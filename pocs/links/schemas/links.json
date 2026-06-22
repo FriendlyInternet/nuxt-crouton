@@ -1,0 +1,33 @@
+{
+  "collection": "links",
+  "fields": {
+    "title": {
+      "type": "string",
+      "meta": {
+        "required": true,
+        "maxLength": 200,
+        "label": "Title",
+        "area": "main",
+        "help": "Human-readable name for the link"
+      }
+    },
+    "url": {
+      "type": "string",
+      "meta": {
+        "required": true,
+        "maxLength": 2000,
+        "label": "URL",
+        "area": "main",
+        "help": "Full URL including scheme (e.g. https://example.com)"
+      }
+    },
+    "tags": {
+      "type": "string",
+      "meta": {
+        "label": "Tags",
+        "area": "sidebar",
+        "help": "Comma-separated tags for categorising the link (e.g. \"news, frontend\")"
+      }
+    }
+  }
+}

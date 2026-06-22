@@ -1,0 +1,42 @@
+{
+  // Cloudflare WORKERS (static assets) config for the `links` POC.
+  //
+  // This is an id-less AUTO-PROVISIONING stub: wrangler 4.45+ creates the D1
+  // binding on the first deploy, then `scripts/sync-wrangler-ids.mjs` writes the
+  // provisioned ids back into this file.
+  //
+  // Nitro's `cloudflare_module` preset (NITRO_PRESET in cf:staging) reads
+  // this file at build time and writes the deployable config to
+  // .output/server/wrangler.json, injecting `name` + the `assets` binding
+  // automatically. Domain convention (#133): staging → pmcp.dev.
+  "name": "links",
+  "compatibility_date": "2024-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // id-less → auto-provisioned on first `cf:staging`; sync-wrangler-ids.mjs fills
+  // in `database_id` afterwards.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "links-db",
+      "migrations_dir": "server/db/migrations/sqlite"
+    }
+  ],
+
+  // Staging environment — separate id-less resources auto-provisioned on the first
+  // `cf:staging`. Bindings do NOT inherit across envs, so they're declared here too.
+  // The env block is stripped from the generated .output config (nitro#3429), so
+  // cf:staging re-injects it via scripts/inject-wrangler-env.mjs.
+  "env": {
+    "staging": {
+      "routes": [{ "pattern": "links.pmcp.dev", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "links-staging-db",
+          "migrations_dir": "server/db/migrations/sqlite"
+        }
+      ]
+    }
+  }
+}

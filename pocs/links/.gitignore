@@ -1,0 +1,9 @@
+node_modules
+.nuxt
+.data
+.wrangler
+dist
+.output
+.env
+*.log
+node-compile-cache

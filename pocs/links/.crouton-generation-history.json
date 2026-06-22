@@ -1,0 +1,10 @@
+{
+  "lastGenerated": "2026-06-22",
+  "collections": {
+    "links": {
+      "layer": "links",
+      "generated": "2026-06-22",
+      "fields": ["title", "url", "tags"]
+    }
+  }
+}
