@@ -33,10 +33,13 @@ watchEffect(() => {
 </script>
 
 <template>
-  <div class="min-h-screen flex items-center justify-center bg-(--ui-bg)">
+  <div class="min-h-screen flex flex-col items-center justify-center gap-3 bg-(--ui-bg)">
     <UIcon
       name="i-lucide-loader-2"
-      class="size-6 animate-spin text-(--ui-text-dimmed)"
+      class="size-6 animate-spin text-(--ui-primary)"
     />
+    <p class="text-sm text-(--ui-text-muted)">
+      Loading your workspace...
+    </p>
   </div>
 </template>

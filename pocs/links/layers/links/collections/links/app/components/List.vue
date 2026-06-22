@@ -41,10 +41,25 @@
         :href="row.original.url"
         target="_blank"
         rel="noopener noreferrer"
-        class="text-(--ui-primary) hover:underline"
+        class="inline-flex items-center gap-1 text-(--ui-primary) hover:underline transition-colors duration-150"
       >
-        {{ row.original.url }}
+        <span class="truncate max-w-xs">{{ row.original.url }}</span>
+        <UIcon name="i-lucide-external-link" class="size-3 shrink-0 opacity-60" />
       </a>
+    </template>
+    <template #tags-cell="{ row }">
+      <div v-if="row.original.tags" class="flex flex-wrap gap-1">
+        <UBadge
+          v-for="tag in parseTags(row.original.tags)"
+          :key="tag"
+          color="neutral"
+          variant="subtle"
+          size="sm"
+        >
+          {{ tag }}
+        </UBadge>
+      </div>
+      <span v-else class="text-(--ui-text-dimmed)">--</span>
     </template>
   </CroutonCollection>
 </template>
@@ -64,4 +79,8 @@ const { items, pending } = await useCollectionQuery(
   'links'
 )
 
+/** Split a comma-separated tags string into trimmed, non-empty tokens. */
+function parseTags(raw: string): string[] {
+  return raw.split(',').map(t => t.trim()).filter(Boolean)
+}
 </script>

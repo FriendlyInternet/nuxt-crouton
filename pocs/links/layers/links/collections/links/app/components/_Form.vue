@@ -41,7 +41,7 @@
       <template #main>
       <div class="flex flex-col gap-4 p-1">
         <UFormField label="Title" name="title" class="not-last:pb-4">
-          <UInput v-model="state.title" class="w-full" size="xl" />
+          <UInput v-model="state.title" class="w-full" size="xl" placeholder="My awesome link" />
         </UFormField>
         <UFormField label="URL" name="url" class="not-last:pb-4">
           <UInput v-model="state.url" class="w-full" size="xl" type="url" placeholder="https://example.com" />
@@ -53,7 +53,7 @@
       <div class="flex flex-col gap-4 p-1">
         <UFormField label="Tags" name="tags" class="not-last:pb-4">
           <UInput v-model="state.tags" class="w-full" size="xl" placeholder="news, frontend, tools" />
-          <p class="text-sm text-gray-500 mt-1">Comma-separated tags</p>
+          <p class="text-sm text-(--ui-text-muted) mt-1.5">Comma-separated tags</p>
         </UFormField>
       </div>
       </template>
