@@ -26,7 +26,11 @@ jobs:
     if: >
       github.event.pull_request.draft == false &&
       github.event.pull_request.user.type != 'Bot'
-    runs-on: ubuntu-latest
+    # Runner toggle (#610/#655): set repo var AGENT_RUNNER=mac-mini to route the agent loop
+    # to the self-hosted Mac mini; unset ⇒ GitHub-hosted. This is the one fork-PR-triggered
+    # Claude workflow, so the WS4 fork-PR approval gate (#656) is a HARD prerequisite before
+    # AGENT_RUNNER is ever pointed at our own hardware.
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
     # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to

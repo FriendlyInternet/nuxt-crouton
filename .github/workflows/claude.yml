@@ -14,7 +14,10 @@ jobs:
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
-    runs-on: ubuntu-latest
+    # Runner toggle (#610/#655): set repo var AGENT_RUNNER=mac-mini to route the agent loop
+    # to the self-hosted Mac mini; unset ⇒ GitHub-hosted. Enable the fork-PR approval gate
+    # first (WS4 security, #656) — these jobs run our code on our own box.
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
     # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to
