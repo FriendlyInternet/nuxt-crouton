@@ -167,11 +167,17 @@ async function gather() {
     .sort((a, b) => b.ageDays - a.ageDays)
 
   // Epics whose sub-issues are ALL closed but the epic is still open (stale tracking).
+  // Tag each with the action it needs, read from the label the labeller stamps (#763):
+  // needs-postmortem (run the retro first) vs ready-to-close (postmortem done, just close).
   const staleEpics = []
   for (const e of openEpics) {
     const kids = await subIssues(e.number)
     if (kids.length > 0 && kids.every((k) => k.state === 'closed')) {
-      staleEpics.push({ number: e.number, title: e.title, url: e.html_url, children: kids.length })
+      const names = labelNames(e)
+      const state = names.includes('status:ready-to-close')
+        ? 'ready-to-close'
+        : 'needs-postmortem' // default until/unless a postmortem marker flips the label
+      staleEpics.push({ number: e.number, title: e.title, url: e.html_url, children: kids.length, state })
     }
   }
 

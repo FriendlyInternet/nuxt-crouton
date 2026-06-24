@@ -6,6 +6,7 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   extends: [
     '@fyit/crouton-core',
+    '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-pages',
     './layers/main',

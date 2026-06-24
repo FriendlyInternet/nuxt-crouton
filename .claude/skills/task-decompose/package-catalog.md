@@ -29,6 +29,7 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-events` | `packages/crouton-events` | Event tracking layer for Nuxt Crouton - Audit trail for all CRUD operations |
 | `@fyit/crouton-flow` | `packages/crouton-flow` | Vue Flow integration for nuxt-crouton - graph/DAG visualization for collections |
 | `@fyit/crouton-i18n` | `packages/crouton-i18n` | i18n layer extending nuxt-crouton for multi-language support |
+| `@fyit/crouton-layout` | `packages/crouton-layout` | Deterministic layout engine for Nuxt Crouton — the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Default-on via @fyit/crouton. |
 | `@fyit/crouton-maps` | `packages/crouton-maps` | Map integration layer for Nuxt Crouton with MapLibre GL (@geoql/v-maplibre), OpenFreeMap tiles, and Nominatim geocoding — no API keys required |
 | `@fyit/crouton-mcp` | `packages/crouton-mcp` | MCP server for AI-powered Crouton collection generation |
 | `@fyit/crouton-mcp-toolkit` | `packages/crouton-mcp-toolkit` | MCP Toolkit integration for Crouton - expose collections to AI assistants via Model Context Protocol |

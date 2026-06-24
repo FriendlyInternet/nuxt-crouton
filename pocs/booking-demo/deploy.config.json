@@ -1,0 +1,4 @@
+{
+  "stagingUrl": "https://booking-demo.pmcp.dev",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton @fyit/crouton-bookings"
+}

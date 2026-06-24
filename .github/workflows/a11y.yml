@@ -1,0 +1,116 @@
+name: A11y (PR)
+
+# Per-PR accessibility scan (epic #726, WS4). Runs the a11y subagent at depth=quick
+# over the PR diff (eslint-a11y on changed .vue + static ARIA/keyboard smells), posts
+# an advisory sticky comment, and FAILS the check on any critical/serious (🔴) finding,
+# blocking merge. Diff-scoped, so it never fails on the pre-existing repo backlog — only
+# on what THIS PR introduces. Mirrors red-team.yml.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      # a11y lives in templates — only scan PRs that touch .vue files.
+      - '**/*.vue'
+
+concurrency:
+  group: a11y-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  a11y:
+    # Skip drafts and bot-authored PRs (no point scanning Dependabot/agent noise here).
+    if: >
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.type != 'Bot'
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
+    # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to
+    # be here or the claude-code-action OIDC token request fails ("Could not fetch an OIDC
+    # token"). A workflow-level block would be silently shadowed.
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the agent can diff the PR against its base branch.
+          fetch-depth: 0
+
+      # a11y's engine is eslint-plugin-vuejs-accessibility (already wired into the root
+      # eslint.config.mjs, warn-first) — so unlike red-team's pure static read, the subagent
+      # needs node_modules to actually run `npx eslint`. Install before invoking it.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
+      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+        # The VERDICT FILE is the gate — NOT this step's exit code. The agent can exit non-zero
+        # on `max_turns` (it flails writing the verdict / the SDK errors) even when it found
+        # nothing critical/serious, which would turn every PR red on a flake (mirrors the
+        # red-team #499/#602/#603 fix). `continue-on-error` makes the gate step below the sole
+        # decider: no verdict ⇒ inconclusive pass; a 🔴 finding in the verdict ⇒ fail.
+        continue-on-error: true
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          show_full_output: true
+          claude_args: "--max-turns 30"
+          prompt: |
+            Act as the **a11y subagent** defined in `.claude/agents/a11y.md`.
+            Input: { scope: "diff", depth: "quick", fix: false }.
+
+            The PR diff is this branch vs its base. The base branch is
+            `origin/${{ github.event.pull_request.base.ref }}` — diff against it
+            (`git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD`),
+            keep only the changed `.vue` files, and scan ONLY those through the engines in the
+            agent definition (run `npx eslint <changed.vue> --format json` for the
+            `vuejs-accessibility/*` rules, then read the templates for the ARIA-without-keyboard
+            / missing-name / missing-label smells). Be precise and avoid false positives — a red
+            CI check on a wrong call is worse than a comment. Do NOT boot a fixture (that's the
+            deep/daily path); quick is static only.
+
+            Then do exactly two outputs:
+
+            1. **Post a single PR comment** summarising the findings using the review skill's
+               3-level format (🔴 Critical / 🟡 Warning / 🔵 Note) — a severity table + each
+               finding's `file:line`, rule id, and one-line fix. Make it a sticky comment
+               containing the literal marker `<!-- a11y -->` on its own line, and EDIT that
+               comment in place if it already exists rather than posting a new one. If there
+               are no findings, post/update the comment saying the quick scan found nothing.
+
+            2. **Write `a11y-verdict.json`** at the repo root, exactly:
+               `{"highest":"<none|note|warning|critical>","critical":N,"warning":N,"note":N}`
+               where `highest` is the most severe finding's level (🔴→critical, 🟡→warning,
+               🔵→note, or `none`) per the skill's severity map (axe critical/serious +
+               structural eslint rules → 🔴). This file is the machine signal the gate step
+               reads — always write it, even for a clean scan.
+
+            Do NOT edit any `apps/`/`packages/` code (quick scan is report-only; `--fix` is a
+            separate, human-invoked path). Do NOT file GitHub issues (the daily sweep owns that).
+            Reporting + the verdict file is all.
+
+      - name: Gate on critical/serious
+        if: always()
+        run: |
+          if [ ! -f a11y-verdict.json ]; then
+            echo "::warning::a11y produced no verdict file — treating as inconclusive (not blocking)."
+            exit 0
+          fi
+          echo "Verdict: $(cat a11y-verdict.json)"
+          HIGHEST=$(node -e "process.stdout.write((require('./a11y-verdict.json').highest||'none').toLowerCase())")
+          case "$HIGHEST" in
+            critical)
+              echo "::error::a11y found a critical/serious accessibility issue in this PR's diff — see the a11y PR comment. Blocking merge."
+              exit 1
+              ;;
+            *)
+              echo "a11y highest severity: ${HIGHEST}. No critical/serious — check passes."
+              ;;
+          esac

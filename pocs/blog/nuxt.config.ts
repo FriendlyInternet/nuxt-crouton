@@ -18,6 +18,7 @@ export default defineNuxtConfig({
   // dependency of this POC even if core's extends ever change.
   extends: [
     '@fyit/crouton-core',
+    '@fyit/crouton-layout',
     '@fyit/crouton-auth',
     '@fyit/crouton-i18n',
     '@fyit/crouton-devtools/eruda',

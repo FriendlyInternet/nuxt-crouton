@@ -160,6 +160,7 @@ onKeyStroke('/', (e) => {
           variant="ghost"
           icon="i-lucide-plus"
           size="sm"
+          :aria-label="`Create ${camelToTitleCase(collection)}`"
           @click="handleCreate"
         />
       </div>

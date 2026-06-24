@@ -460,6 +460,7 @@ onBeforeUnmount(() => {
             color="neutral"
             variant="ghost"
             size="xs"
+            aria-label="Actions"
             @click.stop
           />
         </UDropdownMenu>
@@ -477,6 +478,7 @@ onBeforeUnmount(() => {
             color="neutral"
             variant="ghost"
             size="xs"
+            aria-label="Add"
             @click.stop
           />
         </UDropdownMenu>

@@ -180,6 +180,13 @@ for (const e of epicItems) {
   const total = children.length
   const epicNames = labelNames(e)
   const blocked = anyBlocked || epicNames.includes('status:blocked')
+  // "Finished but still open" state (#763), stamped on the epic by label-ready-epics.mjs —
+  // the single source of truth. These REPLACE the old "done"-on-an-open-epic badge (which
+  // read as a contradiction: an open epic showing "Done"). open/in-progress stay as-is:
+  // in-progress = a child is actively worked; open = ready to pick up.
+  const readyToClose = epicNames.includes('status:ready-to-close')
+  const needsPostmortem = epicNames.includes('status:needs-postmortem')
+  const allDone = total > 0 && done >= total
 
   const parts = [`${done}/${total} done`]
   if (blocked) parts.push('blocked')
@@ -187,11 +194,17 @@ for (const e of epicItems) {
   if (closedInWindow) parts.push(`${closedInWindow} closed in last ${windowHours}h`)
   const whereWeAre = parts.join(' · ')
 
-  const status = blocked ? 'blocked' : (total > 0 && done >= total) ? 'done' : inProgress ? 'in-progress' : 'open'
+  // Prefer the stamped label; fall back to needs-postmortem when all children are closed
+  // but the labeller hasn't run yet — so a fully-delivered epic is never shown as plain "done".
+  const status = blocked ? 'blocked'
+    : readyToClose ? 'ready-to-close'
+    : (needsPostmortem || allDone) ? 'needs-postmortem'
+    : inProgress ? 'in-progress'
+    : 'open'
 
   epics.push({
     number: e.number, title: e.title, url: e.html_url,
-    status, blocked, total, done,
+    status, blocked, total, done, readyToClose, needsPostmortem,
     theHypothesis: parseHypothesis(e.body),
     weWillKnowBy: parseKnowBy(e.body),
     whereWeAre,

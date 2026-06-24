@@ -17,6 +17,7 @@ e2e/                         # the harness (Playwright) — NOT a workspace pack
   i18n.smoke.spec.ts         # generic, manifest-driven locale-switch check (optional)
   maps.smoke.spec.ts         # generic, manifest-driven maps mount + live geocode check (optional)
   printing.smoke.spec.ts     # with-sales only: two-tier order→print→done smoke vs an in-test fake :9100 printer (optional)
+  a11y.smoke.spec.ts         # generic, manifest-driven axe-core accessibility scan (per surface)
   .auth/                     # generated storageState + team slug (gitignored)
 
 fixtures/                    # the apps under test — real crouton apps, one per config
@@ -171,7 +172,8 @@ When you add a fixture, set its `packages` (step 3) **and** add it to `ALL` in t
       "heading": "Main Items",      // visible list heading to assert
       "create": { "name": "e2e item" },  // text field label/name -> value; omit to skip CRUD
       "update": { "name": "renamed" },   // optional edit values; default = first field + " edited"
-      "requiredField": "name"            // optional: clear this field to assert validation blocks submit; omit to skip
+      "requiredField": "name",           // optional: clear this field to assert validation blocks submit; omit to skip
+      "a11y": false                      // optional: opt this list page OUT of the axe-core scan (quarantine; default = scan)
     }
   ],
   // Optional: package-specific UI a generic items CRUD doesn't reach. Omit when a
@@ -183,8 +185,13 @@ When you add a fixture, set its `packages` (step 3) **and** add it to `ALL` in t
       "path": "/admin/{team}/workspace",          // route; {team} -> active team slug
       "expect": { "visible": "[id$='-panel-pages-sidebar']" }  // CSS selector that must be visible
       // or: "expect": { "heading": "Workspace" } // a role=heading name (case-insensitive)
+      // add "a11y": false inside "expect" to opt this surface OUT of the axe-core scan
     }
   ],
+  // Optional: opt the WHOLE fixture out of the axe-core a11y scan (a11y.smoke.spec.ts).
+  // Prefer the per-collection / per-surface "a11y": false over this blanket switch.
+  // Omit (default) to scan. See "Accessibility scan (axe-core)" below.
+  "a11y": false,
   // Optional: a locale-switch check (crouton-i18n). A `surface` can only assert a
   // static element renders; this one *interacts* — flips locale via the
   // package-owned LanguageSwitcher and asserts a known UI string changes
@@ -251,6 +258,40 @@ Locally, `pnpm test:e2e` writes the same HTML report to `playwright-report/`
 (`npx playwright show-report` to open). Out of scope for now: `toHaveScreenshot()`
 pixel-diff baselines (flake-prone, separate follow-up) and screenshotting the live
 staging deploys.
+
+## Accessibility scan (axe-core — epic #726 WS2)
+
+`a11y.smoke.spec.ts` runs **`@axe-core/playwright`** against each rendered surface —
+the runtime half of the a11y story (the static half is the warn-first eslint-a11y
+rules, #727). It's manifest-driven like the other specs: for every `collection`
+(its list page) and every declared `surface`, it waits for the page to render, then
+runs axe on the **live DOM** and **fails on any critical/serious violation**.
+
+- **Why runtime, not just lint:** axe scans the *actually-rendered* page (generated
+  templates and computed ARIA included), so it catches what static lint can't —
+  computed roles, focus order, names that only exist after hydration.
+- **Lenient by design (start):** only `critical`/`serious` impacts go red
+  (`A11Y_BLOCKING_IMPACTS` in `helpers.ts`). `moderate`/`minor` are attached as
+  `a11y-advisory` annotations (visible in the HTML report / trace) and `console.log`ged,
+  **not** failed — so the gate landed without walling existing fixtures red. Tighten by
+  adding `moderate` to that set once the backlog is clear.
+- **Theme-owned rules are excluded:** `color-contrast` is **disabled**
+  (`A11Y_EXCLUDED_RULES`) — it's determined by the active theme's colour tokens
+  (Nuxt UI 4 / crouton-themes), identical across every template, so gating each
+  fixture on it would re-fail the same theme-level finding on every PR. Contrast is
+  tracked as a theme/Unlighthouse concern (#731), not per-template. Every
+  **structural** rule a template controls (names, labels, roles, `image-alt`,
+  keyboard) stays a hard fail. The scan is scoped to WCAG 2.0/2.1 A+AA tags so
+  best-practice noise (e.g. `region`) doesn't gate either.
+- **Opt-out** (to quarantine a known-bad surface while a fix is tracked — leave a
+  manifest note pointing at the issue):
+  - whole fixture → `"a11y": false` at the manifest root
+  - one collection → `"a11y": false` on the collection entry
+  - one surface → `"expect": { "a11y": false }` on the surface entry
+- **No new fixtures or CI matrix change needed:** the spec is generic and runs under
+  the existing `chromium` project (any `*.smoke.spec.ts`), so it covers every fixture
+  the matrix already selects; `@axe-core/playwright` is a root devDependency picked up
+  by CI's `pnpm install`. Findings show up in the same Playwright HTML report / trace.
 
 ## Gotchas
 - **Module format:** repo root is CommonJS, and Playwright 1.57 transpiles

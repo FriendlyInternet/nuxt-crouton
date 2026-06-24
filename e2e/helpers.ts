@@ -8,6 +8,7 @@
  * Target: fixtures/minimal (pkg "e2e-fixture-minimal").
  */
 import type { Page } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -38,6 +39,13 @@ export interface CollectionSpec {
    * omit to skip that check for this collection.
    */
   requiredField?: string
+  /**
+   * Opt this collection's list page OUT of the axe-core a11y scan
+   * (a11y.smoke.spec.ts). Set `false` to quarantine a known-bad surface while a
+   * fix is tracked — leave a note in the manifest pointing at the issue. Omit
+   * (default) to scan it.
+   */
+  a11y?: boolean
 }
 
 /**
@@ -56,6 +64,12 @@ export interface SurfaceSpec {
     visible?: string
     /** Visible heading (role=heading) name, matched case-insensitively. */
     heading?: string
+    /**
+     * Opt this surface OUT of the axe-core a11y scan (a11y.smoke.spec.ts). Set
+     * `false` to quarantine a known-bad surface while a fix is tracked (leave a
+     * note pointing at the issue). Omit (default) to scan it.
+     */
+    a11y?: boolean
   }
 }
 
@@ -118,6 +132,13 @@ export interface FixtureManifest {
   i18n?: I18nSpec
   /** Optional maps + geocoding check; omit for fixtures without crouton-maps. */
   maps?: MapsSpec
+  /**
+   * Opt the WHOLE fixture out of the axe-core a11y scan (a11y.smoke.spec.ts).
+   * Set `false` to skip every collection/surface scan for this fixture. Omit
+   * (default) to scan. Prefer the per-collection / per-surface `a11y: false`
+   * over this blanket switch so coverage stays as wide as possible.
+   */
+  a11y?: boolean
 }
 
 /** Read the active fixture's e2e manifest (what to smoke). */
@@ -314,4 +335,125 @@ export async function fillField(scope: Page | ReturnType<Page['getByRole']>, fie
     return
   }
   throw new Error(`Could not find form field "${field}"`)
+}
+
+/**
+ * axe-core impacts that FAIL the a11y smoke. We start lenient (epic #726 WS2):
+ * only `critical`/`serious` go red — these block a screen-reader / keyboard user
+ * (missing names, keyboard traps, contrast). `moderate`/`minor` are reported as
+ * advisory annotations, not failures, so the gate lands without walling existing
+ * generated templates red. Tighten by adding `moderate` here once the backlog is
+ * clear.
+ */
+export const A11Y_BLOCKING_IMPACTS: ReadonlySet<string> = new Set(['critical', 'serious'])
+
+/**
+ * axe rules excluded from the gate because they're owned by the DESIGN SYSTEM, not
+ * the per-template markup this harness scans.
+ *
+ * - `color-contrast` — determined by the active theme's colour tokens (Nuxt UI 4 /
+ *   crouton-themes), identical across every generated template, so gating each
+ *   fixture on it would just re-fail the same theme-level finding on every PR and
+ *   wall the whole suite red. Contrast is a theme concern, tracked separately
+ *   (epic #726 follow-up / the Unlighthouse sweep, #731). The gate keeps every
+ *   STRUCTURAL rule a template actually controls — names, labels, roles,
+ *   `image-alt`, keyboard operability — as hard fails.
+ */
+export const A11Y_EXCLUDED_RULES: readonly string[] = ['color-contrast']
+
+/**
+ * Critical/serious rules currently violated by the SHARED admin shell (crouton-core
+ * layout) and Nuxt UI 4 / reka-ui chrome — so they appear identically on EVERY
+ * fixture and are fixable only in `packages/` (out of this harness's scope). They're
+ * downgraded from blocking to ADVISORY so the gate could land green on today's code;
+ * tracked in #735 to drive to zero. As each is fixed in the shell, delete it here so
+ * the gate starts failing on any regression of it.
+ *
+ * This is a baseline by RULE, not a blanket disable: a NEW violation of any OTHER
+ * rule (e.g. `image-alt`, `label`, `link-name`, `select-name`) on a scanned page
+ * still fails the gate — so a template that ships an inaccessible element is caught.
+ *
+ *   aria-allowed-attr — `aria-controls` on reka-ui collapsible nav trailing-icon
+ *     elements (`data-slot="linkTrailing"`), emitted by Nuxt UI 4 `UNavigationMenu`
+ *     internals. Our code never adds `aria-controls` (verified #735) — it's an
+ *     upstream reka-ui/Nuxt UI bug, so it stays baselined pending an upstream fix.
+ *
+ * REMOVED (now enforced — the gate FAILS on any regression):
+ *   button-name — driven to zero across every fixture in #735 by naming the
+ *     icon-only buttons in crouton-core (layout switcher, rows-per-page select,
+ *     tree node menus, workspace create), crouton-pages (workspace reorder +
+ *     create), crouton-bookings (WeekStrip), and crouton-assets (Picker clear).
+ *     Verified green on all six fixtures via @axe-core/playwright.
+ */
+export const A11Y_KNOWN_SHELL_RULES: readonly string[] = ['aria-allowed-attr']
+
+/** A flattened axe violation — enough to fail a test with an actionable message. */
+export interface A11yViolation {
+  /** axe rule id, e.g. "image-alt", "color-contrast", "label". */
+  id: string
+  /** axe impact: "critical" | "serious" | "moderate" | "minor" (may be null). */
+  impact: string
+  /** Human description of the rule. */
+  help: string
+  /** Deep link to the axe rule docs. */
+  helpUrl: string
+  /** How many DOM nodes violated it. */
+  nodes: number
+  /** Up to 5 offending CSS selectors (the rest are elided). */
+  targets: string[]
+}
+
+/**
+ * Run axe-core against the current page DOM and return the violations, flattened.
+ *
+ * Injects axe-core (via @axe-core/playwright) into the live page and analyses the
+ * rendered DOM — so it catches what static lint can't (computed roles, contrast,
+ * focus order). Scoped to the standard WCAG 2.0/2.1 A+AA rule set so best-practice
+ * noise (e.g. `region`) doesn't fail the gate; the caller decides which impacts
+ * are blocking (see A11Y_BLOCKING_IMPACTS).
+ *
+ * Call it only AFTER the page has rendered (await a heading/element first) so axe
+ * scans real content, not a cold-compile spinner.
+ */
+export async function scanA11y(page: Page): Promise<A11yViolation[]> {
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .disableRules([...A11Y_EXCLUDED_RULES])
+    .analyze()
+  return results.violations.map(v => ({
+    id: v.id,
+    impact: v.impact ?? 'unknown',
+    help: v.help,
+    helpUrl: v.helpUrl,
+    nodes: v.nodes.length,
+    targets: v.nodes.flatMap(n => n.target.map(String)).slice(0, 5)
+  }))
+}
+
+/**
+ * Split a scan's violations into what FAILS the gate vs what's only ADVISORY.
+ *
+ * Blocking = `critical`/`serious` impact AND not a known shared-shell baseline rule
+ * (`A11Y_KNOWN_SHELL_RULES`). Everything else — `moderate`/`minor`, plus the
+ * baselined shell rules — is advisory: reported in the run, not failed. See the
+ * `A11Y_*` constants above for the rationale behind each bucket.
+ */
+export function classifyA11y(
+  violations: A11yViolation[]
+): { blocking: A11yViolation[], advisory: A11yViolation[] } {
+  const blocking = violations.filter(
+    v => A11Y_BLOCKING_IMPACTS.has(v.impact) && !A11Y_KNOWN_SHELL_RULES.includes(v.id)
+  )
+  const advisory = violations.filter(v => !blocking.includes(v))
+  return { blocking, advisory }
+}
+
+/** Format violations into a readable multi-line block for a test message / annotation. */
+export function formatA11yViolations(violations: A11yViolation[]): string {
+  if (!violations.length) return 'no violations'
+  return violations
+    .map(v => `  [${v.impact}] ${v.id} (${v.nodes} node${v.nodes === 1 ? '' : 's'}) — ${v.help}\n`
+      + `    ${v.helpUrl}\n`
+      + `    ${v.targets.join(' , ')}`)
+    .join('\n')
 }

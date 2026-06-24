@@ -14,6 +14,7 @@ export default defineNuxtConfig({
 
   extends: [
     '@fyit/crouton-core',
+    '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-three',
     '@fyit/crouton-pages',

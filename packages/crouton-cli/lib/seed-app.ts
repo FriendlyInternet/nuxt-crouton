@@ -200,6 +200,48 @@ function collectCollectionFixtureSql(appDir: string, core: any, teamId: string):
 }
 
 /**
+ * Turn the app's deterministic default layout (`crouton.layout.json`, emitted by
+ * the generator, #709) into an idempotent upsert into `layout_configs`, so a
+ * freshly seeded POC boots with a real, data-bound layout instead of a blank
+ * canvas. The row id is `default` — what the team layout surface
+ * (`admin/[team]/layout.vue`, `LAYOUT_ID = 'default'`) loads. `core` is
+ * `@fyit/crouton-core/shared/seed`.
+ *
+ * NB: `layout_configs.id` is a global primary key, so this seeds the one default
+ * layout for the POC's single seeded team; multi-team seeding is out of scope here.
+ */
+function collectDefaultLayoutSql(appDir: string, core: any, teamId: string): string {
+  const layoutPath = join(appDir, 'crouton.layout.json')
+  if (!existsSync(layoutPath)) return ''
+
+  let parsed: any
+  try {
+    parsed = JSON.parse(readFileSync(layoutPath, 'utf8'))
+  } catch {
+    consola.warn('Skipping unparseable crouton.layout.json')
+    return ''
+  }
+
+  const tree = parsed?.tree
+  if (!tree || typeof tree !== 'object') return ''
+
+  const now = Math.floor(Date.now() / 1000)
+  const id = parsed.id || 'default'
+  const values = {
+    teamId,
+    name: id,
+    renderer: parsed.renderer || 'panes',
+    // Object value → JSON literal (the `tree` column is `text({ mode: 'json' })`).
+    tree,
+    createdAt: now,
+    updatedAt: now,
+  }
+
+  consola.info(`Discovered default layout (${parsed.pattern || 'layout'}) → layout_configs[${id}]`)
+  return core.buildUpsert('layout_configs', { id }, values, { immutable: ['createdAt'] })
+}
+
+/**
  * Run the seed: discover → order → collect SQL → execute via wrangler.
  * Returns the generated SQL (handy for tests / dry runs).
  */
@@ -237,10 +279,13 @@ export async function seedApp(options: SeedAppOptions): Promise<string> {
   // 2) App-local generated collections' editable seed.json fixtures (#298).
   const fixtureSql = collectCollectionFixtureSql(appDir, core, teamId)
 
-  const sql = [providerSql, fixtureSql].filter(s => s.trim()).join('\n')
+  // 3) Deterministic default layout (#709) → a `layout_configs` row the POC boots with.
+  const layoutSql = collectDefaultLayoutSql(appDir, core, teamId)
+
+  const sql = [providerSql, fixtureSql, layoutSql].filter(s => s.trim()).join('\n')
 
   if (!sql.trim()) {
-    consola.warn('No seed providers or collection fixtures found — nothing to seed.')
+    consola.warn('No seed providers, collection fixtures, or layout found — nothing to seed.')
     return sql
   }
 

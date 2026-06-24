@@ -1,0 +1,27 @@
+{
+  "table": "bookings_bookings",
+  "key": null,
+  "rows": [
+    {
+      "date": 1782254865,
+      "slot": "Sample slot 1",
+      "group": "Sample group 1",
+      "quantity": 1,
+      "status": "Sample status 1"
+    },
+    {
+      "date": 1782168465,
+      "slot": "Sample slot 2",
+      "group": "Sample group 2",
+      "quantity": 2,
+      "status": "Sample status 2"
+    },
+    {
+      "date": 1782082065,
+      "slot": "Sample slot 3",
+      "group": "Sample group 3",
+      "quantity": 3,
+      "status": "Sample status 3"
+    }
+  ]
+}

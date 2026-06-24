@@ -9,6 +9,7 @@ Email infrastructure layer for Nuxt applications using Vue Email templates and R
 | File | Purpose |
 |------|---------|
 | `nuxt.config.ts` | Layer configuration with runtime config |
+| `brand/email-brand.mjs` | **Brand identity SSOT** (name, primary accent, URL, logo, sans stack) — plain ESM so the dependency-free digest `render.mjs` scripts can import it too. `.d.mts` sibling for types |
 | `server/utils/email.ts` | Resend service wrapper (`useEmailService()`) |
 | `server/utils/senders.ts` | Convenience send functions |
 | `server/utils/template-renderer.ts` | Vue Email template rendering |
@@ -189,6 +190,26 @@ Located in `server/emails/`:
 | `PasswordReset.vue` | Password reset email | `link`, `name`, `expiryMinutes` |
 | `TeamInvite.vue` | Team invitation email | `link`, `inviterName`, `teamName`, `role` |
 | `Welcome.vue` | Welcome email | `name`, `getStartedLink` |
+
+## Brand Identity SSOT (`brand/email-brand.mjs`)
+
+One dependency-free module is the single source of truth for the email *identity*
+(brand name, primary accent `#0F766E`, canonical URL, logo, sans font stack). It's
+authored as plain `.mjs` (with a hand-written `.d.mts` for types) so it can be
+imported from **two very different worlds**:
+
+- `server/emails/BaseLayout.vue` uses it for its prop defaults (`brandName`,
+  `primaryColor`, font stack).
+- The standalone digest renderers (`.claude/skills/epic-digest/render.mjs`,
+  `.claude/skills/housekeeping/render.mjs`) import it via a relative path. These run
+  in a GitHub Action with **no transpile and no npm install**, so the module must
+  stay pure ESM — never convert it to `.ts`.
+
+Scope is **identity only**, not a shared visual system: the transactional templates
+stay minimal/sans; epic-digest keeps its editorial serif + fluorescent palette + dark
+mode and only borrows the brand name/URL (footer) and accent colour (masthead). Change
+the identity here once and every surface follows. Exported from the package as
+`@fyit/crouton-email/brand`. (See issue #744.)
 
 ## Configuration
 

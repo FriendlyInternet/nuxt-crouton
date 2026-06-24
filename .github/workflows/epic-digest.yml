@@ -1,9 +1,9 @@
 name: epic-digest
 
-# Daily "where are we?" roundup, posted as a comment on the standing
-# "📊 Daily epic digest" issue. Deterministic (no LLM, no secrets) — gathers via
-# the GitHub API with the built-in GITHUB_TOKEN, renders Markdown, posts a comment.
-# See .claude/skills/epic-digest/ (gather.mjs → render.mjs → post-comment.sh).
+# Daily "where are we?" roundup, delivered by email via Resend. Deterministic
+# (no LLM) — gathers via the GitHub API with the built-in GITHUB_TOKEN, renders
+# email-safe HTML + a plain-text mirror, and emails it. See
+# .claude/skills/epic-digest/ (gather.mjs → render.mjs).
 
 on:
   schedule:
@@ -14,7 +14,6 @@ on:
 
 permissions:
   contents: read
-  issues: write
 
 concurrency:
   group: epic-digest
@@ -36,26 +35,13 @@ jobs:
           DIGEST_REPO: ${{ github.repository }}
         run: node .claude/skills/epic-digest/gather.mjs > digest.data.json
 
-      - name: Render Markdown
-        run: |
-          node .claude/skills/epic-digest/render.mjs digest.data.json --format md --out-dir .
-          cp epic-digest-*.md digest.md
-
-      - name: Post to the standing issue
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DIGEST_REPO: ${{ github.repository }}
-          DIGEST_BODY_FILE: digest.md
-        run: bash .claude/skills/epic-digest/post-comment.sh
-
-      # Optional second rail (#551): also DM the digest by email via Resend. Render-only
-      # (no LLM); reuses the same render.mjs output as email-safe HTML + a plain-text mirror.
-      # Shares the sender var (RESEND_FROM) with red-team-daily.yml; recipient is its own
-      # (DIGEST_REPORT_EMAIL). When the secret/vars are unset the step warns and skips —
-      # the job stays green so the standing-issue comment remains the baseline delivery.
-      - name: Render HTML for email
+      # Render email-safe HTML + a plain-text mirror (no LLM, no network).
+      - name: Render the digest
         run: node .claude/skills/epic-digest/render.mjs digest.data.json --out-dir .
 
+      # Deliver by email via Resend. Shares the sender var (RESEND_FROM) with
+      # red-team-daily.yml; recipient is its own (DIGEST_REPORT_EMAIL). When the
+      # secret/vars are unset the step warns and skips so the job stays green.
       - name: Email the digest (Resend)
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -69,11 +55,12 @@ jobs:
             exit 0
           fi
           if [ -z "$RESEND_API_KEY" ] || [ -z "$EMAIL_FROM" ] || [ -z "$EMAIL_TO" ]; then
-            echo "::warning::RESEND_API_KEY / RESEND_FROM / DIGEST_REPORT_EMAIL not set — skipping email. The digest was still posted to the standing issue."
+            echo "::warning::RESEND_API_KEY / RESEND_FROM / DIGEST_REPORT_EMAIL not set — skipping email (nothing delivered)."
             exit 0
           fi
-          SUBJECT="📊 Daily epic digest — $(date -u +%F)"
-          echo "Emailing $HTML → $EMAIL_TO"
+          SUBJECT="$(head -1 epic-digest-*.subject.txt 2>/dev/null)"
+          [ -z "$SUBJECT" ] && SUBJECT="Daily epic digest — $(date -u +%F)"
+          echo "Emailing $HTML → $EMAIL_TO  (subject: $SUBJECT)"
           # Build the JSON payload with jq so the HTML/text bodies are safely escaped.
           jq -n \
             --arg from "$EMAIL_FROM" \
@@ -94,7 +81,7 @@ jobs:
           name: epic-digest
           path: |
             digest.data.json
-            epic-digest-*.md
             epic-digest-*.html
             epic-digest-*.txt
+            epic-digest-*.subject.txt
           if-no-files-found: ignore

@@ -1,0 +1,120 @@
+name: A11y (daily sweep)
+
+# Scheduled whole-repo accessibility sweep (epic #726, WS4). Runs the /a11y skill at
+# depth=deep — static eslint-a11y across every package, plus best-effort runtime axe via
+# the e2e fixture harness — then POSTS the report to a public standing issue and files
+# `a11y`-labelled issues for new confirmed criticals.
+#
+# PUBLIC POSTING (unlike red-team-daily, which emails privately): accessibility findings
+# are NOT a security disclosure — they're safe and useful to track in the open. So the
+# report lands on a rolling standing issue and new criticals become their own `a11y` issues.
+#
+# Required repo config: secrets.ANTHROPIC_API_KEY (shared with the other claude workflows).
+
+on:
+  schedule:
+    - cron: '42 6 * * *'   # 06:42 UTC daily (offset from red-team's 06:17 to avoid pile-up)
+  workflow_dispatch:        # manual run
+
+concurrency:
+  group: a11y-daily
+  cancel-in-progress: false
+
+jobs:
+  a11y-daily:
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    # Job-level permissions (see a11y.yml for why id-token MUST be here). `issues: write`
+    # because — unlike the security sweep — this workflow DOES post to GitHub (standing
+    # issue + new-finding issues); a11y findings are safe to disclose publicly.
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # The deep pass runs eslint-a11y (needs deps) and may boot a fixture for axe.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
+      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          show_full_output: true
+          claude_args: "--max-turns 60"
+          prompt: |
+            Run the **`/a11y`** skill (`.claude/skills/a11y/SKILL.md`) at
+            **depth=deep, scope=repo**. Sweep the `vuejs-accessibility/*` eslint rules across
+            every `packages/*` `.vue`, and attempt best-effort runtime axe via the e2e fixture
+            harness (the `a11y.smoke.spec.ts` path, epic #726 WS2) — if booting a fixture is too
+            heavy or unavailable, degrade gracefully to the static deep sweep and say so. Only
+            probe this repo's own local fixtures — never any external or production host.
+
+            Collate ONE whole-repo report to
+            `writeups/reports/a11y-repo-$(date -u +%Y%m%d).md` following
+            `writeups/reports/a11y-TEMPLATE.md`. Always write the report, even on a clean sweep.
+
+            Then **file `a11y` GitHub issues for NEW confirmed critical findings only**
+            (🔴, engine-confirmed). Dedupe FIRST: search open issues with the `a11y` label and
+            skip any whose title/location already matches — note "already filed" in the report
+            instead. Label each new issue `a11y` + the owning `pkg:<name>`/`app:<name>` +
+            `type:fix`. Title in plain language naming the impact (e.g. "Icon-only delete button
+            has no accessible name in crouton-sales"). Body in `github-tasks` style (👤 what an
+            AT user can't do & why it matters, 🤖 `location`/`rule`/`fix`, 🧪 how to test).
+            Warnings/notes stay in the report only — don't file them (noise).
+
+            Do NOT edit any `apps/`/`packages/` product code. The report file + any new `a11y`
+            issues are the whole job — a later step posts the report to the standing issue.
+
+      - name: Post report to the standing issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          REPORT=$(ls -t writeups/reports/a11y-repo-*.md 2>/dev/null | head -1 || true)
+          if [ -z "$REPORT" ]; then
+            echo "::warning::No a11y report file was produced — nothing to post."
+            exit 0
+          fi
+          echo "Report: $REPORT"
+          TITLE="♿ A11y — daily accessibility sweep"
+          MARKER="<!-- a11y-daily -->"
+          DATE=$(date -u +%F)
+
+          # Build the issue body: provenance header (autonomous CI bot — name the source, no
+          # @pmcp disclaimer per CLAUDE.md) + marker + the report, trimmed to fit the field.
+          BODY_FILE=$(mktemp)
+          {
+            echo "$MARKER"
+            echo "> 🤖 **Claude Code** · agent pipeline (CI) · _daily a11y deep sweep, updated ${DATE}_"
+            echo ""
+            echo "_Last run: [$DATE]($RUN_URL) · this issue is updated in place each day._"
+            echo ""
+            head -c 60000 "$REPORT"
+          } > "$BODY_FILE"
+
+          # Find-or-create the rolling standing issue. Key off the EXACT title among open
+          # a11y issues — deterministic (individual finding-issues also carry the `a11y`
+          # label, so a loose search could edit the wrong one; the title is unique).
+          NUM=$(gh issue list --repo "$REPO" --state open --label a11y --limit 200 --json number,title \
+                  --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty" || true)
+
+          if [ -z "$NUM" ]; then
+            echo "Creating the standing a11y issue…"
+            gh issue create --repo "$REPO" --title "$TITLE" --label a11y --body-file "$BODY_FILE"
+          else
+            echo "Updating standing a11y issue #$NUM…"
+            gh issue edit "$NUM" --repo "$REPO" --body-file "$BODY_FILE"
+          fi

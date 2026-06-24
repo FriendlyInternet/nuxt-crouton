@@ -129,21 +129,55 @@ jobs:
       # The dist-consumed framework packages (inputs.layer-packages) must be built
       # before the app build. Pure source layers (crouton-editor/pages/charts) have
       # no build script and are skipped.
+
+      # The layer cache is shared across ALL callers (one runner cache), but the set
+      # of dists a deploy needs varies per app (different layer-packages, + devtools
+      # below). Keying on source alone (`hashFiles('packages/**/*.ts')`) meant the
+      # first app to populate the cache decided which dists every later app got — a
+      # cache HIT could restore a set MISSING a package the current app needs, and
+      # the build step (gated on cache-miss) would skip it → `nuxt prepare` failing
+      # to load it. That's the #745 devtools crash, but it's a general cross-app
+      # collision class (e.g. an i18n-needing app hitting an i18n-less cache). So we
+      # fold the resolved build set into the cache key: different sets → different
+      # entries → no collision.
+      - name: Compute layer build-set key
+        id: layer-set
+        env:
+          LAYER_PACKAGES: ${{ inputs['layer-packages'] }}
+        run: |
+          # The EXACT set built below: caller's layer-packages + devtools (always),
+          # sorted + de-duped so key is order-independent. crouton-devtools is in the
+          # set unconditionally — scaffolded apps declare it in nuxt.config `modules`
+          # (scaffold-app.ts), so `nuxt prepare` needs its dist on every deploy (there
+          # is no review flag to gate on; building it for apps that don't list it is
+          # cheap and inert). (#745)
+          set_str=$(printf '%s\n' $LAYER_PACKAGES @fyit/crouton-devtools | sort -u | tr '\n' ' ')
+          echo "Layer build set: $set_str"
+          echo "hash=$(printf '%s' "$set_str" | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
       - name: Cache layer builds
         id: layer-cache
         uses: actions/cache@v4
         with:
           path: |
             packages/*/dist
-          key: layer-builds-${{ hashFiles('packages/**/*.ts') }}
+          key: layer-builds-${{ steps.layer-set.outputs.hash }}-${{ hashFiles('packages/**/*.ts') }}
 
       - name: Build layer packages
         if: steps.layer-cache.outputs.cache-hit != 'true'
         env:
           LAYER_PACKAGES: ${{ inputs['layer-packages'] }}
         run: |
-          for pkg in $LAYER_PACKAGES; do
+          # Same set the cache key was computed from (layer-set step). de-dupe is by
+          # "dist already built this run" so an explicit devtools in layer-packages
+          # isn't built twice.
+          for pkg in $LAYER_PACKAGES @fyit/crouton-devtools; do
             dir="packages/${pkg#@fyit/}"
+            # de-dupe: skip if this dist was already built earlier in the loop
+            if [ -d "$dir/dist" ] && [ -n "$(ls -A "$dir/dist" 2>/dev/null)" ]; then
+              echo "Skipping $pkg (already built this run)"
+              continue
+            fi
             if node -e "process.exit(require('./$dir/package.json').scripts?.build ? 0 : 1)" 2>/dev/null; then
               echo "Building $pkg"
               pnpm --filter "$pkg" build

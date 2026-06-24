@@ -17,6 +17,7 @@
     "@fyit/crouton": "workspace:*",
     "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-email": "workspace:*",
+    "@fyit/crouton-layout": "workspace:*",
     "@libsql/client": "catalog:",
     "@nuxtjs/mdc": "^0.21.1",
     "@vue-flow/background": "^1.3.0",

@@ -57,6 +57,7 @@
     "@fyit/crouton-events": "workspace:*",
     "@fyit/crouton-flow": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
+    "@fyit/crouton-layout": "workspace:*",
     "@fyit/crouton-maps": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",
     "@fyit/crouton-sales": "workspace:*",

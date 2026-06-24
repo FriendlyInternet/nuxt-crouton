@@ -1,0 +1,18 @@
+{
+  "table": "bookings_settings",
+  "key": null,
+  "rows": [
+    {
+      "statuses": "Sample statuses 1",
+      "groups": "Sample groups 1"
+    },
+    {
+      "statuses": "Sample statuses 2",
+      "groups": "Sample groups 2"
+    },
+    {
+      "statuses": "Sample statuses 3",
+      "groups": "Sample groups 3"
+    }
+  ]
+}

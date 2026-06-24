@@ -1,0 +1,77 @@
+name: Unlighthouse (a11y staging sweep)
+
+# Scheduled whole-site accessibility (+ perf/SEO/best-practices) sweep of a STAGING deploy
+# (epic #726, WS5). Unlighthouse (MIT, self-hosted, axe + Lighthouse under the hood) crawls
+# the site and produces a route-by-route static report. This is a REPORT-ONLY monitor — it
+# uploads the static report as a build artifact; it does NOT gate merges (the per-PR a11y.yml
+# is the gate). Complements the daily a11y subagent sweep (#730) with a real-browser,
+# whole-route view of the running app.
+#
+# No SaaS, no lockfile impact: run via `npx`, scanning a public staging URL.
+#
+# Required repo config:
+#   vars.UNLIGHTHOUSE_SITE — the staging URL to scan, e.g. "https://triage.pmcp.dev"
+# If it's unset the job warns and skips (stays green) — so this lands safely before a URL
+# is chosen. Set it in repo Settings → Secrets and variables → Actions → Variables.
+
+on:
+  schedule:
+    - cron: '23 7 * * 1'   # 07:23 UTC every Monday (weekly; a full crawl is heavier than the daily subagent sweep)
+  workflow_dispatch:
+    inputs:
+      site:
+        description: 'Staging URL to scan (overrides vars.UNLIGHTHOUSE_SITE)'
+        required: false
+        type: string
+
+concurrency:
+  group: unlighthouse
+  cancel-in-progress: false
+
+jobs:
+  unlighthouse:
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve target site
+        id: site
+        env:
+          INPUT_SITE: ${{ inputs.site }}
+          VAR_SITE: ${{ vars.UNLIGHTHOUSE_SITE }}
+        run: |
+          SITE="${INPUT_SITE:-$VAR_SITE}"
+          if [ -z "$SITE" ]; then
+            echo "::warning::Neither the workflow_dispatch site input nor vars.UNLIGHTHOUSE_SITE is set — skipping the Unlighthouse sweep. Set vars.UNLIGHTHOUSE_SITE to a staging URL (e.g. https://triage.pmcp.dev) to enable it."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Scanning: $SITE"
+            echo "site=$SITE" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.site.outputs.skip == 'false'
+        with:
+          node-version: 22
+
+      - name: Run Unlighthouse (static report)
+        if: steps.site.outputs.skip == 'false'
+        # Report-only: never fail the job on a low score (no --budget). `|| true` guards
+        # transient crawl/headless hiccups so a flake can't turn the scheduled run red.
+        run: |
+          npx --yes unlighthouse-ci@^0.17 \
+            --site "${{ steps.site.outputs.site }}" \
+            --build-static \
+            || echo "::warning::Unlighthouse exited non-zero — see logs; uploading whatever report was produced."
+
+      - name: Upload static report
+        if: steps.site.outputs.skip == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unlighthouse-report
+          # Unlighthouse writes the static client to .unlighthouse/ by default.
+          path: .unlighthouse/
+          if-no-files-found: warn
+          retention-days: 14

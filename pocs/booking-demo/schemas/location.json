@@ -1,0 +1,158 @@
+{
+  "title": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "translatable": true,
+      "label": "Title",
+      "maxLength": 200,
+      "area": "main",
+      "group": "basic"
+    }
+  },
+  "color": {
+    "type": "string",
+    "meta": {
+      "label": "Color",
+      "component": "ColorPicker",
+      "area": "sidebar",
+      "group": "basic",
+      "help": "Color used for this location's bookings in the calendar"
+    }
+  },
+  "street": {
+    "type": "string",
+    "meta": {
+      "translatable": true,
+      "label": "Street",
+      "area": "main",
+      "group": "address"
+    }
+  },
+  "zip": {
+    "type": "string",
+    "meta": {
+      "translatable": true,
+      "label": "ZIP Code",
+      "area": "main",
+      "group": "address"
+    }
+  },
+  "city": {
+    "type": "string",
+    "meta": {
+      "translatable": true,
+      "label": "City",
+      "area": "main",
+      "group": "address"
+    }
+  },
+  "location": {
+    "type": "text",
+    "meta": {
+      "label": "Coordinates (GeoJSON)",
+      "area": "main",
+      "group": "scheduling"
+    }
+  },
+  "content": {
+    "type": "text",
+    "meta": {
+      "translatable": true,
+      "label": "Content",
+      "area": "main",
+      "group": "content",
+      "component": "EditorSimple"
+    }
+  },
+  "allowedMemberIds": {
+    "type": "array",
+    "meta": {
+      "label": "Allowed Member IDs",
+      "area": "sidebar",
+      "group": "access",
+      "help": "User IDs that are allowed to book at this location"
+    }
+  },
+  "slots": {
+    "type": "repeater",
+    "meta": {
+      "label": "Available Time Slots",
+      "repeaterComponent": "Slot",
+      "addLabel": "Add Time Slot",
+      "sortable": true,
+      "area": "main",
+      "group": "scheduling",
+      "help": "Only used in slot mode. Hidden when inventory mode is enabled.",
+      "properties": {
+        "label": { "type": "string", "required": true, "label": "Slot Name" },
+        "capacity": { "type": "number", "label": "Capacity", "default": 1 }
+      }
+    }
+  },
+  "openDays": {
+    "type": "array",
+    "meta": {
+      "nullable": true,
+      "label": "Open Days",
+      "area": "main",
+      "group": "scheduling",
+      "component": "OpenDaysPicker",
+      "help": "Days of the week this location is open. Empty/null means every day."
+    }
+  },
+  "slotSchedule": {
+    "type": "json",
+    "meta": {
+      "nullable": true,
+      "label": "Slot Schedule",
+      "area": "main",
+      "group": "scheduling",
+      "component": "ScheduleGrid",
+      "help": "Per-slot day-of-week availability. Null means all slots follow open days."
+    }
+  },
+  "blockedDates": {
+    "type": "repeater",
+    "meta": {
+      "nullable": true,
+      "label": "Blocked Dates",
+      "repeaterComponent": "BlockedDateInput",
+      "addLabel": "Add Blocked Period",
+      "sortable": false,
+      "area": "main",
+      "group": "scheduling",
+      "help": "Date ranges when the location is closed (holidays, maintenance, etc.)"
+    }
+  },
+  "inventoryMode": {
+    "type": "boolean",
+    "meta": {
+      "label": "Inventory Mode",
+      "default": false,
+      "area": "sidebar",
+      "group": "inventorySettings",
+      "help": "When enabled, books from a quantity pool instead of time slots. Use for equipment rentals, bike pools, etc."
+    }
+  },
+  "quantity": {
+    "type": "number",
+    "meta": {
+      "label": "Available Units",
+      "default": 0,
+      "area": "sidebar",
+      "group": "inventorySettings",
+      "dependsOn": "inventoryMode",
+      "help": "Number of items available for booking per day (e.g., 5 bikes, 10 kayaks)"
+    }
+  },
+  "maxBookingsPerMonth": {
+    "type": "number",
+    "meta": {
+      "label": "Max Bookings Per Month",
+      "area": "sidebar",
+      "group": "limits",
+      "help": "Maximum bookings a user can make per calendar month. Empty = unlimited."
+    }
+  }
+}

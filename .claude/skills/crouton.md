@@ -92,6 +92,7 @@ Use this skill when the user mentions:
 | `--hierarchy` | Enable tree structure |
 | `--seed` | Generate seed data file |
 | `--count <n>` | Seed record count (default: 25) |
+| `--no-tests` | Skip the per-collection schema-smoke test (emitted by default, #785) |
 | `--dry-run` | Preview without writing |
 
 ### Field Types
@@ -307,6 +308,25 @@ crouton {layer} {collection} --fields-file=./schemas/{collection}.json --dialect
    npx nuxt typecheck
    ```
 
+### Step 6: Default Layout (generate → POC, #709)
+
+The generator's final step runs the **deterministic layout pass** and writes
+**`crouton.layout.json`** at the app root — a `layout_configs`-format tree that
+arranges the just-generated collections into a good default (no LLM):
+
+- a compound **calendar** present (bookings) → **calendar-primary**;
+- otherwise list + form → **master-detail**; extra collections stacked;
+- each block is data-bound (`config.collection`), and the arrangement is
+  **viability-gated** (every block ≥ its `minWidth`, vertical fallback when a
+  side-by-side split is too narrow).
+
+`crouton-seed` upserts this tree into `layout_configs` (row `default`), so the
+POC boots laid-out — editable in `CroutonLayout`, the layout is **data** not
+`.vue`. Reviewed via the usual UI sign-off loop (#307: staging preview → `approve`).
+The rule set lives in `crouton-layout/app/utils/layout-compose.ts`
+(`composeDefaultLayout`, in the `@fyit/crouton-layout` package — #751);
+the LLM `/layout` pass (#711) is gated and out of scope.
+
 ## Generated Files
 
 ```
@@ -327,10 +347,16 @@ layers/{layer}/collections/{collection}/
 │       ├── schema.ts         # Drizzle ORM schema
 │       ├── queries.ts        # Database operations
 │       └── seed.ts           # Seed data (with --seed flag)
+├── {Layer}{Collection}s.test.ts  # Zod schema-smoke test (#785) — skip with --no-tests
 ├── types.ts                  # TypeScript interfaces
 ├── nuxt.config.ts           # Layer configuration
 └── README.md                # Collection documentation
 ```
+
+A **schema-smoke test** is emitted per collection by default (#785): runtime-free
+(zod only), it asserts the generated Zod schema accepts a valid record and rejects
+an invalid one. `crouton init`/`scaffold-app` wire a `vitest.config.ts` + `test`
+script so `pnpm test` runs them. The e2e fixture smoke still owns boot + CRUD.
 
 ### Running Seed Files
 

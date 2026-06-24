@@ -837,12 +837,45 @@ function handleDelete() {
 }
 
 // Translatable fields
+// Document-first (#722): only the document body fields render inline (big title,
+// faint slug, content hero). SEO/OG/robots move into the disclosure below.
 const translatableFields = computed(() => {
   if (showBlockEditor.value) {
-    return ['title', 'slug', 'seoTitle', 'seoDescription', 'content']
+    return ['title', 'slug', 'content']
   }
-  return ['title', 'slug', 'seoTitle', 'seoDescription']
+  return ['title', 'slug']
 })
+
+// Per-field presentation for the inline document fields: borderless big title +
+// faint slug (read by CroutonI18nInput's bareFields/fieldUi, #722).
+const docFieldUi = {
+  title: { variant: 'none', size: 'xl', class: '!text-2xl font-bold leading-tight px-0' },
+  slug: { variant: 'none', size: 'md', class: 'text-muted px-0' },
+}
+const docFieldPlaceholders = computed(() => ({
+  title: t('pages.editor.titlePlaceholder', 'Untitled page'),
+  slug: t('pages.editor.slugPlaceholder', 'page-url-slug'),
+}))
+
+// SEO & social disclosure (root og/robots + per-locale seo text, bound to the
+// active app locale — refine to follow the locale tab in a later pass).
+const showSeoMeta = ref(false)
+const seoLocale = computed(() => locale.value || 'en')
+function localeField(field: 'seoTitle' | 'seoDescription') {
+  return computed<string>({
+    get: () => {
+      const tr = state.value.translations as Record<string, Record<string, any>> | undefined
+      return (tr?.[seoLocale.value]?.[field] as string) ?? ''
+    },
+    set: (val: string) => {
+      const tr = { ...(state.value.translations as Record<string, Record<string, any>> || {}) }
+      tr[seoLocale.value] = { ...(tr[seoLocale.value] || {}), [field]: val }
+      state.value.translations = tr
+    },
+  })
+}
+const seoTitle = localeField('seoTitle')
+const seoDescription = localeField('seoDescription')
 
 // Field components
 const fieldComponents = computed((): Record<string, string> => {
@@ -1117,26 +1150,64 @@ defineExpose({ state })
         </UFormField>
       </div>
 
-      <!-- Content -->
-      <div class="flex-1 min-h-0 p-4 overflow-hidden">
-        <CroutonI18nInput
-          v-if="contentReady"
-          :key="contentKey"
-          v-model="state.translations"
-          :fields="translatableFields"
-          :layout="i18nLayout"
-          :show-ai-translate="hasAI"
-          field-type="page"
-          :field-components="fieldComponents"
-          :field-options="fieldOptions"
-          :field-groups="fieldGroups"
-          :default-open-groups="[t('pages.fieldGroups.info'), t('pages.fieldGroups.content')]"
-          :collab="collabForI18n"
-          :class="isCollectionPage ? 'min-h-64' : 'h-full'"
-        >
-          <template #group-extra="{ locale: previewLocale }">
-            <USeparator class="mt-3 mb-2" />
-            <div class="flex flex-col gap-2">
+      <!-- Content (document-first #722): big title + faint slug + content hero;
+           SEO / OG / robots live in one quiet disclosure below. -->
+      <div class="flex-1 min-h-0 overflow-auto">
+        <div class="mx-auto flex h-full w-full max-w-3xl flex-col px-4 py-3">
+          <CroutonI18nInput
+            v-if="contentReady"
+            :key="contentKey"
+            v-model="state.translations"
+            :fields="translatableFields"
+            :layout="i18nLayout"
+            :show-ai-translate="hasAI"
+            field-type="page"
+            :field-components="fieldComponents"
+            :field-options="fieldOptions"
+            :bare-fields="['title', 'slug']"
+            :field-ui="docFieldUi"
+            :field-placeholders="docFieldPlaceholders"
+            :collab="collabForI18n"
+            :class="isCollectionPage ? 'min-h-64' : 'flex-1 min-h-0'"
+          >
+            <template v-if="hasMetadata" #header>
+              <div class="flex items-center gap-3 text-xs text-muted">
+                <span v-if="createdByName" class="flex items-center gap-1">
+                  <UIcon name="i-lucide-user-plus" class="size-3" />
+                  {{ createdByName }} {{ createdTimeAgo }}
+                </span>
+                <span v-if="updatedByName && updatedByName !== createdByName" class="flex items-center gap-1">
+                  <UIcon name="i-lucide-pencil" class="size-3" />
+                  {{ updatedByName }} {{ updatedTimeAgo }}
+                </span>
+                <span v-else-if="(state as any).updatedAt && (state as any).updatedAt !== (state as any).createdAt" class="flex items-center gap-1">
+                  <UIcon name="i-lucide-pencil" class="size-3" />
+                  {{ t('pages.editor.updated', { time: updatedTimeAgo }) }}
+                </span>
+              </div>
+            </template>
+          </CroutonI18nInput>
+          <div v-else class="h-full flex items-center justify-center">
+            <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-muted" />
+          </div>
+
+          <!-- SEO & social — one quiet disclosure (root og/robots + per-locale seo text) -->
+          <div v-if="!isCollectionPage" class="mt-3 shrink-0 border-t border-default pt-2">
+            <button
+              type="button"
+              class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted hover:text-default transition-colors"
+              @click="showSeoMeta = !showSeoMeta"
+            >
+              <UIcon :name="showSeoMeta ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="size-3.5" />
+              {{ t('pages.editor.seoSocial', 'SEO & social') }}
+            </button>
+            <div v-if="showSeoMeta" class="mt-2 flex flex-col gap-2">
+              <UFormField :label="t('pages.fields.seoTitle', 'SEO title')" name="seoTitle">
+                <UInput v-model="seoTitle" size="sm" class="w-full" :placeholder="t('pages.editor.seoTitlePlaceholder', 'Defaults to the page title')" />
+              </UFormField>
+              <UFormField :label="t('pages.fields.seoDescription', 'SEO description')" name="seoDescription">
+                <UTextarea v-model="seoDescription" :rows="2" size="sm" class="w-full" :placeholder="t('pages.editor.seoDescriptionPlaceholder', 'One-line summary for search & shares')" />
+              </UFormField>
               <UFormField :label="t('pages.fields.ogImage')" name="ogImage">
                 <Suspense v-if="hasAssetsPicker">
                   <CroutonAssetsPicker
@@ -1163,63 +1234,33 @@ defineExpose({ state })
                   class="w-full"
                 />
               </UFormField>
-            </div>
-            <!-- SEO preview for narrow/mobile (hidden on wide screens where secondary column shows it) -->
-            <div class="lg:hidden">
               <CroutonPagesEditorSeoPreview
                 :team-slug="teamSlugRef"
                 :translations="state.translations"
                 :og-image="state.ogImage"
-                :preview-locale="previewLocale"
+                :preview-locale="seoLocale"
               />
             </div>
-          </template>
-          <template #group-extra-secondary="{ locale: previewLocale }">
-            <CroutonPagesEditorSeoPreview
-              :team-slug="teamSlugRef"
-              :translations="state.translations"
-              :og-image="state.ogImage"
-              :preview-locale="previewLocale"
-            />
-          </template>
-          <template v-if="hasMetadata" #header>
-            <div class="flex items-center gap-3 text-xs text-muted">
-              <span v-if="createdByName" class="flex items-center gap-1">
-                <UIcon name="i-lucide-user-plus" class="size-3" />
-                {{ createdByName }} {{ createdTimeAgo }}
-              </span>
-              <span v-if="updatedByName && updatedByName !== createdByName" class="flex items-center gap-1">
-                <UIcon name="i-lucide-pencil" class="size-3" />
-                {{ updatedByName }} {{ updatedTimeAgo }}
-              </span>
-              <span v-else-if="(state as any).updatedAt && (state as any).updatedAt !== (state as any).createdAt" class="flex items-center gap-1">
-                <UIcon name="i-lucide-pencil" class="size-3" />
-                {{ t('pages.editor.updated', { time: updatedTimeAgo }) }}
-              </span>
+          </div>
+
+          <!-- Config fields for app pages (non-regular, non-collection, non-block-content page types) -->
+          <template v-if="!showBlockEditor && !isCollectionPage && selectedPageType?.configSchema?.length">
+            <USeparator :label="t('pages.editor.pageSettings')" class="my-6" />
+            <div class="space-y-4">
+              <div v-for="field in selectedPageType.configSchema" :key="field.name" class="text-sm text-muted">
+                {{ t('pages.editor.configField', { name: field.name }) }}
+              </div>
             </div>
           </template>
-        </CroutonI18nInput>
-        <div v-else class="h-full flex items-center justify-center">
-          <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-muted" />
+
+          <template v-else-if="!showBlockEditor && !isCollectionPage && !selectedPageType?.configSchema?.length">
+            <div class="p-4 bg-muted/30 rounded-lg text-center text-sm text-muted mt-6">
+              <UIcon name="i-lucide-info" class="size-5 mb-2" />
+              <p>{{ t('pages.editor.noConfig') }}</p>
+              <p>{{ t('pages.editor.displaysComponent', { name: selectedPageType?.name ? t(selectedPageType.name) : '' }) }}</p>
+            </div>
+          </template>
         </div>
-
-        <!-- Config fields for app pages (non-regular, non-collection, non-block-content page types) -->
-        <template v-if="!showBlockEditor && !isCollectionPage && selectedPageType?.configSchema?.length">
-          <USeparator :label="t('pages.editor.pageSettings')" class="my-6" />
-          <div class="space-y-4">
-            <div v-for="field in selectedPageType.configSchema" :key="field.name" class="text-sm text-muted">
-              {{ t('pages.editor.configField', { name: field.name }) }}
-            </div>
-          </div>
-        </template>
-
-        <template v-else-if="!showBlockEditor && !isCollectionPage && !selectedPageType?.configSchema?.length">
-          <div class="p-4 bg-muted/30 rounded-lg text-center text-sm text-muted mt-6">
-            <UIcon name="i-lucide-info" class="size-5 mb-2" />
-            <p>{{ t('pages.editor.noConfig') }}</p>
-            <p>{{ t('pages.editor.displaysComponent', { name: selectedPageType?.name ? t(selectedPageType.name) : '' }) }}</p>
-          </div>
-        </template>
       </div>
     </UForm>
 

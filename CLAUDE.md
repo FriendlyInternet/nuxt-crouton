@@ -21,14 +21,26 @@ Whenever you need to perform multiple independent operations, invoke all relevan
 When improving code, use multiple focused passes:
 1. Functionality → Performance → Quality → Testing → Documentation
 
-### 4. Task Management with TodoWrite (MANDATORY)
+### 4. Task Management with TodoWrite (when available)
 
-**CRITICAL**: Use the TodoWrite tool proactively for ALL complex tasks.
+**Use the TodoWrite tool proactively for complex tasks — *when the harness exposes it*.**
+
+> ⚠️ **TodoWrite is not available on every harness** (notably Claude Code on the
+> web, where the tool errors with *"not enabled in this context"*). It's a
+> **capability, not a guarantee** — don't assume it, and don't waste turns
+> retrying it after it errors. When it's absent, **fall back** to:
+> 1. a short inline checklist in your reply (the breakdown lives in chat), and
+> 2. the **GitHub issue's own acceptance-criteria checkboxes** as the durable,
+>    coarse tracker — tick them as you satisfy each criterion.
+>
+> Do **not** push ephemeral per-step micro-todos onto the GitHub issue (comment
+> spam / body churn) — the issue tracks the *unit of work* (epic + sub-issues +
+> acceptance criteria), the inline checklist tracks *this session's steps*.
 
 **When to use:** Any task with 3+ steps, multi-file changes, debugging, feature implementations.
 **When NOT to use:** Single straightforward tasks, trivial changes, purely conversational queries.
 
-**Critical Rules:**
+**Critical Rules (when using TodoWrite):**
 - Exactly ONE task must be `in_progress` at any time
 - Mark tasks `completed` IMMEDIATELY after finishing
 - ONLY mark complete when FULLY accomplished — never if tests fail or work is partial
@@ -43,10 +55,11 @@ Every task is a **GitHub issue** (see `### GitHub Issue Tracking` below) and fol
 
 ```
 1. Claim the issue   → set it in-progress, use TodoWrite for the local breakdown
-2. Do The Work       → Follow CLAUDE.md patterns, KISS principle
-3. Run Type Checking → pnpm typecheck (runs per-app), fix errors immediately
-4. Update the issue  → comment progress / tick acceptance criteria
-5. Git Commit        → ALWAYS use /commit skill, reference (#NN) — NEVER git commit directly
+2. Test Sign-Off     → for packages/* LOGIC: write the test FIRST, agree on it, before any code (see "Test Sign-Off" below). Apps opt-in; pocs exempt. Skip for non-logic / schema / UI changes.
+3. Do The Work       → Follow CLAUDE.md patterns, KISS principle — make the agreed test green
+4. Run Type Checking → pnpm typecheck (runs per-app), fix errors immediately
+5. Update the issue  → comment progress / tick acceptance criteria
+6. Git Commit        → ALWAYS use /commit skill, reference (#NN) — NEVER git commit directly
 ```
 
 **ARCHAEOLOGY-FIRST for bugs (HARD GATE): research how & when a bug was introduced BEFORE fixing it.** The moment a bug, crash, failed build, broken test, or "this used to work" is reported, step 0 is to find the first-bad commit (`git log -S`/`-G`, `git blame`, `git bisect`) — or determine it's *not* a code regression (stale install, env, data) — and **record that finding on the tracking issue/PR** (open one if none exists). A symptom-first fix can "repair" code that was never broken. Run the **`bug-archaeology`** skill; it carries the protocol + the finding template. (#424)
@@ -216,6 +229,8 @@ Addon packages must register in `croutonApps` (in `app/app.config.ts`) to be det
 
 So: scaffold a new app at **`pocs/<name>`** (label `poc:<name>`); **promote `pocs/<name>` → `apps/<name>` only at production launch** (then it takes on the `apps/` rules, the `app:<name>` label, and prod deploy). Mirror `apps/velo` / `apps/fanfare` for structure either way. The endpoint of building a POC is a **deployed staging preview URL** (see the `/deploy` skill), not just merged code.
 
+When a POC instead **graduates into `packages/*`** (it was incubating a future package), that promotion is the checkpoint to **backfill test-first coverage** for its genuine logic — the Test Sign-Off gate (#774) is *off* for `pocs/*` but *on* for `packages/*`, so graduation is where the tests get written.
+
 ### New App `postinstall` Must Be Guarded
 
 **Every app in `apps/` MUST use `"postinstall": "nuxt prepare 2>/dev/null || true"` — NEVER a bare `nuxt prepare`.**
@@ -374,6 +389,28 @@ import { useDrizzle } from '#server/utils/drizzle'
 When delegating: template scout first → parallel tasks → clear boundaries → smell check after.
 Agent definitions live in `.claude/agents/*.md` (the recursive `task-orchestrator` / `task-decomposer` / `task-worker` pipeline). When an agent defines a custom persona, include it in the Task prompt when invoking.
 
+## You HAVE a headless browser (verify capabilities, don't assume)
+
+**This environment has a working headless browser** — Playwright + a chromium
+pre-installed under `/opt/pw-browsers/`. You **can** render pages, screenshot UI,
+and drive a live preview locally. The recurring trap: the Playwright browser
+**download host is egress-blocked**, so `npx playwright install` fails — and a
+session wrongly concludes "no Chromium / no browser" and plans around a
+limitation that **doesn't exist**. Don't. Use the already-installed browser:
+
+```bash
+# Easiest — screenshot a running app (auto-resolves the chromium build):
+node scripts/app-shots.mjs <baseUrl> <path[:name]> [more...]   # → screenshots/<name>.png
+# In Playwright code, point launch() at the installed binary (build number varies):
+#   chromium.launch({ executablePath: <…/opt/pw-browsers/chromium-*/chrome-linux/chrome> })
+```
+
+The `SessionStart` hook announces the browser + its path every session. **General
+rule:** a prior session's (or a task brief's) claimed limitation is a
+*hypothesis* — verify it with a 5-second check before designing around it. The
+same applies to any "X isn't available here" (TodoWrite, a CLI, a binary): probe,
+don't trust a stale assertion.
+
 ## UI Sign-Off (deploy a live preview before you build) — epic #307
 
 **When a task changes a visual surface, get sign-off before you build it.** Treat work as
@@ -417,6 +454,35 @@ it). In the agent pipeline it's a gate in `.claude/agents/task-worker.md`; inter
 same by hand. It **reuses the same revision/approval loop and signal as the UI gate** (#310) —
 feedback goes inline on the committed `<collection>.md` in the diff; approval (a **comment**
 containing `lgtm`/`approve` — not a reaction or label, #572) unblocks generation.
+
+## Test Sign-Off (agree on the test before you write the code) — epic #774
+
+**When a task adds or changes hand-written LOGIC in `packages/*`, write the test first and agree on
+it before writing the code.** Run the **`test-review`** skill to render the proposed *failing*
+test(s) — the cases being asserted, in plain language plus the test code — get a human to sign off
+on the **behaviour**, and only then write the code that makes it green. The agreed test is the
+contract: "done" = that test passes. This is the third sign-off gate alongside Schema (#314, the
+data model) and UI (#307, the look) — pick the gate by *what the change is*.
+
+**Scope is by where the code currently lives (#779), not its origin or destiny:**
+
+| Current home | Test-first |
+|---|---|
+| `packages/*` | **On** (default) — what we maintain; every consuming app inherits its correctness |
+| `apps/*` | **Opt-in** — may be another user's app; their call, not ours to impose |
+| `pocs/*` | **Off** — the incubator must stay fast and safe-to-fail |
+
+The gate moves *with the code*: a POC has no fixed identity, so it's exempt while it's a POC, and
+**graduating to `packages/*` is the checkpoint to backfill its tests** (see the `pocs/` note above).
+Within `packages/*` the gate fires only on hand-written **logic** — a data model routes to the
+Schema gate, how something looks routes to the UI gate, and deterministic generated CRUD is covered
+by the e2e fixture smoke, not here.
+
+In the agent pipeline it's a gate in `.claude/agents/task-worker.md`; interactively, do the same by
+hand. It **reuses the same revision/approval loop and signal as the UI/Schema gates** (#310) — hold
+on `status:blocked`; approval is a **comment** containing `lgtm`/`approve` (not a reaction or label,
+#572) and unblocks the code. (The CI `test` job already hard-gates `pnpm test` — this gate is about
+*order*, writing the test first, not enforcement.)
 
 ## Documentation Organization
 
@@ -472,12 +538,12 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 
 | Type | File | Purpose |
 |------|------|---------|
-| Skill | `.claude/skills/crouton.md` | Collection generation workflow |
+| Skill | `.claude/skills/crouton.md` | Collection generation workflow — incl. the generate → POC **default-layout** step (#709): after collections generate, a deterministic rule set (`crouton-layout/app/utils/layout-compose.ts`) arranges them into a viability-gated `layout_configs` tree (`crouton.layout.json` → seeded), so a fresh POC boots laid-out (calendar-primary / master-detail), not a blank canvas |
 | Skill | `.claude/skills/sync-docs/SKILL.md` | Doc sync before commits |
 | Skill | `.claude/skills/i18n-audit.md` | Translation audit + fix |
 | Skill | `.claude/skills/github-tasks/SKILL.md` | GitHub issue tracking (epics, labels, workflow) |
-| Skill | `.claude/skills/epic-digest/SKILL.md` | Daily "where are we?" digest — a "🧪 Needs your eyes" band (what landed + the author's How-to-test steps + a 👁 badge for visual changes, so the owner has a ready QA checklist), last-24h activity, and a progress snapshot of every open epic, rendered dependency-free (HTML/text, or Markdown). Interactive run gathers via GitHub MCP; a scheduled GitHub Action (`gather.mjs` → `render.mjs` → `post-comment.sh`) posts it to a standing issue every morning with no LLM/secrets (#357, #408, #495). For a status rapport / "what moved this week" |
-| Skill | `.claude/skills/housekeeping/SKILL.md` | Weekly "🧹 Housekeeping" digest — a **report-only** sweep that catches the drift the event-driven jobs miss (stale unmerged branches, issues missing `type:`/component labels, `packages/apps/pocs/workers` dirs with no matching `.github/labels.yml` label, stuck `status:in-progress` tickets, epics with all children closed, idle PRs). Mirrors `epic-digest`'s deterministic `gather.mjs → render.mjs → post-comment.sh` (no LLM/secrets) → one rolling standing issue; **never mutates** a branch/label/issue. Cadence + delivery are config-as-data in `.github/digests.yml` (`schedule.mjs` gates a daily cron → only sends on the configured day; `issue`/`email` rails). Scheduled by `.github/workflows/housekeeping.yml` (epic #633) |
+| Skill | `.claude/skills/epic-digest/SKILL.md` | Daily "where are we?" digest — a "🧪 Needs your eyes" band (what landed + the author's How-to-test steps + a 👁 badge for visual changes, so the owner has a ready QA checklist), a "✅ Ready to close" band for finished-but-open epics (driven by the `status:ready-to-close`/`status:needs-postmortem` labels, #763 — replaces the old contradictory "Done"-on-an-open-epic badge), last-24h activity, and a progress snapshot of every open epic, rendered dependency-free (HTML/text, or Markdown). Interactive run gathers via GitHub MCP; a scheduled GitHub Action (`gather.mjs` → `render.mjs` → email via Resend) sends it every morning with no LLM (#357, #408, #495, #551). For a status rapport / "what moved this week" |
+| Skill | `.claude/skills/housekeeping/SKILL.md` | Daily "🧹 Housekeeping" digest — a **report-only** sweep that catches the drift the event-driven jobs miss (stale unmerged branches, issues missing `type:`/component labels, `packages/apps/pocs/workers` dirs with no matching `.github/labels.yml` label, stuck `status:in-progress` tickets, epics with all children closed — split by `status:ready-to-close`/`status:needs-postmortem` (#763), idle PRs). Mirrors `epic-digest`'s deterministic `gather.mjs → render.mjs → post-comment.sh` (no LLM/secrets) → one rolling standing issue; **never mutates** a branch/label/issue. Cadence + delivery are config-as-data in `.github/digests.yml` (`schedule.mjs` gates a daily cron → only sends on the configured day; `issue`/`email` rails). Scheduled by `.github/workflows/housekeeping.yml` (epic #633) |
 | Skill | `.claude/skills/ticket-diagram/SKILL.md` | Attach a self-contained **Excalidraw** status diagram to a GitHub epic — read the epic + sub-issue tree → boxes-coloured-by-status with bound dependency arrows → a committed **PNG that renders on the GitHub mobile app AND has the editable scene embedded inside it** (open the PNG in Excalidraw to edit), plus a diffable `<slug>.graph.json` → sticky comment → iterate to approval (reuses the #310 sign-off loop). Round-trip human edits back via `scripts/ticket-excalidraw-import.mjs` (decode embedded scene from an attached PNG → re-render → re-embed). Generator: `scripts/ticket-excalidraw.mjs` (+ `scripts/lib/excalidraw.mjs`, `scripts/lib/excalidraw-png.mjs` codec). NOT live Mermaid (stalls on mobile). Workstream #2 of #479, epic #483 |
 | Skill | `.claude/skills/ecosystem-check/SKILL.md` | Check Nuxt/UnJS/Vite/OSS prior art before building |
 | Skill | `.claude/skills/provider-swap/SKILL.md` | Swap the external library/provider behind a `packages/*` package (map renderer, geocoder, editor engine, storage SDK) while keeping the public API stable so consuming apps need no changes — the keep-the-API-stable playbook + gotchas (dist `.d.ts` over docs, generator templates, fixtures, dup-dep type clashes). From the Mapbox→MapLibre swap (#538) |
@@ -489,11 +555,14 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 | Skill | `.claude/skills/task-decompose/SKILL.md` | Entry point to the recursive task-decomposition pipeline (`/task-decompose`) — one task → an epic + tree of sub-issues → agents. See "Task Decomposition Pipeline" below |
 | Skill | `.claude/skills/ui-proposal/SKILL.md` | Deploy a live staging preview (with `NUXT_PUBLIC_CROUTON_REVIEW=true`) for design sign-off before building UI — the default gate. `--static` fallback generates an offline HTML/CSS mockup + PNG. Part of the UI sign-off loop (#307, #488) |
 | Skill | `.claude/skills/schema-review/SKILL.md` | Render a collection schema (field-definition JSON) into a human-readable field table + relationships (HTML + PNG + Markdown) for data-model sign-off before `crouton config` generates code. Part of the schema sign-off loop (#314) |
+| Skill | `.claude/skills/test-review/SKILL.md` | Propose the failing test(s) FIRST and get a human to sign off on the **behaviour** before writing code — the test analog of schema-review/ui-proposal. Scoped by location (`packages/*` on, `apps/*` opt-in, `pocs/*` off, #779) and to hand-written **logic** within packages; reuses the `lgtm`/`status:blocked` loop (#310/#572). Part of the test sign-off gate (#774) |
 | Skill | `.claude/skills/block-authoring/SKILL.md` | Author a placeable layout block (`croutonLayoutBlocks`) that looks right at **any pane size** — the one hard rule (size to the pane via `@container`, never the viewport) + list/form playbooks + the sizing contract (`minWidth`…) the viability metric reads. Use when adding/converting a layout block or when one breaks in a narrow pane (layout engine, #703/#710) |
 | Skill | `.claude/skills/postmortem/SKILL.md` | At epic close (after the verify rollup, before closing): post a retro comment — what went well / what was hard (evidence-backed) / 1–3 proposals — and offer to mint accepted proposals as `workflow` issues. Tightens the loop over time (#403) |
 | Skill | `.claude/skills/bug-archaeology/SKILL.md` | First step of bug work (HARD GATE): research how & when a bug was introduced — `git log -S`/`blame`/`bisect` to the first-bad commit, or rule it a non-code cause (stale install/env/data) — and record the finding on the issue/PR before fixing. Use the moment a bug/regression/broken build is reported (#424) |
 | Skill | `.claude/skills/red-team/SKILL.md` | Adversarially probe the monorepo for security flaws at the right depth — steers the `red-team` subagent (`quick`/`standard`/`deep`), collates findings into a `writeups/reports/red-team-*.md` report, and files `security`/`sec:*` issues for confirmed high/criticals. The on-demand brain behind the per-PR CI gate + daily deep sweep. Use to "red-team", "try to hack this", "pentest this package/app" (#540) |
 | Agent | `.claude/agents/red-team.md` | Adversarial security prober — given `{ scope, depth }` reads code as an attacker (cross-team IDOR, auth bypass, injection, secret exposure, SSRF, upload/cache/rate-limit) and returns structured findings; static-first, `deep` dynamically confirms against a fixture. Reports only, never patches. Steered by `/red-team` + the CI/daily workflows (#540) |
+| Skill | `.claude/skills/a11y/SKILL.md` | Accessibility review — the code-cleaning analog of `/code-review` for WCAG/ARIA. Reviews just your diff (or `--scope <pkg>`/`--file`) via the depth-aware `a11y` subagent (`quick`=eslint-a11y + ARIA/keyboard smells, `standard`=one package, `deep`=boot a fixture + `@axe-core/playwright`), rates findings (axe critical/serious → 🔴, moderate → 🟡, minor → 🔵, reusing `/review`'s 3-level format), then `--comment` (inline PR comments) or `--fix` (safe `alt`/`aria-label`/label-for/`role`+`tabindex` → `pnpm typecheck`). On-demand layer atop the warn-first eslint-a11y rules (#726/#729) |
+| Agent | `.claude/agents/a11y.md` | Accessibility prober — given `{ scope, depth, fix }` reads templates as a screen-reader/keyboard user (ARIA-without-keyboard, missing `alt`/labels, positive `tabindex`, bad roles) and returns structured severity-rated findings; static-first via eslint-a11y, `deep` runs `@axe-core/playwright` against a fixture. Reports only; patches the safe set under `fix:true`. Steered by `/a11y` (#726/#729) |
 | Agent | `.claude/agents/task-orchestrator.md` | Reads an epic, fans it into 2–6 top-level sub-issues, spawns a decomposer per child |
 | Agent | `.claude/agents/task-decomposer.md` | Recursive: LEAF TEST one issue → spawn a worker (leaf) or split into sub-issues + spawn a decomposer per child |
 | Agent | `.claude/agents/task-worker.md` | Implements one leaf issue on an isolated worktree branch → `pnpm typecheck` → `/commit` → PR (`Closes #NN`) |

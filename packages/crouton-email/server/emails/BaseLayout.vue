@@ -10,6 +10,8 @@ import {
   EText,
   EHr
 } from 'vue-email'
+// Brand identity SSOT — shared with the digest renderers. See brand/email-brand.mjs.
+import { BRAND_NAME, FONT_SANS, LOGO_URL, PRIMARY_COLOR } from '../../brand/email-brand.mjs'
 
 interface Props {
   preview?: string
@@ -21,9 +23,9 @@ interface Props {
 
 withDefaults(defineProps<Props>(), {
   preview: '',
-  brandName: 'My App',
-  logoUrl: '',
-  primaryColor: '#0F766E',
+  brandName: BRAND_NAME,
+  logoUrl: LOGO_URL,
+  primaryColor: PRIMARY_COLOR,
   appUrl: ''
 })
 </script>
@@ -37,7 +39,7 @@ withDefaults(defineProps<Props>(), {
     <EBody
       :style="{
         backgroundColor: '#ffffff',
-        fontFamily: '-apple-system, BlinkMacSystemFont, \'Segoe UI\', \'Roboto\', \'Oxygen\', \'Ubuntu\', \'Cantarell\', \'Fira Sans\', \'Droid Sans\', \'Helvetica Neue\', sans-serif'
+        fontFamily: FONT_SANS
       }"
     >
       <EContainer

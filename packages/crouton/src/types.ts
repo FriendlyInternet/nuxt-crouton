@@ -157,6 +157,13 @@ export interface CroutonOptions {
    */
   i18n?: boolean
 
+  /**
+   * Deterministic layout engine (editor, renderer, default-layout pass,
+   * placeable blocks, layout_configs storage). Default-on, like auth/admin/i18n.
+   * @default true
+   */
+  layout?: boolean
+
   // ═══════════════════════════════════════════════════════════════════════════
   // Optional Add-ons (disabled by default)
   // ═══════════════════════════════════════════════════════════════════════════

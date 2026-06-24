@@ -23,7 +23,10 @@ the only thing it writes.
   failure). Report-only — never auto-prune (a destructive label sync strips the label from
   every issue).
 - **⏳ Stuck in-progress** — `status:in-progress` issues with no activity in >N days.
-- **✅ Epics ready to close** — all sub-issues closed but the epic still open.
+- **✅ Epics ready to close** — all sub-issues closed but the epic still open, split by the
+  action each needs (read from the `status:ready-to-close` / `status:needs-postmortem` label
+  the labeller stamps — see below): *run the postmortem then close* vs *postmortem done, just
+  close*.
 - **🔀 Idle PRs** — open PRs with no activity in >N days.
 
 ## Pipeline (deterministic — no LLM, no secrets)
@@ -60,7 +63,7 @@ green no-op when `RESEND_API_KEY` is unset).
 
 ```yaml
 housekeeping:
-  schedule: weekly:wed   # daily | weekly:<dow> ; dow = mon|tue|wed|thu|fri|sat|sun
+  schedule: daily        # daily | weekly:<dow> ; dow = mon|tue|wed|thu|fri|sat|sun
   deliver: [issue]       # issue | email
   # to: [you@example.com]  # required only when deliver includes email
 ```
@@ -84,6 +87,18 @@ past an event trigger.
 GITHUB_TOKEN=$(gh auth token) node .claude/skills/housekeeping/prune-merged-branches.mjs        # dry-run
 GITHUB_TOKEN=$(gh auth token) APPLY=true node .claude/skills/housekeeping/prune-merged-branches.mjs  # delete
 ```
+
+## Epic close-state labels (separate workflow — the only auto-label) (#763)
+
+The "✅ Epics ready to close" section reads two labels it does **not** set:
+`status:ready-to-close` and `status:needs-postmortem`. They're stamped by a separate daily
+workflow (`.github/workflows/label-ready-epics.yml` → `scripts/label-ready-epics.mjs`), split
+off by blast radius exactly like the branch janitor — it's the **only** auto-*label* mutation,
+and the digest stays report-only. For each open epic whose sub-issues are all closed it applies
+`status:ready-to-close` if a `<!-- postmortem:done -->` marker exists on a comment (left by the
+`postmortem` skill), else `status:needs-postmortem`; it removes both when the epic no longer
+qualifies. The same labels drive the daily epic-digest email's "Ready to close" band, so both
+digests agree. Dry-run by default; set repo var `LABEL_READY_EPICS_APPLY=true` to write.
 
 ## Tuning
 

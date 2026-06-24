@@ -76,7 +76,9 @@ export default {
     // Basic collection
     {
       name: 'products', // Collection name (plural, kebab-case recommended)
-      fieldsFile: './schemas/products.json' // Path to JSON schema file
+      fieldsFile: './schemas/products.json', // Path to JSON schema file
+      // tests: false // Skip the schema-smoke test for this collection (emitted by
+      //              // default, #785; equivalent to the global --no-tests flag)
     },
 
     // Collection with hierarchy support (tree structure)

@@ -1,0 +1,52 @@
+[
+  {
+    "collection": "settings",
+    "fields": [
+      "statuses",
+      "groups"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-06-23T22:47:45.101Z",
+    "layer": "bookings",
+    "gitSha": "1ecedf6"
+  },
+  {
+    "collection": "locations",
+    "fields": [
+      "title",
+      "color",
+      "street",
+      "zip",
+      "city",
+      "location",
+      "content",
+      "allowedMemberIds",
+      "slots",
+      "openDays",
+      "slotSchedule",
+      "blockedDates",
+      "inventoryMode",
+      "quantity",
+      "maxBookingsPerMonth"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-06-23T22:47:45.086Z",
+    "layer": "bookings",
+    "gitSha": "1ecedf6"
+  },
+  {
+    "collection": "bookings",
+    "fields": [
+      "location",
+      "date",
+      "slot",
+      "group",
+      "quantity",
+      "status"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-06-23T22:47:45.066Z",
+    "layer": "bookings",
+    "gitSha": "1ecedf6"
+  }
+]

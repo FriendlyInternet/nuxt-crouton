@@ -38,6 +38,9 @@
     },
     "thinkgraph": {
       "url": "http://localhost:3004/mcp"
+    },
+    "nuxt-ui": {
+      "url": "https://ui.nuxt.com/mcp"
     }
   }
 }

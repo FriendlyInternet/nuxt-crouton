@@ -28,7 +28,8 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 CroutonBooking
 ├── Slot/
 │   └── Indicator.vue   - Visual slot indicator
-├── Panel.vue           - Main booking sidebar
+├── Panel.vue           - Main booking sidebar (CroutonBookingsPanel; self-fetches via useBookingsList)
+├── LayoutCalendar.vue  - CroutonBookingsLayoutCalendar: the calendar as a placeable layout block (#709), registered in croutonLayoutBlocks as `bookings-calendar` (compound, minWidth 520). Wraps CroutonBookingsPanel; the deterministic layout pass picks it → calendar-primary.
 ├── Calendar.vue        - Calendar date picker
 ├── List.vue            - Bookings list
 ├── BookingCard.vue     - Individual booking card

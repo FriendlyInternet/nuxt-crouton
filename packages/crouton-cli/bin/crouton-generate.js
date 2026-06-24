@@ -55,6 +55,7 @@ const generate = defineCommand({
     hierarchy: { type: 'boolean', description: 'Enable hierarchy support (parentId, path, depth, order)' },
     seed: { type: 'boolean', description: 'Generate seed data file using drizzle-seed' },
     count: { type: 'string', description: 'Number of seed records (default: 25)', default: '25' },
+    tests: { type: 'boolean', description: 'Generate a per-collection schema-smoke test (use --no-tests to skip)', default: true },
     noAutoMerge: { type: 'boolean', description: 'Skip auto-merging package collections from manifests' },
   },
   async run({ args }) {
@@ -65,6 +66,7 @@ const generate = defineCommand({
         configPath: args.config,
         force: args.force,
         dryRun: args.dryRun,
+        noTests: args.tests === false,
         noAutoMerge: args.noAutoMerge,
       })
       return
@@ -79,6 +81,7 @@ const generate = defineCommand({
           configPath,
           force: args.force,
           dryRun: args.dryRun,
+          noTests: args.tests === false,
           noAutoMerge: args.noAutoMerge,
         })
         return
@@ -112,6 +115,7 @@ const generate = defineCommand({
       hierarchy: args.hierarchy,
       seed: args.seed,
       seedCount: parseInt(args.count || '25', 10),
+      noTests: args.tests === false,
     })
   }
 })
@@ -125,6 +129,7 @@ const configCmd = defineCommand({
     only: { type: 'string', description: 'Generate only a specific collection' },
     dryRun: { type: 'boolean', description: 'Preview without writing' },
     force: { type: 'boolean', description: 'Force generation' },
+    tests: { type: 'boolean', description: 'Generate per-collection schema-smoke tests (use --no-tests to skip)', default: true },
     noAutoMerge: { type: 'boolean', description: 'Skip auto-merging package collections' },
   },
   async run({ args }) {
@@ -140,6 +145,7 @@ const configCmd = defineCommand({
       force: args.force,
       dryRun: args.dryRun,
       only: args.only,
+      noTests: args.tests === false,
       noAutoMerge: args.noAutoMerge,
     })
   }

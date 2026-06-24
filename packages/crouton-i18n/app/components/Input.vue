@@ -51,6 +51,23 @@ const props = defineProps<{
    * Only relevant when fieldGroups is set.
    */
   defaultOpenGroups?: string[]
+  /**
+   * Fields rendered WITHOUT their auto label/translate row — for a document-style
+   * presentation where the field carries its own affordance (e.g. a big
+   * borderless title). Opt-in; default keeps the labelled rows. (#722)
+   */
+  bareFields?: string[]
+  /**
+   * Per-field overrides for the default `UInput` (variant / size / extra class),
+   * e.g. a borderless large title or a faint slug. Opt-in; only affects the
+   * plain-input branch (block/editor/textarea fields are unaffected). (#722)
+   */
+  fieldUi?: Record<string, { variant?: string, size?: string, class?: string }>
+  /**
+   * Per-field placeholder text (e.g. a borderless title's "Untitled page").
+   * Takes priority over the derived fallback-locale placeholder. Opt-in. (#722)
+   */
+  fieldPlaceholders?: Record<string, string>
 }>()
 
 const emit = defineEmits<{
@@ -178,7 +195,7 @@ function previewText(field: string, locale: string): string {
 </script>
 
 <template>
-  <div class="flex flex-col gap-4 h-full">
+  <div class="flex flex-col gap-2 h-full">
     <!-- ============================================= -->
     <!-- SIDE-BY-SIDE LAYOUT (with tabs on narrow)    -->
     <!-- ============================================= -->
@@ -193,7 +210,9 @@ function previewText(field: string, locale: string): string {
           :content="false"
           color="neutral"
           variant="link"
-          class="mb-3"
+          size="xs"
+          :ui="{ trigger: 'px-2 py-1 text-xs', list: 'gap-1' }"
+          class="mb-2"
         />
 
         <!-- Fields for active locale -->
@@ -315,7 +334,7 @@ function previewText(field: string, locale: string): string {
               field === 'content' ? 'flex-1 min-h-[300px]' : ''
             ]"
           >
-            <div class="flex items-center justify-between h-5">
+            <div v-if="!bareFields?.includes(field)" class="flex items-center justify-between h-5">
               <label class="text-xs font-medium text-muted uppercase tracking-wide">
                 {{ field }}
               </label>
@@ -406,11 +425,12 @@ function previewText(field: string, locale: string): string {
             <UInput
               v-else
               :model-value="getFieldValue(field, narrowLocaleTab)"
-              :placeholder="narrowLocaleTab !== primaryEditingLocale && getFieldValue(field, primaryEditingLocale) ? `${primaryEditingLocale.toUpperCase()}: ${getFieldValue(field, primaryEditingLocale)}` : (defaultValues?.[field] || '')"
+              :placeholder="narrowLocaleTab !== primaryEditingLocale && getFieldValue(field, primaryEditingLocale) ? `${primaryEditingLocale.toUpperCase()}: ${getFieldValue(field, primaryEditingLocale)}` : (fieldPlaceholders?.[field] || defaultValues?.[field] || '')"
               :color="error && !getFieldValue(field, narrowLocaleTab) ? 'error' : 'primary'"
               :highlight="!!(error && !getFieldValue(field, narrowLocaleTab))"
-              class="w-full"
-              size="sm"
+              :variant="(fieldUi?.[field]?.variant as any)"
+              :size="((fieldUi?.[field]?.size as any) || 'sm')"
+              :class="['w-full', fieldUi?.[field]?.class]"
               @update:model-value="updateFieldWithTransform(field, $event, narrowLocaleTab)"
               @blur="handleFieldBlur(field, narrowLocaleTab)"
             />

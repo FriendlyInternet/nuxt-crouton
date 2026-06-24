@@ -23,7 +23,8 @@ Unified Nuxt module that aggregates all Crouton packages into a single entry poi
     ├── Core add-ons (enabled by default):
     │   ├── @fyit/crouton-auth (authentication)
     │   ├── @fyit/crouton-admin (admin dashboard)
-    │   └── @fyit/crouton-i18n (translations)
+    │   ├── @fyit/crouton-i18n (translations)
+    │   └── @fyit/crouton-layout (deterministic layout engine)
     │
     ├── Optional add-ons (disabled by default):
     │   ├── @fyit/crouton-editor (TipTap)
@@ -91,6 +92,7 @@ export default defineNuxtConfig({
 | `auth` | `true` | Better Auth with teams, passkeys, 2FA |
 | `admin` | `true` | Admin dashboard |
 | `i18n` | `true` | Multi-language support |
+| `layout` | `true` | Deterministic layout engine (editor, renderer, default-layout pass, blocks, `layout_configs`) |
 | `editor` | `false` | TipTap rich text |
 | `flow` | `false` | Vue Flow graphs |
 | `assets` | `false` | Media library |

@@ -15,8 +15,33 @@
 // Output: screenshots/<name>.png (name defaults to a slug of the path).
 // All screenshots go in screenshots/ (repo HARD GATE) unless --out overrides.
 
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
+
+// Resolve an already-installed chromium WITHOUT pinning a build number. The
+// browsers live at /opt/pw-browsers/chromium-<build>/… and the build bumps with
+// Playwright; a hardcoded path silently breaks after a bump and looks like "no
+// browser" (the trap that's fooled past sessions — there IS always a browser).
+// So we glob the newest matching build instead. Override with
+// PLAYWRIGHT_CHROMIUM_PATH.
+export function findChromium() {
+  const envPath = process.env.PLAYWRIGHT_CHROMIUM_PATH
+  if (envPath && existsSync(envPath)) return envPath
+  const root = '/opt/pw-browsers'
+  if (!existsSync(root)) return undefined
+  const dirs = readdirSync(root)
+  const pick = (prefix, rel) =>
+    dirs
+      .filter(d => d.startsWith(prefix))
+      .map(d => `${root}/${d}/${rel}`)
+      .filter(existsSync)
+      .sort() // build numbers sort lexically; newest wins
+      .pop()
+  return (
+    pick('chromium-', 'chrome-linux/chrome')
+    || pick('chromium_headless_shell-', 'chrome-linux/headless_shell')
+  )
+}
 
 const argv = process.argv.slice(2)
 let outDir = 'screenshots'

@@ -15,9 +15,9 @@ per open **epic** with a progress bar and a one-line status — the sub-issue br
 into a collapsible section so the overview stays clean. Built to be **read at a glance, drilled
 into if needed**.
 
-**This is render-only.** It *makes* the digest (HTML + plain text under
-`writeups/reports/`) and shows you where it landed — it does **not** send email
-yet. Forwarding/sending and scheduling are follow-up sub-issues of epic #357.
+**Interactively this is render-only.** A by-hand run *makes* the digest (HTML +
+plain text under `writeups/reports/`) and shows you where it landed. The
+**scheduled** job is what delivers — by **email** via Resend (see below).
 
 ## When to use
 - A daily/weekly "where are we?" check, a status rapport, or "what moved".
@@ -151,24 +151,22 @@ node .claude/skills/epic-digest/render.mjs writeups/reports/.epic-digest.data.js
 Dependency-free (no npm deps, no network). Default writes the `.html` + `.txt`;
 `--format md` writes a GitHub-flavoured `.md` instead (used by the daily job).
 
-## Automated daily run (no LLM, no secrets)
+## Automated daily run (no LLM)
 The interactive flow above gathers via GitHub MCP. The **scheduled** daily digest
 runs entirely deterministically — `.github/workflows/epic-digest.yml` (cron
 `0 5 * * *`, ~06:00 Europe/Brussels) does:
 ```bash
 GITHUB_TOKEN=… node .claude/skills/epic-digest/gather.mjs > digest.data.json   # API → same JSON shape
-node .claude/skills/epic-digest/render.mjs digest.data.json --format md --out-dir .
-GH_TOKEN=… DIGEST_BODY_FILE=epic-digest-<date>.md bash .claude/skills/epic-digest/post-comment.sh
+node .claude/skills/epic-digest/render.mjs digest.data.json --out-dir .         # email-safe HTML + .txt
+# → email the HTML (+ text mirror) via Resend
 ```
 - **`gather.mjs`** parses `Hypothesis` (or legacy `The bet`) / `We'll know by` from each epic body and
   **computes** `whereWeAre` from child counts — no model in the loop.
-- **`post-comment.sh`** posts the Markdown as a comment on the single standing
-  **"📊 Daily epic digest"** issue (creating it if missing) via `gh` + the built-in
-  `GITHUB_TOKEN`. No email provider, no secret to provision (#408).
-- **Optional email rail (#551):** the scheduled workflow also emails the rendered
-  HTML (+ text mirror) via Resend when `secrets.RESEND_API_KEY`, `vars.RESEND_FROM`
-  (shared with the red-team daily) and `vars.DIGEST_REPORT_EMAIL` are set. Unset ⇒ the
-  step warns and skips, so the standing-issue comment stays the baseline delivery.
+- **Delivery is email-only, via Resend** (#551). The job emails the rendered HTML
+  (+ text mirror) when `secrets.RESEND_API_KEY`, `vars.RESEND_FROM` (shared with the
+  red-team daily) and `vars.DIGEST_REPORT_EMAIL` are set; unset ⇒ the step warns and
+  skips so the job stays green. The old standing-issue comment rail was retired (it
+  produced duplicate GitHub-notification mail).
 - The render is the same `render.mjs`, so the hand-run and the cron stay in lockstep.
 
 ## Step 5 — Hand off
@@ -187,7 +185,7 @@ GH_TOKEN=… DIGEST_BODY_FILE=epic-digest-<date>.md bash .claude/skills/epic-dig
 - **Epics are the unit.** Lead with epics + progress, not a flat issue list — that's
   the whole point ("focus on epics").
 - **Interactive = render-only.** A by-hand run just writes files and shows them; the
-  *scheduled* job is what delivers (posts to the standing issue, see above).
+  *scheduled* job is what delivers (emails via Resend, see above).
 - **`<details>` in email:** the collapsible sub-issue section renders expanded in
   mail clients that strip `<details>` — that's fine, it degrades gracefully.
 - The renderer sorts **blocked epics first**, then by % complete, so attention

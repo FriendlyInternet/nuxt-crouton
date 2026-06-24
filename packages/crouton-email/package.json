@@ -19,6 +19,10 @@
     "./server/utils/senders": {
       "import": "./server/utils/senders.ts",
       "types": "./server/utils/senders.ts"
+    },
+    "./brand": {
+      "import": "./brand/email-brand.mjs",
+      "types": "./brand/email-brand.d.mts"
     }
   },
   "main": "./nuxt.config.ts",
@@ -27,6 +31,7 @@
     "app",
     "server",
     "types",
+    "brand",
     "nuxt.config.ts",
     "CHANGELOG.md",
     "LICENSE"

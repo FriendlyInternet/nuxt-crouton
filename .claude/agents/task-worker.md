@@ -51,9 +51,10 @@ a feature branch.
    was passed — see "Epic integration branch" below; otherwise the repo base). One branch
    = one issue.
 5. **Sign-off gates — propose before you build / generate.** Before implementing, check whether
-   this issue changes a **visual surface** or a **collection schema**. Either one is posted for
-   human sign-off on a **draft** PR and **holds** until approved (both run the shared loop
-   below). Neither applies → skip cleanly and go straight to implementation.
+   this issue changes a **visual surface**, a **collection schema**, or adds/changes
+   **`packages/*` logic**. Any one is posted for human sign-off on a **draft** PR and **holds**
+   until approved (all run the shared loop below). None applies → skip cleanly and go straight to
+   implementation.
    - **(a) UI sign-off (visual changes).** UI-touching = adds/changes `**/*.vue`,
      `**/app/components|layouts|pages/**`, a theme (`packages/crouton-themes/**`, a `ui:` block in
      `app.config.ts`), or app CSS / Tailwind tokens. **Not** UI: pure `<script>`/types,
@@ -69,6 +70,13 @@ a feature branch.
      `.html` + PNG); commit the `.md`+`.html`; post the PNG as a sticky
      `<!-- schema-review:<collection> -->` comment. **Do not run `crouton config` / write any
      generated files until approved.**
+   - **(c) Test sign-off (logic).** Fires when the issue adds/changes hand-written **logic** in
+     **`packages/*`** (a composable rule, server util, permission check, calculation, layout-engine
+     transform, generator logic). `apps/*` logic only if the app opted in; `pocs/*` is exempt;
+     scaffolding / generated CRUD / pure-UI route to their own gate or the e2e smoke, not here. →
+     Run the **`test-review`** skill: write the proposed **failing** test, commit it (`test(<pkg>):
+     …`) so it lands in the diff, and **hold** — do **not** write the implementation until the
+     test is approved.
    - For whichever gate fired: **open the PR early as a draft** (same base rules as the "Open a
      PR" step), steer feedback to **inline comments on the committed `.md`** in the diff, apply
      `status:blocked`, @mention `@pmcp` noting what's awaiting sign-off, and **STOP** — do not
@@ -202,7 +210,30 @@ expensive after generation. A task with no schema change skips this gate.
   collection (`crouton config`), then continue (typecheck → commit → PR ready).
 - **Conservative:** only gate a real schema/field change; don't gate unrelated edits.
 
-## Sign-off revision & approval loop (#310, shared by both gates)
+## Test sign-off gate (#774)
+
+No `packages/*` logic is written unseen. When the work adds or changes **hand-written logic in
+`packages/*`** (a composable rule, server util, permission check, calculation, layout-engine
+transform, a generator's own logic), you **agree on the test before you write the code**: run the
+**`test-review`** skill, commit the proposed **failing** test, and **hold** for sign-off — then
+write the implementation to make it green. The test is the contract; "done" = it passes.
+
+- **Scope is by location (#779).** `packages/*` → gate on. `apps/*` → only if the app opted in.
+  `pocs/*` → off (the incubator stays fast; a POC graduating to `packages/*` is where its tests get
+  backfilled). Within `packages/*`, only **logic** fires this gate — a data model routes to the
+  schema gate, how it looks to the UI gate, generated CRUD to the e2e smoke.
+- **Review happens on the diff.** The committed failing test (e.g. `*.test.ts` beside the source)
+  is the **actionable** surface — the reviewer inline-comments an `it(...)` to change a case. State
+  the plain-language edge-case list alongside it so sign-off is about behaviour, not syntax.
+- **The hold is `status:blocked`** — you stop after committing the test and do **not** write the
+  implementation.
+- **Same loop, same approval signal** as the UI/schema gates (below). On `lgtm`/`approve`, write
+  the code to make the test green, then continue (typecheck → commit → PR ready). **Red before
+  green.**
+- **Conservative:** only gate genuine hand-written logic; skip scaffolding, generated code, pure
+  UI, and non-`packages/*` work.
+
+## Sign-off revision & approval loop (#310, shared by all gates)
 
 Posting the proposal — a UI mockup **or** a schema review — is not the end. The ephemeral worker
 has already stopped, so an **attended

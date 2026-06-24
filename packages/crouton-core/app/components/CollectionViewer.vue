@@ -14,6 +14,8 @@
           :color="currentLayout === layoutOption.value ? 'primary' : 'neutral'"
           :variant="currentLayout === layoutOption.value ? 'solid' : 'ghost'"
           size="sm"
+          :aria-label="camelToTitleCase(layoutOption.value)"
+          :aria-pressed="currentLayout === layoutOption.value"
           @click="currentLayout = layoutOption.value"
         />
       </div>
@@ -35,6 +37,7 @@
             variant="outline"
             size="sm"
             trailing-icon="i-lucide-chevron-down"
+            aria-label="Change layout"
           />
         </UDropdownMenu>
 

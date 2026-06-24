@@ -4,7 +4,7 @@
       <!-- Rows-per-page selector: hidden on mobile to keep the footer lean -->
       <span class="hidden text-sm text-muted sm:inline">{{ t('table.rowsPerPageColon') }}</span>
       <USelect
-        :label="tString('table.rowsPerPage')"
+        :aria-label="tString('table.rowsPerPage')"
         :model-value="pageCount"
         :items="pageSizeItems"
         class="hidden w-20 sm:block"

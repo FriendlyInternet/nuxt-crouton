@@ -102,7 +102,7 @@ const { t } = useT()
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center gap-3 min-h-12 px-4 py-2 border-b border-default bg-elevated/30">
+  <div class="@container flex flex-wrap items-center gap-1.5 min-h-9 px-3 py-1.5 border-b border-default bg-elevated/30">
     <!-- Left group: Status, Visibility, Settings -->
     <UFieldGroup>
       <!-- Status -->
@@ -110,14 +110,19 @@ const { t } = useT()
         :items="statusDropdownItems"
         :content="{ align: 'start' }"
       >
-        <UButton variant="ghost" color="neutral" size="xs" class="px-2 lg:px-3">
+        <UButton
+          variant="ghost"
+          color="neutral"
+          size="xs"
+          class="px-2 @4xl:px-3"
+        >
           <span
             :class="[
               'block size-3 rounded-full',
               `bg-${statusConfig[status]?.color || 'warning'}`
             ]"
           />
-          <span class="hidden lg:inline">{{ statusConfig[status]?.label }}</span>
+          <span class="hidden @4xl:inline">{{ statusConfig[status]?.label }}</span>
         </UButton>
 
         <template #draft="{ item }">
@@ -145,12 +150,17 @@ const { t } = useT()
         :items="visibilityDropdownItems"
         :content="{ align: 'start' }"
       >
-        <UButton variant="ghost" color="neutral" size="xs" class="px-2 lg:px-3">
+        <UButton
+          variant="ghost"
+          color="neutral"
+          size="xs"
+          class="px-2 @4xl:px-3"
+        >
           <UIcon
             :name="visibilityConfig[visibility]?.icon || 'i-lucide-globe'"
             class="size-4 text-muted"
           />
-          <span class="hidden lg:inline">{{ visibilityConfig[visibility]?.label }}</span>
+          <span class="hidden @4xl:inline">{{ visibilityConfig[visibility]?.label }}</span>
         </UButton>
 
         <template #public="{ item }">
@@ -192,10 +202,10 @@ const { t } = useT()
           color="neutral"
           icon="i-lucide-settings"
           size="xs"
-          class="px-2 lg:px-3"
+          class="px-2 @4xl:px-3"
           @click="emit('show-settings')"
         >
-          <span class="hidden lg:inline">{{ t('pages.editor.settings') }}</span>
+          <span class="hidden @4xl:inline">{{ t('pages.editor.settings') }}</span>
         </UButton>
       </UTooltip>
     </UFieldGroup>
@@ -213,7 +223,7 @@ const { t } = useT()
           size="xs"
           @click="emit('show-ai-generator')"
         >
-          <span class="hidden lg:inline">{{ t('pages.editor.generate') }}</span>
+          <span class="hidden @4xl:inline">{{ t('pages.editor.generate') }}</span>
         </UButton>
       </UTooltip>
 
@@ -226,7 +236,7 @@ const { t } = useT()
           size="xs"
           @click="emit('show-preview')"
         >
-          <span class="hidden lg:inline">{{ t('pages.editor.preview') }}</span>
+          <span class="hidden @4xl:inline">{{ t('pages.editor.preview') }}</span>
         </UButton>
       </UTooltip>
 
@@ -245,7 +255,7 @@ const { t } = useT()
           icon="i-lucide-external-link"
           size="xs"
         >
-          <span class="hidden lg:inline">{{ t('pages.editor.open') }}</span>
+          <span class="hidden @4xl:inline">{{ t('pages.editor.open') }}</span>
         </UButton>
       </UTooltip>
 

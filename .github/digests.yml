@@ -16,12 +16,14 @@
 #   to:       [addr, ...]               recipients — required only when deliver includes email
 
 housekeeping:
-  schedule: weekly:wed
+  schedule: daily   # run more regularly (#763) — low-noise: upserts ONE standing issue, empty sections drop
   deliver: [issue]
   # to: [you@example.com]   # only used when deliver includes email
 
 # epic-digest currently hard-codes its own daily cron; retrofitting it onto this schema is a
 # nice-to-have follow-up (#637). Declared here so the config is the single source of intent.
+# Delivered by email only (Resend) — the standing-issue rail was retired to stop the duplicate
+# GitHub-notification mail.
 epic-digest:
   schedule: daily
-  deliver: [issue]
+  deliver: [email]

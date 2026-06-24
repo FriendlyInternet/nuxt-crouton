@@ -23,6 +23,7 @@
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
+    "@fyit/crouton-layout": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",
     "@fyit/crouton-three": "workspace:*",
     "@libsql/client": "catalog:",

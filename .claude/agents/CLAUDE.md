@@ -47,6 +47,25 @@ It's steered by the **`/red-team` skill** (on demand) and run by
 `red-team-daily.yml` (daily `deep`). Findings → a report under `writeups/reports/` + (for
 confirmed high/criticals) `security`/`sec:*` GitHub issues.
 
+## The a11y agent (standalone — the accessibility analog of red-team)
+
+`a11y.md` is an **accessibility prober** (epic #726), the code-cleaning analog of
+`red-team`. Given `{ scope, depth, fix }` it reads `.vue` templates as a screen-reader /
+keyboard user would — ARIA-without-keyboard, missing `alt`/labels, positive `tabindex`,
+bad roles — and **returns structured severity-rated findings**. Static-first via
+`eslint-plugin-vuejs-accessibility`; at `depth=deep` it runs `@axe-core/playwright`
+against a fixture. It reports; it patches the safe set (`alt`/`aria-label`/label-for/
+`role`+`tabindex`) only under `fix:true`.
+
+| Agent | File | Recurses? | Writes code? | Model |
+|-------|------|-----------|--------------|-------|
+| `a11y` | `a11y.md` | no | only under `fix:true` (safe set) | `sonnet` |
+
+It's steered by the **`/a11y` skill** (on demand) and run by
+`.github/workflows/a11y.yml` (per-PR `quick`, fails the check on 🔴 critical/serious) and
+`a11y-daily.yml` (daily `deep`, posts a public standing issue + files `a11y` issues for new
+criticals). Severity maps axe critical/serious → 🔴, moderate → 🟡, minor → 🔵.
+
 ### The agent contract
 
 - **Input is passed in the prompt** as a small JSON-ish object — e.g.

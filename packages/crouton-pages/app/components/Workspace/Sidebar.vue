@@ -296,6 +296,8 @@ defineExpose({
         :variant="reorderMode.isActive.value ? 'subtle' : 'ghost'"
         icon="i-lucide-arrow-up-down"
         :disabled="pending"
+        aria-label="Reorder pages"
+        :aria-pressed="reorderMode.isActive.value"
         @click="toggleReorderMode"
       />
     </div>

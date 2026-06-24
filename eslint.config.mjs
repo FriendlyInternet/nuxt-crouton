@@ -1,5 +1,6 @@
 // @ts-check
 import { createConfigForNuxt } from '@nuxt/eslint-config/flat'
+import pluginVueA11y from 'eslint-plugin-vuejs-accessibility'
 
 /**
  * Root ESLint config for the nuxt-crouton monorepo.
@@ -10,6 +11,22 @@ import { createConfigForNuxt } from '@nuxt/eslint-config/flat'
  *
  * @see https://eslint.nuxt.com/packages/config
  */
+
+/**
+ * Accessibility (warn-first) — epic #726.
+ * Enable every `eslint-plugin-vuejs-accessibility` recommended rule, but at
+ * `warn` rather than `error`, so a11y issues surface in lint/CI without walling
+ * existing code red. Derived from the plugin's own recommended set so it stays
+ * in sync if rules are added/removed upstream. Scoped to *.vue only (the Nuxt
+ * config already wires vue-eslint-parser for templates) to avoid the plugin's
+ * global config entry touching non-Vue files. Tighten to `error` once the
+ * existing backlog is cleared.
+ */
+const a11yWarnRules = Object.fromEntries(
+  Object.keys(
+    pluginVueA11y.configs['flat/recommended'].find(c => c.rules)?.rules ?? {}
+  ).map(rule => [rule, 'warn'])
+)
 export default createConfigForNuxt({
   features: {
     // Enable tooling rules for library/module development
@@ -70,6 +87,13 @@ export default createConfigForNuxt({
       // Allow mixed operators in complex conditions
       '@stylistic/no-mixed-operators': 'off'
     }
+  })
+  .append({
+    // Accessibility checks on Vue templates, warn-first (epic #726, #727)
+    name: 'vuejs-accessibility:warn-first',
+    files: ['**/*.vue'],
+    plugins: { 'vuejs-accessibility': pluginVueA11y },
+    rules: a11yWarnRules
   })
   .append({
     // CLI generator files often have unused destructured variables

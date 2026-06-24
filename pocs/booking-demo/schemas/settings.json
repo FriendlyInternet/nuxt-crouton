@@ -1,0 +1,24 @@
+{
+  "statuses": {
+    "type": "repeater",
+    "meta": {
+      "label": "Booking Statuses",
+      "repeaterComponent": "CroutonFormTranslatableOptionItem",
+      "addLabel": "Add Status",
+      "sortable": true,
+      "area": "main",
+      "group": "bookingOptions"
+    }
+  },
+  "groups": {
+    "type": "repeater",
+    "meta": {
+      "label": "Age Groups",
+      "repeaterComponent": "CroutonFormTranslatableOptionItem",
+      "addLabel": "Add Group",
+      "sortable": true,
+      "area": "main",
+      "group": "bookingOptions"
+    }
+  }
+}

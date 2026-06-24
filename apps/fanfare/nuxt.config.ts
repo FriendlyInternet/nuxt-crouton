@@ -19,6 +19,7 @@ export default defineNuxtConfig({
   devServer: { port: 3007 },
   extends: [
     '@fyit/crouton-core',
+    '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-charts',
     '@fyit/crouton-pages',

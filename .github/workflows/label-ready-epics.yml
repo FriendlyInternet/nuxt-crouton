@@ -1,0 +1,46 @@
+name: label-ready-epics
+
+# Stamp open epics with status:ready-to-close / status:needs-postmortem (#763), so the
+# "finished but still open" state is queryable on GitHub and both digests (epic-digest,
+# housekeeping) read one source of truth. Deterministic (no LLM): reads sub-issues + the
+# postmortem marker via the built-in GITHUB_TOKEN and adds/removes the two managed labels.
+#
+# This is the ONLY piece of the #763 system that mutates GitHub. Like the merged-branch
+# janitor it ships its own workflow + a dry-run default, so a bug here can't touch anything
+# else. Set the repo variable LABEL_READY_EPICS_APPLY=true (or workflow_dispatch apply=true)
+# to actually write labels; until then it logs what it WOULD do and changes nothing.
+
+on:
+  schedule:
+    - cron: '0 5 * * *'   # daily, an hour before the digests so labels are fresh when they render
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Write labels (true) or dry-run (false)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: label-ready-epics
+  cancel-in-progress: false
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Stamp ready-to-close / needs-postmortem labels
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DIGEST_REPO: ${{ github.repository }}
+          # Apply when the manual input says so, OR the repo variable is set to true.
+          APPLY: ${{ (github.event_name == 'workflow_dispatch' && inputs.apply) && 'true' || vars.LABEL_READY_EPICS_APPLY || 'false' }}
+        run: node scripts/label-ready-epics.mjs

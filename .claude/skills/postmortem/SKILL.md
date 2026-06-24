@@ -65,6 +65,19 @@ sections:
   paste-ready next-session prompt. End the roundup with this so it's the first
   thing visible when the epic is reopened.
 
+**Lead the comment with a machine-readable marker** so automation can detect that
+this epic has had its postmortem without parsing the prose. Put it on the very
+first line (it's an HTML comment — invisible in the rendered view, present in the
+raw body via the API):
+
+```
+<!-- postmortem:done epic=#NN -->
+```
+
+The "ready to close vs needs postmortem" labeller (#763, `label-ready-epics.mjs`)
+greps the epic's comments for `postmortem:done`: present ⇒ `status:ready-to-close`,
+absent ⇒ `status:needs-postmortem`. Use the real epic number for `#NN`.
+
 Post it with `add_issue_comment` on the epic.
 
 ## Step 4 — Dedup against existing follow-ups, then offer to turn proposals into work

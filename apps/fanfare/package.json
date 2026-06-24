@@ -28,6 +28,7 @@
     "@fyit/crouton-charts": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
+    "@fyit/crouton-layout": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",
     "@fyit/crouton-printing": "workspace:*",
     "@fyit/crouton-sales": "workspace:*",

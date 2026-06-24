@@ -196,6 +196,12 @@ function getInsertCommand(type: string): string {
 // Editor ref
 const editorBlocksRef = ref()
 
+// Fullscreen "focus mode": pop the editor (+preview tabs) into a fullscreen
+// modal. We TELEPORT the same editor DOM into the modal (rather than mounting a
+// second instance) so content, cursor and collab state are preserved.
+const isFullscreen = ref(false)
+const fsTargetRef = ref<HTMLElement | null>(null)
+
 
 // Property panel state (managed here, not in CroutonEditorBlocks)
 const selectedNode = ref<{ pos: number; node: any } | null>(null)
@@ -242,68 +248,102 @@ defineExpose({
 
 <template>
   <div class="block-editor-with-preview w-full h-full flex flex-col">
-    <!-- Tab buttons only -->
-    <UTabs v-model="activeTab" :items="tabItems" :content="false" :ui="{ indicator: 'bg-primary/10', trigger: 'data-[state=active]:text-primary' }" />
-
-    <!-- Editor Tab -->
-    <div
-      v-show="activeTab === 'editor'"
-      class="flex-1 min-h-0 pt-2"
-    >
-      <CroutonEditorBlocks
-        ref="editorBlocksRef"
-        v-model="content"
-        :placeholder="placeholder"
-        :editable="editable"
-        :extensions="pageBlockExtensions"
-        :suggestion-items="blockSuggestionItems"
-        :yxml-fragment="yxmlFragment"
-        :collab-provider="collabProvider"
-        :collab-user="collabUser"
-        content-type="json"
-        class="h-full border border-default rounded-lg"
-        @block:select="(node) => selectedNode = node"
-        @block:edit="(node) => { selectedNode = node; isPropertyPanelOpen = true }"
-      />
-    </div>
-
-    <!-- Preview Tab -->
-    <div
-      v-show="activeTab === 'preview'"
-      class="flex-1 min-h-0 pt-2"
-    >
-      <div class="border border-default rounded-lg overflow-hidden h-full flex flex-col">
-        <!-- Header -->
-        <div class="flex items-center justify-between px-4 py-2 border-b border-default bg-muted/30 flex-shrink-0">
-          <div class="flex items-center gap-2">
-            <UIcon name="i-lucide-eye" class="size-4 text-muted" />
-            <span class="text-sm font-medium">{{ previewTitle }}</span>
-          </div>
-          <!-- Zoom toggle -->
+    <!-- The editor body teleports into the fullscreen modal when expanded
+         (same instance → content/cursor/collab preserved). -->
+    <Teleport :to="fsTargetRef" :disabled="!isFullscreen || !fsTargetRef">
+      <div class="flex h-full min-h-0 flex-col" :class="isFullscreen ? 'p-3' : ''">
+        <!-- Tab buttons + fullscreen toggle -->
+        <div class="flex items-center gap-2">
+          <UTabs v-model="activeTab" :items="tabItems" :content="false" class="flex-1" :ui="{ indicator: 'bg-primary/10', trigger: 'data-[state=active]:text-primary' }" />
           <UButton
-            :icon="isZoomedOut ? 'i-lucide-zoom-in' : 'i-lucide-zoom-out'"
+            :icon="isFullscreen ? 'i-lucide-minimize-2' : 'i-lucide-maximize-2'"
             color="neutral"
             variant="ghost"
             size="xs"
-            :title="isZoomedOut ? t('pages.editor.zoomTo100') : t('pages.editor.zoomToPercent', { percent: Math.round(previewScale * 100) })"
-            @click="isZoomedOut = !isZoomedOut"
-          >
-            <span class="text-xs text-muted ml-1">{{ Math.round(currentScale * 100) }}%</span>
-          </UButton>
+            :aria-label="isFullscreen ? t('pages.editor.exitFullscreen', 'Exit fullscreen') : t('pages.editor.fullscreen', 'Fullscreen')"
+            @click="isFullscreen = !isFullscreen"
+          />
         </div>
 
-        <!-- Preview content - uses local state for immediate updates -->
-        <!-- Zoomed out to show more content in small containers -->
-        <div class="flex-1 overflow-auto">
-          <div :style="previewZoomStyle">
-            <CroutonPagesBlockContent
-              :content="previewContent as any"
-              class="p-4"
-            />
+        <!-- Editor Tab -->
+        <div
+          v-show="activeTab === 'editor'"
+          class="flex-1 min-h-0 pt-2"
+        >
+          <CroutonEditorBlocks
+            ref="editorBlocksRef"
+            v-model="content"
+            :placeholder="placeholder"
+            :editable="editable"
+            :extensions="pageBlockExtensions"
+            :suggestion-items="blockSuggestionItems"
+            :yxml-fragment="yxmlFragment"
+            :collab-provider="collabProvider"
+            :collab-user="collabUser"
+            content-type="json"
+            class="h-full border border-default rounded-lg"
+            @block:select="(node) => selectedNode = node"
+            @block:edit="(node) => { selectedNode = node; isPropertyPanelOpen = true }"
+          />
+        </div>
+
+        <!-- Preview Tab -->
+        <div
+          v-show="activeTab === 'preview'"
+          class="flex-1 min-h-0 pt-2"
+        >
+          <div class="border border-default rounded-lg overflow-hidden h-full flex flex-col">
+            <!-- Header -->
+            <div class="flex items-center justify-between px-4 py-2 border-b border-default bg-muted/30 flex-shrink-0">
+              <div class="flex items-center gap-2">
+                <UIcon name="i-lucide-eye" class="size-4 text-muted" />
+                <span class="text-sm font-medium">{{ previewTitle }}</span>
+              </div>
+              <!-- Zoom toggle -->
+              <UButton
+                :icon="isZoomedOut ? 'i-lucide-zoom-in' : 'i-lucide-zoom-out'"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                :title="isZoomedOut ? t('pages.editor.zoomTo100') : t('pages.editor.zoomToPercent', { percent: Math.round(previewScale * 100) })"
+                @click="isZoomedOut = !isZoomedOut"
+              >
+                <span class="text-xs text-muted ml-1">{{ Math.round(currentScale * 100) }}%</span>
+              </UButton>
+            </div>
+
+            <!-- Preview content - uses local state for immediate updates -->
+            <!-- Zoomed out to show more content in small containers -->
+            <div class="flex-1 overflow-auto">
+              <div :style="previewZoomStyle">
+                <CroutonPagesBlockContent
+                  :content="previewContent as any"
+                  class="p-4"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
-    </div>
+    </Teleport>
+
+    <!-- Inline placeholder shown while the editor is teleported into fullscreen -->
+    <button
+      v-if="isFullscreen"
+      type="button"
+      class="flex-1 min-h-[120px] flex items-center justify-center gap-2 rounded-lg border border-dashed border-default text-sm text-muted hover:text-default hover:border-primary transition-colors"
+      @click="isFullscreen = true"
+    >
+      <UIcon name="i-lucide-maximize-2" class="size-4" />
+      {{ t('pages.editor.editingFullscreen', 'Editing in fullscreen…') }}
+    </button>
+
+    <!-- Fullscreen modal: hosts the teleported editor -->
+    <UModal v-model:open="isFullscreen" fullscreen :ui="{ content: 'bg-default' }">
+      <template #content>
+        <div ref="fsTargetRef" class="h-full pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]" />
+      </template>
+    </UModal>
 
     <!-- Property Panel - Rendered at root level for proper z-index/overlay -->
     <USlideover

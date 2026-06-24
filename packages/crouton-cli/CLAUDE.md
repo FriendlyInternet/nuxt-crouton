@@ -272,6 +272,7 @@ crouton db-pull --config ./custom-wrangler.jsonc
 | `--count <number>` | Number of seed records (default: 25) |
 | `--force` | Overwrite existing files |
 | `--no-translations` | Skip i18n fields |
+| `--no-tests` | Skip the per-collection schema-smoke test (emitted by default, #785) |
 | `--dry-run` | Preview without writing |
 
 ## Key Files
@@ -280,10 +281,12 @@ crouton db-pull --config ./custom-wrangler.jsonc
 |------|---------|
 | `bin/crouton-generate.js` | CLI entry point (citty with 12 subcommands) |
 | `bin/crouton-seed.mjs` | `crouton-seed` entry — app DB seeding (citty) |
-| `lib/seed-app.ts` | Seed runner: discover providers, order, collect SQL, run wrangler |
+| `lib/seed-app.ts` | Seed runner: discover providers, order, collect SQL, run wrangler. Also seeds the **default layout** (`crouton.layout.json` → `layout_configs[default]`, #709) |
+| `lib/compose-layout.ts` | **Deterministic default-layout step** (#709) — after generation, runs `@fyit/crouton-layout`'s `composeDefaultLayout` (moved out of crouton-core, #751) over the generated collections and writes `crouton.layout.json` (a `layout_configs` tree the POC boots with). `registryKeyFor(layer, collection)` mirrors the generated registry key; mirrors the core + bookings block sizing contracts (no live `app.config` at generate time) |
 | `lib/generate-collection.ts` | Main orchestrator (~74KB) |
 | `lib/init-app.ts` | Init pipeline (scaffold → generate → doctor) |
-| `lib/generators/*.ts` | Template generators (14 files) |
+| `lib/generators/*.ts` | Template generators (15 files) |
+| `lib/generators/collection-test.ts` | Emits `<Layer><Collections>.test.ts` — a runtime-free Zod schema smoke (valid parses / invalid rejected). Sample derived from each field's `zod`. On by default; `--no-tests` skips (#785) |
 | `lib/db-pull.ts` | Remote D1 → local dev pull |
 | `lib/module-registry.ts` | Module definitions for `crouton add` |
 | `lib/add-module.ts` | Module installation implementation |
@@ -309,7 +312,8 @@ lib/generators/
 ├── types.ts               → TypeScript interfaces
 ├── nuxt-config.ts         → Layer config
 ├── field-components.ts    → Dependent field components
-└── query-registry.ts      → Server-side query registry (lazy imports)
+├── query-registry.ts      → Server-side query registry (lazy imports)
+└── collection-test.ts     → <Layer><Collections>.test.ts (Zod schema smoke, #785)
 ```
 
 ## Schema Format
@@ -507,12 +511,50 @@ layers/[layer]/collections/[collection]/
 │       ├── queries.ts
 │       └── seed.ts          # Only with --seed flag
 ├── seed.json                # Editable auto-derived sample rows (#298)
+├── [Layer][Collections].test.ts  # Zod schema-smoke test (#785) — skip with --no-tests
 ├── types.ts
 └── nuxt.config.ts
 
 # Also generated at app root (aggregated across all collections):
 server/utils/crouton-query-registry.ts   # Lazy-loaded query function registry
+crouton.layout.json                       # Deterministic default layout tree (#709) — seeded into layout_configs
 ```
+
+## Generated Tests (#785)
+
+Every generated collection ships a **schema-smoke test** next to it
+(`<Layer><Collections>.test.ts`) — on by default, suppressed with `--no-tests`
+(or `tests: false` on a collection). It imports the collection's generated Zod
+schema from the composable and asserts the deterministic surface: a valid record
+parses, an invalid one is rejected. It is **runtime-free** (zod only, no Nuxt/DB,
+no mocks), so it stays green for any schema — the unit-level complement to the
+**e2e fixture smoke**, which owns boot + CRUD (this does NOT duplicate it).
+
+- The valid sample is derived at generation time from each field's `zod` (the
+  same source the schema embeds), so it matches the schema whether or not the
+  type manifest resolved. Two overrides mirror `fieldsSchema` in
+  `generate-collection.ts`: `date` → `z.coerce.date()` (ISO string), dependent
+  fields → non-empty `z.array(z.string()).min(1)`. Auto/system + hierarchy
+  fields are excluded; output is deterministic (no `Date.now()`/`Math.random()`).
+- `scaffold-app`/`crouton init` emit a `vitest.config.ts` + `test` script + the
+  `vitest` devDep, so `pnpm test` runs these out of the box (#789).
+- API route auth/error-path tests are a tracked follow-up (#791), not emitted yet.
+
+## Default Layout (generate → POC, #709)
+
+After collections are generated, `runPostGeneration` runs the **deterministic
+layout pass** (`lib/compose-layout.ts` → `@fyit/crouton-layout`'s `composeDefaultLayout`)
+and writes **`crouton.layout.json`** at the app root: a `layout_configs`-format
+tree that arranges the generated collections into a good default — **calendar-primary**
+when the bookings package is in play, otherwise **master-detail** (list + form),
+with extra collections stacked. Each placed block is data-bound (`config.collection`).
+The arrangement is **viability-gated** (every block ≥ its `minWidth`); a too-narrow
+side-by-side split falls back to a vertical stack.
+
+`crouton-seed` then upserts that tree into the team-scoped `layout_configs` table
+(row id `default`), so a freshly seeded POC boots with a real, data-bound layout
+instead of a blank canvas — editable in `CroutonLayout` (the layout is **data**,
+not generated `.vue`). The LLM `/layout` pass (#711) is gated and out of scope.
 
 ## Output Location
 
@@ -634,6 +676,7 @@ features: {
 | `formComponent` | string | Use a custom form component instead of generating Form.vue |
 | `kind` | string | Collection kind: `'data'` (default), `'content'`, or `'media'`. Affects admin sidebar grouping |
 | `publishable` | boolean | Auto-register as page type in crouton-pages (requires crouton-pages) |
+| `tests` | boolean | Emit the schema-smoke test for this collection (default `true`; set `false` to skip, like `--no-tests`) (#785) |
 
 ### formComponent Option
 
@@ -835,6 +878,7 @@ npx nuxt typecheck
 | `lib/utils/helpers.ts` | Case conversion, type mapping, seed generators |
 | `lib/generators/types.ts` | TypeScript type generation (snapshot) |
 | `lib/generators/composable.ts` | Composable generation (snapshot) |
+| `lib/generators/collection-test.ts` | Schema-smoke test emission — import path, per-type sample derivation, valid/invalid cases (#785) |
 
 ## Seed Data Generation
 

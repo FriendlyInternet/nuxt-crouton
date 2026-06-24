@@ -118,7 +118,10 @@ function tmplPackageJson(vars: ScaffoldVars): string {
   const devDeps = {
     '@fyit/crouton-cli': 'workspace:*',
     '@fyit/crouton-devtools': 'workspace:*',
-    'drizzle-kit': '^0.31.0'
+    'drizzle-kit': '^0.31.0',
+    // Runs the schema-smoke tests the generator emits next to each collection
+    // (#785). Not cataloged by design (#141); matches @fyit/crouton-cli.
+    'vitest': '^2.1.0'
   }
   if (vars.cf) {
     devDeps['wrangler'] = '^4.64.0'
@@ -129,6 +132,8 @@ function tmplPackageJson(vars: ScaffoldVars): string {
     dev: 'nuxt dev',
     generate: 'nuxt generate',
     preview: 'nuxt preview',
+    // Runs the per-collection schema-smoke tests the generator emits (#785).
+    test: 'vitest run',
     // Guarded: a whole-monorepo `pnpm install` (e.g. on Cloudflare) runs every
     // workspace's postinstall before the dist-consumed @fyit/* packages are built;
     // a bare `nuxt prepare` would error and abort the entire install. The guard
@@ -344,6 +349,21 @@ export default defineConfig({
   dialect: 'sqlite',
   schema,
   out: 'server/db/migrations/sqlite',
+})
+`
+}
+
+function tmplVitestConfig(): string {
+  // Runs the per-collection schema-smoke tests the generator emits (#785). They
+  // import only the generated Zod schema (no Nuxt runtime), so a plain node
+  // environment is enough — the e2e fixture smoke owns boot + CRUD.
+  return `import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  test: {
+    include: ['layers/**/*.test.ts', 'tests/**/*.test.ts'],
+    environment: 'node',
+  },
 })
 `
 }
@@ -603,6 +623,7 @@ export async function scaffoldApp(
     { path: 'app/assets/css/main.css', content: tmplMainCss() },
     { path: 'server/db/schema.ts', content: tmplSchemaTs() },
     { path: 'server/db/translations-ui.ts', content: tmplTranslationsUi(vars) },
+    { path: 'vitest.config.ts', content: tmplVitestConfig() },
     { path: 'schemas/.gitkeep', content: '' }
   ]
 

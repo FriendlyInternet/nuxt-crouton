@@ -20,6 +20,26 @@ cat <<'REMINDER'
   failing build: stop and create it.
 REMINDER
 
+# Headless-browser announcement — surfaces in EVERY session so no agent has to
+# rediscover it (the recurring trap: the Playwright browser DOWNLOAD is
+# egress-blocked, so `npx playwright install` fails and a session wrongly
+# concludes "no browser" — when a chromium is ALREADY installed under
+# /opt/pw-browsers). You CAN screenshot/preview UI locally. Use
+# `node scripts/app-shots.mjs <url> <path[:name]>` (it auto-resolves the build).
+_chromium=""
+for _c in /opt/pw-browsers/chromium_headless_shell-*/chrome-linux/headless_shell \
+          /opt/pw-browsers/chromium-*/chrome-linux/chrome; do
+  [ -x "$_c" ] && _chromium="$_c"
+done
+if [ -n "$_chromium" ]; then
+  cat <<BROWSER
+[session-start] 📸 HEADLESS BROWSER AVAILABLE — you can render/screenshot UI locally.
+  chromium: $_chromium  (the download host is egress-blocked; use this pre-installed one)
+  Easiest: node scripts/app-shots.mjs <baseUrl> <path[:name]>  → screenshots/<name>.png
+  Do NOT conclude "no browser" from a failed \`playwright install\` — verify, don't assume.
+BROWSER
+fi
+
 if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi

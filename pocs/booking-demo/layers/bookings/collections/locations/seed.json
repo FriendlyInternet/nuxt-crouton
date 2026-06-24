@@ -1,0 +1,69 @@
+{
+  "table": "bookings_locations",
+  "key": "title",
+  "rows": [
+    {
+      "title": "Sample title 1",
+      "color": "Sample color 1",
+      "street": "Sample street 1",
+      "zip": "Sample zip 1",
+      "city": "Sample city 1",
+      "location": "Sample location content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "content": "Sample content content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "allowedMemberIds": [
+        "sample"
+      ],
+      "slots": "Sample slots 1",
+      "openDays": [
+        "sample"
+      ],
+      "slotSchedule": {},
+      "blockedDates": "Sample blockedDates 1",
+      "inventoryMode": true,
+      "quantity": 1,
+      "maxBookingsPerMonth": 1
+    },
+    {
+      "title": "Sample title 2",
+      "color": "Sample color 2",
+      "street": "Sample street 2",
+      "zip": "Sample zip 2",
+      "city": "Sample city 2",
+      "location": "Sample location content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "content": "Sample content content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "allowedMemberIds": [
+        "sample"
+      ],
+      "slots": "Sample slots 2",
+      "openDays": [
+        "sample"
+      ],
+      "slotSchedule": {},
+      "blockedDates": "Sample blockedDates 2",
+      "inventoryMode": false,
+      "quantity": 2,
+      "maxBookingsPerMonth": 2
+    },
+    {
+      "title": "Sample title 3",
+      "color": "Sample color 3",
+      "street": "Sample street 3",
+      "zip": "Sample zip 3",
+      "city": "Sample city 3",
+      "location": "Sample location content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "content": "Sample content content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "allowedMemberIds": [
+        "sample"
+      ],
+      "slots": "Sample slots 3",
+      "openDays": [
+        "sample"
+      ],
+      "slotSchedule": {},
+      "blockedDates": "Sample blockedDates 3",
+      "inventoryMode": true,
+      "quantity": 3,
+      "maxBookingsPerMonth": 3
+    }
+  ]
+}

@@ -66,6 +66,7 @@ function handleCancel(onCancel: () => void) {
         variant="ghost"
         icon="i-lucide-plus"
         size="sm"
+        aria-label="Create page"
         @click="() => handleCreate()"
       />
     </template>

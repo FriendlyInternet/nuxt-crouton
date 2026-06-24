@@ -1,4 +1,22 @@
 import type { CroutonBlockDefinition } from '@fyit/crouton-core/app/types/block-definition'
+import type { CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/layout-block'
+
+// Placeable layout block (#709): the bookings calendar as a compound surface the
+// deterministic layout pass reaches for → a "calendar-primary" arrangement. Wide
+// `minWidth` so the viability gate keeps it in a roomy pane.
+const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
+  'bookings-calendar': {
+    id: 'bookings-calendar',
+    name: 'Calendar',
+    description: 'Bookings calendar + availability',
+    icon: 'i-lucide-calendar',
+    component: 'CroutonBookingsLayoutCalendar',
+    kind: 'compound',
+    category: 'bookings',
+    minWidth: 520,
+    defaultSize: 65,
+  },
+}
 
 const bookingBlockDefinition: CroutonBlockDefinition = {
   type: 'bookingBlock',
@@ -135,5 +153,6 @@ export default defineAppConfig({
   },
   croutonBlocks: {
     bookingBlock: bookingBlockDefinition
-  }
+  },
+  croutonLayoutBlocks
 })

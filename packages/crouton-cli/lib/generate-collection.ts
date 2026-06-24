@@ -39,6 +39,7 @@ import { generateQueries } from './generators/database-queries.ts'
 import { generateSchema } from './generators/database-schema.ts'
 import { generateTypes } from './generators/types.ts'
 import { generateNuxtConfig } from './generators/nuxt-config.ts'
+import { generateCollectionTest } from './generators/collection-test.ts'
 import { generateRepeaterItemComponent } from './generators/repeater-item-component.ts'
 import { generateFieldComponents } from './generators/field-components.ts'
 import { generateSeedFile } from './generators/seed-data.ts'
@@ -120,6 +121,7 @@ interface WriteScaffoldOptions {
   hierarchy?: boolean
   seed?: boolean
   seedCount?: number
+  noTests?: boolean
 }
 
 interface RunConfigOptions {
@@ -128,6 +130,7 @@ interface RunConfigOptions {
   dryRun?: boolean
   only?: string
   noAutoMerge?: boolean
+  noTests?: boolean
 }
 
 interface RunGenerateOptions {
@@ -143,6 +146,7 @@ interface RunGenerateOptions {
   hierarchy?: boolean
   seed?: boolean
   seedCount?: number
+  noTests?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -627,7 +631,7 @@ ${translationsFieldSchema}
   }
 }
 
-async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25 }: WriteScaffoldOptions): Promise<void> {
+async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, noTests = false }: WriteScaffoldOptions): Promise<void> {
   const cases = toCase(collection)
   const base = path.resolve('layers', layer, 'collections', cases.plural)
 
@@ -849,6 +853,9 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
       console.log(`• ${base}/server/database/seed.ts (${seedCount} records)`)
     }
     console.log(`• ${base}/types.ts`)
+    if (!noTests) {
+      console.log(`• ${base}/${layerPascalCase}${cases.pascalCasePlural}.test.ts (schema smoke)`)
+    }
     console.log(`• ${base}/nuxt.config.ts`)
     console.log(`• layers/${layer}/nuxt.config.ts (layer root config)`)
     console.log(`• nuxt.config.ts (root config - add layer to extends)`)
@@ -1037,6 +1044,18 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
       content: `${JSON.stringify(seedFixture, null, 2)}\n`,
     })
     console.log(`  Generating seed.json (${seedFixture.rows.length} sample rows)`)
+  }
+
+  // Emit a schema-smoke test next to the collection (#785) — on by default,
+  // suppressed by --no-tests. Runtime-free (zod only): asserts the generated
+  // Zod schema accepts a valid record and rejects an invalid one. The e2e
+  // fixture smoke owns boot + CRUD; this is the unit-level complement.
+  if (!noTests) {
+    files.push({
+      path: path.join(base, `${layerPascalCase}${cases.pascalCasePlural}.test.ts`),
+      content: generateCollectionTest(data, config),
+    })
+    console.log(`  Generating ${layerPascalCase}${cases.pascalCasePlural}.test.ts (schema smoke)`)
   }
 
   // Write all files
@@ -1229,6 +1248,29 @@ async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
     } catch (error: any) {
       console.log(`⚠ Could not generate query registry: ${error.message}`)
     }
+
+    // Deterministic default layout (#709): arrange the generated collections into
+    // a viable `layout_configs` tree the POC boots with (seeded by crouton-seed).
+    console.log(`\n${'═'.repeat(60)}`)
+    console.log(`  DEFAULT LAYOUT`)
+    console.log(`${'═'.repeat(60)}\n`)
+
+    try {
+      const { writeDefaultLayout } = await import('./compose-layout.ts')
+      const layoutResult = await writeDefaultLayout({
+        allCollections,
+        features: config.features,
+        cwd: process.cwd(),
+      })
+      if (layoutResult.written) {
+        console.log(`✓ Composed default layout (${layoutResult.pattern}${layoutResult.viable ? ', viable' : ', NOT viable — review minWidths'})`)
+        console.log(`  → ${layoutResult.path}`)
+      } else {
+        console.log(`⚠ Skipped default layout (${layoutResult.reason})`)
+      }
+    } catch (error: any) {
+      console.log(`⚠ Could not compose default layout: ${error.message}`)
+    }
   }
 
   console.log(`\n${'═'.repeat(60)}`)
@@ -1276,6 +1318,7 @@ export async function runConfig(options: RunConfigOptions = {}): Promise<void> {
     if (!config.flags) config.flags = {}
     if (options.force) config.flags.force = true
     if (options.dryRun) config.flags.dryRun = true
+    if (options.noTests) config.flags.noTests = true
 
     // Single-collection filter
     const onlyCollection = options.only || null
@@ -1438,7 +1481,8 @@ export async function runConfig(options: RunConfigOptions = {}): Promise<void> {
               config: config,
               collectionConfig: collectionConfig, // Pass individual collection config for hierarchy detection
               seed: !!collectionSeed,
-              seedCount: collectionSeed?.count || config?.seed?.defaultCount || 25
+              seedCount: collectionSeed?.count || config?.seed?.defaultCount || 25,
+              noTests: config.flags?.noTests || collectionConfig?.tests === false || false
             })
 
             allCollections.push({ name: collectionName, layer: target.layer, fields })
@@ -1479,7 +1523,8 @@ export async function runConfig(options: RunConfigOptions = {}): Promise<void> {
               noTranslations: config.flags?.noTranslations || false,
               config: config,
               seed: globalSeed,
-              seedCount: config?.seed?.defaultCount || 25
+              seedCount: config?.seed?.defaultCount || 25,
+              noTests: config.flags?.noTests || false
             })
 
             allCollections.push({ name: collection, layer: target.layer, fields })
@@ -1524,7 +1569,8 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
       noTranslations: options.noTranslations || false,
       hierarchy: options.hierarchy || false,
       seed: options.seed || false,
-      seedCount: options.seedCount || 25
+      seedCount: options.seedCount || 25,
+      noTests: options.noTests || false
     }
 
     // Validate CLI arguments

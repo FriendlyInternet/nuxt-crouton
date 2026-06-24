@@ -18,10 +18,13 @@
 // route + id-less D1) is produced by the app scaffold; this script only writes the
 // deploy config and sanity-checks the wrangler.
 //
-// Review overlay (#590/#596): deploy-pocs.yml passes enable-review: true to deploy-app.yml
-// for every POC staging deploy, so the @fyit/crouton-devtools overlay is always active on
-// previews — every preview URL is review-ready. The NUXT_CROUTON_REVIEW_GITHUB_APP_*
-// repo secrets enable the /api/_review bridge (GitHub App-based PR commenting).
+// Review overlay (#590/#596): scaffolded apps declare @fyit/crouton-devtools in their
+// nuxt.config `modules` (scaffold-app.ts), so the overlay is active on every POC staging
+// preview — every preview URL is review-ready. deploy-app.yml always builds the devtools
+// dist before `nuxt prepare` (#745), so it loads regardless of this script's layerPackages
+// default. A PR-tied deploy also gets the /api/_review bridge wired (deploy-app.yml's
+// review-pr input + the NUXT_CROUTON_REVIEW_GITHUB_APP_* repo secrets → GitHub App PR
+// commenting as nuxt-harness[bot]).
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
