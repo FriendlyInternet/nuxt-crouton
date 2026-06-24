@@ -1,0 +1,30 @@
+{
+  "name": "e2e-fixture-with-sales",
+  "type": "module",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
+    "postinstall": "nuxt prepare 2>/dev/null || true"
+  },
+  "dependencies": {
+    "@fyit/crouton": "workspace:*",
+    "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-i18n": "workspace:*",
+    "@fyit/crouton-printing": "workspace:*",
+    "@fyit/crouton-sales": "workspace:*",
+    "@libsql/client": "^0.17.0",
+    "drizzle-orm": "^0.45.1",
+    "nuxt": "^4.2.2",
+    "vue": "^3.5.26",
+    "vue-router": "^4.6.4"
+  },
+  "devDependencies": {
+    "@fyit/crouton-cli": "workspace:*",
+    "drizzle-kit": "^0.31.0"
+  }
+}

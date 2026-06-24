@@ -1,0 +1,39 @@
+{
+  "table": "sales_printers",
+  "key": "title",
+  "rows": [
+    {
+      "title": "Sample title 1",
+      "ipAddress": "Sample ipAddress 1",
+      "port": "Sample port 1",
+      "status": "Sample status 1",
+      "type": "Sample type 1",
+      "driver": "Sample driver 1",
+      "config": {},
+      "showPrices": true,
+      "isActive": true
+    },
+    {
+      "title": "Sample title 2",
+      "ipAddress": "Sample ipAddress 2",
+      "port": "Sample port 2",
+      "status": "Sample status 2",
+      "type": "Sample type 2",
+      "driver": "Sample driver 2",
+      "config": {},
+      "showPrices": false,
+      "isActive": false
+    },
+    {
+      "title": "Sample title 3",
+      "ipAddress": "Sample ipAddress 3",
+      "port": "Sample port 3",
+      "status": "Sample status 3",
+      "type": "Sample type 3",
+      "driver": "Sample driver 3",
+      "config": {},
+      "showPrices": true,
+      "isActive": true
+    }
+  ]
+}

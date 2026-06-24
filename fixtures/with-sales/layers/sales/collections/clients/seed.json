@@ -1,0 +1,21 @@
+{
+  "table": "sales_clients",
+  "key": "title",
+  "rows": [
+    {
+      "title": "Sample title 1",
+      "isReusable": true,
+      "isActive": true
+    },
+    {
+      "title": "Sample title 2",
+      "isReusable": false,
+      "isActive": false
+    },
+    {
+      "title": "Sample title 3",
+      "isReusable": true,
+      "isActive": true
+    }
+  ]
+}

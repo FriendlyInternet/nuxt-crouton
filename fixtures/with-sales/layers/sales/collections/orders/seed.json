@@ -1,0 +1,30 @@
+{
+  "table": "sales_orders",
+  "key": "clientName",
+  "rows": [
+    {
+      "clientName": "Sample clientName 1",
+      "eventOrderNumber": 1,
+      "overallRemarks": "Sample overallRemarks content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "locationRemarks": {},
+      "isPersonnel": true,
+      "status": "Sample status 1"
+    },
+    {
+      "clientName": "Sample clientName 2",
+      "eventOrderNumber": 2,
+      "overallRemarks": "Sample overallRemarks content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "locationRemarks": {},
+      "isPersonnel": false,
+      "status": "Sample status 2"
+    },
+    {
+      "clientName": "Sample clientName 3",
+      "eventOrderNumber": 3,
+      "overallRemarks": "Sample overallRemarks content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "locationRemarks": {},
+      "isPersonnel": true,
+      "status": "Sample status 3"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": { "type": "uuid", "meta": { "primaryKey": true } },
+  "title": { "type": "string", "meta": { "required": true, "label": "Event Name", "maxLength": 200 } },
+  "slug": { "type": "string", "meta": { "required": true, "unique": true, "label": "URL Slug" } },
+  "description": { "type": "text", "meta": { "label": "Description" } },
+  "eventType": { "type": "string", "meta": { "label": "Event Type", "default": "standard" } },
+  "startDate": { "type": "date", "meta": { "label": "Start Date" } },
+  "endDate": { "type": "date", "meta": { "label": "End Date" } },
+  "status": { "type": "string", "meta": { "required": true, "label": "Status", "default": "upcoming" } },
+  "isCurrent": { "type": "boolean", "meta": { "label": "Current Event", "default": false } },
+  "requiresClient": { "type": "boolean", "meta": { "label": "Requires Client", "default": true, "helpText": "When enabled, orders must be linked to a client. Disable for loose orders." } },
+  "helperPin": { "type": "string", "meta": { "label": "Helper PIN", "maxLength": 6, "helpText": "PIN for volunteer login" } },
+  "currency": { "type": "string", "meta": { "label": "Currency", "default": "EUR", "helpText": "ISO currency code used for order totals and receipts." } },
+  "metadata": { "type": "json", "meta": { "label": "Metadata" } },
+  "archivedAt": { "type": "date", "meta": { "label": "Archived At" } }
+}

@@ -1,0 +1,21 @@
+{
+  "table": "sales_eventsettings",
+  "key": null,
+  "rows": [
+    {
+      "settingKey": "Sample settingKey 1",
+      "settingValue": "Sample settingValue content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "description": "Sample description content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "settingKey": "Sample settingKey 2",
+      "settingValue": "Sample settingValue content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "description": "Sample description content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "settingKey": "Sample settingKey 3",
+      "settingValue": "Sample settingValue content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "description": "Sample description content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    }
+  ]
+}

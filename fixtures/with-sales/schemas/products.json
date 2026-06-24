@@ -1,0 +1,15 @@
+{
+  "id": { "type": "uuid", "meta": { "primaryKey": true } },
+  "eventId": { "type": "uuid", "refTarget": "events", "meta": { "required": true, "label": "Event" } },
+  "categoryId": { "type": "uuid", "refTarget": "categories", "meta": { "label": "Category" } },
+  "locationId": { "type": "uuid", "refTarget": "locations", "meta": { "label": "Prep Location" } },
+  "title": { "type": "string", "meta": { "required": true, "label": "Product Name", "maxLength": 200 } },
+  "description": { "type": "text", "meta": { "label": "Description" } },
+  "price": { "type": "decimal", "meta": { "required": true, "label": "Price", "precision": 10, "scale": 2 } },
+  "isActive": { "type": "boolean", "meta": { "label": "Active", "default": true } },
+  "requiresRemark": { "type": "boolean", "meta": { "label": "Requires Remark", "default": false } },
+  "remarkPrompt": { "type": "string", "meta": { "label": "Remark Prompt" } },
+  "hasOptions": { "type": "boolean", "meta": { "label": "Has Options", "default": false } },
+  "multipleOptionsAllowed": { "type": "boolean", "meta": { "label": "Multiple Options", "default": false } },
+  "options": { "type": "repeater", "meta": { "label": "Options", "helpText": "Product variants like sizes or extras" } }
+}

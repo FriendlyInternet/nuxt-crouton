@@ -1,0 +1,27 @@
+{
+  "table": "sales_orderitems",
+  "key": null,
+  "rows": [
+    {
+      "quantity": 1,
+      "unitPrice": 1,
+      "totalPrice": 1,
+      "remarks": "Sample remarks content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "selectedOptions": {}
+    },
+    {
+      "quantity": 2,
+      "unitPrice": 2,
+      "totalPrice": 2,
+      "remarks": "Sample remarks content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "selectedOptions": {}
+    },
+    {
+      "quantity": 3,
+      "unitPrice": 3,
+      "totalPrice": 3,
+      "remarks": "Sample remarks content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "selectedOptions": {}
+    }
+  ]
+}

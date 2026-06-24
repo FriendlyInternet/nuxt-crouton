@@ -1,0 +1,6 @@
+{
+  "id": { "type": "uuid", "meta": { "primaryKey": true } },
+  "title": { "type": "string", "meta": { "required": true, "label": "Client Name", "maxLength": 200 } },
+  "isReusable": { "type": "boolean", "meta": { "label": "Reusable", "default": true, "helpText": "Can be used across events" } },
+  "isActive": { "type": "boolean", "meta": { "label": "Active", "default": true } }
+}

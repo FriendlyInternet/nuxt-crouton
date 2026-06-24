@@ -1,0 +1,30 @@
+{
+  "table": "sales_printqueues",
+  "key": null,
+  "rows": [
+    {
+      "status": "Sample status 1",
+      "printData": "Sample printData content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "printMode": "Sample printMode 1",
+      "errorMessage": "Sample errorMessage content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "retryCount": "Sample retryCount 1",
+      "completedAt": "Sample completedAt 1"
+    },
+    {
+      "status": "Sample status 2",
+      "printData": "Sample printData content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "printMode": "Sample printMode 2",
+      "errorMessage": "Sample errorMessage content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "retryCount": "Sample retryCount 2",
+      "completedAt": "Sample completedAt 2"
+    },
+    {
+      "status": "Sample status 3",
+      "printData": "Sample printData content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "printMode": "Sample printMode 3",
+      "errorMessage": "Sample errorMessage content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "retryCount": "Sample retryCount 3",
+      "completedAt": "Sample completedAt 3"
+    }
+  ]
+}

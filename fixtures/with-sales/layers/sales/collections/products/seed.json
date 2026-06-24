@@ -1,0 +1,39 @@
+{
+  "table": "sales_products",
+  "key": "title",
+  "rows": [
+    {
+      "title": "Sample title 1",
+      "description": "Sample description content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "price": 1,
+      "isActive": true,
+      "requiresRemark": true,
+      "remarkPrompt": "Sample remarkPrompt 1",
+      "hasOptions": true,
+      "multipleOptionsAllowed": true,
+      "options": "Sample options 1"
+    },
+    {
+      "title": "Sample title 2",
+      "description": "Sample description content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "price": 2,
+      "isActive": false,
+      "requiresRemark": false,
+      "remarkPrompt": "Sample remarkPrompt 2",
+      "hasOptions": false,
+      "multipleOptionsAllowed": false,
+      "options": "Sample options 2"
+    },
+    {
+      "title": "Sample title 3",
+      "description": "Sample description content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "price": 3,
+      "isActive": true,
+      "requiresRemark": true,
+      "remarkPrompt": "Sample remarkPrompt 3",
+      "hasOptions": true,
+      "multipleOptionsAllowed": true,
+      "options": "Sample options 3"
+    }
+  ]
+}
