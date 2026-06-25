@@ -1,0 +1,81 @@
+name: eval-scoreboard
+
+# WS6b.2 (#884) — the model-routing scoreboard. Rolls up the run-outcome ledger
+# (writeups/reports/eval-ledger.jsonl, #883) into cost-per-success per (model × flow)
+# and upserts it onto ONE standing issue. Deterministic (no LLM, no secrets beyond the
+# built-in GITHUB_TOKEN) — it reads committed data and renders, mirroring housekeeping.
+#
+# Cadence-as-data (#637): the cron fires DAILY (cheap wake-up); the `gate` step reads
+# .github/digests.yml via schedule.mjs and exits early on non-send days (eval-scoreboard
+# is weekly:mon). A manual workflow_dispatch always sends. Change cadence in digests.yml,
+# never this cron. Report-only — it touches nothing but its own standing issue.
+
+on:
+  schedule:
+    - cron: '0 7 * * *'   # daily wake-up; digests.yml decides the real send day
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: eval-scoreboard
+  cancel-in-progress: false
+
+jobs:
+  scoreboard:
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Cadence gate: is today a send day for `eval-scoreboard` per .github/digests.yml?
+      # Manual dispatch forces a send. Everything below is skipped when send=false.
+      - name: Schedule gate
+        id: gate
+        env:
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+        run: node .claude/skills/housekeeping/schedule.mjs eval-scoreboard
+
+      - name: Render scoreboard
+        if: steps.gate.outputs.send == 'true'
+        run: node scripts/eval-ledger/scoreboard.mjs > scoreboard.md
+
+      # Upsert onto ONE standing issue (inline, like the #869 posting step) — find-or-create
+      # by exact title, then comment. No external script so the scoreboard stays self-contained.
+      - name: Post to the standing scoreboard issue
+        if: steps.gate.outputs.send == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TITLE="📊 Model routing scoreboard"
+          DATE=$(date -u +%F)
+
+          BODY_FILE=$(mktemp)
+          {
+            echo "> 🤖 **Claude Code** · agent pipeline (CI) · _deterministic scoreboard rollup, updated ${DATE}_"
+            echo ""
+            echo "_Last run: [${DATE}](${RUN_URL}) · upserted in place each send (weekly, see \`.github/digests.yml\`). Source: \`writeups/reports/eval-ledger.jsonl\` (#883). Tunes \`.claude/routing.yaml\` (#864)._"
+            echo ""
+            cat scoreboard.md
+          } > "$BODY_FILE"
+
+          # REST list (immediately consistent) — NOT `--search`, whose index lags after create.
+          NUM=$(gh issue list --repo "$REPO" --state open --label meta:agents --limit 500 \
+                  --json number,title --jq ".[] | select(.title==\"$TITLE\") | .number" | head -n1 || true)
+          if [ -z "${NUM:-}" ]; then
+            echo "Creating the standing scoreboard issue…"
+            gh issue create --repo "$REPO" --title "$TITLE" --label meta:agents --label workflow --body-file "$BODY_FILE"
+          else
+            echo "Commenting on standing scoreboard issue #$NUM…"
+            gh issue comment "$NUM" --repo "$REPO" --body-file "$BODY_FILE"
+          fi

@@ -27,3 +27,10 @@ housekeeping:
 epic-digest:
   schedule: daily
   deliver: [email]
+
+# WS6b.2 (#884) — the model-routing scoreboard: cost-per-success per (model × flow), rolled up
+# from writeups/reports/eval-ledger.jsonl and posted to one standing issue. Low-noise weekly is
+# plenty (routing tiers change slowly); a manual dispatch always sends. No email rail needed.
+eval-scoreboard:
+  schedule: weekly:mon
+  deliver: [issue]
