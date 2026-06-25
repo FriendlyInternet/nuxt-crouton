@@ -1,0 +1,41 @@
+import { nanoid } from 'nanoid'
+import { sqliteTable, text, integer, real, customType } from 'drizzle-orm/sqlite-core'
+
+// Custom JSON column that handles NULL values gracefully during LEFT JOINs
+const jsonColumn = customType<any>({
+  dataType() {
+    return 'text'
+  },
+  fromDriver(value: unknown): any {
+    if (value === null || value === undefined || value === '') {
+      return null
+    }
+    try {
+      return JSON.parse(value as string)
+    } catch {
+      return null
+    }
+  },
+  toDriver(value: any): string {
+    return JSON.stringify(value)
+  },
+})
+
+export const salesOrderitems = sqliteTable('sales_orderitems', {
+  id: text('id').primaryKey().$default(() => nanoid()),
+
+  teamId: text('teamId').notNull(),
+  owner: text('owner').notNull(),
+  orderId: text('orderId').notNull(),
+  productId: text('productId').notNull(),
+  quantity: integer('quantity').notNull(),
+  unitPrice: real('unitPrice').notNull(),
+  totalPrice: real('totalPrice').notNull(),
+  remarks: text('remarks'),
+  selectedOptions: jsonColumn('selectedOptions').$default(() => ({})),
+
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date()),
+  createdBy: text('createdBy').notNull(),
+  updatedBy: text('updatedBy').notNull()
+})

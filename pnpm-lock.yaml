@@ -531,6 +531,46 @@ importers:
         specifier: ^0.31.0
         version: 0.31.9
 
+  fixtures/with-sales:
+    dependencies:
+      '@fyit/crouton':
+        specifier: workspace:*
+        version: link:../../packages/crouton
+      '@fyit/crouton-core':
+        specifier: workspace:*
+        version: link:../../packages/crouton-core
+      '@fyit/crouton-i18n':
+        specifier: workspace:*
+        version: link:../../packages/crouton-i18n
+      '@fyit/crouton-printing':
+        specifier: workspace:*
+        version: link:../../packages/crouton-printing
+      '@fyit/crouton-sales':
+        specifier: workspace:*
+        version: link:../../packages/crouton-sales
+      '@libsql/client':
+        specifier: ^0.17.0
+        version: 0.17.4
+      drizzle-orm:
+        specifier: ^0.45.1
+        version: 0.45.2(@cloudflare/workers-types@4.20260118.0)(@libsql/client@0.17.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.2)(kysely@0.28.11)(pg@8.17.1)
+      nuxt:
+        specifier: ^4.4.8
+        version: 4.4.8(acbda501943d3a88c40c15b150712194)
+      vue:
+        specifier: ^3.5.38
+        version: 3.5.38(typescript@5.9.3)
+      vue-router:
+        specifier: ^4.6.4
+        version: 4.6.4(vue@3.5.38(typescript@5.9.3))
+    devDependencies:
+      '@fyit/crouton-cli':
+        specifier: workspace:*
+        version: link:../../packages/crouton-cli
+      drizzle-kit:
+        specifier: ^0.31.0
+        version: 0.31.10
+
   packages/crouton:
     dependencies:
       '@fyit/crouton-admin':

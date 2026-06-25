@@ -1,0 +1,10 @@
+{
+  "id": { "type": "uuid", "meta": { "primaryKey": true } },
+  "orderId": { "type": "uuid", "refTarget": "orders", "meta": { "required": true, "label": "Order" } },
+  "productId": { "type": "uuid", "refTarget": "products", "meta": { "required": true, "label": "Product" } },
+  "quantity": { "type": "integer", "meta": { "required": true, "label": "Quantity", "default": 1 } },
+  "unitPrice": { "type": "decimal", "meta": { "required": true, "label": "Unit Price", "precision": 10, "scale": 2 } },
+  "totalPrice": { "type": "decimal", "meta": { "required": true, "label": "Total Price", "precision": 10, "scale": 2 } },
+  "remarks": { "type": "text", "meta": { "label": "Item Remarks" } },
+  "selectedOptions": { "type": "json", "meta": { "label": "Selected Options" } }
+}

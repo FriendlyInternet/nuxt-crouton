@@ -1,0 +1,13 @@
+{
+  "id": { "type": "uuid", "meta": { "primaryKey": true } },
+  "eventId": { "type": "uuid", "refTarget": "events", "meta": { "required": true, "label": "Event" } },
+  "orderId": { "type": "uuid", "refTarget": "orders", "meta": { "required": true, "label": "Order" } },
+  "printerId": { "type": "uuid", "refTarget": "printers", "meta": { "required": true, "label": "Printer" } },
+  "locationId": { "type": "uuid", "refTarget": "locations", "meta": { "label": "Location" } },
+  "status": { "type": "string", "meta": { "required": true, "label": "Status", "default": "0", "helpText": "0=pending, 1=printing, 2=done, 9=error. Stored as text — the print-server endpoints use string status values." } },
+  "printData": { "type": "text", "meta": { "required": true, "label": "Print Data" } },
+  "printMode": { "type": "string", "meta": { "label": "Print Mode", "default": "normal" } },
+  "errorMessage": { "type": "text", "meta": { "label": "Error Message" } },
+  "retryCount": { "type": "string", "meta": { "label": "Retry Count", "default": "0", "helpText": "Stored as text; incremented via SQL COALESCE(retryCount,0)+1." } },
+  "completedAt": { "type": "string", "meta": { "label": "Completed At", "helpText": "ISO timestamp string (toISOString), not a date column." } }
+}

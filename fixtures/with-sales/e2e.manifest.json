@@ -1,0 +1,18 @@
+{
+  "packages": ["crouton-sales", "crouton-printing"],
+  "collections": [
+    {
+      "key": "salesClients",
+      "heading": "Sales Clients",
+      "create": { "title": "e2e client" },
+      "requiredField": "title"
+    }
+  ],
+  "surfaces": [
+    {
+      "name": "sales admin section renders",
+      "path": "/admin/{team}/sales",
+      "expect": { "visible": "a[href$='/sales/events']" }
+    }
+  ]
+}

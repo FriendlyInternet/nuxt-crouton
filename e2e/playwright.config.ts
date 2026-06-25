@@ -81,7 +81,13 @@ export default defineConfig({
     env: {
       ...process.env,
       BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'dev',
-      BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || 'http://localhost:3000'
+      BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
+      // The with-sales fixture (#355) exercises the in-process ESC/POS drainer:
+      // turn it on so a placed order's print job is delivered to the in-test fake
+      // :9100 printer and driven to done. Harmless for other fixtures (no
+      // print_jobs to drain). node:net is imported lazily by the drainer, so this
+      // is a no-op until a job exists.
+      ...(fixture === 'with-sales' ? { CROUTON_PRINTING_DRAINER: '1' } : {})
     },
     // Generous: a cold `nuxt dev` first build in CI can take a while.
     timeout: 180000

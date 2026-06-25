@@ -16,6 +16,7 @@ e2e/                         # the harness (Playwright) — NOT a workspace pack
   surface.smoke.spec.ts      # generic, manifest-driven package-surface checks (optional)
   i18n.smoke.spec.ts         # generic, manifest-driven locale-switch check (optional)
   maps.smoke.spec.ts         # generic, manifest-driven maps mount + live geocode check (optional)
+  printing.smoke.spec.ts     # with-sales only: two-tier order→print→done smoke vs an in-test fake :9100 printer (optional)
   a11y.smoke.spec.ts         # generic, manifest-driven axe-core accessibility scan (per surface)
   .auth/                     # generated storageState + team slug (gitignored)
 
@@ -26,6 +27,7 @@ fixtures/                    # the apps under test — real crouton apps, one pe
   with-assets/               # + @fyit/crouton-assets  (surface: CroutonAssetsPicker mounts, not the stub)
   with-collab/               # + @fyit/crouton-collab  (spike surface: realtime collab UI mounts single-client)
   with-maps/                 # + @fyit/crouton-maps    (maps: map mounts in form + live Nominatim geocode)
+  with-sales/                # + @fyit/crouton-printing + @fyit/crouton-sales (two-tier print smoke vs an in-test fake :9100 printer)
   <name>/                    # add more here
     e2e.manifest.json        # declares what to smoke (collections, fields)
 ```
