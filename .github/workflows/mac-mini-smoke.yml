@@ -1,0 +1,56 @@
+name: Mac mini runner smoke
+
+# Dispatch-only proof that the self-hosted `mac-mini` runner (epic #610 / #653) picks up a
+# job AND resolves the toolchain via its `.path` file (the launchd-PATH gotcha — runbook
+# §2a / writeups/setup/self-hosted-mac-mini-runner.md). This is the #654 acceptance check.
+#
+# SAFE on a public repo: `workflow_dispatch` only → it can be triggered ONLY by a human with
+# write access, manually. There is no `pull_request`/`push` trigger, so untrusted fork code
+# can never land on the self-hosted box through this workflow (epic #610 WS4).
+#
+# NB: `workflow_dispatch` only works once this file is on the DEFAULT branch (main). Until
+# #882 merges, the "Run workflow" button won't appear.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: mac-mini-smoke
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    # Hardcoded to the self-hosted box (not the AGENT_RUNNER toggle) — this job's whole point
+    # is to prove THIS runner works.
+    runs-on: [self-hosted, mac-mini]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Identify the runner
+        run: |
+          echo "runner.name = ${{ runner.name }}"
+          echo "runner.os   = ${{ runner.os }}"
+          echo "runner.arch = ${{ runner.arch }}"
+          uname -a
+
+      # Proves git + a clean workspace checkout work on the box.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # The .path proof: these must resolve from the runner's launchd PATH. node/pnpm are
+      # also covered per-job by setup-node/pnpm-action-setup elsewhere, but gh + wrangler
+      # rely on `.path` carrying /opt/homebrew/bin. If any line errors "command not found",
+      # the `.path` file is missing/stale (re-run `echo "$PATH" > ~/actions-runner/.path`).
+      - name: Toolchain resolves (the .path proof)
+        run: |
+          echo "PATH=$PATH"
+          echo "--- versions ---"
+          node -v
+          pnpm -v
+          gh --version
+          wrangler --version
+
+      - name: Done
+        run: echo "✅ mac-mini runner executed this job and the toolchain resolved."

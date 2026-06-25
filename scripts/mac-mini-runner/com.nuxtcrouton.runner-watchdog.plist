@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.nuxtcrouton.runner-watchdog.plist — launchd agent that runs runner-healthcheck.sh
+  every 5 minutes to keep the Mac mini self-hosted GitHub Actions runner alive.
+
+  Epic #610 / issue #657 (WS5). This is the watchdog LAYER. It does NOT replace the
+  runner's own service (`./svc.sh install`, label `actions.runner.*`) nor its launchd
+  `KeepAlive` — it sits above them and catches the failures KeepAlive can't see (a
+  wedged-but-alive listener, a lost GitHub connection). See the runbook:
+  writeups/setup/self-hosted-mac-mini-runner.md
+
+  INSTALL (edit the two paths first — see <<EDIT>> markers):
+    cp scripts/mac-mini-runner/com.nuxtcrouton.runner-watchdog.plist \
+       ~/Library/LaunchAgents/com.nuxtcrouton.runner-watchdog.plist
+    # then edit ProgramArguments path + WorkingDirectory to your absolute paths
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.nuxtcrouton.runner-watchdog.plist
+    launchctl kickstart  gui/$(id -u)/com.nuxtcrouton.runner-watchdog   # run once now
+
+  UNINSTALL:
+    launchctl bootout gui/$(id -u)/com.nuxtcrouton.runner-watchdog
+
+  This is a LaunchAgent (per-user, GUI domain) on purpose: the runner itself installs as
+  a GUI-domain agent via svc.sh, so the watchdog must share that domain to `kickstart` it.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.nuxtcrouton.runner-watchdog</string>
+
+  <!-- <<EDIT>> Absolute path to bash + the checked-out script. Use the FULL path; launchd
+       has a minimal PATH. Replace YOURNAME with your macOS short username. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/YOURNAME/nuxt-crouton/scripts/mac-mini-runner/runner-healthcheck.sh</string>
+  </array>
+
+  <!-- Run every 300s (5 min). launchd fires it on load and then on the interval. -->
+  <key>StartInterval</key>
+  <integer>300</integer>
+
+  <!-- Don't keep it resident — it's a periodic one-shot, not a daemon. -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- <<EDIT>> Pass non-secret config here. SECRETS (GH_TOKEN, ALERT_WEBHOOK) should go in
+       a gitignored ~/.runner-watchdog.env that the script sources — NOT in this committed
+       plist. Keep only non-sensitive defaults here. -->
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>RUNNER_DIR</key>
+    <string>/Users/YOURNAME/actions-runner</string>
+    <key>RUNNER_LABEL</key>
+    <string>mac-mini</string>
+    <key>GH_REPO</key>
+    <string>FriendlyInternet/nuxt-crouton</string>
+  </dict>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/YOURNAME/nuxt-crouton</string>
+
+  <!-- launchd captures the script's own stdout/stderr here; the script ALSO appends to
+       ~/Library/Logs/runner-watchdog.log via its log() helper. -->
+  <key>StandardOutPath</key>
+  <string>/Users/YOURNAME/Library/Logs/runner-watchdog.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOURNAME/Library/Logs/runner-watchdog.err.log</string>
+
+  <!-- Run with a normal nice value; the check is cheap. -->
+  <key>ProcessType</key>
+  <string>Background</string>
+</dict>
+</plist>
