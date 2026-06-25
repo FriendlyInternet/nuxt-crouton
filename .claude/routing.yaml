@@ -1,0 +1,81 @@
+# routing.yaml — the single source of truth for "what runs on what model".
+# WS6a of epic #669 (#864). Pairs with the evidence-based eval loop (#865).
+#
+# Today this file is DESCRIPTIVE: it records the CURRENT model of each agent
+# (mirrors `.claude/agents/*.md` frontmatter) plus a `proposed` cheaper tier and
+# the rationale. The generator renders it to a human-readable registry:
+#
+#   node scripts/gen-routing.mjs          # write writeups/architecture/routing-registry.md
+#   node scripts/gen-routing.mjs --check  # exit 1 if the registry is stale (CI)
+#
+# NEXT (not in this skeleton): a sync step that writes the chosen tier back INTO
+# the consumers (agent frontmatter, pi models.json, workflow env) so this file
+# becomes PRESCRIPTIVE — edit once, propagate. Until then, changing a model still
+# means editing the agent file; this file is the map + the proposal, reviewed on
+# the regular sweep and validated by the #865 scoreboard before any demotion.
+
+# ── Tiers ────────────────────────────────────────────────────────────────────
+# Each tier maps to a concrete model per harness. `out_per_mtok` is the Claude
+# baseline output price ($/Mtok) — the cost lever; pi's cheaper/local equivalents
+# are measured for real by the #865 eval loop, not assumed here.
+tiers:
+  small:
+    claude: haiku        # claude-haiku-4-5
+    pi: deepseek-v3.2    # or ollama:qwen2.5-coder:7b (local, ~$0) on the Mac mini
+    out_per_mtok: 5
+    note: reports / triage / decompose — no code written
+  medium:
+    claude: sonnet       # claude-sonnet-4-6
+    pi: deepseek-v3.2
+    out_per_mtok: 15
+    note: most work
+  large:
+    claude: opus         # claude-opus-4-8
+    pi: claude-opus-4-8
+    out_per_mtok: 75
+    note: hard build / synthesis — quality-sensitive
+
+default: medium
+
+# ── Routes ───────────────────────────────────────────────────────────────────
+# One entry per agent/flow. `tier` = what it runs on TODAY (must match the agent
+# frontmatter — `--check` is the guard). `proposed` = where the cheap-but-good
+# re-tiering would put it, pending the #865 quality measurement. Omit `proposed`
+# to mean "no change proposed".
+routes:
+  task-worker:
+    tier: large
+    why: "writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model"
+  task-orchestrator:
+    tier: medium
+    proposed: small
+    why: reads epic → workstreams; no code → over-tiered today
+  task-decomposer:
+    tier: medium
+    proposed: small
+    why: LEAF test + split issues; no code → over-tiered today
+  red-team:
+    tier: large
+    proposed: medium
+    why: security analysis, reports only — opus is overkill, free win to Sonnet
+  a11y:
+    tier: medium
+    proposed: small
+    why: template review, reports only
+  frontend-review:
+    tier: medium
+    proposed: small
+    why: convention review, reports only
+
+# ── Overrides ────────────────────────────────────────────────────────────────
+# Per-flow exceptions that pin an exact model regardless of tier. This is where a
+# one-off flow declares itself VISIBLY instead of burying the decision in a branch.
+overrides:
+  - flow: prototype-example
+    model: claude-opus-4-8
+    why: exploratory prototype flow — quality over cost (replace with your real flow)
+
+# ── Known gaps (not yet routed here) ─────────────────────────────────────────
+# The top-level workflow loop (claude.yml, decompose-on-issue.yml, fix-ci, the
+# daily sweeps) runs on the claude-code-action DEFAULT model — UNPINNED. Pinning
+# those is a follow-up; once pinned they become routes above.
