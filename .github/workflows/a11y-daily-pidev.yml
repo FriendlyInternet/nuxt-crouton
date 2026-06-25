@@ -1,0 +1,190 @@
+name: A11y (reports-only — pi.dev variant)
+
+# The SAFE first production pi.dev flow — epic #669 (#867), the reports-only step
+# that comes BEFORE any code-writing flow. It is a pi.dev twin of `a11y-daily.yml`
+# with three deliberate safety properties, each fixing a concrete failure from the
+# WS1 spike (#670, reverted in #862):
+#
+#   1. SCOPED CREDENTIAL — the pi step's ONLY secret is `PI_PROVIDER_KEY` (the model
+#      provider key). It is given NO `GH_TOKEN` / PAT / push token, and checkout runs
+#      with `persist-credentials: false`, so the git remote carries no token either.
+#      → pi literally cannot commit, push, open a PR, or comment. (The spike ran pi
+#        with full human gh/git creds; this is the fix.)
+#   2. NO MERGE SURFACE — reports-only means the run produces a markdown file and
+#      nothing else. There is no PR, so `automerge-epic-subpr.yml` has nothing to act
+#      on. (The spike's epic/sub-PR shape tripped automerge → unreviewed merge to main.)
+#   3. AGENT_HARNESS GATE (WS7) — `workflow_dispatch`-only AND gated default-OFF: the
+#      job no-ops unless you explicitly opt in (input `harness: pi`, or repo variable
+#      `AGENT_HARNESS == 'pi'`). One-variable flip, mirroring `AGENT_RUNNER` (#655).
+#
+# A SEPARATE trusted step posts the report using the workflow's own scoped
+# `GITHUB_TOKEN` (permissions: issues: write) — that token is never exposed to pi.
+#
+# Required config:
+#   • secret  PI_PROVIDER_KEY  — pi's model-provider key (an Anthropic key for a cheap
+#                                Claude model, or a local-model endpoint on the box)
+#   • (optional) var AGENT_RUNNER=mac-mini — route to the self-hosted runner (#653/#654/
+#                                #657) for a true local/$0 model run; defaults to
+#                                ubuntu-latest (cheap Claude via API) as the baseline.
+#   • (optional) var AGENT_HARNESS=pi — opt-in without touching the dispatch input.
+#
+# This captures the first #865 eval datapoint: pi's cost + report quality vs the
+# Claude `a11y-daily.yml` baseline, on the tier `routing.yaml` proposes for a11y (small).
+
+on:
+  workflow_dispatch:
+    inputs:
+      harness:
+        description: "Opt-in flag (WS7). Must be 'pi' to actually run — default 'off' no-ops."
+        required: true
+        default: "off"
+        type: choice
+        options: ["off", "pi"]
+      model:
+        description: "Model for pi (cheap by default — first quality/cost read)."
+        required: false
+        default: "claude-haiku-4-5-20251001"
+        type: string
+
+concurrency:
+  group: a11y-daily-pidev
+  cancel-in-progress: false
+
+jobs:
+  a11y-pidev:
+    # AGENT_HARNESS gate (WS7) — default OFF. Dispatch-only is the first lock; this
+    # `if` is the second: even a manual run no-ops unless the operator opts in.
+    if: ${{ inputs.harness == 'pi' || vars.AGENT_HARNESS == 'pi' }}
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    # `issues: write` is for the SEPARATE posting step only — the pi step below never
+    # receives a GitHub token. NO `id-token` (pi auths via a provider key, not OIDC).
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # persist-credentials:false → no GITHUB_TOKEN is written into .git/config, so the
+      # pi step has no git push path even if it tried (scoped-credential property #1).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # The deep a11y pass runs eslint-a11y (needs deps) and may boot a fixture for axe.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # ── The agent: pi.dev, REPORTS-ONLY, scoped to the model key only ──────────────
+      # env carries ONLY the provider key — no GH_TOKEN/GITHUB_TOKEN. «VERIFY» pi's CLI
+      # surface on the runner (print flag / model flag) via `pi --help`; the working
+      # invocation from the spike is `pi --print --model <m> "<prompt>"`. Skills: bridge
+      # .claude/skills → .pi/skills so pi loads them (Agent Skills standard).
+      - id: pi
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.PI_PROVIDER_KEY }}
+          PI_MODEL: ${{ inputs.model }}
+        run: |
+          set -uo pipefail
+          command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
+          mkdir -p .pi && [ -e .pi/skills ] || ln -s ../.claude/skills .pi/skills
+          DATE=$(date -u +%Y%m%d)
+          LOG="a11y-pidev-exec-${{ github.run_id }}.log"
+          PROMPT=$(cat <<EOF
+          Run the **/a11y** skill (.claude/skills/a11y/SKILL.md) at **depth=deep, scope=repo**.
+          Sweep the vuejs-accessibility/* eslint rules across every packages/* .vue, and attempt
+          best-effort runtime axe via the e2e fixture harness (the a11y.smoke.spec.ts path); if
+          booting a fixture is too heavy or unavailable, degrade gracefully to the static deep
+          sweep and say so. Only probe this repo's own local fixtures — never any external host.
+
+          Collate ONE whole-repo report to writeups/reports/a11y-repo-pidev-${DATE}.md following
+          writeups/reports/a11y-TEMPLATE.md. Always write the report, even on a clean sweep.
+
+          REPORTS-ONLY — this run has NO git/gh credentials by design. Do NOT file any GitHub
+          issues, do NOT post to GitHub, do NOT edit any apps/ or packages/ code, do NOT run
+          git or gh or push anything. Your SINGLE deliverable is the report file above; a later
+          workflow step posts it. Report quality is what is being measured here.
+          EOF
+          )
+          echo "report=writeups/reports/a11y-repo-pidev-${DATE}.md" >> "$GITHUB_OUTPUT"
+          echo "exec=$LOG" >> "$GITHUB_OUTPUT"
+          START=$(date +%s)
+          # «VERIFY» flags — single source of truth for the invocation:
+          pi --print --model "$PI_MODEL" "$PROMPT" 2>&1 | tee "$LOG"
+          RC=${PIPESTATUS[0]}
+          END=$(date +%s)
+          echo "wall=$((END-START))" >> "$GITHUB_OUTPUT"
+          echo "conclusion=$([ "$RC" -eq 0 ] && echo success || echo failure)" >> "$GITHUB_OUTPUT"
+
+      # ── Post the report (separate, trusted; the only step that holds GITHUB_TOKEN) ──
+      # Mirrors a11y-daily's posting, but to a DEDICATED standing issue kept distinct
+      # from the Claude baseline's, so the two reports sit side-by-side for comparison.
+      - name: Post report to the pi.dev standing issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          MODEL: ${{ inputs.model }}
+        run: |
+          set -euo pipefail
+          REPORT=$(ls -t writeups/reports/a11y-repo-pidev-*.md 2>/dev/null | head -1 || true)
+          if [ -z "$REPORT" ]; then
+            echo "::warning::No pi.dev a11y report file was produced — nothing to post."
+            exit 0
+          fi
+          echo "Report: $REPORT"
+          TITLE="♿ A11y — pi.dev reports-only sweep (eval)"
+          MARKER="<!-- a11y-daily-pidev -->"
+          DATE=$(date -u +%F)
+
+          BODY_FILE=$(mktemp)
+          {
+            echo "$MARKER"
+            echo "> 🤖 **pi.dev** · agent pipeline (CI) · _reports-only a11y sweep on \`$MODEL\`, updated ${DATE}_"
+            echo ""
+            echo "_Last run: [$DATE]($RUN_URL) · model \`$MODEL\` · this issue is updated in place each run. The Claude baseline lives at the \"♿ A11y — daily accessibility sweep\" issue — compare the two._"
+            echo ""
+            head -c 60000 "$REPORT"
+          } > "$BODY_FILE"
+
+          # Find-or-create off the EXACT title among open a11y issues (deterministic;
+          # finding-issues also carry `a11y`, so a loose search could edit the wrong one).
+          NUM=$(gh issue list --repo "$REPO" --state open --label a11y --limit 200 --json number,title \
+                  --jq "map(select(.title == \"$TITLE\")) | .[0].number // empty" || true)
+          if [ -z "$NUM" ]; then
+            echo "Creating the pi.dev standing a11y issue…"
+            gh issue create --repo "$REPO" --title "$TITLE" --label a11y --label meta:agents --body-file "$BODY_FILE"
+          else
+            echo "Updating pi.dev standing a11y issue #$NUM…"
+            gh issue edit "$NUM" --repo "$REPO" --body-file "$BODY_FILE"
+          fi
+
+      # ── Eval datapoint (#865) — the first row of the cost-per-flow scoreboard ───────
+      - name: Capture eval datapoint
+        if: always()
+        env:
+          MODEL: ${{ inputs.model }}
+          WALL: ${{ steps.pi.outputs.wall }}
+          CONCLUSION: ${{ steps.pi.outputs.conclusion }}
+          REPORT: ${{ steps.pi.outputs.report }}
+        run: |
+          {
+            echo "## pi.dev a11y reports-only — eval datapoint (#865)"
+            echo ""
+            echo "| field | value |"
+            echo "|---|---|"
+            echo "| flow | a11y (reports-only) |"
+            echo "| harness | pi.dev |"
+            echo "| model | \`${MODEL}\` |"
+            echo "| wall (s) | ${WALL:-n/a} |"
+            echo "| pi conclusion | ${CONCLUSION:-n/a} |"
+            echo "| report | ${REPORT:-none} |"
+            echo "| runner | ${{ runner.name }} |"
+            echo ""
+            echo "_Cost: read from pi's \`/usage\` (or the provider dashboard) for this run and record it on #865 alongside the Claude \`a11y-daily.yml\` baseline — the metric is cost-per-comparable-report._"
+          } >> "$GITHUB_STEP_SUMMARY"
