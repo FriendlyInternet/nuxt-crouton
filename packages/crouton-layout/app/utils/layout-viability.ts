@@ -38,6 +38,17 @@ export interface ViabilityResult {
 /** A block's declared `minWidth` (px), or 0 when undeclared/unknown. */
 export type MinWidthResolver = (blockId: string) => number
 
+/**
+ * A pane is *collapsed* iff it's collapsible AND explicitly closed (#852). A
+ * collapsed pane leaves the splitter (it becomes a gutter tab), so it occupies
+ * no pane width — viability and the runtime min-size floor both skip it, and it
+ * stops constraining its siblings. Re-opening it (`open !== false`) restores
+ * full enforcement.
+ */
+export function isCollapsed(node: LayoutNode): boolean {
+  return node.collapsible === true && node.open === false
+}
+
 /** Build a `MinWidthResolver` from a layout-block registry. */
 export function minWidthResolver(registry: CroutonLayoutBlockRegistry): MinWidthResolver {
   return (id: string) => registry[id]?.minWidth ?? 0
@@ -51,18 +62,26 @@ interface LeafWidth {
 
 /** Recursively distribute `width` (px) down the tree, collecting leaf widths. */
 function leafWidths(node: LayoutNode, width: number): LeafWidth[] {
+  // Collapsed panes leave the splitter (#852) — no leaf, no width claimed.
+  if (isCollapsed(node)) return []
+
   if (node.type === 'leaf') {
     return [{ blockId: node.blockId, width }]
   }
 
+  // Only the OPEN children sit in the splitter; collapsed ones become gutter
+  // tabs, so the open siblings share the full width among themselves.
+  const open = node.children.filter(c => !isCollapsed(c))
+  if (open.length === 0) return []
+
   // Split: horizontal divides width by size share; vertical keeps full width.
   if (node.direction === 'vertical') {
-    return node.children.flatMap(child => leafWidths(child, width))
+    return open.flatMap(child => leafWidths(child, width))
   }
 
-  const shares = node.children.map(c => c.defaultSize ?? 100 / node.children.length)
+  const shares = open.map(c => c.defaultSize ?? 100 / open.length)
   const total = shares.reduce((a, b) => a + b, 0) || 1
-  return node.children.flatMap((child, i) =>
+  return open.flatMap((child, i) =>
     leafWidths(child, (width * shares[i]!) / total),
   )
 }
@@ -113,8 +132,10 @@ export function checkTreeViability(
  * `leafWidths` above so the floor the renderer enforces matches the metric.
  */
 export function subtreeMinWidth(node: LayoutNode, minWidthFor: MinWidthResolver): number {
+  // A collapsed pane is a gutter tab, not a panel — it imposes no width floor.
+  if (isCollapsed(node)) return 0
   if (node.type === 'leaf') return minWidthFor(node.blockId)
-  const kids = node.children.map(c => subtreeMinWidth(c, minWidthFor))
+  const kids = node.children.filter(c => !isCollapsed(c)).map(c => subtreeMinWidth(c, minWidthFor))
   if (node.direction === 'vertical') return kids.reduce((a, b) => Math.max(a, b), 0)
   return kids.reduce((a, b) => a + b, 0)
 }

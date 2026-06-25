@@ -5,6 +5,7 @@ import {
   minWidthResolver,
   subtreeMinWidth,
   panelMinSizePct,
+  isCollapsed,
 } from '../layout-viability'
 import type { LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
 import type { CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/layout-block'
@@ -202,5 +203,64 @@ describe('panelMinSizePct — px floor → SplitterPanel min-size %', () => {
 
   it('is 0 for a fluid block with no authored minSize', () => {
     expect(panelMinSizePct('horizontal', { type: 'leaf', blockId: 'stats' }, 1000, r)).toBe(0)
+  })
+})
+
+describe('collapse-aware viability (#852) — a collapsed pane occupies no pane width', () => {
+  it('isCollapsed: only true for a collapsible pane that is closed', () => {
+    expect(isCollapsed({ type: 'leaf', blockId: 'x', collapsible: true, open: false })).toBe(true)
+    expect(isCollapsed({ type: 'leaf', blockId: 'x', collapsible: true, open: true })).toBe(false)
+    expect(isCollapsed({ type: 'leaf', blockId: 'x', collapsible: true })).toBe(false) // defaults open
+    expect(isCollapsed({ type: 'leaf', blockId: 'x', open: false })).toBe(false) // not collapsible → always counts
+  })
+
+  it('a layout non-viable with the pane OPEN becomes viable once it is COLLAPSED', () => {
+    // pos(480) + orders(280) side by side need ≥ 760; at 700 the open layout fails.
+    const open: LayoutNode = {
+      type: 'split', direction: 'horizontal',
+      children: [
+        { type: 'leaf', blockId: 'main', defaultSize: 50 }, // 480
+        { type: 'leaf', blockId: 'sidebar', defaultSize: 50, collapsible: true, collapse: 'gutter-tabs', open: true }, // 320
+      ],
+    }
+    expect(checkLayoutViability(open, minWidthFor, [700]).viable).toBe(false)
+
+    // Collapsed: the sidebar leaves the splitter, so main gets the whole 700 ≥ 480.
+    const collapsed: LayoutNode = {
+      type: 'split', direction: 'horizontal',
+      children: [
+        { type: 'leaf', blockId: 'main', defaultSize: 50 },
+        { type: 'leaf', blockId: 'sidebar', defaultSize: 50, collapsible: true, collapse: 'gutter-tabs', open: false },
+      ],
+    }
+    expect(checkLayoutViability(collapsed, minWidthFor, [700]).viable).toBe(true)
+  })
+
+  it('an OPEN collapsible pane is still enforced (min-width intact on re-open)', () => {
+    const reopened: LayoutNode = {
+      type: 'split', direction: 'horizontal',
+      children: [
+        { type: 'leaf', blockId: 'main', defaultSize: 50 },
+        { type: 'leaf', blockId: 'sidebar', defaultSize: 50, collapsible: true, open: true }, // 350 < 320? no — at 700, 50% = 350 ≥ 320 ok
+      ],
+    }
+    // sidebar gets 350 ≥ 320 (ok), but main also 350 < 480 → violation proves the open pane is counted.
+    const res = checkLayoutViability(reopened, minWidthFor, [700])
+    expect(res.violations.map(v => v.blockId)).toContain('main')
+  })
+
+  it('subtreeMinWidth: a horizontal split EXCLUDES a collapsed child', () => {
+    const split: LayoutNode = {
+      type: 'split', direction: 'horizontal',
+      children: [
+        { type: 'leaf', blockId: 'main' }, // 480
+        { type: 'leaf', blockId: 'sidebar', collapsible: true, open: false }, // collapsed → 0
+      ],
+    }
+    expect(subtreeMinWidth(split, minWidthFor)).toBe(480)
+  })
+
+  it('subtreeMinWidth: a collapsed leaf itself contributes 0', () => {
+    expect(subtreeMinWidth({ type: 'leaf', blockId: 'sidebar', collapsible: true, open: false }, minWidthFor)).toBe(0)
   })
 })

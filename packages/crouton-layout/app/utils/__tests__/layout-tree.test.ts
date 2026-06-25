@@ -85,3 +85,45 @@ describe('sanitizeLayoutTree — rejects / strips malformed input', () => {
     expect(sanitizeLayoutTree(node)).toBeNull()
   })
 })
+
+describe('sanitizeLayoutTree — preserves the collapse contract (#852)', () => {
+  it('passes collapsible/collapse/open through on a leaf', () => {
+    expect(sanitizeLayoutTree({
+      type: 'leaf', blockId: 'orders', defaultSize: 30,
+      collapsible: true, collapse: 'gutter-tabs', open: false,
+    })).toEqual({
+      renderer: 'panes',
+      root: { type: 'leaf', blockId: 'orders', defaultSize: 30, collapsible: true, collapse: 'gutter-tabs', open: false },
+    })
+  })
+
+  it('passes the collapse contract through on a split node', () => {
+    const out = sanitizeLayoutTree({
+      type: 'split', direction: 'horizontal', collapsible: true, collapse: 'gutter-tabs', open: false,
+      children: [{ type: 'leaf', blockId: 'a' }, { type: 'leaf', blockId: 'b' }],
+    })
+    expect(out!.root).toMatchObject({ collapsible: true, collapse: 'gutter-tabs', open: false })
+  })
+
+  it('drops a collapse style outside the fixed enum', () => {
+    const out = sanitizeLayoutTree({ type: 'leaf', blockId: 'x', collapsible: true, collapse: 'free-form-css' })
+    expect(out).toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'x', collapsible: true } })
+  })
+
+  it('drops non-boolean collapsible / open', () => {
+    const out = sanitizeLayoutTree({ type: 'leaf', blockId: 'x', collapsible: 'yes', open: 1 })
+    expect(out).toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'x' } })
+  })
+
+  it('omits the collapse fields entirely when absent (no churn for non-collapsible panes)', () => {
+    const out = sanitizeLayoutTree({ type: 'leaf', blockId: 'x', defaultSize: 50 })
+    expect(out).toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'x', defaultSize: 50 } })
+  })
+
+  it('keeps the OTHER collapse styles in the enum (header-toggle / icon-rail)', () => {
+    expect(sanitizeLayoutTree({ type: 'leaf', blockId: 'x', collapse: 'header-toggle' })!.root)
+      .toMatchObject({ collapse: 'header-toggle' })
+    expect(sanitizeLayoutTree({ type: 'leaf', blockId: 'x', collapse: 'icon-rail' })!.root)
+      .toMatchObject({ collapse: 'icon-rail' })
+  })
+})

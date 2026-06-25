@@ -13,6 +13,12 @@ import { sanitizeLayoutTree } from '../utils/layout-tree'
  * before handing it to the editor — a row tampered with directly in the DB still
  * can't feed the renderer a malformed tree. `save` is debounced so a flurry of
  * resize/drag edits collapses into one write.
+ *
+ * Per-pane collapse state (#852) needs no special handling here: `collapsible` /
+ * `collapse` / `open` live on the tree's nodes (keyed by their path), so they
+ * persist with `save(tree)` and restore via `sanitizeLayoutTree` on `load` — the
+ * same ride as the resize ratios (`defaultSize`), team-scoped via `layout_configs`
+ * rather than localStorage.
  */
 export function useCroutonLayoutStore() {
   const { getTeamId } = useTeamContext()

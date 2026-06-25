@@ -141,6 +141,17 @@ export function applySizes(
   return replaceAt(root, path, { ...target, children }) ?? root
 }
 
+/**
+ * Set a collapsible pane's persisted open/closed state (#852). Addressed by
+ * path like `applySizes`/`setConfig`; the flag rides the tree so it persists
+ * alongside sizes via `useCroutonLayoutStore`. A no-op for a non-existent path.
+ */
+export function setOpen(root: LayoutNode, path: NodePath, open: boolean): LayoutNode {
+  const target = getNode(root, path)
+  if (!target) return root
+  return replaceAt(root, path, { ...target, open }) ?? root
+}
+
 /** Set the per-block config on the leaf at `path`. */
 export function setConfig(
   root: LayoutNode,

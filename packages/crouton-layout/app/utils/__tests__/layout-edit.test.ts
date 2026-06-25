@@ -6,6 +6,7 @@ import {
   removeNode,
   applySizes,
   setConfig,
+  setOpen,
 } from '../layout-edit'
 import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layout'
 import type { CroutonLayoutBlockDefinition } from '@fyit/crouton-core/app/types/layout-block'
@@ -170,5 +171,60 @@ describe('setConfig — writes per-block config on a leaf', () => {
   it('is a no-op on a split node', () => {
     const root = masterDetail()
     expect(setConfig(root, [], { x: 1 })).toBe(root)
+  })
+})
+
+describe('setOpen — persists a collapsible pane’s open/closed state', () => {
+  function collapsibleDetail(): LayoutSplit {
+    return {
+      type: 'split',
+      direction: 'horizontal',
+      children: [
+        { type: 'leaf', blockId: 'pos', defaultSize: 60 },
+        { type: 'leaf', blockId: 'orders', defaultSize: 40, collapsible: true, collapse: 'gutter-tabs', open: true },
+      ],
+    }
+  }
+
+  it('sets open=false on the addressed pane (collapse it)', () => {
+    const root = collapsibleDetail()
+    const next = setOpen(root, [1], false) as LayoutSplit
+    expect(next.children[1]).toMatchObject({ blockId: 'orders', collapsible: true, open: false })
+  })
+
+  it('sets open=true on the addressed pane (re-open it)', () => {
+    const root: LayoutSplit = {
+      type: 'split', direction: 'horizontal',
+      children: [
+        { type: 'leaf', blockId: 'pos' },
+        { type: 'leaf', blockId: 'orders', collapsible: true, open: false },
+      ],
+    }
+    const next = setOpen(root, [1], true) as LayoutSplit
+    expect(next.children[1]).toMatchObject({ blockId: 'orders', open: true })
+  })
+
+  it('only touches the addressed node; siblings + sizes untouched', () => {
+    const root = collapsibleDetail()
+    const next = setOpen(root, [1], false) as LayoutSplit
+    expect(next.children[0]).toMatchObject({ blockId: 'pos', defaultSize: 60 })
+    expect(next.children[1]).toMatchObject({ defaultSize: 40, collapse: 'gutter-tabs' })
+  })
+
+  it('can set open on the root node (empty path)', () => {
+    const root: LayoutNode = { type: 'leaf', blockId: 'orders', collapsible: true, open: true }
+    expect(setOpen(root, [], false)).toMatchObject({ blockId: 'orders', open: false })
+  })
+
+  it('is a no-op for a non-existent path', () => {
+    const root = collapsibleDetail()
+    expect(setOpen(root, [5], false)).toBe(root)
+  })
+
+  it('does not mutate the input tree', () => {
+    const root = collapsibleDetail()
+    const snapshot = JSON.stringify(root)
+    setOpen(root, [1], false)
+    expect(JSON.stringify(root)).toBe(snapshot)
   })
 })

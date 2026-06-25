@@ -14,10 +14,13 @@
  * the renderer + `useCroutonLayoutBlocks().sanitizeConfig` so there's one
  * allowlist. Pure (no Nuxt runtime) so it's unit-testable.
  */
-import type { LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
+import type { LayoutCollapseStyle, LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
 
 /** Hard recursion cap — a hostile/looping tree can't blow the stack. */
 const MAX_DEPTH = 12
+
+/** The fixed collapse-style enum (#852) — anything else is dropped on the way in. */
+const COLLAPSE_STYLES: readonly LayoutCollapseStyle[] = ['gutter-tabs', 'header-toggle', 'icon-rail']
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -27,14 +30,31 @@ function clampSize(v: unknown): number | undefined {
   return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100 ? v : undefined
 }
 
+function collapseStyle(v: unknown): LayoutCollapseStyle | undefined {
+  return COLLAPSE_STYLES.includes(v as LayoutCollapseStyle) ? (v as LayoutCollapseStyle) : undefined
+}
+
+function bool(v: unknown): boolean | undefined {
+  return typeof v === 'boolean' ? v : undefined
+}
+
 function sanitizeNode(input: unknown, depth: number): LayoutNode | null {
   if (depth > MAX_DEPTH || !isRecord(input)) return null
 
   const defaultSize = clampSize(input.defaultSize)
   const minSize = clampSize(input.minSize)
+  // Collapse contract (#852) — copied through so a pane's open-state and chosen
+  // affordance survive the storage round-trip (the persisted tree is untrusted,
+  // so only known fields / enum values pass).
+  const collapsible = bool(input.collapsible)
+  const collapse = collapseStyle(input.collapse)
+  const open = bool(input.open)
   const base = {
     ...(defaultSize !== undefined ? { defaultSize } : {}),
     ...(minSize !== undefined ? { minSize } : {}),
+    ...(collapsible !== undefined ? { collapsible } : {}),
+    ...(collapse !== undefined ? { collapse } : {}),
+    ...(open !== undefined ? { open } : {}),
   }
 
   if (input.type === 'leaf') {
