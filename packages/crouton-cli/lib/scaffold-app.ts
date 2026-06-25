@@ -152,7 +152,11 @@ function tmplPackageJson(vars: ScaffoldVars): string {
     // wrangler resolves migrations_dir relative to the config dir, doubling
     // `server/server/…` → "No migrations present" (#138). Drop --config so it
     // resolves from the app-root source config (where the synced ids live).
-    scripts['cf:staging'] = `NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && npx wrangler d1 migrations apply ${vars.name}-staging-db --env staging --remote`
+    // No dev-tools flag here: the @fyit/crouton-devtools menu auto-detects by
+    // folder (on under pocs/ + fixtures/, off under apps/, #811), so a launched
+    // app's staging build stays menu-off by default. Opt an app in by setting
+    // NUXT_PUBLIC_CROUTON_DEVTOOLS=true on this build.
+    scripts['cf:staging'] = `NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && npx wrangler d1 migrations apply ${vars.name}-staging-db --env staging --remote`
     scripts['sync:ids'] = 'node scripts/sync-wrangler-ids.mjs'
     scripts['db:generate'] = 'drizzle-kit generate'
     scripts['db:migrate'] = `npx wrangler d1 migrations apply ${vars.name}-db --local`

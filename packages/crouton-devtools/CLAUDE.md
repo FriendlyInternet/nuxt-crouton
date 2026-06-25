@@ -9,6 +9,7 @@ DevTools integration for Nuxt Crouton. Provides visual inspection and management
 | File | Purpose |
 |------|---------|
 | `src/module.ts` | Nuxt module entry point |
+| `src/resolve-enabled.ts` | Pure, unit-tested resolver for the unified menu gate — folder default (pocs/fixtures on, apps off) + `NUXT_PUBLIC_CROUTON_DEVTOOLS` override + deprecated `_REVIEW`/`_ERUDA` aliases (#811) |
 | `src/runtime/composables/useCroutonDevTools.ts` | Dev-tools **tool registry** — `registerTool()` + reactive `tools`/`toggle` the launcher reads (#809) |
 | `src/runtime/components/CroutonDevTools.vue` | Unified **glasses launcher** → Nuxt UI dropdown of toggleable tools (#809) |
 | `src/runtime/plugins/crouton-devtools.client.ts` | Mounts the launcher into the host app's context (appContext) so global Nuxt UI components resolve (#809) |
@@ -56,9 +57,16 @@ export default defineNuxtConfig({
 })
 ```
 
-**Auto-included in `crouton init` scaffolds (#595):** `@fyit/crouton-devtools` is automatically added to the generated app's `devDependencies` and `modules` array. The generated `cf:staging` script prefixes `NUXT_PUBLIC_CROUTON_REVIEW=true` so staging builds activate the review overlay without any extra configuration. Production builds (`cf:deploy`) omit the flag, so there is zero production footprint.
+**Auto-included in `crouton init` scaffolds (#595):** `@fyit/crouton-devtools` is automatically added to the generated app's `devDependencies` and `modules` array. The generated `cf:staging` script no longer sets any dev-tools flag (#811) — the glasses menu **auto-detects by folder** (on under `pocs/` + `fixtures/`, off under `apps/`), so a launched app's staging build is menu-off by default while an incubating POC gets it for free. Opt a launched app's build in with `NUXT_PUBLIC_CROUTON_DEVTOOLS=true`; production builds (`cf:deploy`) carry nothing.
 
 ## Mobile DevTools (eruda) layer — `@fyit/crouton-devtools/eruda`
+
+> **Superseded by the Console tool (#810/#811).** eruda is now the **Console**
+> tool in the unified glasses menu, which auto-detects by folder — prefer it for
+> new apps. This standalone `extends` layer stays for backward compatibility, and
+> its env flag `NUXT_PUBLIC_CROUTON_ERUDA` now also doubles as a **deprecated
+> alias** that turns the whole menu on (with a deprecation warning). Use
+> `NUXT_PUBLIC_CROUTON_DEVTOOLS=true` going forward.
 
 A separate, **opt-in Nuxt layer** (not the DevTools module above) that adds
 [eruda](https://github.com/liriliri/eruda) — an **in-page** devtools panel for
@@ -163,13 +171,26 @@ registerTool({
     pure `overlay/capture.ts`) → POSTs to `/api/_review`. The launcher toggle drives
     select-mode; the **old standalone `review-overlay.client.ts` FAB is retired**
     (deleted). Comment panel rebuilt on Nuxt UI 4; the highlight is a styled div.
-- **Gating** — the module adds the plugins + auto-imports `useCroutonDevTools`
-  in local dev, when a build sets `NUXT_PUBLIC_CROUTON_DEVTOOLS=true`, or on a
-  staging review build (`NUXT_PUBLIC_CROUTON_REVIEW=true`, so Annotate replaces the
-  old overlay there) (→ `runtimeConfig.public.croutonDevtools`); the plugins
-  double-check at runtime, so production ships nothing. Registered **before** the
-  dev-only early return so a flagged staging build gets it. Folder-based auto-on for
-  pocs/fixtures + flag unification is #811.
+- **Gating (unified, #811)** — one decision (`src/resolve-enabled.ts`, pure +
+  unit-tested in `test/resolveEnabled.test.ts`) governs the whole menu:
+  - **Folder default** from `nuxt.options.rootDir` — **on** under `pocs/` +
+    `fixtures/`, **off** under `apps/` (and anything else). A launched app is
+    trusted to work, so it stays clean by default.
+  - **Always on in local dev** (`nuxt.options.dev`).
+  - **One override** — `NUXT_PUBLIC_CROUTON_DEVTOOLS=true|false` wins over the
+    folder default either way (`false` wins even in local dev).
+  - **Deprecated aliases** — `NUXT_PUBLIC_CROUTON_REVIEW` /
+    `NUXT_PUBLIC_CROUTON_ERUDA` are honoured as **on-only** aliases for one
+    transition (they log a deprecation warning); the override beats them. Remove
+    them once consumers migrate.
+  When enabled the module adds the launcher + tool plugins and auto-imports
+  `useCroutonDevTools` (→ `runtimeConfig.public.croutonDevtools = true`);
+  registered **before** the dev-only early return so a flagged/POC staging build
+  gets it, and the plugins double-check at runtime so production ships nothing.
+  **Annotate's build-time machinery** (the `data-crouton-src` transform + the
+  `/api/_review` bridge + `croutonReview` server config) installs whenever the
+  menu ships in a **non-dev** build (`annotateMachineryOn`), so a deployed
+  preview's Annotate tool can resolve files + post feedback — no separate flag.
 
 ## Preview-review source stamping — `data-crouton-src` (epic #488, #490)
 
@@ -184,15 +205,19 @@ is injected by a **dev-only** Vite middleware and is stripped from `nuxt build`,
 it can't help on a deployed Workers preview. A compiler `nodeTransform` runs during
 SFC compilation, so the attribute is present in the built SSR + client output.
 
-**Gating — staging only, NEVER production** (mirrors the eruda layer): the transform
-is installed only when `NUXT_PUBLIC_CROUTON_REVIEW=true` at build time (set it in an
-app's `cf:staging` script, never `cf:deploy`). Flag absent → transform not registered
-→ zero attributes in the build. It also skips third-party components under
-`node_modules`, so a click only ever resolves to a file in this repo.
+**Gating — staging only, NEVER production** (#811): the transform is part of
+Annotate's build-time machinery, so it installs whenever the **menu ships in a
+non-dev build** (`annotateMachineryOn` — a POC/`fixtures/` build, or an app build
+that opted in with `NUXT_PUBLIC_CROUTON_DEVTOOLS=true`; the deprecated
+`NUXT_PUBLIC_CROUTON_REVIEW` alias still works for a transition). Menu off →
+transform not registered → zero attributes in the build. It also skips
+third-party components under `node_modules`, so a click only ever resolves to a
+file in this repo.
 
 ```jsonc
-// app package.json
-"cf:staging": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && …",
+// app package.json — no dev-tools flag needed; the menu auto-detects by folder.
+// A POC stamps automatically; opt a launched app in for a staging build with:
+"cf:staging": "NUXT_PUBLIC_CROUTON_DEVTOOLS=true NITRO_PRESET=cloudflare_module nuxt build && …",
 "cf:deploy":  "NITRO_PRESET=cloudflare_module nuxt build && …"   // no flag → never stamped
 ```
 
