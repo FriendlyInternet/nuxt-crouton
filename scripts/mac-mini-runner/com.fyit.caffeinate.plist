@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.fyit.caffeinate — holds a system/display-idle sleep assertion so the Mac mini
+  never sleeps (#657). Belt-and-suspenders alongside `sudo pmset -a sleep 0 disksleep 0`
+  (the runbook's primary method). KeepAlive relaunches caffeinate if it ever exits.
+
+  `caffeinate -dimsu`:  -d display  -i system idle  -m disk idle  -s while on AC  -u user-active
+  Deploy: see scripts/mac-mini-runner/README.md — copy to ~/Library/LaunchAgents/ and load.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.fyit.caffeinate</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/caffeinate</string>
+    <string>-dimsu</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+</dict>
+</plist>

@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  com.fyit.runner-watchdog — runs runner-watchdog.sh every 5 minutes (#657).
+  Deploy: see scripts/mac-mini-runner/README.md.
+    • Edit the two ABSOLUTE paths below (no ~ expansion in launchd) and the username.
+    • Set ALERT_WEBHOOK to a Slack/Discord incoming webhook to get failure pings (optional).
+    • Copy to ~/Library/LaunchAgents/ and `launchctl load` it.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.fyit.runner-watchdog</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <!-- ABSOLUTE path to the checked-out script (edit the username): -->
+    <string>/Users/CHANGEME/nuxt-crouton/scripts/mac-mini-runner/runner-watchdog.sh</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>RUNNER_DIR</key>
+    <string>/Users/CHANGEME/actions-runner</string>
+    <!-- Optional: a Slack/Discord-compatible incoming webhook for failure alerts. Leave empty to disable. -->
+    <key>ALERT_WEBHOOK</key>
+    <string></string>
+  </dict>
+
+  <!-- Every 300s. launchd also fires once at load. -->
+  <key>StartInterval</key>
+  <integer>300</integer>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/CHANGEME/Library/Logs/runner-watchdog.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/CHANGEME/Library/Logs/runner-watchdog.log</string>
+</dict>
+</plist>
