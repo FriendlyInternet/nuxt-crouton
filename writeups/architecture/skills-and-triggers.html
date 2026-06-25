@@ -35,7 +35,19 @@
   .b.auto{background:rgba(52,211,153,.14); color:var(--auto); border:1px solid #1f5e47;}
   .b.ask{background:rgba(96,165,250,.14); color:var(--ask); border:1px solid #29456f;}
   .b.flow{background:rgba(167,139,250,.14); color:var(--flow); border:1px solid #443a6b;}
+  .b.cron{background:rgba(244,162,59,.14); color:#f0a23b; border:1px solid #6b4f23;}
   .what{font-size:12.5px; color:var(--muted); margin:0;}
+  .flow-wrap{margin-top:26px;}
+  .flow-lanes{display:flex; flex-direction:column; gap:10px;}
+  .fl-lane{background:linear-gradient(180deg,var(--panel),var(--panel-2)); border:1px solid var(--line); border-radius:var(--radius); padding:13px 15px;}
+  .fl-head{display:flex; gap:11px; align-items:flex-start; margin-bottom:9px;}
+  .fl-ico{font-size:19px; line-height:1.2;}
+  .fl-trig{font-size:14px; font-weight:700; display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .fl-when{font-size:12px; color:var(--muted); margin-top:2px;}
+  .fl-skills{display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding-left:30px;}
+  .fl-chip{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; font-weight:700; color:#cfe3ff; background:#0e1626; border:1px solid var(--line); border-radius:7px; padding:3px 9px; display:inline-flex; align-items:center; gap:6px;}
+  .fl-cad{font-family:-apple-system,Segoe UI,Roboto,sans-serif; font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:#f0a23b; background:rgba(244,162,59,.13); border:1px solid #6b4f23; border-radius:999px; padding:1px 6px;}
+  .fl-arrow{color:#52628a; font-size:13px; font-weight:700;}
   .cif-wrap{margin-top:42px;}
   .cif-promises{display:flex; flex-wrap:wrap; gap:10px; margin:2px 0 18px;}
   .cif-promise{display:inline-flex; align-items:center; gap:8px; background:var(--panel); border:1px solid var(--line); padding:8px 14px; border-radius:999px; font-size:13px; color:var(--ink);}
@@ -82,6 +94,103 @@
       <text class="s-s" x="375" y="104" text-anchor="middle">green stages run automatically before the commit lands</text>
     </svg>
   </div>
+
+  <section class="flow-wrap">
+    <h2><span class="num">★</span> When each skill fires — the flow</h2>
+    <p class="grp-sub">The cards above say <em>how</em> a skill triggers; this says <em>when</em> — which event sets off which skills, in order. Read each lane left-to-right.</p>
+    <div class="flow-lanes">
+      <div class="fl-lane">
+        <div class="fl-head">
+          <span class="fl-ico">📋</span>
+          <div>
+            <div class="fl-trig">You start an initiative <span class="b ask">on ask</span></div>
+            <div class="fl-when">Issue-first — open the epic + sub-issues before any code.</div>
+          </div>
+        </div>
+        <div class="fl-skills"><span class="fl-chip">/github-tasks</span><span class="fl-arrow">→</span><span class="fl-chip">/task-decompose</span><span class="fl-arrow">→</span><span class="fl-chip">/ecosystem-check</span></div>
+      </div>
+      <div class="fl-lane">
+        <div class="fl-head">
+          <span class="fl-ico">🔨</span>
+          <div>
+            <div class="fl-trig">You build a feature <span class="b flow">in flow</span></div>
+            <div class="fl-when">The sign-off gates fire first (agree the model / look / test), then you generate.</div>
+          </div>
+        </div>
+        <div class="fl-skills"><span class="fl-chip">/schema-review</span><span class="fl-arrow">→</span><span class="fl-chip">/ui-proposal</span><span class="fl-arrow">→</span><span class="fl-chip">/test-review</span><span class="fl-arrow">→</span><span class="fl-chip">/crouton</span><span class="fl-arrow">→</span><span class="fl-chip">/block-authoring</span></div>
+      </div>
+      <div class="fl-lane">
+        <div class="fl-head">
+          <span class="fl-ico">💾</span>
+          <div>
+            <div class="fl-trig">You commit <span class="b auto">auto</span></div>
+            <div class="fl-when">Pre-commit gates run automatically, then the conventional commit lands.</div>
+          </div>
+        </div>
+        <div class="fl-skills"><span class="fl-chip">/sync-docs</span><span class="fl-arrow">→</span><span class="fl-chip">/i18n-check</span><span class="fl-arrow">→</span><span class="fl-chip">/commit</span></div>
+      </div>
+      <div class="fl-lane">
+        <div class="fl-head">
+          <span class="fl-ico">🤖</span>
+          <div>
+            <div class="fl-trig">A robot opens a PR → CI runs <span class="b flow">in flow</span></div>
+            <div class="fl-when">Quality gates run on the change before it can merge.</div>
+          </div>
+        </div>
+        <div class="fl-skills"><span class="fl-chip">/review</span><span class="fl-arrow">→</span><span class="fl-chip">/a11y</span><span class="fl-arrow">→</span><span class="fl-chip">/e2e-smoke</span><span class="fl-arrow">→</span><span class="fl-chip">/red-team</span></div>
+      </div>
+      <div class="fl-lane">
+        <div class="fl-head">
+          <span class="fl-ico">🚀</span>
+          <div>
+            <div class="fl-trig">You ship it <span class="b ask">on ask</span></div>
+            <div class="fl-when">Staging by default; production is a separate, deliberate skill.</div>
+          </div>
+        </div>
+        <div class="fl-skills"><span class="fl-chip">/deploy</span><span class="fl-arrow">→</span><span class="fl-chip">/poc-deploy</span><span class="fl-arrow">→</span><span class="fl-chip">/deploy-production</span></div>
+      </div>
+      <div class="fl-lane">
+        <div class="fl-head">
+          <span class="fl-ico">🐛</span>
+          <div>
+            <div class="fl-trig">A bug is reported <span class="b flow">in flow</span></div>
+            <div class="fl-when">Archaeology first — find when it broke before fixing.</div>
+          </div>
+        </div>
+        <div class="fl-skills"><span class="fl-chip">/bug-archaeology</span></div>
+      </div>
+      <div class="fl-lane">
+        <div class="fl-head">
+          <span class="fl-ico">🏁</span>
+          <div>
+            <div class="fl-trig">An epic closes <span class="b flow">in flow</span></div>
+            <div class="fl-when">A retro mines improvements into new workflow issues.</div>
+          </div>
+        </div>
+        <div class="fl-skills"><span class="fl-chip">/postmortem</span></div>
+      </div>
+      <div class="fl-lane">
+        <div class="fl-head">
+          <span class="fl-ico">⏰</span>
+          <div>
+            <div class="fl-trig">On a schedule — no human <span class="b cron">on a schedule</span></div>
+            <div class="fl-when">Deterministic digests + the daily security sweep run themselves.</div>
+          </div>
+        </div>
+        <div class="fl-skills"><span class="fl-chip">/epic-digest<span class="fl-cad">daily</span></span><span class="fl-arrow">→</span><span class="fl-chip">/housekeeping<span class="fl-cad">weekly</span></span><span class="fl-arrow">→</span><span class="fl-chip">/skills-digest<span class="fl-cad">monthly</span></span><span class="fl-arrow">→</span><span class="fl-chip">/red-team<span class="fl-cad">daily deep</span></span></div>
+      </div>
+      <div class="fl-lane">
+        <div class="fl-head">
+          <span class="fl-ico">🧰</span>
+          <div>
+            <div class="fl-trig">On demand, as needed <span class="b ask">on ask</span></div>
+            <div class="fl-when">Keep the repo current and healthy.</div>
+          </div>
+        </div>
+        <div class="fl-skills"><span class="fl-chip">/dependency-sweep</span><span class="fl-arrow">→</span><span class="fl-chip">/db-migrations</span><span class="fl-arrow">→</span><span class="fl-chip">/db-clone</span><span class="fl-arrow">→</span><span class="fl-chip">/provider-swap</span><span class="fl-arrow">→</span><span class="fl-chip">/remove-app</span><span class="fl-arrow">→</span><span class="fl-chip">/audit</span><span class="fl-arrow">→</span><span class="fl-chip">/i18n-audit</span></div>
+      </div>
+    </div>
+  </section>
 
   <section>
     <h2><span class="num">1</span> Build & generate</h2>
@@ -137,6 +246,10 @@
       <div class="skill">
         <div class="skill-head"><span class="name">/housekeeping</span><span class="badges"><span class="b ask">on ask</span></span></div>
         <p class="what">Generate the weekly "🧹 Housekeeping" digest — a render-only report of repo drift that needs a human eye (stale unmerged branches, mislabeled issues, stuck in-progress tickets, epics ready to close, idle PRs, label-coverage gaps). Reports only, never mutates. Use when asked for a "housekeeping report", "repo drift", "what's stale", or to run the weekly sweep by hand.</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/skills-digest</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">Generate a monthly digest of the skills in this repo's flow system — a render-only HTML + plain-text email listing every skill grouped by job, plus a "what was added / updated / removed since last digest" band computed from git history. Use when asked for a "skills digest", "what skills do we have", "skills report", "what skills changed", or to keep the skill surface from sprawling.</p>
       </div>
       <div class="skill">
         <div class="skill-head"><span class="name">/ticket-diagram</span><span class="badges"><span class="b flow">in flow</span><span class="b ask">on ask</span></span></div>

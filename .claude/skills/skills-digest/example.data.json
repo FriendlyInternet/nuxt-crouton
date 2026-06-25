@@ -1,0 +1,47 @@
+{
+  "generatedAt": "2026-07-01T05:00:00.000Z",
+  "repo": "FriendlyInternet/nuxt-crouton",
+  "since": "2026-06-01",
+  "total": 6,
+  "groups": [
+    {
+      "id": "build",
+      "title": "Build & generate",
+      "sub": "Turn intent into code (or into issues that become code).",
+      "skills": [
+        { "name": "crouton", "desc": "Collection generation workflow — schema JSON → generated CRUD.", "triggers": ["ask"] },
+        { "name": "ui-proposal", "desc": "Deploy a live staging preview for design sign-off before building UI.", "triggers": ["flow", "ask"] }
+      ]
+    },
+    {
+      "id": "plan",
+      "title": "Plan & track",
+      "sub": "Before code exists — issue tracking and prior-art checks.",
+      "skills": [
+        { "name": "github-tasks", "desc": "Track work as GitHub issues — epics, sub-issues, labels.", "triggers": ["ask", "flow"] },
+        { "name": "skills-digest", "desc": "Monthly digest of the skills we have + what changed since last time.", "triggers": ["ask"] }
+      ]
+    },
+    {
+      "id": "commit",
+      "title": "Commit gates",
+      "sub": "Run automatically as part of landing a change — you rarely call them by hand.",
+      "skills": [
+        { "name": "sync-docs", "desc": "Update docs to match a code change before /commit.", "triggers": ["auto"] },
+        { "name": "commit", "desc": "Smart, granular conventional commits.", "triggers": ["ask"] }
+      ]
+    }
+  ],
+  "changed": {
+    "firstRun": false,
+    "added": [
+      { "name": "skills-digest", "desc": "Monthly digest of the skills we have + what changed since last time." }
+    ],
+    "updated": [
+      { "name": "github-tasks", "desc": "Track work as GitHub issues — epics, sub-issues, labels." }
+    ],
+    "removed": [
+      { "name": "legacy-export" }
+    ]
+  }
+}

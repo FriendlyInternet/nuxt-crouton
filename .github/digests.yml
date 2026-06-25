@@ -10,7 +10,10 @@
 # send day. That sidesteps GitHub's static-cron limitation without ever editing `cron`.
 #
 # Fields per report:
-#   schedule: daily | weekly:<dow>      dow = mon|tue|wed|thu|fri|sat|sun (UTC)
+#   schedule: daily | weekly:<dow> | monthly:<dom>
+#                                        dow = mon|tue|wed|thu|fri|sat|sun (UTC)
+#                                        dom = 1..31 (UTC); clamped to the month's last day, so
+#                                        `monthly:31` still fires in 30-day months / February
 #   deliver:  [issue] | [issue, email]  rails that already exist (issue = standing issue;
 #                                        email = Resend, no-op when RESEND_API_KEY unset)
 #   to:       [addr, ...]               recipients — required only when deliver includes email
@@ -27,3 +30,11 @@ housekeeping:
 epic-digest:
   schedule: daily
   deliver: [email]
+
+# Monthly roll-up of the skills in .claude/skills/ + a "what changed since last digest" band
+# (#838/#841). Email-only via Resend (recipient is the DIGEST_REPORT_EMAIL repo var, shared with
+# epic-digest). schedule.mjs gates the daily workflow cron to the 1st of each month.
+skills-digest:
+  schedule: monthly:1
+  deliver: [email]
+  # to: [you@example.com]   # the workflow reads the DIGEST_REPORT_EMAIL repo var; this is documentation

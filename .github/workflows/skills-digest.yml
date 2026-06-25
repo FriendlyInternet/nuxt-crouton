@@ -1,0 +1,107 @@
+name: skills-digest
+
+# Monthly roll-up of the skills in .claude/skills/ + a "what changed since last digest" band,
+# delivered by email via Resend. Deterministic (no LLM): gather.mjs enumerates the skills
+# (reusing scripts/gen-skills-doc.mjs) and computes the git delta, render.mjs makes email-safe
+# HTML + a plain-text mirror. Cadence + delivery live in .github/digests.yml (#838/#841).
+#
+# The cron fires DAILY (cheap wake-up); .claude/skills/housekeeping/schedule.mjs reads
+# digests.yml and exits early unless today is the configured send day (monthly:1 by default) —
+# so changing the cadence is a one-line YAML edit, never a cron change.
+
+on:
+  schedule:
+    # ~06:00 Europe/Brussels (05:00 UTC winter). The gate below decides the actual send day.
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skills-digest
+  cancel-in-progress: false
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # FULL history — the "what changed" delta needs the previous-send-date commit to be
+          # reachable; a shallow clone can't reach a month-ago commit (gather.mjs would fall
+          # back to firstRun=true and show no delta).
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # Cadence gate — send only on the configured day-of-month. A manual dispatch forces it.
+      - name: Decide if today is a send day
+        id: gate
+        env:
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+        run: node .claude/skills/housekeeping/schedule.mjs skills-digest
+
+      - name: Gather the skill set + delta
+        if: steps.gate.outputs.send == 'true'
+        env:
+          DIGEST_REPO: ${{ github.repository }}
+        run: |
+          # Previous send date = the 1st of last month (anchored to the 1st so GNU date's
+          # month-arithmetic can't drift on a 31st). The delta window starts here.
+          SINCE=$(date -u -d "$(date -u +%Y-%m-01) -1 month" +%F)
+          echo "Delta window since: $SINCE"
+          DIGEST_SINCE="$SINCE" node .claude/skills/skills-digest/gather.mjs > skills.data.json
+
+      # Render email-safe HTML + a plain-text mirror (no LLM, no network).
+      - name: Render the digest
+        if: steps.gate.outputs.send == 'true'
+        run: node .claude/skills/skills-digest/render.mjs skills.data.json --out-dir .
+
+      # Deliver by email via Resend. Shares RESEND_FROM / DIGEST_REPORT_EMAIL with epic-digest.
+      # When the secret/vars are unset the step warns and skips so the job stays green.
+      - name: Email the digest (Resend)
+        if: steps.gate.outputs.send == 'true'
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.RESEND_FROM }}
+          EMAIL_TO: ${{ vars.DIGEST_REPORT_EMAIL }}
+        run: |
+          HTML=$(ls -t skills-digest-*.html 2>/dev/null | head -1 || true)
+          TXT=$(ls -t skills-digest-*.txt 2>/dev/null | head -1 || true)
+          if [ -z "$HTML" ] || [ -z "$TXT" ]; then
+            echo "::warning::No rendered digest HTML/text found — nothing to email."
+            exit 0
+          fi
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$EMAIL_FROM" ] || [ -z "$EMAIL_TO" ]; then
+            echo "::warning::RESEND_API_KEY / RESEND_FROM / DIGEST_REPORT_EMAIL not set — skipping email (nothing delivered)."
+            exit 0
+          fi
+          SUBJECT="$(head -1 skills-digest-*.subject.txt 2>/dev/null)"
+          [ -z "$SUBJECT" ] && SUBJECT="Skills digest — $(date -u +%F)"
+          echo "Emailing $HTML → $EMAIL_TO  (subject: $SUBJECT)"
+          jq -n \
+            --arg from "$EMAIL_FROM" \
+            --arg to "$EMAIL_TO" \
+            --arg subject "$SUBJECT" \
+            --rawfile html "$HTML" \
+            --rawfile text "$TXT" \
+            '{from:$from, to:[$to], subject:$subject, html:$html, text:$text}' \
+          | curl -sS -X POST https://api.resend.com/emails \
+              -H "Authorization: Bearer $RESEND_API_KEY" \
+              -H "Content-Type: application/json" \
+              -d @- -w '\nHTTP %{http_code}\n'
+
+      - name: Upload digest artifacts
+        if: always() && steps.gate.outputs.send == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: skills-digest
+          path: |
+            skills.data.json
+            skills-digest-*.html
+            skills-digest-*.txt
+            skills-digest-*.subject.txt
+          if-no-files-found: ignore

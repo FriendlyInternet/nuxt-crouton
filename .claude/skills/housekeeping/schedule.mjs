@@ -14,6 +14,9 @@
  *   FORCE=1               treat as a send regardless of cadence (manual workflow_dispatch)
  *   DIGESTS_FILE          default ".github/digests.yml"
  *   SCHEDULE_TODAY_DOW    override today's weekday (mon..sun) for testing
+ *   SCHEDULE_TODAY_DOM    override today's day-of-month (1..31) for testing
+ *   SCHEDULE_TODAY        override today's date (YYYY-MM-DD) for testing — drives both
+ *                         the weekday and the month-length used to clamp `monthly:<dom>`
  */
 
 import { readFileSync, existsSync, appendFileSync } from 'node:fs'
@@ -52,7 +55,14 @@ function parse(text) {
 }
 
 const DOW = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
-const todayDow = process.env.SCHEDULE_TODAY_DOW || DOW[new Date().getUTCDay()]
+// Today's date: a SCHEDULE_TODAY override (YYYY-MM-DD) drives weekday, day-of-month, AND the
+// month length used to clamp `monthly:<dom>`; otherwise use the real UTC date. Per-field
+// overrides (SCHEDULE_TODAY_DOW / _DOM) still win for targeted tests.
+const now = process.env.SCHEDULE_TODAY ? new Date(`${process.env.SCHEDULE_TODAY}T00:00:00Z`) : new Date()
+const todayDow = process.env.SCHEDULE_TODAY_DOW || DOW[now.getUTCDay()]
+const todayDom = Number(process.env.SCHEDULE_TODAY_DOM || now.getUTCDate())
+// Last day of the current UTC month (28..31) — day 0 of next month rolls back to it.
+const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate()
 
 let cfg = {}
 if (existsSync(file)) {
@@ -78,10 +88,17 @@ if (forced) {
   send = true
   reason = 'daily'
 } else {
-  const m = schedule.match(/^weekly:(\w+)$/)
-  if (m) {
-    send = m[1].toLowerCase() === todayDow
-    reason = `weekly:${m[1]} vs today=${todayDow}`
+  const weekly = schedule.match(/^weekly:(\w+)$/)
+  const monthly = schedule.match(/^monthly:(\d{1,2})$/)
+  if (weekly) {
+    send = weekly[1].toLowerCase() === todayDow
+    reason = `weekly:${weekly[1]} vs today=${todayDow}`
+  } else if (monthly) {
+    // Clamp the configured day-of-month to the last valid day, so `monthly:31` still fires
+    // in a 30-day month (and `monthly:30` in February) rather than silently never sending.
+    const wanted = Math.min(Math.max(Number(monthly[1]), 1), daysInMonth)
+    send = wanted === todayDom
+    reason = `monthly:${monthly[1]}→${wanted} (month has ${daysInMonth}d) vs today=${todayDom}`
   } else {
     // Unknown cadence — fail safe by sending (a misconfig shouldn't silence the report).
     send = true
