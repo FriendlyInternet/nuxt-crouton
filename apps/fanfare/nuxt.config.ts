@@ -89,6 +89,15 @@ export default defineNuxtConfig({
           '@simplewebauthn/server': cfStubs,
           'papaparse': cfStubs
         }
-      : {}
+      : {},
+    // node-server (venue/Pi) target: Nitro's externalizer mangles drizzle-orm in
+    // this pnpm monorepo — it misses the `drizzle-orm/libsql` driver subpath and
+    // emits broken absolute pnpm-store paths for drizzle's internal cross-imports,
+    // so `node .output/server` dies with ERR_MODULE_NOT_FOUND. Inline the whole of
+    // drizzle-orm so Rollup bundles it self-contained into the server chunk (only
+    // the imported subpaths — core + libsql — are pulled in; the unused mysql/pg
+    // drivers are not). @libsql/client stays external and traces fine. The
+    // Cloudflare build uses D1 (no libsql) so it's scoped out by isCloudflare. (#798)
+    externals: isCloudflare ? {} : { inline: ['drizzle-orm'] }
   }
 })

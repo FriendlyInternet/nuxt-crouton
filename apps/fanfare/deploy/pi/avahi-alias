@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""
+Publish extra mDNS names as CNAMEs pointing at this host's own `.local` record
+(#798/#804) — so the till is reachable at e.g. `kassa.local` instead of an IP.
+
+A CNAME-to-host (not a fixed-IP A record) is deliberate: the host's own
+`<hostname>.local` is published per-interface by avahi, so the alias resolves to
+whichever address the querying client can actually reach — the wired RUT IP for a
+phone on the venue wifi, the home-wifi IP at the bench — with no per-network config.
+
+Runs in the foreground holding the registration; on SIGTERM it withdraws the
+record cleanly (so `systemctl stop` removes it). Needs only python3-dbus +
+avahi-daemon (no avahi-utils). Usage: avahi-alias kassa.local [more.local ...]
+"""
+import sys
+import signal
+import dbus
+
+DBUS_NAME = 'org.freedesktop.Avahi'
+SERVER_IFACE = 'org.freedesktop.Avahi.Server'
+GROUP_IFACE = 'org.freedesktop.Avahi.EntryGroup'
+IF_UNSPEC = dbus.Int32(-1)
+PROTO_UNSPEC = dbus.Int32(-1)
+CLASS_IN = dbus.UInt16(0x01)
+TYPE_CNAME = dbus.UInt16(0x05)
+TTL = dbus.UInt32(60)
+
+
+def encode_dns_name(name):
+    """Wire-format a domain name: length-prefixed labels + null terminator."""
+    out = bytearray()
+    for label in name.rstrip('.').split('.'):
+        b = label.encode('ascii')
+        out.append(len(b))
+        out += b
+    out.append(0)
+    return [dbus.Byte(x) for x in out]
+
+
+def main(aliases):
+    if not aliases:
+        print('usage: avahi-alias <name.local> [name2.local ...]', file=sys.stderr)
+        return 2
+    bus = dbus.SystemBus()
+    server = dbus.Interface(bus.get_object(DBUS_NAME, '/'), SERVER_IFACE)
+    fqdn = str(server.GetHostNameFqdn())          # e.g. "pmcpi.local"
+    rdata = encode_dns_name(fqdn)
+    group = dbus.Interface(bus.get_object(DBUS_NAME, server.EntryGroupNew()), GROUP_IFACE)
+    for cname in aliases:
+        # AddRecord(interface, protocol, flags, name, class, type, ttl, rdata)
+        group.AddRecord(IF_UNSPEC, PROTO_UNSPEC, dbus.UInt32(0),
+                        cname, CLASS_IN, TYPE_CNAME, TTL, rdata)
+    group.Commit()
+    print(f'published {", ".join(aliases)} -> {fqdn} (CNAME, per-interface)')
+
+    def stop(*_):
+        try:
+            group.Reset()
+        finally:
+            sys.exit(0)
+    signal.signal(signal.SIGTERM, stop)
+    signal.signal(signal.SIGINT, stop)
+    signal.pause()
+
+
+if __name__ == '__main__':
+    sys.exit(main(sys.argv[1:]))

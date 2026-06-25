@@ -1,0 +1,34 @@
+[Unit]
+# fanfare — local-first venue POS (node-server) + in-process ESC/POS print drainer.
+# This is a TEMPLATE: setup.sh renders __APP_DIR__ / __NODE_BIN__ / __USER__ to the
+# real paths and installs the result as /etc/systemd/system/fanfare.service.
+Description=fanfare local-first venue POS (node-server + ESC/POS drainer)
+Documentation=https://github.com/FriendlyInternet/nuxt-crouton/issues/798
+# Needs the LAN up. NetworkManager brings up both wlan0 (home, the access URL)
+# and the eth0 static 192.168.1.51/24 printer-subnet route before this target.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__APP_DIR__
+# Rig defaults (non-secret). Bind to the LAN with HOST/PORT *env* — never the
+# `nuxt dev --host/--port` flags, which mangle the port (#798). The drainer is a
+# Nitro server plugin gated on this flag, so it runs in the production build too.
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=80
+Environment=CROUTON_PRINTING_DRAINER=1
+# Secrets (BETTER_AUTH_SECRET, BETTER_AUTH_URL) live outside the repo.
+EnvironmentFile=/etc/fanfare/fanfare.env
+# Bind port 80 (the friendly URL drops the :3007) as the non-root User above —
+# the only privileged capability the app needs.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+ExecStart=__NODE_BIN__ __APP_DIR__/.output/server/index.mjs
+Restart=always
+RestartSec=3
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

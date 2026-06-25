@@ -1,0 +1,16 @@
+[Unit]
+# Publishes an mDNS CNAME alias (the instance name, e.g. kassa.local) pointing at
+# this host's own .local record, so the till is reachable by name (#798/#804).
+# setup.sh renders __ALIAS_BIN__ to the installed avahi-alias path.
+Description=mDNS alias %i -> this host (for the friendly venue URL)
+Requires=avahi-daemon.service
+After=avahi-daemon.service
+
+[Service]
+Type=simple
+ExecStart=__ALIAS_BIN__ %i
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
