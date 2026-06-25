@@ -1,0 +1,96 @@
+name: Close epic on /close-epic comment
+
+# An epic that has finished its postmortem is labelled `status:ready-to-close`
+# (by scripts/label-ready-epics.mjs / the /postmortem skill). This lets the owner
+# close it by simply commenting `/close-epic` on the epic — the label is the
+# precondition, so an epic whose postmortem hasn't run yet CANNOT be closed this
+# way (the verify → postmortem → close discipline holds structurally). Deterministic,
+# no LLM.
+#
+# Out of scope (deliberately): auto-closing on last-child-merge — that would invert
+# postmortem-before-close, skip the "🧪 Verify the whole thing" gate, and cause reopen
+# churn. The comment stays the explicit human trigger. See #856.
+#
+# Composes with (no clash): strip-status-on-close.yml + project-status.yml (both fire on
+# `issues: closed`); label-ready-epics.yml (the daily labeller). The `/close-epic` keyword
+# is distinct from the `approve`/`lgtm` sign-off keywords (resume-on-comment.yml).
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  close-epic:
+    # Cheap webhook-snapshot pre-filter; the script re-checks server-side (labels/state
+    # can drift between the event and the run). Fire only on: a human comment (not a Bot —
+    # avoids loops), on an ISSUE (not a PR), invoking /close-epic, on an epic already
+    # marked status:ready-to-close.
+    if: |
+      !github.event.issue.pull_request &&
+      github.event.comment.user.type != 'Bot' &&
+      contains(github.event.issue.labels.*.name, 'epic') &&
+      contains(github.event.issue.labels.*.name, 'status:ready-to-close') &&
+      contains(github.event.comment.body, '/close-epic')
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      issues: write
+    steps:
+      # Close with the Harness App token (NOT GITHUB_TOKEN): GitHub suppresses workflow
+      # triggers for GITHUB_TOKEN-initiated events, so a GITHUB_TOKEN close's
+      # `issues: closed` event would NOT reach strip-status-on-close / project-status
+      # (the #572 lesson). An App installation token cascades.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - name: Close the epic
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const issue_number = context.payload.issue.number
+            const actor = context.payload.comment.user.login
+            const body = context.payload.comment.body || ''
+
+            // Whole-word /close-epic (the `if:` substring test would also match e.g.
+            // "/close-epically"; tighten here).
+            if (!/(^|\s)\/close-epic(\s|$)/i.test(body)) {
+              core.info('Comment does not invoke /close-epic as a command — ignoring.'); return
+            }
+
+            // Re-check server-side: state + the two gating labels.
+            const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
+            if (issue.state === 'closed') { core.info('Epic already closed — nothing to do.'); return }
+            const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+            if (!labels.includes('epic') || !labels.includes('status:ready-to-close')) {
+              core.info('Issue is not an epic marked status:ready-to-close — ignoring (run /postmortem first).'); return
+            }
+
+            // Only a maintainer (push access) may close. getCollaboratorPermissionLevel
+            // collapses to admin/write/read/none.
+            let perm = 'none'
+            try {
+              perm = (await github.rest.repos.getCollaboratorPermissionLevel({
+                ...context.repo, username: actor })).data.permission
+            } catch (e) { core.info(`Permission check failed for @${actor}: ${e.message}`); return }
+            if (!['admin', 'write'].includes(perm)) {
+              core.info(`@${actor} lacks push access (perm=${perm}) — ignoring.`); return
+            }
+
+            // Close as completed + strip the managed status labels directly (idempotent;
+            // strip-status-on-close also handles this, but don't rely on the cascade).
+            await github.rest.issues.update({
+              ...context.repo, issue_number, state: 'closed', state_reason: 'completed',
+            })
+            for (const name of ['status:ready-to-close', 'status:needs-postmortem']) {
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name }) } catch (e) {}
+            }
+            await github.rest.issues.createComment({
+              ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _close-epic on comment (#856)_\n\n'
+                + `✅ Epic closed via \`/close-epic\` by @${actor} (was \`status:ready-to-close\`).`,
+            })
+            core.info(`Closed epic #${issue_number} (requested by @${actor}).`)

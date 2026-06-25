@@ -80,6 +80,14 @@ absent ⇒ `status:needs-postmortem`. Use the real epic number for `#NN`.
 
 Post it with `add_issue_comment` on the epic.
 
+**Flip the labels immediately (don't wait for the daily cron).** Right after posting,
+add `status:ready-to-close` and remove `status:needs-postmortem` on the epic
+(`issue_write` / label tools) so the review queue updates *now* — `label-ready-epics`
+stays as the daily safety net. The epic is then closeable by the owner simply commenting
+**`/close-epic`** on it (`close-epic-on-comment.yml` closes it, gated on the
+`status:ready-to-close` label, #856) — surface that in the `🔭 Next` handoff so they know
+the one-gesture close is available.
+
 ## Step 4 — Dedup against existing follow-ups, then offer to turn proposals into work
 
 **First, dedup — don't mint duplicates.** Before proposing anything new, search for an
