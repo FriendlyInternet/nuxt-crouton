@@ -178,6 +178,21 @@
           "ticket": "Ticket",
           "receipt": "Bon"
         }
+      },
+      "layout": {
+        "pos": {
+          "name": "Kassa",
+          "description": "Kassa voor het evenement"
+        },
+        "orders": {
+          "name": "Bestellingen",
+          "description": "Live bestellingen voor het evenement"
+        },
+        "clients": {
+          "name": "Klanten",
+          "description": "Open klantrekeningen voor het evenement"
+        },
+        "eventSlug": "Evenement"
       }
     },
     "admin": {

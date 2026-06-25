@@ -1,5 +1,60 @@
 import type { CroutonBlockDefinition } from '@fyit/crouton-core/app/types/block-definition'
+import type { CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/layout-block'
 import { SALES_CHART_KIND_OPTIONS } from './utils/chart-blocks'
+
+// Placeable layout blocks (#711 test) — the Event Workspace surfaces exposed to
+// the deterministic layout engine, so the workspace can be reproduced from a
+// layout *data tree* (rendered by CroutonLayoutRenderer) instead of the
+// hand-coded splitter in EventWorkspace/Shell.vue. Each takes the event by slug
+// (its only config field). minWidth/defaultSize mirror Shell's SplitterPanel
+// min-size/default-size so the viability gate keeps the same proportions.
+const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
+  // The kassa — the workspace's primary surface (Shell `pos` panel, min-size 35).
+  'sales-pos': {
+    id: 'sales-pos',
+    name: 'sales.blocks.layout.pos.name',
+    description: 'sales.blocks.layout.pos.description',
+    icon: 'i-lucide-shopping-cart',
+    component: 'SalesLayoutPos',
+    kind: 'compound',
+    category: 'kassa',
+    minWidth: 480,
+    defaultSize: 45,
+    configSchema: [
+      { name: 'eventSlug', type: 'text', label: 'sales.blocks.layout.eventSlug', default: '' },
+    ],
+  },
+  // The live orders pane (Shell `orders` panel, default-size 30 / min-size 18).
+  'sales-orders': {
+    id: 'sales-orders',
+    name: 'sales.blocks.layout.orders.name',
+    description: 'sales.blocks.layout.orders.description',
+    icon: 'i-lucide-clipboard-list',
+    component: 'SalesLayoutOrders',
+    kind: 'compound',
+    category: 'kassa',
+    minWidth: 280,
+    defaultSize: 30,
+    configSchema: [
+      { name: 'eventSlug', type: 'text', label: 'sales.blocks.layout.eventSlug', default: '' },
+    ],
+  },
+  // The open-client-tabs pane (Shell `clients` panel, default-size 25 / min-size 15).
+  'sales-clients': {
+    id: 'sales-clients',
+    name: 'sales.blocks.layout.clients.name',
+    description: 'sales.blocks.layout.clients.description',
+    icon: 'i-lucide-users',
+    component: 'SalesLayoutClients',
+    kind: 'compound',
+    category: 'kassa',
+    minWidth: 240,
+    defaultSize: 25,
+    configSchema: [
+      { name: 'eventSlug', type: 'text', label: 'sales.blocks.layout.eventSlug', default: '' },
+    ],
+  },
+}
 
 // Sales analytics block for crouton-pages: editor picks a chart kind and an
 // event scope (one event or all). Renders via CroutonChartsWidget when
@@ -492,5 +547,7 @@ export default defineAppConfig({
     printBridgeBlock,
     salesChartBlock,
     salesProductMatrixBlock
-  }
+  },
+  // Placeable layout blocks (#711 test) — see the registry definition above.
+  croutonLayoutBlocks
 })

@@ -177,6 +177,21 @@
           "ticket": "Ticket",
           "receipt": "Reçu"
         }
+      },
+      "layout": {
+        "pos": {
+          "name": "Caisse",
+          "description": "Point de vente pour l'événement"
+        },
+        "orders": {
+          "name": "Commandes",
+          "description": "Commandes en direct pour l'événement"
+        },
+        "clients": {
+          "name": "Clients",
+          "description": "Comptes clients ouverts pour l'événement"
+        },
+        "eventSlug": "Événement"
       }
     },
     "admin": {

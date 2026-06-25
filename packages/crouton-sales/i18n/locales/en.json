@@ -178,6 +178,21 @@
           "ticket": "Ticket",
           "receipt": "Receipt"
         }
+      },
+      "layout": {
+        "pos": {
+          "name": "Kassa",
+          "description": "Point of sale for the event"
+        },
+        "orders": {
+          "name": "Orders",
+          "description": "Live orders for the event"
+        },
+        "clients": {
+          "name": "Clients",
+          "description": "Open client tabs for the event"
+        },
+        "eventSlug": "Event"
       }
     },
     "admin": {

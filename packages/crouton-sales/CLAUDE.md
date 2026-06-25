@@ -624,6 +624,27 @@ Components are auto-imported with `Sales` prefix (e.g., `SalesClientCart`, `Sale
 | `ReceiptSettingsModal.vue` | `SalesSettingsReceiptSettingsModal` | Receipt text customization |
 | `PrintPreviewModal.vue` | `SalesSettingsPrintPreviewModal` | Receipt preview with test print |
 
+### Layout Blocks (`Layout/`) — for the layout engine (`@fyit/crouton-layout`)
+
+Registered in `app/app.config.ts` under `croutonLayoutBlocks` (distinct from the
+TipTap `croutonBlocks` above) — placeable panes the deterministic layout engine
+(and `CroutonLayoutRenderer`) can arrange from a `LayoutTree`. They reproduce the
+Event Workspace (`EventWorkspace/Shell.vue`) as **data** instead of a hand-coded
+splitter (#711 test). Each takes the event by `eventSlug` (its only config field);
+`minWidth`/`defaultSize` mirror Shell's `SplitterPanel` `min-size`/`default-size`.
+
+| Block id | Component | Wraps | Sizing |
+|----------|-----------|-------|--------|
+| `sales-pos` | `SalesLayoutPos` | `SalesPosPanel` (kassa) | minWidth 480, default 45 |
+| `sales-orders` | `SalesLayoutOrders` | `SalesEventWorkspaceOrdersTab` (header + filters) | minWidth 280, default 30 |
+| `sales-clients` | `SalesLayoutClients` | `SalesEventWorkspaceClientsPanel` (recurring-client events) | minWidth 240, default 25 |
+
+The Orders/Clients blocks are team-members-only: they gate on `useAuth().loggedIn`
+and resolve the event member-side via `SalesBlocksEventResolver` inside `<Suspense>`
+(same pattern as the standalone CMS blocks). i18n keys live under
+`sales.blocks.layout.*`. Known gap vs Shell: the engine has no per-pane
+open/collapse state or gutter-tab affordance — that interactivity stays in Shell.
+
 ### CMS Page Blocks (`Blocks/`) — for `@fyit/crouton-pages`
 
 Registered in `app/app.config.ts` under `croutonBlocks`. Appear in the page
