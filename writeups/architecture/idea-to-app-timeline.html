@@ -1,0 +1,322 @@
+<!doctype html>
+<!-- Idea → App timeline + feedback loops. Styled to match the epic-digest email:
+     serif, light paper, teal accent, small-caps labels, thin rules, and the digest's
+     signature FLUO highlighter markers (a bright swipe on paper → glowing neon text in
+     dark mode). Five hues from the digest palette, one per actor:
+       yellow  = an artifact the agent POSTS (preview / diagram / schema / test)
+       green   = YOUR command or in-page action
+       orange  = a skill
+       cyan    = a CI workflow
+       magenta = the AUTO-generated comment / command that bridges machine ↔ machine
+     Hand-authored. -->
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
+<title>Idea → App · the timeline &amp; the feedback loops</title>
+<style>
+  :root { color-scheme: light dark; supported-color-schemes: light dark; }
+  body { -webkit-text-size-adjust:100%; }
+  @media only screen and (max-width:600px) {
+    .outer-pad { padding:28px 16px !important; }
+    .doc-title { font-size:28px !important; }
+  }
+
+  /* ── FLUO markers ──────────────────────────────────────────────────────────
+     Light: a real highlighter swipe — dark text on a bright stripe. */
+  .m { -webkit-box-decoration-break:clone; box-decoration-break:clone; color:#161616; padding:0 .14em; }
+  .m-art   { background-image:linear-gradient(transparent 24%, #fdf436 24%, #fdf436 92%, transparent 92%); }
+  .m-cmd   { background-image:linear-gradient(transparent 24%, #4cf083 24%, #4cf083 92%, transparent 92%); }
+  .m-skill { background-image:linear-gradient(transparent 24%, #ff7a3d 24%, #ff7a3d 92%, transparent 92%); }
+  .m-ci    { background-image:linear-gradient(transparent 24%, #3ee6ff 24%, #3ee6ff 92%, transparent 92%); }
+  .m-auto  { background-image:linear-gradient(transparent 24%, #ff52cf 24%, #ff52cf 92%, transparent 92%); }
+  /* small-caps chip variant for the legend */
+  .mc { font-variant:small-caps; letter-spacing:.06em; font-size:12.5px; font-weight:600; padding:1px .38em; }
+
+  /* mono code block for exact comment formats */
+  .code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:1.65;
+          background:#f5f5f1; border:1px solid #e7e6e1; border-radius:8px; padding:11px 13px;
+          color:#33332e; white-space:pre-wrap; margin:8px 0 2px; overflow-x:auto; }
+
+  @media (prefers-color-scheme: dark) {
+    .page         { background:#0e0e0d !important; }
+    .ink          { color:#f0efe9 !important; }
+    .sub          { color:#c4c4bd !important; }
+    .mut          { color:#9a958a !important; }
+    .faint        { color:#5a5a55 !important; }
+    .rule         { border-color:#2a2a27 !important; }
+    .rail         { background:#2a2a27 !important; }
+    .node         { background:#0e0e0d !important; border-color:#5a5a55 !important; color:#9a958a !important; }
+    .loop         { background:#141413 !important; border-color:#2a2a27 !important; }
+    .brand-accent { background:#2dd4bf !important; }
+    .mono         { color:#c4c4bd !important; }
+    .gate         { color:#ff8c1f !important; }
+    .code         { background:#161613 !important; border-color:#2a2a27 !important; color:#c4c4bd !important; }
+    /* Dark: flip the marker to bright neon *text*, same hue + a faint glow. */
+    .m       { padding:0 !important; background-image:none !important; }
+    .m-art   { color:#fff21a !important; text-shadow:0 0 9px rgba(255,242,26,.5) !important; }
+    .m-cmd   { color:#2dff7a !important; text-shadow:0 0 9px rgba(45,255,122,.5) !important; }
+    .m-skill { color:#ff8c1f !important; text-shadow:0 0 9px rgba(255,140,31,.5) !important; }
+    .m-ci    { color:#16f6ff !important; text-shadow:0 0 9px rgba(22,246,255,.5) !important; }
+    .m-auto  { color:#ff2ff0 !important; text-shadow:0 0 9px rgba(255,47,240,.5) !important; }
+  }
+</style>
+</head>
+<body class="page" style="margin:0;padding:0;background:#ffffff;font-family:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,'Times New Roman',serif;color:#1a1a1a">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="page" style="background:#ffffff"><tr><td align="center" class="outer-pad" style="padding:44px 22px">
+  <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%">
+
+    <!-- masthead -->
+    <tr><td style="padding:0 0 26px">
+      <div class="brand-accent" style="width:44px;height:3px;background:#0F766E;border-radius:2px"></div>
+    </td></tr>
+    <tr><td style="padding:0 0 8px">
+      <div class="ink doc-title" style="font-size:34px;line-height:1.1;color:#1a1a1a">Idea&nbsp;→&nbsp;App</div>
+      <div class="mut" style="font-style:italic;color:#8a8a84;font-size:15px;margin-top:8px">
+        The straight line from a sentence to a live URL — then the <b>feedback loops</b>
+        that bend it: the agent posts an artifact, you command on it, an automatic
+        comment fires, the agent acts and re-posts. Colour tells you who's acting.
+      </div>
+    </td></tr>
+
+    <!-- legend (5 hues) -->
+    <tr><td style="padding:18px 0 0;line-height:2.4">
+      <span class="m mc m-art">🟡 agent posts</span>&nbsp;
+      <span class="m mc m-cmd">🟢 you command</span>&nbsp;
+      <span class="m mc m-skill">🟠 a skill</span>&nbsp;
+      <span class="m mc m-ci">🔵 ci runs</span>&nbsp;
+      <span class="m mc m-auto">🟣 auto-comment</span>
+    </td></tr>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
+         PART I — THE STRAIGHT LINE
+    ═════════════════════════════════════════════════════════════════════════ -->
+    <tr><td style="padding:34px 0 6px">
+      <div class="mut" style="font-variant:small-caps;letter-spacing:.05em;color:#8a8a84;font-size:13px">Part I · the straight line</div>
+    </td></tr>
+
+    <!-- 0 -->
+    <tr><td style="padding:14px 0 0">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td valign="top" style="width:46px"><div class="node" style="width:30px;height:30px;border-radius:50%;border:1px solid #d8d7d1;background:#fff;color:#8a8a84;text-align:center;line-height:30px;font-size:14px">0</div></td>
+        <td valign="top" style="padding:2px 0 0">
+          <div class="ink" style="font-variant:small-caps;letter-spacing:.05em;font-size:21px;color:#1a1a1a">Idea lands</div>
+          <div class="mut" style="font-style:italic;color:#8a8a84;font-size:13px;margin:2px 0 10px">No code yet. The issue exists before the code does.</div>
+          <div style="font-size:15px;line-height:1.85;color:#474744">
+            <div style="margin:5px 0">🛠 <span class="m m-skill">github-tasks</span> opens the <b>epic + sub-issues</b>, labelled by package/app, written as a <i>hypothesis</i>.</div>
+            <div style="margin:5px 0">🛠 <span class="m m-skill">ecosystem-check</span> <span class="mut" style="color:#8a8a84">(optional)</span> — does Nuxt/UnJS already solve it?</div>
+            <div style="margin:5px 0">⚙️ <span class="m m-ci">decompose-on-issue.yml</span> fires on <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#6b6b66">issues: opened/labeled</span>.</div>
+            <div style="margin:5px 0">👤 <span class="m m-cmd">/task-decompose "build X"</span> → orchestrator → decomposer → worker.</div>
+          </div>
+          <div class="gate" style="margin-top:10px;font-size:13px;color:#b45309;font-style:italic">⚑ Hard gate — editing files with no issue? Stop and open it first.</div>
+        </td>
+      </tr></table>
+    </td></tr>
+
+    <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="width:46px;padding:8px 0"><div class="rail" style="width:1px;background:#e7e6e1;height:20px;margin:0 auto"></div></td><td></td></tr></table></td></tr>
+
+    <!-- 1 -->
+    <tr><td>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td valign="top" style="width:46px"><div class="node" style="width:30px;height:30px;border-radius:50%;border:1px solid #d8d7d1;background:#fff;color:#8a8a84;text-align:center;line-height:30px;font-size:14px">1</div></td>
+        <td valign="top" style="padding:2px 0 0">
+          <div class="ink" style="font-variant:small-caps;letter-spacing:.05em;font-size:21px;color:#1a1a1a">Sign-off gates</div>
+          <div class="mut" style="font-style:italic;color:#8a8a84;font-size:13px;margin:2px 0 10px">Agree on the <i>shape</i> before writing code — each opens a feedback loop (Part II) and holds on <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12px;color:#6b6b66">status:blocked</span>.</div>
+          <div style="font-size:15px;line-height:1.85;color:#474744">
+            <div style="margin:5px 0">🛠 <span class="m m-skill">schema-review</span> — the data model <span class="mut" style="color:#8a8a84">(#314 → loop B)</span></div>
+            <div style="margin:5px 0">🛠 <span class="m m-skill">ui-proposal</span> — the look <span class="mut" style="color:#8a8a84">(#307 → loop A)</span></div>
+            <div style="margin:5px 0">🛠 <span class="m m-skill">test-review</span> — logic in <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#6b6b66">packages/*</span> <span class="mut" style="color:#8a8a84">(#774 → loop C)</span></div>
+          </div>
+        </td>
+      </tr></table>
+    </td></tr>
+
+    <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="width:46px;padding:8px 0"><div class="rail" style="width:1px;background:#e7e6e1;height:20px;margin:0 auto"></div></td><td></td></tr></table></td></tr>
+
+    <!-- 2 -->
+    <tr><td>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td valign="top" style="width:46px"><div class="node" style="width:30px;height:30px;border-radius:50%;border:1px solid #d8d7d1;background:#fff;color:#8a8a84;text-align:center;line-height:30px;font-size:14px">2</div></td>
+        <td valign="top" style="padding:2px 0 0">
+          <div class="ink" style="font-variant:small-caps;letter-spacing:.05em;font-size:21px;color:#1a1a1a">Build it</div>
+          <div style="font-size:15px;line-height:1.85;color:#474744;margin-top:8px">
+            <div style="margin:5px 0">🛠 <span class="m m-skill">crouton</span> — schema → Form/List/API/migration + a default layout.</div>
+            <div style="margin:5px 0">🛠 <span class="m m-skill">db-migrations</span> at the migration step · <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#6b6b66">pnpm typecheck</span> after <b>every</b> change.</div>
+          </div>
+          <div class="gate" style="margin-top:10px;font-size:13px;color:#b45309;font-style:italic">⚑ A hook blocks <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12px">packages/*</span> edits without approval. New apps → <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12px">pocs/</span>, not <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12px">apps/</span>.</div>
+        </td>
+      </tr></table>
+    </td></tr>
+
+    <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="width:46px;padding:8px 0"><div class="rail" style="width:1px;background:#e7e6e1;height:20px;margin:0 auto"></div></td><td></td></tr></table></td></tr>
+
+    <!-- 3 -->
+    <tr><td>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td valign="top" style="width:46px"><div class="node" style="width:30px;height:30px;border-radius:50%;border:1px solid #d8d7d1;background:#fff;color:#8a8a84;text-align:center;line-height:30px;font-size:14px">3</div></td>
+        <td valign="top" style="padding:2px 0 0">
+          <div class="ink" style="font-variant:small-caps;letter-spacing:.05em;font-size:21px;color:#1a1a1a">Commit</div>
+          <div style="font-size:15px;line-height:1.85;color:#474744;margin-top:8px">
+            <div style="margin:5px 0">👤 <span class="m m-cmd">/commit</span> — never raw <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#6b6b66">git commit</span>. Runs 🛠 <span class="m m-skill">sync-docs</span> + 🛠 <span class="m m-skill">i18n-check</span> first.</div>
+          </div>
+        </td>
+      </tr></table>
+    </td></tr>
+
+    <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="width:46px;padding:8px 0"><div class="rail" style="width:1px;background:#e7e6e1;height:20px;margin:0 auto"></div></td><td></td></tr></table></td></tr>
+
+    <!-- 4 -->
+    <tr><td>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td valign="top" style="width:46px"><div class="node" style="width:30px;height:30px;border-radius:50%;border:1px solid #d8d7d1;background:#fff;color:#8a8a84;text-align:center;line-height:30px;font-size:14px">4</div></td>
+        <td valign="top" style="padding:2px 0 0">
+          <div class="ink" style="font-variant:small-caps;letter-spacing:.05em;font-size:21px;color:#1a1a1a">PR opens · CI fans out</div>
+          <div style="font-size:14.5px;line-height:1.95;color:#474744;margin-top:8px">
+            <div>⚙️ <span class="m m-ci">ci.yml</span> typecheck+lint+test · ⚙️ <span class="m m-ci">e2e.yml</span> boot→auth→CRUD</div>
+            <div>⚙️ <span class="m m-ci">frontend-review.yml</span> · ⚙️ <span class="m m-ci">a11y.yml</span> · ⚙️ <span class="m m-ci">red-team.yml</span></div>
+            <div>⚙️ <span class="m m-ci">deploy-pocs.yml</span> preview URL · ⚙️ <span class="m m-ci">pipeline-pr-status.yml</span> status note</div>
+          </div>
+        </td>
+      </tr></table>
+    </td></tr>
+
+    <tr><td><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="width:46px;padding:8px 0"><div class="rail" style="width:1px;background:#e7e6e1;height:20px;margin:0 auto"></div></td><td></td></tr></table></td></tr>
+
+    <!-- 5 -->
+    <tr><td>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td valign="top" style="width:46px"><div class="node" style="width:30px;height:30px;border-radius:50%;border:1px solid #d8d7d1;background:#fff;color:#8a8a84;text-align:center;line-height:30px;font-size:14px">5</div></td>
+        <td valign="top" style="padding:2px 0 0">
+          <div class="ink" style="font-variant:small-caps;letter-spacing:.05em;font-size:21px;color:#1a1a1a">Merge → staging → prod</div>
+          <div style="font-size:15px;line-height:1.85;color:#474744;margin-top:8px">
+            <div style="margin:5px 0">⚙️ Merge to <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#6b6b66">main</span> auto-deploys <span class="m m-ci">deploy-app/-pocs.yml</span> → <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#6b6b66">&lt;app&gt;.pmcp.dev</span> (staging).</div>
+            <div style="margin:5px 0">👤 <span class="m m-cmd">/deploy-production</span> → <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#6b6b66">friendlyinter.net</span> — human-only, never an agent side effect (#318).</div>
+            <div style="margin:5px 0">🛠 <span class="m m-skill">postmortem</span> at epic close mints <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:13px;color:#6b6b66">workflow</span> issues.</div>
+          </div>
+        </td>
+      </tr></table>
+    </td></tr>
+
+    <!-- ════════════════════════════════════════════════════════════════════════
+         PART II — THE FEEDBACK LOOPS (the exhaustive bit)
+    ═════════════════════════════════════════════════════════════════════════ -->
+    <tr><td class="rule" style="padding:38px 0 0;border-top:1px solid #e7e6e1"></td></tr>
+    <tr><td style="padding:24px 0 4px">
+      <div class="mut" style="font-variant:small-caps;letter-spacing:.05em;color:#8a8a84;font-size:13px">Part II · the feedback loops</div>
+      <div class="ink" style="font-variant:small-caps;letter-spacing:.04em;font-size:24px;color:#1a1a1a;margin-top:4px">Post → command → auto → act → re-post</div>
+      <div class="mut" style="font-style:italic;color:#8a8a84;font-size:14px;margin-top:6px">
+        Each loop: 🟡 the agent posts an artifact · 🟢 you command on it · 🟣 an automatic
+        comment fires · 🟠/🔵 a skill or workflow acts · ✅ it ends on your <b>lgtm</b>.
+      </div>
+    </td></tr>
+
+    <!-- LOOP A — annotate a live preview -->
+    <tr><td style="padding:22px 0 0">
+      <div class="loop" style="border:1px solid #e7e6e1;border-left:4px solid #0F766E;border-radius:12px;padding:16px 18px;background:#fcfcfa">
+        <div class="ink" style="font-variant:small-caps;letter-spacing:.04em;font-size:18px;color:#1a1a1a">A · Annotate a live preview <span class="mut" style="font-size:12px;color:#8a8a84">— the UI gate (#307/#488/#590/#607)</span></div>
+        <div style="font-size:14.5px;line-height:1.7;color:#474744;margin-top:10px">
+          <div style="margin:7px 0">🟡 <b>Agent posts</b> a <span class="m m-art">live staging preview</span>. The <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">cf:staging</span> build with <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">NUXT_PUBLIC_CROUTON_REVIEW=true</span> stamps every component root with <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">data-crouton-src</span>, ships the <b>Annotate</b> tool + the <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">/api/_review</span> bridge, and drops a sticky PR comment with the URL.</div>
+          <div style="margin:7px 0">🟢 <b>You command on the page</b> — open the <span class="m m-cmd">🥽 glasses launcher</span> (bottom-right) → toggle <span class="m m-cmd">Annotate</span> → hover highlights elements → click one → type → <b>Send</b>. <span class="mut" style="color:#8a8a84">(Static-mockup fallback: inline-comment the committed <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12px">.md</span>.)</span></div>
+          <div style="margin:7px 0">🟣 <b>Auto-comment fires.</b> <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">useCroutonAnnotate</span> builds a <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">ReviewAnnotation</span> → <span class="m m-auto">POST /api/_review</span> posts as <span class="m m-auto">crouton[bot]</span> (GitHub-App token, no PAT) the exact comment the agent keys off:</div>
+          <div class="code">🎯 <b>Preview feedback</b>
+
+- <b>Component:</b> `app/components/ProductCard.vue`
+- <b>Element:</b> `div &gt; button:nth-of-type(2)` <i>(bbox 100,200 150×40)</i>
+- <b>Page:</b> `/products/view`
+
+&gt; make this smaller and add an icon</div>
+          <div style="margin:7px 0">🔵 <b>Agent acts.</b> The subscribed agent (<span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">subscribe_pr_activity</span>) wakes on <span class="m m-auto">🎯 Preview feedback</span>, reads the <b>Component</b> line, edits <i>that</i> file, redeploys to the same URL, appends <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">- rN: …</span> to the sticky.</div>
+          <div style="margin:7px 0">✅ <b>Ends</b> when you reply <span class="m m-cmd">lgtm</span> / <span class="m m-cmd">approve</span>. <span class="mut" style="color:#8a8a84">No PR open? → the bridge opens an issue instead (#812).</span></div>
+        </div>
+      </div>
+    </td></tr>
+
+    <!-- LOOP B — edit a ticket diagram -->
+    <tr><td style="padding:16px 0 0">
+      <div class="loop" style="border:1px solid #e7e6e1;border-left:4px solid #0F766E;border-radius:12px;padding:16px 18px;background:#fcfcfa">
+        <div class="ink" style="font-variant:small-caps;letter-spacing:.04em;font-size:18px;color:#1a1a1a">B · Edit a ticket diagram <span class="mut" style="font-size:12px;color:#8a8a84">— round-trip (#479/#483)</span></div>
+        <div style="font-size:14.5px;line-height:1.7;color:#474744;margin-top:10px">
+          <div style="margin:7px 0">🟡 <b>Agent posts</b> 👤 <span class="m m-cmd">/ticket-diagram</span> → an <span class="m m-art">Excalidraw status PNG</span> — boxes coloured by status, dependency arrows, with the <b>editable scene embedded inside the PNG</b> (a <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">tEXt</span> chunk). Committed <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">&lt;slug&gt;.png</span> + diffable <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">&lt;slug&gt;.graph.json</span>, sticky comment. Renders on the GitHub mobile app.</div>
+          <div style="margin:7px 0">🟢 <b>You command on the diagram</b> — open the PNG in <span class="m m-cmd">Excalidraw</span> (the scene loads live) → drag boxes / edit labels → export with <b>“Embed scene” ON</b> → attach the edited PNG back to a comment. <span class="mut" style="color:#8a8a84">(Mobile: one-tap <span class="m m-cmd">ticket-editor</span> Worker — each Save posts a frozen comment.)</span></div>
+          <div style="margin:7px 0">🟣 <b>Round-trip back in.</b> 🛠 <span class="m m-skill">ticket-excalidraw-import.mjs</span> runs <span class="m m-auto">extractScene()</span> to decode the scene from <i>your</i> PNG → re-renders from your layout → <span class="m m-auto">embedScene()</span> re-embeds it → commits the refreshed PNG, appends the revision log.</div>
+          <div style="margin:7px 0">✅ <b>Ends</b> on <span class="m m-cmd">lgtm</span> / <span class="m m-cmd">approve</span> → the gate merges.</div>
+        </div>
+      </div>
+    </td></tr>
+
+    <!-- LOOP C — sign off the data model -->
+    <tr><td style="padding:16px 0 0">
+      <div class="loop" style="border:1px solid #e7e6e1;border-left:4px solid #0F766E;border-radius:12px;padding:16px 18px;background:#fcfcfa">
+        <div class="ink" style="font-variant:small-caps;letter-spacing:.04em;font-size:18px;color:#1a1a1a">C · Sign off the data model <span class="mut" style="font-size:12px;color:#8a8a84">— schema gate (#314)</span></div>
+        <div style="font-size:14.5px;line-height:1.7;color:#474744;margin-top:10px">
+          <div style="margin:7px 0">🟡 <b>Agent posts</b> 🛠 <span class="m m-skill">schema-review</span> → a <span class="m m-art">field-table PNG</span> + commits <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">&lt;collection&gt;.md</span> (the inline-commentable surface) and <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">.html</span>.</div>
+          <div style="margin:7px 0">🟢 <b>You command on the table</b> — <span class="m m-cmd">inline-comment the <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px">.md</span></span> in the PR diff, pinned to a field: “make this <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px">decimal</span>”, “add a <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px">slug</span> field”.</div>
+          <div style="margin:7px 0">🔵 <b>Agent acts.</b> Reads the review threads (<span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">pull_request_read</span>), edits <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">schemas/&lt;collection&gt;.json</span>, re-renders, replies/resolves each thread, pushes — the diff updates in place.</div>
+          <div style="margin:7px 0">✅ <b>Ends</b> on <span class="m m-cmd">lgtm</span> / <span class="m m-cmd">approve</span> → <i>only then</i> does <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">crouton config</span> generate code.</div>
+        </div>
+      </div>
+    </td></tr>
+
+    <!-- LOOP D — agree on the test -->
+    <tr><td style="padding:16px 0 0">
+      <div class="loop" style="border:1px solid #e7e6e1;border-left:4px solid #0F766E;border-radius:12px;padding:16px 18px;background:#fcfcfa">
+        <div class="ink" style="font-variant:small-caps;letter-spacing:.04em;font-size:18px;color:#1a1a1a">D · Agree on the test <span class="mut" style="font-size:12px;color:#8a8a84">— test gate (#774)</span></div>
+        <div style="font-size:14.5px;line-height:1.7;color:#474744;margin-top:10px">
+          <div style="margin:7px 0">🟡 <b>Agent posts</b> 🛠 <span class="m m-skill">test-review</span> → the <span class="m m-art">proposed failing test</span> — a plain-language case list + the test code, committed red. <span class="mut" style="color:#8a8a84">(Logic in <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12px">packages/*</span> only.)</span></div>
+          <div style="margin:7px 0">🟢 <b>You command on the cases</b> — <span class="m m-cmd">inline-comment the test</span> (“add a case for …”, “fix this expectation”) or just say so in chat.</div>
+          <div style="margin:7px 0">🔵 <b>Agent acts.</b> Revises cases/expectations, replies to threads — the test stays in the diff as the contract.</div>
+          <div style="margin:7px 0">✅ <b>Ends</b> on <span class="m m-cmd">lgtm</span> / <span class="m m-cmd">approve</span> → <i>only then</i> writes the code to make it green.</div>
+        </div>
+      </div>
+    </td></tr>
+
+    <!-- THE SHARED RESUME RAIL -->
+    <tr><td style="padding:20px 0 0">
+      <div style="border:1px dashed #d8d7d1;border-radius:12px;padding:15px 18px">
+        <div class="ink" style="font-variant:small-caps;letter-spacing:.04em;font-size:16px;color:#1a1a1a">⚑ The one signal that resumes any held gate <span class="mut" style="font-size:12px;color:#8a8a84">(#572/#310)</span></div>
+        <div style="font-size:14.5px;line-height:1.75;color:#474744;margin-top:8px">
+          <div style="margin:5px 0">✅ <b>Only</b> an <span class="m m-cmd">issue comment</span> matching <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">/\b(approve|lgtm)\b/i</span> on a <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">status:blocked</span> issue. ⚙️ <span class="m m-ci">resume-on-comment.yml</span> then merges the gate PR with an <b>App token</b> (so <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">pull_request: closed</span> cascades to wave advancement) — merge, not squash.</div>
+          <div class="gate" style="margin:5px 0;color:#b45309;font-style:italic">🚫 A 👍 reaction, the <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12px">ui-approved</span> label, or marking the draft ready do <b>nothing</b> — no workflow listens for them.</div>
+        </div>
+      </div>
+    </td></tr>
+
+    <!-- THE AUTONOMOUS LOOPS -->
+    <tr><td style="padding:26px 0 4px">
+      <div class="mut" style="font-variant:small-caps;letter-spacing:.05em;color:#8a8a84;font-size:13px">…and the loops with no human in them (machine ↔ machine)</div>
+    </td></tr>
+    <tr><td style="padding:8px 0 0">
+      <div style="font-size:14.5px;line-height:1.7;color:#474744">
+        <div style="margin:7px 0">🔧 <b>Autofix</b> — ⚙️ <span class="m m-ci">fix-ci-on-failure.yml</span> on CI/E2E red → a bot reproduces &amp; fixes, pushes via App token (re-triggers CI). Capped at <b>3</b> (<span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">ci-fix-attempts:N</span>); never touches <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">packages/</span>; at the cap it 🛑 blocks the issue + tags you.</div>
+        <div style="margin:7px 0">🔀 <b>Auto-merge</b> — ⚙️ <span class="m m-ci">automerge-epic-subpr.yml</span>: a non-draft, pipeline-authored sub-PR onto an <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">epic/</span> branch with <b>no red checks</b> and no <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">packages/</span> changes merges itself.</div>
+        <div style="margin:7px 0">🌊 <b>Waves</b> — ⚙️ <span class="m m-ci">schedule-waves.yml</span>: each issue's <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">Blocked-by: #NN</span> edges; when all blockers close it applies <span class="m m-auto">delegate</span> (App token) → the next worker dispatches.</div>
+        <div style="margin:7px 0">💬 <b>Comment dispatch</b> — you comment 👤 <span class="m m-cmd">/delegate</span> or <span class="m m-cmd">/deploy</span> on an issue → ⚙️ <span class="m m-ci">comment-dispatch.yml</span> applies the <span class="m m-auto">delegate</span> label, reacts 🚀, the pipeline picks it up.</div>
+        <div style="margin:7px 0">📊 <b>Status note</b> — ⚙️ <span class="m m-ci">pipeline-pr-status.yml</span>: a sticky <span class="mono" style="font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#6b6b66">&lt;!-- crouton-pipeline-status --&gt;</span> per PR + epic roll-up, refreshed on every check-suite.</div>
+        <div style="margin:7px 0">🧪 <b>Needs your eyes</b> — 🛠 <span class="m m-skill">epic-digest</span>'s top band surfaces each merged PR's authored <i>how-to-test</i> steps + a 👁 badge for visual changes, so QA has a ready checklist.</div>
+      </div>
+    </td></tr>
+
+    <!-- one-line model -->
+    <tr><td class="rule" style="padding:32px 0 0;border-top:1px solid #e7e6e1"></td></tr>
+    <tr><td style="padding:22px 0 0">
+      <div class="mut" style="font-variant:small-caps;letter-spacing:.05em;color:#8a8a84;font-size:13px;margin:0 0 8px">The whole thing in one breath</div>
+      <div class="sub" style="font-size:15px;line-height:2;color:#474744">
+        idea → 🛠 <span class="m m-skill">github-tasks</span> (issue first) → gates that each
+        <b>post an artifact</b> 🟡, take your <b>command</b> 🟢, fire an <b>auto-comment</b> 🟣,
+        and <b>re-post</b> until you reply <span class="m m-cmd">lgtm</span> → 🛠 <span class="m m-skill">crouton</span> build + typecheck →
+        👤 <span class="m m-cmd">/commit</span> → PR → ⚙️ <span class="m m-ci">CI</span> fans out (autofix / automerge run themselves) →
+        merge = staging → 👤 <span class="m m-cmd">/deploy-production</span> → 🛠 <span class="m m-skill">postmortem</span>.
+      </div>
+      <div class="gate" style="margin-top:16px;font-size:14px;color:#b45309;font-style:italic">
+        Burn in: the issue exists <b>before</b> code, and an <b>lgtm/approve comment</b> — not a
+        reaction, not a label — is the only thing that unblocks a held gate.
+      </div>
+    </td></tr>
+
+    <!-- footer -->
+    <tr><td class="rule mut" style="padding:24px 0 0;border-top:1px solid #e7e6e1;font-style:italic;color:#bdbdb6;font-size:12px;margin-top:30px">
+      <a href="https://github.com/FriendlyInternet/nuxt-crouton" class="lnk" style="color:#bdbdb6;text-decoration:underline;text-decoration-color:#bdbdb6;text-underline-offset:3px">Crouton</a> ·
+      Companion to <span class="mono" style="font-family:ui-monospace,Menlo,monospace">skills-and-triggers.html</span> &amp; <span class="mono" style="font-family:ui-monospace,Menlo,monospace">agent-flow.html</span>.
+    </td></tr>
+
+  </table>
+</td></tr></table>
+</body></html>

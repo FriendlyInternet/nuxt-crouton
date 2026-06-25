@@ -1,0 +1,237 @@
+<!doctype html>
+<!-- Idea → App · FLOW EDITOR (prototype). A self-contained, dependency-free node graph:
+     every step is a draggable block, connections re-route live as you move things,
+     and you can pan (drag canvas) + zoom (scroll). No CDN, opens offline. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Idea → App · flow editor</title>
+<style>
+  :root{ --ink:#1f2329; --mut:#6b7280; --line:#e7e6e1; --page:#f4f4f1; --card:#fff;
+    --skill:#ea7a3c; --cmd:#22a865; --ci:#2f95c4; --art:#d4a017; --auto:#b3469e; --gate:#13897c; --neutral:#9aa0a6; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;color:var(--ink);}
+  #app{display:flex;flex-direction:column;height:100vh;background:var(--page);}
+  header{padding:12px 18px;border-bottom:1px solid var(--line);background:#fff;display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  header h1{font-family:Georgia,serif;font-size:19px;margin:0;}
+  header .sub{color:var(--mut);font-size:12.5px;font-style:italic;flex:1;min-width:200px;}
+  .toolbar{display:flex;gap:6px;}
+  .tbtn{cursor:pointer;border:1px solid var(--line);background:#fff;border-radius:8px;padding:6px 11px;font:inherit;font-size:12.5px;color:var(--mut);}
+  .tbtn:hover{border-color:var(--mut);color:var(--ink);}
+  #viewport{position:relative;flex:1;overflow:hidden;cursor:grab;background:
+    radial-gradient(circle at 1px 1px, #e1e0da 1px, transparent 0) 0 0/22px 22px;}
+  #viewport.panning{cursor:grabbing;}
+  #world{position:absolute;top:0;left:0;transform-origin:0 0;}
+  #edges{position:absolute;top:0;left:0;overflow:visible;pointer-events:none;}
+  .node{position:absolute;width:222px;background:var(--card);border:1px solid var(--line);
+    border-left:4px solid var(--neutral);border-radius:12px;box-shadow:0 2px 10px rgba(31,35,41,.07);
+    user-select:none;}
+  .node.loop{width:198px;}
+  .node .nh{display:flex;align-items:center;gap:7px;padding:9px 12px 8px;cursor:grab;border-bottom:1px solid var(--line);}
+  .node .nh:active{cursor:grabbing;}
+  .node .nh .ne{font-size:15px;}
+  .node .nh .nt{font-weight:700;font-size:13.5px;}
+  .node .nb{padding:7px 12px 10px;display:flex;flex-direction:column;gap:4px;}
+  .node .it{display:flex;align-items:baseline;gap:7px;font-size:11.5px;line-height:1.35;}
+  .node .it i{flex:0 0 auto;width:7px;height:7px;border-radius:50%;margin-top:4px;}
+  .node .it b{font-weight:600;}
+  .node .it span{color:var(--mut);}
+  .node.loop .nb{padding:6px 12px 9px;}
+  .node.loop .it{font-size:11px;}
+  .edge-label{fill:#475569;font-size:11px;font-weight:600;paint-order:stroke;stroke:var(--page);stroke-width:3px;}
+  .legend{position:absolute;left:14px;bottom:12px;display:flex;flex-wrap:wrap;gap:4px 12px;
+    background:rgba(255,255,255,.9);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:11.5px;color:var(--mut);backdrop-filter:blur(4px);}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .legend i{width:9px;height:9px;border-radius:50%;}
+  .hint{position:absolute;right:14px;bottom:12px;background:rgba(255,255,255,.9);border:1px solid var(--line);
+    border-radius:10px;padding:7px 12px;font-size:11.5px;color:var(--mut);}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Idea&nbsp;→&nbsp;App</h1>
+    <span class="sub">Prototype flow editor — drag any block to reshape; connections follow.</span>
+    <div class="toolbar">
+      <button class="tbtn" id="fit">Fit</button>
+      <button class="tbtn" id="reset">Reset layout</button>
+      <button class="tbtn" id="zin">＋</button>
+      <button class="tbtn" id="zout">－</button>
+    </div>
+  </header>
+  <div id="viewport">
+    <div id="world">
+      <svg id="edges"></svg>
+      <!-- nodes injected -->
+    </div>
+    <div class="legend" id="legend"></div>
+    <div class="hint">drag block · drag canvas to pan · scroll to zoom</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var C = { skill:'#ea7a3c', cmd:'#22a865', ci:'#2f95c4', art:'#d4a017', auto:'#b3469e', gate:'#13897c', neutral:'#9aa0a6' };
+  var TXT = { skill:'#b4530f', cmd:'#15803d', ci:'#0e6f93', art:'#8a6308', auto:'#8d2e7a', gate:'#0f766e', neutral:'#6b7280' };
+
+  // ── node data (x,y are world coords) ──
+  var NODES = [
+    { id:'p0', x:60,  y:40,   accent:'gate', e:'💡', t:'Idea & plan', items:[
+      ['skill','github-tasks','epic + sub-issues'],['ci','decompose-on-issue.yml','on label'],['cmd','/task-decompose','→ agents'] ] },
+    { id:'p1', x:60,  y:250,  accent:'gate', e:'🤝', t:'Sign-off gates', items:[
+      ['skill','schema-review','#314'],['skill','ui-proposal','#307'],['skill','test-review','#774'] ] },
+    { id:'p2', x:60,  y:470,  accent:'skill', e:'🔨', t:'Build', items:[
+      ['skill','crouton','Form/List/API'],['skill','db-migrations',''],['neutral','pnpm typecheck','each change'] ] },
+    { id:'p3', x:60,  y:680,  accent:'cmd', e:'📝', t:'Commit', items:[
+      ['cmd','/commit','conventional'],['skill','sync-docs',''],['skill','i18n-check',''] ] },
+    { id:'p4', x:60,  y:880,  accent:'ci', e:'🔀', t:'PR · CI fans out', items:[
+      ['ci','ci.yml','typecheck+test'],['ci','e2e.yml','boot→CRUD'],['ci','a11y · red-team',''],['ci','deploy-pocs.yml','preview'],['ci','pipeline-pr-status',''] ] },
+    { id:'p5', x:60,  y:1140, accent:'ci', e:'🚀', t:'Merge → staging', items:[
+      ['ci','deploy-app.yml','pmcp.dev'],['ci','automerge-epic-subpr',''],['ci','schedule-waves.yml',''] ] },
+    { id:'p6', x:60,  y:1340, accent:'cmd', e:'🌐', t:'Production', items:[
+      ['cmd','/deploy-production','human-only'],['neutral','promote','pocs/→apps/'] ] },
+    { id:'p7', x:60,  y:1500, accent:'skill', e:'🎓', t:'Close & learn', items:[
+      ['skill','postmortem','→ workflow issues'],['ci','epic-digest',''],['ci','housekeeping',''] ] },
+    // loop cluster
+    { id:'lpost', x:600, y:250, accent:'art', loop:1, e:'🟡', t:'Agent posts', items:[['art','preview · diagram · schema','']] },
+    { id:'lcmd',  x:840, y:420, accent:'cmd', loop:1, e:'🟢', t:'You command', items:[['cmd','pin · comment · edit','']] },
+    { id:'lauto', x:600, y:590, accent:'auto', loop:1, e:'🟣', t:'Auto-comment', items:[['auto','🎯 crouton[bot] → PR','']] },
+    { id:'lact',  x:360, y:420, accent:'ci', loop:1, e:'🔵', t:'Agent acts', items:[['ci','edits file · re-posts','']] },
+  ];
+  var INIT = JSON.parse(JSON.stringify(NODES.map(function(n){return {id:n.id,x:n.x,y:n.y};})));
+
+  // ── edges ──
+  var EDGES = [
+    ['p0','p1','neutral'],['p1','p2','neutral'],['p2','p3','neutral'],['p3','p4','neutral'],
+    ['p4','p5','neutral'],['p5','p6','neutral'],['p6','p7','neutral'],
+    ['p1','lpost','gate','','opens'],
+    ['lpost','lcmd','neutral','dash'],['lcmd','lauto','neutral','dash'],['lauto','lact','neutral','dash'],['lact','lpost','neutral','dash'],
+    ['lcmd','p2','cmd','','✅ lgtm → continue'],
+    ['p4','p4','ci','','⟲ autofix ≤3'],
+    ['p5','p0','ci','dash','🌊 next wave'],
+  ];
+
+  var world = document.getElementById('world');
+  var svg = document.getElementById('edges');
+  var viewport = document.getElementById('viewport');
+  var els = {};
+
+  // build nodes
+  NODES.forEach(function(n){
+    var d = document.createElement('div');
+    d.className = 'node' + (n.loop?' loop':'');
+    d.style.left = n.x+'px'; d.style.top = n.y+'px';
+    d.style.borderLeftColor = C[n.accent];
+    d.innerHTML = '<div class="nh"><span class="ne">'+n.e+'</span><span class="nt">'+n.t+'</span></div>'+
+      '<div class="nb">'+ n.items.map(function(it){
+        return '<div class="it"><i style="background:'+C[it[0]]+'"></i><div><b style="color:'+TXT[it[0]]+'">'+it[1]+'</b>'+(it[2]?' <span>'+it[2]+'</span>':'')+'</div></div>';
+      }).join('') +'</div>';
+    world.appendChild(d);
+    els[n.id] = d; n.el = d;
+    makeDraggable(n);
+  });
+
+  function rect(n){ return { x:n.x, y:n.y, w:n.el.offsetWidth, h:n.el.offsetHeight }; }
+  // border point of rect toward target point P
+  function border(r, px, py){
+    var cx=r.x+r.w/2, cy=r.y+r.h/2, dx=px-cx, dy=py-cy;
+    if(dx===0&&dy===0) return [cx,cy];
+    var tx = dx!==0 ? (r.w/2)/Math.abs(dx) : Infinity;
+    var ty = dy!==0 ? (r.h/2)/Math.abs(dy) : Infinity;
+    var t = Math.min(tx,ty);
+    return [cx+dx*t, cy+dy*t];
+  }
+  function byId(id){ return NODES.find(function(n){return n.id===id;}); }
+
+  function renderEdges(){
+    var parts = '<defs>';
+    ['neutral','gate','cmd','ci'].forEach(function(k){
+      parts += '<marker id="m-'+k+'" markerWidth="7" markerHeight="7" refX="5.5" refY="3.2" orient="auto"><path d="M0,0.4 L6.6,3.2 L0,6 Z" fill="'+C[k]+'"/></marker>';
+    });
+    parts += '</defs>';
+    EDGES.forEach(function(e){
+      var a=byId(e[0]), b=byId(e[1]), col=C[e[2]], dash=e[3]==='dash', label=e[4];
+      var ra=rect(a), rb=rect(b);
+      if(a===b){ // self-loop on the right side
+        var x=ra.x+ra.w, y1=ra.y+ra.h*0.32, y2=ra.y+ra.h*0.68;
+        parts += '<path d="M '+x+' '+y1+' C '+(x+70)+' '+(y1-6)+', '+(x+70)+' '+(y2+6)+', '+x+' '+y2+'" fill="none" stroke="'+col+'" stroke-width="2" '+(dash?'stroke-dasharray="6 6"':'')+' marker-end="url(#m-'+e[2]+')"/>';
+        if(label) parts += '<text class="edge-label" x="'+(x+78)+'" y="'+((y1+y2)/2+4)+'">'+label+'</text>';
+        return;
+      }
+      var ca=[ra.x+ra.w/2,ra.y+ra.h/2], cb=[rb.x+rb.w/2,rb.y+rb.h/2];
+      var p1=border(ra, cb[0], cb[1]), p2=border(rb, ca[0], ca[1]);
+      var dx=p2[0]-p1[0], dy=p2[1]-p1[1];
+      var horiz=Math.abs(dx)>Math.abs(dy);
+      var c1,c2;
+      if(horiz){ var off=Math.abs(dx)*0.45; c1=[p1[0]+Math.sign(dx)*off,p1[1]]; c2=[p2[0]-Math.sign(dx)*off,p2[1]]; }
+      else { var of2=Math.abs(dy)*0.45; c1=[p1[0],p1[1]+Math.sign(dy)*of2]; c2=[p2[0],p2[1]-Math.sign(dy)*of2]; }
+      parts += '<path d="M '+p1[0].toFixed(1)+' '+p1[1].toFixed(1)+' C '+c1[0].toFixed(1)+' '+c1[1].toFixed(1)+', '+c2[0].toFixed(1)+' '+c2[1].toFixed(1)+', '+p2[0].toFixed(1)+' '+p2[1].toFixed(1)+'" fill="none" stroke="'+col+'" stroke-width="2" '+(dash?'stroke-dasharray="6 6"':'')+' marker-end="url(#m-'+e[2]+')"/>';
+      if(label){ var mx=(p1[0]+p2[0])/2, my=(p1[1]+p2[1])/2; parts += '<text class="edge-label" x="'+mx.toFixed(1)+'" y="'+(my-4).toFixed(1)+'" text-anchor="middle">'+label+'</text>'; }
+    });
+    svg.innerHTML = parts;
+  }
+
+  // ── view transform (pan/zoom) ──
+  var view = { tx:20, ty:10, s:1 };
+  function applyView(){ world.style.transform = 'translate('+view.tx+'px,'+view.ty+'px) scale('+view.s+')'; }
+
+  // node dragging
+  function makeDraggable(n){
+    var handle = n.el.querySelector('.nh');
+    handle.addEventListener('pointerdown', function(ev){
+      ev.preventDefault(); ev.stopPropagation();
+      handle.setPointerCapture(ev.pointerId);
+      var sx=ev.clientX, sy=ev.clientY, ox=n.x, oy=n.y;
+      function mv(e){
+        n.x = ox + (e.clientX-sx)/view.s;
+        n.y = oy + (e.clientY-sy)/view.s;
+        n.el.style.left=n.x+'px'; n.el.style.top=n.y+'px';
+        renderEdges();
+      }
+      function up(e){ handle.releasePointerCapture(ev.pointerId); window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up); }
+      window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+    });
+  }
+
+  // canvas panning
+  viewport.addEventListener('pointerdown', function(ev){
+    if(ev.target.closest('.node')) return;
+    viewport.classList.add('panning');
+    var sx=ev.clientX, sy=ev.clientY, otx=view.tx, oty=view.ty;
+    function mv(e){ view.tx=otx+(e.clientX-sx); view.ty=oty+(e.clientY-sy); applyView(); }
+    function up(){ viewport.classList.remove('panning'); window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up); }
+    window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+  });
+
+  // zoom on wheel (around cursor)
+  viewport.addEventListener('wheel', function(ev){
+    ev.preventDefault();
+    var r = viewport.getBoundingClientRect();
+    var mx=ev.clientX-r.left, my=ev.clientY-r.top;
+    var ns = Math.min(2.2, Math.max(0.35, view.s * (ev.deltaY<0?1.1:0.9)));
+    var k = ns/view.s;
+    view.tx = mx - (mx-view.tx)*k; view.ty = my - (my-view.ty)*k; view.s = ns;
+    applyView();
+  }, {passive:false});
+
+  function zoomBy(f){ var ns=Math.min(2.2,Math.max(0.35,view.s*f)); var r=viewport.getBoundingClientRect();
+    var mx=r.width/2,my=r.height/2,k=ns/view.s; view.tx=mx-(mx-view.tx)*k; view.ty=my-(my-view.ty)*k; view.s=ns; applyView(); }
+  document.getElementById('zin').onclick=function(){zoomBy(1.15);};
+  document.getElementById('zout').onclick=function(){zoomBy(1/1.15);};
+  document.getElementById('reset').onclick=function(){ NODES.forEach(function(n,i){ n.x=INIT[i].x; n.y=INIT[i].y; n.el.style.left=n.x+'px'; n.el.style.top=n.y+'px'; }); view={tx:20,ty:10,s:1}; applyView(); renderEdges(); };
+  document.getElementById('fit').onclick=fit;
+  function fit(){
+    var minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+    NODES.forEach(function(n){ var r=rect(n); minx=Math.min(minx,r.x);miny=Math.min(miny,r.y);maxx=Math.max(maxx,r.x+r.w);maxy=Math.max(maxy,r.y+r.h); });
+    var pad=40, vw=viewport.clientWidth, vh=viewport.clientHeight;
+    var s=Math.min((vw-pad*2)/(maxx-minx),(vh-pad*2)/(maxy-miny),1.4);
+    view.s=s; view.tx=pad-minx*s; view.ty=pad-miny*s; applyView();
+  }
+
+  // legend
+  var leg=[['skill','a skill'],['cmd','you (command)'],['ci','ci workflow'],['art','agent posts'],['auto','auto-comment'],['gate','human gate']];
+  document.getElementById('legend').innerHTML = leg.map(function(l){return '<span><i style="background:'+C[l[0]]+'"></i>'+l[1]+'</span>';}).join('');
+
+  applyView(); renderEdges();
+  setTimeout(fit, 30); // initial fit once measured
+})();
+</script>
+</body></html>

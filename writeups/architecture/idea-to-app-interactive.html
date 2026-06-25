@@ -1,0 +1,406 @@
+<!doctype html>
+<!-- Idea → App · ENGAGED edition. An actual interactive timeline + an animated loop
+     cycle, not a wall of text. Epic-digest aesthetic (paper, teal, fluo markers).
+       Part I  — a vertical timeline spine: click a phase to expand, or hit ▶ Play
+                 to walk the journey (the spine fills, each node lights in turn).
+       Part II — the feedback loop as a CYCLE diagram: 4 stages flow clockwise
+                 (post → command → auto → act); tabs switch loops A–D; click a
+                 stage bubble to read it; ✅ lgtm breaks the loop and ships.
+     Self-contained, vanilla JS, no build. Hand-authored. -->
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Idea → App · interactive timeline</title>
+<style>
+  :root{
+    --paper:#ffffff; --ink:#1a1a1a; --sub:#474744; --mut:#8a8a84; --faint:#bdbdb6;
+    --line:#e7e6e1; --card:#fcfcfa; --code-bg:#f5f5f1; --code-ink:#33332e;
+    --teal:#0F766E; --gate:#b45309;
+    --art:#e0b800; --cmd:#16a34a; --skill:#ea580c; --ci:#0891b2; --auto:#c026d3;
+    --art-h:#fdf436; --cmd-h:#4cf083; --skill-h:#ff7a3d; --ci-h:#3ee6ff; --auto-h:#ff52cf;
+  }
+  body.dark{
+    --paper:#0e0e0d; --ink:#f0efe9; --sub:#c4c4bd; --mut:#9a958a; --faint:#5a5a55;
+    --line:#2a2a27; --card:#141413; --code-bg:#161613; --code-ink:#c4c4bd;
+    --teal:#2dd4bf; --gate:#ff8c1f;
+    --art:#fff21a; --cmd:#2dff7a; --skill:#ff8c1f; --ci:#16f6ff; --auto:#ff2ff0;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0; background:var(--paper); color:var(--ink); transition:background .25s,color .25s;
+    font-family:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,'Times New Roman',serif;
+    -webkit-text-size-adjust:100%;}
+  .wrap{max-width:660px; margin:0 auto; padding:40px 22px 90px;}
+  .mono{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.85em; color:var(--mut);}
+  .mut{color:var(--mut);} .sub{color:var(--sub);}
+  b{font-weight:700;}
+
+  /* fluo markers — swipe on paper, neon glow in dark */
+  .m{ -webkit-box-decoration-break:clone; box-decoration-break:clone; color:#161616; padding:0 .14em; border-radius:1px; }
+  .m-art{ background-image:linear-gradient(transparent 24%,var(--art-h) 24%,var(--art-h) 92%,transparent 92%); }
+  .m-cmd{ background-image:linear-gradient(transparent 24%,var(--cmd-h) 24%,var(--cmd-h) 92%,transparent 92%); }
+  .m-skill{ background-image:linear-gradient(transparent 24%,var(--skill-h) 24%,var(--skill-h) 92%,transparent 92%); }
+  .m-ci{ background-image:linear-gradient(transparent 24%,var(--ci-h) 24%,var(--ci-h) 92%,transparent 92%); }
+  .m-auto{ background-image:linear-gradient(transparent 24%,var(--auto-h) 24%,var(--auto-h) 92%,transparent 92%); }
+  body.dark .m{ background-image:none!important; padding:0!important; }
+  body.dark .m-art{ color:var(--art-h); text-shadow:0 0 9px rgba(255,242,26,.5); }
+  body.dark .m-cmd{ color:var(--cmd-h); text-shadow:0 0 9px rgba(45,255,122,.5); }
+  body.dark .m-skill{ color:var(--skill-h); text-shadow:0 0 9px rgba(255,140,31,.5); }
+  body.dark .m-ci{ color:var(--ci-h); text-shadow:0 0 9px rgba(22,246,255,.5); }
+  body.dark .m-auto{ color:var(--auto-h); text-shadow:0 0 9px rgba(255,47,240,.5); }
+
+  /* masthead */
+  .accent{ width:44px; height:3px; background:var(--teal); border-radius:2px; margin-bottom:22px; }
+  h1{ font-size:34px; line-height:1.1; margin:0 0 8px; }
+  .lede{ color:var(--mut); font-style:italic; font-size:15px; max-width:58ch; margin:0 0 16px; }
+
+  .controls{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:6px 0 8px; }
+  .btn{ cursor:pointer; border:1px solid var(--line); background:transparent; color:var(--sub);
+    border-radius:999px; padding:6px 14px; font-family:inherit; font-size:13.5px; transition:all .15s;
+    display:inline-flex; align-items:center; gap:7px; }
+  .btn:hover{ border-color:var(--mut); color:var(--ink); }
+  .btn.primary{ border-color:var(--teal); color:var(--teal); }
+  .btn .ic{ font-size:13px; }
+  .key{ display:flex; flex-wrap:wrap; gap:5px 12px; margin:6px 0 0; font-size:12px; color:var(--mut); }
+  .key span{ display:inline-flex; align-items:center; gap:5px; }
+  .key i{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+
+  .seclabel{ font-variant:small-caps; letter-spacing:.05em; color:var(--mut); font-size:13px; margin:40px 0 2px; }
+  .secbig{ font-variant:small-caps; letter-spacing:.04em; font-size:25px; margin:2px 0 4px; }
+
+  /* ── Part I · timeline spine ── */
+  #timeline{ position:relative; margin:18px 0 0; padding-left:8px; }
+  #spine{ position:absolute; left:22px; top:14px; bottom:14px; width:3px; background:var(--line); border-radius:2px; }
+  #spinefill{ position:absolute; left:22px; top:14px; width:3px; background:var(--teal); border-radius:2px;
+    height:0; transition:height .5s cubic-bezier(.4,0,.2,1); box-shadow:0 0 10px var(--teal); }
+  .tl-node{ position:relative; padding:0 0 14px 56px; opacity:0; transform:translateY(10px);
+    transition:opacity .5s, transform .5s; }
+  .tl-node.in{ opacity:1; transform:none; }
+  .tl-dot{ position:absolute; left:8px; top:2px; width:34px; height:34px; border-radius:50%;
+    background:var(--paper); border:2px solid var(--line); display:grid; place-items:center;
+    font-size:16px; z-index:2; transition:all .3s; }
+  .tl-node.active .tl-dot{ border-color:var(--teal); box-shadow:0 0 0 5px color-mix(in srgb,var(--teal) 18%,transparent); transform:scale(1.08); }
+  .tl-head{ cursor:pointer; user-select:none; display:flex; align-items:baseline; gap:9px; flex-wrap:wrap; }
+  .tl-num{ font-variant:small-caps; letter-spacing:.05em; font-size:12px; color:var(--mut); }
+  .tl-title{ font-variant:small-caps; letter-spacing:.03em; font-size:20px; color:var(--ink); }
+  .tl-one{ flex:1 1 100%; color:var(--mut); font-style:italic; font-size:13.5px; margin-top:1px; }
+  .tl-chev{ color:var(--faint); font-size:12px; transition:transform .2s; margin-left:auto; }
+  .tl-node.open .tl-chev{ transform:rotate(180deg); }
+  .tl-detail{ overflow:hidden; max-height:0; transition:max-height .35s ease; }
+  .tl-node.open .tl-detail{ max-height:420px; }
+  .tl-detail .inner{ padding:10px 0 4px; }
+  .tl-detail .row{ font-size:14.5px; line-height:1.8; color:var(--sub); margin:3px 0; }
+  .gatev{ color:var(--gate); font-style:italic; font-size:12.5px; margin-top:8px; }
+
+  /* ── Part II · loop cycle ── */
+  .tabs{ display:flex; flex-wrap:wrap; gap:6px; margin:14px 0 4px; }
+  .tab{ cursor:pointer; border:1px solid var(--line); background:transparent; color:var(--sub);
+    border-radius:9px; padding:6px 12px; font-family:inherit; font-size:13px; transition:all .15s; }
+  .tab:hover{ border-color:var(--mut); }
+  .tab.active{ background:var(--teal); border-color:var(--teal); color:#fff; }
+  body.dark .tab.active{ color:#06201d; }
+  .looptag{ color:var(--mut); font-style:italic; font-size:13px; margin:8px 0 4px; }
+
+  .ring-wrap{ position:relative; width:100%; max-width:360px; margin:14px auto 6px; aspect-ratio:1/1; }
+  .ring-wrap svg{ position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+  .flowpath{ fill:none; stroke:var(--line); stroke-width:2.5; stroke-linecap:round;
+    stroke-dasharray:5 7; animation:flow 1.1s linear infinite; }
+  body.paused .flowpath{ animation:none; }
+  @keyframes flow{ to{ stroke-dashoffset:-24; } }
+  .bub{ position:absolute; transform:translate(-50%,-50%); width:84px; height:84px; border-radius:50%;
+    background:var(--card); border:2px solid var(--line); cursor:pointer; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:1px; transition:all .2s; padding:4px; }
+  .bub:hover{ transform:translate(-50%,-50%) scale(1.06); }
+  .bub .be{ font-size:20px; line-height:1; }
+  .bub .bl{ font-variant:small-caps; letter-spacing:.03em; font-size:11px; color:var(--mut); text-align:center; line-height:1.15; }
+  .bub.sel{ border-width:3px; }
+  .bub[data-stage=post].sel{ border-color:var(--art); box-shadow:0 0 0 5px color-mix(in srgb,var(--art) 22%,transparent); }
+  .bub[data-stage=command].sel{ border-color:var(--cmd); box-shadow:0 0 0 5px color-mix(in srgb,var(--cmd) 22%,transparent); }
+  .bub[data-stage=auto].sel{ border-color:var(--auto); box-shadow:0 0 0 5px color-mix(in srgb,var(--auto) 22%,transparent); }
+  .bub[data-stage=act].sel{ border-color:var(--ci); box-shadow:0 0 0 5px color-mix(in srgb,var(--ci) 22%,transparent); }
+  .ring-center{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; width:120px; pointer-events:none; }
+  .ring-center .rc-loop{ font-variant:small-caps; letter-spacing:.04em; font-size:13px; color:var(--ink); }
+  .ring-center .rc-sub{ font-size:11px; color:var(--mut); font-style:italic; margin-top:3px; }
+
+  .stage-detail{ border:1px solid var(--line); border-left:4px solid var(--teal); border-radius:12px;
+    background:var(--card); padding:14px 16px; margin:6px 0 0; font-size:14.5px; line-height:1.7; color:var(--sub); min-height:60px; }
+  .stage-detail .sd-head{ font-variant:small-caps; letter-spacing:.04em; font-size:15px; color:var(--ink); margin-bottom:5px; }
+  .code{ font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:1.6;
+    background:var(--code-bg); border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    color:var(--code-ink); white-space:pre-wrap; margin:9px 0 2px; overflow-x:auto; }
+  .exit{ text-align:center; font-size:14px; color:var(--sub); margin:14px 0 0; }
+  .exit .pill{ display:inline-block; background:color-mix(in srgb,var(--cmd) 18%,transparent);
+    color:var(--cmd); border:1px solid var(--cmd); border-radius:999px; padding:3px 12px; font-weight:700; }
+  body.dark .exit .pill{ color:#06201d; background:var(--cmd); }
+
+  .auto-list .row{ font-size:14.5px; line-height:1.7; color:var(--sub); margin:8px 0; }
+  .railbox{ border:1px dashed var(--line); border-radius:12px; padding:14px 16px; margin:18px 0; }
+  hr.rule{ border:0; border-top:1px solid var(--line); margin:34px 0 0; }
+  .breath{ font-size:15px; line-height:2; color:var(--sub); }
+  footer{ color:var(--faint); font-size:12px; font-style:italic; margin-top:24px; padding-top:18px; border-top:1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="accent"></div>
+  <h1>Idea&nbsp;→&nbsp;App</h1>
+  <p class="lede">A feature's journey from a sentence to a live URL. Walk the timeline, then
+    watch the feedback loop spin. Colour says who's acting.</p>
+
+  <div class="controls">
+    <button class="btn primary" id="play"><span class="ic">▶</span> Play the journey</button>
+    <button class="btn" id="expandAll">Expand all</button>
+    <button class="btn" id="theme"><span class="ic">◐</span> Theme</button>
+  </div>
+  <div class="key">
+    <span><i style="background:var(--art)"></i>agent posts</span>
+    <span><i style="background:var(--cmd)"></i>you command</span>
+    <span><i style="background:var(--skill)"></i>a skill</span>
+    <span><i style="background:var(--ci)"></i>ci runs</span>
+    <span><i style="background:var(--auto)"></i>auto-comment</span>
+  </div>
+
+  <!-- ══ PART I ══ -->
+  <div class="seclabel">Part I · the journey</div>
+  <div id="timeline">
+    <div id="spine"></div>
+    <div id="spinefill"></div>
+    <!-- nodes injected by JS -->
+  </div>
+
+  <!-- ══ PART II ══ -->
+  <div class="seclabel">Part II · the feedback loop</div>
+  <div class="secbig">It spins until you say&nbsp;<span class="m m-cmd">lgtm</span></div>
+  <p class="lede" style="margin-top:2px">Pick a gate, then click a stage to follow one full turn. The agent posts, you
+    command, an automatic comment fires, the agent acts — and re-posts, round after round.</p>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="looptag" id="looptag"></div>
+
+  <div class="ring-wrap">
+    <svg viewBox="0 0 100 100" aria-hidden="true">
+      <defs>
+        <marker id="ah" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="var(--mut)"/>
+        </marker>
+      </defs>
+      <path class="flowpath" marker-end="url(#ah)" d="M50,14 A36 36 0 0 1 86,50"/>
+      <path class="flowpath" marker-end="url(#ah)" d="M86,50 A36 36 0 0 1 50,86"/>
+      <path class="flowpath" marker-end="url(#ah)" d="M50,86 A36 36 0 0 1 14,50"/>
+      <path class="flowpath" marker-end="url(#ah)" d="M14,50 A36 36 0 0 1 50,14"/>
+    </svg>
+    <button class="bub" data-stage="post"    style="top:8%;  left:50%"><span class="be">🟡</span><span class="bl">agent<br>posts</span></button>
+    <button class="bub" data-stage="command" style="top:50%; left:92%"><span class="be">🟢</span><span class="bl">you<br>command</span></button>
+    <button class="bub" data-stage="auto"    style="top:92%; left:50%"><span class="be">🟣</span><span class="bl">auto-<br>comment</span></button>
+    <button class="bub" data-stage="act"     style="top:50%; left:8%"><span class="be">🔵</span><span class="bl">agent<br>acts</span></button>
+    <div class="ring-center"><div class="rc-loop" id="rcLoop">Loop A</div><div class="rc-sub">↻ until lgtm</div></div>
+  </div>
+
+  <div class="stage-detail" id="stageDetail"></div>
+  <div class="exit">✅ You reply <span class="pill">lgtm / approve</span> → <span class="mono" style="color:var(--ci)">resume-on-comment.yml</span> merges the gate &amp; the work ships.</div>
+
+  <!-- autonomous -->
+  <div class="seclabel">…and the loops with no human in them</div>
+  <div class="auto-list">
+    <div class="row">🔧 <b>Autofix</b> — ⚙️ <span class="m m-ci">fix-ci-on-failure.yml</span> on CI red → a bot fixes &amp; re-pushes. Capped at <b>3</b>; never touches <span class="mono">packages/</span>; at the cap it 🛑 tags you.</div>
+    <div class="row">🔀 <b>Auto-merge</b> — ⚙️ <span class="m m-ci">automerge-epic-subpr.yml</span>: a green, pipeline-authored sub-PR onto an <span class="mono">epic/</span> branch merges itself.</div>
+    <div class="row">🌊 <b>Waves</b> — ⚙️ <span class="m m-ci">schedule-waves.yml</span>: <span class="mono">Blocked-by: #NN</span> edges; when all blockers close it <span class="m m-auto">delegate</span>s the next worker.</div>
+    <div class="row">💬 <b>Comment dispatch</b> — you comment 👤 <span class="m m-cmd">/delegate</span> or <span class="m m-cmd">/deploy</span> → ⚙️ <span class="m m-ci">comment-dispatch.yml</span> picks it up, reacts 🚀.</div>
+    <div class="row">📊 <b>Status note</b> — ⚙️ <span class="m m-ci">pipeline-pr-status.yml</span>: a sticky PR + epic roll-up, refreshed on every check-suite.</div>
+  </div>
+
+  <hr class="rule">
+  <div class="seclabel" style="margin-top:22px">The whole thing in one breath</div>
+  <div class="breath">
+    idea → 🛠 <span class="m m-skill">github-tasks</span> (issue first) → gates that <b>post</b> 🟡, take your <b>command</b> 🟢, fire an <b>auto-comment</b> 🟣 and <b>re-post</b> until <span class="m m-cmd">lgtm</span> → 🛠 <span class="m m-skill">crouton</span> build → 👤 <span class="m m-cmd">/commit</span> → ⚙️ <span class="m m-ci">CI</span> (autofix / automerge run themselves) → merge = staging → 👤 <span class="m m-cmd">/deploy-production</span> → 🛠 <span class="m m-skill">postmortem</span>.
+  </div>
+  <div class="gatev" style="margin-top:14px;font-size:13.5px">Burn in: the issue exists <b>before</b> code, and an <b>lgtm/approve comment</b> — not a reaction, not a label — is the only thing that unblocks a held gate.</div>
+
+  <footer><a href="https://github.com/FriendlyInternet/nuxt-crouton" style="color:inherit">Crouton</a> · Interactive companion to the email-safe <span class="mono">idea-to-app-timeline.html</span>.</footer>
+</div>
+
+<script>
+(function(){
+  var body = document.body;
+  if (window.matchMedia('(prefers-color-scheme: dark)').matches) body.classList.add('dark');
+  document.getElementById('theme').addEventListener('click', function(){ body.classList.toggle('dark'); });
+
+  // ── Part I data ──
+  var PHASES = [
+    { icon:'💡', title:'Idea lands', one:'Open the issue before any code exists.',
+      rows:[
+        '🛠 <span class="m m-skill">github-tasks</span> opens the <b>epic + sub-issues</b>, labelled by package/app, written as a <i>hypothesis</i>.',
+        '⚙️ <span class="m m-ci">decompose-on-issue.yml</span> can fan it out automatically.',
+        '👤 <span class="m m-cmd">/task-decompose "build X"</span> hands the whole tree to agents.'
+      ], gate:'⚑ Editing files with no issue? Stop and open it first.' },
+    { icon:'🤝', title:'Sign-off gates', one:'Agree on the shape before building — this opens the loops in Part II.',
+      rows:[
+        '🛠 <span class="m m-skill">schema-review</span> — the data model <span class="mut">(#314)</span>',
+        '🛠 <span class="m m-skill">ui-proposal</span> — the look <span class="mut">(#307)</span>',
+        '🛠 <span class="m m-skill">test-review</span> — logic in <span class="mono">packages/*</span> <span class="mut">(#774)</span>'
+      ], gate:'⚑ Each gate holds on <span class="mono">status:blocked</span> until you reply lgtm.' },
+    { icon:'🔨', title:'Build it', one:'Generate the collection, typecheck every change.',
+      rows:[
+        '🛠 <span class="m m-skill">crouton</span> — schema → Form / List / API / migration + a default layout.',
+        '<span class="mono">pnpm typecheck</span> after <b>every</b> change.'
+      ], gate:'⚑ A hook blocks <span class="mono">packages/*</span> edits. New apps → <span class="mono">pocs/</span>.' },
+    { icon:'📝', title:'Commit', one:'One skill, never raw git.',
+      rows:[
+        '👤 <span class="m m-cmd">/commit</span> runs 🛠 <span class="m m-skill">sync-docs</span> + 🛠 <span class="m m-skill">i18n-check</span> first, then granular conventional commits.'
+      ], gate:'' },
+    { icon:'🔀', title:'PR opens · CI fans out', one:'Six checks run themselves.',
+      rows:[
+        '⚙️ <span class="m m-ci">ci.yml</span> typecheck+lint+test · ⚙️ <span class="m m-ci">e2e.yml</span> boot→auth→CRUD',
+        '⚙️ <span class="m m-ci">frontend-review</span> · <span class="m m-ci">a11y</span> · <span class="m m-ci">red-team</span> · <span class="m m-ci">deploy-pocs</span> preview URL',
+        '⚙️ <span class="m m-ci">pipeline-pr-status.yml</span> posts the status note.'
+      ], gate:'' },
+    { icon:'🚀', title:'Merge → staging → prod', one:'Trunk is staging; production is a deliberate human act.',
+      rows:[
+        '⚙️ Merge to <span class="mono">main</span> auto-deploys → <span class="mono">&lt;app&gt;.pmcp.dev</span> (staging).',
+        '👤 <span class="m m-cmd">/deploy-production</span> → <span class="mono">friendlyinter.net</span> — human-only (#318).',
+        '🛠 <span class="m m-skill">postmortem</span> at epic close mints <span class="mono">workflow</span> issues.'
+      ], gate:'' }
+  ];
+
+  var tl = document.getElementById('timeline');
+  PHASES.forEach(function(p, i){
+    var node = document.createElement('div');
+    node.className = 'tl-node';
+    node.dataset.i = i;
+    node.innerHTML =
+      '<div class="tl-dot">'+p.icon+'</div>'+
+      '<div class="tl-head">'+
+        '<span class="tl-num">Phase '+i+'</span>'+
+        '<span class="tl-title">'+p.title+'</span>'+
+        '<span class="tl-chev">▾</span>'+
+        '<span class="tl-one">'+p.one+'</span>'+
+      '</div>'+
+      '<div class="tl-detail"><div class="inner">'+
+        p.rows.map(function(r){return '<div class="row">'+r+'</div>';}).join('')+
+        (p.gate?'<div class="gatev">'+p.gate+'</div>':'')+
+      '</div></div>';
+    node.querySelector('.tl-head').addEventListener('click', function(){ toggle(i); });
+    tl.appendChild(node);
+  });
+  var nodes = Array.prototype.slice.call(tl.querySelectorAll('.tl-node'));
+  var fill = document.getElementById('spinefill');
+
+  function setFill(i){
+    var dot = nodes[i].querySelector('.tl-dot');
+    var h = dot.offsetTop + dot.offsetHeight/2 - 14;
+    fill.style.height = Math.max(0, h) + 'px';
+  }
+  function activate(i){
+    nodes.forEach(function(n,j){ n.classList.toggle('active', j===i); });
+    setFill(i);
+  }
+  function toggle(i){
+    var n = nodes[i];
+    var open = n.classList.toggle('open');
+    activate(i);
+    if (open) syncExpandLabel();
+  }
+
+  // scroll reveal
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting) e.target.classList.add('in'); });
+  }, { threshold:.2 });
+  nodes.forEach(function(n){ io.observe(n); });
+
+  // expand all / collapse all
+  var allOpen = false;
+  var expBtn = document.getElementById('expandAll');
+  expBtn.addEventListener('click', function(){
+    allOpen = !allOpen;
+    nodes.forEach(function(n){ n.classList.toggle('open', allOpen); });
+    syncExpandLabel();
+    if (allOpen) setFill(nodes.length-1);
+  });
+  function syncExpandLabel(){
+    var openCount = nodes.filter(function(n){return n.classList.contains('open');}).length;
+    allOpen = openCount === nodes.length;
+    expBtn.textContent = allOpen ? 'Collapse all' : 'Expand all';
+  }
+
+  // play the journey
+  var playing = false, timer = null, playBtn = document.getElementById('play');
+  playBtn.addEventListener('click', function(){ playing ? stop() : play(); });
+  function play(){
+    playing = true; playBtn.innerHTML = '<span class="ic">⏸</span> Pause';
+    nodes.forEach(function(n){ n.classList.remove('open'); });
+    var i = 0;
+    step();
+    function step(){
+      if (!playing || i >= nodes.length) { stop(); return; }
+      nodes.forEach(function(n){ n.classList.remove('open'); });
+      nodes[i].classList.add('open','in');
+      activate(i);
+      nodes[i].scrollIntoView({ behavior:'smooth', block:'center' });
+      i++;
+      timer = setTimeout(step, 1500);
+    }
+  }
+  function stop(){
+    playing = false; if (timer) clearTimeout(timer);
+    playBtn.innerHTML = '<span class="ic">▶</span> Play the journey';
+    syncExpandLabel();
+  }
+
+  // ── Part II data ──
+  var LOOPS = {
+    A:{ name:'Loop A', tag:'Annotate a live preview — UI gate (#307)',
+      post:'The agent ships a <span class="m m-art">live staging preview</span>. The <span class="mono">cf:staging</span> build (<span class="mono">NUXT_PUBLIC_CROUTON_REVIEW=true</span>) stamps every component with <span class="mono">data-crouton-src</span> and ships the Annotate tool + a sticky PR comment with the URL.',
+      command:'On the running page you open the <span class="m m-cmd">🥽 glasses launcher</span> → toggle <span class="m m-cmd">Annotate</span> → click an element → type → Send.',
+      auto:'<span class="mono">/api/_review</span> posts as <span class="m m-auto">crouton[bot]</span> the exact comment the agent keys off:',
+      code:'🎯 Preview feedback\n- Component: `app/components/ProductCard.vue`\n- Element: `div > button:nth-of-type(2)`\n- Page: `/products/view`\n> make this smaller, add an icon',
+      act:'The subscribed agent wakes on <span class="m m-auto">🎯 Preview feedback</span>, edits <i>that</i> file, redeploys to the same URL, and re-posts.' },
+    B:{ name:'Loop B', tag:'Edit a ticket diagram — round-trip (#483)',
+      post:'👤 <span class="m m-cmd">/ticket-diagram</span> posts an <span class="m m-art">Excalidraw status PNG</span> with the editable scene embedded <i>inside</i> the PNG. Renders on GitHub mobile.',
+      command:'You open the PNG in <span class="m m-cmd">Excalidraw</span>, drag boxes / edit labels, export with “Embed scene” ON, and attach it back to a comment.',
+      auto:'🛠 <span class="m m-skill">ticket-excalidraw-import.mjs</span> runs <span class="m m-auto">extractScene()</span> to decode the scene from your PNG.',
+      code:'',
+      act:'It re-renders from <i>your</i> layout, <span class="m m-auto">embedScene()</span> re-embeds it, commits the refreshed PNG and updates the sticky.' },
+    C:{ name:'Loop C', tag:'Sign off the data model — schema gate (#314)',
+      post:'🛠 <span class="m m-skill">schema-review</span> posts a <span class="m m-art">field-table PNG</span> and commits a <span class="mono">&lt;collection&gt;.md</span> you can comment on.',
+      command:'You <span class="m m-cmd">inline-comment the <span class="mono">.md</span></span> pinned to a field: “make this <span class="mono">decimal</span>”, “add a <span class="mono">slug</span>”.',
+      auto:'The agent reads the review threads via <span class="m m-auto">pull_request_read</span>.',
+      code:'',
+      act:'It edits <span class="mono">schemas/&lt;collection&gt;.json</span>, re-renders, resolves each thread, pushes — the diff updates in place.' },
+    D:{ name:'Loop D', tag:'Agree on the test — test gate (#774)',
+      post:'🛠 <span class="m m-skill">test-review</span> posts a <span class="m m-art">proposed failing test</span> — a case list + the code, committed red.',
+      command:'You <span class="m m-cmd">inline-comment the test</span>: “add a case for …”, “fix this expectation”.',
+      auto:'The agent reads the threads and revises the cases — the test stays the contract.',
+      code:'',
+      act:'Only once you approve does it write the code to make the test <b>green</b>.' },
+  };
+  var STAGE_TITLE = { post:'🟡 Agent posts', command:'🟢 You command', auto:'🟣 Auto-comment fires', act:'🔵 Agent acts → re-posts' };
+
+  var curLoop = 'A', curStage = 'post';
+  var tabsEl = document.getElementById('tabs');
+  Object.keys(LOOPS).forEach(function(k){
+    var t = document.createElement('button');
+    t.className = 'tab'; t.dataset.loop = k; t.textContent = k + ' · ' + LOOPS[k].tag.split(' — ')[0];
+    t.addEventListener('click', function(){ selLoop(k); });
+    tabsEl.appendChild(t);
+  });
+  var bubs = Array.prototype.slice.call(document.querySelectorAll('.bub'));
+  bubs.forEach(function(b){ b.addEventListener('click', function(){ selStage(b.dataset.stage); }); });
+
+  function selLoop(k){
+    curLoop = k;
+    Array.prototype.forEach.call(tabsEl.children, function(t){ t.classList.toggle('active', t.dataset.loop===k); });
+    document.getElementById('looptag').textContent = LOOPS[k].tag;
+    document.getElementById('rcLoop').textContent = LOOPS[k].name;
+    render();
+  }
+  function selStage(s){ curStage = s; render(); }
+  function render(){
+    bubs.forEach(function(b){ b.classList.toggle('sel', b.dataset.stage===curStage); });
+    var L = LOOPS[curLoop];
+    var html = '<div class="sd-head">'+STAGE_TITLE[curStage]+'</div>'+ L[curStage];
+    if (curStage==='auto' && L.code) html += '<div class="code">'+L.code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>';
+    document.getElementById('stageDetail').innerHTML = html;
+  }
+  selLoop('A');
+})();
+</script>
+</body></html>
