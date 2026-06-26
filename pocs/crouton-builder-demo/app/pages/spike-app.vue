@@ -1,20 +1,23 @@
 <script setup lang="ts">
 /**
- * Spike (#903 → #906) — "everything in Vue Flow": build an app by dragging a
- * collection's blocks from a DRAWER onto a Vue Flow canvas, then COMPILE the placement
- * into a real layout (fork A). Sub-issue A (#906) re-skins the hand-rolled spike onto
- * proper Nuxt UI 4 components and makes the drawer out-of-the-way on a phone.
+ * Spike (#903 → #906 → #908) — "everything in Vue Flow": build an app by dragging a
+ * collection's blocks from a DRAWER onto a Vue Flow canvas, then turn the placement
+ * into a real layout. Two paths:
+ *   - ✨ **Magic arrange** (#908) — the deterministic composer + viability gate pick a
+ *     strong layout and offer 2–3 archetype proposals to flip between (no API cost).
+ *   - **As placed** — the dumb positional infer (the original spike's "Compile").
  *
- *   drawer (Artists' blocks) ──drag──▶ CroutonFlow (ephemeral) ──compile──▶ LayoutTree
+ *   drawer (Artists' blocks) ──drag──▶ CroutonFlow (ephemeral) ──✨/compile──▶ LayoutTree
  *
- * Reuses what already exists: CroutonFlow's drag-drop (`@node-drop`) and the WS8
- * pieces↔tree bridge (`piecesToTree`). No backend — the Artists blocks are demo blocks.
+ * Reuses what already exists: CroutonFlow's drag-drop (`@node-drop`); the layout engine's
+ * `composeDefault` (#709) + `checkViability` (#710) via `useSpikeMagic`. No backend — the
+ * Artists blocks are demo blocks.
  *
  * Responsive shell: the palette is a persistent slim sidebar on desktop (so HTML5
  * drag-drop onto the canvas stays usable) and a toggled `UDrawer` bottom sheet on a
  * phone (out of the way — fork A; touch drag / snapping is epic #905 sub-issue B). The
- * compiled result rides in a `USlideover`. The palette markup is defined once with
- * VueUse's `createReusableTemplate` and reused in both places.
+ * result rides in a `USlideover`. The palette markup is defined once with VueUse's
+ * `createReusableTemplate` and reused in both places.
  */
 import { markRaw } from 'vue'
 import { createReusableTemplate } from '@vueuse/core'
@@ -22,9 +25,15 @@ import type { LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout
 import SpikeBlockNode from '~/components/SpikeBlockNode.vue'
 
 useHead({ title: 'Spike · app on Vue Flow' })
-const BUILD = 'spike-a · #906 · Nuxt UI 4 drawer + slideover + slider'
+const BUILD = 'spike-c · #908 · ✨ Magic arrange (deterministic) + archetype proposals'
 
 const blockNode = markRaw(SpikeBlockNode)
+
+const { magicArrange } = useSpikeMagic()
+const { checkViability } = useCroutonLayoutBlocks()
+
+/** A layout the result slideover can render + let you flip between (magic or positional). */
+interface CanvasProposal { id: string, label: string, icon: string, note: string, tree: LayoutTree, viable: boolean }
 
 // Define the palette markup once; render it in the desktop sidebar AND the mobile drawer.
 const [DefinePalette, ReusePalette] = createReusableTemplate()
@@ -66,38 +75,64 @@ function onNodeDrop(item: Record<string, unknown>, position: { x: number, y: num
   }]
 }
 
-// Fork A — compile the placement into a layout. Same rule as the WS8 bridge's
-// piecesToTree, inlined (the package util isn't exposed as a POC import): 1 node → its
-// leaf is the root; many → a split whose axis is inferred from how they're laid out
-// (wider spread in x ⇒ horizontal), ordered along that axis. The productionised path
-// would call the real `piecesToTree`.
-const compiled = ref<LayoutTree | null>(null)
-function compile() {
-  const ns = nodes.value
-  if (!ns.length) { compiled.value = null; return }
+// The proposals the result slideover shows; you flip between them by id.
+const proposals = ref<CanvasProposal[]>([])
+const selectedId = ref<string>('')
+const resultTitle = ref('Layout')
+const selected = computed<CanvasProposal | null>(
+  () => proposals.value.find(p => p.id === selectedId.value) ?? proposals.value[0] ?? null,
+)
+
+/** ✨ Magic v1 (#908) — deterministic arrange + viability-gated archetype proposals. */
+function magic() {
+  const blocks = nodes.value.map(n => ({ blockId: n.data.blockId, label: n.data.label }))
+  const { proposals: ps, defaultId } = magicArrange(blocks)
+  proposals.value = ps
+  selectedId.value = defaultId ?? ps[0]?.id ?? ''
+  resultTitle.value = '✨ Magic layout'
+  paletteOpen.value = false
+  resultOpen.value = ps.length > 0
+}
+
+// "As placed" — the original spike's dumb positional infer: 1 node → its leaf is the
+// root; many → a split whose axis is inferred from how they're laid out (wider spread in
+// x ⇒ horizontal), ordered along that axis. Kept beside ✨ Magic as the literal placement.
+function inferPositional(ns: FlowNode[]): LayoutTree | null {
+  if (!ns.length) return null
   const leaf = (n: FlowNode): LayoutNode => ({ type: 'leaf', blockId: n.data.blockId })
-  if (ns.length === 1) {
-    compiled.value = { renderer: 'panes', root: leaf(ns[0]!) }
+  if (ns.length === 1) return { renderer: 'panes', root: leaf(ns[0]!) }
+  const spread = (a: number[]) => Math.max(...a) - Math.min(...a)
+  const horizontal = spread(ns.map(n => n.position.x)) >= spread(ns.map(n => n.position.y))
+  const ordered = [...ns].sort((a, b) => (horizontal ? a.position.x - b.position.x : a.position.y - b.position.y))
+  return {
+    renderer: 'panes',
+    root: {
+      type: 'split',
+      direction: horizontal ? 'horizontal' : 'vertical',
+      children: ordered.map(n => ({ ...leaf(n), defaultSize: Math.round((100 / ordered.length) * 10) / 10 })),
+    },
   }
-  else {
-    const spread = (a: number[]) => Math.max(...a) - Math.min(...a)
-    const horizontal = spread(ns.map(n => n.position.x)) >= spread(ns.map(n => n.position.y))
-    const ordered = [...ns].sort((a, b) => (horizontal ? a.position.x - b.position.x : a.position.y - b.position.y))
-    compiled.value = {
-      renderer: 'panes',
-      root: {
-        type: 'split',
-        direction: horizontal ? 'horizontal' : 'vertical',
-        children: ordered.map(n => ({ ...leaf(n), defaultSize: Math.round((100 / ordered.length) * 10) / 10 })),
-      },
-    }
-  }
+}
+function compile() {
+  const tree = inferPositional(nodes.value)
+  if (!tree) { proposals.value = []; return }
+  proposals.value = [{
+    id: 'positional',
+    label: 'As placed',
+    icon: 'i-lucide-move',
+    note: 'Exactly where you dropped them',
+    tree,
+    viable: checkViability(tree, [1280, 768]).viable,
+  }]
+  selectedId.value = 'positional'
+  resultTitle.value = 'Compiled layout'
   paletteOpen.value = false
   resultOpen.value = true
 }
 function reset() {
   nodes.value = []
-  compiled.value = null
+  proposals.value = []
+  selectedId.value = ''
   resultOpen.value = false
 }
 </script>
@@ -120,8 +155,9 @@ function reset() {
         </UCard>
       </div>
       <div class="mt-4 flex flex-col gap-2">
-        <UButton size="sm" icon="i-lucide-wand-2" :disabled="!nodes.length" block @click="compile">Compile to layout</UButton>
-        <UButton size="sm" color="neutral" variant="soft" icon="i-lucide-rotate-ccw" block @click="reset">Reset</UButton>
+        <UButton size="sm" color="primary" icon="i-lucide-wand-2" :disabled="!nodes.length" block @click="magic">✨ Magic arrange</UButton>
+        <UButton size="sm" color="neutral" variant="soft" icon="i-lucide-move" :disabled="!nodes.length" block @click="compile">As placed</UButton>
+        <UButton size="sm" color="neutral" variant="ghost" icon="i-lucide-rotate-ccw" block @click="reset">Reset</UButton>
       </div>
     </DefinePalette>
 
@@ -140,7 +176,7 @@ function reset() {
           @click="paletteOpen = true"
         />
         <UButton
-          v-if="compiled"
+          v-if="proposals.length"
           size="xs"
           icon="i-lucide-panel-right-open"
           label="Layout"
@@ -191,11 +227,47 @@ function reset() {
       </template>
     </UDrawer>
 
-    <!-- Compiled layout — the result of fork A, in a contextual slideover (#906) -->
-    <USlideover v-model:open="resultOpen" title="Compiled layout" :ui="{ content: 'sm:max-w-md' }">
+    <!-- Result — magic proposals (or the positional compile), in a contextual slideover -->
+    <USlideover v-model:open="resultOpen" :title="resultTitle" :ui="{ content: 'sm:max-w-lg' }">
       <template #body>
-        <div class="h-full overflow-hidden rounded-xl border border-default">
-          <CroutonLayoutRenderer v-if="compiled" :node="compiled.root" />
+        <div class="flex h-full flex-col gap-3">
+          <!-- Flip between archetype proposals (#908) -->
+          <div v-if="proposals.length > 1" class="flex flex-wrap gap-1.5">
+            <UButton
+              v-for="p in proposals"
+              :key="p.id"
+              :icon="p.icon"
+              :label="p.label"
+              size="xs"
+              :color="p.id === selectedId ? 'primary' : 'neutral'"
+              :variant="p.id === selectedId ? 'soft' : 'ghost'"
+              @click="selectedId = p.id"
+            />
+          </div>
+          <div v-if="selected" class="flex items-center gap-2 text-xs text-muted">
+            <span>{{ selected.note }}</span>
+            <UBadge
+              v-if="selected.viable"
+              color="success"
+              variant="subtle"
+              size="sm"
+              icon="i-lucide-check"
+            >viable</UBadge>
+            <UBadge
+              v-else
+              color="warning"
+              variant="subtle"
+              size="sm"
+              icon="i-lucide-alert-triangle"
+            >tight fit</UBadge>
+          </div>
+          <div class="min-h-0 flex-1 overflow-hidden rounded-xl border border-default">
+            <CroutonLayoutRenderer
+              v-if="selected"
+              :key="selected.id"
+              :node="selected.tree.root"
+            />
+          </div>
         </div>
       </template>
     </USlideover>
