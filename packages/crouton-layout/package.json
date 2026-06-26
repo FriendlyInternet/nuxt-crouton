@@ -8,7 +8,9 @@
     ".": "./nuxt.config.ts",
     "./app/utils/layout-compose": "./app/utils/layout-compose.ts",
     "./app/utils/layout-viability": "./app/utils/layout-viability.ts",
-    "./app/utils/layout-edit": "./app/utils/layout-edit.ts"
+    "./app/utils/layout-edit": "./app/utils/layout-edit.ts",
+    "./app/utils/layout-compose-bridge": "./app/utils/layout-compose-bridge.ts",
+    "./app/composables/useCroutonComposeGestures": "./app/composables/useCroutonComposeGestures.ts"
   },
   "scripts": {
     "test": "vitest run",

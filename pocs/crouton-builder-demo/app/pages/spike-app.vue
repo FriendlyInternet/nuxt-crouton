@@ -1,36 +1,47 @@
 <script setup lang="ts">
 /**
- * Spike (#903 → #906 → #908) — "everything in Vue Flow": build an app by dragging a
- * collection's blocks from a DRAWER onto a Vue Flow canvas, then turn the placement
- * into a real layout. Two paths:
- *   - ✨ **Magic arrange** (#908) — the deterministic composer + viability gate pick a
- *     strong layout and offer 2–3 archetype proposals to flip between (no API cost).
+ * Spike (#903 → #906 → #908 → #907) — "everything in Vue Flow": build an app by dragging
+ * a collection's blocks from a DRAWER onto a canvas, then turn the placement into a real
+ * layout. Three non-exclusive paths (a menu, not a mode war):
+ *   - ✨ **Magic arrange** (#908) — deterministic composer + viability gate pick a strong
+ *     layout and offer 2–3 archetype proposals to flip between (no API cost).
+ *   - **Snap** (#907) — the WS4 magnetic compose canvas: drag a card beside another and
+ *     they click into a bound split; resize from the corner. The canvas IS the layout.
  *   - **As placed** — the dumb positional infer (the original spike's "Compile").
  *
- *   drawer (Artists' blocks) ──drag──▶ CroutonFlow (ephemeral) ──✨/compile──▶ LayoutTree
+ *   drawer (Artists' blocks) ──drag──▶ Free (Vue Flow) ⇄ Snap (compose canvas) ──▶ LayoutTree
  *
  * Reuses what already exists: CroutonFlow's drag-drop (`@node-drop`); the layout engine's
- * `composeDefault` (#709) + `checkViability` (#710) via `useSpikeMagic`. No backend — the
- * Artists blocks are demo blocks.
+ * `composeDefault`/`checkViability` (via `useSpikeMagic`); and for snapping the WS4
+ * `CroutonLayoutComposeCanvas` + `piecesToTree` bridge (#873/#899) — so the snapped
+ * arrangement yields the SAME `LayoutTree` as the magic/compile paths (one shared model).
+ * No backend — the Artists blocks are demo blocks.
  *
  * Responsive shell: the palette is a persistent slim sidebar on desktop (so HTML5
  * drag-drop onto the canvas stays usable) and a toggled `UDrawer` bottom sheet on a
- * phone (out of the way — fork A; touch drag / snapping is epic #905 sub-issue B). The
- * result rides in a `USlideover`. The palette markup is defined once with VueUse's
- * `createReusableTemplate` and reused in both places.
+ * phone (out of the way — #906). The result rides in a `USlideover`. The palette markup
+ * is defined once with VueUse's `createReusableTemplate` and reused in both places.
  */
-import { markRaw } from 'vue'
+import { markRaw, computed } from 'vue'
 import { createReusableTemplate } from '@vueuse/core'
 import type { LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
+import { piecesToTree } from '@fyit/crouton-layout/app/utils/layout-compose-bridge'
+import type { ComposePiece } from '@fyit/crouton-layout/app/composables/useCroutonComposeGestures'
 import SpikeBlockNode from '~/components/SpikeBlockNode.vue'
 
 useHead({ title: 'Spike · app on Vue Flow' })
-const BUILD = 'spike-c · #908 · ✨ Magic arrange (deterministic) + archetype proposals'
+const BUILD = 'spike-b · #907 · Snap mode — magnetic compose canvas (WS4 reuse)'
 
 const blockNode = markRaw(SpikeBlockNode)
 
 const { magicArrange } = useSpikeMagic()
 const { checkViability } = useCroutonLayoutBlocks()
+
+// Free (Vue Flow free placement) ⇄ Snap (magnetic compose canvas). Non-exclusive: you can
+// drop in Free, switch to Snap to bind by hand, and either feeds the same compile/magic.
+type CanvasMode = 'free' | 'snap'
+const mode = ref<CanvasMode>('free')
+const pieces = ref<ComposePiece[]>([])
 
 /** A layout the result slideover can render + let you flip between (magic or positional). */
 interface CanvasProposal { id: string, label: string, icon: string, note: string, tree: LayoutTree, viable: boolean }
@@ -75,6 +86,48 @@ function onNodeDrop(item: Record<string, unknown>, position: { x: number, y: num
   }]
 }
 
+/** Collect every placed block (blockId + heading) under a layout node. */
+function flattenLeaves(node: LayoutNode): { blockId: string, label?: string }[] {
+  if (node.type === 'leaf') {
+    const heading = node.config?.heading
+    return [{ blockId: node.blockId, label: typeof heading === 'string' ? heading : undefined }]
+  }
+  if (node.type === 'split') return node.children.flatMap(flattenLeaves)
+  if (node.type === 'nested') return flattenLeaves(node.layout.root)
+  return []
+}
+
+/** The dropped blocks, from whichever surface is active (Snap may have grouped them). */
+function currentBlocks(): { blockId: string, label?: string }[] {
+  return mode.value === 'snap'
+    ? pieces.value.flatMap(p => flattenLeaves(p.node))
+    : nodes.value.map(n => ({ blockId: n.data.blockId, label: n.data.label }))
+}
+const blockCount = computed(() => currentBlocks().length)
+
+/** Enter Snap mode — seed the compose canvas from the free nodes (relative layout kept). */
+function enterSnap() {
+  if (mode.value === 'snap') return
+  const ns = nodes.value
+  if (ns.length) {
+    const minX = Math.min(...ns.map(n => n.position.x))
+    const minY = Math.min(...ns.map(n => n.position.y))
+    pieces.value = ns.map(n => ({
+      id: n.id,
+      node: { type: 'leaf', blockId: n.data.blockId, config: { collection: 'artists', ...(n.data.label ? { heading: n.data.label } : {}) } },
+      x: Math.round(n.position.x - minX) + 24,
+      y: Math.round(n.position.y - minY) + 24,
+      width: 260,
+      height: 184,
+      label: n.data.label,
+    }))
+  }
+  mode.value = 'snap'
+}
+function enterFree() {
+  mode.value = 'free'
+}
+
 // The proposals the result slideover shows; you flip between them by id.
 const proposals = ref<CanvasProposal[]>([])
 const selectedId = ref<string>('')
@@ -85,8 +138,7 @@ const selected = computed<CanvasProposal | null>(
 
 /** ✨ Magic v1 (#908) — deterministic arrange + viability-gated archetype proposals. */
 function magic() {
-  const blocks = nodes.value.map(n => ({ blockId: n.data.blockId, label: n.data.label }))
-  const { proposals: ps, defaultId } = magicArrange(blocks)
+  const { proposals: ps, defaultId } = magicArrange(currentBlocks())
   proposals.value = ps
   selectedId.value = defaultId ?? ps[0]?.id ?? ''
   resultTitle.value = '✨ Magic layout'
@@ -113,24 +165,31 @@ function inferPositional(ns: FlowNode[]): LayoutTree | null {
     },
   }
 }
+// Compile the current surface into a LayoutTree. Snap → the bound `piecesToTree` (#899);
+// Free → the positional infer. Both flow into the SAME slideover (one shared model).
+const compileLabel = computed(() => (mode.value === 'snap' ? 'Compile snapped' : 'As placed'))
 function compile() {
-  const tree = inferPositional(nodes.value)
+  const snap = mode.value === 'snap'
+  const tree = snap
+    ? (pieces.value.length ? piecesToTree(pieces.value) : null)
+    : inferPositional(nodes.value)
   if (!tree) { proposals.value = []; return }
   proposals.value = [{
     id: 'positional',
-    label: 'As placed',
-    icon: 'i-lucide-move',
-    note: 'Exactly where you dropped them',
+    label: snap ? 'Snapped' : 'As placed',
+    icon: snap ? 'i-lucide-magnet' : 'i-lucide-move',
+    note: snap ? 'Your snapped arrangement' : 'Exactly where you dropped them',
     tree,
     viable: checkViability(tree, [1280, 768]).viable,
   }]
   selectedId.value = 'positional'
-  resultTitle.value = 'Compiled layout'
+  resultTitle.value = snap ? 'Snapped layout' : 'Compiled layout'
   paletteOpen.value = false
   resultOpen.value = true
 }
 function reset() {
   nodes.value = []
+  pieces.value = []
   proposals.value = []
   selectedId.value = ''
   resultOpen.value = false
@@ -155,16 +214,35 @@ function reset() {
         </UCard>
       </div>
       <div class="mt-4 flex flex-col gap-2">
-        <UButton size="sm" color="primary" icon="i-lucide-wand-2" :disabled="!nodes.length" block @click="magic">✨ Magic arrange</UButton>
-        <UButton size="sm" color="neutral" variant="soft" icon="i-lucide-move" :disabled="!nodes.length" block @click="compile">As placed</UButton>
+        <UButton size="sm" color="primary" icon="i-lucide-wand-2" :disabled="!blockCount" block @click="magic">✨ Magic arrange</UButton>
+        <UButton size="sm" color="neutral" variant="soft" :icon="mode === 'snap' ? 'i-lucide-magnet' : 'i-lucide-move'" :disabled="!blockCount" block @click="compile">{{ compileLabel }}</UButton>
         <UButton size="sm" color="neutral" variant="ghost" icon="i-lucide-rotate-ccw" block @click="reset">Reset</UButton>
       </div>
     </DefinePalette>
 
     <header class="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-default px-5 py-3">
       <h1 class="text-base font-semibold">Spike · build an app on Vue Flow</h1>
-      <p class="hidden text-xs text-muted sm:block">Drag a block from the drawer onto the canvas → Compile. #903</p>
+      <p class="hidden text-xs text-muted lg:block">Drop blocks → arrange (Free / Snap) → ✨ Magic or compile. #905</p>
       <div class="ml-auto flex items-center gap-2">
+        <!-- Free placement ⇄ magnetic Snap — non-exclusive surfaces over the same blocks (#907) -->
+        <div class="flex items-center gap-0.5 rounded-lg border border-default p-0.5">
+          <UButton
+            size="xs"
+            icon="i-lucide-move"
+            label="Free"
+            :color="mode === 'free' ? 'primary' : 'neutral'"
+            :variant="mode === 'free' ? 'soft' : 'ghost'"
+            @click="enterFree"
+          />
+          <UButton
+            size="xs"
+            icon="i-lucide-magnet"
+            label="Snap"
+            :color="mode === 'snap' ? 'primary' : 'neutral'"
+            :variant="mode === 'snap' ? 'soft' : 'ghost'"
+            @click="enterSnap"
+          />
+        </div>
         <!-- Mobile: open the palette as a bottom sheet (desktop has the persistent sidebar) -->
         <UButton
           class="md:hidden"
@@ -195,10 +273,12 @@ function reset() {
         <ReusePalette />
       </aside>
 
-      <!-- The Vue Flow canvas -->
+      <!-- The canvas — Free (Vue Flow) or Snap (magnetic compose canvas) -->
       <div class="relative min-w-0 flex-1">
         <ClientOnly>
+          <!-- Free placement: drag blocks from the drawer, position freely -->
           <CroutonFlow
+            v-if="mode === 'free'"
             v-model:rows="nodes"
             collection="artists"
             data-mode="ephemeral"
@@ -207,13 +287,33 @@ function reset() {
             :minimap="false"
             @node-drop="onNodeDrop"
           />
+          <!-- Snap: the WS4 magnetic compose canvas — drag cards together → bound split (#907) -->
+          <div v-else class="absolute inset-0 p-3">
+            <CroutonLayoutComposeCanvas v-model="pieces" class="h-full w-full" />
+          </div>
         </ClientOnly>
+
+        <!-- Snap hint (when there's something to arrange) -->
         <p
-          v-if="!nodes.length"
+          v-if="mode === 'snap' && pieces.length"
+          class="pointer-events-none absolute inset-x-0 top-2 mx-auto w-fit rounded-full border border-default bg-elevated/90 px-3 py-1 text-[11px] text-muted backdrop-blur"
+        >
+          Drag a card beside another → they snap into a split · resize from the corner
+        </p>
+
+        <!-- Empty states -->
+        <p
+          v-if="mode === 'free' && !nodes.length"
           class="pointer-events-none absolute inset-0 grid place-items-center px-6 text-center text-sm text-muted"
         >
           <span class="hidden md:inline">Drag a block from the drawer onto the canvas →</span>
           <span class="md:hidden">Tap <strong>Blocks</strong> to open the palette.</span>
+        </p>
+        <p
+          v-else-if="mode === 'snap' && !pieces.length"
+          class="pointer-events-none absolute inset-0 grid place-items-center px-6 text-center text-sm text-muted"
+        >
+          Drop blocks in <strong>Free</strong> mode, then switch back here to snap them together.
         </p>
       </div>
     </div>
