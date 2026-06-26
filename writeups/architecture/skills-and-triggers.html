@@ -139,6 +139,14 @@
         <p class="what">Generate the weekly "🧹 Housekeeping" digest — a render-only report of repo drift that needs a human eye (stale unmerged branches, mislabeled issues, stuck in-progress tickets, epics ready to close, idle PRs, label-coverage gaps). Reports only, never mutates. Use when asked for a "housekeeping report", "repo drift", "what's stale", or to run the weekly sweep by hand.</p>
       </div>
       <div class="skill">
+        <div class="skill-head"><span class="name">/issue-dedup</span><span class="badges"><span class="b auto">auto</span><span class="b ask">on ask</span><span class="b flow">in flow</span></span></div>
+        <p class="what">Before creating a GitHub issue or epic, search for an existing related one and force a reuse / replace / new decision — so the issue-first flow can't silently mint a duplicate. The create-time half of the dedup gate (the pickup-time half is /issue-sanity-check). Use whenever you're about to open an issue/epic, or run /issue-dedup. Backed by a hard PreToolUse hook on issue_write create.</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/issue-sanity-check</span><span class="badges"><span class="b ask">on ask</span><span class="b flow">in flow</span></span></div>
+        <p class="what">A pessimistic go/no-go the moment you pick up a GitHub issue — read it skeptically and hunt for reasons NOT to do it (already done? obsolete? duplicate? premise wrong? cheaper way? net-negative?), returning proceed / reshape / drop with one-line evidence. The pickup-time half of the dedup gate (the create-time half is /issue-dedup). Use as step 1 of the Task Execution Workflow, or run /issue-sanity-check #NN.</p>
+      </div>
+      <div class="skill">
         <div class="skill-head"><span class="name">/ticket-diagram</span><span class="badges"><span class="b flow">in flow</span><span class="b ask">on ask</span></span></div>
         <p class="what">Attach a self-contained Excalidraw status diagram to a GitHub epic — read the epic + its sub-issue tree, render boxes-coloured-by-status with dependency arrows to a committed PNG that (a) renders on the GitHub mobile app and (b) has the editable Excalidraw scene embedded inside it, post it as a sticky comment, and round-trip human edits back in from a comment. Use when asked to "diagram an epic", "draw the ticket tree", "show the epic on mobile", "add a status graph to #NN", or to keep an epic's diagram current as its children change.</p>
       </div>

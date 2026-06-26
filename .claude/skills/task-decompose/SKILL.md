@@ -112,13 +112,16 @@ chose a different design. Four rules now prevent that:
 
 1. **Resolve the epic.**
    - If `$ARGUMENTS` is (or contains) an issue number: `issue_read` it; use it as the epic.
-   - Else: **search first** (`search_issues`/`list_issues` by keywords + `epic` label) to
-     avoid a duplicate. If a matching epic exists, reuse it. Otherwise create one with
-     `issue_write` (method `create`):
+   - Else: **dedup first** — run the **`issue-dedup`** skill (search open **and**
+     recently-closed work by keywords + `epic` label, surface matches, decide reuse /
+     replace / new). If a matching epic exists, **reuse it** — don't mint a duplicate.
+     Otherwise create one with `issue_write` (method `create`):
      - title: plain human English (no jargon);
      - labels: `epic` + the component it primarily spans (`pkg:*`/`app:*`; never `root`).
        For dev-tooling/`.claude` work that serves the whole monorepo, use `meta:agents`;
-     - body: `## 👤 For humans`, `## 🤖 For agents`, `## 🧪 How to test` per `github-tasks`.
+     - body: `## 👤 For humans`, `## 🤖 For agents`, `## 🧪 How to test` per `github-tasks`,
+       ending with a `Dedup-checked:` attestation line — the `require-issue-dedup` hook
+       **blocks the create without it** (#297).
 2. **Launch the orchestrator.** Spawn it via the `Agent` tool:
    - `subagent_type: "task-orchestrator"`
    - prompt: `{ epic_issue_number: <epic number>, depth: 0 }` + a short restatement of the

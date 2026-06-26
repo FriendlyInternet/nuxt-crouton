@@ -18,6 +18,15 @@
             "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/require-comment-provenance.mjs"
           }
         ]
+      },
+      {
+        "matcher": "mcp__github__issue_write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/require-issue-dedup.mjs"
+          }
+        ]
       }
     ],
     "SessionStart": [
