@@ -134,6 +134,11 @@ reinventing CMS bits that already shipped.
    - `mcp__github__issue_write` (method `create`) — title is plain human English; body
      has `## 👤 For humans`, `## 🤖 For agents`, `## 🧪 How to test`; `labels` = the
      correct `type:*` + `pkg:*`/`app:*` (where the source actually changes). Never `root`.
+   - **End the body with a `Dedup-checked:` line** (e.g. `_Dedup-checked: sub-issues of epic
+     #<NN> — searched siblings, no overlap_`). The `require-issue-dedup` PreToolUse hook
+     **blocks a create without it** (#297). Sub-issues of *this* epic are scoped by the epic,
+     so a one-line attestation referencing the parent is enough — but if a workstream looks
+     like it might duplicate *another* epic's work, search (`search_issues`) and say so.
    - `mcp__github__sub_issue_write` (method `add`, `issue_number` = epic,
      `sub_issue_id` = the child's **id** from the create response — not its number).
    - **Encode dependency order as a machine-readable `Blocked-by:` line** in the body of

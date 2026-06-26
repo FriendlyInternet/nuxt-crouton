@@ -12,6 +12,19 @@ A git pre-commit hook that displays a reminder when committing changes to:
 
 The hook reminds developers to check if documentation artifacts need to be updated.
 
+## Claude Code PreToolUse hooks (wired in `.claude/settings.json`)
+
+These run inside a Claude Code session before a matched tool call. Exit `0` allows the call;
+exit `2` cancels it and the stderr text is shown to the agent.
+
+- **`gate-package-edits.sh`** (`Edit|Write`) — blocks edits to `packages/` without approval.
+- **`require-comment-provenance.mjs`** (`mcp__github__add_issue_comment`) — blocks an agent
+  comment whose body doesn't lead with a 🤖 provenance header.
+- **`require-issue-dedup.mjs`** (`mcp__github__issue_write`) — backstops the dedup gate
+  (#297): blocks a `method: create` whose body lacks a `Dedup-checked:` attestation line, so
+  the issue-first flow can't silently open a duplicate. Updates/closes pass through. Run the
+  **`/issue-dedup`** skill to do the real search; the marker is the receipt the hook checks.
+
 ## Installation
 
 ### Option 1: Manual Installation
