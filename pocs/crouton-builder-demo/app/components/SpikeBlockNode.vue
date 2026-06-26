@@ -19,16 +19,15 @@ const node = computed<LayoutNode>(() => ({ type: 'leaf', blockId: props.data.blo
 </script>
 
 <template>
-  <div
-    class="spike-block-node w-64 overflow-hidden rounded-xl border bg-default shadow-sm transition-shadow"
-    :class="selected ? 'border-primary shadow-lg' : 'border-default'"
+  <UCard
+    class="spike-block-node w-64 transition-shadow"
+    :class="selected ? 'ring-primary shadow-lg' : ''"
+    :ui="{ root: 'overflow-hidden', header: 'flex items-center gap-2 bg-elevated/60 px-3 py-1.5 sm:px-3', body: 'h-36 p-0 sm:p-0' }"
   >
-    <div class="flex items-center gap-2 border-b border-default bg-elevated/60 px-3 py-1.5">
+    <template #header>
       <UIcon name="i-lucide-box" class="size-3.5 text-primary" />
       <span class="text-xs font-medium">{{ data.label || data.blockId }}</span>
-    </div>
-    <div class="h-36">
-      <CroutonLayoutRenderer :node="node" />
-    </div>
-  </div>
+    </template>
+    <CroutonLayoutRenderer :node="node" />
+  </UCard>
 </template>

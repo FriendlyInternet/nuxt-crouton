@@ -185,15 +185,14 @@ const frameScale = computed(() => {
 
     <!-- The ruler: a min-width track with authored checkpoints (each locks upward) -->
     <div class="relative h-9 select-none">
-      <input
-        v-model.number="simWidth"
-        type="range"
+      <USlider
+        v-model="simWidth"
         :min="MIN"
         :max="MAX"
-        step="1"
+        :step="1"
         aria-label="Container width"
-        class="absolute inset-x-0 top-1/2 z-10 w-full -translate-y-1/2 accent-primary"
-      >
+        class="absolute inset-x-0 top-1/2 z-10 w-full -translate-y-1/2"
+      />
       <!-- "locks upward" fill from the active checkpoint to the handle -->
       <div
         v-if="activeMin !== null"

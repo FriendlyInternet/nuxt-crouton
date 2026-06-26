@@ -15,7 +15,7 @@ useHead({ title: 'Crouton Builder — live POC' })
 
 // Bump on every deploy so you can confirm (esp. on mobile, where the browser caches
 // hard) that you're looking at the latest build, not a stale one.
-const BUILD = 'b19 · 26 Jun · collapse-motion picker in Breakpoints + spring-drawer demo (drag the ruler past 640)'
+const BUILD = 'b20 · 26 Jun · Nuxt UI 4 cleanup — USlider ruler + theme-token zoom dots (#906)'
 
 // Backend-free demo blocks (registered in app.config) so the canvas/author can be
 // driven without auth. A `nested` app on the Reports page demonstrates

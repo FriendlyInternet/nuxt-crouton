@@ -134,10 +134,11 @@ function onComposeZoom(piece: ComposePiece): void {
   if (path) zoom.zoomIntoNested(path)
 }
 
+// Theme tokens (semantic), not raw palette steps, so the dots track the active theme.
 const levelDot: Record<string, string> = {
-  site: 'bg-violet-400',
+  site: 'bg-secondary',
   layout: 'bg-primary',
-  breakpoints: 'bg-blue-400',
+  breakpoints: 'bg-info',
 }
 
 /**
