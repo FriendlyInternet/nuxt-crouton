@@ -10,6 +10,7 @@
     "./app/utils/layout-viability": "./app/utils/layout-viability.ts",
     "./app/utils/layout-edit": "./app/utils/layout-edit.ts",
     "./app/utils/layout-compose-bridge": "./app/utils/layout-compose-bridge.ts",
+    "./app/utils/layout-snap": "./app/utils/layout-snap.ts",
     "./app/composables/useCroutonComposeGestures": "./app/composables/useCroutonComposeGestures.ts"
   },
   "scripts": {

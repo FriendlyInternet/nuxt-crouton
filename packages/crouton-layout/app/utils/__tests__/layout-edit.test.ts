@@ -11,6 +11,7 @@ import {
   removeNode,
   applySizes,
   setConfig,
+  setCollapseRecipe,
   makeNested,
   getNestedLayout,
   replaceNestedLayout,
@@ -179,6 +180,28 @@ describe('setConfig — writes per-block config on a leaf', () => {
   it('is a no-op on a split node', () => {
     const root = masterDetail()
     expect(setConfig(root, [], { x: 1 })).toBe(root)
+  })
+})
+
+describe('setCollapseRecipe — per-pane tuck edge + affordance (#852)', () => {
+  it('sets the recipe on the matching leaf only, by blockId', () => {
+    const root = masterDetail()
+    const next = setCollapseRecipe(root, 'list', { edge: 'left', affordance: 'tab' }) as LayoutSplit
+    expect(next.children[0]).toMatchObject({ blockId: 'list', collapse: { edge: 'left', affordance: 'tab' } })
+    expect(next.children[1]).not.toHaveProperty('collapse')
+  })
+  it('recurses into nested sub-layouts', () => {
+    const root: LayoutNode = {
+      type: 'split',
+      direction: 'horizontal',
+      children: [
+        { type: 'leaf', blockId: 'keep' },
+        { type: 'nested', label: 'App', layout: { renderer: 'panes', root: { type: 'leaf', blockId: 'inner' } } },
+      ],
+    }
+    const next = setCollapseRecipe(root, 'inner', { edge: 'bottom', affordance: 'dot' }) as LayoutSplit
+    const nested = next.children[1] as { layout: LayoutTree }
+    expect(nested.layout.root).toMatchObject({ blockId: 'inner', collapse: { edge: 'bottom', affordance: 'dot' } })
   })
 })
 

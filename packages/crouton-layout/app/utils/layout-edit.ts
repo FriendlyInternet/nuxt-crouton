@@ -11,7 +11,7 @@
  * (root itself is `[]`). All functions return a NEW root (structural copies on
  * the touched spine) and never mutate their input.
  */
-import type { LayoutNode, LayoutLeaf, LayoutSplit, LayoutNested, LayoutTree } from '@fyit/crouton-core/app/types/layout'
+import type { LayoutNode, LayoutLeaf, LayoutSplit, LayoutNested, LayoutTree, LayoutCollapseRecipe } from '@fyit/crouton-core/app/types/layout'
 import type { CroutonLayoutBlockDefinition } from '@fyit/crouton-core/app/types/layout-block'
 
 export type NodePath = number[]
@@ -158,6 +158,24 @@ export function setConfig(
   const target = getNode(root, path)
   if (!target || target.type !== 'leaf') return root
   return replaceAt(root, path, { ...target, config }) ?? root
+}
+
+/**
+ * Set a leaf's collapse recipe (#852) — how it tucks when collapsed (edge + affordance).
+ * Keyed by `blockId` (how the editor selects a pane), recursing into nested sub-layouts;
+ * immutable, returns a new root. A pure helper so the recipe picker just swaps the tree.
+ */
+export function setCollapseRecipe(
+  root: LayoutNode,
+  blockId: string,
+  recipe: LayoutCollapseRecipe,
+): LayoutNode {
+  function walk(node: LayoutNode): LayoutNode {
+    if (node.type === 'leaf') return node.blockId === blockId ? { ...node, collapse: recipe } : node
+    if (node.type === 'nested') return { ...node, layout: { ...node.layout, root: walk(node.layout.root) } }
+    return { ...node, children: node.children.map(walk) }
+  }
+  return walk(root)
 }
 
 // --- Recursive nested layouts (WS2 #871) -----------------------------------

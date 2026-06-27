@@ -24,6 +24,13 @@ export interface LayoutLeaf extends LayoutNodeBase {
   blockId: string
   /** User-editable props passed to the block (validated against its config schema in Sprint 1). */
   config?: Record<string, unknown>
+  /**
+   * How this pane tucks when collapsed (#852) — its **edge** + **affordance**
+   * (the "hide recipe"). A per-pane property (stable across breakpoints, unlike
+   * the per-breakpoint `collapsed` set + `collapseStyle` motion). Absent ⇒
+   * `DEFAULT_COLLAPSE_RECIPE` (right-edge tab — the original gutter behaviour).
+   */
+  collapse?: LayoutCollapseRecipe
 }
 
 export interface LayoutSplit extends LayoutNodeBase {
@@ -85,6 +92,45 @@ export function isLayoutCollapseStyle(value: unknown): value is LayoutCollapseSt
  */
 export function isInPlaceCollapse(style: LayoutCollapseStyle): boolean {
   return style !== 'gutter-tabs'
+}
+
+/**
+ * The per-pane **collapse recipe** (#852) — HOW a pane tucks when collapsed,
+ * generalising the single right-edge gutter tab into a small, opinionated set:
+ * which EDGE the pane leaves to, and the AFFORDANCE it leaves behind there.
+ * A per-pane choice (on the `leaf`), stable across breakpoints — distinct from
+ * the per-breakpoint `collapsed` set (which panes) + `collapseStyle` (the motion).
+ *
+ * Prototyped POC-side in `/hide-recipes` (epic #907); this is its durable home.
+ */
+export const LAYOUT_COLLAPSE_EDGES = ['left', 'top', 'right', 'bottom'] as const
+export type LayoutCollapseEdge = (typeof LAYOUT_COLLAPSE_EDGES)[number]
+
+export const LAYOUT_COLLAPSE_AFFORDANCES = ['tab', 'button', 'dot'] as const
+export type LayoutCollapseAffordance = (typeof LAYOUT_COLLAPSE_AFFORDANCES)[number]
+
+export interface LayoutCollapseRecipe {
+  edge: LayoutCollapseEdge
+  affordance: LayoutCollapseAffordance
+}
+
+/** The shipped default tuck — a right-edge tab (the original gutter-tabs placement). */
+export const DEFAULT_COLLAPSE_RECIPE: LayoutCollapseRecipe = { edge: 'right', affordance: 'tab' }
+
+export function isLayoutCollapseEdge(value: unknown): value is LayoutCollapseEdge {
+  return typeof value === 'string' && (LAYOUT_COLLAPSE_EDGES as readonly string[]).includes(value)
+}
+export function isLayoutCollapseAffordance(value: unknown): value is LayoutCollapseAffordance {
+  return typeof value === 'string' && (LAYOUT_COLLAPSE_AFFORDANCES as readonly string[]).includes(value)
+}
+
+/** Narrow a persisted/untrusted value to a complete recipe, filling defaults per field. */
+export function normalizeCollapseRecipe(value: unknown): LayoutCollapseRecipe {
+  const v = (value ?? {}) as Partial<LayoutCollapseRecipe>
+  return {
+    edge: isLayoutCollapseEdge(v.edge) ? v.edge : DEFAULT_COLLAPSE_RECIPE.edge,
+    affordance: isLayoutCollapseAffordance(v.affordance) ? v.affordance : DEFAULT_COLLAPSE_RECIPE.affordance,
+  }
 }
 
 /**

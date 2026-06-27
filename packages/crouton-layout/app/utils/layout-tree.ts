@@ -15,7 +15,7 @@
  * allowlist. Pure (no Nuxt runtime) so it's unit-testable.
  */
 import type { LayoutBreakpoint, LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
-import { isLayoutCollapseStyle } from '@fyit/crouton-core/app/types/layout'
+import { isLayoutCollapseStyle, isLayoutCollapseEdge, isLayoutCollapseAffordance } from '@fyit/crouton-core/app/types/layout'
 
 /** Hard recursion cap — a hostile/looping tree can't blow the stack. */
 const MAX_DEPTH = 12
@@ -41,7 +41,13 @@ function sanitizeNode(input: unknown, depth: number): LayoutNode | null {
   if (input.type === 'leaf') {
     if (typeof input.blockId !== 'string' || !input.blockId) return null
     const config = isRecord(input.config) ? input.config : undefined
-    return { type: 'leaf', blockId: input.blockId, ...(config ? { config } : {}), ...base }
+    // Preserve a valid per-pane collapse recipe (#852); keep it only when BOTH fields
+    // are known values, so a stray/partial object is dropped rather than half-trusted.
+    const c = isRecord(input.collapse) ? input.collapse : undefined
+    const collapse = c && isLayoutCollapseEdge(c.edge) && isLayoutCollapseAffordance(c.affordance)
+      ? { edge: c.edge, affordance: c.affordance }
+      : undefined
+    return { type: 'leaf', blockId: input.blockId, ...(config ? { config } : {}), ...(collapse ? { collapse } : {}), ...base }
   }
 
   if (input.type === 'split') {

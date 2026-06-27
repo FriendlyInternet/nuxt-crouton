@@ -16,8 +16,9 @@
  * compose: this picks the arrangement; the renderer reflows within each pane.
  */
 import { computed, provide, ref, toRef, watch } from 'vue'
-import { useElementSize } from '@vueuse/core'
-import type { LayoutNode, LayoutSplit, LayoutTree } from '@fyit/crouton-core/app/types/layout'
+import { useElementSize, createReusableTemplate } from '@vueuse/core'
+import type { CollapsedPane } from '../utils/layout-responsive'
+import type { LayoutCollapseEdge, LayoutNode, LayoutSplit, LayoutTree } from '@fyit/crouton-core/app/types/layout'
 import { isInPlaceCollapse } from '@fyit/crouton-core/app/types/layout'
 import { normalizeCollapseStyle } from '../utils/layout-responsive'
 import { findNodePath, type NodePath } from '../utils/layout-edit'
@@ -66,27 +67,26 @@ const inPlace = computed(() => isInPlaceCollapse(collapseStyle.value))
 // obvious, instead of the old silent reflow.
 const openOverlay = ref<string | null>(null)
 
-// The drawer slides out from — and back to — the SIDE the collapsed pane lives on (a
-// left pane → from the left), so the motion reads as "this pane opened up". We LATCH the
-// side when the drawer opens (`overlaySide`) and keep it through the close: deriving it
-// from `openOverlay` would flip to the default the moment it's nulled, so a left drawer
-// would exit right. Determined by the block's position in the top horizontal split;
-// vertical splits (or not found) fall back to the right.
-function subtreeHasBlock(node: LayoutNode, blockId: string): boolean {
-  if (node.type === 'leaf') return node.blockId === blockId
-  if (node.type === 'nested') return subtreeHasBlock(node.layout.root, blockId)
-  if (node.type === 'split') return node.children.some(c => subtreeHasBlock(c, blockId))
-  return false
+// The drawer slides out from — and back to — the EDGE the pane tucks to (its collapse
+// recipe, #852): a left-tucked pane → from the left, a top-tucked pane → from the top, so
+// the motion reads as "this pane opened up". We LATCH the edge when the drawer opens
+// (`overlayEdge`) and keep it through the close (deriving it from `openOverlay` would flip
+// to the default the moment it's nulled, so the exit would go the wrong way).
+function recipeEdgeOf(blockId: string): LayoutCollapseEdge {
+  return collapsedPanes.value.find(p => p.blockId === blockId)?.recipe.edge ?? 'right'
 }
-function sideOfBlock(blockId: string): 'left' | 'right' {
-  const root = resolved.value.root
-  if (!root || root.type !== 'split' || root.direction !== 'horizontal') return 'right'
-  const idx = root.children.findIndex(c => subtreeHasBlock(c, blockId))
-  if (idx < 0) return 'right'
-  return idx < root.children.length / 2 ? 'left' : 'right'
-}
-const overlaySide = ref<'left' | 'right'>('right')
-function peek(blockId: string) { overlaySide.value = sideOfBlock(blockId); openOverlay.value = blockId; emit('expand', blockId) }
+const overlayEdge = ref<LayoutCollapseEdge>('right')
+function peek(blockId: string) { overlayEdge.value = recipeEdgeOf(blockId); openOverlay.value = blockId; emit('expand', blockId) }
+
+// Collapsed panes grouped by the edge their recipe tucks them to → the four edge rails.
+// `gutter-tabs` is no longer a single right rail: each pane leaves to its own edge with its
+// own affordance (tab / button / dot). The four rails reserve space, so the visible content
+// reflows inside them (never overlapped).
+function panesOnEdge(edge: LayoutCollapseEdge) { return collapsedPanes.value.filter(p => p.recipe.edge === edge) }
+function edgeHasPanes(edge: LayoutCollapseEdge) { return collapsedPanes.value.some(p => p.recipe.edge === edge) }
+
+// One tuck-affordance chip (tab / button / dot), reused in all four edge rails.
+const [DefineTuck, ReuseTuck] = createReusableTemplate<{ pane: CollapsedPane }>()
 const overlayPane = computed(() => collapsedPanes.value.find(p => p.blockId === openOverlay.value) ?? null)
 const overlayNode = computed<LayoutNode | null>(() => (openOverlay.value ? { type: 'leaf', blockId: openOverlay.value } : null))
 
@@ -107,6 +107,15 @@ provide(LAYOUT_COLLAPSE_KEY, computed(() =>
     : null,
 ))
 
+// The peek drawer's resting position + slide direction, by the pane's tuck edge.
+const overlayPlacement = computed(() => ({
+  left: 'inset-y-0 left-0 w-[min(440px,88%)] border-r border-default',
+  right: 'inset-y-0 right-0 w-[min(440px,88%)] border-l border-default',
+  top: 'inset-x-0 top-0 h-[min(70%,32rem)] border-b border-default',
+  bottom: 'inset-x-0 bottom-0 h-[min(70%,32rem)] border-t border-default',
+}[overlayEdge.value]))
+const overlayTransition = computed(() => `mq-drawer-${overlayEdge.value}`)
+
 defineExpose({ activeBreakpoint, collapseStyle, openOverlay })
 </script>
 
@@ -126,41 +135,65 @@ defineExpose({ activeBreakpoint, collapseStyle, openOverlay })
       />
     </template>
 
-    <!-- gutter-tabs (default): collapsed panes leave the splitter into a right-edge rail. -->
+    <!-- gutter-tabs (default), generalised to PER-EDGE rails (#852): each collapsed pane leaves
+         to the edge its recipe names, as its chosen affordance (tab / button / dot). The rails
+         reserve space so the visible content reflows inside them. -->
     <template v-else>
-      <div class="min-w-0 flex-1">
-        <CroutonLayoutRenderer
-          v-if="visibleRoot"
-          :node="visibleRoot"
-          @layout-change="onInnerLayout"
-        />
-        <div
-          v-else
-          class="grid h-full w-full place-items-center p-6 text-center text-sm text-muted"
+      <!-- one tuck affordance, reused in every rail -->
+      <DefineTuck v-slot="{ pane }">
+        <button
+          type="button"
+          :title="`Expand ${pane.label ? pane.label + ' · ' : ''}${pane.blockId}`"
+          class="flex items-center gap-1.5 text-xs font-medium shadow-sm transition-transform hover:text-primary active:scale-95"
+          :class="{
+            'rounded-md border border-default bg-default px-2 py-1.5': pane.recipe.affordance === 'tab',
+            'rounded-full border border-primary/40 bg-primary/10 px-2.5 py-1.5 text-primary': pane.recipe.affordance === 'button',
+            'size-8 justify-center rounded-full border border-default bg-default p-0': pane.recipe.affordance === 'dot',
+          }"
+          @click="peek(pane.blockId)"
         >
-          Every pane is collapsed at this width — expand one from the gutter.
-        </div>
-      </div>
+          <UIcon name="i-lucide-layout-panel-left" class="size-3.5 shrink-0" />
+          <span v-if="pane.recipe.affordance !== 'dot'" class="max-w-28 truncate">{{ pane.label || pane.blockId }}</span>
+        </button>
+      </DefineTuck>
 
-      <!-- Gutter rail: each collapsed pane as a tab. -->
-      <div
-        v-if="collapsedPanes.length"
-        class="flex w-9 shrink-0 flex-col items-stretch gap-1 border-l border-default bg-elevated/60 p-1"
-      >
-      <button
-        v-for="pane in collapsedPanes"
-        :key="pane.blockId"
-        type="button"
-        :title="`Expand ${pane.label ? pane.label + ' · ' : ''}${pane.blockId}`"
-        class="group flex flex-1 flex-col items-center justify-center gap-1 rounded-md border border-default bg-default py-2 text-muted transition-colors hover:border-primary hover:text-primary"
-        @click="peek(pane.blockId)"
-      >
-        <UIcon
-          name="i-lucide-chevron-left"
-          class="size-3.5"
-        />
-        <span class="[writing-mode:vertical-rl] rotate-180 text-[10px] uppercase tracking-wide">{{ pane.label || pane.blockId }}</span>
-      </button>
+      <div class="flex h-full w-full flex-col">
+        <!-- top rail -->
+        <div v-if="edgeHasPanes('top')" class="flex shrink-0 flex-wrap items-center justify-center gap-1.5 border-b border-default bg-elevated/50 p-1.5">
+          <ReuseTuck v-for="pane in panesOnEdge('top')" :key="pane.blockId" :pane="pane" />
+        </div>
+
+        <div class="flex min-h-0 flex-1">
+          <!-- left rail -->
+          <div v-if="edgeHasPanes('left')" class="flex shrink-0 flex-col items-center justify-center gap-1.5 border-r border-default bg-elevated/50 p-1.5">
+            <ReuseTuck v-for="pane in panesOnEdge('left')" :key="pane.blockId" :pane="pane" />
+          </div>
+
+          <!-- content: the survivors, reflowed -->
+          <div class="min-w-0 flex-1">
+            <CroutonLayoutRenderer
+              v-if="visibleRoot"
+              :node="visibleRoot"
+              @layout-change="onInnerLayout"
+            />
+            <div
+              v-else
+              class="grid h-full w-full place-items-center p-6 text-center text-sm text-muted"
+            >
+              Every pane is tucked — tap one on an edge to bring it back.
+            </div>
+          </div>
+
+          <!-- right rail -->
+          <div v-if="edgeHasPanes('right')" class="flex shrink-0 flex-col items-center justify-center gap-1.5 border-l border-default bg-elevated/50 p-1.5">
+            <ReuseTuck v-for="pane in panesOnEdge('right')" :key="pane.blockId" :pane="pane" />
+          </div>
+        </div>
+
+        <!-- bottom rail -->
+        <div v-if="edgeHasPanes('bottom')" class="flex shrink-0 flex-wrap items-center justify-center gap-1.5 border-t border-default bg-elevated/50 p-1.5">
+          <ReuseTuck v-for="pane in panesOnEdge('bottom')" :key="pane.blockId" :pane="pane" />
+        </div>
       </div>
     </template>
 
@@ -172,11 +205,11 @@ defineExpose({ activeBreakpoint, collapseStyle, openOverlay })
         @click="openOverlay = null"
       />
     </Transition>
-    <Transition :name="overlaySide === 'left' ? 'mq-drawer-l' : 'mq-drawer-r'">
+    <Transition :name="overlayTransition">
       <div
         v-if="openOverlay && overlayNode"
-        class="absolute inset-y-0 z-50 flex w-[min(440px,88%)] flex-col bg-default shadow-2xl"
-        :class="overlaySide === 'left' ? 'left-0 border-r border-default' : 'right-0 border-l border-default'"
+        class="absolute z-50 flex flex-col bg-default shadow-2xl"
+        :class="overlayPlacement"
       >
         <div class="flex items-center gap-2 border-b border-default px-3 py-2">
           <UIcon
@@ -217,13 +250,19 @@ defineExpose({ activeBreakpoint, collapseStyle, openOverlay })
 <style scoped>
 .mq-scrim-enter-active, .mq-scrim-leave-active { transition: opacity .2s ease }
 .mq-scrim-enter-from, .mq-scrim-leave-to { opacity: 0 }
-.mq-drawer-r-enter-active, .mq-drawer-r-leave-active,
-.mq-drawer-l-enter-active, .mq-drawer-l-leave-active { transition: transform .28s cubic-bezier(.32,.72,0,1) }
-.mq-drawer-r-enter-from, .mq-drawer-r-leave-to { transform: translateX(100%) }
-.mq-drawer-l-enter-from, .mq-drawer-l-leave-to { transform: translateX(-100%) }
+.mq-drawer-left-enter-active, .mq-drawer-left-leave-active,
+.mq-drawer-right-enter-active, .mq-drawer-right-leave-active,
+.mq-drawer-top-enter-active, .mq-drawer-top-leave-active,
+.mq-drawer-bottom-enter-active, .mq-drawer-bottom-leave-active { transition: transform .28s cubic-bezier(.32,.72,0,1) }
+.mq-drawer-right-enter-from, .mq-drawer-right-leave-to { transform: translateX(100%) }
+.mq-drawer-left-enter-from, .mq-drawer-left-leave-to { transform: translateX(-100%) }
+.mq-drawer-top-enter-from, .mq-drawer-top-leave-to { transform: translateY(-100%) }
+.mq-drawer-bottom-enter-from, .mq-drawer-bottom-leave-to { transform: translateY(100%) }
 @media (prefers-reduced-motion: reduce) {
   .mq-scrim-enter-active, .mq-scrim-leave-active,
-  .mq-drawer-r-enter-active, .mq-drawer-r-leave-active,
-  .mq-drawer-l-enter-active, .mq-drawer-l-leave-active { transition: none }
+  .mq-drawer-left-enter-active, .mq-drawer-left-leave-active,
+  .mq-drawer-right-enter-active, .mq-drawer-right-leave-active,
+  .mq-drawer-top-enter-active, .mq-drawer-top-leave-active,
+  .mq-drawer-bottom-enter-active, .mq-drawer-bottom-leave-active { transition: none }
 }
 </style>

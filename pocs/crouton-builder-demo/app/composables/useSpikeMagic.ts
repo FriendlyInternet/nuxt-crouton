@@ -25,7 +25,8 @@ export interface MagicBlockInput {
 export type MagicPattern = 'master-detail' | 'form-centric' | 'calendar-primary' | 'dashboard' | 'stacked'
 
 export interface MagicProposal {
-  id: MagicPattern
+  /** Stable id for flip chips — a `MagicPattern` (deterministic) or `pattern-i` (AI, may repeat a pattern). */
+  id: string
   label: string
   icon: string
   note: string
@@ -138,7 +139,7 @@ export function useSpikeMagic() {
    * The pattern `composeDefault` (#709) selects is surfaced first (the *strong* default);
    * the others are the "propose another layout" alternatives the owner asked for.
    */
-  function magicArrange(blocks: MagicBlockInput[]): { proposals: MagicProposal[], defaultId: MagicPattern | null } {
+  function magicArrange(blocks: MagicBlockInput[]): { proposals: MagicProposal[], defaultId: string | null } {
     if (!blocks.length) return { proposals: [], defaultId: null }
 
     const g = group(blocks)
@@ -199,5 +200,79 @@ export function useSpikeMagic() {
     return { proposals, defaultId: proposals[0]?.id ?? null }
   }
 
-  return { magicArrange }
+  /**
+   * Materialize ONE named archetype from a block list, viability-gated — the
+   * deterministic guardrail Magic v2 (#909) runs over the AI's chosen pattern.
+   * Returns null when the pattern can't apply to these blocks (caller falls back).
+   */
+  function buildPattern(pattern: MagicPattern, blocks: MagicBlockInput[]): { tree: LayoutTree, viable: boolean } | null {
+    if (!blocks.length) return null
+    const g = group(blocks)
+    const root
+      = pattern === 'master-detail' ? buildMasterDetail(g)
+        : pattern === 'form-centric' ? buildFormCentric(g)
+          : pattern === 'calendar-primary' ? buildCalendarPrimary(g)
+            : pattern === 'dashboard' ? buildDashboard(g)
+              : buildStacked(blocks)
+    if (!root) return null
+    const tree: LayoutTree = { renderer: 'panes', root }
+    return { tree, viable: checkViability(tree, TARGET_WIDTHS).viable }
+  }
+
+  /** Reorder blocks to follow an AI-proposed blockId order; unknown ids dropped, leftovers appended. */
+  function orderBlocks(blocks: MagicBlockInput[], order: string[] | undefined): MagicBlockInput[] {
+    if (!order?.length) return blocks
+    const pool = [...blocks]
+    const out: MagicBlockInput[] = []
+    for (const id of order) {
+      const i = pool.findIndex(b => b.blockId === id)
+      if (i !== -1) out.push(pool.splice(i, 1)[0]!)
+    }
+    return [...out, ...pool]
+  }
+
+  /**
+   * ✨ Magic v2 (#909) — ask Claude to propose + rank layouts from the dropped blocks
+   * (and an optional typed intent), then run each through the deterministic composer as
+   * the **viability guardrail**: materialize the AI's pattern+order into a real tree and
+   * re-check viability; an inapplicable pattern falls back to a stacked tree. If the AI
+   * is unavailable (no key) or errors, degrade gracefully to the deterministic v1.
+   */
+  async function magicArrangeAI(
+    blocks: MagicBlockInput[],
+    intent?: string,
+  ): Promise<{ proposals: MagicProposal[], defaultId: string | null, source: 'ai' | 'fallback' | 'empty' }> {
+    if (!blocks.length) return { proposals: [], defaultId: null, source: 'empty' }
+    try {
+      const res = await $fetch<{ source: string, proposals?: Array<{ pattern: MagicPattern, blockOrder?: string[], title?: string, rationale?: string }> }>(
+        '/api/spike-magic-ai',
+        { method: 'POST', body: { blocks, intent: intent ?? '' } },
+      )
+      if (res?.source === 'ai' && res.proposals?.length) {
+        const out: MagicProposal[] = []
+        res.proposals.forEach((p, i) => {
+          const ordered = orderBlocks(blocks, p.blockOrder)
+          const built = buildPattern(p.pattern, ordered) ?? buildPattern('stacked', ordered)
+          if (!built) return
+          const meta = PATTERN_META[p.pattern] ?? PATTERN_META.stacked
+          out.push({
+            id: `${p.pattern}-${i}`,
+            label: p.title?.trim() || meta.label,
+            icon: meta.icon,
+            note: p.rationale?.trim() || meta.note,
+            tree: built.tree,
+            viable: built.viable,
+          })
+        })
+        if (out.length) return { proposals: out.slice(0, 3), defaultId: null, source: 'ai' }
+      }
+    }
+    catch {
+      // fall through to the deterministic guardrail
+    }
+    const det = magicArrange(blocks)
+    return { proposals: det.proposals, defaultId: det.defaultId, source: 'fallback' }
+  }
+
+  return { magicArrange, magicArrangeAI, buildPattern }
 }

@@ -23,6 +23,7 @@ const hasTools = computed(() => tools.value.length > 0)
   <UPopover
     v-if="hasTools"
     :content="{ side: 'top', align: 'end', sideOffset: 8 }"
+    :ui="{ content: 'z-[100000]' }"
   >
     <UButton
       icon="i-lucide-glasses"
@@ -35,7 +36,9 @@ const hasTools = computed(() => tools.value.length > 0)
     />
 
     <template #content>
-      <div class="w-64 p-1">
+      <!-- data-crouton-ui: this popover is teleported to <body> (outside the launcher root), so the
+           Annotate select-mode guard (`isOurs`) keys off this marker to never annotate our own UI. -->
+      <div class="w-64 p-1" data-crouton-ui>
         <p class="px-2.5 py-1.5 text-[11px] font-medium tracking-wide text-muted">
           Crouton tools
         </p>

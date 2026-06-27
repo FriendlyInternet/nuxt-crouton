@@ -14,6 +14,47 @@ layer (TresJS / Three.js for Vue) works end-to-end in a real crouton app.
 Extends `@fyit/crouton-core`, `@fyit/crouton-i18n`, `@fyit/crouton-three`, and
 `@fyit/crouton-pages` (for the 3D Model block + generated `pages` collection).
 
+## Crouton Builder spike — `/spike-app` (epic #907)
+
+Build an app by dragging a collection's blocks onto a Vue Flow canvas, snap them
+into bound splits, then `✨ Magic`/compile into a `LayoutTree`.
+
+### Focus / layout-edit view (#907 — `focus-view-1`)
+
+Double-clicking a layout node opens a **dedicated full-screen edit VIEW**, not a
+Vue Flow camera zoom. This is the key design choice:
+
+- **Why a view, not a camera.** The old approach zoomed the Vue Flow *camera*
+  onto the focused node (`focusBounds` → `fitBounds`/`setCenter`). Resizing the
+  focused node to a device width made Vue Flow re-measure and fire its own
+  viewport fit, which raced/overrode the camera op → non-deterministic, off-screen
+  framing on some nodes (reliably the **2nd** node at a mobile viewport). A plain
+  overlay has no camera and no re-measure race, so **every** node renders at a
+  constant, cleanly-framed on-screen size for free.
+- **One unified surface.** The view hosts `CroutonLayoutBreakpointAuthor`
+  (`@fyit/crouton-layout`) — which already unifies the breakpoint key-points
+  (min-width ruler), the device buttons, the width slider, the per-checkpoint
+  **collapse motion** (gutter-tabs / spring-drawer / crt-power-down / iris-portal),
+  and per-block widget variants, with splitter drags → keypoint sizes. We compose
+  it untouched in the POC (no package edit); the floating app-style header sits in
+  the author's reserved top band. A subtle CSS scale+fade eases the view in.
+- **Persistence contract is unchanged.** The node's layout rides in the page's
+  `zoomTree` `v-model` (root + authored breakpoints); resize→keypoint is the
+  author's own job. `Done` returns to the board.
+- **Detach** is a **board gesture** (consolidated from the detach-redesign branch):
+  grab a pane of a merged node and pull it — the group eases apart, the pane tracks
+  your finger 1:1 (zoom-corrected) and past a threshold detaches into its own flow
+  node exactly where you release; under the threshold it springs back. The edit view
+  stays focused purely on responsiveness.
+- **Overview-on-add** (also consolidated): adding a block re-frames the board to an
+  overview (`fitView` with `maxZoom:1`) instead of hard-zooming the first block on a
+  phone.
+
+Verify the framing fix at a **mobile viewport (390×844)**: drop 2 blocks →
+double-click each → both open framed identically and fully on-screen. Drag one block
+onto another to merge → pull a pane out (it follows your finger and detaches where you
+release) → add a block (the camera frames an overview, not a hard zoom).
+
 ## Local dev
 
 ```bash

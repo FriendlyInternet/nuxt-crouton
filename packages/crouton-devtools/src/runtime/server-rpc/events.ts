@@ -1,4 +1,5 @@
 import { defineEventHandler, getQuery } from 'h3'
+import { useRuntimeConfig } from 'nitropack/runtime'
 
 /**
  * Get persisted events from the events package

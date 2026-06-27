@@ -77,6 +77,16 @@ describe('sanitizeLayoutTree — rejects / strips malformed input', () => {
     expect(out).toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'stats' } })
   })
 
+  it('keeps a valid collapse recipe, drops a partial/invalid one (#852)', () => {
+    expect(sanitizeLayoutTree({ type: 'leaf', blockId: 'stats', collapse: { edge: 'left', affordance: 'dot' } }))
+      .toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'stats', collapse: { edge: 'left', affordance: 'dot' } } })
+    // partial (no affordance) / bogus values → dropped, not half-trusted
+    expect(sanitizeLayoutTree({ type: 'leaf', blockId: 'stats', collapse: { edge: 'left' } }))
+      .toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'stats' } })
+    expect(sanitizeLayoutTree({ type: 'leaf', blockId: 'stats', collapse: { edge: 'sideways', affordance: 'tab' } }))
+      .toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'stats' } })
+  })
+
   it('rejects a tree nested past the depth cap', () => {
     let node: Record<string, unknown> = { type: 'leaf', blockId: 'deep' }
     for (let i = 0; i < 20; i++) {
