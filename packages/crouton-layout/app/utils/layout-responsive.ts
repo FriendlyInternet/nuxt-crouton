@@ -25,8 +25,8 @@
  *
  * Pure (no Vue, no DOM) so the precedence is unit-testable without a browser.
  */
-import type { LayoutBreakpoint, LayoutCollapseStyle, LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
-import { DEFAULT_COLLAPSE_STYLE, isLayoutCollapseStyle } from '@fyit/crouton-core/app/types/layout'
+import type { LayoutBreakpoint, LayoutCollapseRecipe, LayoutCollapseStyle, LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
+import { DEFAULT_COLLAPSE_STYLE, isLayoutCollapseStyle, normalizeCollapseRecipe } from '@fyit/crouton-core/app/types/layout'
 
 /** The effective layout view at one container width — what the renderer draws. */
 export interface ResolvedLayout {
@@ -109,11 +109,13 @@ export function resolveLayoutAtWidth(tree: LayoutTree, width: number): ResolvedL
   }
 }
 
-/** A pane that's been collapsed out of the tree → rendered as a gutter tab. */
+/** A pane that's been collapsed out of the tree → rendered as a tucked affordance. */
 export interface CollapsedPane {
   blockId: string
   /** The enclosing nested-app label, when the block lives inside a `nested` node. */
   label?: string
+  /** How this pane tucks (#852) — edge + affordance, normalized from the leaf's `collapse`. */
+  recipe: LayoutCollapseRecipe
 }
 
 /** Pull the size fields off a node (preserved when a single survivor collapses up). */
@@ -145,7 +147,7 @@ export function partitionCollapsed(
   function walk(node: LayoutNode, contextLabel?: string): LayoutNode | null {
     if (node.type === 'leaf') {
       if (set.has(node.blockId)) {
-        collapsed.push({ blockId: node.blockId, ...(contextLabel ? { label: contextLabel } : {}) })
+        collapsed.push({ blockId: node.blockId, ...(contextLabel ? { label: contextLabel } : {}), recipe: normalizeCollapseRecipe(node.collapse) })
         return null
       }
       return node
@@ -230,7 +232,7 @@ export function setCollapseStyle(tree: LayoutTree, minWidth: number, style: stri
 /** List the blocks placed in a layout root (for the authoring controls). */
 export function listBlocks(root: LayoutNode | null, contextLabel?: string): CollapsedPane[] {
   if (!root) return []
-  if (root.type === 'leaf') return [{ blockId: root.blockId, ...(contextLabel ? { label: contextLabel } : {}) }]
+  if (root.type === 'leaf') return [{ blockId: root.blockId, ...(contextLabel ? { label: contextLabel } : {}), recipe: normalizeCollapseRecipe(root.collapse) }]
   if (root.type === 'nested') return listBlocks(root.layout.root, root.label ?? contextLabel)
   return root.children.flatMap(c => listBlocks(c, contextLabel))
 }

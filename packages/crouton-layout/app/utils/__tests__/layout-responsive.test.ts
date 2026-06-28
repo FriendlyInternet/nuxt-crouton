@@ -232,7 +232,7 @@ describe('partitionCollapsed', () => {
   it('splits visible panes from collapsed leaves (gutter rail)', () => {
     const root = masterDetail()
     const { visible, collapsed } = partitionCollapsed(root, ['list'])
-    expect(collapsed).toEqual([{ blockId: 'list' }])
+    expect(collapsed).toEqual([{ blockId: 'list', recipe: { edge: 'right', affordance: 'tab' } }])
     // The surviving single child collapses up into a bare leaf.
     expect(visible).toMatchObject({ type: 'leaf', blockId: 'form' })
   })
@@ -261,7 +261,24 @@ describe('partitionCollapsed', () => {
       ],
     }
     const { collapsed } = partitionCollapsed(nestedRoot, ['inner'])
-    expect(collapsed).toEqual([{ blockId: 'inner', label: 'App' }])
+    expect(collapsed).toEqual([{ blockId: 'inner', label: 'App', recipe: { edge: 'right', affordance: 'tab' } }])
+  })
+
+  it('carries each leaf\'s collapse recipe onto the collapsed pane (#852)', () => {
+    const root: LayoutNode = {
+      type: 'split',
+      direction: 'horizontal',
+      children: [
+        leaf('list', { collapse: { edge: 'left', affordance: 'tab' } }),
+        leaf('stats', { collapse: { edge: 'top', affordance: 'button' } }),
+        leaf('form'),
+      ],
+    }
+    const { collapsed } = partitionCollapsed(root, ['list', 'stats'])
+    expect(collapsed).toEqual([
+      { blockId: 'list', recipe: { edge: 'left', affordance: 'tab' } },
+      { blockId: 'stats', recipe: { edge: 'top', affordance: 'button' } },
+    ])
   })
 })
 
@@ -312,8 +329,8 @@ describe('authoring transforms', () => {
       ],
     }
     expect(listBlocks(root)).toEqual([
-      { blockId: 'list' },
-      { blockId: 'calendar', label: 'Bookings' },
+      { blockId: 'list', recipe: { edge: 'right', affordance: 'tab' } },
+      { blockId: 'calendar', label: 'Bookings', recipe: { edge: 'right', affordance: 'tab' } },
     ])
   })
 })

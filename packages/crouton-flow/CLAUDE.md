@@ -169,6 +169,7 @@ When `sync` is enabled:
 | `selected` | `string[]` | - | Selected node IDs (enables `v-model:selected`) |
 | `additionalEdges` | `Array<{ id, source, target }>` | `[]` | Extra edges rendered alongside parent-derived edges (e.g. multi-parent synthesis connections) |
 | `defaultNodeComponent` | `Component` | - | Explicit node component for the default render path (overrides `{Collection}Node` name resolution). Used by `CroutonFlowSiteFlow` to inject its page card. Ghost nodes still render as ghosts. |
+| `focusBounds` | `{ x, y, width, height } \| null` | - | Camera focus — set a rect (flow coords) to zoom onto that area, clear it to fit the whole board. Deterministic (no re-measure): maps the rect's WIDTH to a constant fraction (~0.86) of the canvas width via `setCenter`, so scrubbing the rect to a wider device zooms OUT and the content stays ~the same on-screen size (responsive-preview feel). View transform only. Exposes `fitView` / `fitBounds` / `setCenter` via template ref. |
 
 ## Events
 
@@ -176,7 +177,8 @@ When `sync` is enabled:
 |-------|---------|-------------|
 | `nodeClick` | `(nodeId, data)` | Node clicked |
 | `nodeDblClick` | `(nodeId, data)` | Node double-clicked |
-| `nodeMove` | `(nodeId, position)` | Node moved |
+| `nodeMove` | `(nodeId, position)` | Node moved (after drag) |
+| `nodeDrag` | `(nodeId, position)` | Emitted continuously *while* dragging (live position, throttled ~50ms). Not gated on `sync` — use for live snap guides / alignment previews. |
 | `edgeClick` | `(edgeId)` | Edge clicked |
 | `nodeContainerChange` | `(ContainerChangeEvent)` | Node moved into/out of a container group |
 | `connectEnd` | `({ sourceNodeId, sourceHandleType, position, mouseEvent })` | Connection drag ended in empty space (no target handle). Use to show a "create node" menu. |

@@ -5,7 +5,7 @@
  * Runs as a Nitro plugin using the onAfterResponse hook.
  */
 
-import { defineNitroPlugin } from 'nitropack/runtime'
+import { defineNitroPlugin, useRuntimeConfig } from 'nitropack/runtime'
 import type { NitroApp } from 'nitropack'
 import { operationStore, type Operation } from '../utils/operationStore'
 import { systemOperationStore } from '../utils/systemOperationStore'

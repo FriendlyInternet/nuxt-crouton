@@ -120,6 +120,13 @@ interface Props {
    * by-name lookup unreachable. Ghost nodes still render as ghosts.
    */
   defaultNodeComponent?: Component
+  /**
+   * Camera focus: a rectangle (flow coords) to frame — set it to zoom the canvas onto that area
+   * (e.g. a node the host is rendering at a specific size), clear it (null/undefined) to fit the
+   * whole board. Deterministic (fitBounds) — pass the rect the focused node WILL occupy and the
+   * camera frames it without waiting for Vue Flow to re-measure. View transform only.
+   */
+  focusBounds?: { x: number, y: number, width: number, height: number } | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -146,6 +153,8 @@ const emit = defineEmits<{
   nodeDblClick: [nodeId: string, data: Record<string, unknown>]
   /** Emitted when a node position changes (after drag) */
   nodeMove: [nodeId: string, position: FlowPosition]
+  /** Emitted continuously WHILE a node is dragged (live position, throttled ~50ms) — for live snap guides / alignment previews */
+  nodeDrag: [nodeId: string, position: FlowPosition]
   /** Emitted when an edge is clicked */
   edgeClick: [edgeId: string]
   /** Emitted when selection changes */
@@ -237,8 +246,28 @@ const {
   getSelectedNodes,
   addSelectedNodes,
   removeSelectedNodes,
-  findNode
+  findNode,
+  fitView,
+  fitBounds,
+  setCenter
 } = useVueFlow()
+
+// Camera focus driven by `focusBounds`: the host hands us the EXACT rectangle (flow coords) the
+// focused node occupies — its position + the size it's rendered at. Rather than auto-fit (which
+// would shrink a wider device to tiny), we set an explicit zoom that maps the device WIDTH to a
+// CONSTANT fraction of the canvas width — so scrubbing to a bigger screen zooms OUT and the layout
+// stays ~the same on-screen size, only reflowing for the new width (the responsive-preview feel).
+// Deterministic (no Vue Flow re-measure). Clear → fit the whole board, capped.
+watch(() => props.focusBounds, (bounds) => {
+  if (bounds) {
+    // Defer past the same-tick node-set/resize churn (soloing a node makes Vue Flow re-process
+    // nodes and can fire its own viewport fit that races ours) so our fit is the last camera op.
+    const apply = () => fitBounds({ ...bounds }, { duration: 250, padding: 0.18 })
+    if (typeof requestAnimationFrame !== 'undefined') requestAnimationFrame(() => requestAnimationFrame(apply))
+    else apply()
+  }
+  else nextTick(() => fitView({ duration: 450, padding: 0.3, maxZoom: 1 }))
+}, { deep: true })
 
 // Flag to prevent emit loops when syncing selected prop to Vue Flow
 const isSyncingFromProp = ref(false)
@@ -741,7 +770,17 @@ const syncDragPosition = useThrottleFn((event: NodeDragEvent) => {
   }
 }, 50)
 
-onNodeDrag(syncDragPosition)
+// Live drag forwarding: sync to collaborators (when sync) AND emit nodeDrag for the
+// host to draw a snap/alignment guide. nodeDrag is NOT gated on sync — a non-sync
+// canvas (e.g. the builder spike) still wants the live position for snap previews.
+onNodeDrag((event: NodeDragEvent) => {
+  syncDragPosition(event)
+  if (!props.draggable) return
+  emit('nodeDrag', event.node.id, {
+    x: Math.round(event.node.position.x),
+    y: Math.round(event.node.position.y),
+  })
+})
 
 // Handle node drag end - final position sync + container detection
 // event.nodes contains ALL dragged nodes (multi-select), event.node is just the primary
@@ -991,6 +1030,9 @@ defineExpose({
   relayoutAll,
   layoutSubtree,
   selectSubtree,
+  fitView,
+  fitBounds,
+  setCenter,
 })
 </script>
 

@@ -20,6 +20,15 @@ import { partitionCollapsed, resolveLayoutAtWidth, type CollapsedPane, type Reso
 export const LAYOUT_VARIANTS_KEY: InjectionKey<Ref<Record<string, string>> | ComputedRef<Record<string, string>>> = Symbol('crouton-layout-variants')
 
 /**
+ * The KNOWN container width (px) the responsive renderer resolved at — a simulated `width`
+ * (the device frame) or its own measured width. `CroutonLayoutRenderer` falls back to this
+ * when its own ResizeObserver reads 0 (e.g. inside a `transform: scale()` device frame, where
+ * the observer can report 0 / fire late) — so min-width enforcement AND the auto-stack reflow
+ * still work there instead of silently no-opping into squished equal columns.
+ */
+export const LAYOUT_CONTAINER_WIDTH_KEY: InjectionKey<Ref<number> | ComputedRef<number>> = Symbol('crouton-layout-container-width')
+
+/**
  * In-place collapse context (WS6, #875) — provided by `CroutonLayoutResponsiveRenderer`
  * when the active breakpoint's collapse style is an *in-place* one (not `gutter-tabs`).
  * It tells the recursive `CroutonLayoutRenderer` which leaves to render as a collapsed

@@ -24,9 +24,23 @@ import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layou
 import { isInPlaceCollapse } from '@fyit/crouton-core/app/types/layout'
 import { minWidthResolver, panelMinSizePct } from '../utils/layout-viability'
 import { isSubtreeCollapsed } from '../utils/layout-responsive'
-import { LAYOUT_VARIANTS_KEY, LAYOUT_COLLAPSE_KEY } from '../composables/useCroutonLayoutResponsive'
+import { LAYOUT_VARIANTS_KEY, LAYOUT_COLLAPSE_KEY, LAYOUT_CONTAINER_WIDTH_KEY } from '../composables/useCroutonLayoutResponsive'
 
-const props = defineProps<{ node: LayoutNode }>()
+const props = withDefaults(
+  defineProps<{
+    node: LayoutNode
+    /**
+     * Whether the splitter is draggable. `true` (default) is the authoring
+     * affordance — the editor / breakpoint-author / compose paths keep their
+     * resize handles. `false` is VIEW mode: a served layout renders at its
+     * breakpoint-resolved sizes with no draggable dividers (the end user doesn't
+     * redefine the layout). Stacking/min-width logic is unaffected either way —
+     * this gates only the handles. Threaded through the recursion. (#937)
+     */
+    interactive?: boolean
+  }>(),
+  { interactive: true },
+)
 
 // Per-block widget variant overrides for the authored breakpoint in view (WS5
 // #874), provided by CroutonLayoutResponsiveRenderer. Absent (plain renderer) →
@@ -73,10 +87,37 @@ const groupRef = ref<HTMLElement | null>(null)
 const { width: groupWidth, height: groupHeight } = useElementSize(groupRef)
 const minWidthFor = computed(() => minWidthResolver(blocks.value))
 
+// The width to reason about min-sizes / stacking with: our own measured group width, or — when
+// that reads 0 (a transform-scaled device frame breaks the ResizeObserver) — the known container
+// width the responsive renderer resolved at. Without this the px→% min-size math divides by 0 and
+// every floor collapses to 0, so panes squish into equal clipped columns instead of stacking.
+const injectedWidth = inject(LAYOUT_CONTAINER_WIDTH_KEY, ref(0))
+const basisWidth = computed(() => groupWidth.value || injectedWidth.value)
+
 function panelMin(child: LayoutNode): number {
   if (props.node.type !== 'split') return 0
-  return panelMinSizePct(props.node.direction, child, groupWidth.value, minWidthFor.value)
+  return panelMinSizePct(props.node.direction, child, basisWidth.value, minWidthFor.value)
 }
+
+// Auto-stack to a full-width column (#852 follow-up): a horizontal split whose children
+// can't fit side-by-side at their min-widths — the summed min-size exceeds the group —
+// stops being columns and stacks vertically (each pane full width). This is the responsive
+// reflow the /hide-recipes spike proved (row→column by available width), brought into the
+// real renderer so a desktop-composed layout adapts on mobile with NO authored breakpoint.
+// The same `panelMinSizePct` machinery decides it, so it triggers exactly when the columns
+// would otherwise overflow — layouts that DO fit are byte-for-byte unchanged. Kept off the
+// in-place-collapse path (that owns its own splitter reflow).
+const stackMinSum = computed(() => {
+  if (props.node.type !== 'split' || props.node.direction !== 'horizontal') return 0
+  return props.node.children.reduce((sum, child) => sum + panelMin(child), 0)
+})
+const shouldStack = computed(() =>
+  props.node.type === 'split'
+  && props.node.direction === 'horizontal'
+  && !inPlace.value
+  && basisWidth.value > 0
+  && stackMinSum.value > 100,
+)
 
 function onLayout(sizes: number[]) {
   if (props.node.type === 'split') emit('layoutChange', props.node, sizes)
@@ -163,7 +204,32 @@ watch(
     v-else-if="node.type === 'nested'"
     class="croutonpane h-full w-full"
   >
-    <CroutonLayoutRenderer :node="node.layout.root" />
+    <CroutonLayoutRenderer
+      :node="node.layout.root"
+      :interactive="interactive"
+    />
+  </div>
+
+  <!-- Split, STACKED — too narrow to fit side-by-side, so the columns reflow to a
+       full-width vertical stack (responsive reflow, #852 follow-up). `groupRef` stays on
+       it so the live width keeps measuring: widen past the fit threshold and it flips
+       back to the SplitterGroup below. No resize handles (you don't drag stacked panes). -->
+  <div
+    v-else-if="node.type === 'split' && shouldStack"
+    ref="groupRef"
+    class="flex h-full w-full flex-col gap-px overflow-y-auto"
+  >
+    <div
+      v-for="(child, i) in node.children"
+      :key="i"
+      class="croutonpane min-h-72 w-full shrink-0"
+    >
+      <CroutonLayoutRenderer
+        :node="child"
+        :interactive="interactive"
+        @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
+      />
+    </div>
   </div>
 
   <!-- Split -->
@@ -179,7 +245,7 @@ watch(
       :key="i"
     >
       <SplitterResizeHandle
-        v-if="i > 0"
+        v-if="i > 0 && interactive"
         class="bg-border hover:bg-primary transition-colors data-[orientation=horizontal]:w-px data-[orientation=vertical]:h-px"
       />
       <SplitterPanel
@@ -193,6 +259,7 @@ watch(
       >
         <CroutonLayoutRenderer
           :node="child"
+          :interactive="interactive"
           @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
         />
       </SplitterPanel>

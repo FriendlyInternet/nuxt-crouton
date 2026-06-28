@@ -31,7 +31,10 @@ let toastTimer: ReturnType<typeof setTimeout> | undefined
 
 function isOurs(t: EventTarget | null): boolean {
   if (!(t instanceof Element)) return false
-  return OVERLAY_IDS.some(id => t.closest(`#${id}`) !== null)
+  // `[data-crouton-ui]` covers our own UI that Nuxt UI TELEPORTS to <body> (popovers / menus like
+  // the launcher's tool switch) — those render OUTSIDE the overlay roots, so an id-only `closest`
+  // misses them and the switch becomes an annotation target. The marker catches them too.
+  return t.closest('[data-crouton-ui]') !== null || OVERLAY_IDS.some(id => t.closest(`#${id}`) !== null)
 }
 
 function boxOf(el: Element): AnnotateBox {

@@ -5,6 +5,8 @@ export interface ErudaLike {
   init: () => void
   show: () => void
   hide: () => void
+  /** eruda's own floating entry button — we hide it and drive show/hide from the launcher chip. */
+  _entryBtn?: { hide: () => void }
 }
 
 /**
@@ -30,6 +32,10 @@ export function createConsoleTool(
       if (!eruda) {
         eruda = await loadEruda()
         eruda.init()
+        // Hide eruda's own floating entry button — it sits bottom-right and OVERLAPS the
+        // glasses launcher. The launcher's active-tool chip is the toggle instead (#810
+        // follow-up), so the on/off control lives in one place. Best-effort (private API).
+        eruda._entryBtn?.hide()
       }
       eruda.show()
     },

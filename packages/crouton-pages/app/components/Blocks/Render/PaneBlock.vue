@@ -45,7 +45,9 @@ const height = computed<number>(() => {
     class="pane-block rounded-xl border border-default overflow-hidden"
     :style="{ height: `${height}px` }"
   >
-    <CroutonLayoutRenderer :node="tree.root" />
+    <!-- View mode: a published page is served, not authored — render at the
+         breakpoint-resolved sizes with no draggable dividers (#937). -->
+    <CroutonLayoutRenderer :node="tree.root" :interactive="false" />
   </div>
 
   <!-- Invalid / missing layout tree — safe, legible fallback (never a raw error) -->

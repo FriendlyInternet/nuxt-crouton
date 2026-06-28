@@ -37,9 +37,11 @@ const route = useRoute()
 const collectionName = computed(() => route.params.collection as string)
 const layout = computed(() => (route.query.layout as any) || 'table')
 
-// Verify collection exists
+// Verify collection exists. Cast to a string-keyed record: appConfig.croutonCollections is typed
+// with the concrete generated collection keys, so a dynamic lookup by the route param (an arbitrary
+// string) otherwise trips TS7053 the moment a consumer type-checks this page.
 const appConfig = useAppConfig()
-const croutonCollections = appConfig.croutonCollections || {}
+const croutonCollections = (appConfig.croutonCollections || {}) as Record<string, unknown>
 const error = ref<string | null>(null)
 
 const collectionTitle = computed(() => {
