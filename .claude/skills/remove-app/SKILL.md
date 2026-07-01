@@ -88,6 +88,21 @@ git rm -f .github/workflows/deploy-<app>.yml   # the per-app CI caller, if prese
 git mv pocs/<app> retired/pocs/<app>       # or git mv apps/<app> retired/apps/<app>
 git rm -f .github/workflows/deploy-<app>.yml   # the per-app CI caller, if present
 ```
+Then write a **`.retired.json`** age-stamp into the archived directory (this is
+written automatically during the archive flow):
+```bash
+cat > retired/pocs/<app>/.retired.json << 'EOF'
+{
+  "archivedAt": "<current ISO timestamp>",
+  "sourceEpic": <epic number>,
+  "sourceDir": "pocs/<app>"
+}
+EOF
+```
+Schema: `archivedAt` is the ISO-8601 date of the archive commit, `sourceEpic` is
+the epic being closed, `sourceDir` is the original path (e.g. `pocs/blog` or
+`apps/myapp`). The retirement digest band and GC trigger read this stamp.
+
 > `--archive` preserves the code as browsable reference under `retired/` while
 > still tearing down all live Cloudflare resources, branches, and issues (Steps 4+).
 > Archive != keep-deployed — the Worker/D1/KV are deleted either way.
