@@ -127,12 +127,17 @@ Two ways:
 - **Manual (one-time):** `npx wrangler secret bulk secrets.json` (prod) /
   `… --env staging` (staging). `BETTER_AUTH_URL`/`BASE_URL` must be the **production
   domain** (not localhost). Pages secrets do NOT carry over — re-provide the values.
-- **Automatic (CI):** store the whole bundle as a GitHub **Environment** secret
-  `WORKER_SECRETS_JSON` (a JSON object of `{ "NAME": "value", … }`) under the
-  `production` and `staging` environments (env-scoped so each can hold the right
-  URLs). The reusable `deploy-app.yml` runs `wrangler secret bulk` from it on every
-  deploy (`--env staging` for non-prod). Omit it to manage secrets manually.
-  Automation can't invent values — they must live in that secret once.
+- **Automatic (CI):** store the whole bundle as a **repository-level** Actions secret
+  `WORKER_SECRETS_JSON` (a JSON object of `{ "NAME": "value", … }`). It MUST be
+  repo-level, NOT an Environment secret — the deploy job is reached via
+  `secrets: inherit` from caller jobs that declare no `environment:`, so an
+  Environment-scoped secret resolves EMPTY with no error and the Worker deploys
+  without secrets (#1094). The reusable `deploy-app.yml` runs `wrangler secret bulk`
+  from it on every deploy (`--env staging` for non-prod). Omit it to manage secrets
+  manually. If the app depends on the bundle, set `"secrets": { "required": true }`
+  in its `deploy.config.json` — an empty resolution then FAILS the deploy instead
+  of silently skipping. Automation can't invent values — they must live in that
+  secret once.
 
 ### Step 5: Routine deploys (staging)
 - **CI (preferred):** merge to `main` (or open a PR) → the caller runs the staging pipeline (#347).

@@ -100,13 +100,16 @@ jobs:
               echo "skip: apps/$app has no deploy.config.json (not opted in)"
               return
             fi
-            local su pu lp
+            local su pu lp rq
             su=$(jq -r '.stagingUrl // ""' "$cfg")
             pu=$(jq -r '.productionUrl // ""' "$cfg")
             lp=$(jq -r '.layerPackages // ""' "$cfg")
+            # secrets.required → the deploy fails loudly if WORKER_SECRETS_JSON
+            # resolves empty (the Environment-scoping trap, #1094)
+            rq=$(jq '.secrets.required // false' "$cfg")
             include=$(printf '%s' "$include" | jq \
-              --arg a "$app" --arg e "$env" --arg su "$su" --arg pu "$pu" --arg lp "$lp" \
-              '. + [{app:$a, environment:$e, stagingUrl:$su, productionUrl:$pu, layerPackages:$lp}]')
+              --arg a "$app" --arg e "$env" --arg su "$su" --arg pu "$pu" --arg lp "$lp" --argjson rq "$rq" \
+              '. + [{app:$a, environment:$e, stagingUrl:$su, productionUrl:$pu, layerPackages:$lp, requireWorkerSecrets:$rq}]')
           }
 
           if [ "$EVENT" = "workflow_dispatch" ]; then
@@ -175,4 +178,7 @@ jobs:
       # events have no such input, so this resolves false for them (and the gate
       # itself only fires on environment=production anyway).
       skip-staging-smoke: ${{ inputs.skip_staging_smoke || false }}
+      # From deploy.config.json secrets.required — fail loudly when the app expects
+      # a WORKER_SECRETS_JSON bundle but it resolves empty (mis-scoped, #1094).
+      require-worker-secrets: ${{ matrix.requireWorkerSecrets || false }}
     secrets: inherit
