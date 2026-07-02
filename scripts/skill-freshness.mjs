@@ -6,6 +6,8 @@
  *   node scripts/skill-freshness.mjs --pretty   # full per-skill breakdown
  *   node scripts/skill-freshness.mjs --json      # machine-readable, for the housekeeping band
  *   node scripts/skill-freshness.mjs --check     # exit 1 ONLY if a skill cites a VANISHED path
+ *   git diff --name-only base...HEAD | \
+ *     node scripts/skill-freshness.mjs --cite    # JSON: which skills cite the changed paths (WS4)
  *
  * The knowledge-skill library (#1073/#1091) is a set of dated snapshots dense with exactly the
  * facts that drift (versions, counts, ports, paths). WS1 gave each one a machine-parseable
@@ -212,10 +214,68 @@ export function computeSkillFreshness(opts = {}) {
 
 const hasIssues = (s) => s.vanished.length || s.possiblyStale.length || s.overdue
 
+/**
+ * Given a set of changed repo-relative paths (e.g. a PR's diff), return the stamped skills that
+ * CITE one of them — the input to the advisory PR signal (#1100 WS4). Deterministic, no git.
+ *
+ * A skill cites a changed file when one of its extracted path tokens either exactly equals the
+ * changed path (a FILE citation) or is a directory prefix of it (a DIR citation) — but a dir
+ * token must be ≥3 segments deep so broad tokens like `packages/` or `apps/` don't firehose
+ * every PR. File vs dir is inferred from the source extension (files carry one; dir citations
+ * don't).
+ * @param {string[]} changedPaths
+ * @param {{ root?: string, skillsDir?: string, today?: string }} [opts]
+ */
+export function computeCitingSkills(changedPaths, opts = {}) {
+  const root = opts.root || ROOT
+  const skillsDir = opts.skillsDir || join(root, '.claude/skills')
+  const today = opts.today || isoDay(new Date())
+  const changed = [...new Set(changedPaths.map((p) => p.trim()).filter(Boolean))]
+
+  const segs = (t) => t.replace(/\/+$/, '').split('/').length
+  const isDirToken = (t) => !EXT_RE.test(t.replace(/\/+$/, ''))
+  const matchesToken = (cp, tok) => {
+    const t = tok.replace(/\/+$/, '')
+    if (cp === t) return true
+    return isDirToken(tok) && segs(tok) >= 3 && cp.startsWith(t + '/')
+  }
+
+  const out = []
+  for (const { name, file } of discoverSkillFiles(skillsDir)) {
+    const text = readFileSync(file, 'utf8')
+    const stamp = parseStamp(text)
+    if (!stamp) continue // only provenance-stamped skills carry a re-verify contract
+    const tokens = extractCitedPaths(text)
+    const matched = changed.filter((cp) => tokens.some((tok) => matchesToken(cp, tok)))
+    if (matched.length) out.push({ name, stamp, ageDays: daysBetween(today, stamp), matched: matched.sort() })
+  }
+  return out.sort((a, b) => a.name.localeCompare(b.name))
+}
+
+/** Read newline-separated paths from stdin (for the `--cite` CI pipe). */
+function readStdinLines() {
+  try {
+    return readFileSync(0, 'utf8').split('\n').map((l) => l.trim()).filter(Boolean)
+  } catch {
+    return []
+  }
+}
+
 // ── CLI ───────────────────────────────────────────────────────────────────────
 const runDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
 if (runDirectly) {
   const argv = process.argv.slice(2)
+
+  // --cite: map changed paths (positional args, else newline-separated stdin) → citing skills.
+  // Emits JSON for the advisory PR workflow (#1100 WS4). No git; purely token-vs-path matching.
+  if (argv.includes('--cite')) {
+    const positional = argv.filter((a) => !a.startsWith('--'))
+    const changed = positional.length ? positional : readStdinLines()
+    const skills = computeCitingSkills(changed)
+    process.stdout.write(JSON.stringify({ today: isoDay(new Date()), changed: changed.length, skills }, null, 2) + '\n')
+    process.exit(0)
+  }
+
   const result = computeSkillFreshness()
   const { today, staleDays, shallow, summary, skills, malformed } = result
 
