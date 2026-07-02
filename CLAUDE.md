@@ -595,6 +595,7 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 | Agent | `.claude/agents/task-decomposer.md` | Recursive: LEAF TEST one issue → spawn a worker (leaf) or split into sub-issues + spawn a decomposer per child |
 | Agent | `.claude/agents/task-worker.md` | Implements one leaf issue on an isolated worktree branch → `pnpm typecheck` → `/commit` → PR (`Closes #NN`) |
 | MCP Server | `packages/crouton-mcp/` | AI collection generation |
+| MCP Server | `fallow-mcp` (root devDep, [fallow](https://docs.fallow.tools/)) | Deterministic codebase intelligence — `audit` / `dead_code` / `dupes` / `health` tools for dead code, duplication, complexity, and dependency hygiene. CLI: `npx fallow audit` (diff-scoped PR verdict), `npx fallow health --score`, `npx fallow dead-code`. Config: `.fallowrc.json` (root; `_archive`/`retired`/build output ignored). Prefer it over grep for "who imports this / is this export used / what's duplicated" (#1120) |
 | Themes | `packages/crouton-themes/` | Swappable UI themes |
 
 ### MCP Server Tools
@@ -609,7 +610,7 @@ Available: `KO` theme (hardware-inspired). Usage: `extends: ['@fyit/crouton-them
 
 When any task reveals repetitive work an MCP tool/resource/prompt could automate, capture with `/mcp-idea <description>` or add to `.claude/mcp-ideas.md`.
 
-MCP Servers: CLI MCP (`packages/crouton-mcp/`), Docs MCP (`docs/server/mcp/`)
+MCP Servers: CLI MCP (`packages/crouton-mcp/`), Docs MCP (`docs/server/mcp/`), Fallow MCP (`fallow-mcp` — codebase intelligence, #1120)
 
 ## Key Reminders
 

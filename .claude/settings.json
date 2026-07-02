@@ -56,6 +56,13 @@
     },
     "nuxt-ui": {
       "url": "https://ui.nuxt.com/mcp"
+    },
+    "fallow": {
+      "command": "pnpm",
+      "args": [
+        "exec",
+        "fallow-mcp"
+      ]
     }
   }
 }
