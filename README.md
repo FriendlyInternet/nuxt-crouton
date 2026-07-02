@@ -1,6 +1,6 @@
 # 🥖 Nuxt Crouton
 
-> Crispy, reusable CRUD layers for Nuxt 3 applications
+> Crispy, reusable CRUD layers for Nuxt 4 applications
 
 Nuxt Crouton is a collection of Nuxt Layers that provide instant CRUD functionality, multi-language support, and rich text editing for your Nuxt applications. Built as layers (not modules), they're simple, composable, and just work.
 
@@ -8,36 +8,36 @@ Nuxt Crouton is a collection of Nuxt Layers that provide instant CRUD functional
 
 ### Core
 
-#### [@fyit/crouton](./packages/nuxt-crouton)
+#### [@fyit/crouton](./packages/crouton)
 Base CRUD layer with essential components and composables for data management.
 
-#### [@fyit/crouton-cli](./packages/nuxt-crouton-cli)
+#### [@fyit/crouton-cli](./packages/crouton-cli)
 CLI tool to generate complete CRUD collections with API endpoints, components, and database schema.
 
 ### Addon Layers
 
-#### [@fyit/crouton-i18n](./packages/nuxt-crouton-i18n)
+#### [@fyit/crouton-i18n](./packages/crouton-i18n)
 Multi-language support extending the base layer with i18n capabilities.
 
-#### [@fyit/crouton-editor](./packages/nuxt-crouton-editor)
+#### [@fyit/crouton-editor](./packages/crouton-editor)
 Rich text editor integration extending the base layer with Tiptap.
 
-#### [@fyit/crouton-ai](./packages/nuxt-crouton-ai)
+#### [@fyit/crouton-ai](./packages/crouton-ai)
 AI integration layer with chat, completion, and multi-provider support (OpenAI, Anthropic).
 
-#### [@fyit/crouton-assets](./packages/nuxt-crouton-assets)
+#### [@fyit/crouton-assets](./packages/crouton-assets)
 Centralized asset management with NuxtHub blob storage integration.
 
-#### [@fyit/crouton-events](./packages/nuxt-crouton-events)
+#### [@fyit/crouton-events](./packages/crouton-events)
 Event management with calendar integration and scheduling capabilities.
 
-#### [@fyit/crouton-maps](./packages/nuxt-crouton-maps)
+#### [@fyit/crouton-maps](./packages/crouton-maps)
 Map integration with location fields and geocoding support.
 
-#### [@fyit/crouton-flow](./packages/nuxt-crouton-flow)
+#### [@fyit/crouton-flow](./packages/crouton-flow)
 Visual flow builder with drag-and-drop workflow creation.
 
-#### [@fyit/crouton-devtools](./packages/nuxt-crouton-devtools)
+#### [@fyit/crouton-devtools](./packages/crouton-devtools)
 Development tools and debugging utilities for Crouton applications.
 
 ## 🚀 Quick Start
@@ -215,7 +215,7 @@ cd nuxt-crouton
 pnpm install
 
 # Work on packages
-cd packages/nuxt-crouton
+cd packages/crouton
 ```
 
 ### Publishing

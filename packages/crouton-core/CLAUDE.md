@@ -8,14 +8,14 @@ Core CRUD layer for Nuxt applications. Provides composables, components, and ser
 
 ## Auto-Included Packages
 
-When you extend `nuxt-crouton`, you automatically get:
+When you extend `@fyit/crouton`, you automatically get:
 
 | Package | Provides | Routes |
 |---------|----------|--------|
 | `@nuxthub/core` | Database (D1/SQLite), KV storage, blob storage, multi-vendor support | None |
-| `nuxt-crouton-i18n` | Translation system (`useT`), DB-backed translations, team overrides | None |
-| `nuxt-crouton-auth` | Authentication, teams, sessions, OAuth, passkeys, 2FA | `/auth/*` |
-| `nuxt-crouton-admin` | Super admin dashboard, user/team management, impersonation | `/super-admin/*` |
+| `@fyit/crouton-i18n` | Translation system (`useT`), DB-backed translations, team overrides | None |
+| `@fyit/crouton-auth` | Authentication, teams, sessions, OAuth, passkeys, 2FA | `/auth/*` |
+| `@fyit/crouton-admin` | Super admin dashboard, user/team management, impersonation | `/super-admin/*` |
 
 **Order matters:** NuxtHub loads first (provides database), then i18n (provides translations), then auth (uses both), then admin (uses all).
 
@@ -364,7 +364,7 @@ Routes from child apps are automatically included in the parent's sidebar group.
 1. Team auth is now in `@crouton/auth` package
 2. Client-side: `useTeamContext()` in this package (gets teamId/teamSlug from route)
 3. Server-side: Import from `@crouton/auth/server` (e.g., `resolveTeamAndCheckMembership`)
-4. See `packages/nuxt-crouton-auth/CLAUDE.md` for server utilities
+4. See `packages/crouton-auth/CLAUDE.md` for server utilities
 
 ### Add collection config option
 1. Edit types in `app/composables/useCollections.ts`
@@ -373,7 +373,7 @@ Routes from child apps are automatically included in the parent's sidebar group.
 
 ## Dependencies
 
-- **Auto-includes**: `@nuxthub/core`, `@nuxt/ui`, `nuxt-crouton-i18n`, `nuxt-crouton-auth`, `nuxt-crouton-admin`
+- **Auto-includes**: `@nuxthub/core`, `@nuxt/ui`, `@fyit/crouton-i18n`, `@fyit/crouton-auth`, `@fyit/crouton-admin`
 - **Runtime deps**: `@libsql/client` (required for SQLite - pnpm doesn't hoist from layers)
 - **Required by**: App packages (e.g., `crouton-bookings`)
 - **Peer deps**: `nuxt ^4.0.0`
