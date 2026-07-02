@@ -42,8 +42,10 @@ mcp__github__list_issues    labels: ["epic"]      # scan epic titles for overlap
 ```
 
 Run a couple of phrasings — exact-title and broad-body — and include `state:closed` in at
-least one. `search_issues` output can be large; if it overflows, narrow the query or filter
-to titles rather than dumping everything.
+least one. **Keep results in-context:** these calls overflow easily (a bare `list_issues
+labels:["epic"]` came back at ~140k chars), so pass **`minimal_output: true`**, a small
+**`perPage` (5–10)**, and prefer **`in:title`** filters — only widen if a narrow query misses.
+If output still overflows, narrow further rather than slicing the blob out-of-band.
 
 ### 3. Surface the matches to the human (number · state · why-similar)
 

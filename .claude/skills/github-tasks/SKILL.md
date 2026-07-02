@@ -154,6 +154,8 @@ Issues, sub-issues, and labels are managed through the GitHub MCP tools:
 - Link a child under a parent: `mcp__github__sub_issue_write` (`method: add`, `issue_number` = parent, `sub_issue_id` = the child's **id** from its create response — not its number).
 - Read / list: `mcp__github__issue_read`, `mcp__github__list_issues`, `mcp__github__search_issues`.
 
+**Scan without overflowing the context.** A broad `list_issues` / `search_issues` (e.g. `labels: ["epic"]`, or a keyword search with no `in:title`) can return a 90k–140k-char blob that overflows the tool result and has to be sliced out-of-band — pure wasted turns. For any repo-wide scan (the dedup and epic walk-up steps are where this bites): pass **`minimal_output: true`**, keep **`perPage` small (5–10)**, and prefer **`in:title`** filters over broad body matches. Only widen when a narrow query genuinely misses.
+
 **Labels must already exist** before you can apply them — applying an unknown label errors. New labels are added via labels-as-code (below), not by the API.
 
 **Projects v2 boards can't be created or managed via these tools** (UI-only). Tell the user to create the board in the web/iOS app; if they enable the project's "Auto-add" workflow, issues you create land on the board automatically.
