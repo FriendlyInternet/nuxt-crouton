@@ -170,7 +170,7 @@ Do not trust "daily" labels; the truth is `on.schedule` + `.github/digests.yml`.
 | Workflow | Cron in file | Real cadence |
 |---|---|---|
 | `e2e.yml` | `0 4 * * *` | Nightly full-matrix backstop — genuinely daily |
-| `epic-digest.yml` | `0 5 * * *` | Daily (hard-codes its own cron; retrofit onto digests.yml is open follow-up #637) |
+| `epic-digest.yml` | `0 5 * * *` | Daily wake-up; real send day from `digests.yml` via `schedule.mjs` (retrofit #1139) |
 | `label-ready-epics.yml` | `0 5 * * *` | Daily (labels only when `vars.LABEL_READY_EPICS_APPLY` allows) |
 | `skills-digest.yml` | `0 5 * * *` | **Monthly (1st)** — cron is only a wake-up; `.github/digests.yml` `monthly:1` gates the send |
 | `housekeeping.yml` | `0 6 * * *` | Daily per digests.yml (`schedule: daily`) |
