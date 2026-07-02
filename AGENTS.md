@@ -78,7 +78,10 @@ reveal its own gaps; running the real thing next to the contract can.
 *We think that* if X then Y · *We'll do that by* … · *We'll be right if* … · *We'll know by* …
 
 **Record what you didn't do** — when alternatives were real, a `Considered & rejected` note
-(`option → ❌ why not`) stops future-us re-litigating it.
+(`option → ❌ why not`) stops future-us re-litigating it. That note is authoring-time; the calls made
+*mid-work* go in the epic's running **Decisions log** — one dated line (`decision → why → rejected`)
+appended *when the call is made*, **append-only so reversals stay visible** (a reversed decision gets a
+new line, never an edit — the reversal is the lesson, per *Observe the harness*). It's a habit, not a gate.
 
 **Two audiences**, in this order: **👤 humans** lead — plain language, what changed + why it matters
 (a diagram only if it clarifies); **🤖 agents** — scope, exact paths/symbols, behaviour, acceptance,
