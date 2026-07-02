@@ -117,7 +117,7 @@ Where docs disagree, trust order: see `crouton-docs-trust-map` §1.
 
 ## Provenance and maintenance
 
-verified: 2026-07-02
+verified: 2026-07-03
 
 ```bash
 node -e "const j=require('./package.json'); console.log(j.packageManager, JSON.stringify(j.pnpm.overrides,null,1))"  # pnpm pin + current override versions
