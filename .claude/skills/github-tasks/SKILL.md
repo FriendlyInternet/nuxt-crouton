@@ -150,7 +150,7 @@ GitHub issues slot into the repo's task-execution flow (see `CLAUDE.md`):
 3. **Branch + do the work** — work on a feature branch; follow `CLAUDE.md` patterns; run `pnpm typecheck`.
 4. **Commit** — use the `/commit` skill, referencing the issue in the body (e.g. `(#NN)`).
 5. **Open a PR** — early is fine. Put `Closes #NN` in the body so the issue auto-closes on merge. Let CI run and fix failures (the PR can be watched/autofixed).
-6. **Squash-merge** → the issue closes automatically and the branch is deleted. Don't push feature work straight to `main`.
+6. **Merge preserving commits** (merge/rebase — don't squash by default; squash only a noisy `wip`/`oops` history, per `AGENTS.md` § Commits → Merge policy) → the issue closes automatically and the branch is deleted. Don't push feature work straight to `main`.
 7. **Walk up the epic tree (REQUIRED — part of the merge, not an afterthought).** The moment the merge auto-closes the leaf issue, run the parent check in *"Closing a child? Always check the parent"* above. If that merge closed the epic's **last** open child, post the `## 🧪 Verify the whole thing` rollup on the epic, run the **`postmortem`** skill (retro + improvement proposals — see step 4 there), and **ask the owner to close it** (close on confirmation). A merge is not "done" until the parent epic is either closed or explicitly handed off for the verify + postmortem pass. When watching/auto-merging a PR, do this walk-up as soon as the merge lands.
 
 Work lands via **PRs**, not direct pushes to `main`. Issues are the source of truth for *what* to do; `docs/PROGRESS_TRACKER.md` (if used) becomes an optional phase-level rollup, not the per-task tracker.

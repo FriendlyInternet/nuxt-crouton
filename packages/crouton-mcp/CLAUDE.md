@@ -66,7 +66,7 @@ Hybrid Approach:
 
 ## Field Types
 
-These MUST match `packages/nuxt-crouton-cli/lib/utils/helpers.mjs`:
+The **live source of truth is manifest loading** — `getTypeMapping()` in `packages/crouton-cli/lib/utils/manifest-loader.ts` builds the map from every package's `crouton.manifest.ts` (core's types: `packages/crouton-core/crouton.manifest.ts`). The hardcoded table in `src/utils/field-types.ts` is a **fallback used only when manifest loading fails** — keep it consistent with the core manifest:
 
 | Type | Zod | TypeScript | Default |
 |------|-----|------------|---------|
@@ -196,7 +196,7 @@ pnpm dev
 ### Sync field types
 
 If field types change in generator:
-1. Update `src/utils/field-types.ts` to match `helpers.mjs`
+1. Update the owning package's `crouton.manifest.ts` (the live source), then mirror `src/utils/field-types.ts` (the fallback)
 2. Update Field Types table in this file
 3. Run `/sync-check` to verify all docs are in sync
 
@@ -220,7 +220,7 @@ npx @modelcontextprotocol/inspector node dist/index.js
 
 When modifying this package:
 
-- [ ] Field types match generator (`lib/utils/helpers.mjs`)
+- [ ] Fallback field types match the core manifest (`packages/crouton-core/crouton.manifest.ts`; check: `node scripts/validate-field-types-sync.mjs`)
 - [ ] Tool definitions documented above
 - [ ] Resource URIs documented above
 - [ ] Changes propagated to `.claude/skills/crouton.md` if workflow affected
