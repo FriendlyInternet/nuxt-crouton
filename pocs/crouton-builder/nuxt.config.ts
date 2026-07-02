@@ -10,7 +10,16 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  extends: ['@fyit/crouton-core', '@fyit/crouton-layout', '@fyit/crouton-i18n', './layers/builder'],
+  // crouton-flow (Site level) rides Vue Flow; extended here (not default-on). No
+  // flowId/sync used → no collab Durable Object binding needed (mirrors the demo POC).
+  extends: ['@fyit/crouton-core', '@fyit/crouton-layout', '@fyit/crouton-flow', '@fyit/crouton-i18n', './layers/builder'],
+
+  // View Transitions API — the graduated Page⇄Site morph (Replace: page-site-transition).
+  // Matching `view-transition-name` on the flow card + the board makes the card grow
+  // into the board and shrink back; replaces the POC's cross-fade stopgap.
+  experimental: {
+    viewTransition: true
+  },
   hub: {
     db: 'sqlite',
     kv: true
