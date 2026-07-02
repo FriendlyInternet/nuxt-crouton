@@ -192,7 +192,7 @@ export default defineNuxtConfig({
 ```
 
 ::callout{icon="i-lucide-info" color="blue"}
-**Additional Commands:** The CLI also provides `add`, `doctor`, `scaffold-app`, `seed-translations`, `db-pull`, `deploy-setup`, and `deploy-check` commands. See the [CLI Reference](/generation/cli-reference) for complete documentation of all available commands.
+**Additional Commands:** The CLI also provides `add`, `doctor`, `scaffold-app`, `seed-translations`, `db-pull`, and `deploy-check` commands. See the [CLI Reference](/generation/cli-reference) for complete documentation of all available commands.
 ::
 
 ## Rollback Commands
