@@ -44,7 +44,7 @@ Concrete local example: a staging preview deployed green but with an empty datab
 | Typecheck fixtures | `pnpm typecheck:fixtures` | The #197 generator-regression gate surface. |
 | Typecheck MCP | `pnpm typecheck:mcp` | = `pnpm --filter @fyit/crouton-mcp typecheck` (was a silent no-op with a stale filter name until fixed under [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098)). Stale-name inventory: `crouton-config-registry` § "Silent no-ops". |
 | MCP server tests | `pnpm --filter @fyit/crouton-mcp build && pnpm --filter @fyit/crouton-mcp test` | Build first — CI does (`ci.yml` mcp-server-tests job). |
-| Lint | `pnpm lint` / `pnpm lint:fix` | `eslint .` from root, `eslint.config.mjs`. **No CI workflow runs repo-wide `pnpm lint`**; `ci.yml`'s "Lint & Type Check" job is a misnomer — tracked as [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097) (§6). |
+| Lint | `pnpm lint` / `pnpm lint:fix` | `eslint .` from root, `eslint.config.mjs`. **No CI workflow runs repo-wide `pnpm lint`** (the misnamed "Lint & Type Check" job was renamed `typecheck-mcp` under [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097); CI still runs no eslint). |
 | Publish validation | `pnpm check:publint` · `pnpm check:attw` | Both target `./packages/crouton` only. |
 
 E2E environment realities (verified in `e2e/playwright.config.ts`):
@@ -134,7 +134,7 @@ Smaller items: `crouton-core` useCollectionQuery/useCollectionMutation logging t
 
 | Job | What it actually does | Gap vs the claim |
 |---|---|---|
-| `lint-and-typecheck` | Builds + typechecks **only `@fyit/crouton-mcp`** | **Misnomer**: runs no eslint and no app typecheck. Root CLAUDE.md's "EVERY change requires `pnpm typecheck`" is a **local/agent discipline, not a CI gate** — no workflow runs `pnpm typecheck` (apps); the only CI typecheck of app-shaped code is e2e.yml's regenerated-fixture typecheck (#197). Gate fix tracked as [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097); the `typecheck:mcp` script's stale filter was fixed under [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098). |
+| `typecheck-mcp` + `typecheck-apps` | MCP-server typecheck, and the full app sweep (`pnpm typecheck`) | Fixed under [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097): `typecheck-apps` builds the apps' workspace deps, `nuxt prepare`s each app, and runs the exact local sweep — root CLAUDE.md's "EVERY change requires `pnpm typecheck`" is now a CI gate too (was: `lint-and-typecheck`, MCP-only, no eslint — renamed since it overclaimed). e2e.yml's regenerated-fixture typecheck (#197) still covers fixtures; the `typecheck:mcp` script's stale filter was fixed under [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098). |
 | `build-fanfare` | Builds fanfare for `cloudflare-pages` + `node-server` presets | Fanfare **typecheck intentionally NOT gated** ("known pre-existing baseline of type errors" — comment in the job); the build is the smoke. |
 | `test` | `pnpm install --ignore-scripts` → builds `crouton-auth`/`crouton-core`/`crouton` → `npx nuxt prepare` in each `apps/*` → **`pnpm test`** | This is the real unit-test gate. Other suited packages (layout, cli…) run from source; the three builds are for dist-consumers. |
 | `mcp-server-tests` | Build then test `@fyit/crouton-mcp` | — |

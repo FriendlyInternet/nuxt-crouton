@@ -79,7 +79,7 @@ pnpm typecheck:fixtures     # same for fixtures/*
 Known deltas:
 
 - Root script `typecheck:mcp` was a silent no-op (stale package name, exited 0) until fixed under [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098) — it now runs `pnpm --filter @fyit/crouton-mcp typecheck`. The stale-name silent-no-op inventory is owned by sibling `crouton-config-registry` § "Silent no-ops".
-- CLAUDE.md says "EVERY change requires `pnpm typecheck`", but CI does **not** run the full app sweep — it typechecks only `@fyit/crouton-mcp` and build-smokes fanfare, whose typecheck is *intentionally ungated* ("known pre-existing baseline of type errors", comment in `ci.yml`). The gate gap is tracked as [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097). So the full-sweep rule is enforced by agent discipline, not CI. Trust order: AGENTS.md > root CLAUDE.md > CI reality; run the sweep yourself.
+- CLAUDE.md's "EVERY change requires `pnpm typecheck`" is CI-backed since [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097): `ci.yml`'s `typecheck-apps` job runs the exact local sweep on every packages/apps-touching PR (the old fanfare "pre-existing baseline of type errors" exemption is gone — it typechecks green). Still run the sweep locally before committing; CI is the backstop, not the loop.
 
 ## 5. Env vars
 
