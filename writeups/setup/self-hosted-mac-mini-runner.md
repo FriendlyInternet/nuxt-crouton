@@ -258,9 +258,11 @@ committed file.
 
 > **macOS portability (#654 / #610 WS4 audit):** `actions/create-github-app-token` and
 > `anthropics/claude-code-action@<pinned sha>` are Node actions → run fine on macOS
-> self-hosted. The deploy workflows currently `runs-on: ubuntu-latest`; `wrangler deploy`
-> itself is cross-platform Node, so it works from macOS — verify with the #654 test below
-> before flipping any deploy job's `runs-on`.
+> self-hosted. `wrangler deploy` is cross-platform Node and was **verified from macOS by
+> the #654 proof run**, after which the reusable `deploy-app.yml` was flipped to the
+> fork-guarded `AGENT_RUNNER` toggle — deploys now route to the mini too. One macOS gap
+> surfaced: hosted runners ship `jq`, a bare mac doesn't — `deploy-app.yml` self-heals
+> with an `Ensure jq` step (`brew install jq` when missing).
 
 ✅ **Checkpoint (#654 acceptance):**
 1. Route a cheap agent workflow to the runner (set repo var `AGENT_RUNNER=mac-mini`, run
@@ -437,6 +439,7 @@ Every workflow carrying `vars.AGENT_RUNNER`, its trigger, and why it's safe to r
 | `close-epic-on-comment.yml` | `issue_comment` | label-gated (`epic` + `status:ready-to-close` — labels need triage perms) + non-bot |
 | `resume-on-comment.yml` | `issue_comment` | label-gated (`status:blocked`); executes repo code only — a drive-by `lgtm` can resume a pipeline (accepted risk, same as GitHub-hosted; comment bodies handled via github-script) |
 | `decompose-on-issue.yml` / `-pidev.yml` | `issues` labeled `delegate`(-`pi`) / dispatch | applying labels needs triage perms |
+| `deploy-app.yml` (reusable — the deploy job all `deploy-*` callers share) | `workflow_call` from push-to-main / `workflow_dispatch` callers, plus `deploy-pocs.yml` on `pull_request` of `pocs/**` | **fork-guarded `runs-on`** (policy §3) — the only fork-reachable path (a fork PR touching `pocs/**`) routes back to `ubuntu-latest`; fork PRs also receive no secrets |
 | `fix-ci-on-failure.yml` | `workflow_run` of CI/E2E | head-branch allowlist (`claude/issue-*`) + `workflow_run` executes trunk code |
 | `a11y-daily(-pidev).yml`, `red-team-daily.yml`, `gate-smoke.yml`, `eval-scoreboard.yml`, `loop-station-advisor.yml`, `sync-changelogs.yml`, `unlighthouse.yml` | `schedule` / `workflow_dispatch` | maintainer-initiated only |
 | `mac-mini-smoke.yml` | `workflow_dispatch` | maintainer-initiated (hardcoded to the box by design) |
