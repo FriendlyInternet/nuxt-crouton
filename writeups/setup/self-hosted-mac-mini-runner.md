@@ -231,6 +231,22 @@ wrangler --version
 > rescues the direct `gh`/`wrangler` calls. (Re-run the `echo "$PATH" > .path` if you later
 > change the nvm default node version, since that dir is version-stamped.)
 
+> ⚠️ **GOTCHA — a hard-killed `claude-code-action` job can poison that runner's action
+> cache.** Found during the #658 proof run: after a `claude-code-action` session was killed
+> by `timeout-minutes` mid-work, every subsequent claude-code-action job **on that same
+> runner** crashed in ~30 s during action startup with bun's
+> `Internal error: directory mismatch for directory ".../claude-code-action/.../tsconfig.json"`
+> — before the agent even started (the loop-station trace shows `0 events`). Re-runs don't
+> help (the scheduler keeps handing the job to the same idle runner). Fix is on-box: clear
+> that runner's cached copy of the action and kick the service —
+> ```bash
+> # 🖥️ MINI — <N> is the affected runner's dir (plain ~/actions-runner for the first)
+> rm -rf ~/actions-runner/_work/_actions/anthropics
+> cd ~/actions-runner && ./svc.sh stop && ./svc.sh start
+> ```
+> The action re-downloads clean on the next job. (Hosted runners never hit this — they're
+> ephemeral; a persistent self-hosted `_work` is what lets the corruption stick.)
+
 ### 2b. Secrets
 
 ⚙️ **GITHUB (repo settings)** — nothing to run on the mini here. **GitHub repo secrets are
