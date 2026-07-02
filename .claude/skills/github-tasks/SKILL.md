@@ -129,12 +129,13 @@ Don't stop at the issue you were asked about; closing the leaf without checking 
 
 ## Core rules
 
-1. **Every issue maps to a package or an app — never "root".** If it feels like root-level work (CI, deploy, ops), label it with the **app it serves** (e.g. CI that builds fanfare → `app:fanfare`). There is deliberately no `root` label.
+1. **Every issue maps to a package or an app — never "root".** If it feels like root-level work (CI, deploy, ops), label it with the **app it serves** (e.g. CI that builds fanfare → `app:fanfare`). Harness / method work that serves the *whole* monorepo rather than one app — `.claude/**`, `AGENTS.md`, skill/agent/hook changes — maps to **`meta:agents`** (see rule 3). There is deliberately no `root` label.
 2. **Exactly one `type:*` label** per issue — except an **epic**, which carries `epic` instead of a type.
 3. **Component label = where the source actually changes** (mirrors the commit-scope convention):
    - `pkg:<name>` for package source (`packages/*`, e.g. `pkg:crouton-sales`)
    - `app:<name>` for app/deployment/ops work (`apps/*`, e.g. `app:fanfare`)
    - `worker:<name>` for `workers/*`
+   - **`meta:agents`** for **harness / method** work with no single app or package owner — `.claude/**` (skills, agents, hooks), `AGENTS.md`, and cross-cutting method changes. This *is* the component for that work: it serves the whole monorepo, so it satisfies rule 1's "never root" rather than being an exception to it.
    - Package work that also lands a schema/config change in an app gets **both** (e.g. `pkg:crouton-sales` + `app:fanfare`).
 4. Use meta labels where they apply: `epic`, `spike`, `needs-triage`.
 5. **Link issues & PRs when talking to the user.** Any time you mention an issue/PR in a chat reply, render it as a clickable link to the full URL (`[#303](https://github.com/FriendlyInternet/nuxt-crouton/issues/303)`, `[#376](https://github.com/FriendlyInternet/nuxt-crouton/pull/376)`) so the owner can open it in one click. This is a **chat-reply** convention only — commit messages keep bare `(#NN)`, and PR bodies use `Closes #NN` (not a URL) so GitHub auto-closes the issue on merge.
@@ -185,4 +186,5 @@ Work lands via **PRs**, not direct pushes to `main`. Issues are the source of tr
 | Feature touching a package + app schema/config | `type:feat` `pkg:<name>` `app:<name>` |
 | App/deployment/ops/CI work | `type:chore`/`type:docs` `app:<name>` |
 | Cross-cutting initiative | `epic` `pkg:<name>` (+ `app:<name>`) |
+| Harness / skill / agent / method change (`.claude/**`, `AGENTS.md`) | `type:docs`/`type:chore` `meta:agents` (+ `epic` if an epic) |
 | Time-boxed proof-of-concept | `spike` `type:feat` `<component>` |
