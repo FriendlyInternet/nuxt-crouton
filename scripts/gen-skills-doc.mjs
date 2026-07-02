@@ -73,9 +73,7 @@ export const META = {
   'crouton-validation-reality': { group: 'knowledge', triggers: ['ask'] },
   'crouton-config-registry': { group: 'knowledge', triggers: ['ask'] },
   'crouton-docs-trust-map': { group: 'knowledge', triggers: ['ask'] },
-  'crouton-graduation-campaign': { group: 'knowledge', triggers: ['ask'] },
   'crouton-harness-observability': { group: 'knowledge', triggers: ['ask'] },
-  'crouton-research-frontier': { group: 'knowledge', triggers: ['ask'] }
 }
 
 export const GROUPS = [
