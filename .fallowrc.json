@@ -2,7 +2,56 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
     "src/index.{ts,tsx,js,jsx}",
-    "src/main.{ts,tsx,js,jsx}"
+    "src/main.{ts,tsx,js,jsx}",
+    // Nitro file-based routing — every file IS a route, incl. inside generated layers
+    "**/server/api/**/*.ts",
+    "**/server/routes/**/*.ts",
+    "**/server/plugins/**/*.ts",
+    "**/server/middleware/**/*.ts",
+    // Generated collection components: auto-registered (BookingsBookingsList) and
+    // resolved dynamically via the croutonCollections registry — invisible statically
+    "**/layers/**/app/components/**/*.vue",
+    // Loaded by crouton-core's nuxt.config at build time (join(process.cwd(), ...))
+    "**/crouton.config.js",
+    // Referenced from nuxt.config `css:` arrays, not imports
+    "**/app/assets/css/**",
+    // Standalone executables invoked by CI/humans, not imported
+    "scripts/**/*.mjs",
+    // Nuxt module runtime dirs are injected via @nuxt/kit resolver paths
+    "packages/*/src/runtime/**",
+    // Nuxt conventions: file-based page routes, app.config, Nitro server/utils auto-imports
+    "**/app/pages/**/*.vue",
+    "**/app/app.config.ts",
+    "**/server/utils/**/*.ts",
+    // Loaded dynamically by crouton-core at boot ("Loaded N package manifests")
+    "**/crouton.manifest.ts",
+    // Tool-convention entries: unbuild config, Nuxt module source (dist is what's imported)
+    "**/build.config.ts",
+    "packages/*/module.ts",
+    // Executables + the lib files bin/crouton-generate.js spawns via path, not import
+    "packages/*/bin/**",
+    "packages/crouton-cli/lib/**",
+    // Opt-in theme layers — everything inside is reachable once an app extends the theme
+    "packages/crouton-themes/**",
+    // More Nuxt conventions: layouts (used by name via NuxtLayout), priority-stub dirs
+    "**/app/layouts/**/*.vue",
+    "**/app/stubs/**",
+    // @nuxtjs/mcp-toolkit auto-discovers server/mcp/{tools,resources,prompts} from all layers
+    "**/server/mcp/**",
+    // Drizzle schemas + seeds: consumed by migration tooling and dynamic seed endpoints
+    "**/server/db/**",
+    "**/server/database/**",
+    // Module entries, Cloudflare Durable Objects (wrangler entry), injected devtools assets
+    "packages/*/module.mjs",
+    "**/durable-objects/**",
+    "packages/crouton-collab/worker-template/**",
+    "packages/crouton-devtools/eruda/**",
+    // Root-level tool configs (changelogithub, harness stage model) + docs scripts
+    "*.config.{js,mjs,ts}",
+    "docs/scripts/**",
+    // Package test harnesses incl. mocks wired via vitest config aliases
+    "packages/*/tests/**",
+    "pocs/*/scripts/**"
   ],
   "workspaces": {
     "packages": [
@@ -21,7 +70,13 @@
     "retired/**",
     "**/.nuxt/**",
     "**/.output/**",
-    "**/dist/**"
+    "**/dist/**",
+    // Dev/harness assets — not reachable from any app graph by design
+    "**/playground/**",
+    "**/e2e-templates/**",
+    "packages/*/examples/**",
+    // Internal notes/prototypes, not part of any code graph
+    "writeups/**"
   ],
   "duplicates": {
     // Hide pair-only clones; focus on widespread copy-paste
