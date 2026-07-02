@@ -418,7 +418,7 @@
           <tr>
             <td><strong>3 · pre-prod</strong><br/><span class="tag">confidence gate · manual</span></td>
             <td>before <span class="mono">workflow_dispatch</span> env=production</td>
-            <td><span class="mono">/deploy-production</span> skill pre-flight: change verified on staging, prod secrets set, never seeded. Production is <strong>only</strong> reachable via the deliberate dispatch (#318) — never a push side effect.</td>
+            <td>CI-enforced staging smoke (#1107): the production dispatch first runs <span class="mono">smoke-deployed.mjs</span> against the app's <strong>live staging URL</strong> and refuses to deploy while it's red (escape hatch: <span class="mono">skip_staging_smoke=true</span>, loud warning) · <span class="mono">/deploy-production</span> skill pre-flight: prod secrets set, never seeded. Production is <strong>only</strong> reachable via the deliberate dispatch (#318) — never a push side effect.</td>
             <td>Nothing un-soaked reaches <span class="mono">*.friendlyinter.net</span>. The click stays human; the gate makes it informed.</td>
           </tr>
         </tbody>
@@ -437,9 +437,9 @@
         <h3>Post-merge smoke failures are loud (#1106)</h3>
         <p>On merge→<span class="mono">main</span> a failing deployed smoke <strong>fails the run by default</strong> (a smoke "fail" is always a real broken deploy — skipped checks pass), so <span class="mono">report-failed-deploy.yml</span> opens an issue instead of the break vanishing as a buried <span class="mono">::warning::</span>. PR previews stay report-only unless the app sets <span class="mono">smoke.required</span>; a known-brittle app opts out of the main gate with <span class="mono">smoke.gateOnMain: false</span>.</p>
       </div>
-      <div class="callout warn">
-        <h3>Gap → #1107: the prod pre-flight is honour-system</h3>
-        <p>Rung 3 lives in a skill's checklist, not CI — a production dispatch runs zero checks against the current staging. #1107 adds the seatbelt: smoke the live staging URL first and refuse to deploy prod while it's red (with a loud, explicit escape hatch).</p>
+      <div class="callout good">
+        <h3>The prod click is CI-gated (#1107)</h3>
+        <p>A production dispatch first smokes the app's <strong>live staging URL</strong> (reusing the deterministic <span class="mono">review+&lt;app&gt;-main@…</span> login the last push-to-main seeded) and hard-fails before any build if staging is red. The click stays human (#318); the escape hatch (<span class="mono">skip_staging_smoke=true</span>) exists for "staging is down, prod needs a hotfix" and carries a loud warning.</p>
       </div>
     </div>
   </section>

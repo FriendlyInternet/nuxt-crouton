@@ -27,7 +27,13 @@ happen by accident or as a side effect of an agent flow.
 ## Pre-flight (confirm before deploying)
 
 1. **The change is already on staging and verified there.** Deploy to production only
-   what staging has proven — never straight to prod.
+   what staging has proven — never straight to prod. **CI enforces this** (#1107, the
+   Rung 3 confidence gate): the production dispatch first smokes the app's live staging
+   URL and **refuses to deploy while it's red**. Staging red → fix staging (merge to
+   `main` redeploys it), see the smoke go green, re-dispatch. Genuine emergency with
+   staging itself down → re-dispatch with `skip_staging_smoke=true` (loud warning on
+   the run; never routine). The gate applies to the CI path — a local `cf:deploy`
+   bypasses it, so hold yourself to the same bar there.
 2. **App is Workers-ready** — same checks as `/deploy` Step 2 (the shared mechanics live
    in that skill; don't duplicate them).
 3. **Production Worker secrets are set** — `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` = the
