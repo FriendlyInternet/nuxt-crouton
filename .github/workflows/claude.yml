@@ -34,14 +34,16 @@ jobs:
         with:
           fetch-depth: 1
 
-      # Pinned to commit with Claude Code 2.1.100 — fixes bun "directory mismatch" crash in 2.1.98 (v1.0.92)
-      # TODO: revert to @v1 once v1.0.93+ is released
+      # Pinned to v1.0.162 (Claude Code 2.1.198). Re-pinned from v1.0.92 during the #658
+      # proof run: a timeout-killed session poisoned the old pin's per-runner action cache
+      # (runbook §2a) — a NEW ref also means a fresh `_work/_actions` directory on every
+      # runner, which is the no-SSH recovery path. Keep every workflow's pin in sync.
       # --allowedTools: tag-mode (@claude) defaults to a read+git-commit-only grant (no
       # Write/Edit/general Bash), so a mention asking for a real code change silently can't
       # make one (#658 proof-run finding). Grant the same working set the other agent
       # workflows use (gate-smoke.yml precedent); the actor gate (write access) still
       # bounds who can invoke, and the action keeps WebSearch/WebFetch disallowed.
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_args: "--max-turns 25 --allowedTools Bash,Write,Edit,Read,Grep,Glob"

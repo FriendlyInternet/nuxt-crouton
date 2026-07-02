@@ -75,7 +75,7 @@ jobs:
       # Same engine + allowlist as the real gate workflows (#834's fix) — the
       # smoke MUST use the identical permission grant, or it isn't testing
       # the thing that shipped fail-open.
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         continue-on-error: true
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
