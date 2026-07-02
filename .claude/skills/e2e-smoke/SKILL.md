@@ -33,6 +33,11 @@ pages/editor code.
 | `minimal` | core + auth + i18n, one `items` collection | crouton-core, crouton-auth, crouton-i18n, generator core, generic CRUD |
 | `with-pages` | + `@fyit/crouton-pages` → transitively `@fyit/crouton-editor`; surface = pages workspace (mounts `CroutonEditorBlocks` → the real tiptap editor) | crouton-pages, **crouton-editor**, tiptap deps |
 | `with-bookings` | + `@fyit/crouton-bookings` (locations/settings/slots); surface = bookings admin | crouton-bookings, heavy domain-package scaffolding |
+| `with-assets` | + `@fyit/crouton-assets`; surface = the optional `CroutonAssetsPicker` mounts (not the core stub) | crouton-assets, the stub/`hasApp` system |
+| `with-collab` | + `@fyit/crouton-collab`; surface = realtime collab UI mounts single-client (spike) | crouton-collab |
+| `with-maps` | + `@fyit/crouton-maps`; a `venues` collection with address+coordinate fields — MapLibre map mounts in the generated form, `/api/maps/geocode` proxies live Nominatim | crouton-maps |
+| `with-sales` | + `@fyit/crouton-sales` + `@fyit/crouton-printing`; two-tier POS smoke — order placed, print job pending→done against an in-test fake `:9100` ESC/POS printer | crouton-sales, crouton-printing |
+| `with-devtools` | + `@fyit/crouton-devtools` + `@fyit/crouton-feedback`; surface = the feedback "glasses" launcher mounts via devtools `installModule` | crouton-devtools, crouton-feedback |
 
 If unsure which fixture covers the change, grep the fixtures for the affected
 component/package (`grep -rl '<Component>' fixtures/`) before guessing. If none
@@ -95,7 +100,7 @@ pnpm test:e2e
 ```
 
 - The config's `webServer` boots `pnpm --filter e2e-fixture-<name> dev` on `:3000`, or **reuses a server already running there** (so if a dev server is up on 3000, kill it or expect it to be reused).
-- First run is slow: cold `nuxt dev` compiles routes/auth-modal on demand (timeouts are deliberately ~30s). Don't lower them; give the run up to ~3 min before suspecting a hang.
+- First run is slow: cold `nuxt dev` compiles routes/auth-modal on demand (timeouts are deliberately high — 240s per test / 30s per expect / 180s webServer boot; `e2e/playwright.config.ts`). Don't lower them; give the run several minutes before suspecting a hang.
 - Run in the background if it's long, and report when it returns.
 
 ## Faster runs (the cold-compile tax)

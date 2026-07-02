@@ -2,7 +2,7 @@
   "name": "nuxt-crouton-workspace",
   "version": "1.0.0",
   "private": true,
-  "description": "Nuxt Crouton - Reusable CRUD layers for Nuxt 3",
+  "description": "Nuxt Crouton - Reusable CRUD layers for Nuxt 4",
   "keywords": [
     "nuxt",
     "nuxt-layer",
