@@ -1,7 +1,7 @@
 # Self-Hosted Mac mini GitHub Actions Runner — Runbook
 
 **Date:** 2026-06-25
-**Status:** Active setup runbook (epic #610 / #669 — WS1/WS2/WS5)
+**Status:** Active setup runbook (epic #610 / #669 — WS1/WS2/WS4/WS5)
 **Purpose:** Stand up the Mac mini at home as an **always-on GitHub Actions self-hosted
 runner**, so the agent + deploy workflows run on our own hardware (no metered
 GitHub-hosted minutes, full control) and survive reboots, sleep, and network blips.
@@ -279,9 +279,8 @@ already read a toggle: `runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}`. A
 *not* Secrets) to send those jobs to the mini; delete the variable to fall back to
 GitHub-hosted. One variable, reversible — no workflow edits needed.
 
-> This runbook covers WS1/WS2/WS5 (register + provision + keep-alive). Wiring *more*
-> workflows to the toggle, and the fork-PR security policy (WS4), are tracked separately
-> in #610 — don't broaden `runs-on` to untrusted-triggered workflows without that policy.
+> Wiring *more* workflows to the toggle must respect the security policy in **§5** —
+> don't broaden `runs-on` to untrusted-triggered workflows without reading it first.
 
 ---
 
@@ -383,6 +382,79 @@ tail -f ~/Library/Logs/runner-watchdog.log                            # watch it
    (GitHub's runner has built-in reconnect; the watchdog's step 3 also catches a wedge).
 3. **`kill` the runner process** → KeepAlive (or, within 5 min, the watchdog) restarts it.
    `kill $(pgrep -f Runner.Listener)` then watch `./svc.sh status` / the watchdog log.
+
+---
+
+## 5. Security — a self-hosted runner on a PUBLIC repo (#656 — WS4)
+
+`nuxt-crouton` is public. A self-hosted runner that executes **untrusted fork-PR code** is
+the classic GitHub Actions footgun: the job runs arbitrary code from the PR head on *our*
+hardware, on a box that holds repo-write-capable creds and an LLM agent with `bash`.
+Reference: GitHub's [self-hosted runner hardening](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners#self-hosted-runner-security).
+
+### The policy
+
+1. **Fork / untrusted PR CI stays on GitHub-hosted, always.** `ci.yml` and `e2e.yml` are
+   hardcoded `ubuntu-latest` and do **not** read the `AGENT_RUNNER` toggle — keep it that way.
+2. **Only trusted-event jobs may route to `mac-mini`.** A workflow may carry the
+   `AGENT_RUNNER` toggle only if every path to it is one of:
+   - a **maintainer-initiated** event (`workflow_dispatch`, `schedule`, `workflow_run` of
+     trunk workflows), or
+   - an **actor/label-gated** event (`issue_comment` / `issues` guarded on
+     `author_association` or a collaborators-only label), or
+   - a `pull_request` event whose `runs-on` expression **routes fork heads back to
+     `ubuntu-latest`** (see below).
+3. **Fork PRs never execute on the box — structurally, not by convention.** The
+   `pull_request`-triggered toggled workflows use the fork-guarded expression, so even
+   with `AGENT_RUNNER=mac-mini` set a fork PR runs GitHub-hosted:
+   ```yaml
+   runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
+   ```
+   (For non-PR events `github.event.pull_request` is empty → falls through to the normal
+   toggle. Same shape as #347's "a push event can never set environment=production".)
+4. **Never use `pull_request_target` on a workflow that can reach `mac-mini`.** It hands
+   fork PRs a secrets-bearing context; combined with a self-hosted runner it's the worst
+   case. No workflow in the repo uses it today — keep it that way.
+5. **Comment bodies are untrusted input** even on actor-gated workflows: handle them in
+   `actions/github-script` (JS values), never interpolate `${{ github.event.comment.body }}`
+   into a `run:` shell line.
+6. **Considered & rejected:** allowing fork PRs on the mini behind a label gate →
+   ❌ one mislabel = arbitrary code on our box; not worth it (#656).
+
+### Audit of the toggled workflows (2026-07-02)
+
+Every workflow carrying `vars.AGENT_RUNNER`, its trigger, and why it's safe to route:
+
+| Workflow | Trigger | Trust gate |
+|---|---|---|
+| `a11y.yml`, `frontend-review.yml`, `red-team.yml` | `pull_request` (checks out + agents over PR code) | **fork-guarded `runs-on`** (policy §3) |
+| `schedule-waves.yml` | `issues`/`pull_request` closed | runs repo code only; fork-guarded `runs-on` as belt-and-braces |
+| `claude.yml` | `@claude` mention in issues/comments | `claude-code-action` validates the actor has **write** access before acting |
+| `comment-dispatch.yml` | `issue_comment` | `author_association` OWNER/MEMBER/COLLABORATOR |
+| `close-epic-on-comment.yml` | `issue_comment` | label-gated (`epic` + `status:ready-to-close` — labels need triage perms) + non-bot |
+| `resume-on-comment.yml` | `issue_comment` | label-gated (`status:blocked`); executes repo code only — a drive-by `lgtm` can resume a pipeline (accepted risk, same as GitHub-hosted; comment bodies handled via github-script) |
+| `decompose-on-issue.yml` / `-pidev.yml` | `issues` labeled `delegate`(-`pi`) / dispatch | applying labels needs triage perms |
+| `fix-ci-on-failure.yml` | `workflow_run` of CI/E2E | head-branch allowlist (`claude/issue-*`) + `workflow_run` executes trunk code |
+| `a11y-daily(-pidev).yml`, `red-team-daily.yml`, `gate-smoke.yml`, `eval-scoreboard.yml`, `loop-station-advisor.yml`, `sync-changelogs.yml`, `unlighthouse.yml` | `schedule` / `workflow_dispatch` | maintainer-initiated only |
+| `mac-mini-smoke.yml` | `workflow_dispatch` | maintainer-initiated (hardcoded to the box by design) |
+
+**When adding the toggle to a new workflow**, re-run this reasoning: which events can reach
+the job, who can fire them, and does the job ever check out non-trunk code? If any path is
+fork/drive-by reachable, add the fork guard or an actor gate first.
+
+### Repo settings + box hardening (⚙️ GITHUB / 🖥️ MINI — human steps)
+
+- [ ] ⚙️ **GITHUB (repo settings)** → Settings → Actions → General → *Fork pull request
+  workflows*: set **"Require approval for all outside collaborators"** (or stricter,
+  "Require approval for all external contributors"). This is defense-in-depth on top of the
+  structural guard — a fork PR then needs a human click before *any* workflow runs.
+- [ ] 🖥️ **MINI** — run the runner as a **dedicated, low-privilege macOS user** (not your
+  admin account): no sudo, no keychain full of personal creds, no SSH keys beyond what the
+  runner needs. The only standing secrets on the box are the watchdog's optional
+  `~/.runner-watchdog.env` (§4c); job secrets are injected by GitHub at runtime (§2b).
+- Network note: the runner only makes **outbound** connections (long-poll to GitHub) — no
+  inbound ports to firewall. Egress is unrestricted by default; if you later want to cap
+  what agent jobs can reach, that's an outbound-proxy/PF exercise, tracked separately.
 
 ---
 
