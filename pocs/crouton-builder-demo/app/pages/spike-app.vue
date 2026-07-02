@@ -32,6 +32,7 @@ import type { ComposePiece } from '@fyit/crouton-layout/app/composables/useCrout
 import type { PageStatus, PageVisibility, PageLayout } from '~/utils/spike-page-meta'
 import SpikeBlockNode from '~/components/SpikeBlockNode.vue'
 import SpikePageCard from '~/components/SpikePageCard.vue'
+import SpecWalkPanel from '~/components/SpecWalkPanel.vue'
 
 useHead({ title: 'Spike · app on Vue Flow' })
 // Iteration changelog / decision log (#940, #1048): the version timeline now lives in the shared
@@ -1189,6 +1190,10 @@ function exitToPages() {
       :label="currentPage?.label ?? currentPageLabel"
       @close="previewOpen = false"
     />
+
+    <!-- Reconcile/verify walk (#1039) — mounted here (not app.vue) because the page reliably
+         renders; opened from the feedback launcher's "Spec walk" tool. -->
+    <SpecWalkPanel />
   </div>
 </template>
 

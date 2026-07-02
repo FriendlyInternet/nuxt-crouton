@@ -1,0 +1,33 @@
+{
+  "table": "builder_bookings",
+  "key": null,
+  "rows": [
+    {
+      "venue": "Sample venue 1",
+      "date": 1783023697,
+      "fee": 1,
+      "status": {
+        "value": "confirmed",
+        "label": "Confirmed"
+      }
+    },
+    {
+      "venue": "Sample venue 2",
+      "date": 1782937297,
+      "fee": 2,
+      "status": {
+        "value": "cancelled",
+        "label": "Cancelled"
+      }
+    },
+    {
+      "venue": "Sample venue 3",
+      "date": 1782850897,
+      "fee": 3,
+      "status": {
+        "value": "pending",
+        "label": "Pending"
+      }
+    }
+  ]
+}

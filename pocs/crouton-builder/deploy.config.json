@@ -1,0 +1,4 @@
+{
+  "stagingUrl": "https://crouton-builder.pmcp.dev",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton @fyit/crouton-feedback @fyit/crouton-layout"
+}

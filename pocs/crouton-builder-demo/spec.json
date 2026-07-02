@@ -1,0 +1,329 @@
+[
+  {
+    "id": "site-page-two-level",
+    "behaviour": "Two levels on one screen: a Site flow (pages as a wireable sitemap) and a Page board (compose blocks). You land on the Site.",
+    "when": "open the builder",
+    "expect": "a CroutonFlow canvas of page cards (lines = parentId); tapping a card (or ⤢ / double-click) opens that page's board; 'Pages ←' returns to the flow",
+    "hook": "",
+    "howToTest": "1. open /spike-app → see the Site flow of page cards  2. tap a card → its LayoutTree loads onto the board  3. tap 'Pages ←' → back to the flow",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "port the board into the old zoom shell → ❌ added Site as a level on top of the polished board instead (Decision B)"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "page-model-one-node",
+    "behaviour": "The board holds many layout candidates + loose drafts, but exactly one node is 'the page' (★-badged) — the live layout a user would see.",
+    "when": "on a page board with several nodes",
+    "expect": "one node carries the ★ page badge; 'Set as page' promotes another; 'Duplicate' clones one as a free draft; a merge involving the page always consumes (the badge survives)",
+    "hook": "page-badge",
+    "howToTest": "1. open a board with 2+ nodes → exactly one shows the ★ badge  2. Set as page on another → badge moves  3. merge the page into another node → the result keeps the ★ badge",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "focus-edit-view",
+    "behaviour": "Editing a layout opens a dedicated full-screen edit VIEW, not a Vue Flow camera zoom (the camera zoom raced VF's re-measure and framed off-screen).",
+    "when": "double-click a layout node",
+    "expect": "a full-screen overlay hosting the breakpoint author (min-width ruler, device buttons, width slider, per-block variants, splitter drags); 'Done' returns; the node's layout persists via the page's zoomTree",
+    "hook": "",
+    "howToTest": "1. double-click a composed node → full-screen edit view opens (no camera wobble)  2. drag a splitter → keypoint sizes change  3. Done → returns, changes persisted",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "camera zoom onto the node → ❌ VF re-measure race framed the 2nd node off-screen at mobile width"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "per-element-resize",
+    "behaviour": "Responsiveness is per-element, not global — each card has a corner resize handle and renders responsively at the set width (the old board-wide responsive slider is gone).",
+    "when": "a node is selected",
+    "expect": "a corner handle sets the node width/height; once a width is set the card switches to a read-only responsive preview (splitter drags then resize the card, not its panes); opening edit lands at that width",
+    "hook": "",
+    "howToTest": "1. select a card → corner handle appears  2. drag it narrower → the card's content reflows responsively  3. open edit → lands at the resized width",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "global board-wide responsive slider → ❌ replaced by per-element width"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "intrinsic-block-sizing",
+    "behaviour": "A component decides its own size as declared data: each block carries sizing {width,height: fill|hug}. hug = size to content. A Top bar / Bottom nav declare height:hug, so a pinned bar comes out as a short pill — no per-instance size UI.",
+    "when": "place a hug-height block (e.g. Top bar) vs a fill block (List/Form/Chart)",
+    "expect": "the hug block renders short (content height); the fill block stretches; a card can't be resized below its hard floor",
+    "hook": "floor-readout",
+    "howToTest": "1. add a Top bar block → it renders as a short pill (declares height:hug)  2. add a List → it fills  3. try to resize a card below its floor → it won't go (floor readout shows 'stacks <Npx · floor Mpx')",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "per-instance align/size panel → ❌ the component decides, not the instance"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "composite-derive-sizing",
+    "behaviour": "Composites DERIVE their rules from children, component-driven all the way up: a split/nested layout publishes the same contract its leaves do, folded bottom-up by deriveSizing (hard floor = widest leaf; soft floor = sum across a row / max across a column).",
+    "when": "select a composed (multi-pane) card",
+    "expect": "the card shows a derived floor readout; the per-element resize can't drag it below its hard floor (a layout can't violate its components' rules)",
+    "hook": "floor-readout",
+    "howToTest": "1. compose a 2-pane row → select it  2. read the derived floor (hard = widest leaf, soft = sum)  3. resize down → stops at the hard floor",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "manual min/max override on a composite → ❌ deferred; risks reintroducing per-instance flex — revisit after graduation if derived floors prove insufficient"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "page-regions-pin",
+    "behaviour": "A node can be pinned to the page's top/bottom edge (a sticky pill/bar) from its toolbar — the first bounded-vocabulary expressiveness feature. Region is a bounded enum (top|bottom|main), agent-pickable, serialisable. No free-floating positioning.",
+    "when": "pin a node top/bottom, then view the assembled page",
+    "expect": "the badge shows 'Pinned top/bottom'; the GRADUATED app assembles the real rendered page from regions — pinned-top in a sticky top bar, pinned-bottom in a sticky bottom bar, the ★ page in a scrolling main between",
+    "hook": "region-pill",
+    "howToTest": "GRADUATED: 1. pin a node to top → region pill shows 'Pinned top'  2. pin another to bottom  3. open the page (its real route/render) → sticky top bar + sticky bottom bar + scrolling main",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": [
+      "per-pane pin (pin one pane inside a composed layout) → ❌ deferred; pinning is card-level",
+      "per-pane size lock → ❌ dropped; intrinsic hug sizing makes a pinned bar short automatically"
+    ],
+    "note": "A1 contradiction (▶ Preview did nothing — region assembly didn't run) resolved as an ADD, 2026-07-02: the POC implements pin→region→Preview end-to-end (v46) and no static bug was found, but the walk couldn't verify it and the modal ▶ Preview is POC-only scaffolding anyway — the graduated app assembles regions on the REAL page render. Carried through the new-behaviour gate, not the C1 side-by-side."
+  },
+  {
+    "id": "display-variants",
+    "behaviour": "A block can expose bounded display variants — enumerated layouts of the same data (e.g. Artists list: rows / cards / table). A variant is an enum an agent could equally pick, declared on the registry, serialised on the leaf, so it persists and round-trips.",
+    "when": "select a pane in the edit view",
+    "expect": "a Display chip row is DISCOVERABLE the moment a variant-capable block is selected (not buried behind a second toggle); a tap re-renders the block in that variant; the choice serialises onto leaf.config.variant",
+    "hook": "",
+    "howToTest": "GRADUATED: 1. edit a List block → select its pane  2. Display row offers rows/cards/table, visible without hunting  3. pick 'table' → re-renders; reopen → still table (persisted on the leaf)",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": [
+      "free display config → ❌ bounded enum only, inside the expressiveness boundary"
+    ],
+    "note": "A1 contradiction (Display options not visible in the edit view) resolved as an ADD, 2026-07-02: the mechanism is fully implemented in the POC (registry select → leaf.config.variant, v47) but only the Artists·List block declares variants and the chips render only after pane-select AND opening the ⋯ options panel — the walk never surfaced them. Carried to the graduated app with an explicit discoverability acceptance criterion."
+  },
+  {
+    "id": "snap-dwell-arm",
+    "behaviour": "Snapping is a two-stage dwell-to-arm gesture: near a snap point → soft (blue, wide, pulsing); hold ~0.6s → armed (green, release-to-snap). The arm timer is keyed on the target only, so finger jitter that flips the nearest seam doesn't reset it.",
+    "when": "drag a card near a snap point and hold",
+    "expect": "a soft blue guide first, then a green armed ring/guide after the dwell; releasing while armed snaps",
+    "hook": "snap-guide",
+    "howToTest": "1. drag a card toward another's edge → soft blue guide (data-armed=false)  2. hold ~0.6s → turns green (data-armed=true)  3. release → snaps into place",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "pane-drop-beside",
+    "behaviour": "Drop a card OVER a composed layout (≥35% overlap) → add it beside the targeted pane on the nearest side (L/R/T/B by quadrant). Flattens into the parent row/column when the side runs along it, else wraps the pane in a new perpendicular split — so you can add 'right of a pane in a vertical stack', which seam-only insert couldn't reach.",
+    "when": "drag a card over a multi-pane layout near one pane's edge",
+    "expect": "the pane under the cursor is targeted; the card joins as a sibling on the nearest side; flatten vs wrap as above; the drop commits by tracking the dragged node's id",
+    "hook": "ghost-pane",
+    "howToTest": "1. drag a card over a 2-pane row, near the right pane's right edge → it joins the row (flatten)  2. drag over a vertical stack, to the right of a pane → wraps in a new horizontal split",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "seam-only insert → ❌ couldn't add beside a pane in a stack with no matching seam"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "ghost-ease-apart",
+    "behaviour": "On an armed pane-drop the target renders a ghost skeleton matching the dragged node's footprint (every leaf → a dashed placeholder, splits/nested preserved) and the real panes ease apart via FLIP to make room — a 2-row stack opens a 2-row slot, not a flat sliver. Reverts on un-arm.",
+    "when": "hold a card armed over a layout",
+    "expect": "a dashed ghost matching the dragged footprint appears; panes slide apart and the card grows to fit; un-arming reverts it",
+    "hook": "ghost-pane",
+    "howToTest": "1. drag a 2-row card over a layout and arm it → a 2-row dashed ghost opens  2. real panes ease apart (FLIP)  3. move away to un-arm → reverts",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "detach-reorder",
+    "behaviour": "Long-press a merged node → its TOP-LEVEL panes wiggle (grabbable). Reorder is the default: slide a pane to another slot ('Move here') and release. Detach needs a clear pull OUT past a ~64px margin beyond the card edge, so a small overshoot while reordering doesn't tip into a detach. Scope: top-level panes only — a layout nested inside a layout is grabbed as ONE pane; its inner panes aren't individually grabbable in the POC.",
+    "when": "long-press a composed node, then pull a top-level pane",
+    "expect": "top-level panes wiggle; sliding within the card reorders (green 'Move here'); pulling past the detach margin detaches; under the threshold it springs back; tap-outside/Esc/Done cancels",
+    "hook": "",
+    "howToTest": "1. long-press a merged node → its top-level panes wiggle  2. slide a pane to another slot → 'Move here', release → reordered  3. pull a pane far out (>~64px) → detaches as its own node",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "lgtm 999 · Maarten · 2026-07-02 · A1 narrowed-contract sign-off (via session chat, recorded on #999)",
+    "note": "A1 contradiction (didn't work for a layout nested inside a layout) resolved by NARROWING, 2026-07-02: the POC only makes top-level panes grabbable by design ('each top-level pane', SpikeBlockNode) — the nested case was never implemented, so the entry over-claimed depth. Narrowed to the built behaviour; depth-recursive detach/reorder carried as its own Add entry (detach-reorder-nested)."
+  },
+  {
+    "id": "detach-reorder-nested",
+    "behaviour": "Depth-recursive detach/reorder: the wiggle gesture reaches panes INSIDE a layout nested in a layout — an inner pane can be reordered within its nested group or pulled out past the detach margin, the same two-stage gesture as top-level.",
+    "when": "long-press a node containing a nested layout, then pull one of the nested layout's inner panes",
+    "expect": "inner panes are individually grabbable; sliding reorders within the nested group; pulling past the margin detaches the inner pane as its own node; the nested layout itself stays grabbable as a whole at its own level",
+    "hook": "",
+    "howToTest": "GRADUATED: 1. compose a layout containing a nested layout  2. long-press → both levels' panes wiggle  3. slide an inner pane → reorders inside the nested group  4. pull it far out (>~64px) → detaches as its own node",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "enter-page-fit",
+    "behaviour": "Entering a page snaps to a fitted frame instantly, framed by the node's known geometry (position + footprint), not Vue Flow's measured size (stale on fresh mount), with duration 0 (no zoom-out wobble).",
+    "when": "open a page from the Site flow",
+    "expect": "the page node is framed cleanly and immediately, no zoom-out wobble or off-screen framing",
+    "hook": "",
+    "howToTest": "1. from the Site flow, open a page → the board frames the page node instantly and centred (no wobble)",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "Vue Flow fitView → ❌ measures the small wrapper, zooms into the oversized card"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "add-block-land",
+    "behaviour": "Adding a block lands it in a clear spot right of every existing node (from real footprints), the camera centres on it at a moderate zoom, and a green 'just added' glow fades after ~2.5s.",
+    "when": "add a block from the palette",
+    "expect": "the new block appears in a clear area (never under a wide/moved layout), camera centres on it, green glow fades",
+    "hook": "",
+    "howToTest": "1. add a block from the palette → it lands clear to the right, camera centres, green glow fades ~2.5s later",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "fixed count×300 stride → ❌ dropped new blocks under wide/moved layouts"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "pinch-zoom",
+    "behaviour": "A 2-finger pinch starting on a node zooms the board (the node's drag would otherwise swallow it); SpikeBlockNode catches the gesture in the capture phase and the page drives zoom via setCenter, keeping the pinched point under the fingers. One finger still drags/long-presses.",
+    "when": "pinch with two fingers starting over a node",
+    "expect": "the board zooms around the pinched point; single-finger still drags/long-presses",
+    "hook": "",
+    "howToTest": "1. (touch) start a 2-finger pinch on a card → board zooms, pinched point stays under the fingers  2. one finger → still drags",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "drag-glow",
+    "behaviour": "A dragged card carries a light-green halo (Vue Flow dragging, forwarded by CroutonFlow), fading on drop. Snap rings (emerald armed / sky soft) outrank the glow.",
+    "when": "drag a card",
+    "expect": "a light-green halo while dragging, fading on drop; snap rings take visual priority when present",
+    "hook": "",
+    "howToTest": "1. drag a card → light-green halo  2. bring it near a snap → the snap ring outranks the glow  3. drop → halo fades",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "spacer-block",
+    "behaviour": "The Spacer is a real, snappable layout primitive that holds empty space (faint dashed hint in the builder); it snaps/reorders/resizes like any block to push neighbours around or hold a gap, with a small minWidth (40) so it can be a thin gutter.",
+    "when": "add a Spacer from the palette",
+    "expect": "an empty space block with a faint dashed hint; behaves like any block (snap/reorder/resize); can be a thin gutter",
+    "hook": "",
+    "howToTest": "1. add a Spacer → dashed empty block  2. snap it between two blocks → pushes them apart  3. resize narrow → thin gutter",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "page-site-routing",
+    "behaviour": "Page ⇄ Site is REAL routing, not one view. The POC fakes it: /spike-app is one route and selectedPageId v-if/v-else-swaps with a cross-fade (a visual transition pretending to be navigation).",
+    "when": "navigate between the Site flow and a page board",
+    "expect": "POC: one URL, no history. GRADUATED: /builder = Site flow, /builder/[pageId] = that page's board (deep-linkable), browser back/forward works, page-to-page is a plain route link",
+    "hook": "",
+    "howToTest": "POC: 1. open a page → URL stays /spike-app  2. browser back → doesn't return to the flow. GRADUATED target: URL is /builder/[pageId]; back returns to /builder",
+    "status": "stopgap",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "page-site-transition",
+    "behaviour": "The Page⇄Site transition is a simultaneous cross-fade + subtle directional scale (a gentle zoom). Explicitly a stopgap.",
+    "when": "move between Site and Page",
+    "expect": "POC: cross-fade (both views stacked, one in as the other out). GRADUATED: View Transitions API shared-element morph — matching view-transition-name on the flow card and the page board so the card grows into the board and shrinks back",
+    "hook": "",
+    "howToTest": "POC: 1. open/close a page → cross-fade. GRADUATED target: the page card morphs into the board (shared-element)",
+    "status": "stopgap",
+    "supersedes": "",
+    "consideredRejected": [
+      "mode=out-in → ❌ flashed the dark bg and delayed board mount so fitPage missed"
+    ]
+  },
+  {
+    "id": "board-persistence",
+    "behaviour": "Board state is ephemeral (in-memory only): each page's board is cached in a pageBoards Map and restored on re-entry, but nothing persists — a reload starts from composeDefault. By design for the POC.",
+    "when": "edit a board, then reload",
+    "expect": "POC: re-entering the page restores the in-memory board, but a full reload resets to composeDefault. GRADUATED: durable persistence — the LayoutTree round-trips to a store / the ticket (#974)",
+    "hook": "",
+    "howToTest": "POC: 1. compose a board  2. leave and re-enter → restored  3. reload the page → back to default (not saved). GRADUATED target: survives reload",
+    "status": "stopgap",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "layouttree-serialise",
+    "behaviour": "The board serialises to a clean, diffable LayoutTree (layouts → blocks → splits/sizes/breakpoints) — the canonical interchange format an agent and the builder both read/write. In the POC the model exists but lives in POC utils + inferred app.config.",
+    "when": "graduate the serialisation",
+    "expect": "a stable, human-readable LayoutTree serialiser on a typed package surface (the editable renderer + serialisation already landed in @fyit/crouton-layout via #987/#990 — re-validate it satisfies this, don't rebuild)",
+    "hook": "",
+    "howToTest": "GRADUATED: serialise a composed board → a stable diffable tree; reload it → identical layout (round-trips)",
+    "status": "stopgap",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "round-trip-ticket",
+    "behaviour": "Persist a version back to the GitHub ticket: a human's edited layout saves onto the tracking issue as the command/spec for the agent to (re)build from. Agent writes the tree → human edits visually → edit posts back → agent reads it. The North Star — the builder is the human's seat in an agent pipeline.",
+    "when": "save a builder version",
+    "expect": "the serialised LayoutTree is posted to the issue as a diffable spec; the round-trip works both ways (mirrors the schema-review / ui-proposal sign-off loops, but the artifact is the layout tree)",
+    "hook": "",
+    "howToTest": "GRADUATED: edit a layout → 'save version' → the tree appears on the issue → an agent reads it back and rebuilds the same layout",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "magic-ai-arrange",
+    "behaviour": "Two-tier magic arrange: ✨ Magic arrange (deterministic compose of placed blocks) and ✨ Magic (AI) — a free-text 'Describe the app' intent → an LLM arranges the placed blocks — shown only when the crouton-ai add-on is installed (hasApp('ai')). Both write the same LayoutTree (the agent→human arrow, in-app).",
+    "when": "use magic arrange on placed blocks",
+    "expect": "Magic arrange deterministically composes a first-cut layout; with crouton-ai installed, an AI tier takes a free-text intent and arranges; both produce a LayoutTree",
+    "hook": "",
+    "howToTest": "GRADUATED: 1. place blocks → Magic arrange → a composed layout  2. with crouton-ai → type an intent → AI arranges the same blocks",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "multiplayer-collab",
+    "behaviour": "Build together: sync the board through crouton-collab (a CollabRoom over Yjs — flowId + synced data mode + presence). The POC runs Vue Flow ephemeral/non-synced. When synced, undo must switch to Y.UndoManager (per-user transaction undo) — the POC's whole-board snapshot stack is a single-user placeholder that would clobber others' edits.",
+    "when": "two people edit the same board",
+    "expect": "edits and presence sync via a CollabRoom; undo is per-user (Y.UndoManager), not a whole-board snapshot",
+    "hook": "",
+    "howToTest": "GRADUATED: 1. two clients join the same board → edits sync + presence shows  2. user A undo → only A's last edit reverts, not B's",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "real-collections",
+    "behaviour": "The graduated builder app is a real crouton app whose data model is real collections (crouton CLI/config → generated CRUD/API/migrations), not the POC's backend-free demo blocks. The builder composes those collections' blocks.",
+    "when": "scaffold the graduated app",
+    "expect": "CLI-scaffolded app + real collections (server/db/schema.ts present, generated layers, a migration); demo blocks are replaced by blocks over real collections",
+    "hook": "",
+    "howToTest": "GRADUATED (conformance C2): the app boots, server/db/schema.ts exists, collections are generated (not stubs), CRUD works",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
+  }
+]

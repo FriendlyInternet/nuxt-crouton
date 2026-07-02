@@ -562,8 +562,11 @@ jobs:
             const password = `${{ steps.seed.outputs.password }}`
             const marker = `<!-- deploy-staging:${app} -->`
             // Disposable test login (#608) — only present when the seed step ran + produced creds.
+            // One-click link: crouton-auth's /auth/login?email=…&password=… prefills the form
+            // (fills only, never auto-submits). Fine for these throwaway staging creds.
+            const loginUrl = `${url.replace(/\/$/, '')}/auth/login?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`
             const login = (email && password)
-              ? `\n\n🔑 **Test login** — paste straight in, no registration:\n\`\`\`\nEmail:    ${email}\nPassword: ${password}\n\`\`\`\n_Disposable account on this isolated, throwaway staging DB._`
+              ? `\n\n🔑 **Test login** — [**one-click login**](${loginUrl}) (prefills the form), or paste:\n\`\`\`\nEmail:    ${email}\nPassword: ${password}\n\`\`\`\n_Disposable account on this isolated, throwaway staging DB._`
               : ''
             const body = `${marker}\n🚀 **${app}** staging deployed: ${url}${login}\n\n_Isolated, auto-provisioned Workers staging env (its own D1 + KV)._`
             const { owner, repo } = context.repo
