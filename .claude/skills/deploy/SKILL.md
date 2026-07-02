@@ -38,7 +38,7 @@ monorepo's convention, applied per app at its production cutover — #136 for tr
 
 ```
 /deploy              # Deploy current app to STAGING (auto-detected from cwd)
-/deploy three-demo   # Deploy a specific app to STAGING
+/deploy velo         # Deploy a specific app to STAGING
 # production → use the separate /deploy-production skill
 ```
 
@@ -81,7 +81,7 @@ Confirm the app is Workers-ready:
 5. **CF stubs** — `server/utils/_cf-stubs/` exists; `nuxt.config.ts` has `nitro.alias` for passkey/webauthn/papaparse stubs and pins **no** preset.
 6. **Auth** — `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` available in the environment (see **Credentials**).
 
-If anything is missing and the app is on the old Pages setup → **Migrating a Pages app → Workers**. If it's just missing files, copy them from `apps/three-demo` (the reference) or re-run the scaffolder.
+If anything is missing and the app is on the old Pages setup → **Migrating a Pages app → Workers**. If it's just missing files, copy them from `apps/velo` (the reference) or re-run the scaffolder.
 
 ### Step 3: First (bootstrap) staging deploy
 The id-less bindings auto-provision here. Confirm with the user, then deploy the
@@ -104,16 +104,19 @@ git add apps/{app}/wrangler.jsonc && git commit -m "chore({app}): commit provisi
 > verify what's verifiable (config, `pnpm sync:ids --dry-run` logic) and have the
 > user run the CF-gated steps, pasting output (the #109/#113/#114 loop).
 
-### Step 4: Wire CI (per-app caller)
-Add a tiny caller that uses the reusable `deploy-app.yml`. **Model on
-`.github/workflows/deploy-three-demo.yml`.** Set: `app`, `production-url`,
-`staging-url`, and the `paths` filter (the app + its extended `crouton*` packages +
-lockfile + both workflow files). Merge to `main`/open a PR → isolated staging with
-the URL commented on the PR; manual dispatch → production (#347). Uses `secrets: inherit`.
+### Step 4: Wire CI (opt in via `deploy.config.json`)
+There is **one generic workflow for all apps** — `.github/workflows/deploy-apps.yml`
+(#481/#638; the old per-app `deploy-<app>.yml` callers are retired — don't create one).
+An app opts in by adding a `deploy.config.json` next to its `package.json`. **Model on
+`apps/velo/deploy.config.json`.** Set: `stagingUrl`, `productionUrl`, `layerPackages`,
+and `watchPaths` (the app + its extended `crouton*` packages + lockfile). The workflow's
+`detect` job matches changed files against `watchPaths` and fans out one reusable
+`deploy-app.yml` call per affected app. Merge to `main`/open a PR → isolated staging
+with the URL commented on the PR; manual dispatch (app + environment inputs) →
+production (#347). The fan-out uses `secrets: inherit`.
 
 Ensure **repo-level** secrets `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` exist
-(Settings → Secrets and variables → Actions). The reusable workflow maps the GitHub
-`environment:` to `production`/`staging`, so environment-scoped secrets also work.
+(Settings → Secrets and variables → Actions).
 
 ### Step 4.5: App (Worker) secrets
 The app's own secrets (`BETTER_AUTH_SECRET`/`BETTER_AUTH_URL`, `NUXT_*`, etc.) live
@@ -152,12 +155,12 @@ secret `REVIEW_SEED_SECRET` salts the password; **production seeds nothing**.
 For an app still on the Pages setup (`wrangler.toml`, `pages_build_output_dir`,
 `wrangler pages deploy`):
 
-1. **`wrangler.toml` → `wrangler.jsonc`** in the Workers shape (see `apps/three-demo`):
+1. **`wrangler.toml` → `wrangler.jsonc`** in the Workers shape (see `apps/velo`):
    drop `pages_build_output_dir`; keep `name`/`compatibility_*`; `d1_databases` (reuse
    the existing prod `database_id`), `kv_namespaces`; add an `env.staging` block with a
    **separate** `{app}-staging-db` + KV (id-less to auto-provision, or existing staging ids).
 2. **Add** `scripts/sync-wrangler-ids.mjs`, `scripts/inject-wrangler-env.mjs`,
-   `drizzle.config.ts` (copy from `apps/three-demo`).
+   `drizzle.config.ts` (copy from `apps/velo`).
 3. **package.json** — replace the Pages `cf:*` scripts with the Workers chain
    (`NITRO_PRESET=cloudflare_module`, `sync:ids`, `db:migrate:staging`); keep the
    guarded `postinstall`.
@@ -195,7 +198,7 @@ Wrangler 4.64+ rejects `env` in a *redirected* config. `scripts/inject-wrangler-
 the redirect so `--env staging` deploys read it directly. No manual strip step.
 
 ### `papaparse` RollupError / passkey/tsyringe errors
-Add the CF stubs + `nitro.alias` (see scaffolder output / `apps/three-demo`).
+Add the CF stubs + `nitro.alias` (see scaffolder output / `apps/velo`).
 
 ### KV namespace not found by `sync:ids`
 It matches the auto-provisioned title `<worker-name>-<binding>` (e.g.
@@ -207,4 +210,4 @@ Set `NODE_OPTIONS='--max-old-space-size=8192'` (CI sets this).
 
 ## Deploy Learnings Location
 Per-app deploy gotchas: `docs/projects/{app}/{app}-deploy.md`. Append new fixes there.
-Reference implementation for everything above: **`apps/three-demo`**.
+Reference implementation for everything above: **`apps/velo`**.
