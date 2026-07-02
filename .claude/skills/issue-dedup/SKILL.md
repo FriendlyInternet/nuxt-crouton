@@ -1,5 +1,6 @@
 ---
 name: issue-dedup
+layer: method
 description: Before creating a GitHub issue or epic, search for an existing related one and force a reuse / replace / new decision — so the issue-first flow can't silently mint a duplicate. The create-time half of the dedup gate (the pickup-time half is /issue-sanity-check). Use whenever you're about to open an issue/epic, or run /issue-dedup. Backed by a hard PreToolUse hook on issue_write create.
 allowed-tools: mcp__github__search_issues, mcp__github__list_issues, mcp__github__issue_read, mcp__github__issue_write, mcp__github__add_issue_comment, Read, Grep
 ---

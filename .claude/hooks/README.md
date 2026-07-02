@@ -28,8 +28,8 @@ echo '{"tool_input":{"file_path":"pocs/x/spec.json","content":"[{\"id\":\"a\",\"
 ## Git hook: `pre-commit-sync-reminder`
 
 A git pre-commit hook that displays a reminder when committing changes to:
-- Collection generator (`packages/nuxt-crouton-cli/lib/` or `bin/`)
-- MCP server (`packages/nuxt-crouton-mcp-server/src/`)
+- Collection generator (`packages/crouton-cli/lib/` or `bin/`)
+- MCP server (`packages/crouton-mcp/src/`)
 
 It reminds developers to check whether documentation artifacts need updating.
 
