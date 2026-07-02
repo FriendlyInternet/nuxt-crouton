@@ -84,31 +84,31 @@
   {
     "id": "page-regions-pin",
     "behaviour": "A node can be pinned to the page's top/bottom edge (a sticky pill/bar) from its toolbar — the first bounded-vocabulary expressiveness feature. Region is a bounded enum (top|bottom|main), agent-pickable, serialisable. No free-floating positioning.",
-    "when": "pin a node top/bottom, then Preview",
-    "expect": "the badge shows 'Pinned top/bottom'; ▶ Preview assembles the running page — pinned-top in a sticky top bar, pinned-bottom in a sticky bottom bar, the ★ page in a scrolling main between",
+    "when": "pin a node top/bottom, then view the assembled page",
+    "expect": "the badge shows 'Pinned top/bottom'; the GRADUATED app assembles the real rendered page from regions — pinned-top in a sticky top bar, pinned-bottom in a sticky bottom bar, the ★ page in a scrolling main between",
     "hook": "region-pill",
-    "howToTest": "1. pin a node to top → region pill shows 'Pinned top'  2. pin another to bottom  3. ▶ Preview → sticky top bar + sticky bottom bar + scrolling main",
-    "status": "proposed",
+    "howToTest": "GRADUATED: 1. pin a node to top → region pill shows 'Pinned top'  2. pin another to bottom  3. open the page (its real route/render) → sticky top bar + sticky bottom bar + scrolling main",
+    "status": "new",
     "supersedes": "",
     "consideredRejected": [
       "per-pane pin (pin one pane inside a composed layout) → ❌ deferred; pinning is card-level",
       "per-pane size lock → ❌ dropped; intrinsic hug sizing makes a pinned bar short automatically"
     ],
-    "note": "A1 contradiction: clicking ▶ Preview does nothing — the region assembly did not run."
+    "note": "A1 contradiction (▶ Preview did nothing — region assembly didn't run) resolved as an ADD, 2026-07-02: the POC implements pin→region→Preview end-to-end (v46) and no static bug was found, but the walk couldn't verify it and the modal ▶ Preview is POC-only scaffolding anyway — the graduated app assembles regions on the REAL page render. Carried through the new-behaviour gate, not the C1 side-by-side."
   },
   {
     "id": "display-variants",
     "behaviour": "A block can expose bounded display variants — enumerated layouts of the same data (e.g. Artists list: rows / cards / table). A variant is an enum an agent could equally pick, declared on the registry, serialised on the leaf, so it persists and round-trips.",
     "when": "select a pane in the edit view",
-    "expect": "an options panel shows a Display chip row; a tap re-renders the block in that variant; the choice serialises onto leaf.config.variant",
+    "expect": "a Display chip row is DISCOVERABLE the moment a variant-capable block is selected (not buried behind a second toggle); a tap re-renders the block in that variant; the choice serialises onto leaf.config.variant",
     "hook": "",
-    "howToTest": "1. edit a List block → select its pane  2. Display row offers rows/cards/table  3. pick 'table' → re-renders; reopen → still table (persisted on the leaf)",
-    "status": "proposed",
+    "howToTest": "GRADUATED: 1. edit a List block → select its pane  2. Display row offers rows/cards/table, visible without hunting  3. pick 'table' → re-renders; reopen → still table (persisted on the leaf)",
+    "status": "new",
     "supersedes": "",
     "consideredRejected": [
       "free display config → ❌ bounded enum only, inside the expressiveness boundary"
     ],
-    "note": "A1 contradiction: the Display variant options were not visible in the edit view."
+    "note": "A1 contradiction (Display options not visible in the edit view) resolved as an ADD, 2026-07-02: the mechanism is fully implemented in the POC (registry select → leaf.config.variant, v47) but only the Artists·List block declares variants and the chips render only after pane-select AND opening the ⋯ options panel — the walk never surfaced them. Carried to the graduated app with an explicit discoverability acceptance criterion."
   },
   {
     "id": "snap-dwell-arm",
@@ -150,15 +150,26 @@
   },
   {
     "id": "detach-reorder",
-    "behaviour": "Long-press a merged node → its panes wiggle (grabbable). Reorder is the default: slide a pane to another slot ('Move here') and release. Detach needs a clear pull OUT past a ~64px margin beyond the card edge, so a small overshoot while reordering doesn't tip into a detach.",
-    "when": "long-press a composed node, then pull a pane",
-    "expect": "panes wiggle; sliding within the card reorders (green 'Move here'); pulling past the detach margin detaches; under the threshold it springs back; tap-outside/Esc/Done cancels",
+    "behaviour": "Long-press a merged node → its TOP-LEVEL panes wiggle (grabbable). Reorder is the default: slide a pane to another slot ('Move here') and release. Detach needs a clear pull OUT past a ~64px margin beyond the card edge, so a small overshoot while reordering doesn't tip into a detach. Scope: top-level panes only — a layout nested inside a layout is grabbed as ONE pane; its inner panes aren't individually grabbable in the POC.",
+    "when": "long-press a composed node, then pull a top-level pane",
+    "expect": "top-level panes wiggle; sliding within the card reorders (green 'Move here'); pulling past the detach margin detaches; under the threshold it springs back; tap-outside/Esc/Done cancels",
     "hook": "",
-    "howToTest": "1. long-press a merged node → panes wiggle  2. slide a pane to another slot → 'Move here', release → reordered  3. pull a pane far out (>~64px) → detaches as its own node",
+    "howToTest": "1. long-press a merged node → its top-level panes wiggle  2. slide a pane to another slot → 'Move here', release → reordered  3. pull a pane far out (>~64px) → detaches as its own node",
     "status": "proposed",
     "supersedes": "",
     "consideredRejected": [],
-    "note": "A1 contradiction: detach/reorder does not work for a layout nested inside a layout."
+    "note": "A1 contradiction (didn't work for a layout nested inside a layout) resolved by NARROWING, 2026-07-02: the POC only makes top-level panes grabbable by design ('each top-level pane', SpikeBlockNode) — the nested case was never implemented, so the entry over-claimed depth. Narrowed to the built behaviour; depth-recursive detach/reorder carried as its own Add entry (detach-reorder-nested). Awaiting sign-off on the narrowed contract."
+  },
+  {
+    "id": "detach-reorder-nested",
+    "behaviour": "Depth-recursive detach/reorder: the wiggle gesture reaches panes INSIDE a layout nested in a layout — an inner pane can be reordered within its nested group or pulled out past the detach margin, the same two-stage gesture as top-level.",
+    "when": "long-press a node containing a nested layout, then pull one of the nested layout's inner panes",
+    "expect": "inner panes are individually grabbable; sliding reorders within the nested group; pulling past the margin detaches the inner pane as its own node; the nested layout itself stays grabbable as a whole at its own level",
+    "hook": "",
+    "howToTest": "GRADUATED: 1. compose a layout containing a nested layout  2. long-press → both levels' panes wiggle  3. slide an inner pane → reorders inside the nested group  4. pull it far out (>~64px) → detaches as its own node",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
   },
   {
     "id": "enter-page-fit",
