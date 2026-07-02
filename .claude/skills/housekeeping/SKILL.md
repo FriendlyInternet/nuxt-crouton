@@ -35,6 +35,11 @@ the only thing it writes.
   isn't a currently-open epic: a closed epic left with unfinished work, or a parent missing
   the `epic` label (#980).
 - **🔀 Idle PRs** — open PRs with no activity in >N days.
+- **📚 Skill freshness** — knowledge skills (the `verified:` provenance contract, #1073/#1091)
+  whose citations drifted or whose stamp aged out, via `scripts/skill-freshness.mjs` (fs+git, no
+  LLM): a cited path that **vanished** (🔴), a cited file with commits **newer than the stamp**
+  (🟡 possibly-stale), or a stamp **> 90d old** (🔵 re-verify due). Report-only — a re-verified,
+  re-stamped skill drops off next run (#1100 WS3). Section dropped if the checker can't run.
 
 ## Pipeline (deterministic — no LLM, no secrets)
 
