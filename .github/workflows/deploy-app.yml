@@ -384,9 +384,11 @@ jobs:
       # Prove the DEPLOYED preview actually works — log in with the seeded account, run
       # any app-declared CRUD + public read, and screenshot it (#293). This is the
       # acceptance typecheck/boot can't give: auth + a data round-trip on the real Worker
-      # (D1 + secrets + better-auth). Report-only by DEFAULT — a brittle smoke must never
-      # red a previously-green deploy across velo/fanfare/triage; an app opts into gating
-      # with `"smoke": { "required": true }` in its deploy.config.json. Login proof + CRUD
+      # (D1 + secrets + better-auth). On PR previews it's report-only by DEFAULT — a
+      # brittle smoke must never red a previously-green deploy across velo/fanfare/triage;
+      # an app opts into gating with `"smoke": { "required": true }` in its
+      # deploy.config.json. On push to main (the shared staging) a failure GATES by
+      # default — see the "Gate on smoke result" step (#1106). Login proof + CRUD
       # use plain fetch (always available); the screenshot is best-effort (skips cleanly
       # when no browser is present on the runner).
       - name: Verify deployed preview (smoke)
@@ -418,18 +420,37 @@ jobs:
           path: screenshots/${{ inputs.app }}-smoke.png
           if-no-files-found: ignore
 
-      # Gate the deploy on the smoke ONLY when the app opted in (smoke.required: true).
-      # Otherwise a failing smoke is a loud warning, not a red deploy.
-      - name: Gate on smoke result (opt-in)
+      # Gate the deploy on the smoke — two regimes (#1106, epic #632 Rung 2):
+      #   • PR / dispatch previews: report-only unless the app opts IN
+      #     (smoke.required: true). A brittle smoke must never block PR iteration.
+      #   • push to main (the shared *.pmcp.dev staging): gate by DEFAULT. A green
+      #     workflow over a broken deployed staging is the silent failure
+      #     report-failed-deploy.yml exists to catch — and it only reacts to RED
+      #     runs, so a report-only failure here would vanish as a ::warning::.
+      #     A known-brittle app can opt OUT with smoke.gateOnMain: false.
+      #   A smoke "fail" is always a real broken deploy: skipped checks
+      #   (no creds / no manifest) pass, they don't fail (see smoke-deployed.mjs).
+      - name: Gate on smoke result
         if: ${{ steps.smoke.outputs.result == 'fail' }}
         env:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
+          EVENT: ${{ github.event_name }}
         run: |
-          REQUIRED=$(jq -r '.smoke.required // false' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null || echo false)
+          CONFIG="$WORKSPACE/$APP/deploy.config.json"
+          REQUIRED=$(jq -r '.smoke.required // false' "$CONFIG" 2>/dev/null || echo false)
           if [ "$REQUIRED" = "true" ]; then
             echo "::error::Deployed-preview smoke failed and $APP sets smoke.required=true."
             exit 1
+          fi
+          if [ "$EVENT" = "push" ]; then
+            GATE_ON_MAIN=$(jq -r '.smoke.gateOnMain // true' "$CONFIG" 2>/dev/null || echo true)
+            if [ "$GATE_ON_MAIN" = "true" ]; then
+              echo "::error::Deployed smoke failed on the shared staging after merge to main — failing the run so report-failed-deploy.yml opens an issue (#1106). A known-brittle smoke can opt out with smoke.gateOnMain=false in $APP/deploy.config.json."
+              exit 1
+            fi
+            echo "::warning::Deployed smoke failed post-merge, but $APP sets smoke.gateOnMain=false (report-only)."
+            exit 0
           fi
           echo "::warning::Deployed-preview smoke failed (report-only; set smoke.required=true in $APP/deploy.config.json to gate)."
 

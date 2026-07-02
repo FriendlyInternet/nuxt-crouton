@@ -412,7 +412,7 @@
           <tr>
             <td><strong>2 · <span class="mono">*.pmcp.dev</span></strong><br/><span class="tag">post-merge · integration</span></td>
             <td>every merge to <span class="mono">main</span> (path-filtered)</td>
-            <td>staging deploy incl. remote D1 migrations (<span class="mono">deploy-apps.yml</span> → <span class="mono">deploy-app.yml</span>) · deployed smoke against the live shared staging URL · <span class="mono">report-failed-deploy.yml</span> opens an issue when a post-merge deploy goes red · nightly full-matrix <span class="mono">e2e</span> backstop (cron)</td>
+            <td>staging deploy incl. remote D1 migrations (<span class="mono">deploy-apps.yml</span> → <span class="mono">deploy-app.yml</span>) · deployed smoke against the live shared staging URL — gates by default on push-to-main (#1106, opt-out <span class="mono">smoke.gateOnMain: false</span>) · <span class="mono">report-failed-deploy.yml</span> opens an issue when a post-merge deploy goes red · nightly full-matrix <span class="mono">e2e</span> backstop (cron)</td>
             <td>The <em>integrated, deployed</em> world is healthy — the check the PR's isolated preview can't give you.</td>
           </tr>
           <tr>
@@ -433,9 +433,9 @@
         <h3>Gates that can't silently rot</h3>
         <p>The agent gates (<span class="mono">red-team</span>/<span class="mono">a11y</span>/<span class="mono">frontend-review</span>) are themselves smoke-tested against committed known-bad fixtures (<span class="mono">gate-smoke.yml</span>, #1034), so a fail-open gate turns red in CI instead of passing green forever.</p>
       </div>
-      <div class="callout warn">
-        <h3>Gap → #1106: post-merge smoke failures vanish</h3>
-        <p>The deployed smoke on merge→<span class="mono">main</span> is report-only by default: a failing smoke leaves the workflow <em>green</em>, so <span class="mono">report-failed-deploy.yml</span> (which reacts to red runs) never fires and the break survives as a buried <span class="mono">::warning::</span>. #1106 makes a post-merge smoke failure loud.</p>
+      <div class="callout good">
+        <h3>Post-merge smoke failures are loud (#1106)</h3>
+        <p>On merge→<span class="mono">main</span> a failing deployed smoke <strong>fails the run by default</strong> (a smoke "fail" is always a real broken deploy — skipped checks pass), so <span class="mono">report-failed-deploy.yml</span> opens an issue instead of the break vanishing as a buried <span class="mono">::warning::</span>. PR previews stay report-only unless the app sets <span class="mono">smoke.required</span>; a known-brittle app opts out of the main gate with <span class="mono">smoke.gateOnMain: false</span>.</p>
       </div>
       <div class="callout warn">
         <h3>Gap → #1107: the prod pre-flight is honour-system</h3>
