@@ -310,6 +310,10 @@
         <p class="what">When a bug or regression is reported, the FIRST step — before fixing — is to research how and when it was introduced (git archaeology), then record that finding on the tracking issue/PR. Use the moment a bug, error, broken build, or "this used to work" is reported, before writing a fix. Produces a first-bad-commit (or "not a code regression") note you paste onto the issue.</p>
       </div>
       <div class="skill">
+        <div class="skill-head"><span class="name">/demo-video</span><span class="badges"><span class="b ask">on ask</span><span class="b flow">in flow</span></span></div>
+        <p class="what">Record a WebM demo video of a UI flow with shot-scraper video — a YAML storyboard drives the browser (click, type, scroll, wait) with an animated cursor overlay, so a reviewer can watch the feature instead of driving it. Use to attach motion evidence to a UI sign-off (#307), to turn an issue's "How to test" steps into a watchable clip, or when asked to "record a demo", "make a video of this flow", "show me it working".</p>
+      </div>
+      <div class="skill">
         <div class="skill-head"><span class="name">/frontend-review</span><span class="badges"><span class="b ask">on ask</span><span class="b auto">auto</span></span></div>
         <p class="what">Front-end conventions review for Vue surfaces — the component-usage analog of /a11y, pointed at Nuxt UI 4 + crouton conventions instead of WCAG. Reviews just your diff (or a package/file) for v3 component names, the v4 overlay pattern, Options API, raw-HTML re-implementations, and hardcoded colors; rates findings by severity; and either comments inline on the PR (--comment) or applies the safe fixes for you (--fix). Steers the depth-aware `frontend-review` subagent. Use when asked to "check the frontend", "are we using Nuxt UI right", "review component usage", "frontend-review this", or run /frontend-review.</p>
       </div>

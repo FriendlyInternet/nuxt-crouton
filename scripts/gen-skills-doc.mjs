@@ -51,6 +51,7 @@ export const META = {
   'red-team': { group: 'review', triggers: ['ask', 'auto'] },
   a11y: { group: 'review', triggers: ['ask'] },
   'frontend-review': { group: 'review', triggers: ['ask', 'auto'] },
+  'demo-video': { group: 'review', triggers: ['ask', 'flow'] },
   deploy: { group: 'deploy', triggers: ['ask'] },
   'deploy-production': { group: 'deploy', triggers: ['ask'] },
   'poc-deploy': { group: 'deploy', triggers: ['ask'] },

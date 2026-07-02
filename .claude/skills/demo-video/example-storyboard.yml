@@ -1,0 +1,25 @@
+# Example shot-scraper video storyboard — copy and adapt.
+# Run: bash scripts/demo-video-setup.sh && shot-scraper video storyboard.yml
+# Full reference: .claude/skills/demo-video/SKILL.md
+output: screenshots/demo.webm
+url: http://localhost:3000/
+# server: pnpm --filter <app> dev     # optional: boot the app for the recording
+viewport:
+  width: 1280
+  height: 720
+cursor: true
+wait_for: "text=Sign in"              # recording starts once this is on screen
+scenes:
+- name: Landing
+  do:
+  - pause: 1
+  - scroll: {y: 400, duration: 0.6}
+  - pause: 0.5
+- name: Interact
+  do:
+  - click: "a[href='/login']"
+  - type: {into: "input[name=email]", text: "demo@example.com", delay_ms: 35}
+  - press: Enter
+  - wait_for: "text=Dashboard"
+  - screenshot: screenshots/demo-final.png
+  - pause: 1
