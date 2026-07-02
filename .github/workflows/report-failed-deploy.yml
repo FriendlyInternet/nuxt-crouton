@@ -16,7 +16,6 @@ on:
     workflows:
       - "Deploy Apps (Cloudflare Workers)"
       - "Deploy Docs"
-      - "Deploy Blog (POC preview)"
       - "Deploy POCs (preview)"
     types: [completed]
 
