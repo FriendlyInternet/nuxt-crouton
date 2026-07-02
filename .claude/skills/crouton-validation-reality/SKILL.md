@@ -42,7 +42,7 @@ Concrete local example: a staging preview deployed green but with an empty datab
 | E2E, subset of specs | `pnpm test:e2e e2e/collection.smoke.spec.ts e2e/surface.smoke.spec.ts` | The `setup` project (login) always runs first via project dependency. |
 | Typecheck (the gate) | `pnpm typecheck` | = `pnpm -r --filter './apps/*' typecheck` — **apps only**. NEVER `npx nuxt typecheck` from root (no app context → thousands of false positives; root CLAUDE.md; mechanics in `crouton-build-and-env` §4). |
 | Typecheck fixtures | `pnpm typecheck:fixtures` | The #197 generator-regression gate surface. |
-| Typecheck MCP | `pnpm typecheck:mcp` | ⚠️ **Silent no-op** (matches no package, **exits 0**, "No projects matched the filters") — tracked as [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098). Use `pnpm --filter @fyit/crouton-mcp typecheck` (build first, see next row). Why + the stale-name inventory: `crouton-config-registry` § "Silent no-ops". |
+| Typecheck MCP | `pnpm typecheck:mcp` | = `pnpm --filter @fyit/crouton-mcp typecheck` (was a silent no-op with a stale filter name until fixed under [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098)). Stale-name inventory: `crouton-config-registry` § "Silent no-ops". |
 | MCP server tests | `pnpm --filter @fyit/crouton-mcp build && pnpm --filter @fyit/crouton-mcp test` | Build first — CI does (`ci.yml` mcp-server-tests job). |
 | Lint | `pnpm lint` / `pnpm lint:fix` | `eslint .` from root, `eslint.config.mjs`. **No CI workflow runs repo-wide `pnpm lint`**; `ci.yml`'s "Lint & Type Check" job is a misnomer — tracked as [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097) (§6). |
 | Publish validation | `pnpm check:publint` · `pnpm check:attw` | Both target `./packages/crouton` only. |
@@ -134,7 +134,7 @@ Smaller items: `crouton-core` useCollectionQuery/useCollectionMutation logging t
 
 | Job | What it actually does | Gap vs the claim |
 |---|---|---|
-| `lint-and-typecheck` | Builds + typechecks **only `@fyit/crouton-mcp`** | **Misnomer**: runs no eslint and no app typecheck. Root CLAUDE.md's "EVERY change requires `pnpm typecheck`" is a **local/agent discipline, not a CI gate** — no workflow runs `pnpm typecheck` (apps); the only CI typecheck of app-shaped code is e2e.yml's regenerated-fixture typecheck (#197). Gate fix tracked as [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097); the `typecheck:mcp` no-op script as [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098). |
+| `lint-and-typecheck` | Builds + typechecks **only `@fyit/crouton-mcp`** | **Misnomer**: runs no eslint and no app typecheck. Root CLAUDE.md's "EVERY change requires `pnpm typecheck`" is a **local/agent discipline, not a CI gate** — no workflow runs `pnpm typecheck` (apps); the only CI typecheck of app-shaped code is e2e.yml's regenerated-fixture typecheck (#197). Gate fix tracked as [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097); the `typecheck:mcp` script's stale filter was fixed under [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098). |
 | `build-fanfare` | Builds fanfare for `cloudflare-pages` + `node-server` presets | Fanfare **typecheck intentionally NOT gated** ("known pre-existing baseline of type errors" — comment in the job); the build is the smoke. |
 | `test` | `pnpm install --ignore-scripts` → builds `crouton-auth`/`crouton-core`/`crouton` → `npx nuxt prepare` in each `apps/*` → **`pnpm test`** | This is the real unit-test gate. Other suited packages (layout, cli…) run from source; the three builds are for dist-consumers. |
 | `mcp-server-tests` | Build then test `@fyit/crouton-mcp` | — |
@@ -165,5 +165,5 @@ grep -nE 'timeout|Timeout' e2e/playwright.config.ts        # real e2e timeouts
 for p in packages/*/; do echo "$(find $p -path '*node_modules*' -prune -o -type f \( -name '*.test.ts' -o -name '*.spec.ts' \) -print | wc -l) $p"; done | sort -rn | head -20   # coverage table
 grep -rn 'describe\.skip' packages/*/test*/ packages/*/tests/ 2>/dev/null | grep -v node_modules      # mocking-wall status
 grep -rnE '\b(it|describe|test)\.(todo|skip)\(' packages/*/test*/ packages/*/tests/ 2>/dev/null | grep -v node_modules | wc -l  # dormant-marker count
-pnpm typecheck:mcp                                         # still a no-op? ("No projects matched") — #1098
+pnpm typecheck:mcp                                         # should run tsc in crouton-mcp (fixed #1098); "No projects matched" = regressed
 ```
