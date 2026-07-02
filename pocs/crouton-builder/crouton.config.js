@@ -1,5 +1,9 @@
 export default {
-  // The graduated Crouton Builder app (epic #983, A3 data model).
+  // Feature flags - which crouton packages to enable
+  features: {
+  },
+
+  // The graduated Crouton Builder app (epic #983, A3 data model — signed off on #988).
   // Three real collections replace the POC's backend-free demo blocks:
   //   pages    — the Site flow sitemap (hierarchy via parentId) + each page's builder board
   //   artists  — content the builder arranges (list variants / form / stats blocks)

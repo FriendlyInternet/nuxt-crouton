@@ -1,0 +1,47 @@
+{
+  // Cloudflare WORKERS (static assets) config for crouton-builder.
+  //
+  // Nitro's `cloudflare_module` preset (NITRO_PRESET in cf:deploy) reads this
+  // file at build time and writes the deployable config to
+  // .output/server/wrangler.json, injecting `main` + the `assets` binding.
+  //
+  // Bootstrap → committed: bindings start id-LESS so the first deploy
+  // auto-provisions them; `pnpm sync:ids` then writes the ids back here.
+  "name": "crouton-builder",
+  "compatibility_date": "2024-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // No production route — this is a POC (staging-only preview at
+  // crouton-builder.pmcp.dev via env.staging below). A prod route comes at
+  // promotion to apps/ (#318 / pocs convention).
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "crouton-builder-db",
+      "migrations_dir": "server/db/migrations/sqlite"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "KV" }
+  ],
+
+  // Staging environment — its OWN isolated D1 + KV, also id-less so they
+  // auto-provision on the first `pnpm cf:staging`. The env block is stripped
+  // from the generated .output config (nitro#3429), so cf:staging re-injects it
+  // via scripts/inject-wrangler-env.mjs before deploying.
+  "env": {
+    "staging": {
+      "routes": [{ "pattern": "crouton-builder.pmcp.dev", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "crouton-builder-staging-db",
+          "migrations_dir": "server/db/migrations/sqlite"
+        }
+      ],
+      "kv_namespaces": [
+        { "binding": "KV" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "table": "builder_artists",
+  "key": "name",
+  "rows": [
+    {
+      "name": "Sample name 1",
+      "genre": {
+        "value": "rock",
+        "label": "Rock"
+      },
+      "image": "",
+      "bio": "Sample bio content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "rating": 1,
+      "active": true
+    },
+    {
+      "name": "Sample name 2",
+      "genre": {
+        "value": "jazz",
+        "label": "Jazz"
+      },
+      "image": "",
+      "bio": "Sample bio content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "rating": 2,
+      "active": false
+    },
+    {
+      "name": "Sample name 3",
+      "genre": {
+        "value": "hip-hop",
+        "label": "Hip-hop"
+      },
+      "image": "",
+      "bio": "Sample bio content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "rating": 3,
+      "active": true
+    }
+  ]
+}
