@@ -126,6 +126,27 @@ if (data.idlePRs?.length) {
   ])
 }
 
+// 📚 Skill freshness (#1100 WS3) — knowledge skills whose cited paths drifted or whose
+// `verified:` stamp aged out. Report-only; a re-verified/re-stamped skill drops off next run.
+const sf = data.skillFreshness
+if (sf && (sf.flagged?.length || sf.malformed?.length)) {
+  const lines = [
+    `Knowledge skills (\`verified:\` provenance) that need a re-check — nothing was modified:`
+  ]
+  for (const s of sf.flagged) {
+    const tags = []
+    if (s.vanished.length) tags.push(`🔴 ${s.vanished.length} vanished`)
+    if (s.possiblyStale.length) tags.push(`🟡 ${s.possiblyStale.length} possibly-stale`)
+    if (s.overdue) tags.push(`🔵 stamp ${s.ageDays}d old`)
+    lines.push(`- \`/${s.name}\` (stamped ${s.stamp}) — ${tags.join(', ')}`)
+    for (const p of s.vanished) lines.push(`  - 🔴 vanished: \`${p}\``)
+    for (const p of s.possiblyStale) lines.push(`  - 🟡 \`${p.path}\` — changed ${p.lastCommit}, after the stamp`)
+  }
+  for (const m of sf.malformed) lines.push(`- \`/${m.name}\` — ⚠️ ${m.reason}`)
+  lines.push('', `_Re-run \`node scripts/skill-freshness.mjs --pretty\` locally; re-verify the facts, then bump the \`verified:\` stamp._`)
+  sections.push(['📚 Skill freshness', lines])
+}
+
 // Loop Station budget readout (#934, WS4) — one read-only line, always shown when
 // the inventory has produced data. Sourced from the latest committed history.jsonl
 // record (gathered, not recomputed). Omitted when WS1 hasn't run yet.
