@@ -60,6 +60,14 @@ on:
           that PR. Leave empty to deploy without the bridge. Ignored for production.
         required: false
         type: string
+      skip_staging_smoke:
+        description: >-
+          ESCAPE HATCH (#1107): skip the pre-prod confidence gate that smokes the live
+          staging URL before a production deploy. Only for "staging is down and prod
+          needs a hotfix" — the run carries a loud warning. Ignored for staging.
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   # Figure out which opted-in apps to deploy (and to which env) → a matrix the deploy
@@ -163,4 +171,8 @@ jobs:
       # PR-tied deploys wire the preview-review bridge to this PR (#607); on a manual
       # dispatch use the optional review_pr input; empty → the bridge stays off.
       review-pr: ${{ github.event.pull_request.number || github.event.inputs.review_pr }}
+      # Rung 3 escape hatch (#1107) — only a manual dispatch can set it; push/PR
+      # events have no such input, so this resolves false for them (and the gate
+      # itself only fires on environment=production anyway).
+      skip-staging-smoke: ${{ inputs.skip_staging_smoke || false }}
     secrets: inherit

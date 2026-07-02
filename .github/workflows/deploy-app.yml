@@ -63,6 +63,15 @@ on:
         required: false
         default: ''
         type: string
+      skip-staging-smoke:
+        description: >-
+          ESCAPE HATCH for the Rung 3 pre-prod confidence gate (#1107): skip the
+          live-staging smoke that normally blocks a production deploy while staging
+          is red. Only for "staging is down and prod needs a hotfix" — using it
+          prints a loud warning on the run.
+        required: false
+        default: false
+        type: boolean
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         required: true
@@ -112,6 +121,46 @@ jobs:
         with:
           node-version: ${{ inputs['node-version'] }}
           cache: 'pnpm'
+
+      # ── Rung 3 pre-prod confidence gate (#1107, epic #632) ──────────────────
+      # Before anything expensive: smoke the app's LIVE STAGING URL and refuse to
+      # deploy production while it's red. "Verified on staging first" was only a
+      # skill checklist until now — this enforces it. The smoke recomputes the
+      # deterministic review login the last push-to-main staging deploy seeded
+      # (KEY=main; same derivation as the "Seed review login" step below) and runs
+      # scripts/smoke-deployed.mjs — node built-ins only, so it works before
+      # `pnpm install` (the screenshot part self-skips without playwright).
+      # Gates the deliberate manual click (#318), never automates it. Escape
+      # hatch: the skip-staging-smoke input (loud warning, next step).
+      - name: Pre-prod confidence gate — smoke live staging
+        if: ${{ inputs.environment == 'production' && !inputs['skip-staging-smoke'] }}
+        env:
+          STAGING_URL: ${{ inputs['staging-url'] }}
+          APP: ${{ inputs.app }}
+          WORKSPACE: ${{ inputs.workspace }}
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+        run: |
+          if [ -z "$STAGING_URL" ]; then
+            echo "::error::No staging-url configured for $APP — cannot verify staging before production (#1107). Set stagingUrl in $WORKSPACE/$APP/deploy.config.json, or dispatch with skip-staging-smoke=true (deliberate escape hatch)."
+            exit 1
+          fi
+          # Same deterministic creds the staging seed step derives on push to main.
+          SALT="${REVIEW_SEED_SECRET:-crouton-review-seed}"
+          EMAIL="review+${APP}-main@example.com"
+          PW="$(printf '%s' "${SALT}:${APP}:main" | sha256sum | cut -c1-24)"
+          MANIFEST="$WORKSPACE/$APP/deploy.config.json"
+          if node scripts/smoke-deployed.mjs --url "$STAGING_URL" --email "$EMAIL" --password "$PW" --app "$APP" --manifest "$MANIFEST"; then
+            echo "### ✅ Pre-prod gate ($APP): staging smoke green on $STAGING_URL — proceeding to production" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Pre-prod gate REFUSED ($APP): the staging smoke is red on $STAGING_URL. Fix staging (merge to main redeploys it), verify the smoke is green, then re-dispatch. Genuine emergency with staging down → re-dispatch with skip-staging-smoke=true (#1107)."
+            exit 1
+          fi
+
+      - name: Pre-prod gate SKIPPED (escape hatch)
+        if: ${{ inputs.environment == 'production' && inputs['skip-staging-smoke'] }}
+        run: |
+          echo "::warning::skip-staging-smoke=true — deploying PRODUCTION without verifying the live staging (#1107 escape hatch). Do this only when staging itself is down and prod needs a hotfix."
+          echo "### ⚠️ Pre-prod gate SKIPPED via skip-staging-smoke — staging was NOT verified before this production deploy" >> "$GITHUB_STEP_SUMMARY"
 
       # --ignore-scripts: skip every workspace postinstall (guarded `nuxt prepare`)
       # during a whole-monorepo install; the app's own prepare runs below.
@@ -384,9 +433,11 @@ jobs:
       # Prove the DEPLOYED preview actually works — log in with the seeded account, run
       # any app-declared CRUD + public read, and screenshot it (#293). This is the
       # acceptance typecheck/boot can't give: auth + a data round-trip on the real Worker
-      # (D1 + secrets + better-auth). Report-only by DEFAULT — a brittle smoke must never
-      # red a previously-green deploy across velo/fanfare/triage; an app opts into gating
-      # with `"smoke": { "required": true }` in its deploy.config.json. Login proof + CRUD
+      # (D1 + secrets + better-auth). On PR previews it's report-only by DEFAULT — a
+      # brittle smoke must never red a previously-green deploy across velo/fanfare/triage;
+      # an app opts into gating with `"smoke": { "required": true }` in its
+      # deploy.config.json. On push to main (the shared staging) a failure GATES by
+      # default — see the "Gate on smoke result" step (#1106). Login proof + CRUD
       # use plain fetch (always available); the screenshot is best-effort (skips cleanly
       # when no browser is present on the runner).
       - name: Verify deployed preview (smoke)
@@ -418,18 +469,37 @@ jobs:
           path: screenshots/${{ inputs.app }}-smoke.png
           if-no-files-found: ignore
 
-      # Gate the deploy on the smoke ONLY when the app opted in (smoke.required: true).
-      # Otherwise a failing smoke is a loud warning, not a red deploy.
-      - name: Gate on smoke result (opt-in)
+      # Gate the deploy on the smoke — two regimes (#1106, epic #632 Rung 2):
+      #   • PR / dispatch previews: report-only unless the app opts IN
+      #     (smoke.required: true). A brittle smoke must never block PR iteration.
+      #   • push to main (the shared *.pmcp.dev staging): gate by DEFAULT. A green
+      #     workflow over a broken deployed staging is the silent failure
+      #     report-failed-deploy.yml exists to catch — and it only reacts to RED
+      #     runs, so a report-only failure here would vanish as a ::warning::.
+      #     A known-brittle app can opt OUT with smoke.gateOnMain: false.
+      #   A smoke "fail" is always a real broken deploy: skipped checks
+      #   (no creds / no manifest) pass, they don't fail (see smoke-deployed.mjs).
+      - name: Gate on smoke result
         if: ${{ steps.smoke.outputs.result == 'fail' }}
         env:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
+          EVENT: ${{ github.event_name }}
         run: |
-          REQUIRED=$(jq -r '.smoke.required // false' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null || echo false)
+          CONFIG="$WORKSPACE/$APP/deploy.config.json"
+          REQUIRED=$(jq -r '.smoke.required // false' "$CONFIG" 2>/dev/null || echo false)
           if [ "$REQUIRED" = "true" ]; then
             echo "::error::Deployed-preview smoke failed and $APP sets smoke.required=true."
             exit 1
+          fi
+          if [ "$EVENT" = "push" ]; then
+            GATE_ON_MAIN=$(jq -r '.smoke.gateOnMain // true' "$CONFIG" 2>/dev/null || echo true)
+            if [ "$GATE_ON_MAIN" = "true" ]; then
+              echo "::error::Deployed smoke failed on the shared staging after merge to main — failing the run so report-failed-deploy.yml opens an issue (#1106). A known-brittle smoke can opt out with smoke.gateOnMain=false in $APP/deploy.config.json."
+              exit 1
+            fi
+            echo "::warning::Deployed smoke failed post-merge, but $APP sets smoke.gateOnMain=false (report-only)."
+            exit 0
           fi
           echo "::warning::Deployed-preview smoke failed (report-only; set smoke.required=true in $APP/deploy.config.json to gate)."
 
