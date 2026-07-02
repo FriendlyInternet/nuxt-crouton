@@ -45,7 +45,7 @@ jobs:
       # AUTH: this is headless/unattended, so it MUST use an API key. Do NOT swap in a
       # subscription CLAUDE_CODE_OAUTH_TOKEN — subscription OAuth is for interactive
       # Claude Code use only, not CI automation (Anthropic Legal & Compliance terms).
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         id: claude
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}

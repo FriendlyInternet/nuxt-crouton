@@ -46,7 +46,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           show_full_output: true
