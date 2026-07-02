@@ -1,5 +1,10 @@
 # Progress Tracker
 
+> ⚠️ **Superseded (kept for history).** Everything below tracks the ThinkGraph MCP
+> initiative — the `thinkgraph` app has since been **retired**, so this is not a live
+> tracker. Work is tracked as **GitHub issues/epics** (root `CLAUDE.md` → GitHub Issue
+> Tracking); this file is only an *optional* phase-level rollup when one is kept current.
+
 ## Current Initiative: ThinkGraph MCP Integration (Phase 1)
 
 **Goal:** Complete the MCP read-write loop so external AI agents can fully interact with ThinkGraph.

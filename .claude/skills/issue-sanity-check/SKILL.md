@@ -1,5 +1,6 @@
 ---
 name: issue-sanity-check
+layer: method
 description: A pessimistic go/no-go the moment you pick up a GitHub issue — read it skeptically and hunt for reasons NOT to do it (already done? obsolete? duplicate? premise wrong? cheaper way? net-negative?), returning proceed / reshape / drop with one-line evidence. The pickup-time half of the dedup gate (the create-time half is /issue-dedup). Use as step 1 of the Task Execution Workflow, or run /issue-sanity-check #NN.
 allowed-tools: mcp__github__issue_read, mcp__github__search_issues, mcp__github__list_issues, mcp__github__add_issue_comment, Read, Grep, Glob, Bash
 ---

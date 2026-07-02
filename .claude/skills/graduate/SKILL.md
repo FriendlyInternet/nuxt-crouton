@@ -1,5 +1,6 @@
 ---
 name: graduate
+layer: stack
 description: Turn a proven POC into a real, crouton-native, documented package(s) + a consuming app — the deliberate "step back and rebuild" checkpoint. SPEC-DRIVEN — the POC discovers a behaviour spec (captured at each sign-off), graduation freezes it as authoritative, the app is rebuilt the crouton way to satisfy it, and nothing is done until it's checked + signed off against two gates (experience + crouton-conformance). Use when a `pocs/*` app is proven and "done", or asked to "graduate this poc", "make it a real app", "extract the package".
 allowed-tools: Read, Grep, Glob, Bash, mcp__github__issue_read, mcp__github__issue_write, mcp__github__sub_issue_write, mcp__github__add_issue_comment, mcp__github__list_issues, mcp__github__search_issues, mcp__github__get_label
 ---

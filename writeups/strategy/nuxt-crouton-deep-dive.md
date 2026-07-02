@@ -1,5 +1,12 @@
 # Nuxt-Crouton: Complete Technical Deep Dive
 
+> ⚠️ **Point-in-time snapshot (kept for history).** Written against a 22-package repo on
+> the **Cloudflare Pages**-era deploy and the €5 Atelier-tier product framing. Since then:
+> apps deploy to Cloudflare **Workers** (#108/#114), the package count has grown
+> (`ls packages/` for the live list), and the product framing has moved on. Read it for
+> architecture background, not current facts — current stack/deploy rules live in the root
+> `CLAUDE.md`.
+
 ## 1. Repository Overview
 
 **Repository**: `FriendlyInternet/nuxt-crouton`  

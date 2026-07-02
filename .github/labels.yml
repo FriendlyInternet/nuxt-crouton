@@ -256,4 +256,4 @@
   description: "Auto-fix bot has attempted to fix CI 3 times — at the cap (#338)"
 - name: "ui-approved"
   color: "0e8a16"
-  description: "UI sign-off given — the mockup is approved, build may proceed (#307/#310)"
+  description: "Informational UI sign-off marker — resumes NOTHING (approval = lgtm comment, #572); digest badge"

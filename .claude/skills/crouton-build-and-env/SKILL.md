@@ -78,7 +78,7 @@ pnpm typecheck:fixtures     # same for fixtures/*
 
 Known deltas:
 
-- Root script `typecheck:mcp` matches nothing (stale package name) and exits 0 — a silent no-op, tracked as [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098). Use `pnpm --filter @fyit/crouton-mcp typecheck` instead. The why + the full inventory of these stale-name silent no-ops (incl. the `.claude/settings.json` MCP path) is owned by sibling `crouton-config-registry` § "Silent no-ops".
+- Root script `typecheck:mcp` was a silent no-op (stale package name, exited 0) until fixed under [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098) — it now runs `pnpm --filter @fyit/crouton-mcp typecheck`. The stale-name silent-no-op inventory is owned by sibling `crouton-config-registry` § "Silent no-ops".
 - CLAUDE.md says "EVERY change requires `pnpm typecheck`", but CI does **not** run the full app sweep — it typechecks only `@fyit/crouton-mcp` and build-smokes fanfare, whose typecheck is *intentionally ungated* ("known pre-existing baseline of type errors", comment in `ci.yml`). The gate gap is tracked as [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097). So the full-sweep rule is enforced by agent discipline, not CI. Trust order: AGENTS.md > root CLAUDE.md > CI reality; run the sweep yourself.
 
 ## 5. Env vars
@@ -110,7 +110,7 @@ Fixtures commit a dummy `.env` on purpose (`BETTER_AUTH_SECRET=dev-fixture-secre
 
 - Root CLAUDE.md's "Development Commands" lists `pnpm dev` — **no root `dev` script exists**; use `pnpm --filter <app> dev`.
 - `pnpm-workspace.yaml` `examples/*` glob: no such directory.
-- `typecheck:mcp` filter + `.claude/settings.json` MCP path: stale `nuxt-crouton-mcp-server` name (§4, [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098)).
+- `typecheck:mcp` filter + `.claude/settings.json` MCP path: had the stale `nuxt-crouton-mcp-server` name — fixed under [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098) (§4).
 - `scripts/deploy-app.sh` still says Cloudflare *Pages* + `wrangler.toml` — superseded; use the `/deploy` skill (sibling `crouton-ci-and-deploy-map`).
 
 Where docs disagree, trust order: see `crouton-docs-trust-map` §1.

@@ -85,7 +85,7 @@ Things a user may report as broken that are **deliberately disabled** — don't 
 - `packages/crouton-pages/nuxt.config.ts` has that **exact rule commented out and marked `BROKEN: conflicts with pages-pages layer routes`** — "Wildcards like '/api/teams/*/pages/**' break layer route matching in Nitro 2.13.1".
 - `apps/velo/nuxt.config.ts` independently warns: the wildcard "conflicts with radix3's :id parameter routing and breaks ALL /api/teams/:id/* generated collection routes".
 
-The nominal doc trust order (see `crouton-docs-trust-map` §1) doesn't settle this — it's a **doc-vs-working-code** conflict, not doc-vs-doc: two independent code comments record a live runtime failure the doc's example causes. **Operational rule: do NOT add wildcard `/api/teams/*/...` routeRules; treat root CLAUDE.md's ISR example as stale/known-broken.** Whether a newer Nitro fixes the radix3 conflict is unverified — re-test before re-enabling. Fixing the root doc is tracked as issue #1095.
+The nominal doc trust order (see `crouton-docs-trust-map` §1) doesn't settle this — it's a **doc-vs-working-code** conflict, not doc-vs-doc: two independent code comments record a live runtime failure the doc's example causes. **Operational rule: do NOT add wildcard `/api/teams/*/...` routeRules.** Whether a newer Nitro fixes the radix3 conflict is unverified — re-test before re-enabling. Root CLAUDE.md's ISR example was fixed under issue #1095 (it now shows the broken rule only as an explicit ❌).
 
 ## Discriminating experiments (cheap probes that split hypothesis classes)
 
@@ -104,7 +104,7 @@ Every error string was grepped to its source in the working tree; file paths and
 verified: 2026-07-02
 
 ```bash
-grep -n "database: true\|isr: 3600" CLAUDE.md                          # gotcha + stale ISR example still in root doc? (#1095 open?)
+grep -n "database: true\|isr: 3600" CLAUDE.md                          # isr: 3600 should appear only inside the commented ❌ example (#1095)
 grep -n "isr" packages/crouton-pages/nuxt.config.ts apps/velo/nuxt.config.ts   # contradiction comments still live? (was pages:110-115, velo:75-77)
 grep -n "500 under production SSR" e2e/CLAUDE.md                       # #246 still open? (was e2e/CLAUDE.md:307-309)
 grep -n "haveIBeenPwned" packages/crouton-auth/server/lib/auth.ts      # breach check still off? (was auth.ts:708-714)

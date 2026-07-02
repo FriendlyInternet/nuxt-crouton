@@ -1,5 +1,6 @@
 ---
 name: skills-digest
+layer: method
 description: Generate a monthly digest of the skills in this repo's flow system — a render-only HTML + plain-text email listing every skill grouped by job, plus a "what was added / updated / removed since last digest" band computed from git history. Use when asked for a "skills digest", "what skills do we have", "skills report", "what skills changed", or to keep the skill surface from sprawling.
 allowed-tools: Read, Write, Bash
 ---

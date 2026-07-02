@@ -2,7 +2,7 @@
   "name": "nuxt-crouton-workspace",
   "version": "1.0.0",
   "private": true,
-  "description": "Nuxt Crouton - Reusable CRUD layers for Nuxt 3",
+  "description": "Nuxt Crouton - Reusable CRUD layers for Nuxt 4",
   "keywords": [
     "nuxt",
     "nuxt-layer",
@@ -32,7 +32,7 @@
     "test:ui": "vitest --ui",
     "typecheck": "pnpm -r --filter './apps/*' typecheck",
     "typecheck:fixtures": "pnpm -r --filter './fixtures/*' typecheck",
-    "typecheck:mcp": "pnpm --filter nuxt-crouton-mcp-server typecheck",
+    "typecheck:mcp": "pnpm --filter @fyit/crouton-mcp typecheck",
     "poc:scaffold-deploy": "node scripts/scaffold-poc-deploy.mjs",
     "db:clone": "node scripts/db-clone.mjs",
     "db:counts": "node scripts/db-counts.mjs",

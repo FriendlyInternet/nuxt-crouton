@@ -48,7 +48,7 @@
     "crouton": {
       "command": "node",
       "args": [
-        "./packages/nuxt-crouton-mcp-server/dist/index.js"
+        "./packages/crouton-mcp/dist/index.js"
       ]
     },
     "thinkgraph": {
