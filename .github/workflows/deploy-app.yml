@@ -93,7 +93,13 @@ on:
 jobs:
   deploy:
     name: Deploy ${{ inputs.app }} (${{ inputs.environment }})
-    runs-on: ubuntu-latest
+    # Routed to the self-hosted box behind the AGENT_RUNNER toggle (#654/#658 — wrangler
+    # deploy is cross-platform Node; verified from macOS by the #654 proof run). The fork
+    # guard implements the runbook §5 policy: deploy-pocs.yml calls this on `pull_request`
+    # of pocs/**, so a fork PR must never reach the box — it routes back to GitHub-hosted
+    # structurally (fork PRs also get no secrets, but the guard keeps their code off our
+    # hardware in the first place). Delete the AGENT_RUNNER repo var to fall back.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
     # GitHub deployment environment — kept as production/staging so any
     # environment-scoped secrets/protection from the existing setup still apply
     # (the Workers target is staging/prod independently, via inputs.environment).
@@ -112,6 +118,13 @@ jobs:
       NODE_OPTIONS: '--max-old-space-size=8192'
     steps:
       - uses: actions/checkout@v4
+
+      # Hosted runners ship jq; a self-hosted mac starts bare (runbook §2a installs
+      # node/pnpm/gh/wrangler but jq wasn't on the list). Self-heals via Homebrew —
+      # already on the runner PATH through its `.path` file. No-op when jq exists.
+      - name: Ensure jq (self-hosted macOS)
+        if: runner.os == 'macOS'
+        run: command -v jq >/dev/null 2>&1 || brew install jq
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
