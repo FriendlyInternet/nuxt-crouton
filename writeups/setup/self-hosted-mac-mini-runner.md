@@ -325,10 +325,13 @@ Pi runbook's "auth-retry-with-backoff self-heal" idea.
 Two committed files do this:
 
 - [`scripts/mac-mini-runner/runner-healthcheck.sh`](../../scripts/mac-mini-runner/runner-healthcheck.sh)
-  — checks (1) the launchd service has a live PID, (2) that PID is a real
-  `Runner.Listener`, (3) the box can reach `api.github.com`, (4) — if a `GH_TOKEN` is
-  present — the repo's API reports ≥1 **online** runner. On any failure it restarts the
-  runner via `launchctl kickstart` (falling back to `svc.sh`), alerts via an optional
+  — **fleet-aware** (#1045): for **every** installed runner service (one
+  `actions.runner.*.plist` per runner) it checks (1) the service is loaded with a live
+  PID, (2) that runner's own `Runner.Listener` process exists, (3) the box can reach
+  `api.github.com`, (4) — if a `GH_TOKEN` is present — the repo's API reports **all
+  expected** runners online (default expected = installed count; override with
+  `EXPECTED_RUNNERS`). On failure it restarts only the failed runner(s) via `launchctl
+  kickstart` (falling back to that runner's `svc.sh`), alerts via an optional
   `ALERT_WEBHOOK`, and exits non-zero.
 - [`scripts/mac-mini-runner/com.nuxtcrouton.runner-watchdog.plist`](../../scripts/mac-mini-runner/com.nuxtcrouton.runner-watchdog.plist)
   — a launchd agent that runs the health-check every **5 minutes**.
@@ -455,6 +458,54 @@ fork/drive-by reachable, add the fork guard or an actor gate first.
 - Network note: the runner only makes **outbound** connections (long-poll to GitHub) — no
   inbound ports to firewall. Egress is unrestricted by default; if you later want to cap
   what agent jobs can reach, that's an outbound-proxy/PF exercise, tracked separately.
+
+---
+
+## 6. Scaling to N runners — concurrent jobs on the one box (#1045)
+
+**A GitHub runner executes exactly one job at a time.** There is no "jobs per runner"
+setting — one registered runner = one launchd service = one slot. So when a long job
+(an E2E smoke, a decompose pipeline, an in-job agent session) holds the slot, every other
+`mac-mini` job queues behind it. The fix is boringly standard: **register more runners on
+the same box.** Each gets a unique `--name` (`mac-mini-2`, `mac-mini-3`, …) but the **same
+`--labels mac-mini`**, so GitHub fans `runs-on`-matched jobs across whichever slots are
+idle — no workflow changes at all.
+
+**Resource sizing:** each slot can be a full Nuxt build / Playwright run / in-job Claude
+agent at once. **Default fleet = 3** on the mini; don't over-provision or the box thrashes
+(drop to 2 if RAM says so — watch it under load).
+
+### Adding a runner
+
+⚙️ **GITHUB (repo settings)** — mint a **fresh registration token** per runner (they
+expire in ~1h and are single-use): Settings → Actions → Runners → **New self-hosted
+runner** — you only need the token from that page; the download is reused from the first
+install.
+
+🖥️ **MINI (terminal)** — folder: the repo clone (the script lives in it):
+
+```bash
+cd ~/nuxt-crouton
+RUNNER_TOKEN=<token from the UI> ./scripts/mac-mini-runner/add-runner.sh 2   # then 3, …
+```
+
+[`add-runner.sh`](../../scripts/mac-mini-runner/add-runner.sh) automates the whole §1–§2
+dance for runner N: unpacks the existing tarball into `~/actions-runner-<N>`, registers
+as `mac-mini-<N>` with the `mac-mini` label (`--replace`-safe to re-run), copies the
+first runner's **`.path`** file (the launchd-minimal-PATH gotcha, §2a), and installs +
+starts its own launchd service (`actions.runner.<owner>-<repo>.mac-mini-<N>`).
+
+The watchdog (§4c) needs **no reconfiguration** — it discovers every installed
+`actions.runner.*.plist` on each run and requires the whole fleet online.
+
+✅ **Checkpoint (#1045 acceptance):**
+1. Repo Settings → Actions → Runners shows all fleet members **Idle**, each labelled
+   `self-hosted, macOS, ARM64, mac-mini`.
+2. Dispatch 3 `mac-mini` jobs at once (e.g. re-run three PR agent-gates) → **all 3 go
+   `in_progress`**, none `queued`.
+3. `kill` one runner's `Runner.Listener` → the watchdog flags that runner (not "≥1 online
+   so fine") and restarts just it.
+4. Regression: a single dispatched job still routes to the mini as before.
 
 ---
 
