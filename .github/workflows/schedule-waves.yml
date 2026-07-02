@@ -28,7 +28,10 @@ permissions:
 
 jobs:
   release:
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    # Belt-and-braces: a closing FORK PR also fires this trigger — the job only runs
+    # repo-defined script (never PR code), but keep fork-originated events off the
+    # self-hosted box anyway. Security policy: runbook §5 (#656).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
     steps:
       # Mint a Nuxt Harness App installation token so the released `delegate` label is applied by
       # `nuxt-harness[bot]` → the dispatched decompose run passes the bot-actor guard via

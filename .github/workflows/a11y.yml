@@ -27,7 +27,10 @@ jobs:
     if: >
       github.event.pull_request.draft == false &&
       github.event.pull_request.user.type != 'Bot'
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    # Fork PRs never land on the self-hosted box, even with AGENT_RUNNER set — this job
+    # checks out the PR's code and runs an agent (bash) over it, so a fork head means
+    # untrusted code on our hardware. Security policy: runbook §5 (#656).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
     # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to
