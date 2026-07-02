@@ -148,13 +148,20 @@ if (sf && (sf.flagged?.length || sf.malformed?.length)) {
 }
 
 if (data.retiredProjects?.length) {
+  // Past-threshold entries get a direct link to the teardown-app workflow_dispatch
+  // page — the one-click "actually delete it now" trigger (#1053). teardown-app.yml
+  // only takes `app` as a free-text input, so we can't pre-fill the form via query
+  // string; the link takes the human straight to Actions with the values to type in.
+  const teardownUrl = `https://github.com/${data.repo}/actions/workflows/teardown-app.yml`
+  const retireDeleteLink = (name) =>
+    `[Retire-delete ${name}](${teardownUrl}) (run with app=${name}, scope=staging, delete_cloudflare=true)`
   sections.push([
     '\u{1F5D1} Retired projects',
     [
       '`retired/` dirs with a `.retired.json` stamp:',
       ...data.retiredProjects.map((r) => {
         const line = `- \`retired/${r.type}s/${r.name}\` — archived ${r.archivedAt} (${r.ageDays}d ago)`
-        return r.pastThreshold ? `${line} → \`/retire-delete ${r.name}\` to fully remove` : line
+        return r.pastThreshold ? `${line} → ${retireDeleteLink(r.name)}` : line
       })
     ]
   ])
