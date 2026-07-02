@@ -266,7 +266,7 @@ crouton db-pull --config ./custom-wrangler.jsonc
 | Option | Description |
 |--------|-------------|
 | `--fields-file <path>` | Schema JSON file |
-| `--dialect <pg\|sqlite>` | Database dialect (default: pg) |
+| `--dialect <pg\|sqlite>` | Database dialect (default: sqlite for the direct command; `crouton config` has no flag — it reads the config file's `dialect`, falling back to `pg` when omitted, so always set `dialect: 'sqlite'` explicitly) |
 | `--hierarchy` | Enable tree structure |
 | `--seed` | Generate seed data file (drizzle-seed) |
 | `--count <number>` | Number of seed records (default: 25) |
@@ -498,7 +498,7 @@ vue-i18n merges them at build time; seed into `translations_ui` only if you want
 layers/[layer]/collections/[collection]/
 ├── app/
 │   ├── components/
-│   │   ├── Form.vue
+│   │   ├── _Form.vue
 │   │   └── List.vue
 │   └── composables/
 │       └── use[LayerCollection].ts
@@ -506,8 +506,8 @@ layers/[layer]/collections/[collection]/
 │   ├── api/teams/[id]/[layer]-[collection]/
 │   │   ├── index.get.ts
 │   │   ├── index.post.ts
-│   │   ├── [id].patch.ts
-│   │   └── [id].delete.ts
+│   │   ├── [{singular}Id].patch.ts
+│   │   └── [{singular}Id].delete.ts
 │   └── database/
 │       ├── schema.ts
 │       ├── queries.ts
@@ -967,14 +967,14 @@ The generator auto-detects field types and generates appropriate data:
 
 | Artifact | Location | Update When |
 |----------|----------|-------------|
-| This CLAUDE.md | `packages/nuxt-crouton-cli/CLAUDE.md` | CLI, options, field types, key files change |
-| README.md | `packages/nuxt-crouton-cli/README.md` | User-facing features change |
+| This CLAUDE.md | `packages/crouton-cli/CLAUDE.md` | CLI, options, field types, key files change |
+| README.md | `packages/crouton-cli/README.md` | User-facing features change |
 | Example configs | `examples/crouton.config.*.js` | Flags, schema format, defaults change |
 | Claude Skill | `.claude/skills/crouton.md` | Field types, workflow, commands change |
-| MCP Server | `packages/nuxt-crouton-mcp-server/` | CLI commands, field types change |
-| Auth Package | `packages/nuxt-crouton-auth/CLAUDE.md` | If `@crouton/auth/server` exports change |
-| External Docs | `apps/docs/content/` | Any user-facing change |
-| FormPreview.vue | `packages/nuxt-crouton-schema-designer/.../FormPreview.vue` | Form component mapping changes |
+| MCP Server | `packages/crouton-mcp/` | CLI commands, field types change |
+| Auth Package | `packages/crouton-auth/CLAUDE.md` | If `@crouton/auth/server` exports change |
+| External Docs | `docs/content/` | Any user-facing change |
+| FormPreview.vue | `packages/crouton-designer/.../FormPreview.vue` | Form component mapping changes |
 
 ### Step 1: Classify Your Change
 
@@ -1029,7 +1029,7 @@ If field types, commands, or workflow changed:
 
 If CLI commands, flags, or field types changed:
 
-- [ ] Update `packages/nuxt-crouton-mcp-server/` (when implemented)
+- [ ] Update `packages/crouton-mcp/` (when implemented)
   - [ ] Field type definitions
   - [ ] Tool input schemas
   - [ ] Tool handlers
@@ -1040,7 +1040,7 @@ For ANY user-facing change:
 
 ```bash
 # Search for references in external docs (from monorepo root)
-grep -r "crouton" apps/docs/content --include="*.md" | head -20
+grep -r "crouton" docs/content --include="*.md" | head -20
 ```
 
 - [ ] Update affected documentation pages
@@ -1057,7 +1057,7 @@ After completing updates, verify everything is in sync:
 
 **Option 2: Run the CI validation script**
 ```bash
-node scripts/validate-field-types-sync.ts
+node scripts/validate-field-types-sync.mjs
 ```
 
 These tools will:
@@ -1095,6 +1095,6 @@ See `.claude/hooks/README.md` for more options.
 - [ ] External docs checked
 
 ### Verification
-- [ ] `/sync-check` command passed (or `node scripts/validate-field-types-sync.ts`)
+- [ ] `/sync-check` command passed (or `node scripts/validate-field-types-sync.mjs`)
 - [ ] `npx nuxt typecheck` passed
 ```

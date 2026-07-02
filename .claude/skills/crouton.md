@@ -10,9 +10,9 @@ This skill helps generate complete CRUD collections for Nuxt Crouton application
 
 | Tool | Purpose | Example |
 |------|---------|---------|
-| `crouton_list_docs` | List all doc pages | Filter by section: `crouton_list_docs({ section: "generation" })` |
-| `crouton_search_docs` | Search for topics | `crouton_search_docs({ query: "config file" })` |
-| `crouton_get_doc` | Read full doc page | `crouton_get_doc({ path: "generation/multi-collection" })` |
+| `list_sections` | List all doc pages | Filter by section: `list_sections({ section: "generation" })` |
+| `search_docs` | Search for topics | `search_docs({ query: "config file" })` |
+| `get_page` | Read full doc page | `get_page({ path: "generation/multi-collection" })` |
 
 **Key Documentation Sections:**
 - `getting-started/` - Installation and first collection
@@ -21,8 +21,8 @@ This skill helps generate complete CRUD collections for Nuxt Crouton application
 - `api-reference/` - Composables, components, server utils
 
 **Documentation Location:**
-- Local: `apps/docs/content/`
-- Live: https://nuxt-crouton-docs.pages.dev/
+- Local: `docs/content/`
+- Live: https://nuxt-crouton.dev/
 
 ### When to Use Docs
 
@@ -333,7 +333,7 @@ the LLM `/layout` pass (#711) is gated and out of scope.
 layers/{layer}/collections/{collection}/
 ├── app/
 │   ├── components/
-│   │   ├── Form.vue          # CRUD form with Zod validation
+│   │   ├── _Form.vue         # CRUD form with Zod validation (note the underscore; skipped when formComponent is set)
 │   │   └── List.vue          # Data table with actions
 │   └── composables/
 │       └── use{Layer}{Collection}s.ts  # Schema, columns, config
@@ -341,8 +341,8 @@ layers/{layer}/collections/{collection}/
 │   ├── api/teams/[id]/{layer}-{collection}s/
 │   │   ├── index.get.ts      # GET all / by IDs
 │   │   ├── index.post.ts     # CREATE
-│   │   ├── [id].patch.ts     # UPDATE
-│   │   └── [id].delete.ts    # DELETE
+│   │   ├── [{singular}Id].patch.ts   # UPDATE (e.g. [productId].patch.ts — NOT [id])
+│   │   └── [{singular}Id].delete.ts  # DELETE
 │   └── database/
 │       ├── schema.ts         # Drizzle ORM schema
 │       ├── queries.ts        # Database operations
@@ -461,7 +461,7 @@ If a collection uses a block editor (`"meta": { "component": "EditorBlocks" }`) 
 
 ## Reference Documentation
 
-- CLI: `packages/nuxt-crouton-cli/CLAUDE.md`
-- MCP Server: `packages/nuxt-crouton-mcp-server/CLAUDE.md`
+- CLI: `packages/crouton-cli/CLAUDE.md`
+- MCP Server: `packages/crouton-mcp/CLAUDE.md`
 - Core Package: `packages/nuxt-crouton/CLAUDE.md`
-- i18n Support: `packages/nuxt-crouton-i18n/CLAUDE.md`
+- i18n Support: `packages/crouton-i18n/CLAUDE.md`

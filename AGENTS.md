@@ -129,6 +129,12 @@ Treat the harness as a system worth measuring: its always-on context budget (siz
 by layer) and how the loops actually ran. At epic close, **postmortem** (went well / was hard, with
 evidence / 1–3 proposals) and mint accepted proposals as tracked tasks. This is how the loop tightens.
 
+**The evidence bar for claiming a result** (internally or publicly): one mechanism must explain *all*
+observations — including the negatives — and survive an adversarial attempt to refute it; the
+hypothesis states its numbers *before* the run (the issue's "We'll know by", made quantitative); and
+negative results are first-class data — record the reversal and extract the rule, don't delete it.
+A claim that ignores its own counter-evidence is the proxy-for-done failure wearing a lab coat.
+
 ## Maintaining this method
 
 Changing a skill/agent/gate → keep this file + the stack adapter in sync and the `layer:` tags honest.

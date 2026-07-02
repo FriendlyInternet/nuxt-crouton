@@ -62,7 +62,21 @@ export const META = {
   'db-migrations': { group: 'verify', triggers: ['ask'] },
   'db-clone': { group: 'verify', triggers: ['ask'] },
   'think-aloud': { group: 'meta', triggers: ['ask'] },
-  'loop-station': { group: 'meta', triggers: ['ask', 'auto'] }
+  'loop-station': { group: 'meta', triggers: ['ask', 'auto'] },
+  // Knowledge-handoff library (epic #1073) — reference packs loaded on demand, not workflow steps.
+  'crouton-architecture-contract': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-generation-reference': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-layout-reference': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-build-and-env': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-run-and-operate': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-diagnostics-index': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-failure-archaeology': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-change-control': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-ci-and-deploy-map': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-validation-reality': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-config-registry': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-docs-trust-map': { group: 'knowledge', triggers: ['ask'] },
+  'crouton-harness-observability': { group: 'knowledge', triggers: ['ask'] },
 }
 
 export const GROUPS = [
@@ -73,6 +87,7 @@ export const GROUPS = [
   { id: 'deploy', title: 'Deploy', sub: 'Code → a live Cloudflare Workers URL. Staging by default; production is a separate skill.' },
   { id: 'verify', title: 'Verify & maintain', sub: 'Prove nothing broke; keep the repo current.' },
   { id: 'meta', title: 'Meta', sub: 'Thinking & workflow aids.' },
+  { id: 'knowledge', title: 'Knowledge handoff', sub: 'Reference packs (epic #1073): architecture, history, diagnostics, operations — load on demand when a question needs project knowledge, not a workflow.' },
   { id: 'uncategorised', title: '⚠️ Uncategorised', sub: 'New skills not yet placed in the generator META map — add them.' }
 ]
 
