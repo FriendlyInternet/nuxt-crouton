@@ -32,10 +32,15 @@ jobs:
 
       # Pinned to commit with Claude Code 2.1.100 — fixes bun "directory mismatch" crash in 2.1.98 (v1.0.92)
       # TODO: revert to @v1 once v1.0.93+ is released
+      # --allowedTools: tag-mode (@claude) defaults to a read+git-commit-only grant (no
+      # Write/Edit/general Bash), so a mention asking for a real code change silently can't
+      # make one (#658 proof-run finding). Grant the same working set the other agent
+      # workflows use (gate-smoke.yml precedent); the actor gate (write access) still
+      # bounds who can invoke, and the action keeps WebSearch/WebFetch disallowed.
       - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: "--max-turns 25"
+          claude_args: "--max-turns 25 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           show_full_output: true
 
       # Loop Station WS2 (#929) / usage rollup (#1064): ship this runner's
