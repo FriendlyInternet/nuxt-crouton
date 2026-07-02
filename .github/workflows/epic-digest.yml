@@ -4,11 +4,16 @@ name: epic-digest
 # (no LLM) — gathers via the GitHub API with the built-in GITHUB_TOKEN, renders
 # email-safe HTML + a plain-text mirror, and emails it. See
 # .claude/skills/epic-digest/ (gather.mjs → render.mjs).
+#
+# Cadence-as-data (#637/#1139): the cron fires DAILY (cheap wake-up); the `gate`
+# step reads .github/digests.yml via schedule.mjs and exits the run early on
+# non-send days. Change the cadence in digests.yml — never this cron. A manual
+# workflow_dispatch always sends (FORCE).
 
 on:
   schedule:
-    # ~06:00 Europe/Brussels. Cron is UTC and can't track DST: 06:00 CET (winter)
-    # = 05:00 UTC; in summer (CEST) this lands at 07:00 local. Adjust if it matters.
+    # Daily wake-up ~06:00 Europe/Brussels (UTC cron can't track DST); the real
+    # send day comes from .github/digests.yml via the gate step below.
     - cron: '0 5 * * *'
   workflow_dispatch:
 
@@ -29,7 +34,16 @@ jobs:
         with:
           node-version: 20
 
+      # Cadence gate (#1139): digests.yml decides whether today is a send day.
+      # Manual dispatch forces a send. Everything below is skipped when send=false.
+      - name: Schedule gate
+        id: gate
+        env:
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
+        run: node .claude/skills/housekeeping/schedule.mjs epic-digest
+
       - name: Gather the issue tree
+        if: steps.gate.outputs.send == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DIGEST_REPO: ${{ github.repository }}
@@ -37,12 +51,14 @@ jobs:
 
       # Render email-safe HTML + a plain-text mirror (no LLM, no network).
       - name: Render the digest
+        if: steps.gate.outputs.send == 'true'
         run: node .claude/skills/epic-digest/render.mjs digest.data.json --out-dir .
 
       # Deliver by email via Resend. Shares the sender var (RESEND_FROM) with
       # red-team-daily.yml; recipient is its own (DIGEST_REPORT_EMAIL). When the
       # secret/vars are unset the step warns and skips so the job stays green.
       - name: Email the digest (Resend)
+        if: steps.gate.outputs.send == 'true'
         env:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           EMAIL_FROM: ${{ vars.RESEND_FROM }}
@@ -75,7 +91,7 @@ jobs:
               -d @- -w '\nHTTP %{http_code}\n'
 
       - name: Upload digest artifacts
-        if: always()
+        if: always() && steps.gate.outputs.send == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: epic-digest

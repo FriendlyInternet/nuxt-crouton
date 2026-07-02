@@ -195,6 +195,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # Best-effort: the deployed smoke's SCREENSHOT wants a Playwright browser; the
+      # smoke itself passes without one (evidence, not a gate — #1126). On the
+      # self-hosted runner this downloads once into the persistent ms-playwright
+      # cache and is a no-op afterwards; on hosted runners it costs ~30s. Never
+      # fails the deploy.
+      - name: Ensure Playwright browser (smoke screenshots)
+        run: npx playwright install chromium 2>&1 | tail -2 || true
+
       # --ignore-scripts above also skips native-module build steps. @nuxt/content
       # (the docs app) needs better-sqlite3's native binding at BUILD time to process
       # collections into the local DB (the dump that's loaded into D1 at runtime).

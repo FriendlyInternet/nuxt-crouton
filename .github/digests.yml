@@ -30,8 +30,7 @@ housekeeping:
   deliver: [issue]
   # to: [you@example.com]   # only used when deliver includes email
 
-# epic-digest currently hard-codes its own daily cron; retrofitting it onto this schema is a
-# nice-to-have follow-up (#637). Declared here so the config is the single source of intent.
+# Gated by schedule.mjs like the others (retrofit #1139; the cron is a daily cheap wake-up).
 # Delivered by email only (Resend) — the standing-issue rail was retired to stop the duplicate
 # GitHub-notification mail.
 epic-digest:
