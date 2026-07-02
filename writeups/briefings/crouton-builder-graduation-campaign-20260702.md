@@ -1,8 +1,5 @@
----
-name: crouton-graduation-campaign
-layer: stack
-description: The executable, decision-gated campaign for finishing the LIVE builder graduation (#983) under the spec-driven method (#992) — current state of the battlefield, numbered phases with expected observations, the ranked options where genuine choices exist, and the wrong paths (#988) fenced off with evidence. Use when picking up issues 983/988/992, when asked to "finish the graduation", "rebuild the builder app", "dogfood the spec-driven loop", "graduate crouton-builder", or when confused why pocs/crouton-builder exists but is "wrong". For the generic mechanics use the graduate/spec/conformance skills — this skill only sequences them for this case. (NB keep this description free of any space-then-hash sequence — an unquoted YAML scalar treats space-hash as a comment start and silently truncates.)
----
+> ⚠️ **Campaign snapshot (2026-07-02) for the live #983 builder graduation — non-authoritative and fast-decaying** (#504). Originally authored as a skill in PR #1091 (epic #1073); relocated here because a live issue's battle state belongs on the issue/briefing, not in a trigger-loaded skill (a stale campaign skill actively misleads). The graduation *method* is owned by the `graduate`/`spec`/`conformance` skills. When #983 closes with a postmortem, this file is history.
+
 
 # Crouton Graduation Campaign — finish #983 under the #992 spec-driven loop
 

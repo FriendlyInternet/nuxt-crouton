@@ -1,8 +1,5 @@
----
-name: crouton-research-frontier
-layer: stack
-description: The three fronts where nuxt-crouton can advance state of the art (the agent harness/method, the schema→app generator, the viability-gated layout engine), each with why current SOTA fails, this repo's specific asset, the first three concrete steps, and a falsifiable "you have a result when" milestone — plus the evidence bar any claim must clear before being stated publicly. Use when proposing research-flavored or novelty-claiming work, when asked "what's actually novel here", "what could we publish / claim / demo", "is this idea worth an epic", "has this been proven", or when writing any public-facing claim about crouton or the harness. NOT a task list — every frontier item here is labeled open or candidate, none is a result yet.
----
+> ⚠️ **Strategy snapshot (2026-07-02), non-authoritative** (#504 — writeups are historical thinking, not standing directives). Originally authored as a skill in PR #1091 (epic #1073); relocated here because the three fronts are current strategic opinion pinned to live issues, not durable agent capability. The durable evidence-bar rules live in AGENTS.md § Observe the harness.
+
 
 # Crouton Research Frontier — where this project can advance state of the art
 
