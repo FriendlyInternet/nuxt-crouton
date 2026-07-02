@@ -45,19 +45,13 @@ Shape (each top-level key is a field name):
 
 Per-field keys: `type` (§2), `meta` (below), `refTarget` (name of the referenced collection — generates a `CroutonFormReferenceSelect` in the form, an FK query-param filter on the list endpoint, and cache auto-refresh), `refScope` (`'adapter'`/`'external'` for refs outside the generated layers, e.g. `users`; handled in `lib/generators/{form-component,list-component,database-queries}.ts`).
 
-**`meta` keys** (full descriptions: `packages/crouton-cli/CLAUDE.md` "Field Meta Properties" — current and trustworthy). Compact index + verified behaviour:
+**`meta` keys** are owned by `packages/crouton-cli/CLAUDE.md` "Field Meta Properties" — read the full catalog there. What that doc doesn't say (verified behaviour):
 
-| meta key | Effect (verified where noted) |
+| meta key | Non-obvious verified behaviour |
 |---|---|
-| `required` | Zod required + `.notNull()` column (`database-schema.ts:78`) |
-| `nullable` | `.nullish()` instead of `.optional()` in Zod; `json` and `date` types get `.nullish()` automatically (`generate-collection.ts:500`) |
-| `maxLength` / `default` / `primaryKey` / `label` | as named |
+| `nullable` | `.nullish()` instead of `.optional()` in Zod; `json` and `date` types get `.nullish()` automatically (`generate-collection.ts`) |
 | `translatable` | value lives in the collection's `translations` JSON column; root column is a cache/fallback — see trap below |
-| `area` (`main`/`sidebar`/`meta`), `group` | form placement; multiple main groups ⇒ tabs |
-| `options` + `displayAs: "optionsSelect"` | static dropdown |
-| `optionsCollection`/`optionsField`/`creatable` | DB-driven dropdown |
-| `component` | form control override (e.g. `"CroutonEditorSimple"`) — also **triggers that package's generator contribution** via manifest `detects`, even without a feature flag |
-| `properties` + `translatableProperties` | typed / per-item-translatable repeater items (long-form: crouton-cli CLAUDE.md "Translatable Repeater Fields") |
+| `component` | besides overriding the form control, it **triggers that package's generator contribution** via manifest `detects`, even without a feature flag |
 
 **Trap — translatable fields must be `required: false`.** The real value lives in `translations.{locale}.field`; a `NOT NULL` root column fails inserts that only populate translations. (crouton-cli/CLAUDE.md "Why this matters".)
 
@@ -93,17 +87,17 @@ Notes:
 - **Alias resolution (#285):** `loadFields` resolves aliases to their canonical type *before any generator runs* (each mapping entry carries `canonical` — `manifest-loader.ts:303-318`). History: `datetime` once leaked through unresolved → a raw `<UInput>` + a `text` column. Rules of thumb: `number` = integer column; `decimal` = float/`real`; a string-encoded enum (`'0'/'1'/'2'`) is `string`, not `number`.
 - Adding a field type = a **manifest** change (plus generator branches) — see crouton-cli/CLAUDE.md "Add a new field type".
 
-## 3. Dialect default — the contradiction, resolved from code
+## 3. Dialect defaults — split by entry point
 
-The docs disagree (`crouton` skill says default `sqlite`; crouton-cli/CLAUDE.md "Key Options" says default `pg`). Code truth (verified 2026-07-02):
+Code truth (the docs were corrected to match in the #1073 reshape):
 
 | Entry point | Dialect default | Where |
 |---|---|---|
-| `crouton <layer> <collection>` (direct generate) | **`sqlite`** | `bin/crouton-generate.js:49,109` |
-| `crouton init <name>` | **`sqlite`** | `bin/crouton-generate.js:180` |
-| `crouton config` | the config file's `dialect`; **if the config omits it → `'pg'`** | `lib/generate-collection.ts:1488,1531` (the `config` subcommand has no `--dialect` flag at all) |
+| `crouton <layer> <collection>` (direct generate) | **`sqlite`** | `bin/crouton-generate.js` |
+| `crouton init <name>` | **`sqlite`** | `bin/crouton-generate.js` |
+| `crouton config` | the config file's `dialect`; **if the config omits it → `'pg'`** | `lib/generate-collection.ts` (the `config` subcommand has no `--dialect` flag at all) |
 
-So: crouton-cli/CLAUDE.md's "default: pg" is **wrong for the direct command**; the `crouton` skill's "default: sqlite" is right for the direct command but misses the config-path pg fallback. **Rule: always write `dialect: 'sqlite'` explicitly in `crouton.config.js`** (every in-repo app targets D1/SQLite).
+**Rule: always write `dialect: 'sqlite'` explicitly in `crouton.config.js`** (every in-repo app targets D1/SQLite) — the silent pg fallback on the config path is the trap.
 
 ## 4. Naming contract
 
@@ -210,26 +204,17 @@ Also: `crouton rollback-bulk --layer=<layer>` / `--config=<path>` (whole layer /
 - The generated file headers saying "regeneration requires --force flag" are stale; `--force` actually means (a) proceed despite missing package dependencies (`:747-754`) and (b) override schema-index export conflicts (`:373-384`).
 - **Hand edits inside generated files are lost on regeneration — including the "editable" `seed.json`** (it is in the unconditional write list, `:1042-1049`). Edit `seed.json` only if you won't regenerate, or re-apply edits after. If you customize a Form, prefer `formComponent:` (skips `_Form.vue` generation entirely) over editing the generated one.
 
-## 9. Doc drift in this domain (trust corrections)
+## 9. Doc drift in this domain
 
-Where docs contradict each other or the code, the trust order is owned by sibling `crouton-docs-trust-map` §1 — and **code beats all of them for mechanics**. Known-stale spots touching generation (all re-verified 2026-07-02):
+The 2026-07-02 sweep's corrections (docs paths, docs-MCP tool names, dead `nuxt-crouton-*` package paths, the `--dialect` default, `_Form.vue`/`[{singular}Id].patch.ts` filenames, the sync-script extension, the manifest-vs-fallback field-type source) were **applied to the canonical docs in the #1073 reshape** — `.claude/skills/crouton.md`, `packages/crouton-cli/CLAUDE.md`, `packages/crouton-mcp/CLAUDE.md` now match the code. Don't trust this skill over them; if they disagree again, code wins (trust order: sibling `crouton-docs-trust-map` §1) and the fix goes to the canonical doc via the `sync-docs` workflow, not to a table here.
 
-| Doc | Claim | Truth |
-|---|---|---|
-| `.claude/skills/crouton.md:24` | docs live at `apps/docs/content/` | `apps/docs` does not exist; the docs site is top-level **`docs/content/`** (root CLAUDE.md agrees) |
-| `.claude/skills/crouton.md` (docs tools) | `crouton_list_docs` / `crouton_search_docs` / `crouton_get_doc` | actual docs-MCP tools (`docs/server/mcp/tools/`): `list_sections`, `search_docs`, `get_page`, `get_example_schema`, `validate_schema` |
-| `.claude/skills/crouton.md:462-467`, crouton-cli/CLAUDE.md sync tables | `packages/nuxt-crouton-cli/`, `packages/nuxt-crouton-mcp-server/`, `helpers.mjs` | `packages/crouton-cli/`, `packages/crouton-mcp/`, `lib/utils/helpers.ts` |
-| crouton-cli/CLAUDE.md "Key Options" | `--dialect` default `pg` | `sqlite` for the direct command; pg only as the config-file fallback (§3) |
-| crouton-cli/CLAUDE.md + `crouton` skill file trees | `Form.vue`, `[id].patch.ts` | `_Form.vue`, `[{singular}Id].patch.ts` (§4, §5) |
-| crouton-cli/CLAUDE.md "Verify Sync" | `node scripts/validate-field-types-sync.ts` | the file is `scripts/validate-field-types-sync.mjs` |
-| crouton-mcp/CLAUDE.md | field types "MUST match helpers.mjs" | live source is manifest loading; the hardcoded table is a fallback only (§2) |
-| generated file headers | "regeneration requires --force" | regeneration overwrites unconditionally (§8) |
-
-If you fix any of these, follow the `sync-docs` skill and crouton-cli/CLAUDE.md's own sync workflow — several artifacts mirror each other.
+One known drift remains in **code**, not docs: generated file headers still claim "regeneration requires --force" while regeneration actually overwrites unconditionally (§8) — that's a template fix in `packages/crouton-cli/lib/generators/`, not a doc edit.
 
 ## Provenance and maintenance
 
-Facts verified 2026-07-02 against: `packages/crouton-cli/{bin/crouton-generate.js, lib/generate-collection.ts, lib/compose-layout.ts, lib/seed-app.ts, lib/rollback-collection.ts, lib/utils/{helpers.ts,manifest-loader.ts}, lib/generators/database-schema.ts, package.json}`, `packages/crouton-core/crouton.manifest.ts`, `packages/crouton-assets/crouton.manifest.ts`, `packages/crouton-layout/app/utils/layout-compose.ts`, `packages/crouton-mcp/src/{index.ts,tools/rollback.ts}`, and on-disk generated output in `fixtures/minimal/` + `pocs/booking-demo/`. Line numbers are anchors from that date and will drift — trust the symbol names over the `:NNN`. Issue numbers (#285, #298, #523, #558, #709, #711, #751, #785, #791) are cited from code comments and discovery-report summaries; check the issue if load-bearing.
+verified: 2026-07-02
+
+Facts verified against: `packages/crouton-cli/{bin/crouton-generate.js, lib/generate-collection.ts, lib/compose-layout.ts, lib/seed-app.ts, lib/rollback-collection.ts, lib/utils/{helpers.ts,manifest-loader.ts}, lib/generators/database-schema.ts, package.json}`, `packages/crouton-core/crouton.manifest.ts`, `packages/crouton-assets/crouton.manifest.ts`, `packages/crouton-layout/app/utils/layout-compose.ts`, `packages/crouton-mcp/src/{index.ts,tools/rollback.ts}`, and on-disk generated output in `fixtures/minimal/` + `pocs/booking-demo/`. Line numbers are anchors from that date and will drift — trust the symbol names over the `:NNN`. Issue numbers (#285, #298, #523, #558, #709, #711, #751, #785, #791) are cited from code comments and discovery-report summaries; check the issue if load-bearing.
 
 Re-verification one-liners:
 

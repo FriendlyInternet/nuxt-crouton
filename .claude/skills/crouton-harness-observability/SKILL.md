@@ -25,50 +25,22 @@ One line: the repo's proof toolkit — where the measurements live, how to read 
 
 **Data:** `writeups/loop-station/history.jsonl` — committed on purpose (tiny, `git blame`-able; see its README). One JSON record per merge that touches the harness, appended by CI (`.github/workflows/loop-station-inventory.yml`). The WS2 runtime *trace* is the only loop-station dataset that is gitignored.
 
-**Record shape** (fields verified against the file and `writeups/loop-station/README.md`, 2026-07-02):
+**Record shape and thresholds are owned by the loop-station skill** (`.claude/skills/loop-station/SKILL.md`; threshold bands in `.claude/skills/loop-station/lib/scorecard.mjs` `THRESHOLDS` — tune only there). Don't restate them here. The one field to check *before reading any number* is `tokenizer` — `anthropic` (API `count_tokens`) vs `heuristic` (offline fallback). That field is the ruler.
 
-| Field | Meaning |
-|---|---|
-| `generatedAt` / `commit` / `pr` | when + the merge/PR that caused the point |
-| `tokenizer` | `anthropic` (API `count_tokens`) or `heuristic` (offline fallback) — **the ruler** |
-| `totals.alwaysOnTokens` | root `CLAUDE.md` token weight — the always-on budget every session and every LLM CI cold-start pays |
-| `totals.tokens` / `byKind` / `byLayer` | full corpus, split by claudemd/skill/agent and by `layer:` tag (method/stage/stack/unlayered) |
-| `scorecard` | green/amber/red per dimension + `overall` (worst band wins) — formulas, not LLM judgments |
-| `redundancy` | 8-word-shingle corpus redundancy % + top restated file pairs |
-| `coldWrites` | per-LLM-CI-workflow tokens written per cold run (always-on + its `prompt:` block) |
-| `artifacts` | per-file tokens/bytes/lines |
-
-**Thresholds** (source of truth: `.claude/skills/loop-station/lib/scorecard.mjs` `THRESHOLDS`, verified 2026-07-02 — tune only there):
-
-| Dimension | Amber | Red |
-|---|---|---|
-| `alwaysOn` (root CLAUDE.md tokens) | 12,000 | 18,000 |
-| single `artifact` (any skill/agent file) | 4,000 | 8,000 |
-| `redundancy` (corpus %) | 12 | 25 |
-| drift-risk pair containment | counts as a pair at ≥ 30% | band by pair count: amber ≥ 2, red ≥ 5 |
+**Current numbers:** run `node .claude/skills/loop-station/gather.mjs --pretty` — never quote a remembered measurement (no API key in the env → `heuristic` tokenizer, so compare only against heuristic-era records).
 
 ### The tokenizer discontinuity — the #1 misread
 
-Every record carries `tokenizer`. **Never compare numbers across two tokenizers.** The heuristic overcounts vs Anthropic `count_tokens` by roughly 20–25% here. Two real traps in the committed history (verified by reading all 20 records, 2026-07-02):
+Every record carries `tokenizer`. **Never compare numbers across two tokenizers.** The heuristic overcounts vs Anthropic `count_tokens` by roughly 20–25% here. Two real traps in the committed history:
 
-- The apparent "drop" 2026-06-30 (18,951 → 15,227) is the heuristic→anthropic switch, **not a diet**. (The API tokenizer itself landed in PR #958, 2026-06-29 — verified `git log -S count_tokens`; the `pr:1013` record is merely the first point where CI actually ran with the `ANTHROPIC_API_KEY`, so the switch *shows up* there. PR #1013 is the pi-telemetry adapter and contains no tokenizer code.)
-- The **last committed record** (PR #1062, 2026-07-01) reverts to `heuristic` (19,704 / red). That is CI-ran-without-`ANTHROPIC_API_KEY` noise, **not a regression** — the anthropic-era point right before it (PR #686, same day) reads 15,798 / amber.
+- The apparent budget "drop" at the heuristic→anthropic switch is the ruler changing, **not a diet**. (The API tokenizer landed in PR #958; the switch *shows up* at the first record where CI actually ran with `ANTHROPIC_API_KEY` — a later PR — so the step and the code change don't share a commit.)
+- A record can silently **revert to `heuristic`** when CI runs without the key (it happened; the point reads red). That is missing-secret noise, **not a regression** — check the surrounding anthropic-era points before ticketing.
 
-The advisor (`advisor.mjs`, see loop-station skill) encodes this rule: deltas are compared only within the same tokenizer.
-
-### Current reality (measured 2026-07-02)
-
-I ran `node .claude/skills/loop-station/gather.mjs --pretty` today (no API key in this env → `heuristic` tokenizer, so compare against heuristic-era records only):
-
-- `alwaysOnTokens` **19,704 (red)** — identical to the PR #1062 heuristic record, i.e. root CLAUDE.md unchanged since. On the anthropic ruler that same file last measured **15,798 (amber band for always-on, but red as a single artifact — any file > 8k is artifact-red)**, PR #686, 2026-07-01.
-- Within the anthropic era the trend was **monotonically climbing** (15,227 → 15,798 over 2026-06-30 → 07-01). The budget sits at/near its own red line and grows.
-- Corpus today: 250k heuristic tokens across 56 artifacts (up from 44 / ~168k at PR #1062) — the jump is this knowledge-handoff skill library itself being written. Expect the next committed anthropic record to show the same step; that step is deliberate, not drift.
-- Redundancy 2.2% (green); 1 drift pair: `a11y` ↔ `frontend-review` SKILL.md at 44.6% containment (a known kept-in-sync pair).
-- `coldWrites`: every LLM CI workflow pays the full always-on budget per cold start (~13 workflows measured today) — the concrete cost of CLAUDE.md growth.
+The advisor (`advisor.mjs`, see loop-station skill) encodes this rule: deltas are compared only within the same tokenizer. A large corpus step can also be deliberate (e.g. a batch of new skills landing) — read the PR behind the record before calling it drift.
 
 ## 2. The session trace (WS2) — reading it at a glance
 
-Producer mechanics live in the loop-station skill (`parse-transcripts.mjs`, `collect-traces.mjs`). What you get is `trace.jsonl` of events (shape verified against the script header, 2026-07-02):
+Producer mechanics live in the loop-station skill (`parse-transcripts.mjs`, `collect-traces.mjs`). What you get is `trace.jsonl` of events:
 
 ```
 { ts, kind, name, parent, depth, agentId?, durMs? }
@@ -81,7 +53,7 @@ Producer mechanics live in the loop-station skill (`parse-transcripts.mjs`, `col
 
 ## 3. The eval ledger — did the run actually succeed, and at what cost?
 
-**Data:** `writeups/reports/eval-ledger.jsonl` (committed, append-only; 3 records as of 2026-07-02). **Scripts:** `scripts/eval-ledger/{schema,append,scoreboard}.mjs` — usage in `scripts/eval-ledger/README.md` (all verified present, 2026-07-02):
+**Data:** `writeups/reports/eval-ledger.jsonl` (committed, append-only). **Scripts:** `scripts/eval-ledger/{schema,append,scoreboard}.mjs` — usage in `scripts/eval-ledger/README.md`:
 
 ```bash
 node scripts/eval-ledger/scoreboard.mjs          # markdown rollup; --json / --html
@@ -99,46 +71,48 @@ Semantics that matter when reading it:
 
 ## 4. Evidence tools — pick by what you must prove
 
-All scripts verified to exist and headers read, 2026-07-02. Full operating runbooks for the app-facing ones are in **crouton-run-and-operate**; this table is the "which proof do I reach for" index.
+Full operating runbooks for the app-facing ones are in **crouton-run-and-operate**; this table is the "which proof do I reach for" index.
 
 | To prove… | Tool (exact invocation) | Notes |
 |---|---|---|
 | "the UI renders like this" | `node scripts/app-shots.mjs <baseUrl> <path[:name]> […] [--out <dir>]` | Uses preinstalled chromium at `/opt/pw-browsers` (globs newest build — never hardcode a build number); output `screenshots/<name>.png` (HARD GATE location); exit 1 on any failure |
 | "the DEPLOY actually works" (not just built) | `node scripts/smoke-deployed.mjs --url <url> --email <e> --password <pw> [--app <n>] [--manifest <app>/deploy.config.json]` | Login proof via `/api/auth/get-session` → optional CRUD round-trip from `deploy.config.json` `smoke.crud` → screenshot. Built because "typecheck + boot" twice masqueraded as done (#293, per its header). Report-only in CI unless `smoke.required: true` |
 | "a generated app still boots/auths/CRUDs" | e2e fixture harness — see **crouton-validation-reality** and the **e2e-smoke** skill | Trace/video/screenshots land in `playwright-report/`; CI artifact `visual-qa-<fixture>` (14-day) |
-| "types still hold" | `pnpm typecheck` (never `npx nuxt typecheck` from root) | Necessary, never sufficient — see AGENTS.md "Done is signed off, not asserted" (#988) |
+| "types still hold" | `pnpm typecheck` (never `npx nuxt typecheck` from root) | Necessary, never sufficient — AGENTS.md "Done is signed off, not asserted"; the story behind it: `crouton-failure-archaeology` (#988) |
 | "what data is on a remote DB" (read-only) | `node scripts/db-counts.mjs --app <app> --env staging\|prod [--dry-run]` | SELECTs only; discovers db name from `wrangler.jsonc`; real run needs CF creds, `--dry-run` needs none |
 | "which gates apply to this path" | `node scripts/harness-stages.mjs <path>` | e.g. `packages/crouton-core/x.ts` → `stage: package, gates(required): test-first` |
-| "layer tags are honest" | `node scripts/harness-layers.mjs --check` | ⚠️ **Fails today** (skills `graduate` + `skills-digest` untagged) and — despite its own header — is wired into **no** CI workflow (verified `grep -r harness-layers .github/` → 0 hits, 2026-07-02). A red here may be pre-existing, not yours |
-| "generated docs aren't stale" | `node scripts/gen-skills-doc.mjs --check` · `node scripts/gen-routing.mjs --check` · `node scripts/gen-package-catalog.mjs --check` | routing check passes today; skills-doc check flags any skill not registered in its `META` map (warning) and stale HTML (failure) — new skills trip it until registered + regenerated |
-| "is a budget regression worth a ticket" | `node .claude/skills/loop-station/advisor.mjs --pretty` | Deterministic gate over history.jsonl; today it says `actionable: true` on the always-on red — see §1 for why the latest record's red is partly tokenizer noise |
+| "layer tags are honest" | `node scripts/harness-layers.mjs --check` | ⚠️ Despite its own header it is wired into **no** CI workflow, and it can be red for pre-existing untagged skills — a failure here may not be yours (re-verify block; #1098) |
+| "generated docs aren't stale" | `node scripts/gen-skills-doc.mjs --check` · `node scripts/gen-routing.mjs --check` · `node scripts/gen-package-catalog.mjs --check` | skills-doc: a skill missing from `META` only warns; stale HTML fails — new skills trip it until registered + regenerated |
+| "is a budget regression worth a ticket" | `node .claude/skills/loop-station/advisor.mjs --pretty` | Deterministic gate over history.jsonl; cross-check any always-on red against the tokenizer rule (§1) before ticketing |
 
 ## 5. Verify capabilities, don't assume (#629)
 
-Root CLAUDE.md ("You HAVE a headless browser") is the standing rule; the incident behind it is [#629](https://github.com/FriendlyInternet/nuxt-crouton/issues/629) (verified: still open, 2026-07-02): an agent checked the default Playwright path (empty), saw `npx playwright install` fail (egress-blocked CDN), and declared "no browser" — while chromium sat preinstalled at `/opt/pw-browsers`. **Two partial negatives are not proof of absence.** Before declaring anything unavailable: env vars → non-default paths → filesystem search → system binaries. Same doctrine applies to TodoWrite (absent on some harnesses — fall back per root CLAUDE.md, don't retry-spam) and any "X isn't available here" claim inherited from a prior session: probe for 5 seconds first. `app-shots.mjs`'s `findChromium()` is the codified fix (env override: `PLAYWRIGHT_CHROMIUM_PATH`).
+Root CLAUDE.md ("You HAVE a headless browser") is the standing rule; the incident behind it is [#629](https://github.com/FriendlyInternet/nuxt-crouton/issues/629): an agent checked the default Playwright path (empty), saw `npx playwright install` fail (egress-blocked CDN), and declared "no browser" — while chromium sat preinstalled at `/opt/pw-browsers`. **Two partial negatives are not proof of absence.** Before declaring anything unavailable: env vars → non-default paths → filesystem search → system binaries. Same doctrine applies to TodoWrite (absent on some harnesses — fall back per root CLAUDE.md, don't retry-spam) and any "X isn't available here" claim inherited from a prior session: probe for 5 seconds first. `app-shots.mjs`'s `findChromium()` is the codified fix (env override: `PLAYWRIGHT_CHROMIUM_PATH`).
 
-## 6. What has NO instrumentation (open gaps — verified 2026-07-02)
+## 6. What has NO instrumentation (open gaps)
 
 | Gap | Status |
 |---|---|
-| **Staging Worker logs**: only `apps/triage` and `apps/fanfare` have a `logs` script, and both tail the **production** worker (`npx wrangler tail <app>`). No staging tail script exists; hand-type `npx wrangler tail <app>-staging --env staging`. No log persistence (no Logpush/Sentry) — an untailed Worker error is gone forever | open |
-| **Runtime product analytics**: `packages/crouton-analytics` exists (PostHog default, epic #945/#946) but **zero** apps/pocs/fixtures depend on it (grep over package.jsons, 2026-07-02). No uptime checks; deployed smoke runs only on deploys | open |
+| **Staging Worker logs**: only a couple of apps have a `logs` script, and those tail the **production** worker (`npx wrangler tail <app>`). No staging tail script exists; hand-type `npx wrangler tail <app>-staging --env staging`. No log persistence (no Logpush/Sentry) — an untailed Worker error is gone forever | open |
+| **Runtime product analytics**: `packages/crouton-analytics` exists (PostHog default, epic #945/#946) but no app/poc/fixture depends on it (re-verify block). No uptime checks; deployed smoke runs only on deploys | open |
 | **Visual regression**: screenshots exist, comparison is human — pixel-diff baselines explicitly deferred (`e2e/CLAUDE.md`) | open, deliberate |
-| **`harness-layers --check` in CI**: documented as CI-enforced, actually unwired and currently failing (§4) | open drift |
+| **`harness-layers --check` in CI**: documented as CI-enforced, actually unwired (§4; #1098) | open drift |
 | **pi WS2 tool-level nesting**: agent-granularity only until pi-otel spans are collected | open |
-| **CI-agent tokenizer flakiness**: loop-station CI records silently fall back to `heuristic` when the key is missing (PR #1062 record) — a red in history may be a missing secret, not growth | known noise mode |
+| **CI-agent tokenizer flakiness**: loop-station CI records silently fall back to `heuristic` when the key is missing — a red in history may be a missing secret, not growth | known noise mode |
 
 ## Provenance and maintenance
 
-Facts verified 2026-07-02 against: `writeups/loop-station/history.jsonl` (all 20 records read) + its README; a live `gather.mjs --pretty` and `advisor.mjs --pretty` run; `.claude/skills/loop-station/SKILL.md` + `lib/scorecard.mjs` + `parse-transcripts.mjs`; `scripts/eval-ledger/{README.md,append.mjs,scoreboard.mjs}` + `writeups/reports/eval-ledger.jsonl` (3 records read); headers of `scripts/{app-shots,smoke-deployed,db-counts}.mjs`; live runs of `harness-stages.mjs`, `harness-layers.mjs --check`, `gen-routing.mjs --check`, `gen-skills-doc.mjs --check`; GitHub issue #629 (read via API); grep for `crouton-analytics` consumers and for `"logs"` scripts in `apps/*/package.json`. Unverified-but-cited: issue numbers inside quoted script/skill prose (#293, #867, #883–#885, #926–#929, #944) — taken from the cited files themselves.
+verified: 2026-07-02
 
-Re-verify when drifting:
+Facts checked against: `writeups/loop-station/history.jsonl` (all records read) + its README; live `gather.mjs --pretty` and `advisor.mjs --pretty` runs; `.claude/skills/loop-station/SKILL.md` + `lib/scorecard.mjs` + `parse-transcripts.mjs`; `scripts/eval-ledger/{README.md,append.mjs,scoreboard.mjs}` + `writeups/reports/eval-ledger.jsonl`; headers of `scripts/{app-shots,smoke-deployed,db-counts}.mjs`; live runs of the `--check` modes; GitHub issue #629; greps for `crouton-analytics` consumers and `"logs"` scripts. Unverified-but-cited: issue numbers inside quoted script/skill prose (#293, #867, #944 etc.) — taken from the cited files themselves. Volatile facts (token counts, record counts, exit codes, issue states) — re-verify here, not in the prose:
 
 ```bash
-node .claude/skills/loop-station/gather.mjs --pretty        # today's budget numbers (§1)
+node .claude/skills/loop-station/gather.mjs --pretty        # current budget numbers (§1)
 grep -o '"tokenizer":"[a-z]*"' writeups/loop-station/history.jsonl | tail -3   # ruler of recent records
 sed -n '/THRESHOLDS/,/^}/p' .claude/skills/loop-station/lib/scorecard.mjs      # threshold bands
-node scripts/eval-ledger/scoreboard.mjs                     # ledger state
+node scripts/eval-ledger/scoreboard.mjs                     # ledger state + record count
 node scripts/harness-layers.mjs --check; grep -rl harness-layers .github/ || echo "still unwired"
 grep -rl crouton-analytics --include=package.json apps pocs fixtures || echo "still unconsumed"
+gh issue view 629 --json state -q .state                    # capability-assumption incident still open?
+grep -l '"logs"' apps/*/package.json                        # which apps have a logs script (2 at verification, both prod-tail)
 ```

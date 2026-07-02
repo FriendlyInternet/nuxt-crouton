@@ -1,12 +1,12 @@
 ---
 name: crouton-ci-and-deploy-map
 layer: stack
-description: The map of nuxt-crouton's 46 GitHub workflows and the deploy-pipeline anatomy — what each workflow gates, how a merge reaches Cloudflare, which secrets/tokens exist where, and how the agent-pipeline workflows chain. Use when a CI check fails and you need to know what it is, when asked "which workflow deploys X / why did staging update / what does this check gate / where is that secret / why didn't my label trigger anything", when wiring a new app into CI, or when debugging a deploy that never fired. Trigger phrases: "what runs on merge to main", "map of the workflows", "WORKER_SECRETS_JSON", "why is the daily sweep not running", "deploy-apps vs deploy-app", "which token does this workflow use".
+description: The map of nuxt-crouton's GitHub workflows and the deploy-pipeline anatomy — what each workflow gates, how a merge reaches Cloudflare, which secrets/tokens exist where, and how the agent-pipeline workflows chain. Use when a CI check fails and you need to know what it is, when asked "which workflow deploys X / why did staging update / what does this check gate / where is that secret / why didn't my label trigger anything", when wiring a new app into CI, or when debugging a deploy that never fired. Trigger phrases: "what runs on merge to main", "map of the workflows", "WORKER_SECRETS_JSON", "why is the daily sweep not running", "deploy-apps vs deploy-app", "which token does this workflow use".
 ---
 
 # CI & Deploy Map
 
-One-line purpose: the ground-truth inventory of `.github/workflows/` (46 files, verified 2026-07-02) plus the anatomy of how code reaches Cloudflare Workers — so you can answer "what fires when, gated by what, authenticated how" without re-reading every workflow.
+One-line purpose: the ground-truth inventory of `.github/workflows/` (count it: `ls .github/workflows | wc -l`) plus the anatomy of how code reaches Cloudflare Workers — so you can answer "what fires when, gated by what, authenticated how" without re-reading every workflow.
 
 Context for newcomers: this monorepo deploys Nuxt apps to **Cloudflare Workers** (never Pages — older docs lie). Trunk is `main`; merging to `main` auto-deploys **staging** (`<app>.pmcp.dev`); **production** (`<app>.friendlyinter.net`) is reachable only via a deliberate `workflow_dispatch` (#318). Much of CI is an agent pipeline: GitHub-issue-driven Claude runs that decompose epics, work leaves, and gate PRs.
 
@@ -26,14 +26,16 @@ Context for newcomers: this monorepo deploys Nuxt apps to **Cloudflare Workers**
 
 This skill is the **map**: inventory, anatomy, secrets, cadences, and the drift between docs and reality. It carries no deploy runbook steps.
 
-## 1. Workflow inventory (46 files in `.github/workflows/`)
+## 1. Workflow inventory
+
+Grouped by role; the file count drifts — count it fresh (`ls .github/workflows | wc -l`).
 
 ### CI checks (push / PR to main)
 
 | Workflow | Trigger | Gates what |
 |---|---|---|
-| `ci.yml` | push/PR, paths `packages/**, apps/**, scripts/**`, lockfile | 8 jobs: `lint-and-typecheck` (**MCP server only** — see §6 drift), `build-fanfare` (matrix of 2 Nitro presets; "the build is the smoke test", fanfare typecheck deliberately ungated), `docs-check`, `sync-validation`, `mcp-server-tests`, `test` (`pnpm test` after building core dists), `changeset-check` (warn-only), `package-check` (publint + attw) |
-| `e2e.yml` | push/PR (paths `packages/**, fixtures/**, e2e/**`, lockfile) + nightly `cron: 0 4 * * *` full matrix + dispatch | Playwright fixture smoke. Smart selection (#622): PRs run only fixtures affected per each fixture's `e2e.manifest.json`; push-to-main/nightly run all. Regenerates fixtures with the current CLI, so a generator regression = red PR (#197) |
+| `ci.yml` | push/PR, paths `packages/**, apps/**, scripts/**`, lockfile | Jobs: `lint-and-typecheck` (**MCP server only — a misnomer**, tracked [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097); see §6), `build-fanfare` (matrix of 2 Nitro presets; "the build is the smoke test", fanfare typecheck deliberately ungated), `docs-check`, `sync-validation`, `mcp-server-tests`, `test` (`pnpm test` after building core dists), `changeset-check` (warn-only), `package-check` (publint + attw) |
+| `e2e.yml` | push/PR (paths `packages/**, fixtures/**, e2e/**`, lockfile) + nightly cron full matrix + dispatch | Playwright fixture smoke. Smart selection (#622): PRs run only fixtures affected per each fixture's `e2e.manifest.json`; push-to-main/nightly run all. Regenerates fixtures with the current CLI, so a generator regression = red PR (#197) |
 | `guard-package-approval.yml` | PR to main | Fails the PR if `.claude/.package-edit-approved` is committed (would disable the packages/ HARD GATE, #350). Epic-scoped approval uses the `CROUTON_PACKAGE_EDIT_APPROVED` env var instead |
 | `skills-doc.yml` | push/PR touching `.claude/skills/**` | `writeups/architecture/skills-and-triggers.html` must be regenerated (`node scripts/gen-skills-doc.mjs`) |
 | `routing-registry.yml` | push/PR touching `.claude/routing.json`, `.claude/agents/**` | Model-routing registry drift check (#864) |
@@ -52,7 +54,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 
 | Workflow | Trigger | Role |
 |---|---|---|
-| `deploy-app.yml` (460 lines) | `workflow_call` only | THE reusable pipeline (#114) — see §2 |
+| `deploy-app.yml` | `workflow_call` only | THE reusable pipeline (#114) — see §2 |
 | `deploy-apps.yml` | push to main + PR (paths `apps/**, packages/**`, lockfile) + `workflow_dispatch(app, environment, review_pr)` | **The one generic caller for every `apps/*` app** (epic #481 WS2). An app opts in by committing `apps/<name>/deploy.config.json`. Replaced the per-app `deploy-<app>.yml` callers |
 | `deploy-pocs.yml` | PR touching `pocs/**` + dispatch(app, mode) | POC staging previews; `mode: version` = immutable Workers-version preview URL. Steps: `poc-deploy` skill |
 | `deploy-docs.yml` | push to main (`docs/**`) / PR build-smoke / dispatch | Docs site — self-contained, NOT via deploy-app.yml |
@@ -61,7 +63,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 
 ### Agent pipeline (see §5 for the chain)
 
-`claude.yml` (@claude mention) · `decompose-on-issue.yml` (`delegate` label) · `comment-dispatch.yml` (`/delegate` comment) · `resume-on-comment.yml` (reply on `status:blocked`) · `close-epic-on-comment.yml` (`/close-epic`) · `schedule-waves.yml` (baton pass) · `automerge-epic-subpr.yml` · `fix-ci-on-failure.yml` · `pipeline-pr-status.yml` · plus the pi.dev variants: `decompose-on-issue-pidev.yml` (**LIVE** — promoted past dispatch-only in #1017: fires when a human applies the `delegate-pi` label, plus manual dispatch; default model tuned in #1019; in real use — e.g. #1035 ran under `delegate-pi`) and `a11y-daily-pidev.yml` (still dispatch-only + `AGENT_HARNESS` gated); both need a funded `PI_PROVIDER_KEY` to complete. Also `mac-mini-smoke.yml` (self-hosted-runner proof, #610).
+`claude.yml` (@claude mention) · `decompose-on-issue.yml` (`delegate` label) · `comment-dispatch.yml` (`/delegate` comment) · `resume-on-comment.yml` (reply on `status:blocked`) · `close-epic-on-comment.yml` (`/close-epic`) · `schedule-waves.yml` (baton pass) · `automerge-epic-subpr.yml` · `fix-ci-on-failure.yml` · `pipeline-pr-status.yml` · plus the pi.dev variants: `decompose-on-issue-pidev.yml` (**LIVE** — promoted past dispatch-only in #1017: fires when a human applies the `delegate-pi` label, plus manual dispatch; default model tuned in #1019; has run for real under `delegate-pi`) and `a11y-daily-pidev.yml` (still dispatch-only + `AGENT_HARNESS` gated); both need a funded `PI_PROVIDER_KEY` to complete. Also `mac-mini-smoke.yml` (self-hosted-runner proof, #610).
 
 ### Digests & scheduled reports (real cadence in §4)
 
@@ -74,7 +76,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 | `labels.yml` | push touching `.github/labels.yml` | Syncs labels (`skip_delete: true` — never removes) |
 | `strip-status-on-close.yml` | issue closed | Strips `status:*` labels (#641) |
 | `cleanup-epic-branches.yml` | PR closed | Deletes `epic/*` head branch only when merged into main (#613) |
-| `cleanup-merged-branches.yml` | Mon `30 6 * * 1` + dispatch | Dry-run unless `vars.CLEANUP_BRANCHES_APPLY=true` |
+| `cleanup-merged-branches.yml` | weekly cron + dispatch | Dry-run unless `vars.CLEANUP_BRANCHES_APPLY=true` |
 | `project-status.yml` / `backfill-project.yml` | PR/issue events / dispatch | Projects-v2 board automation |
 | `db-clone.yml` | dispatch | D1 mirror between envs (`db-clone` skill) |
 | `db-counts.yml` | dispatch | Read-only row counts of any app DB — the safe "what's in there" check (#384) |
@@ -84,9 +86,9 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 
 ### The caller pattern — deploy-apps.yml + deploy.config.json (NOT per-app callers)
 
-**Root CLAUDE.md is stale here** (verified 2026-07-02): it describes "`.github/workflows/deploy-<app>.yml`: a thin caller of the reusable deploy-app.yml". **No per-app caller exists.** Epic #481 replaced them with one generic `deploy-apps.yml` whose `detect` job matrixes over every `apps/<name>/deploy.config.json` whose `watchPaths` match the changed files. Rationale (from the workflow header): the agent pipeline's App token lacks the `workflows` scope, so bots cannot push `.github/workflows/` files — but they CAN push `apps/<name>/deploy.config.json`. The `deploy` skill's "Step 4: Wire CI (per-app caller)" section (which models on a nonexistent `deploy-three-demo.yml`) is likewise stale — trust the workflow files.
+**Older docs still describe per-app `deploy-<app>.yml` callers (root CLAUDE.md deploy section; `deploy` skill Step 4) — that's stale, tracked as [#1093](https://github.com/FriendlyInternet/nuxt-crouton/issues/1093).** Reality (epic #481): one generic `deploy-apps.yml` whose `detect` job matrixes over every `apps/<name>/deploy.config.json` whose `watchPaths` match the changed files. Rationale (from the workflow header): the agent pipeline's App token lacks the `workflows` scope, so bots cannot push `.github/workflows/` files — but they CAN push `apps/<name>/deploy.config.json`. Trust the workflow files.
 
-`deploy.config.json` exists today for apps `fanfare`, `triage`, `velo` and pocs `booking-demo`, `crouton-builder-demo`, `loop-station`. Velo's fields: `stagingUrl`, `productionUrl`, `layerPackages` (space-separated `@fyit/*` list), `watchPaths` (app dir + each extended package + lockfile). Optional: `"smoke": { "required": true }` makes the post-deploy smoke gate the run (default is report-only; velo doesn't set it).
+`deploy.config.json` exists for the launched apps plus several pocs — list them fresh (`ls apps/*/deploy.config.json pocs/*/deploy.config.json`). Velo's fields (the shape): `stagingUrl`, `productionUrl`, `layerPackages` (space-separated `@fyit/*` list), `watchPaths` (app dir + each extended package + lockfile). Optional: `"smoke": { "required": true }` makes the post-deploy smoke gate the run (default is report-only; velo doesn't set it).
 
 **Prod gating is structural, not conventional:** `deploy-apps.yml` hard-codes `environment=staging` for `push`/`pull_request` events; only `workflow_dispatch` with the explicit `production` choice produces a production matrix entry (#318/#347). Also note: **a PR deploys to the SAME staging Worker/DB as merge-to-main** — a PR preview overwrites `<app>.pmcp.dev`. Isolated previews exist only for POCs via `deploy-pocs.yml` `mode: version`.
 
@@ -95,7 +97,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 Inputs: `app`, `workspace` (apps|pocs), `environment`, `staging-url`/`production-url`, `layer-packages`, `review-pr`. Key steps, in order (all verified in the file):
 
 1. `pnpm install --frozen-lockfile --ignore-scripts` → `pnpm rebuild better-sqlite3 || true`.
-2. Layer-dist cache keyed on **build-set hash + `hashFiles('packages/**/*.ts')`** (line ~164; the #745 cross-app cache-collision fix). `@fyit/crouton-devtools` is always appended to the layer set.
+2. Layer-dist cache keyed on **build-set hash + `hashFiles('packages/**/*.ts')`** (the #745 cross-app cache-collision fix). `@fyit/crouton-devtools` is always appended to the layer set.
 3. `nuxt prepare`, then **the one real step**: it runs the app's own `pnpm run cf:deploy` (prod) or `cf:staging` — the source of truth is the app's `package.json`, so CI and a dev's laptop run the identical script.
 4. Optional `wrangler secret bulk` from `WORKER_SECRETS_JSON` (see §3 trap).
 5. Preview-review bridge (#607): staging + PR-tied only — pushes `NUXT_CROUTON_REVIEW_*` Worker secrets so in-page overlay comments post to the PR as `nuxt-harness[bot]`.
@@ -139,16 +141,16 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 | Secret | Used by | Notes |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | all agent workflows | Headless CI MUST use an API key, never a subscription `CLAUDE_CODE_OAUTH_TOKEN` (workflow comments cite Anthropic terms) |
-| `HARNESS_APP_ID` + `HARNESS_APP_PRIVATE_KEY` | ~12 workflows | The "Nuxt Harness" GitHub App — see the cascade rule below |
+| `HARNESS_APP_ID` + `HARNESS_APP_PRIVATE_KEY` | many workflows (grep for it) | The "Nuxt Harness" GitHub App — see the cascade rule below |
 | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` | deploy/db workflows | Token scopes: account Workers Scripts/D1/KV/R2 Edit + zone Workers Routes + DNS Edit (details: `deploy` skill, Credentials) |
 | `WORKER_SECRETS_JSON` | `deploy-app.yml` | Optional bundle of Worker secrets — **see the trap below** |
 | `RESEND_API_KEY` | digests, red-team email | Email rail; steps skip green when unset |
 | `REVIEW_SEED_SECRET` | deploy-app.yml | Optional salt for review-login passwords |
 | `PI_PROVIDER_KEY` | pi.dev variants | pi's model-provider key; required by `decompose-on-issue-pidev.yml` (live on the `delegate-pi` label, #1017) and `a11y-daily-pidev.yml` (dispatch-only). Funding state not verifiable from the repo — if a pi run errors at the agent step, check this key's credit first |
 
-### The WORKER_SECRETS_JSON trap (deploy-app.yml contradicts itself)
+### The WORKER_SECRETS_JSON trap (deploy-app.yml contradicts itself — tracked: [#1094](https://github.com/FriendlyInternet/nuxt-crouton/issues/1094))
 
-The file carries two comments. Lines ~71-75 say "Store it as a GitHub *Environment* secret so production and staging can hold env-specific values." Lines ~247-251 say the opposite: it "**MUST be a *repository-level* Actions secret, NOT an *Environment* secret** — this job is reached via `secrets: inherit` from a caller whose job declares no `environment:`, so Environment-scoped secrets resolve to EMPTY and silently skip." **The line-247 comment is the operative truth** (it describes the actual `deploy-apps.yml` call path). The `deploy` skill's Step 4.5 repeats the stale Environment-secret advice — don't follow it. Symptom of getting this wrong: deploys go green but Worker secrets never update, silently.
+The file carries two contradictory comments: its header advice says store it as a GitHub *Environment* secret; the comment at the secrets step says it "**MUST be a *repository-level* Actions secret, NOT an *Environment* secret** — this job is reached via `secrets: inherit` from a caller whose job declares no `environment:`, so Environment-scoped secrets resolve to EMPTY and silently skip." **The secrets-step comment is the operative truth** (it describes the actual `deploy-apps.yml` call path). The `deploy` skill's Step 4.5 repeats the stale Environment-secret advice — don't follow it. Symptom of getting this wrong: deploys go green but Worker secrets never update, silently. Fix state: [#1094](https://github.com/FriendlyInternet/nuxt-crouton/issues/1094).
 
 ### Actions vars
 
@@ -159,11 +161,11 @@ The file carries two comments. Lines ~71-75 say "Store it as a GitHub *Environme
 1. **The token-cascade rule** (the single most repeated fact across these files): GitHub suppresses workflow triggers for events initiated by the built-in `GITHUB_TOKEN`. Any mutation that must trigger a downstream workflow (apply `delegate` → decompose fires; merge → schedule-waves; close → strip-status; push → CI re-runs) is done with a **Harness App installation token**. Read-only or chain-terminal steps deliberately use `GITHUB_TOKEN`.
 2. **Job-level permissions only**: job-level `permissions` fully OVERRIDES (does not merge with) a workflow-level block, so `id-token: write` must sit on the job or the claude-code-action OIDC request fails. Stated verbatim in several workflows (e.g. `resume-on-comment.yml`).
 
-Also: `anthropics/claude-code-action` is pinned to one SHA across 5+ workflows with "keep in sync when bumping" — a manual multi-file sync liability; check all of them when bumping.
+Also: `anthropics/claude-code-action` is pinned to one SHA across several workflows with "keep in sync when bumping" — a manual multi-file sync liability; grep for the pin and check all of them when bumping (re-verify block).
 
 ## 4. Scheduled things — the REAL cadence
 
-Do not trust "daily" labels; verify against `on.schedule` + `.github/digests.yml`.
+Do not trust "daily" labels; the truth is `on.schedule` + `.github/digests.yml`. **Snapshot 2026-07-02 — regenerate with the cron grep in the re-verify block before relying on it.**
 
 | Workflow | Cron in file | Real cadence |
 |---|---|---|
@@ -177,7 +179,7 @@ Do not trust "daily" labels; verify against `on.schedule` + `.github/digests.yml
 | `eval-scoreboard.yml` | `0 7 * * *` | **Weekly Mon** per digests.yml (`weekly:mon`) |
 | `loop-station-advisor.yml` | `23 7 * * 1` | Weekly Mon |
 | `unlighthouse.yml` | `23 7 * * 1` | Weekly Mon |
-| `red-team-daily.yml`, `a11y-daily.yml` | **none — `workflow_dispatch` only** | Daily schedules dropped to cut cost (#823). Root CLAUDE.md still calls the red-team sweep a live "daily deep sweep" — stale. Coverage now relies on the per-PR gates |
+| `red-team-daily.yml`, `a11y-daily.yml` | **none — `workflow_dispatch` only** | Daily schedules dropped to cut cost (#823). Root CLAUDE.md still calls the red-team sweep a live "daily deep sweep" — stale, tracked [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097). Coverage now relies on the per-PR gates |
 
 **Cadence-as-data rule**: for the digests, never edit a workflow's `cron` to change cadence — edit `.github/digests.yml` (the daily cron is a cheap wake-up; `.claude/skills/housekeeping/schedule.mjs` exits early on non-send days).
 
@@ -193,36 +195,35 @@ How one `delegate` label becomes merged code (entry/steps verified in the named 
 6. **Fix-bot** — `fix-ci-on-failure.yml` (#338): `workflow_run` failure of CI/E2E on `claude/issue-*` branches only; attempt cap via `ci-fix-attempts:N` label (max 3); forbidden from `packages/`; pushes with the App token so CI re-runs; exhaustion → `status:blocked` + owner mention.
 7. **Status & close** — `pipeline-pr-status.yml` (no-LLM sticky comments per PR + epic rollup); `label-ready-epics.yml` marks finished epics; `close-epic-on-comment.yml` (#856) closes on a human `/close-epic` comment only when the epic already carries `status:ready-to-close` (postmortem-before-close holds structurally; server-side re-checks + maintainer permission check).
 
-### Gate-honesty hardening state (volatile — checked 2026-07-02 via GitHub API)
+### Gate-honesty hardening state
 
-The three per-PR review gates shipped **fail-open** (missing tool grant meant the agent could never write its verdict file; outage was indistinguishable from a clean scan — #1034). Fixed in #1031/#1033 (grants added; per the workflow comments the fail-open comment lines remain as warnings). [#1035](https://github.com/FriendlyInternet/nuxt-crouton/issues/1035) (known-bad fixture smoke per gate) **closed 2026-07-02**; still **open** as of 2026-07-02: [#1036](https://github.com/FriendlyInternet/nuxt-crouton/issues/1036) (bake the tool grant into the workflow standard), [#1037](https://github.com/FriendlyInternet/nuxt-crouton/issues/1037) (distinguish agent-outage from clean scan). Practical consequence until #1037 lands: **a green review-gate check can still mean "the agent never ran"** — on a security-sensitive PR, open the check and confirm the verdict comment exists. (This paragraph is the owner of the #1034-hardening status; siblings citing it should defer here.)
+The three per-PR review gates shipped **fail-open** (missing tool grant meant the agent could never write its verdict file; outage was indistinguishable from a clean scan — #1034). Grants fixed in #1031/#1033 (per the workflow comments the fail-open comment lines remain as warnings); #1035 added a known-bad fixture smoke per gate. Follow-ups: [#1036](https://github.com/FriendlyInternet/nuxt-crouton/issues/1036) (bake the tool grant into the workflow standard) and [#1037](https://github.com/FriendlyInternet/nuxt-crouton/issues/1037) (distinguish agent-outage from clean scan) — issue state is live data, check GitHub before relying on it. Practical consequence until #1037 lands: **a green review-gate check can still mean "the agent never ran"** — on a security-sensitive PR, open the check and confirm the verdict comment exists. (This paragraph is the owner of the #1034-hardening status; siblings citing it should defer here.)
 
 Also volatile: `.claude/routing.json` `_known_gaps` states the top-level workflow loop (claude.yml, decompose, fix-ci, the sweeps) runs on the claude-code-action **default model, unpinned** — pinning is an acknowledged follow-up.
 
-## 6. Known doc drift in this area (workflow files beat all prose for CI/deploy mechanics; the doc-vs-doc trust order is owned by `crouton-docs-trust-map` §1)
+## 6. Known doc drift in this area
 
-| Stale claim | Where | Reality |
-|---|---|---|
-| Per-app `deploy-<app>.yml` callers | root CLAUDE.md deploy section; `deploy` skill Step 4 | Generic `deploy-apps.yml` + `deploy.config.json` (epic #481) |
-| `WORKER_SECRETS_JSON` as an Environment secret | `deploy-app.yml:71-75`; `deploy` skill Step 4.5 | Must be repo-level (`deploy-app.yml:~247` is operative) |
-| "Daily deep sweep" red-team/a11y is live | root CLAUDE.md | Dispatch-only since #823 |
-| "EVERY change requires pnpm typecheck" implies CI enforces it | root CLAUDE.md | `ci.yml` typechecks only the MCP server; fanfare's typecheck is deliberately ungated; app typecheck in CI happens only via the e2e fixture-regeneration gate. Local `pnpm typecheck` remains the standing rule — CI just doesn't back it |
-| `report-failed-deploy.yml` watches "Deploy Blog (POC preview)" | the workflow itself | That deploy workflow no longer exists (harmless) |
-| `ui-approved` label resumes anything | (folk knowledge) | Inert by design — only a reply comment resumes (#572) |
+Workflow files beat all prose for CI/deploy mechanics (the doc-vs-doc trust order is owned by `crouton-docs-trust-map` §1). The known-stale claims are tracked — read the issue for current fix state:
+
+- **Per-app `deploy-<app>.yml` callers** (root CLAUDE.md deploy section; `deploy` skill Step 4) — reality is the generic `deploy-apps.yml` + `deploy.config.json` (§2) → [#1093](https://github.com/FriendlyInternet/nuxt-crouton/issues/1093)
+- **`WORKER_SECRETS_JSON` as an Environment secret** (deploy-app.yml header; `deploy` skill Step 4.5) — must be repo-level (§3) → [#1094](https://github.com/FriendlyInternet/nuxt-crouton/issues/1094)
+- **"Daily deep sweep" red-team/a11y still live** (root CLAUDE.md) — dispatch-only since #823 (§4); and **"EVERY change requires pnpm typecheck" implies CI enforces it** — `ci.yml`'s misnamed `lint-and-typecheck` job typechecks only the MCP server; app typecheck in CI happens only via the e2e fixture-regeneration gate. Local `pnpm typecheck` remains the standing rule — CI just doesn't back it → both tracked under [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097)
+- `report-failed-deploy.yml` watches "Deploy Blog (POC preview)", a workflow that no longer exists — harmless dangling reference (untracked)
+- Folk knowledge: the `ui-approved` label resumes nothing — inert by design; only a reply comment resumes (#572)
 
 When this skill and a workflow file disagree, the workflow file wins — then fix this skill.
 
 ## Provenance and maintenance
 
-Facts verified 2026-07-02 against: `ls .github/workflows/` (46 files) and direct reads of `deploy-apps.yml`, `deploy-app.yml`, `ci.yml`, `e2e.yml`, `red-team{,-daily}.yml`, `a11y-daily.yml`, `resume-on-comment.yml`, `close-epic-on-comment.yml`, `decompose-on-issue.yml`, `comment-dispatch.yml`, `schedule-waves.yml`, `fix-ci-on-failure.yml`, `guard-package-approval.yml`, `report-failed-deploy.yml`, `db-counts.yml`; `apps/velo/{wrangler.jsonc,package.json,deploy.config.json}`; `.github/digests.yml`; `.claude/routing.json`; issue states of #1035–#1037 via the GitHub API. Step-level deploy-app.yml details cross-checked by grep (cache key, smoke, concurrency, BETTER_AUTH_SECRET autogen). Not independently reproduced (code-derived from workflow text): the artifact-gate internals (#461/#661) and the a11y-pidev/mac-mini dormancy. The `decompose-on-issue-pidev.yml` liveness (label trigger #1017, real use) is verified against the workflow file + issue #1035's `delegate-pi` label; `PI_PROVIDER_KEY` funding is not verifiable from the repo.
-
-Re-verify when things drift:
+verified: 2026-07-02
 
 ```bash
-ls /home/user/nuxt-crouton/.github/workflows | wc -l                      # inventory size (46)
-grep -rn "cron:" /home/user/nuxt-crouton/.github/workflows/*.yml          # real schedules
-ls /home/user/nuxt-crouton/apps/*/deploy.config.json /home/user/nuxt-crouton/pocs/*/deploy.config.json  # opted-in apps
-grep -n "repository-level" /home/user/nuxt-crouton/.github/workflows/deploy-app.yml  # the WORKER_SECRETS_JSON rule
-grep -n "_known_gaps" /home/user/nuxt-crouton/.claude/routing.json        # unpinned-model note
-# gate-honesty: check issues 1035/1036/1037 state on GitHub
+ls .github/workflows | wc -l                                     # inventory size
+grep -rn "cron:" .github/workflows/*.yml                         # real schedules (cross-check .github/digests.yml gating)
+ls apps/*/deploy.config.json pocs/*/deploy.config.json           # opted-in apps
+grep -n "repository-level" .github/workflows/deploy-app.yml      # the WORKER_SECRETS_JSON rule (#1094)
+grep -rln "HARNESS_APP_ID" .github/workflows                     # App-token workflow set
+grep -rn "claude-code-action@" .github/workflows/*.yml           # the SHA-pin sync set
+grep -n "_known_gaps" .claude/routing.json                       # unpinned-model note
+for n in 1093 1094 1097 1036 1037; do gh issue view $n --json number,state -q '"\(.number) \(.state)"'; done  # tracked-drift + gate-honesty states
 ```

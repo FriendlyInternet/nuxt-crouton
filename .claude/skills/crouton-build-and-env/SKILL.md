@@ -22,14 +22,14 @@ Recreate this monorepo's dev environment from zero, and don't lose an hour to an
 
 ## 1. Toolchain
 
-| Tool | Version | Source of truth |
+| Tool | Pin | Source of truth |
 |---|---|---|
-| pnpm | **10.15.1** (exact, sha512-pinned) | `packageManager` in root `package.json` — ALWAYS use pnpm, never npm/yarn |
-| Node | **No repo-wide pin.** No `.nvmrc`, no root `engines`. CI uses `node-version: '20'` (`.github/workflows/ci.yml`); the Claude sandbox runs v22. Eight `packages/*` declare `engines: node >=18.0.0` (crouton-admin, -atelier, -auth, -cli, -designer, -email, -mcp-toolkit, -mcp) — the loosest bound | practice: anything ≥20 works |
-| Native builds | pnpm builds ONLY `better-sqlite3` (`onlyBuiltDependencies`); `@prisma/client, es5-ext, esbuild, sharp, unrs-resolver, vue-demi` are deliberately in `ignoredBuiltDependencies` (they ship prebuilt binaries) | root `package.json` `pnpm` block |
-| `.npmrc` | 2 lines: `shamefully-hoist=true`, `public-hoist-pattern[]=unstorage` | repo root |
+| pnpm | exact, sha512-pinned version — read it fresh (re-verify block) | `packageManager` in root `package.json` — ALWAYS use pnpm, never npm/yarn |
+| Node | **No repo-wide pin.** No `.nvmrc`, no root `engines`. CI pins its own `node-version` in `.github/workflows/ci.yml` (grep it — re-verify block); a handful of `packages/*` declare a loose `engines` floor, the loosest bound | practice: any recent LTS works |
+| Native builds | pnpm builds ONLY `better-sqlite3` (`onlyBuiltDependencies`); the rest (`@prisma/client`, `esbuild`, `sharp`, …) are deliberately in `ignoredBuiltDependencies` — they ship prebuilt binaries | root `package.json` `pnpm` block |
+| `.npmrc` | `shamefully-hoist=true` + `public-hoist-pattern[]=unstorage` | repo root |
 
-Workspace globs (`pnpm-workspace.yaml`): `packages/*` (31 packages), `apps/*` (fanfare, triage, velo), `docs`, `pocs/*`, `workers/*`, `fixtures/*`, `sandboxes/*` — plus a **stale `examples/*` glob (directory doesn't exist; harmless)**.
+Workspace globs (`pnpm-workspace.yaml`): `packages/*`, `apps/*`, `docs`, `pocs/*`, `workers/*`, `fixtures/*`, `sandboxes/*` — plus a **stale `examples/*` glob (directory doesn't exist; harmless)**. Count the packages fresh if a number is load-bearing (`ls packages | wc -l`).
 
 ## 2. Cold start (fresh clone → apps can boot)
 
@@ -41,11 +41,11 @@ pnpm typecheck          # verify: = pnpm -r --filter './apps/*' typecheck
 
 This is exactly what the SessionStart hook (`.claude/hooks/session-start.sh`) does on Claude-web sessions (`CLAUDE_CODE_REMOTE=true`); local sessions must run it themselves.
 
-**Why `build:packages` is mandatory — the dist-consumption model.** Of the 31 `packages/*`, most are consumed as *source* Nuxt layers (no build), but **13 have build scripts** and some of their exports only resolve into `dist/`:
+**Why `build:packages` is mandatory — the dist-consumption model.** Most `packages/*` are consumed as *source* Nuxt layers (no build), but a subset carry build scripts and some of their exports only resolve into `dist/`:
 
 - `@fyit/crouton` (`packages/crouton`) is **fully dist-consumed**: `"main": "./dist/module.mjs"`, exports only `./dist/module.{mjs,d.ts}`. No dist → the module is unresolvable.
 - `@fyit/crouton-core` is **mixed**: `"main": "./nuxt.config.ts"` (source layer), but its `./app/composables/*` and `./server/database/schema/*` subpath exports resolve into `./dist/` — apps error on a missing `crouton-core/dist`.
-- The full build-script set: unbuild — `crouton, crouton-core, crouton-auth, crouton-ai, crouton-bookings, crouton-devtools, crouton-feedback, crouton-mcp-toolkit, crouton-printing, crouton-sales, crouton-triage`; `nuxt build` — `crouton-flow`; `tsc` — `crouton-mcp`.
+- The build-script set drifts (mostly unbuild; a couple use `nuxt build` or `tsc`) — enumerate it with the build-script loop in the re-verify block.
 
 **The guarded-postinstall trap** is owned by root CLAUDE.md ("New App `postinstall` Must Be Guarded") — read it there. Delta facts verified here: every app/poc/fixture uses `"postinstall": "nuxt prepare 2>/dev/null || true"` (copy from `apps/velo/package.json`); the failure it prevents is exactly the fresh-install ordering above (unbuilt dist → bare `nuxt prepare` → `Could not load '@fyit/crouton'` → whole install aborts).
 
@@ -55,17 +55,17 @@ This is exactly what the SessionStart hook (`.claude/hooks/session-start.sh`) do
 
 ## 3. The version catalog and the pins
 
-Shared versions live in the `catalog:` block of `pnpm-workspace.yaml` (single source of truth, #142) — packages reference them as `"dep": "catalog:"`. Cataloged today: `nuxt ^4.4.8, vue ^3.5.38, vue-router ^5.1.0, typescript ^5.7.0, wrangler ^4.101.0, @libsql/client ^0.17.4, drizzle-orm ^0.45.2, drizzle-kit ^0.31.10, @nuxt/ui ^4.9.0`. Per the in-file comment: `vitest`/`@vitest/coverage-v8`/`happy-dom` and `@nuxt/kit|schema` are **intentionally NOT cataloged** (version spreads need a real migration, #141).
+Shared versions live in the `catalog:` block of `pnpm-workspace.yaml` (single source of truth, #142) — packages reference them as `"dep": "catalog:"`. Read the current set with the catalog grep in the re-verify block. Per the in-file comment: the vitest family (`vitest`/`@vitest/coverage-v8`/`happy-dom`) and `@nuxt/kit|schema` are **intentionally NOT cataloged** (version spreads need a real migration, #141).
 
-Root `package.json` `pnpm.overrides` — do NOT loosen these outside the `dependency-sweep` flow:
+Root `package.json` `pnpm.overrides` — do NOT loosen these outside the `dependency-sweep` flow. Current pin values: read them from the overrides (re-verify block); the prose here carries only the *why*:
 
-| Override | Pin | Why |
+| Override | Pin style | Why |
 |---|---|---|
 | `vue`, `nuxt`, `@nuxt/schema`, `@nuxt/ui`, `@nuxt/devtools(-kit)` | caret ranges | force one framework version across the workspace |
-| `@tiptap/core`, `@tiptap/pm`, `@tiptap/vue-3` | **3.27.0 exact** | must match the tiptap version `@nuxt/ui` bundles, or the editor gets two tiptap instances — see #140/#141; #235 shows the pin being re-floored on a `@nuxt/ui` bump |
-| `unimport` | **4.1.1 exact** | workaround pin — rationale not recoverable from the shallow clone (unverified); treat as deliberate |
-| `youch` | **4.1.0-beta.13 exact** | same: workaround pin, rationale unverified |
-| `zod` | **4.2.1 exact** | same: workaround pin, rationale unverified |
+| `@tiptap/core`, `@tiptap/pm`, `@tiptap/vue-3` | **exact** | must match the tiptap version `@nuxt/ui` bundles, or the editor gets two tiptap instances — see #140/#141; #235 shows the pin being re-floored on a `@nuxt/ui` bump |
+| `unimport` | exact | workaround pin — rationale not recoverable from the shallow clone (unverified); treat as deliberate |
+| `youch` | exact | same: workaround pin, rationale unverified |
+| `zod` | exact | same: workaround pin, rationale unverified |
 
 ## 4. The typecheck story
 
@@ -76,17 +76,17 @@ pnpm typecheck:fixtures     # same for fixtures/*
 
 **Why per-app and never from root:** each app's `tsconfig.json` is just `{"extends": "./.nuxt/tsconfig.json"}` — the config Nuxt *generates* into `.nuxt/` with that app's aliases and auto-imports. `npx nuxt typecheck` from the repo root has no app context, so every auto-import and `#`-alias is unresolved → **thousands of false positives** (missing `defineNuxtConfig`, unresolvable `#imports`, etc.). The rule itself is root CLAUDE.md's; the mechanics above are the why.
 
-Known deltas (verified 2026-07-02):
+Known deltas:
 
-- Root script `typecheck:mcp` matches nothing (stale package name) — use `pnpm --filter @fyit/crouton-mcp typecheck` instead. The why + the full inventory of these stale-name silent no-ops (incl. the `.claude/settings.json` MCP path) is owned by sibling `crouton-config-registry` § "Silent no-ops".
-- CLAUDE.md says "EVERY change requires `pnpm typecheck`", but CI does **not** run the full app sweep — it typechecks only `@fyit/crouton-mcp` and build-smokes fanfare, whose typecheck is *intentionally ungated* ("known pre-existing baseline of type errors", comment in `ci.yml`). So the full-sweep rule is enforced by agent discipline, not CI. Trust order: AGENTS.md > root CLAUDE.md > CI reality; run the sweep yourself.
+- Root script `typecheck:mcp` matches nothing (stale package name) and exits 0 — a silent no-op, tracked as [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098). Use `pnpm --filter @fyit/crouton-mcp typecheck` instead. The why + the full inventory of these stale-name silent no-ops (incl. the `.claude/settings.json` MCP path) is owned by sibling `crouton-config-registry` § "Silent no-ops".
+- CLAUDE.md says "EVERY change requires `pnpm typecheck`", but CI does **not** run the full app sweep — it typechecks only `@fyit/crouton-mcp` and build-smokes fanfare, whose typecheck is *intentionally ungated* ("known pre-existing baseline of type errors", comment in `ci.yml`). The gate gap is tracked as [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097). So the full-sweep rule is enforced by agent discipline, not CI. Trust order: AGENTS.md > root CLAUDE.md > CI reality; run the sweep yourself.
 
 ## 5. Env vars
 
 | Var | Needed for | Notes |
 |---|---|---|
 | `BETTER_AUTH_SECRET` | any app using `crouton-auth` (velo, fanfare, fixtures…) | ≥32 chars. On Claude-web the SessionStart hook generates one (`openssl rand -hex 32`), caches at `~/.crouton-dev-auth-secret`, exports via `CLAUDE_ENV_FILE`. Locally: set it yourself or copy `.env.example` |
-| `BETTER_AUTH_URL` | cookie-correct auth | `.env.example` hardcodes `http://localhost:3000`, but apps run on fixed ports (velo `devServer.port: 3006`, triage 3005, fanfare 3007) — set it to the app's real port. Boot details: sibling `crouton-run-and-operate` |
+| `BETTER_AUTH_URL` | cookie-correct auth | `.env.example` hardcodes `http://localhost:3000`, but apps run on fixed per-app ports pinned in each `nuxt.config.ts` `devServer` block (table + re-verify grep: sibling `crouton-run-and-operate`) — set it to the app's real port |
 | `E2E_FIXTURE`, `BETTER_AUTH_SECRET=dev`, `BETTER_AUTH_URL=http://localhost:3000` | `pnpm test:e2e` | fixtures all run on :3000; mechanics in the `e2e-smoke` skill |
 | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` | anything touching remote D1/Workers | not present in the chat sandbox — remote CF ops run in CI (see `remove-app`, `db-clone` skills) |
 | `HTTPS_PROXY` (+ CA `/root/.ccr/ca-bundle.crt`) | sandbox egress | preconfigured; never disable TLS or unset it |
@@ -106,26 +106,27 @@ Fixtures commit a dummy `.env` on purpose (`BETTER_AUTH_SECRET=dev-fixture-secre
 | `git log -S` / `blame` hits a wall at one boundary commit | **the sandbox clone is shallow** (`git rev-parse --is-shallow-repository` → true); pickaxe attributes everything to the boundary merge | for real archaeology use GitHub (MCP `search_commits` / `list_commits`) or note the limit — don't cite the boundary commit as the origin |
 | A prior session claims tool X is unavailable | claimed limitations are hypotheses (root CLAUDE.md "verify capabilities") | 5-second probe (e.g. `ls /opt/pw-browsers`) before designing around it |
 
-## Known drift in this area (verified 2026-07-02)
+## Known drift in this area
 
 - Root CLAUDE.md's "Development Commands" lists `pnpm dev` — **no root `dev` script exists**; use `pnpm --filter <app> dev`.
 - `pnpm-workspace.yaml` `examples/*` glob: no such directory.
-- `typecheck:mcp` filter + `.claude/settings.json` MCP path: stale `nuxt-crouton-mcp-server` name (§4).
+- `typecheck:mcp` filter + `.claude/settings.json` MCP path: stale `nuxt-crouton-mcp-server` name (§4, [#1098](https://github.com/FriendlyInternet/nuxt-crouton/issues/1098)).
 - `scripts/deploy-app.sh` still says Cloudflare *Pages* + `wrangler.toml` — superseded; use the `/deploy` skill (sibling `crouton-ci-and-deploy-map`).
 
 Where docs disagree, trust order: see `crouton-docs-trust-map` §1.
 
 ## Provenance and maintenance
 
-Facts verified 2026-07-02 against the working tree at commit `c81bdb0`: root `package.json` (scripts, overrides, packageManager), `pnpm-workspace.yaml`, `.npmrc`, `.github/workflows/ci.yml`, `.claude/hooks/session-start.sh`, `apps/velo/package.json` + `.env.example` + `nuxt.config.ts`, `packages/crouton/package.json`, `packages/crouton-core/package.json`, all 31 `packages/*/package.json` build scripts, `scripts/app-shots.mjs`, `/opt/pw-browsers` listing, `pnpm --version` (10.15.1), `node --version` (v22.22.2), `git rev-parse --is-shallow-repository` (true). Tiptap pin rationale: issues #140/#141/#235 (issue text, trusted with citation). `unimport`/`youch`/`zod` exact-pin rationale: **unverified** (shallow clone blocked archaeology).
-
-Re-verify when drift is suspected:
+verified: 2026-07-02
 
 ```bash
-node -e "const j=require('./package.json'); console.log(j.packageManager, JSON.stringify(j.pnpm.overrides,null,1))"
-grep -A12 '^catalog:' pnpm-workspace.yaml
-grep -n 'node-version' .github/workflows/ci.yml | head -3
-grep '"postinstall"' apps/*/package.json
-for p in packages/*/package.json; do node -e "const j=require('./$p'); if(j.scripts?.build) console.log(j.name, j.scripts.build)"; done
-ls /opt/pw-browsers/
+node -e "const j=require('./package.json'); console.log(j.packageManager, JSON.stringify(j.pnpm.overrides,null,1))"  # pnpm pin + current override versions
+grep -A12 '^catalog:' pnpm-workspace.yaml                        # current catalog versions
+grep -n 'node-version' .github/workflows/ci.yml | head -3        # CI Node version
+grep -l '"engines"' packages/*/package.json                      # per-package Node floors
+ls packages | wc -l                                              # package count
+grep '"postinstall"' apps/*/package.json                         # guarded postinstall
+for p in packages/*/package.json; do node -e "const j=require('./$p'); if(j.scripts?.build) console.log(j.name, j.scripts.build)"; done  # build-script set
+ls /opt/pw-browsers/                                             # pre-installed chromium
+pnpm --version; node --version
 ```

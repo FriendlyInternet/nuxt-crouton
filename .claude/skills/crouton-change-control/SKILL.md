@@ -70,11 +70,9 @@ Safety net: `guard-package-approval.yml` fails any PR to `main` that commits the
 
 ## 4. How work reaches `main`
 
-Interactive: feature branch → `/commit` (never raw `git commit`, never `git add .`) → PR with `Closes #NN` → merge **preserving commits** (merge/rebase; squash only a noisy PR history — `AGENTS.md` "Merge policy"). Merge to `main` touching an app's watch-paths auto-deploys its **staging** (#347).
+The interactive flow (feature branch → `/commit` → PR `Closes #NN` → merge preserving commits) is owned by `AGENTS.md` (The loop, Commits) and the `github-tasks`/`commit` skills — read it there. What's specific here, verified in the workflows:
 
 Agent pipeline: workers PR into an `epic/<NN>-<slug>` branch; non-gate bot PRs auto-merge there when green (`automerge-epic-subpr.yml`, merge commit); gate PRs wait for §2. **The pipeline stops at the epic branch — nothing reaches `main` on its own**: the epic→`main` PR is a human act (the #686 lesson, from that epic's postmortem — cited, not reproduced). It also never deploys production (§5).
-
-⚠️ **Contradiction, stated:** `.claude/skills/github-tasks/SKILL.md:153` step 6 says "**Squash-merge**" — verified present 2026-07-02, and stale. `AGENTS.md` wins: don't squash by default. The pipeline's own merge steps already comply ("Merge commit — NOT squash" in `resume-on-comment.yml` and `automerge-epic-subpr.yml`).
 
 ## 5. The non-negotiables (rule → incident behind it)
 
@@ -89,18 +87,17 @@ Agent pipeline: workers PR into an `epic/<NN>-<slug>` branch; non-gate bot PRs a
 
 ## 6. When NOT to gate
 
-- **When unsure a diff is in scope, don't gate** — verbatim rule in `AGENTS.md` (Sign-off gates) and root `CLAUDE.md` (UI Sign-Off: "Be conservative"). Gates guard the *expensive* step; a false hold costs a human round-trip.
-- Not UI: pure `<script>`/composables/types, `server/**`, config, tests, docs (root `CLAUDE.md` UI Sign-Off scope).
-- Not test-first: `pocs/*` (always), `apps/*` (unless opted in), generated CRUD (covered by the e2e fixture smoke), data models (→ schema gate), looks (→ UI gate) — #774/#779.
-- Trivial chores may skip the hypothesis issue framing (`AGENTS.md` Issues) — but never the issue itself.
+Owned by `AGENTS.md` (Sign-off gates: "when unsure a diff is in scope, don't gate") and root `CLAUDE.md` (per-gate scope definitions under UI/Schema/Test Sign-Off) — read them there. The one-line summary: gates guard the *expensive* step; a false hold costs a human round-trip.
 
 ## Provenance and maintenance
 
-Facts verified 2026-07-02 against the working tree: `scripts/harness-stages.mjs` run live on 4 paths; `resume-on-comment.yml` (trigger, approval regex, merge-commit step), `deploy-apps.yml` (staging hard-coding + dispatch whitelist), `automerge-epic-subpr.yml` (packages/ hold, no-squash), `close-epic-on-comment.yml` (label precondition), `guard-package-approval.yml`, `.claude/hooks/gate-package-edits.sh` + `gate-spec-signoff.mjs` + `require-comment-provenance.mjs` wiring in `.claude/settings.json`, `github-tasks/SKILL.md:153` squash line, issue #701 body (via GitHub API). Incident narratives (#686, #988, #680/#685) are cited from issues/postmortems, not reproduced. Re-verify with:
+verified: 2026-07-02
+
+Facts verified against the working tree: `scripts/harness-stages.mjs` run live on 4 paths; `resume-on-comment.yml` (trigger, approval regex, merge-commit step), `deploy-apps.yml` (staging hard-coding + dispatch whitelist), `automerge-epic-subpr.yml` (packages/ hold, no-squash), `close-epic-on-comment.yml` (label precondition), `guard-package-approval.yml`, `.claude/hooks/gate-package-edits.sh` + `gate-spec-signoff.mjs` + `require-comment-provenance.mjs` wiring in `.claude/settings.json`, issue #701 body (via GitHub API). Incident narratives (#686, #988, #680/#685) are cited from issues/postmortems, not reproduced. Re-verify with:
 
 ```bash
 node scripts/harness-stages.mjs packages/crouton-core/x.ts   # stage/gate model still current?
 grep -n "issue_comment" .github/workflows/resume-on-comment.yml   # approval still comment-only?
 grep -n "production" .github/workflows/deploy-apps.yml | head     # #318 still structural?
-grep -n "Squash-merge" .claude/skills/github-tasks/SKILL.md       # stale line fixed yet?
+gh issue view 701 --json state                                    # approval-scope contradiction fixed yet?
 ```

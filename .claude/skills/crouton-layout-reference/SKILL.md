@@ -54,7 +54,9 @@ type LayoutNode = LayoutLeaf | LayoutSplit | LayoutNested
 
 A block is registered by adding a `CroutonLayoutBlockDefinition` under `croutonLayoutBlocks` in a layer's `app/app.config.ts` (defu-merged across all layers — that's the whole contribution mechanism). `component` is an auto-imported component **NAME string** for `<component :is>` — never a component object, never `resolveComponent()`.
 
-**The default registry** — `packages/crouton-layout/app/app.config.ts` (verified 2026-07-02):
+**Snapshot 2026-07-02 — the registry numbers below drift; regenerate with the sizing-mirror grep in the re-verify block before relying on them.**
+
+**The default registry** — `packages/crouton-layout/app/app.config.ts`:
 
 | id | component | minWidth | defaultSize | configSchema |
 |---|---|---|---|---|
@@ -62,7 +64,7 @@ A block is registered by adding a `CroutonLayoutBlockDefinition` under `croutonL
 | `entity-form` | `CroutonLayoutForm` | 320 | 50 | `collection`, `heading` |
 | `stats` | `CroutonLayoutSpikeStats` | 200 | 40 | — |
 
-**Bookings additions** — `packages/crouton-bookings/app/app.config.ts` (verified): `bookings-calendar` (`CroutonBookingsLayoutCalendar`, 520/65), `bookings-calendar-only` (460/60), `bookings-list` (300/40), `bookings-locations` (220/25), `bookings-filters` (240/25).
+**Bookings additions** — `packages/crouton-bookings/app/app.config.ts`: `bookings-calendar` (`CroutonBookingsLayoutCalendar`, 520/65), `bookings-calendar-only` (460/60), `bookings-list` (300/40), `bookings-locations` (220/25), `bookings-filters` (240/25).
 
 **The sizing contract** (fields on the definition, `crouton-core/app/types/layout-block.ts`; all optional, undeclared ⇒ fully fluid, `minWidth` treated as 0):
 
@@ -85,7 +87,7 @@ File: `packages/crouton-layout/app/utils/layout-viability.ts`. Pure (no Nuxt), u
 
 **Definition:** a layout is *viable* iff every placed block gets ≥ its declared `minWidth` (px) at every target container width checked. `checkLayoutViability(root, minWidthResolver(registry), targetWidths)` → `{ viable, violations: [{ blockId, paneWidth, minWidth, containerWidth }] }`.
 
-**Width model** (the only constrained axis is width): a **horizontal** split divides its width among children by normalized `defaultSize` shares (equal when unset); a **vertical** split gives each child the **full** width; a `nested` node recurses into `layout.root` at the same width. Resize-handle pixels are deliberately ignored. Pane widths are rounded to 2 decimals to avoid float dust. There are **no thresholds beyond `minWidth` itself** — the metric is binary per (block, width) pair; the conventional target widths are `[1280, 768]` (the placer's `DEFAULT_TARGET_WIDTHS`, "desktop + tablet").
+**Width model** (the only constrained axis is width): a **horizontal** split divides its width among children by normalized `defaultSize` shares (equal when unset); a **vertical** split gives each child the **full** width; a `nested` node recurses into `layout.root` at the same width. Resize-handle pixels are deliberately ignored. Pane widths are rounded to 2 decimals to avoid float dust. There are **no thresholds beyond `minWidth` itself** — the metric is binary per (block, width) pair; the conventional target widths are the placer's `DEFAULT_TARGET_WIDTHS` (`[1280, 768]`, "desktop + tablet").
 
 **Companion exports** (same file):
 - `subtreeMinWidth(node, resolver)` — the px floor a whole subtree needs: **SUM** of children for horizontal, **MAX** for vertical. This is the enforcement side: `panelMinSizePct(parentDirection, child, containerWidthPx, resolver)` converts it to a reka-ui SplitterPanel min-size **%** (only under a horizontal parent; falls back to authored `minSize` when unmeasured; capped at 90%) — why a pane "refuses" to be dragged smaller.
@@ -98,7 +100,7 @@ File: `packages/crouton-layout/app/utils/layout-compose.ts`. Pure and **delibera
 1. **CLI**, post-generation: `packages/crouton-cli/lib/compose-layout.ts` `writeDefaultLayout()` → writes `crouton.layout.json` at the app root.
 2. **In-app**: `useCroutonLayoutBlocks().composeDefault(collections)` against the live registry.
 
-Input: `{ collections: [{ key, label?, calendar? }], registry, targetWidths? = [1280,768], blockIds? }` where `key` is the collection's registry key (`layerCamel(layer) + PascalCasePlural`, e.g. `bookingsBookings` — mirrored by `registryKeyFor()` in the CLI). Default block ids: `collection-list` / `entity-form` / `bookings-calendar`.
+Input: `{ collections: [{ key, label?, calendar? }], registry, targetWidths? = DEFAULT_TARGET_WIDTHS, blockIds? }` where `key` is the collection's registry key (`layerCamel(layer) + PascalCasePlural`, e.g. `bookingsBookings` — mirrored by `registryKeyFor()` in the CLI). Default block ids: `collection-list` / `entity-form` / `bookings-calendar`.
 
 **Selection rules** (verified against source, in order):
 1. A collection with `calendar: true` + calendar & list blocks registered → **`calendar-primary`**: horizontal `[list 30, calendar 70]`; if not viable, vertical with **calendar on top**.
@@ -117,7 +119,7 @@ Return: `{ tree, pattern, viable, violations }` — the final tree is always re-
 
 **API** — `server/api/teams/[id]/crouton-layouts/[layoutId].{get,put}.ts`. Both resolve team membership and query by `(id AND teamId)`. PUT runs the body's tree through **`sanitizeLayoutTree`** (`app/utils/layout-tree.ts` — pure shape gate: copies only known fields, clamps sizes to 0–100, `MAX_DEPTH = 12` recursion cap, returns `null` for implausible input) and upserts the **cleaned** tree. Defence in depth: sanitize on write, allowlist blockIds + `sanitizeConfig` at render.
 
-**Client store** — `useCroutonLayoutStore()`: `load(layoutId)` re-sanitizes on the way OUT of storage too (a DB-tampered row can't feed the renderer); `save(layoutId, tree)` is debounced **600ms**. The team layout surface `app/pages/admin/[team]/layout.vue` loads/saves the hardcoded row **`LAYOUT_ID = 'default'`**.
+**Client store** — `useCroutonLayoutStore()`: `load(layoutId)` re-sanitizes on the way OUT of storage too (a DB-tampered row can't feed the renderer); `save(layoutId, tree)` is debounced (600ms). The team layout surface `app/pages/admin/[team]/layout.vue` loads/saves the hardcoded row **`LAYOUT_ID = 'default'`**.
 
 **Seeding** — `crouton-seed` (crouton-cli `lib/seed-app.ts`, `collectDefaultLayoutSql`): if `crouton.layout.json` exists at the app root, upsert its tree into `layout_configs` with row id `default` (idempotent `INSERT … ON CONFLICT(id) DO UPDATE`, `createdAt` immutable) for the single seeded team. That's the full generate → booted-laid-out-POC chain: generate → placer → `crouton.layout.json` → seed → `layout_configs[default]` → `/admin/[team]/layout`.
 
@@ -125,22 +127,22 @@ Return: `{ tree, pattern, viable, violations }` — the final tree is always re-
 
 **Serialization out** — `layout-serialize.ts` (#987) gives the canonical diffable string form (stable key order, defaults omitted, sizes rounded); `layout-ticket.ts` (#974) is the GitHub-comment codec for the agent⇄human loop. Both re-validate through `sanitizeLayoutTree` on parse.
 
-## 6. Drift hazards (verified 2026-07-02)
+## 6. Drift hazards
 
 | Hazard | State |
 |---|---|
-| **CLI sizing mirror.** `crouton-cli/lib/compose-layout.ts` hardcodes `CORE_BLOCKS` (collection-list 260/34, entity-form 320/50) + `BOOKINGS_BLOCKS` (bookings-calendar 520/65) because the CLI has no live app.config at generate time. A package changing `minWidth`/`defaultSize` silently desyncs the generate-time placer from the runtime registry. **The keep-in-sync comment itself has drifted**: it points at `crouton-core/app/app.config.ts`, but the live default registry moved to `crouton-layout/app/app.config.ts` in the #751 extraction. Values currently match (verified both sides). | live hazard |
+| **CLI sizing mirror.** `crouton-cli/lib/compose-layout.ts` hardcodes `CORE_BLOCKS` + `BOOKINGS_BLOCKS` (mirrors of the registry's minWidth/defaultSize values) because the CLI has no live app.config at generate time. A package changing `minWidth`/`defaultSize` silently desyncs the generate-time placer from the runtime registry. **The keep-in-sync comment itself has drifted**: it points at `crouton-core/app/app.config.ts`, but the live default registry moved to `crouton-layout/app/app.config.ts` in the #751 extraction. Values matched at the snapshot date — re-check with the sizing-mirror grep before trusting. | live hazard |
 | **`crouton-layout/CLAUDE.md` self-contradicts**: marks the #756 server-side extraction pending and has a second empty "Key Files" heading, while the `layout_configs` schema + API exist on disk. Trust the code and the FIRST table. | stale doc |
 | **`block-authoring` skill's reference pointer is stale**: it cites `LayoutSpikeList/Form/Stats.vue` in `packages/crouton-core/app/components/` — only `LayoutSpikeStats.vue` survives, and it lives in `packages/crouton-layout/app/components/`. The skill's *rules* are still correct. | stale pointer |
-| **Pre-#709 apps have no `crouton.layout.json`**: only `pocs/booking-demo` has one (verified by find); `apps/velo` and `fixtures/minimal` don't — apps generated before the layout pass never got it and boot without a seeded default layout until regenerated. | expected gap |
+| **Pre-#709 apps have no `crouton.layout.json`**: apps generated before the layout pass never got it and boot without a seeded default layout until regenerated (list who has one: the `find` in the re-verify block). | expected gap |
 
 Trust order when these bite: code first, then `packages/crouton-layout/CLAUDE.md` (first Key Files table); for doc-vs-doc conflicts see `crouton-docs-trust-map` §1.
 
 ## 7. Open fronts — the layout epic sprawl
 
-Five **open** epics overlap on `pkg:crouton-layout` scope (all states verified via the GitHub API 2026-07-02). Read before minting anything new here — the idea probably already has an epic:
+Several **open** epics overlap on `pkg:crouton-layout` scope. **Snapshot 2026-07-02 — issue states are live data; re-check with the `gh issue view` loop in the re-verify block before relying on them.** Read before minting anything new here — the idea probably already has an epic:
 
-| Epic | Scope | Status |
+| Epic | Scope | Status at snapshot |
 |---|---|---|
 | [#703](https://github.com/FriendlyInternet/nuxt-crouton/issues/703) | The lean layout engine itself (registry → contract → panes → placer; sprint ladder #713→#704→#710→#706→#709→gated #711) | open — the shipped code documented above IS its output |
 | [#855](https://github.com/FriendlyInternet/nuxt-crouton/issues/855) | One block, three renderers (`panes`/`canvas`/`spatial`), magnetic snap, VR | open, unstarted checklist |
@@ -170,12 +172,13 @@ The full per-file map is `packages/crouton-layout/CLAUDE.md` — index only, don
 
 ## Provenance and maintenance
 
-Facts verified 2026-07-02 against the working tree at `/home/user/nuxt-crouton`: read in full — `packages/crouton-layout/app/utils/{layout-compose.ts,layout-viability.ts}`, `app/app.config.ts`, `app/composables/{useCroutonLayoutBlocks.ts,useCroutonLayoutStore.ts}`, `server/database/schema/layoutConfigs.ts`, `server/api/teams/[id]/crouton-layouts/[layoutId].{get,put}.ts`, `crouton.manifest.ts`, `packages/crouton-core/app/types/{layout.ts,layout-block.ts}`, `packages/crouton-cli/lib/compose-layout.ts`, `lib/seed-app.ts` (layout section), `packages/crouton-bookings/app/app.config.ts` (block entries), `app/utils/layout-tree.ts` (header + sanitizer body), `.claude/skills/block-authoring/SKILL.md`. Epic states #703/#855/#868/#895/#905 verified open via the GitHub API the same day. Issue-numbered design claims (#709/#710/#711/#751/#871/#874/#875/#986/#987) come from in-source doc comments; #983 and the dedup-debt framing are from the discovery briefing, unverified.
+verified: 2026-07-02
 
-Cheap re-verification when something looks off:
-- Sizing-mirror drift: `grep -n "minWidth\|defaultSize" packages/crouton-cli/lib/compose-layout.ts packages/crouton-layout/app/app.config.ts packages/crouton-bookings/app/app.config.ts`
-- Placer rules: read `packages/crouton-layout/app/utils/layout-compose.ts` (~210 lines) — `composeDefaultLayout` is the whole rule set.
-- Table shape: `cat packages/crouton-layout/server/database/schema/layoutConfigs.ts`
-- Default-layout files present: `find apps pocs fixtures -maxdepth 2 -name crouton.layout.json -not -path "*/node_modules/*"`
-- Epic states: `mcp__github__issue_read` (or `gh issue view N`) on 703/855/868/895/905.
-- Unit truth: `pnpm --filter @fyit/crouton-layout test` (vitest suites next to every util).
+```bash
+grep -n "minWidth\|defaultSize" packages/crouton-cli/lib/compose-layout.ts packages/crouton-layout/app/app.config.ts packages/crouton-bookings/app/app.config.ts  # sizing-mirror drift + current registry numbers
+sed -n '1,80p' packages/crouton-layout/app/utils/layout-compose.ts     # placer rules — composeDefaultLayout is the whole rule set; read the file when in doubt
+cat packages/crouton-layout/server/database/schema/layoutConfigs.ts    # table shape
+find apps pocs fixtures -maxdepth 2 -name crouton.layout.json -not -path "*/node_modules/*"  # who has a default-layout file
+for n in 703 855 868 895 905; do gh issue view $n --json number,state,title -q '"\(.number) \(.state) \(.title)"'; done  # epic states (or mcp__github__issue_read)
+pnpm --filter @fyit/crouton-layout test                                # unit truth (vitest suites next to every util)
+```
