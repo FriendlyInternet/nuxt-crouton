@@ -48,13 +48,35 @@ A **"why not" is as load-bearing as a "why"** — it's the evidence the chosen p
 
 - Add a short **`Considered & rejected`** note — one line per option: `option → ❌ why not`. It lives in the **🤖 For agents** block by default (or its own small block, or a comment on the issue/epic).
 - **Required only when alternatives were actually weighed** — trivial chores opt out (same as the hypothesis framing).
-- The **epic** is the natural home for a cross-cutting "why not": post it as a comment *when the decision is made*, while the reasoning is fresh.
+- The **epic** is the natural home for a cross-cutting "why not" — record it in the epic's **Decisions log** (below), *when the decision is made*, while the reasoning is fresh.
 
 Worked example (from epic #392):
 > **Considered & rejected — E2E perf**
 > - Bump Playwright workers → ❌ the harness shares one dev server + SQLite *per job*; parallel workers race on mutated state → flaky.
 > - Shared "build packages once" prebuild job → ❌ serialises a parallel matrix; saves CI *minutes*, not wall-clock.
 > - Cache the built packages → ❌ a stale cache makes the regression smoke pass *falsely* — defeating its purpose.
+
+## The epic's Decisions log (capture the call *when it's made*)
+
+`Considered & rejected` catches the alternatives you weighed **when you write the issue**. But the decisions that leak worst are the ones made **halfway through the work** — "team-scope at the query layer", "layout composition is deterministic, not LLM", "fake the payment in the POC". At authoring time they don't exist yet, so no up-front section can catch them; by close they're lost to chat.
+
+So every epic carries a running **`## 🧭 Decisions`** log — in the epic body, or a maintained pinned comment on the epic — that you **append to the moment a real design call is made**, mid-work, while the reasoning is fresh. It's the *same reflex* as updating a POC's `HANDOFF.md` / `spec.json` at a sign-off (the `spec` skill), pointed at the epic: one concept, two homes.
+
+**The format** — newest at the bottom, one line per decision:
+
+```
+[YYYY-MM-DD] Decision → why → (Rejected: X — why not)
+```
+
+**Append-only — reversals are kept, never edited away.** This is the one deliberate difference from the POC `spec.json`, which *supersedes* (newest wins, prune the stale entry — "this is how it behaves *now*"). A decision log does the opposite: when a decision is later reversed, append a **new** line recording the reversal and the rule learned — don't touch the original. The reversal *is* the lesson, exactly as `AGENTS.md` demands ("negative results are first-class data — record the reversal and extract the rule, don't delete it"). A ledger that erases its own reversals is the re-litigation trap wearing a fresh coat.
+
+**Keep it a habit, not a gate.** Like the hypothesis framing, this is a strongly-modeled convention with a worked example — *not* a required section and *not* hook-enforced. Decision capture dies the instant it's a box you tick to unblock a merge (you get "N/A" and "see chat"). Trivial epics opt out.
+
+Worked example (a running log on an epic):
+> ## 🧭 Decisions
+> - [2026-06-14] Team-scope at the **query layer** (drizzle `where team_id`), not per-route middleware → one choke-point you can't forget to add on a new endpoint → (Rejected: per-route guard — trivially omitted on the next route added; Rejected: DB row-level security — D1/SQLite has none).
+> - [2026-06-20] POC default layout is **deterministic** (`layout-compose.ts` rules), not LLM-generated → reproducible, reviewable, no token cost on every boot → (Rejected: LLM "place the blocks" — non-deterministic and slow, can't diff two runs).
+> - [2026-06-28] **Reversed** the 06-14 call *for the reporting endpoints only*: they team-scope in **middleware** after all → their cross-collection joins made per-query scoping duplicative and error-prone → rule learned: query-layer scoping for single-collection reads, middleware for joins.
 
 ## How to test (REQUIRED on every closeable issue/PR — written for a human)
 
