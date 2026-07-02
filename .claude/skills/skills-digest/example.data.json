@@ -56,5 +56,17 @@
     "topPairs": [
       { "a": "github-tasks", "b": "skills-digest", "containment": 19.5 }
     ]
+  },
+  "deadWeight": {
+    "freshness": { "scanned": 50, "tracked": 13, "malformed": 0, "vanished": 1, "possiblyStale": 2, "overdue": 2 },
+    "staleDays": 90,
+    "stale": [
+      { "name": "crouton-ci-and-deploy-map", "stamp": "2026-03-14", "ageDays": 110, "overdue": true, "vanished": 1, "possiblyStale": 0, "invocations": 0 },
+      { "name": "crouton-run-and-operate", "stamp": "2026-03-30", "ageDays": 94, "overdue": true, "vanished": 0, "possiblyStale": 1, "invocations": 6 }
+    ],
+    "coverage": { "judged": true, "coverageDays": 63, "runs": 41, "records": 9, "scope": "pipeline" },
+    "retireCandidates": [
+      { "name": "crouton-ci-and-deploy-map", "stamp": "2026-03-14", "ageDays": 110, "overdue": true, "vanished": 1, "possiblyStale": 0, "invocations": 0 }
+    ]
   }
 }
