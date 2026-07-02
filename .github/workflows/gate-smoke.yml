@@ -1,0 +1,122 @@
+name: Gate Smoke (known-bad fixtures)
+
+# On-demand positive-case smoke for the agent gates (#1035, postmortem of #834).
+# Each gate (frontend-review / a11y / red-team) is only ever verified "clean →
+# green" by the real per-PR workflows — this workflow proves the OTHER half:
+# "bad → red". It points each gate's subagent directly at a committed
+# known-bad fixture (.claude/gate-fixtures/<gate>/...) instead of a PR diff,
+# then asserts the resulting verdict is severe enough to have failed the real
+# gate. A fixture-in-a-PR smoke (like #847) is expensive to repeat; this is
+# the cheap, re-runnable, manual-dispatch equivalent.
+#
+# A RED run here means a gate did NOT flag its own known-bad fixture — i.e.
+# it is fail-open (the exact #834 class of bug). Treat that as a blocking
+# regression on the affected gate, not a flake.
+
+on:
+  workflow_dispatch:
+    inputs:
+      gate:
+        description: "Which gate to smoke-test"
+        type: choice
+        default: all
+        options:
+          - all
+          - frontend-review
+          - a11y
+          - red-team
+
+concurrency:
+  group: gate-smoke-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      gates: ${{ steps.plan.outputs.gates }}
+    steps:
+      - id: plan
+        run: |
+          case "${{ inputs.gate || 'all' }}" in
+            all)
+              echo 'gates=["frontend-review","a11y","red-team"]' >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "gates=[\"${{ inputs.gate }}\"]" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+  smoke:
+    needs: plan
+    strategy:
+      fail-fast: false
+      matrix:
+        gate: ${{ fromJson(needs.plan.outputs.gates) }}
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        if: matrix.gate == 'a11y'
+      - uses: actions/setup-node@v4
+        if: matrix.gate == 'a11y'
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install (a11y needs eslint)
+        if: matrix.gate == 'a11y'
+        run: pnpm install --frozen-lockfile
+
+      # Same engine + allowlist as the real gate workflows (#834's fix) — the
+      # smoke MUST use the identical permission grant, or it isn't testing
+      # the thing that shipped fail-open.
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+        continue-on-error: true
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          show_full_output: true
+          claude_args: "--max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          prompt: |
+            Act as the **${{ matrix.gate }} subagent** defined in
+            `.claude/agents/${{ matrix.gate }}.md`.
+            Input: { scope: ".claude/gate-fixtures/${{ matrix.gate }}", depth: "quick", fix: false }.
+
+            Scan ONLY the file(s) under `.claude/gate-fixtures/${{ matrix.gate }}/`
+            (ignore everything else in the repo, and ignore the README.md in that
+            directory — it is documentation, not a fixture) through the checklist in
+            the agent definition. These fixtures are deliberately bad — you are
+            expected to find a real, severe violation. Do not soften or omit it.
+
+            Then write `gate-smoke-verdict.json` at the repo root, exactly:
+            `{"highest":"<none|note|warning|critical>"}` for frontend-review/a11y, or
+            `{"highest":"<none|low|medium|high|critical>"}` for red-team — using
+            the same severity vocabulary as the real gate's verdict file
+            (`frontend-review-verdict.json` / `a11y-verdict.json` /
+            `red-team-verdict.json`). Always write the file, even if you (wrongly)
+            find nothing. Do not edit the fixtures. Do not post any PR/issue
+            comments (this is a dispatch smoke, not a PR gate).
+
+      - name: Assert the gate turned RED on its known-bad fixture
+        if: always()
+        run: |
+          if [ ! -f gate-smoke-verdict.json ]; then
+            echo "::error::${{ matrix.gate }} produced NO verdict on its known-bad fixture (agent didn't run, or the permission grant is broken) — this is exactly the fail-open case. FAILING the smoke."
+            exit 1
+          fi
+          echo "Verdict: $(cat gate-smoke-verdict.json)"
+          HIGHEST=$(node -e "process.stdout.write((require('./gate-smoke-verdict.json').highest||'none').toLowerCase())")
+          case "$HIGHEST" in
+            critical|high)
+              echo "${{ matrix.gate }} correctly flagged its known-bad fixture (${HIGHEST}). Smoke passes."
+              ;;
+            *)
+              echo "::error::${{ matrix.gate }} did NOT flag its known-bad fixture as critical/high (got '${HIGHEST}') — the gate is fail-open. FAILING the smoke."
+              exit 1
+              ;;
+          esac
+

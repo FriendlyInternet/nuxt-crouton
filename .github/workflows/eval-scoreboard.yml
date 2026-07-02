@@ -76,6 +76,6 @@ jobs:
             echo "Creating the standing scoreboard issue…"
             gh issue create --repo "$REPO" --title "$TITLE" --label meta:agents --label workflow --body-file "$BODY_FILE"
           else
-            echo "Commenting on standing scoreboard issue #$NUM…"
+            echo "Commenting on standing scoreboard issue #${NUM}…"
             gh issue comment "$NUM" --repo "$REPO" --body-file "$BODY_FILE"
           fi

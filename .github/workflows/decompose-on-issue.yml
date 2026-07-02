@@ -13,9 +13,13 @@ jobs:
     # later label change while `delegate` happens to still be on the issue. Otherwise the
     # worker adding `status:in-progress` re-fires this workflow as claude[bot], which then
     # dies on the bot-actor guard (the mystery duplicate failures). Gate on the *added* label.
+    # AGENT_HARNESS guard (#669 WS7 / #1077): when the repo var is 'pi', this claude flow
+    # yields — the same `delegate` events are picked up by decompose-on-issue-pidev.yml
+    # instead. Unset/anything-else ⇒ claude stays the default (one-variable flip back).
     if: |
-      (github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
-      (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate'))
+      vars.AGENT_HARNESS != 'pi' &&
+      ((github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
+       (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate')))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
@@ -41,7 +45,7 @@ jobs:
       # AUTH: this is headless/unattended, so it MUST use an API key. Do NOT swap in a
       # subscription CLAUDE_CODE_OAUTH_TOKEN — subscription OAuth is for interactive
       # Claude Code use only, not CI automation (Anthropic Legal & Compliance terms).
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         id: claude
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -53,6 +57,9 @@ jobs:
           # else. (The pinned SHA already supports allowed_bots.)
           allowed_bots: "nuxt-harness[bot]"
 
+      # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
+      - uses: ./.github/actions/loop-station-trace
+        if: always()
       # ── Artifact-gate (#461) ──────────────────────────────────────────────────
       # A run is only allowed to be GREEN if the agent produced an OBSERVABLE
       # deliverable on the issue during this run: a comment (sign-off / breadcrumb /
@@ -123,6 +130,43 @@ jobs:
             const signoffHeld = blocked && newComment
             if (linkedPR || signoffHeld || alreadyLinkedPR || alreadyClosed || createdSubIssues) {
               core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} alreadyLinkedPR=${alreadyLinkedPR} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues}`)
+              return
+            }
+
+            // ── (e) CHILD deliverables (#1074) ─────────────────────────────────────────
+            // When the labeled issue is ALREADY decomposed, the correct agent behaviour is
+            // "resume the tree, work the remaining open leaf" — so the fresh deliverable
+            // lands on a CHILD issue, invisible to the checks above (the #1050 false-fail:
+            // pi merged a real PR on child #1053 and the gate still went red). Scan the
+            // sub-issue tree for the same fresh-since-t0 signals. Runs ONLY when the
+            // primary checks found nothing, so the extra API calls are the exception.
+            let childDeliverable = ''
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+                ...context.repo, issue_number, per_page: 100,
+              })
+              for (const s of subs) {
+                if (s.state === 'closed' && s.closed_at && new Date(s.closed_at).getTime() >= sinceMs) {
+                  childDeliverable = `child #${s.number} closed this run`; break
+                }
+                const tl = await github.paginate(github.rest.issues.listEventsForTimeline, {
+                  ...context.repo, issue_number: s.number,
+                })
+                if (tl.some(e => e.event === 'cross-referenced' && e.source && e.source.issue &&
+                    e.source.issue.pull_request && new Date(e.created_at).getTime() >= sinceMs)) {
+                  childDeliverable = `PR linked to child #${s.number} this run`; break
+                }
+                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+                if (childBlocked) {
+                  const cc = await github.paginate(github.rest.issues.listComments, {
+                    ...context.repo, issue_number: s.number, since,
+                  })
+                  if (cc.length > 0) { childDeliverable = `child #${s.number} held for sign-off this run`; break }
+                }
+              }
+            } catch (e) { core.warning(`child-deliverable check skipped: ${e.message}`) }
+            if (childDeliverable) {
+              core.info(`Artifact-gate OK for #${issue_number} via child deliverable: ${childDeliverable}`)
               return
             }
 

@@ -59,7 +59,9 @@ export default createConfigForNuxt({
       // The docs site (relocated from apps/docs) lints via its own config
       'docs/**',
       // POCs (not-yet-live) are excluded from the shared pipeline
-      'pocs/**'
+      'pocs/**',
+      // Deliberately-bad gate smoke fixtures (#1035) — never lint-clean on purpose
+      '.claude/gate-fixtures/**'
     ]
   })
   .append({

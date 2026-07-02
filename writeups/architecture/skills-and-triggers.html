@@ -256,6 +256,14 @@
         <p class="what">Generate the weekly "🧹 Housekeeping" digest — a render-only report of repo drift that needs a human eye (stale unmerged branches, mislabeled issues, stuck in-progress tickets, epics ready to close, idle PRs, label-coverage gaps). Reports only, never mutates. Use when asked for a "housekeeping report", "repo drift", "what's stale", or to run the weekly sweep by hand.</p>
       </div>
       <div class="skill">
+        <div class="skill-head"><span class="name">/issue-dedup</span><span class="badges"><span class="b auto">auto</span><span class="b ask">on ask</span><span class="b flow">in flow</span></span></div>
+        <p class="what">Before creating a GitHub issue or epic, search for an existing related one and force a reuse / replace / new decision — so the issue-first flow can't silently mint a duplicate. The create-time half of the dedup gate (the pickup-time half is /issue-sanity-check). Use whenever you're about to open an issue/epic, or run /issue-dedup. Backed by a hard PreToolUse hook on issue_write create.</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/issue-sanity-check</span><span class="badges"><span class="b ask">on ask</span><span class="b flow">in flow</span></span></div>
+        <p class="what">A pessimistic go/no-go the moment you pick up a GitHub issue — read it skeptically and hunt for reasons NOT to do it (already done? obsolete? duplicate? premise wrong? cheaper way? net-negative?), returning proceed / reshape / drop with one-line evidence. The pickup-time half of the dedup gate (the create-time half is /issue-dedup). Use as step 1 of the Task Execution Workflow, or run /issue-sanity-check #NN.</p>
+      </div>
+      <div class="skill">
         <div class="skill-head"><span class="name">/skills-digest</span><span class="badges"><span class="b ask">on ask</span></span></div>
         <p class="what">Generate a monthly digest of the skills in this repo's flow system — a render-only HTML + plain-text email listing every skill grouped by job, plus a "what was added / updated / removed since last digest" band computed from git history. Use when asked for a "skills digest", "what skills do we have", "skills report", "what skills changed", or to keep the skill surface from sprawling.</p>
       </div>
@@ -300,6 +308,10 @@
       <div class="skill">
         <div class="skill-head"><span class="name">/bug-archaeology</span><span class="badges"><span class="b flow">in flow</span><span class="b ask">on ask</span></span></div>
         <p class="what">When a bug or regression is reported, the FIRST step — before fixing — is to research how and when it was introduced (git archaeology), then record that finding on the tracking issue/PR. Use the moment a bug, error, broken build, or "this used to work" is reported, before writing a fix. Produces a first-bad-commit (or "not a code regression") note you paste onto the issue.</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/demo-video</span><span class="badges"><span class="b ask">on ask</span><span class="b flow">in flow</span></span></div>
+        <p class="what">Record a WebM demo video of a UI flow with shot-scraper video — a YAML storyboard drives the browser (click, type, scroll, wait) with an animated cursor overlay, so a reviewer can watch the feature instead of driving it. Use to attach motion evidence to a UI sign-off (#307), to turn an issue's "How to test" steps into a watchable clip, or when asked to "record a demo", "make a video of this flow", "show me it working".</p>
       </div>
       <div class="skill">
         <div class="skill-head"><span class="name">/frontend-review</span><span class="badges"><span class="b ask">on ask</span><span class="b auto">auto</span></span></div>
@@ -380,11 +392,70 @@
     <div class="grid">
       <div class="skill">
         <div class="skill-head"><span class="name">/loop-station</span><span class="badges"><span class="b ask">on ask</span><span class="b auto">auto</span></span></div>
-        <p class="what">Observe the harness itself — (WS1) measure context budget as a deterministic, trendable inventory (tokens per CLAUDE.md / skill / agent, lexical redundancy, per-CI cold-write totals; committed history.jsonl), and (WS2) reconstruct the real invocation trace (which skills/agents/tools fired and how they nested) from session transcripts. Use for "context budget", "how big is CLAUDE.md / our skills", "is the harness bloating", "how do our agent loops actually run", "trace this session", "loop station".</p>
+        <p class="what">Observe the harness itself — (WS1) measure context budget as a deterministic, trendable inventory (tokens per CLAUDE.md / skill / agent, lexical redundancy, per-CI cold-write totals; committed history.jsonl), (WS2) reconstruct the real invocation trace (which skills/agents/tools fired and how they nested) from session transcripts, and (WS-A) roll the per-run CI traces up into a committed weekly usage record (per-skill invocation counts; usage.jsonl) — the usage side of the dead-weight join. Use for "context budget", "how big is CLAUDE.md / our skills", "is the harness bloating", "how do our agent loops actually run", "which skills actually get used", "trace this session", "loop station".</p>
       </div>
       <div class="skill">
         <div class="skill-head"><span class="name">/think-aloud</span><span class="badges"><span class="b ask">on ask</span></span></div>
         <p class="what">Think through a problem live on the ThinkGraph canvas. Each reasoning step appears as a node in real-time.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="num">8</span> Knowledge handoff</h2>
+    <p class="grp-sub">Reference packs (epic #1073): architecture, history, diagnostics, operations — load on demand when a question needs project knowledge, not a workflow.</p>
+    <div class="grid">
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-architecture-contract</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">The crouton mental model for someone who has never seen this repo — what "layer" means (two different things), the two-halves rule, the three app.config registries, team-scoped multi-tenancy, manifest-driven field types, the numbered invariants with the incidents behind them, and the known-weak points. Use when orienting in this codebase for the first time, when a question is shaped like "how does crouton work / why is it built this way / where does X live", when deciding whether a change belongs in a package or a generated layer, when confused by an extends chain or by croutonApps/croutonCollections/croutonLayoutBlocks, or before proposing any structural change. Trigger phrases: "what is a crouton layer", "package vs generated layer", "how does multi-tenancy work here", "why is there a stub component", "where do field types come from", "what invariants must hold".</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-build-and-env</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">Recreate the nuxt-crouton dev environment from scratch and survive its install/build traps — the pnpm toolchain, the cold-start sequence (why packages must build before apps prepare), the version catalog and workaround pins, the per-app typecheck rule, required env vars, and the known environment traps. Use when setting up a fresh clone/worktree, when "pnpm install" or "nuxt prepare" fails, when an app won't boot after install, when typecheck output looks insane, or when a tool "isn't available". Trigger phrases: "set up the repo from scratch", "why does typecheck show thousands of errors", "playwright install fails", "what pnpm/node version". (Exact error strings — "Could not load '@fyit/crouton'", "Cannot find module '@vue/compiler-sfc'" — route via crouton-diagnostics-index first; it points back here for depth.)</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-change-control</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">The router for how a change legally happens in this repo — which sign-off gate fires for which kind of change, what counts as approval, how the packages-edit guard works, and how work is allowed to reach main. Use when starting ANY change and unsure which rules apply, when an Edit to packages/* gets BLOCKED, when a pipeline issue sits on status:blocked and you need to know what unblocks it, or when asked "do I need sign-off for this", "how do I get this merged", "can I deploy this", "who approves X", "why won't my approval label/reaction do anything".</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-ci-and-deploy-map</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">The map of nuxt-crouton's GitHub workflows and the deploy-pipeline anatomy — what each workflow gates, how a merge reaches Cloudflare, which secrets/tokens exist where, and how the agent-pipeline workflows chain. Use when a CI check fails and you need to know what it is, when asked "which workflow deploys X / why did staging update / what does this check gate / where is that secret / why didn't my label trigger anything", when wiring a new app into CI, or when debugging a deploy that never fired. Trigger phrases: "what runs on merge to main", "map of the workflows", "WORKER_SECRETS_JSON", "why is the daily sweep not running", "deploy-apps vs deploy-app", "which token does this workflow use".</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-config-registry</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">The catalog of every config-as-data surface in nuxt-crouton — which file controls what, who actually reads it, its drift hazards, and how to change it safely. Use when asking "where is X configured", "who reads this file", "what happens if I edit harness.config.mjs / routing.json / digests.yml / labels.yml / a deploy.config.json / an e2e.manifest.json", when a setting change had no effect (silent no-op), when adding a new config surface, or when a gen-*.mjs --check fails. Trigger phrases: "where do I configure", "what reads this config", "config drift", "the setting didn't do anything", "stale generated doc", "add a new config-as-data surface".</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-diagnostics-index</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">Symptom → root-cause lookup table for nuxt-crouton's recurring failure modes — exact error strings mapped to their known cause, fix, and evidence issue. Use when you hit an error you don't recognize in this repo, before debugging from first principles. Trigger phrases and symptoms: "Cannot resolve entry module .nuxt/hub/db/schema.entry.ts", "Could not load '@fyit/crouton'", "No migrations present", "No schema files found", "$setup.t is not a function", "does not provide an export named 'Map'", "no such table: translations_ui", "collection pages 500 in production", "the build was green but the app is broken", "is this a known issue?".</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-docs-trust-map</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">Which docs in nuxt-crouton to trust and how to resolve contradictions between them. Use when two docs disagree, when a doc's claim doesn't match the code ("the README says packages/nuxt-crouton but that dir doesn't exist"), when deciding whether a guide/writeup is authoritative before following it, or when asked "is this doc current", "which doc wins", "why does CLAUDE.md say X but the code says Y". Also the reference for the supersession-banner practice.</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-failure-archaeology</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">The case-law chronicle of this repo's major failures — symptom, root cause, evidence, status, and the rule each battle minted — so nobody re-fights a settled battle or re-proposes a rejected fix. Use when a bug/incident looks familiar ("didn't this happen before?"), when you're about to propose an approach that may have been tried and rejected (e.g. shipping a migration from a package), when someone asks "why does rule X exist" / "why is done-by-lgtm a thing" / "what was incident 988", or when a bug-archaeology run hits the shallow-clone wall and needs the pre-June-2026 history. Trigger phrases: "has this broken before", "why can't packages ship migrations", "why did graduation fail", "why is the green-build lesson a rule", "what did we learn from incident NN". (For a live "build is green but the app is broken" symptom, start at crouton-diagnostics-index. NB keep this description free of any space-then-hash sequence — an unquoted YAML scalar treats space-hash as a comment start and silently truncates.)</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-generation-reference</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">Verified lookup pack for crouton's schema→CRUD generation domain — the fieldsFile JSON format, the complete field-type catalog with aliases, the naming contract, the exact artifact list one generate run produces, the seed/default-layout pipeline, dialect defaults, and rollback semantics. Use when writing or reviewing a collection schema, when asking "what field types exist / what does `crouton config` actually generate / where did this file name come from / why did I get a pg schema", when a generated file's name or path doesn't match the docs, or when removing/regenerating a collection. Trigger phrases — "what field types are supported", "schema JSON format", "what files does crouton generate", "naming convention for collections", "rollback a collection", "dialect default". The generation WORKFLOW (steps + sign-off gates) lives in the `crouton` skill — this is the reference it doesn't carry.</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-harness-observability</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">How to MEASURE this repo instead of eyeballing it — interpret the loop-station context-budget trend (history.jsonl, thresholds, the tokenizer-switch gotcha), read a session trace, use the eval ledger (cost-per-success), and pick the right evidence tool (app-shots, smoke-deployed, db-counts, --check modes). Use when asked "is the harness bloating", "how big is CLAUDE.md really", "did this agent run actually succeed", "prove this works", "what evidence do we have", or when tempted to declare a capability (browser, tool) unavailable. For RUNNING the loop-station scripts, defer to the loop-station skill — this skill is interpretation + the wider evidence toolkit.</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-layout-reference</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">System reference for the crouton layout engine (@fyit/crouton-layout) — the LayoutTree/layout_configs data model, the croutonLayoutBlocks registry and sizing contract, the viability metric, the deterministic placer (#709), and how layouts persist and seed. Use when reasoning about WHY a layout renders/composes/persists the way it does, when a question is shaped like "what is a LayoutTree / where do layouts live / why did the placer pick this arrangement / why won't this pane shrink / where does minWidth get read", or when a generated POC boots with the wrong (or no) default layout. Trigger phrases: "layout tree", "layout_configs", "viability check", "composeDefaultLayout", "block sizing contract", "why is my layout not viable". For authoring a block component, use the block-authoring skill instead.</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-run-and-operate</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">Day-to-day operation runbook for nuxt-crouton apps — boot any app/POC locally with auth working, seed and inspect the local database (including the miniflare-vs-.data split that makes seeded data "disappear"), turn on the review overlay / eruda, observe deployed staging (tail, smoke, row counts), and capture screenshots. Use when asked to "run the app", "boot velo/fanfare/a poc locally", "why can't I log in locally", "seed the database", "the seed data doesn't show up", "look at the local db", "check what's on staging", "screenshot the app", or "where do the artifacts land".</p>
+      </div>
+      <div class="skill">
+        <div class="skill-head"><span class="name">/crouton-validation-reality</span><span class="badges"><span class="b ask">on ask</span></span></div>
+        <p class="what">How to actually run every kind of test in nuxt-crouton (unit/e2e/typecheck/lint, verified commands) plus the HONEST coverage picture — which packages have real tests vs zero, the dormant skipped/todo cases behind three mocking walls, and what CI truly gates vs what CLAUDE.md claims. Use when asked "how do I run the tests", "is X covered by tests", "what does CI actually check", "why is this suite skipped", "where do I add a test", or before trusting a green build as evidence that something works.</p>
       </div>
     </div>
   </section>

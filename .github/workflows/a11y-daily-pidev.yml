@@ -164,7 +164,7 @@ jobs:
             echo "Creating the pi.dev standing a11y issue…"
             gh issue create --repo "$REPO" --title "$TITLE" --label a11y --label meta:agents --body-file "$BODY_FILE"
           else
-            echo "Updating pi.dev standing a11y issue #$NUM…"
+            echo "Updating pi.dev standing a11y issue #${NUM}…"
             gh issue edit "$NUM" --repo "$REPO" --body-file "$BODY_FILE"
           fi
 

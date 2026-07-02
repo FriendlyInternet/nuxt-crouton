@@ -46,7 +46,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           show_full_output: true
@@ -79,6 +79,9 @@ jobs:
             Do NOT edit any `apps/`/`packages/` product code. The report file + any new `a11y`
             issues are the whole job — a later step posts the report to the standing issue.
 
+      # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
+      - uses: ./.github/actions/loop-station-trace
+        if: always()
       - name: Post report to the standing issue
         if: always()
         env:
@@ -119,6 +122,6 @@ jobs:
             echo "Creating the standing a11y issue…"
             gh issue create --repo "$REPO" --title "$TITLE" --label a11y --body-file "$BODY_FILE"
           else
-            echo "Updating standing a11y issue #$NUM…"
+            echo "Updating standing a11y issue #${NUM}…"
             gh issue edit "$NUM" --repo "$REPO" --body-file "$BODY_FILE"
           fi

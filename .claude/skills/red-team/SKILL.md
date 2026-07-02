@@ -101,6 +101,10 @@ of these now?"* — fixing is a separate, explicit step (this skill finds; it do
   PR diff and **fails the check on a high/critical** finding — it doesn't go through this skill.
 - **Daily** (`.github/workflows/red-team-daily.yml`) runs `depth=deep` whole-repo, posts the
   report to a standing issue, and files issues exactly as step 4 above.
+- Both workflows MUST follow the **Claude-action workflow standard** in
+  `.claude/agents/CLAUDE.md` — notably the tool-permission grant (per-PR: `--allowedTools …`;
+  daily sweep: `--permission-mode bypassPermissions`), without which the gate fails open
+  (#834/#1036).
 - **This skill** is the **on-demand** brain and the human entry point — and the reference for
   what the workflows automate.
 - It complements, not replaces, the built-in `security-review` skill (which passively reviews a

@@ -15,7 +15,11 @@ jobs:
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'issues' && contains(github.event.issue.body, '@claude'))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    # 60 not 30: a build-class @claude task (scaffold a POC, pnpm install, typecheck) plus
+    # agent deliberation doesn't fit 30 min on a cold checkout — the #658 proof-run build
+    # was killed mid-work at the 30-min mark with everything unpushed. Self-hosted minutes
+    # are free; the ceiling is a runaway backstop, not a budget.
+    timeout-minutes: 60
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
     # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to
     # be here or the claude-code-action OIDC token request fails
@@ -30,26 +34,23 @@ jobs:
         with:
           fetch-depth: 1
 
-      # Pinned to commit with Claude Code 2.1.100 — fixes bun "directory mismatch" crash in 2.1.98 (v1.0.92)
-      # TODO: revert to @v1 once v1.0.93+ is released
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      # Pinned to v1.0.162 (Claude Code 2.1.198). Re-pinned from v1.0.92 during the #658
+      # proof run: a timeout-killed session poisoned the old pin's per-runner action cache
+      # (runbook §2a) — a NEW ref also means a fresh `_work/_actions` directory on every
+      # runner, which is the no-SSH recovery path. Keep every workflow's pin in sync.
+      # --allowedTools: tag-mode (@claude) defaults to a read+git-commit-only grant (no
+      # Write/Edit/general Bash), so a mention asking for a real code change silently can't
+      # make one (#658 proof-run finding). Grant the same working set the other agent
+      # workflows use (gate-smoke.yml precedent); the actor gate (write access) still
+      # bounds who can invoke, and the action keeps WebSearch/WebFetch disallowed.
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: "--max-turns 25"
+          claude_args: "--max-turns 25 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           show_full_output: true
 
-      # Loop Station WS2 (#929): reconstruct this ephemeral runner's invocation
-      # trace and ship it as an artifact for the all-runs topology. Read-only,
-      # payload-free (names + ids + durations only), tolerant — never fails the
-      # agent job. Reusable snippet: copy these two steps into any LLM workflow.
-      - name: Collect invocation trace
+      # Loop Station WS2 (#929) / usage rollup (#1064): ship this runner's
+      # payload-free invocation trace as an artifact; the weekly
+      # loop-station-usage.yml aggregates them into the committed usage.jsonl.
+      - uses: ./.github/actions/loop-station-trace
         if: always()
-        run: node .claude/skills/loop-station/collect-traces.mjs --out loop-station-trace.jsonl || true
-
-      - name: Upload invocation trace
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: loop-station-trace-${{ github.run_id }}-${{ github.run_attempt }}
-          path: loop-station-trace.jsonl
-          if-no-files-found: ignore

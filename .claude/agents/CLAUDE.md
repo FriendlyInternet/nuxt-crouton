@@ -120,6 +120,11 @@ only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
   ("the worker is now creating the schemas…") is **not** doing it: that exact no-op (a run
   that exits `success` having produced nothing) is what the **artifact-gate** in
   `decompose-on-issue.yml` now turns into a **red** run. Do the work, then prove it landed.
+  **One first-class PASS shape worth knowing (#1076):** a PR opened this run + a
+  `.github/workflows/**` patch embedded in its body for a human to apply (the token can't write
+  there — see `task-worker.md` → "`.github/workflows/` boundary") already satisfies the gate via
+  `linkedPR` alone; it is not a partial/no-op run, and no separate gate change was needed to
+  recognize it.
 - **Spawned agents are SYNCHRONOUS — there is NO "background" execution (the #455 root cause).**
   The `Agent`/Task tool runs a sub-agent **to completion and returns its result within your
   turn**. Nothing keeps running after you stop: when your turn ends, the GitHub Action **job
@@ -236,6 +241,24 @@ all of these by **default** — they're not optional extras; each one has burned
 - **`show_full_output: true`** — the full agent log prints inline; debugging a run must not
   require a debug re-run.
 - **Pin the action to a SHA, kept in sync** across these workflows (bump them together).
+- **The tool-permission grant that matches the workflow's shape (#834/#1036).** Headless CI has
+  no human approver, so any tool the prompt makes the *top-level* agent call directly (the
+  "act as the subagent + write the verdict / file the issue" shape) is silently **DENIED**
+  without a grant: the agent computes the right answer, persists nothing, burns turns on denied
+  retries, hits max_turns — and the gate fails **OPEN** as a hollow green. This shipped broken
+  in `frontend-review`, `a11y`, `red-team` (fixed #1031/#1033) *and* the loop-station advisor
+  (fixed #1037). Two standard forms:
+  - **Per-PR verdict gates** (`frontend-review.yml` / `a11y.yml` / `red-team.yml`):
+    `--allowedTools Bash,Write,Edit,Read,Grep,Glob` in `claude_args`.
+  - **Sweeps/advisors that file issues** (`a11y-daily.yml` / `red-team-daily.yml` /
+    `loop-station-advisor.yml`): `--permission-mode bypassPermissions`.
+  The `gate-package-edits` PreToolUse hook still guards `packages/` either way. Workflows whose
+  prompt only steers the action's built-in GitHub flows (`claude.yml`-style mention glue) don't
+  need a grant — if you omit one, say why in a workflow comment.
+- **Fail-open must be visible (#1037).** If the workflow is a verdict-gated check, pair the
+  `continue-on-error` agent step with `./.github/actions/gate-outage-check` so a no-verdict run
+  (billing / max-turns / auth / silent no-write) surfaces as a `::warning::` annotation instead
+  of a green indistinguishable from a clean scan.
 
 A new claude-action workflow that omits any of these is treated like a failing build.
 

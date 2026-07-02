@@ -28,7 +28,10 @@ permissions:
 
 jobs:
   release:
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    # Belt-and-braces: a closing FORK PR also fires this trigger — the job only runs
+    # repo-defined script (never PR code), but keep fork-originated events off the
+    # self-hosted box anyway. Security policy: runbook §5 (#656).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
     steps:
       # Mint a Nuxt Harness App installation token so the released `delegate` label is applied by
       # `nuxt-harness[bot]` → the dispatched decompose run passes the bot-actor guard via
@@ -52,15 +55,37 @@ jobs:
             // release path below. (Keeps one release codepath.)
             if (context.eventName === 'pull_request') {
               if (!context.payload.pull_request.merged) { core.info('PR closed unmerged — nothing to do.'); return }
-              const closes = [...(context.payload.pull_request.body || '').matchAll(/\bCloses\s+#(\d+)/gi)].map(x => Number(x[1]))
-              if (!closes.length) { core.info('Merged PR has no `Closes #NN` — nothing to do.'); return }
+
+              // #1021 defence-in-depth: only act on merges into the default branch or an
+              // epic/* branch — the two shapes this codepath exists for. Anything else
+              // (throwaway branches, stacked feature branches) must not close issues.
+              const base = context.payload.pull_request.base.ref
+              const defaultBranch = context.payload.repository.default_branch
+              if (base !== defaultBranch && !/^epic\//.test(base)) {
+                core.info(`PR merged into '${base}' (not ${defaultBranch}/epic/*) — not a close-driving merge.`); return
+              }
+
+              // #1021 root fix: match `Closes #NN` the way GitHub's native auto-close does —
+              // NEVER inside code. Strip fenced blocks and inline code spans first, so an
+              // illustrative "`Closes #839`" in a How-to-test line can't mis-close a live
+              // issue (the #839 incident: PR #1020's quoted example closed a real issue).
+              const raw = context.payload.pull_request.body || ''
+              const prose = raw.replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '')
+              const closes = [...prose.matchAll(/\bCloses\s+#(\d+)/gi)].map(x => Number(x[1]))
+              if (!closes.length) { core.info('Merged PR has no `Closes #NN` (in prose) — nothing to do.'); return }
               for (const n of closes) {
                 try {
                   const gi = await github.rest.issues.get({ owner, repo, issue_number: n })
-                  if (gi.data.state !== 'closed') {
-                    await github.rest.issues.update({ owner, repo, issue_number: n, state: 'closed', state_reason: 'completed' })
-                    core.info(`Closed #${n} (its PR merged into the epic branch) — release runs on the issues:closed event.`)
+                  if (gi.data.state === 'closed') continue
+                  // #1035 incident: never auto-close a HELD issue. `status:blocked` means a
+                  // sign-off or human step is pending — closing it destroys the hold ("done
+                  // is signed off, not asserted"). The human closes it when the hold clears.
+                  const held = gi.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+                  if (held) {
+                    core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue
                   }
+                  await github.rest.issues.update({ owner, repo, issue_number: n, state: 'closed', state_reason: 'completed' })
+                  core.info(`Closed #${n} (its PR merged into ${base}) — release runs on the issues:closed event.`)
                 } catch (e) { core.warning(`Could not close #${n}: ${e.message}`) }
               }
               return

@@ -5,7 +5,7 @@
       <h2 class="text-2xl font-semibold">{{ t('sales.orders.title') }}</h2>
       <div class="flex items-center gap-3">
         <span class="text-sm text-muted">{{ t('sales.orders.autoRefresh') }}</span>
-        <USwitch v-model="autoRefresh" />
+        <USwitch v-model="autoRefresh" :aria-label="t('sales.orders.autoRefresh')" />
       </div>
     </div>
 

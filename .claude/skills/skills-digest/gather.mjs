@@ -19,6 +19,8 @@ import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { META, GROUPS, discover } from '../../../scripts/gen-skills-doc.mjs'
+import { computeSkillFreshness } from '../../../scripts/skill-freshness.mjs'
+import { usageCoverage } from '../loop-station/advisor.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
@@ -41,6 +43,24 @@ const git = (...args) => {
   } catch {
     return null
   }
+}
+
+// ── shallow-clone guard (#1027) ───────────────────────────────────────────────
+// A git-delta producer that diffs history over a time window MUST run on a full clone —
+// a shallow one (actions/checkout's default) doesn't have the `since` baseline commit, so
+// the delta below would silently come back empty/firstRun=true, indistinguishable from
+// "genuinely nothing changed" (the skills-digest went blank every month before #1027 caught
+// it). Fail loud instead of shipping a green-but-wrong digest. Only fires inside an actual
+// git repo (`git rev-parse --is-shallow-repository` returns null outside one, e.g. a tarball
+// checkout) — that case already degrades gracefully below via the existing firstRun fallback.
+const shallow = git('rev-parse', '--is-shallow-repository')
+if (shallow !== null && shallow.trim() === 'true') {
+  console.error(
+    'gather.mjs: refusing to compute a git-delta digest from a SHALLOW clone — ' +
+      `the \`since\` baseline (${since}) commit isn't reachable, so the delta would silently ` +
+      'come back empty. Checkout with `fetch-depth: 0` (see the workflow) and re-run.'
+  )
+  process.exit(1)
 }
 
 // The commit snapshot as of the morning of `since` — the baseline we diff HEAD against.
@@ -170,6 +190,57 @@ if (budget) {
   }
 }
 
+// ── dead-weight join (#1100 WS5) ─────────────────────────────────────────────
+// Cross the SKILL-FRESHNESS signal (scripts/skill-freshness.mjs — cited paths drifted /
+// `verified:` stamp aged out) with the USAGE rollup (writeups/loop-station/usage.jsonl, #1064)
+// to surface RETIRE CANDIDATES: a stale skill that also never fired. Honours the loop-station
+// doctrine — it NEVER judges "unused" blind: usageCoverage() gates the retire verdict, so with
+// no rollup (or thin coverage) the band renders freshness-only and says the verdict is withheld.
+// Scope is `pipeline` (CI invocations only); interactive session usage isn't measured yet (#1067),
+// so the band labels the counts as such and a 0 is "never fired IN CI", not "provably dead".
+function loadUsageRecords() {
+  const p = join(ROOT, 'writeups/loop-station/usage.jsonl')
+  if (!existsSync(p)) return []
+  try {
+    return readFileSync(p, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  } catch {
+    return []
+  }
+}
+function deadWeightJoin() {
+  let fresh
+  try {
+    fresh = computeSkillFreshness({ root: ROOT })
+  } catch {
+    return null // git/fs unavailable — drop the band rather than guess
+  }
+  const usageRecords = loadUsageRecords()
+  const coverage = usageCoverage(usageRecords)
+  const fired = {}
+  for (const u of usageRecords) for (const [name, c] of Object.entries(u?.byName || {})) fired[name] = (fired[name] || 0) + (c || 0)
+
+  // "stale" for the retire signal = the hard flags (stamp overdue OR a vanished citation).
+  // possibly-stale alone is too soft to imply retirement; it's carried as context only.
+  const stale = fresh.skills
+    .filter((s) => s.overdue || s.vanished.length)
+    .map((s) => ({
+      name: s.name,
+      stamp: s.stamp,
+      ageDays: s.ageDays,
+      overdue: s.overdue,
+      vanished: s.vanished.length,
+      possiblyStale: s.possiblyStale.length,
+      invocations: fired[s.name] ?? 0
+    }))
+    .sort((a, b) => b.ageDays - a.ageDays)
+
+  // Retire-candidate = stale AND zero invocations — ONLY when coverage lets us judge.
+  const retireCandidates = coverage.judged ? stale.filter((s) => s.invocations === 0) : []
+
+  return { freshness: fresh.summary, staleDays: fresh.staleDays, stale, coverage, retireCandidates }
+}
+const deadWeight = deadWeightJoin()
+
 const data = {
   generatedAt: new Date().toISOString(),
   repo: REPO,
@@ -177,7 +248,8 @@ const data = {
   total: skills.length,
   groups,
   changed,
-  budget: budget ? budget.summary : null
+  budget: budget ? budget.summary : null,
+  deadWeight
 }
 
 process.stdout.write(JSON.stringify(data, null, 2) + '\n')

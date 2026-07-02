@@ -61,8 +61,11 @@ An issue is **leaf-sized** when:
 To split:
 1. Derive 2–6 child workstreams (coherent concerns, not file-by-file).
 2. For each: `issue_write` (create) with full two-audience body + `## 🧪 How to test`
-   + correct `type:*` and `pkg:*`/`app:*` labels; then `sub_issue_write` (add) under
-   the **current** issue (`issue_number` = this issue, `sub_issue_id` = child id).
+   + correct `type:*` and `pkg:*`/`app:*` labels + a closing `Dedup-checked:` line (these
+   are children of the current issue, so `_Dedup-checked: sub-issue of #<this>, no sibling
+   overlap_` suffices — the `require-issue-dedup` hook **blocks a create without it**, #297);
+   then `sub_issue_write` (add) under the **current** issue (`issue_number` = this issue,
+   `sub_issue_id` = child id).
 3. Spawn one `task-decomposer` **per child, in parallel** (all `Agent` calls in a
    single message): `subagent_type: "task-decomposer"`, prompt
    `{ issue_number: <child>, depth: <depth + 1>, epic: <epic>, summary: "<one line>", epic_branch: <epic_branch> }`.

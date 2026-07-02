@@ -36,6 +36,13 @@ A standalone Nuxt app — **no DB, no auth, no crouton-core** (it's a static vie
 - `history.jsonl` ← the committed WS1 inventory (`writeups/loop-station/history.jsonl`).
 - `trace.jsonl` ← WS2: reconstructed from local transcripts if present (real data),
   else the committed `data/example-trace.jsonl` (a real captured trace).
+- `usage.jsonl` ← the committed WS-A cross-run usage rollup
+  (`writeups/loop-station/usage.jsonl`, #1064) when it exists — preferred over the
+  loaded trace for the dead-weight join. Empty until the weekly job lands.
+- `sources.json` ← the provenance manifest (#1065): which source each dataset came
+  from. The size×usage panel labels itself with it — **only** the CI rollup may
+  render a dead-weight verdict; a local session shows counts without verdicts;
+  sample data shows size only.
 
 `public/data/` is gitignored (build artifact); the sources of truth are committed.
 

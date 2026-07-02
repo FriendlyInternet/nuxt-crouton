@@ -1,0 +1,90 @@
+# Gate outage classifier (#1037, epic #1034).
+#
+# The agent gates are deliberately FAIL-OPEN (an agent flake must not red-flag every
+# PR), but fail-open must never be INVISIBLE: a depleted API key (billing_error) and
+# a tool-permission denial (error_max_turns) used to produce the exact same plain
+# green as a genuinely clean scan. This step makes the no-verdict case loud: it
+# classifies WHY no verdict exists — from the agent's session transcript (the same
+# source loop-station-trace reads) plus the agent step's outcome — then emits a
+# ::warning:: annotation and a step-summary block, and always exits 0.
+#
+# Shared by frontend-review.yml / a11y.yml / red-team.yml / loop-station-advisor.yml
+# so the classification logic can't drift per file. Callers pass the verdict file
+# their agent should have written; the advisor (no verdict file) omits it and gates
+# the step on its LLM step's failure instead.
+name: gate-outage-check
+description: Classify a no-verdict agent run (outage vs silent no-write) and surface it as a visible warning instead of a silent pass
+inputs:
+  gate:
+    description: Name of the gate, used in the annotation (e.g. frontend-review)
+    required: true
+  verdict-file:
+    description: >-
+      Path to the verdict file the agent should have written. If it exists the step is
+      quiet. Omit when the caller already knows the run failed (e.g. the advisor) —
+      an empty value classifies unconditionally.
+    required: false
+    default: ''
+  agent-outcome:
+    description: The claude-code-action step's `steps.<id>.outcome` (success/failure)
+    required: true
+outputs:
+  classification:
+    description: verdict-present | billing_error | error_max_turns | auth_error | agent_error | no_verdict
+    value: ${{ steps.classify.outputs.classification }}
+runs:
+  using: composite
+  steps:
+    - name: Classify no-verdict run
+      id: classify
+      shell: bash
+      env:
+        GATE: ${{ inputs.gate }}
+        VERDICT_FILE: ${{ inputs.verdict-file }}
+        AGENT_OUTCOME: ${{ inputs.agent-outcome }}
+      run: |
+        set -u
+        if [ -n "$VERDICT_FILE" ] && [ -f "$VERDICT_FILE" ]; then
+          echo "classification=verdict-present" >> "$GITHUB_OUTPUT"
+          echo "$GATE: verdict file present — agent ran and delivered. No outage."
+          exit 0
+        fi
+
+        # No verdict. Mine the newest session transcript for the failure signature;
+        # every grep is best-effort (a billing_error can kill the run before any
+        # transcript exists), falling back to the step outcome.
+        CLS=""
+        PROJECTS="${CLAUDE_PROJECTS_DIR:-$HOME/.claude/projects}"
+        TRANSCRIPT=$(ls -t "$PROJECTS"/*/*.jsonl 2>/dev/null | head -1 || true)
+        if [ -n "$TRANSCRIPT" ]; then
+          if grep -qi 'credit balance is too low\|billing_error' "$TRANSCRIPT"; then CLS=billing_error
+          elif grep -q 'error_max_turns' "$TRANSCRIPT"; then CLS=error_max_turns
+          elif grep -qi 'authentication_error\|invalid x-api-key' "$TRANSCRIPT"; then CLS=auth_error
+          fi
+        fi
+        if [ -z "$CLS" ]; then
+          case "$AGENT_OUTCOME" in
+            # "Succeeded" yet wrote nothing — the #834 permission-regression signature.
+            success) CLS=no_verdict ;;
+            *)       CLS=agent_error ;;
+          esac
+        fi
+
+        case "$CLS" in
+          billing_error)   DETAIL="the Anthropic API key is out of credit (billing_error) — the agent never scanned anything" ;;
+          error_max_turns) DETAIL="the agent hit max_turns without writing a verdict — possibly burning turns on denied tool calls (check the --allowedTools grant, #834)" ;;
+          auth_error)      DETAIL="the Anthropic API rejected the key (authentication error) — the agent never scanned anything" ;;
+          no_verdict)      DETAIL="the agent step reported success but wrote no verdict — likely a tool-permission or prompt regression (the #834 fail-open signature), NOT a clean scan" ;;
+          *)               DETAIL="the agent step errored before writing a verdict" ;;
+        esac
+
+        echo "classification=$CLS" >> "$GITHUB_OUTPUT"
+        echo "::warning title=$GATE agent outage ($CLS)::$GATE produced no verdict: $DETAIL. The check passes FAIL-OPEN — this run did NOT actually scan anything."
+        {
+          echo "### ⚠️ $GATE — agent outage (\`$CLS\`)"
+          echo ""
+          echo "$DETAIL."
+          echo ""
+          echo "The gate is fail-open by design (an agent flake must not block every PR), but this green does **not** mean \"scanned and clean\" — it means \"never ran\". (#1037)"
+        } >> "$GITHUB_STEP_SUMMARY"
+        exit 0

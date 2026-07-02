@@ -50,7 +50,7 @@ jobs:
           # CI fixtures (with-collab is intentionally excluded — its crouton-collab package
           # has pre-existing type errors that fail the #197 typecheck gate; #210 keeps it a
           # local-only spike until type-clean).
-          ALL="minimal with-pages with-bookings with-assets with-maps with-devtools"
+          ALL="minimal with-pages with-bookings with-assets with-maps with-devtools with-sales"
           # Packages whose change can affect EVERY fixture (shared base + generator + harness inputs).
           UNIVERSAL="crouton crouton-core crouton-i18n crouton-cli crouton-auth"
 

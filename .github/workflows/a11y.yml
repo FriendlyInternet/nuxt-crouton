@@ -12,6 +12,10 @@ on:
     paths:
       # a11y lives in templates — only scan PRs that touch .vue files.
       - '**/*.vue'
+      # Known-bad smoke fixtures (#1035) are diff-scope-excluded so committing/
+      # touching them never self-flags an ordinary PR — they're exercised by
+      # gate-smoke.yml instead, which scans them directly.
+      - '!.claude/gate-fixtures/**'
 
 concurrency:
   group: a11y-${{ github.event.pull_request.number }}
@@ -23,7 +27,10 @@ jobs:
     if: >
       github.event.pull_request.draft == false &&
       github.event.pull_request.user.type != 'Bot'
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    # Fork PRs never land on the self-hosted box, even with AGENT_RUNNER set — this job
+    # checks out the PR's code and runs an agent (bash) over it, so a fork head means
+    # untrusted code on our hardware. Security policy: runbook §5 (#656).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
     # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to
@@ -51,7 +58,8 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+        id: agent
         # The VERDICT FILE is the gate — NOT this step's exit code. The agent can exit non-zero
         # on `max_turns` (it flails writing the verdict / the SDK errors) even when it found
         # nothing critical/serious, which would turn every PR red on a flake (mirrors the
@@ -99,11 +107,23 @@ jobs:
             separate, human-invoked path). Do NOT file GitHub issues (the daily sweep owns that).
             Reporting + the verdict file is all.
 
+      # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
+      - uses: ./.github/actions/loop-station-trace
+        if: always()
+      # Fail-open must be VISIBLE (#1037): when no verdict exists, classify why (billing /
+      # max-turns / auth / silent no-write) and emit a warning annotation + step summary,
+      # so a dead agent can't be mistaken for a clean scan.
+      - uses: ./.github/actions/gate-outage-check
+        if: always()
+        with:
+          gate: a11y
+          verdict-file: a11y-verdict.json
+          agent-outcome: ${{ steps.agent.outcome }}
       - name: Gate on critical/serious
         if: always()
         run: |
           if [ ! -f a11y-verdict.json ]; then
-            echo "::warning::a11y produced no verdict file — treating as inconclusive (not blocking)."
+            echo "No verdict file — outage classified by gate-outage-check above. Inconclusive pass (not blocking)."
             exit 0
           fi
           echo "Verdict: $(cat a11y-verdict.json)"

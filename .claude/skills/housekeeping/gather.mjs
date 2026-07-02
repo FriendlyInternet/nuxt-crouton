@@ -20,6 +20,7 @@
 
 import { execSync } from 'node:child_process'
 import { readdirSync, readFileSync, existsSync } from 'node:fs'
+import { computeSkillFreshness } from '../../../scripts/skill-freshness.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
@@ -170,6 +171,37 @@ function loopStationBudget() {
   }
 }
 
+// ── Skill freshness (#1100 WS3) ───────────────────────────────────────────────
+// Read-only: reuse scripts/skill-freshness.mjs (fs+git, no LLM) to surface knowledge-skills
+// whose cited paths drifted or whose `verified:` stamp aged out. Returns just the flagged
+// skills + a summary so render.mjs can show a "📚 Skill freshness" band (omitted when clean).
+// Null (section dropped) if the checker throws — never blocks the rest of the digest.
+function skillFreshness() {
+  try {
+    const r = computeSkillFreshness()
+    const flagged = r.skills
+      .filter((s) => s.vanished.length || s.possiblyStale.length || s.overdue)
+      .map((s) => ({
+        name: s.name,
+        stamp: s.stamp,
+        ageDays: s.ageDays,
+        overdue: s.overdue,
+        vanished: s.vanished,
+        possiblyStale: s.possiblyStale
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+    return {
+      today: r.today,
+      staleDays: r.staleDays,
+      summary: r.summary,
+      flagged,
+      malformed: r.malformed.map((m) => ({ name: m.name, reason: m.reason }))
+    }
+  } catch {
+    return null
+  }
+}
+
 // ── Issue / PR drift (API) ───────────────────────────────────────────────────
 const COMPONENT_RE = /^(pkg|app|worker|poc):/
 
@@ -272,6 +304,7 @@ const data = {
   staleBranches: staleBranches(),
   labelCoverage: labelCoverage(),
   loopStation: loopStationBudget(),
+  skillFreshness: skillFreshness(),
   ...drift
 }
 

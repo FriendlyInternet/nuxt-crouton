@@ -1,0 +1,51 @@
+{
+  "table": "sales_events",
+  "key": "slug",
+  "rows": [
+    {
+      "title": "Sample title 1",
+      "slug": "sample-1",
+      "description": "Sample description content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "eventType": "Sample eventType 1",
+      "startDate": 1782302745,
+      "endDate": 1782302745,
+      "status": "Sample status 1",
+      "isCurrent": true,
+      "requiresClient": true,
+      "helperPin": "Sample helperPin 1",
+      "currency": "Sample currency 1",
+      "metadata": {},
+      "archivedAt": 1782302745
+    },
+    {
+      "title": "Sample title 2",
+      "slug": "sample-2",
+      "description": "Sample description content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "eventType": "Sample eventType 2",
+      "startDate": 1782216345,
+      "endDate": 1782216345,
+      "status": "Sample status 2",
+      "isCurrent": false,
+      "requiresClient": false,
+      "helperPin": "Sample helperPin 2",
+      "currency": "Sample currency 2",
+      "metadata": {},
+      "archivedAt": 1782216345
+    },
+    {
+      "title": "Sample title 3",
+      "slug": "sample-3",
+      "description": "Sample description content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "eventType": "Sample eventType 3",
+      "startDate": 1782129945,
+      "endDate": 1782129945,
+      "status": "Sample status 3",
+      "isCurrent": true,
+      "requiresClient": true,
+      "helperPin": "Sample helperPin 3",
+      "currency": "Sample currency 3",
+      "metadata": {},
+      "archivedAt": 1782129945
+    }
+  ]
+}

@@ -15,6 +15,7 @@ automatically — no installation step. A `PreToolUse` hook that exits non-zero
 | `gate-package-edits.sh` | `PreToolUse: Edit\|Write` | Blocks edits to `packages/*` unless the package is listed in `.claude/.package-edit-approved` (the packages boundary gate). |
 | `gate-spec-signoff.mjs` | `PreToolUse: Edit\|Write` | Blocks marking a POC `spec.json` entry `status: "settled"` without a populated `signedOff` token — the done-rule backstop (done is *derived* from a sign-off, never self-asserted; #992 WS5). Scoped to `*spec.json`; fail-open on malformed JSON. |
 | `require-comment-provenance.mjs` | `PreToolUse: mcp__github__add_issue_comment` | Blocks an agent GitHub comment whose body doesn't LEAD with a 🤖 provenance header (interactive comments post under @pmcp and must not be mistaken for the human). |
+| `require-issue-dedup.mjs` | `PreToolUse: mcp__github__issue_write` | Backstops the dedup gate (#297): blocks a `method: create` whose body lacks a `Dedup-checked:` attestation line, so the issue-first flow can't silently open a duplicate. Updates/closes pass through. Run the `/issue-dedup` skill to do the real search; the marker is the receipt the hook checks. |
 | `session-start.sh` | `SessionStart` | Prints the ISSUE-FIRST reminder, the headless-browser path, exports the dev auth secret, and runs `pnpm install`. |
 
 To test a `PreToolUse` hook by hand, pipe a fake tool call to it:
@@ -27,8 +28,8 @@ echo '{"tool_input":{"file_path":"pocs/x/spec.json","content":"[{\"id\":\"a\",\"
 ## Git hook: `pre-commit-sync-reminder`
 
 A git pre-commit hook that displays a reminder when committing changes to:
-- Collection generator (`packages/nuxt-crouton-cli/lib/` or `bin/`)
-- MCP server (`packages/nuxt-crouton-mcp-server/src/`)
+- Collection generator (`packages/crouton-cli/lib/` or `bin/`)
+- MCP server (`packages/crouton-mcp/src/`)
 
 It reminds developers to check whether documentation artifacts need updating.
 

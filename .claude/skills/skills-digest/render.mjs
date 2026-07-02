@@ -40,6 +40,8 @@ const changed = data.changed || { firstRun: true, added: [], updated: [], remove
 // against a committed context-budget record; every budget surface is a no-op when absent.
 const budget = data.budget || null
 const dupNames = new Set((budget?.topPairs || []).flatMap((p) => [p.a, p.b]))
+// Dead-weight join (#1100 WS5): freshness × usage. No-op when the gather couldn't compute it.
+const deadWeight = data.deadWeight || null
 const fmtTok = (n) => (n == null ? '' : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n))
 
 // ── helpers ─────────────────────────────────────────────────────────────────
@@ -95,6 +97,51 @@ const budgetPairs = () => {
     .map((p) => `<code style="font:700 12px ui-monospace,Menlo,Consolas,monospace;">/${esc(p.a)}</code> ↔ <code style="font:700 12px ui-monospace,Menlo,Consolas,monospace;">/${esc(p.b)}</code> <strong>${p.containment}%</strong>`)
     .join(' &nbsp;·&nbsp; ')
   return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 26px;"><tr><td style="padding:11px 14px;background:#fdf4e7;border:1px solid #f4d29b;border-radius:10px;color:#7c4a12;font:12.5px -apple-system,Segoe UI,Roboto,sans-serif;">⚠️ <strong>Most-overlapping skills</strong> (measured — loop-station): ${items} — candidates to merge or trim.</td></tr></table>`
+}
+
+// Dead-weight band (#1100 WS5) — knowledge-skill freshness crossed with CI usage. Always a
+// no-op without the join; shows a green "all fresh" line when clean; lists stale skills and,
+// only when usage coverage permits, elevates the stale-AND-unused ones to retire-candidates.
+const usageNote = (cov) =>
+  cov.judged
+    ? `usage: ${cov.coverageDays}d · ${cov.runs} CI runs · pipeline scope (interactive sessions not counted, #1067)`
+    : `usage: ${esc(cov.why || 'no rollup')} — retire verdicts withheld (freshness shown alone)`
+const staleTags = (s) => {
+  const t = []
+  if (s.vanished) t.push(`🔴 ${s.vanished} vanished`)
+  if (s.overdue) t.push(`🔵 stamp ${s.ageDays}d`)
+  if (s.possiblyStale) t.push(`🟡 ${s.possiblyStale} drifted`)
+  return t.join(' · ')
+}
+const deadWeightBand = () => {
+  if (!deadWeight) return ''
+  const f = deadWeight.freshness || {}
+  const stale = deadWeight.stale || []
+  const retire = deadWeight.retireCandidates || []
+  const days = deadWeight.staleDays || 90
+  const head = `<h2 style="font:700 17px -apple-system,Segoe UI,Roboto,sans-serif;color:#0f172a;margin:4px 0 4px;">🪦 Dead weight — freshness × usage</h2>
+  <p style="color:#64748b;font-size:13px;margin:0 0 12px;">Knowledge skills (the <code>verified:</code> provenance contract) crossed with CI invocation counts. Stale <strong>and</strong> unused ⇒ a retire candidate. <span style="color:#94a3b8;">${esc(usageNote(deadWeight.coverage || { judged: false }))}</span></p>`
+  if (!stale.length) {
+    return head + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;"><tr><td style="padding:12px 14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;color:#065f46;font:13px -apple-system,Segoe UI,Roboto,sans-serif;">✅ <strong>All ${f.tracked || 0} knowledge skills fresh</strong> — verified within ${days}d, no vanished citations.</td></tr></table>`
+  }
+  const retireCallout = retire.length
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 10px;"><tr><td style="padding:11px 14px;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;color:#7f1d1d;font:12.5px -apple-system,Segoe UI,Roboto,sans-serif;">🪦 <strong>${retire.length} retire candidate${retire.length === 1 ? '' : 's'}</strong> (stale AND 0 CI invocations over the covered window): ${retire.map((s) => `<code style="font:700 12px ui-monospace,Menlo,Consolas,monospace;">/${esc(s.name)}</code>`).join(' &nbsp;·&nbsp; ')} — review to re-verify or retire.</td></tr></table>`
+    : ''
+  const rows = stale
+    .map(
+      (s) =>
+        `<tr><td style="padding:8px 14px;border-bottom:1px solid #eef2f7;background:#fff;">
+        <code style="font:700 13px ui-monospace,Menlo,Consolas,monospace;color:#0f172a;">/${esc(s.name)}</code>
+        <span style="color:#94a3b8;font-size:12px;"> · stamped ${esc(s.stamp)}</span>
+        <div style="color:#64748b;font-size:12px;margin-top:2px;">${staleTags(s)} · <strong style="color:${s.invocations === 0 ? '#b91c1c' : '#0f766e'};">${s.invocations} CI invocation${s.invocations === 1 ? '' : 's'}</strong></div>
+      </td></tr>`
+    )
+    .join('')
+  return (
+    head +
+    retireCallout +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:10px;border-collapse:separate;overflow:hidden;margin:0 0 28px;">${rows}</table>`
+  )
 }
 
 // ── HTML ──────────────────────────────────────────────────────────────────
@@ -182,6 +229,7 @@ const html = `<!DOCTYPE html>
   <tr><td style="padding:24px 26px;">
     ${changedBand()}
     ${budgetPairs()}
+    ${deadWeightBand()}
     ${flowSection()}
     ${(data.groups || []).map(groupSection).join('')}
     <p style="margin:34px 0 0;padding-top:16px;border-top:1px solid #e2e8f0;color:#94a3b8;font-size:12px;">
@@ -221,10 +269,27 @@ const txtBudget = budget
       ? `   most-overlapping: ${budget.topPairs.map((p) => `/${p.a} ↔ /${p.b} ${p.containment}%`).join(' · ')}\n`
       : '')
   : ''
+const txtDeadWeight = (() => {
+  if (!deadWeight) return ''
+  const f = deadWeight.freshness || {}
+  const stale = deadWeight.stale || []
+  const retire = deadWeight.retireCandidates || []
+  const days = deadWeight.staleDays || 90
+  const note = usageNote(deadWeight.coverage || { judged: false }).replace(/&#?\w+;/g, '')
+  if (!stale.length) return `🪦 DEAD WEIGHT (freshness × usage): ✅ all ${f.tracked || 0} knowledge skills fresh (verified within ${days}d).\n   ${note}\n`
+  const lines = stale.map((s) => {
+    const tags = [s.vanished && `${s.vanished} vanished`, s.overdue && `stamp ${s.ageDays}d`, s.possiblyStale && `${s.possiblyStale} drifted`].filter(Boolean).join(', ')
+    return `   /${s.name} (stamped ${s.stamp}) — ${tags} · ${s.invocations} CI invocations`
+  })
+  const retireLine = retire.length ? `   RETIRE CANDIDATES (stale + 0 CI invocations): ${retire.map((s) => `/${s.name}`).join(', ')}\n` : ''
+  return `🪦 DEAD WEIGHT (freshness × usage) — ${stale.length} stale knowledge skill(s)\n   ${note}\n` + retireLine + lines.join('\n') + '\n'
+})()
 const txt =
   `🧩 SKILLS DIGEST — ${monthYear}\n${repo} · ${total} skills\n` +
   txtBudget +
   '\n' +
+  txtDeadWeight +
+  (txtDeadWeight ? '\n' : '') +
   txtChanged() +
   '\n' +
   txtFlow +

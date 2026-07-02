@@ -17,14 +17,20 @@
 #   deliver:  [issue] | [issue, email]  rails that already exist (issue = standing issue;
 #                                        email = Resend, no-op when RESEND_API_KEY unset)
 #   to:       [addr, ...]               recipients — required only when deliver includes email
+#
+# Shallow-clone contract for git-delta producers (#1027): if a digest's gather.mjs diffs git
+# history over a time window (a "what changed since last time" delta, e.g. skills-digest), its
+# workflow MUST checkout with `fetch-depth: 0` — a shallow clone can't reach the baseline commit,
+# so the delta silently comes back empty instead of erroring. Prefer also guarding gather.mjs
+# itself (`git rev-parse --is-shallow-repository` → exit non-zero) so a dropped fetch-depth fails
+# loud instead of shipping a blank-but-green digest — see skills-digest/gather.mjs for the pattern.
 
 housekeeping:
   schedule: daily   # run more regularly (#763) — low-noise: upserts ONE standing issue, empty sections drop
   deliver: [issue]
   # to: [you@example.com]   # only used when deliver includes email
 
-# epic-digest currently hard-codes its own daily cron; retrofitting it onto this schema is a
-# nice-to-have follow-up (#637). Declared here so the config is the single source of intent.
+# Gated by schedule.mjs like the others (retrofit #1139; the cron is a daily cheap wake-up).
 # Delivered by email only (Resend) — the standing-issue rail was retired to stop the duplicate
 # GitHub-notification mail.
 epic-digest:

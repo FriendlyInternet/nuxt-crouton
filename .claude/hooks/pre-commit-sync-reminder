@@ -7,7 +7,7 @@
 #   chmod +x .git/hooks/pre-commit
 
 # Check if any generator files are staged
-GENERATOR_FILES=$(git diff --cached --name-only | grep -E "^packages/nuxt-crouton-collection-generator/(lib|bin)/")
+GENERATOR_FILES=$(git diff --cached --name-only | grep -E "^packages/crouton-cli/(lib|bin)/")
 
 if [ -n "$GENERATOR_FILES" ]; then
     echo ""
@@ -43,7 +43,7 @@ if [ -n "$GENERATOR_FILES" ]; then
 fi
 
 # Also check for MCP server changes
-MCP_FILES=$(git diff --cached --name-only | grep -E "^packages/nuxt-crouton-mcp-server/src/")
+MCP_FILES=$(git diff --cached --name-only | grep -E "^packages/crouton-mcp/src/")
 
 if [ -n "$MCP_FILES" ]; then
     echo ""
@@ -53,9 +53,9 @@ if [ -n "$MCP_FILES" ]; then
     echo "║ You're committing changes to the MCP server.                  ║"
     echo "║                                                               ║"
     echo "║ Did you:                                                      ║"
-    echo "║   □ Update packages/nuxt-crouton-mcp-server/CLAUDE.md              ║"
-    echo "║   □ Run tests: pnpm --filter crouton-mcp-server test          ║"
-    echo "║   □ Build: pnpm --filter crouton-mcp-server build             ║"
+    echo "║   □ Update packages/crouton-mcp/CLAUDE.md                   ║"
+    echo "║   □ Run tests: pnpm --filter @fyit/crouton-mcp test           ║"
+    echo "║   □ Build: pnpm --filter @fyit/crouton-mcp build             ║"
     echo "╚═══════════════════════════════════════════════════════════════╝"
     echo ""
 fi

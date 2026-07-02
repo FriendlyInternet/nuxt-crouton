@@ -4,6 +4,7 @@ const { data, pending, error } = await useLoopData()
 const k = (n: number) => (n / 1000).toFixed(1) + 'k'
 const latest = computed(() => data.value?.latest ?? null)
 const traceMeta = computed(() => data.value?.traceMeta ?? null)
+const usageSource = computed(() => data.value?.usageSource ?? { kind: 'sample' as const, label: 'sample data' })
 
 // KPI readouts (KoDisplay = 7-segment screens).
 const kpis = computed(() => {
@@ -85,8 +86,11 @@ const maxCold = computed(() => Math.max(1, ...coldWrites.value.map((c) => c.tota
     <section class="grid grid--2">
       <KoPanel class="panel">
         <div class="panel__inner">
-          <h2 class="panel__h">Inventory · size × usage <span class="tag">dead-weight detector</span></h2>
-          <InventoryTable :rows="data?.deadweight ?? []" />
+          <h2 class="panel__h">Inventory · size × usage
+            <span class="tag" :class="{ 'tag--warn': usageSource.kind === 'sample' }">{{
+              usageSource.kind === 'sample' ? '⚠ sample data' : usageSource.label
+            }}</span></h2>
+          <InventoryTable :rows="data?.deadweight ?? []" :source="usageSource" />
         </div>
       </KoPanel>
       <KoPanel class="panel">
@@ -140,6 +144,7 @@ const maxCold = computed(() => Math.max(1, ...coldWrites.value.map((c) => c.tota
 .panel__inner { padding: 4px 8px 8px; width: 100%; }
 .panel__h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 14px; font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase; color: var(--ko-text-label); font-weight: 600; }
 .panel__h .tag { color: #5a6675; letter-spacing: .03em; text-transform: none; font-family: var(--mono); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.panel__h .tag--warn { color: var(--ko-accent-orange); }
 .muted { color: var(--ko-text-label); font-size: 12px; }
 .err { color: var(--ko-accent-red); font-family: var(--mono); font-size: 12px; }
 .cold { display: flex; flex-direction: column; gap: 9px; }

@@ -48,18 +48,32 @@ jobs:
       # Only here does the LLM run — to turn deterministic findings into a human-readable
       # recommendation issue. Pinned to the same SHA as the repo's other claude-code-action
       # workflows — bump together.
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+        id: llm
         if: steps.advisor.outputs.actionable == 'true'
+        # An LLM outage must not kill the run before the deterministic fallback below —
+        # the whole point of this workflow is that actionable findings reach a human (#1037).
+        continue-on-error: true
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           show_full_output: true
-          claude_args: "--max-turns 12"
+          # bypassPermissions REQUIRED (#834/#1036): this prompt has the top-level agent
+          # create/update issues via tool calls directly; headless CI denies un-allowlisted
+          # tools, so without the grant the agent can't file the issue — the sweep-shaped
+          # form, same as a11y-daily.yml / red-team-daily.yml.
+          claude_args: "--max-turns 12 --permission-mode bypassPermissions"
           prompt: |
             You are the **Loop Station advisor** (#933). Read `advisor-findings.json` in
             the repo root — it lists DETERMINISTIC findings about the harness's own
             context budget (always-on tokens, redundancy, scorecard bands, growth since
-            the last merge). For deeper context you may also read
-            `writeups/loop-station/history.jsonl`.
+            the last merge, and — when usage coverage exists — dead-weight skills,
+            #1066). For deeper context you may also read
+            `writeups/loop-station/history.jsonl` and `writeups/loop-station/usage.jsonl`.
+
+            Scope honesty for `dead-weight` findings: the counts cover CI PIPELINE runs
+            only (interactive sessions are not collected yet, #1067), so phrase them as
+            "never fired *in CI* over the covered window (N days)" — never "never used".
+            Cite the finding's `coverageDays` + `runs` evidence.
 
             Your job: turn these findings into ONE concise, actionable GitHub issue for
             the maintainer — "an appointment". Steps:
@@ -78,3 +92,43 @@ jobs:
             If you POST A COMMENT (when updating), lead it with the CI provenance header:
             `> 🤖 **Claude Code** · agent pipeline (CI) · _Loop Station advisor_`
             (Issue bodies are already clearly agent-authored — no header needed there.)
+
+      # Outage visibility (#1037): the advisor's first real run died on billing_error and
+      # the actionable findings evaporated with it. When the LLM step fails, classify why
+      # (loud warning annotation + step summary)…
+      - uses: ./.github/actions/gate-outage-check
+        if: steps.advisor.outputs.actionable == 'true' && steps.llm.outcome == 'failure'
+        with:
+          gate: loop-station-advisor
+          agent-outcome: ${{ steps.llm.outcome }}
+
+      # …and still deliver: the deterministic gate already wrote advisor-findings.json, so
+      # post it raw to the advisor issue — no LLM needed for the findings to reach a human.
+      - name: Deterministic fallback — findings still reach a human
+        if: steps.advisor.outputs.actionable == 'true' && steps.llm.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BODY_FILE=$(mktemp)
+          {
+            echo "> 🤖 **Claude Code** · agent pipeline (CI) · _Loop Station advisor — deterministic fallback (#1037)_"
+            echo ""
+            echo "The advisor's LLM step failed this week, but the deterministic gate found **actionable** findings — posting them raw so they still reach you. Human-phrased recommendations will arrive whenever the LLM step recovers; the outage is classified in [the run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            echo ""
+            echo '```json'
+            cat advisor-findings.json
+            echo '```'
+          } > "$BODY_FILE"
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label loop-station-advisor --state open --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body-file "$BODY_FILE"
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "🔭 Loop Station advisor — actionable findings (LLM outage fallback)" \
+              --label loop-station-advisor --assignee pmcp --body-file "$BODY_FILE"
+          fi
+
+      # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
+      - uses: ./.github/actions/loop-station-trace
+        if: always()

@@ -38,6 +38,8 @@ if (fs.existsSync(historySrc)) {
 }
 
 // ── trace.jsonl (WS2) ─────────────────────────────────────────────────────────
+// Returns the provenance of what it staged — the view labels itself with this
+// (#1065): 'local-session' | 'pi-live' | 'pi-sample' | 'example' | 'empty'.
 async function buildTrace() {
   const harness = (process.env.AGENT_HARNESS || 'claude').toLowerCase()
   const writeTrace = (meta, events, label) => {
@@ -59,7 +61,7 @@ async function buildTrace() {
         buildPiTrace(path.join(POC, 'data', 'pi-telemetry-sample'))
       if (trace && trace.events.length > 0) {
         writeTrace(trace.meta, trace.events, liveDir ? `pi telemetry ${liveDir}` : 'committed pi sample')
-        return
+        return liveDir ? 'pi-live' : 'pi-sample'
       }
     } catch (err) {
       console.error(`[prepare-data] pi telemetry unavailable (${err.message}); using example`)
@@ -77,7 +79,7 @@ async function buildTrace() {
           result.events,
           `live session ${result.session}`
         )
-        return
+        return 'local-session'
       }
     } catch (err) {
       console.error(`[prepare-data] live parse unavailable (${err.message}); using example`)
@@ -88,10 +90,32 @@ async function buildTrace() {
   if (fs.existsSync(example)) {
     fs.copyFileSync(example, path.join(OUT, 'trace.jsonl'))
     console.error('[prepare-data] trace.jsonl ← data/example-trace.jsonl')
-  } else {
-    fs.writeFileSync(path.join(OUT, 'trace.jsonl'), '')
-    console.error('[prepare-data] trace.jsonl: no source → empty')
+    return 'example'
   }
+  fs.writeFileSync(path.join(OUT, 'trace.jsonl'), '')
+  console.error('[prepare-data] trace.jsonl: no source → empty')
+  return 'empty'
 }
 
-await buildTrace()
+const traceSource = await buildTrace()
+
+// ── usage.jsonl (WS-A rollup, #1064) — optional until the weekly job lands ────
+// The committed cross-run usage aggregate. When present it supersedes the loaded
+// trace as the usage side of the dead-weight join (real counts over a stated window).
+const usageSrc = path.join(REPO, 'writeups', 'loop-station', 'usage.jsonl')
+let usageSource = null
+if (fs.existsSync(usageSrc)) {
+  fs.copyFileSync(usageSrc, path.join(OUT, 'usage.jsonl'))
+  usageSource = 'ci-rollup'
+  console.error('[prepare-data] usage.jsonl ← writeups/loop-station/usage.jsonl')
+} else {
+  fs.writeFileSync(path.join(OUT, 'usage.jsonl'), '')
+  console.error('[prepare-data] usage.jsonl: no rollup yet → empty')
+}
+
+// ── sources.json — name the provenance so the view can label itself (#1065) ──
+fs.writeFileSync(
+  path.join(OUT, 'sources.json'),
+  JSON.stringify({ trace: traceSource, usage: usageSource, generatedAt: new Date().toISOString() }, null, 2) + '\n'
+)
+console.error(`[prepare-data] sources.json — trace: ${traceSource} · usage: ${usageSource ?? 'none'}`)

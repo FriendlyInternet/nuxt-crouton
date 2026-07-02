@@ -1,7 +1,7 @@
 ---
 name: loop-station
 layer: method
-description: Observe the harness itself — (WS1) measure context budget as a deterministic, trendable inventory (tokens per CLAUDE.md / skill / agent, lexical redundancy, per-CI cold-write totals; committed history.jsonl), and (WS2) reconstruct the real invocation trace (which skills/agents/tools fired and how they nested) from session transcripts. Use for "context budget", "how big is CLAUDE.md / our skills", "is the harness bloating", "how do our agent loops actually run", "trace this session", "loop station".
+description: Observe the harness itself — (WS1) measure context budget as a deterministic, trendable inventory (tokens per CLAUDE.md / skill / agent, lexical redundancy, per-CI cold-write totals; committed history.jsonl), (WS2) reconstruct the real invocation trace (which skills/agents/tools fired and how they nested) from session transcripts, and (WS-A) roll the per-run CI traces up into a committed weekly usage record (per-skill invocation counts; usage.jsonl) — the usage side of the dead-weight join. Use for "context budget", "how big is CLAUDE.md / our skills", "is the harness bloating", "how do our agent loops actually run", "which skills actually get used", "trace this session", "loop station".
 ---
 
 # Loop Station — harness observatory (WS1 inventory + WS2 trace)
@@ -130,11 +130,51 @@ node .claude/skills/loop-station/collect-traces.mjs --out loop-station-trace.jso
 
 ## In CI
 
-`claude.yml` carries the reusable two-step snippet (collect → upload artifact),
-`if: always()` and tolerant so it never fails the agent job. Copy those two steps
-into any LLM workflow to capture its trace. Each ephemeral runner ships its
-trace tagged by `run_id`; aggregating the artifacts gives the all-runs topology
-WS3 renders.
+Every Claude-agent workflow ships its trace via the composite action
+**`./.github/actions/loop-station-trace`** (one `uses:` step after the agent,
+`if: always()`, tolerant — never fails the job it rides along with). Each
+ephemeral runner ships its trace tagged by `run_id`; the weekly WS-A rollup
+(below) aggregates the artifacts. The pi workflows are excluded — their trace
+comes from pi telemetry (#944), not Claude transcripts.
+
+---
+
+# WS-A — cross-run usage rollup (#1064)
+
+Turns the per-run trace artifacts (which otherwise expire unread) into a
+**committed, trendable usage fact**: per-skill/agent invocation counts across
+all CI runs in a window. This is the usage side of the dead-weight join — the
+observatory panel (#1065) and the advisor's dead-weight rule (#1066) read it.
+
+> Privacy line: raw traces stay gitignored/artifact-only (WS2 rule). What gets
+> committed is the **aggregate** — names + counts, the same granularity
+> `history.jsonl` commits for size. The record carries `source: 'ci-rollup'`
+> and `scope: 'pipeline'` so a consumer can't over-read it: **0 means "never
+> fired in CI"**, not "never used" (interactive coverage is #1067).
+
+## Files
+
+| file | role |
+|------|------|
+| `aggregate-usage.mjs` | N trace NDJSON files → ONE usage record (counts per name, runs, workflows, first/lastSeen). Importable `aggregate(texts, opts)`. Zero input ⇒ a visible meta-only record, never silence |
+| `append-usage.mjs` | append the record to `writeups/loop-station/usage.jsonl`, **idempotent per ISO week** (exports `isoWeek()`) |
+| `lib/aggregate-usage.test.mjs` | counting, attribution, meta-only-on-empty, scope fields, week-key idempotence |
+| `writeups/loop-station/usage.jsonl` | the **committed** usage trend (one record per week) |
+
+## Run by hand
+
+```bash
+node .claude/skills/loop-station/aggregate-usage.mjs --window 7 trace1.jsonl trace2.jsonl \
+  | node .claude/skills/loop-station/append-usage.mjs
+```
+
+## In CI
+
+`.github/workflows/loop-station-usage.yml` runs **weekly** (Mondays 06:41 UTC,
+before the advisor): list the window's `loop-station-trace-*` artifacts →
+download → aggregate → append → commit back `[skip ci]`. Fail-loud contract
+(#1037): a listing failure **fails the job** (an outage must not read as a
+quiet week); zero artifacts appends a meta-only record (a gap you can see).
 
 ---
 
@@ -152,9 +192,19 @@ issue assigned to the maintainer with concrete recommendations.
 
 | file | role |
 |------|------|
-| `advisor.mjs` | **deterministic gate** — reads `history.jsonl`, surfaces candidate findings (scorecard reds, sharp always-on growth, redundancy jumps), decides `actionable`. No LLM, no issue. Importable `analyze()`. |
-| `lib/advisor.test.mjs` | findings logic (reds flag, growth flags, cross-tokenizer deltas are NOT compared, deterministic) |
+| `advisor.mjs` | **deterministic gate** — reads `history.jsonl` + `usage.jsonl`, surfaces candidate findings (scorecard reds, sharp always-on growth, redundancy jumps, dead-weight skills), decides `actionable`. No LLM, no issue. Importable `analyze()` / `usageCoverage()`. |
+| `lib/advisor.test.mjs` | findings logic (reds flag, growth flags, cross-tokenizer deltas are NOT compared, dead-weight coverage gates, deterministic) |
 | `.github/workflows/loop-station-advisor.yml` | weekly: run the gate → **only if actionable** invoke `claude-code-action` to open/update ONE `loop-station-advisor` issue assigned to `pmcp` |
+
+### Dead-weight rule (#1066)
+
+Joins WS1 size × WS-A usage: an **oversized skill** (≥ the scorecard's artifact
+amber band) that **provably never fired** becomes one `dead-weight` finding
+listing the candidates. "Provably" is gated — the rule judges ONLY when the
+usage rollup covers **≥ 60 cumulative days AND ≥ 5 observed runs** (tune in
+`ADVISOR`); anything thinner stays silent with `usage.why` naming the reason,
+because "no data" must never read as "dead". Evidence carries
+`scope: 'pipeline'` — 0 means *never fired in CI*, not never used (#1067).
 
 ## Why the gate is deterministic
 

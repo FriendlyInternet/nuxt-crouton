@@ -1,0 +1,31 @@
+# Loop Station trace shipper (WS2 #929 · WS-A #1064).
+#
+# Reconstructs this ephemeral runner's agent invocation trace and uploads it as
+# a run artifact — the weekly loop-station-usage.yml job aggregates these into
+# the committed usage rollup. One line in any LLM workflow, after the agent step:
+#
+#   - uses: ./.github/actions/loop-station-trace
+#     if: always()
+#
+# Read-only, payload-free (names + ids + durations only — never tool inputs or
+# results), and tolerant: it never fails the job it rides along with. On runners
+# where no Claude transcript exists (e.g. the pi harness) it ships a meta-only
+# file and exits green.
+name: loop-station-trace
+description: Collect this run's agent invocation trace and upload it as an artifact for the usage rollup
+
+runs:
+  using: composite
+  steps:
+    - name: Collect invocation trace
+      if: always()
+      shell: bash
+      run: node .claude/skills/loop-station/collect-traces.mjs --out loop-station-trace.jsonl || true
+
+    - name: Upload invocation trace
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: loop-station-trace-${{ github.run_id }}-${{ github.run_attempt }}
+        path: loop-station-trace.jsonl
+        if-no-files-found: ignore

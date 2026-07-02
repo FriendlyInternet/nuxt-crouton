@@ -196,4 +196,6 @@ needs prop/slot judgment").
   `.github/workflows/frontend-review.yml` runs the subagent at `depth=quick` on a PR
   diff — posts a sticky `<!-- frontend-review -->` comment and **fails the check on a
   🔴 finding** (diff-scoped, so never on the pre-existing backlog). `/frontend-review`
-  is the **on-demand** brain and human entry point for the same machinery.
+  is the **on-demand** brain and human entry point for the same machinery. The workflow
+  MUST follow the **Claude-action workflow standard** in `.claude/agents/CLAUDE.md` —
+  notably the `--allowedTools` grant, without which the gate fails open (#834/#1036).

@@ -13,6 +13,8 @@ authenticates, and does CRUD** after a `packages/` change or dependency bump.
 | `with-assets` | + `@fyit/crouton-assets` (asserts the optional `CroutonAssetsPicker` mounts, not the core stub) |
 | `with-collab` | + `@fyit/crouton-collab` (spike: asserts the realtime collab UI mounts single-client) |
 | `with-maps` | + `@fyit/crouton-maps` (a `venues` collection with address+coordinate fields → asserts the MapLibre map mounts in the generated form + the `/api/maps/geocode` proxy geocodes against live Nominatim) |
+| `with-sales` | + `@fyit/crouton-printing` + `@fyit/crouton-sales` (the full POS + printing domain → two-tier `printing.smoke` boots, places an order, and drives a print job pending → done against an in-test fake :9100 ESC/POS printer, asserting the order auto-completes) |
+| `with-devtools` | + `@fyit/crouton-devtools` + `@fyit/crouton-feedback` (asserts the feedback "glasses" launcher mounts via devtools `installModule`) |
 
 ## What you need to know
 

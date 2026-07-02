@@ -1,5 +1,5 @@
 // parse-app-config.ts — Extract deployment-relevant info from an app directory
-// Used by deploy-check and deploy-setup to understand what an app needs
+// Used by deploy-check to understand what an app needs
 
 import { join } from 'node:path'
 import { readFile, access } from 'node:fs/promises'

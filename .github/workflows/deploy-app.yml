@@ -63,16 +63,40 @@ on:
         required: false
         default: ''
         type: string
+      skip-staging-smoke:
+        description: >-
+          ESCAPE HATCH for the Rung 3 pre-prod confidence gate (#1107): skip the
+          live-staging smoke that normally blocks a production deploy while staging
+          is red. Only for "staging is down and prod needs a hotfix" — using it
+          prints a loud warning on the run.
+        required: false
+        default: false
+        type: boolean
+      require-worker-secrets:
+        description: >-
+          Fail the deploy if WORKER_SECRETS_JSON resolves empty (#1094). Guards the
+          mis-scoping trap: an Environment-scoped WORKER_SECRETS_JSON silently
+          resolves empty on this call path (see the secrets block below), which
+          would otherwise deploy a Worker with no secrets. Callers set this from
+          the app's deploy.config.json `secrets.required`.
+        required: false
+        default: false
+        type: boolean
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         required: true
       CLOUDFLARE_API_TOKEN:
         required: true
       # Optional: a JSON object of { "NAME": "value", … } pushed to the Worker as
-      # secrets on every deploy (wrangler secret bulk). Store it as a GitHub
-      # *Environment* secret so production and staging can hold env-specific values
-      # (e.g. different BETTER_AUTH_URL). Omit it to manage Worker secrets manually
-      # (they persist across deploys, so a one-time `wrangler secret bulk` also works).
+      # secrets on every deploy (wrangler secret bulk). MUST be a *repository-level*
+      # Actions secret, NOT an *Environment* secret: this workflow is reached via
+      # `secrets: inherit` from caller jobs that declare no `environment:`, so an
+      # Environment-scoped secret is never in scope and resolves EMPTY with no error
+      # (the sync step below then silently skips — or fails, when the app sets
+      # `secrets.required` in deploy.config.json). One bundle serves both envs;
+      # env-specific values (e.g. BETTER_AUTH_URL) are handled by the deploy itself
+      # or a one-time manual `wrangler secret bulk`. Omit it to manage Worker
+      # secrets manually (they persist across deploys).
       WORKER_SECRETS_JSON:
         required: false
       # Optional repo-level secret used only to derive the throwaway review login's
@@ -84,7 +108,13 @@ on:
 jobs:
   deploy:
     name: Deploy ${{ inputs.app }} (${{ inputs.environment }})
-    runs-on: ubuntu-latest
+    # Routed to the self-hosted box behind the AGENT_RUNNER toggle (#654/#658 — wrangler
+    # deploy is cross-platform Node; verified from macOS by the #654 proof run). The fork
+    # guard implements the runbook §5 policy: deploy-pocs.yml calls this on `pull_request`
+    # of pocs/**, so a fork PR must never reach the box — it routes back to GitHub-hosted
+    # structurally (fork PRs also get no secrets, but the guard keeps their code off our
+    # hardware in the first place). Delete the AGENT_RUNNER repo var to fall back.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
     # GitHub deployment environment — kept as production/staging so any
     # environment-scoped secrets/protection from the existing setup still apply
     # (the Workers target is staging/prod independently, via inputs.environment).
@@ -104,6 +134,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Hosted runners ship jq; a self-hosted mac starts bare (runbook §2a installs
+      # node/pnpm/gh/wrangler but jq wasn't on the list). Self-heals via Homebrew —
+      # already on the runner PATH through its `.path` file. No-op when jq exists.
+      - name: Ensure jq (self-hosted macOS)
+        if: runner.os == 'macOS'
+        run: command -v jq >/dev/null 2>&1 || brew install jq
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -113,10 +150,58 @@ jobs:
           node-version: ${{ inputs['node-version'] }}
           cache: 'pnpm'
 
+      # ── Rung 3 pre-prod confidence gate (#1107, epic #632) ──────────────────
+      # Before anything expensive: smoke the app's LIVE STAGING URL and refuse to
+      # deploy production while it's red. "Verified on staging first" was only a
+      # skill checklist until now — this enforces it. The smoke recomputes the
+      # deterministic review login the last push-to-main staging deploy seeded
+      # (KEY=main; same derivation as the "Seed review login" step below) and runs
+      # scripts/smoke-deployed.mjs — node built-ins only, so it works before
+      # `pnpm install` (the screenshot part self-skips without playwright).
+      # Gates the deliberate manual click (#318), never automates it. Escape
+      # hatch: the skip-staging-smoke input (loud warning, next step).
+      - name: Pre-prod confidence gate — smoke live staging
+        if: ${{ inputs.environment == 'production' && !inputs['skip-staging-smoke'] }}
+        env:
+          STAGING_URL: ${{ inputs['staging-url'] }}
+          APP: ${{ inputs.app }}
+          WORKSPACE: ${{ inputs.workspace }}
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+        run: |
+          if [ -z "$STAGING_URL" ]; then
+            echo "::error::No staging-url configured for $APP — cannot verify staging before production (#1107). Set stagingUrl in $WORKSPACE/$APP/deploy.config.json, or dispatch with skip-staging-smoke=true (deliberate escape hatch)."
+            exit 1
+          fi
+          # Same deterministic creds the staging seed step derives on push to main.
+          SALT="${REVIEW_SEED_SECRET:-crouton-review-seed}"
+          EMAIL="review+${APP}-main@example.com"
+          PW="$(printf '%s' "${SALT}:${APP}:main" | sha256sum | cut -c1-24)"
+          MANIFEST="$WORKSPACE/$APP/deploy.config.json"
+          if node scripts/smoke-deployed.mjs --url "$STAGING_URL" --email "$EMAIL" --password "$PW" --app "$APP" --manifest "$MANIFEST"; then
+            echo "### ✅ Pre-prod gate ($APP): staging smoke green on $STAGING_URL — proceeding to production" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::error::Pre-prod gate REFUSED ($APP): the staging smoke is red on $STAGING_URL. Fix staging (merge to main redeploys it), verify the smoke is green, then re-dispatch. Genuine emergency with staging down → re-dispatch with skip-staging-smoke=true (#1107)."
+            exit 1
+          fi
+
+      - name: Pre-prod gate SKIPPED (escape hatch)
+        if: ${{ inputs.environment == 'production' && inputs['skip-staging-smoke'] }}
+        run: |
+          echo "::warning::skip-staging-smoke=true — deploying PRODUCTION without verifying the live staging (#1107 escape hatch). Do this only when staging itself is down and prod needs a hotfix."
+          echo "### ⚠️ Pre-prod gate SKIPPED via skip-staging-smoke — staging was NOT verified before this production deploy" >> "$GITHUB_STEP_SUMMARY"
+
       # --ignore-scripts: skip every workspace postinstall (guarded `nuxt prepare`)
       # during a whole-monorepo install; the app's own prepare runs below.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Best-effort: the deployed smoke's SCREENSHOT wants a Playwright browser; the
+      # smoke itself passes without one (evidence, not a gate — #1126). On the
+      # self-hosted runner this downloads once into the persistent ms-playwright
+      # cache and is a no-op afterwards; on hosted runners it costs ~30s. Never
+      # fails the deploy.
+      - name: Ensure Playwright browser (smoke screenshots)
+        run: npx playwright install chromium 2>&1 | tail -2 || true
 
       # --ignore-scripts above also skips native-module build steps. @nuxt/content
       # (the docs app) needs better-sqlite3's native binding at BUILD time to process
@@ -246,17 +331,28 @@ jobs:
       #
       # IMPORTANT — scoping: WORKER_SECRETS_JSON MUST be a *repository-level* Actions
       # secret, NOT an *Environment* secret. This job is reached via `secrets: inherit`
-      # from a thin caller whose calling job declares no `environment:`, so
-      # Environment-scoped secrets are never in scope to inherit and resolve to EMPTY
-      # (they silently skip). Repository-level secrets inherit correctly.
+      # from callers (deploy-apps.yml / deploy-pocs.yml) whose calling jobs declare no
+      # `environment:`, so Environment-scoped secrets are never in scope to inherit and
+      # resolve to EMPTY (they silently skip). Repository-level secrets inherit
+      # correctly. Apps that depend on the bundle set `secrets.required` in their
+      # deploy.config.json → require-worker-secrets makes an empty resolution FAIL
+      # loudly here instead of deploying a Worker with no secrets (#1094).
       - name: Sync explicit Worker secrets (optional override)
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
           SECRETS_JSON: ${{ secrets.WORKER_SECRETS_JSON }}
         run: |
           if [ -z "$SECRETS_JSON" ]; then
+            if [ "${{ inputs['require-worker-secrets'] }}" = "true" ]; then
+              echo "::error::WORKER_SECRETS_JSON resolved EMPTY but ${{ inputs.app }} declares secrets.required in deploy.config.json. Most likely cause: the secret is stored as an *Environment* secret — it must be a *repository-level* Actions secret (Environment scopes are unreachable on this secrets:inherit path and resolve empty with no error, #1094)."
+              exit 1
+            fi
             echo "No WORKER_SECRETS_JSON provided — the Ensure BETTER_AUTH_SECRET step below covers auth."
             exit 0
+          fi
+          if ! printf '%s' "$SECRETS_JSON" | jq -e 'type == "object" and length > 0' >/dev/null 2>&1; then
+            echo "::error::WORKER_SECRETS_JSON is set but is not a non-empty JSON object — refusing to deploy with a broken secrets bundle (#1094)."
+            exit 1
           fi
           printf '%s' "$SECRETS_JSON" > "$RUNNER_TEMP/worker-secrets.json"
           if [ "${{ inputs.environment }}" = "production" ]; then
@@ -384,9 +480,11 @@ jobs:
       # Prove the DEPLOYED preview actually works — log in with the seeded account, run
       # any app-declared CRUD + public read, and screenshot it (#293). This is the
       # acceptance typecheck/boot can't give: auth + a data round-trip on the real Worker
-      # (D1 + secrets + better-auth). Report-only by DEFAULT — a brittle smoke must never
-      # red a previously-green deploy across velo/fanfare/triage; an app opts into gating
-      # with `"smoke": { "required": true }` in its deploy.config.json. Login proof + CRUD
+      # (D1 + secrets + better-auth). On PR previews it's report-only by DEFAULT — a
+      # brittle smoke must never red a previously-green deploy across velo/fanfare/triage;
+      # an app opts into gating with `"smoke": { "required": true }` in its
+      # deploy.config.json. On push to main (the shared staging) a failure GATES by
+      # default — see the "Gate on smoke result" step (#1106). Login proof + CRUD
       # use plain fetch (always available); the screenshot is best-effort (skips cleanly
       # when no browser is present on the runner).
       - name: Verify deployed preview (smoke)
@@ -418,18 +516,37 @@ jobs:
           path: screenshots/${{ inputs.app }}-smoke.png
           if-no-files-found: ignore
 
-      # Gate the deploy on the smoke ONLY when the app opted in (smoke.required: true).
-      # Otherwise a failing smoke is a loud warning, not a red deploy.
-      - name: Gate on smoke result (opt-in)
+      # Gate the deploy on the smoke — two regimes (#1106, epic #632 Rung 2):
+      #   • PR / dispatch previews: report-only unless the app opts IN
+      #     (smoke.required: true). A brittle smoke must never block PR iteration.
+      #   • push to main (the shared *.pmcp.dev staging): gate by DEFAULT. A green
+      #     workflow over a broken deployed staging is the silent failure
+      #     report-failed-deploy.yml exists to catch — and it only reacts to RED
+      #     runs, so a report-only failure here would vanish as a ::warning::.
+      #     A known-brittle app can opt OUT with smoke.gateOnMain: false.
+      #   A smoke "fail" is always a real broken deploy: skipped checks
+      #   (no creds / no manifest) pass, they don't fail (see smoke-deployed.mjs).
+      - name: Gate on smoke result
         if: ${{ steps.smoke.outputs.result == 'fail' }}
         env:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
+          EVENT: ${{ github.event_name }}
         run: |
-          REQUIRED=$(jq -r '.smoke.required // false' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null || echo false)
+          CONFIG="$WORKSPACE/$APP/deploy.config.json"
+          REQUIRED=$(jq -r '.smoke.required // false' "$CONFIG" 2>/dev/null || echo false)
           if [ "$REQUIRED" = "true" ]; then
             echo "::error::Deployed-preview smoke failed and $APP sets smoke.required=true."
             exit 1
+          fi
+          if [ "$EVENT" = "push" ]; then
+            GATE_ON_MAIN=$(jq -r '.smoke.gateOnMain // true' "$CONFIG" 2>/dev/null || echo true)
+            if [ "$GATE_ON_MAIN" = "true" ]; then
+              echo "::error::Deployed smoke failed on the shared staging after merge to main — failing the run so report-failed-deploy.yml opens an issue (#1106). A known-brittle smoke can opt out with smoke.gateOnMain=false in $APP/deploy.config.json."
+              exit 1
+            fi
+            echo "::warning::Deployed smoke failed post-merge, but $APP sets smoke.gateOnMain=false (report-only)."
+            exit 0
           fi
           echo "::warning::Deployed-preview smoke failed (report-only; set smoke.required=true in $APP/deploy.config.json to gate)."
 

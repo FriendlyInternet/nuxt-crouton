@@ -69,3 +69,79 @@ test('analyze is deterministic', () => {
   const input = [rec({ tokens: 10000 }), rec({ lengthBand: 'red', tokens: 20000 })]
   assert.deepEqual(analyze(input), analyze(input))
 })
+
+// ── Dead-weight rule (#1066): oversized skill × provably zero CI invocations ──
+// The rule may only judge with real coverage: cumulative window ≥ 60d AND ≥ 5
+// observed runs. Anything thinner ⇒ silent, with `usage.why` naming the reason —
+// "no data" must never read as "dead".
+
+const artifact = (name, tokens, kind = 'skill') => ({ path: `.claude/skills/${name}/SKILL.md`, kind, name, tokens })
+
+const usageRec = (over = {}) => ({
+  schema: 1,
+  generatedAt: over.generatedAt || '2026-07-06T06:41:00.000Z',
+  windowDays: over.windowDays ?? 7,
+  source: 'ci-rollup',
+  scope: 'pipeline',
+  runs: over.runs ?? 3,
+  workflows: over.workflows || ['claude.yml'],
+  events: over.events ?? 10,
+  byName: over.byName || {}
+})
+
+// 10 weekly records ⇒ 70d coverage, 30 runs — comfortably past both gates.
+const coveredWindow = (byName = {}) => Array.from({ length: 10 }, () => usageRec({ byName }))
+
+test('dead-weight: big + never fired in a covered window → finding with scope + window', () => {
+  const hist = rec()
+  hist.artifacts = [artifact('big-idle', 5000), artifact('big-live', 5000), artifact('small-idle', 1000)]
+  const r = analyze([hist], coveredWindow({ 'big-live': { kind: 'skill', count: 4 } }))
+  const dw = r.findings.find((f) => f.dim === 'dead-weight')
+  assert.ok(dw, 'dead-weight finding present')
+  assert.deepEqual(dw.evidence.candidates.map((c) => c.name), ['big-idle'], 'fired and small skills are not candidates')
+  assert.equal(dw.evidence.scope, 'pipeline')
+  assert.equal(dw.evidence.coverageDays, 70)
+  assert.equal(r.actionable, true)
+})
+
+test('dead-weight: no usage records → never judged (no finding, why says so)', () => {
+  const hist = rec()
+  hist.artifacts = [artifact('big-idle', 5000)]
+  const r = analyze([hist])
+  assert.ok(!r.findings.some((f) => f.dim === 'dead-weight'))
+  assert.equal(r.usage.judged, false)
+  assert.match(r.usage.why, /no usage rollup/)
+})
+
+test('dead-weight: thin coverage (< 60d) → not judged', () => {
+  const hist = rec()
+  hist.artifacts = [artifact('big-idle', 5000)]
+  const r = analyze([hist], [usageRec({ runs: 50 })]) // one week only
+  assert.ok(!r.findings.some((f) => f.dim === 'dead-weight'))
+  assert.match(r.usage.why, /coverage 7d/)
+})
+
+test('dead-weight: run-starved window (< 5 runs) → not judged even at 60d+', () => {
+  const hist = rec()
+  hist.artifacts = [artifact('big-idle', 5000)]
+  const quiet = Array.from({ length: 10 }, () => usageRec({ runs: 0, events: 0 }))
+  const r = analyze([hist], quiet)
+  assert.ok(!r.findings.some((f) => f.dim === 'dead-weight'))
+  assert.match(r.usage.why, /runs/)
+})
+
+test('dead-weight: a skill fired in ANY covered week is not dead', () => {
+  const hist = rec()
+  hist.artifacts = [artifact('big-once', 5000)]
+  const recs = coveredWindow()
+  recs[3] = usageRec({ byName: { 'big-once': { kind: 'skill', count: 1 } } })
+  const r = analyze([hist], recs)
+  assert.ok(!r.findings.some((f) => f.dim === 'dead-weight'))
+})
+
+test('dead-weight: only skills are judged, agents/claudemd are not', () => {
+  const hist = rec()
+  hist.artifacts = [artifact('task-worker', 9000, 'agent'), { path: 'CLAUDE.md', kind: 'claudemd', tokens: 19000 }]
+  const r = analyze([hist], coveredWindow())
+  assert.ok(!r.findings.some((f) => f.dim === 'dead-weight'))
+})

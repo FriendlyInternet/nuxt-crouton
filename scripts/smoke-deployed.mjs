@@ -208,9 +208,17 @@ async function screenshot(smoke, loggedIn) {
     warn(`no playwright available — skipping screenshot (${e.message})`)
     return
   }
-  const browser = await chromium.launch(
-    execPath ? { executablePath: execPath, args: ['--no-sandbox', '--disable-gpu'] } : { args: ['--no-sandbox', '--disable-gpu'] },
-  )
+  // The screenshot is evidence, never a gate: a missing browser build (e.g. a fresh
+  // self-hosted runner cache, #1126) must warn and skip, not crash the smoke.
+  let browser
+  try {
+    browser = await chromium.launch(
+      execPath ? { executablePath: execPath, args: ['--no-sandbox', '--disable-gpu'] } : { args: ['--no-sandbox', '--disable-gpu'] },
+    )
+  } catch (e) {
+    warn(`no launchable browser — skipping screenshot (non-fatal): ${e.message.split('\n')[0]}`)
+    return
+  }
   try {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 })
     // Inject the authenticated session so the screenshot shows the app logged-in.

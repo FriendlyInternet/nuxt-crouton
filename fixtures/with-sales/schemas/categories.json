@@ -1,0 +1,6 @@
+{
+  "id": { "type": "uuid", "meta": { "primaryKey": true } },
+  "eventId": { "type": "uuid", "refTarget": "events", "meta": { "required": true, "label": "Event" } },
+  "title": { "type": "string", "meta": { "required": true, "label": "Category Name", "maxLength": 100 } },
+  "displayOrder": { "type": "integer", "meta": { "label": "Display Order", "default": 0 } }
+}

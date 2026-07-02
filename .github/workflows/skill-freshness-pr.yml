@@ -1,0 +1,107 @@
+name: Skill freshness (PR advisory)
+
+# Advisory, NON-BLOCKING signal (#1100 WS4). When a PR changes a file that a knowledge skill
+# (the `verified:` provenance contract, #1073/#1091) cites, this posts/updates one sticky
+# comment naming those skills so the author can re-verify the facts and bump the stamp — or
+# knowingly skip it. Deterministic, NO LLM: reuses scripts/skill-freshness.mjs --cite (pure
+# token-vs-path matching). It NEVER fails the check and never mutates a skill — staleness is a
+# signal, not a build failure (the epic's rejected "blocking gate on staleness"). Mirrors the
+# sticky-upsert pattern of pipeline-pr-status.yml.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+concurrency:
+  group: skill-freshness-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  advise:
+    # Skip drafts and bot-authored PRs (agent/Dependabot noise).
+    if: >
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need the base branch to diff the PR's changed files.
+          fetch-depth: 0
+
+      - name: Map changed files → citing skills
+        id: cite
+        env:
+          BASE: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          # Changed files in this PR, base...head (three-dot = changes on the PR branch only).
+          git fetch --no-tags --depth=1 origin "$BASE" 2>/dev/null || git fetch --no-tags origin "$BASE"
+          git diff --name-only "origin/$BASE...HEAD" > changed-files.txt || true
+          echo "Changed files:"; cat changed-files.txt || true
+          # Deterministic match → JSON. Never let a match failure fail the job (advisory).
+          node scripts/skill-freshness.mjs --cite < changed-files.txt > skill-citations.json || echo '{"changed":0,"skills":[]}' > skill-citations.json
+          echo "---"; cat skill-citations.json
+
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            const { owner, repo } = context.repo
+            const issue_number = context.payload.pull_request.number
+            const MARKER = '<!-- skill-freshness-advisory -->'
+            const HEADER = '> 🤖 **Claude Code** · agent pipeline (CI) · _skill-freshness advisory_'
+
+            const data = JSON.parse(fs.readFileSync('skill-citations.json', 'utf8'))
+            const skills = data.skills || []
+
+            // Find an existing sticky by its hidden marker.
+            const comments = await github.paginate(github.rest.issues.listComments,
+              { owner, repo, issue_number, per_page: 100 })
+            const existing = comments.find((c) => (c.body || '').includes(MARKER))
+
+            // No cited files touched: clear a prior advisory if one exists, else stay silent
+            // (don't add noise to unrelated PRs).
+            if (!skills.length) {
+              if (existing) {
+                const body = [MARKER, HEADER, '', '### 📚 Skill freshness',
+                  '✅ The latest revision changes no files cited by a knowledge skill.'].join('\n')
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+              }
+              core.info('No skill-cited files changed — nothing to advise.')
+              return
+            }
+
+            const n = skills.length
+            const lines = [
+              MARKER,
+              HEADER,
+              '',
+              `### 📚 This PR changes files cited by ${n} knowledge skill${n === 1 ? '' : 's'}`,
+              '',
+              'These skills cite paths this PR touches. If the change alters what they document,',
+              '**re-verify the facts and bump the `verified:` stamp** (or knowingly skip — this is advisory):',
+              ''
+            ]
+            for (const s of skills) {
+              const cites = s.matched.map((p) => `\`${p}\``).join(', ')
+              const age = s.ageDays != null ? `, stamped ${s.stamp}` : ''
+              lines.push(`- \`/${s.name}\`${age} — cites ${cites}`)
+            }
+            lines.push(
+              '',
+              '_Advisory only — not a merge gate. After re-verifying, run `node scripts/skill-freshness.mjs --pretty` to confirm the skill reads clean._'
+            )
+            const body = lines.join('\n')
+
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body })
+            }
+            core.info(`Advised on ${n} skill(s).`)

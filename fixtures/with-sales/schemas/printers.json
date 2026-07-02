@@ -1,0 +1,14 @@
+{
+  "id": { "type": "uuid", "meta": { "primaryKey": true } },
+  "eventId": { "type": "uuid", "refTarget": "events", "meta": { "required": true, "label": "Event" } },
+  "locationId": { "type": "uuid", "refTarget": "locations", "meta": { "required": true, "label": "Location" } },
+  "title": { "type": "string", "meta": { "required": true, "label": "Printer Name", "maxLength": 100 } },
+  "ipAddress": { "type": "string", "meta": { "required": true, "label": "IP Address" } },
+  "port": { "type": "string", "meta": { "label": "Port", "default": "9100", "helpText": "ESC/POS raw TCP port. 9100 is universal." } },
+  "status": { "type": "string", "meta": { "label": "Status", "default": "idle", "helpText": "Last-known printer state. Not updated by the spooler." } },
+  "type": { "type": "string", "meta": { "label": "Printer Type", "default": "kitchen", "helpText": "kitchen = per-location tickets, receipt = combined customer receipt with footer text" } },
+  "driver": { "type": "string", "meta": { "label": "Driver", "default": "network-escpos", "helpText": "Print transport: network-escpos (drained on-site) or browser-print." } },
+  "config": { "type": "json", "meta": { "label": "Config", "helpText": "Printer-specific configuration (driver options)." } },
+  "showPrices": { "type": "boolean", "meta": { "label": "Show Prices on Receipt", "default": true } },
+  "isActive": { "type": "boolean", "meta": { "label": "Active", "default": true } }
+}

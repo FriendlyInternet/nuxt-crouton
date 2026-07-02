@@ -310,6 +310,37 @@ file must never be committed (a CI guard fails any PR to `main` that contains it
 package edit isn't covered by the epic's approval, that's a blocker — comment + @mention +
 `status:blocked` + stop.
 
+## `.github/workflows/` boundary — embed-patch convention (#1076)
+
+The Harness App token that backs this pipeline deliberately **lacks the `workflows`
+permission** (decided in #1076: grant-vs-convention, resolved as convention — the blast-radius
+of a token that can edit its own CI guardrails outweighs the one manual step this costs). GitHub
+hard-rejects any commit that touches `.github/workflows/**` from that token — this is not a bug
+to route around and not a `packages/`-style approval gate that can be unlocked per epic. It is a
+**permanent boundary**.
+
+When your leaf's work would require a workflow-file change (a new trigger, a path filter, a new
+job):
+
+- **Do not stop-and-block waiting on it.** This is not a missing-prerequisite blocker ("Block,
+  don't improvise" above) — it's a known, permanent limit of your own write access. Route around
+  it instead of holding the whole leaf hostage.
+- **Commit everything else normally** — the workflow-touching lines are the *only* thing you
+  omit from the diff.
+- **Embed the workflow diff verbatim** in the PR body under a `## Workflow patch (human applies)`
+  heading, as a `git apply`-able fenced diff block (see PR #1075 for the exact shape). Keep it
+  minimal — just the lines a maintainer needs to paste or `git apply`.
+- **Flag it, don't necessarily hold it.** `add_issue_comment` a plain top-level note (not a PR
+  *review* body) naming the pending patch and @mentioning the notify handle. Only add
+  `status:blocked` if the omitted workflow change is load-bearing for the rest of the PR to work
+  (e.g. new CI can't run without it) — if the rest of the PR stands on its own, this is an FYI,
+  not a hold.
+- **This shape is a legitimate, complete deliverable — not a partial run.** "PR opened (with
+  everything committable already landed) + a workflow patch embedded for a human to apply" is a
+  first-class **PASS** for the artifact-gate (#461): a linked PR alone already satisfies it
+  (`linkedPR` in `decompose-on-issue.yml`), so don't read the missing workflow commit as an
+  incomplete run, and don't spend extra turns trying to find a way to write the file anyway.
+
 ## Guardrails
 
 - Green typecheck is non-negotiable before the PR is "ready".

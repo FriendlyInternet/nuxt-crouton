@@ -89,7 +89,7 @@ Only update if:
 - Architecture changed fundamentally
 - A new skill/agent was added (add to artifacts table)
 
-### 3. Docs App Content (`apps/docs/content/`)
+### 3. Docs App Content (`docs/content/`)
 
 **When to update existing pages:**
 - The change directly contradicts what a docs page says
@@ -103,7 +103,7 @@ Only update if:
 - Use existing pages as templates — match the structure and tone
 
 **How to find relevant docs pages:**
-- Search `apps/docs/content/` for the name of the changed component/composable/endpoint
+- Search `docs/content/` for the name of the changed component/composable/endpoint
 - If a docs page references it, check if the reference is still accurate
 - Only fix inaccuracies in existing pages — don't expand or improve unrelated sections
 
@@ -143,7 +143,7 @@ Only proceed with files that have **public API impact**.
 For each package with public API changes:
 
 1. **Read the package's CLAUDE.md** (if it exists)
-2. **Search for references** in `apps/docs/content/` using the changed item's name
+2. **Search for references** in `docs/content/` using the changed item's name
 3. **Compare** the docs against what the code now says
 
 ### Step 4: Make Targeted Updates
@@ -160,7 +160,7 @@ Summarize what was updated:
 ```
 Docs synced:
 - packages/crouton-core/CLAUDE.md: added useTeamRoles to composables list
-- apps/docs/content/8.api-reference/composables.md: updated useTeamRoles signature
+- docs/content/8.api-reference/composables.md: updated useTeamRoles signature
 
 No updates needed:
 - 3 internal files changed (no public API impact)
@@ -183,7 +183,7 @@ No doc updates needed — changes are internal/cosmetic only.
 | `packages/*/types*.ts` | `packages/*/CLAUDE.md` (types section) |
 | `packages/crouton-cli/**` | `.claude/skills/crouton.md`, `packages/crouton-cli/CLAUDE.md` |
 | `packages/crouton-mcp*/**` | `packages/crouton-mcp*/CLAUDE.md` |
-| `apps/docs/content/**` | N/A (it IS the docs) |
+| `docs/content/**` | N/A (it IS the docs) |
 | `*.nuxt.config.ts` | Package CLAUDE.md (config section, if exists) |
 
 ## Examples
@@ -196,7 +196,7 @@ Action:
 1. Read `packages/crouton-core/CLAUDE.md`
 2. Find composables section
 3. Add `useTeamRoles` entry matching existing format
-4. Search `apps/docs/content/` for "team roles" — if found, verify accuracy
+4. Search `docs/content/` for "team roles" — if found, verify accuracy
 
 ### Example 2: Renamed a component
 

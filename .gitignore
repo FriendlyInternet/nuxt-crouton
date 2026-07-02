@@ -100,6 +100,9 @@ apps/*/.wrangler/deploy/
 
 # Screenshots (temp)
 *.png
+# Demo recordings (shot-scraper video — see .claude/skills/demo-video)
+*.webm
+*.mp4
 # …except committed ticket-diagram renders (the ticket-diagram skill embeds these in epic/PR bodies)
 !writeups/diagrams/*.png
 # …and committed ui-proposal --static mockup renders (embedded inline in the draft-PR sticky; #613)
@@ -147,3 +150,4 @@ writeups/loop-station/traces/
 retired/pocs/blog/.data
 pocs/crouton-builder/.data
 pocs/booking-demo/.data
+.fallow/

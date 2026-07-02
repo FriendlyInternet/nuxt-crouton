@@ -2,7 +2,9 @@ name: Comment dispatch
 
 # Hand an issue to the agent pipeline by COMMENTING — mobile-friendly, no label UI.
 # Comment `/delegate` (or `/deploy`) on an issue and this applies the `delegate` label,
-# which fires decompose-on-issue.yml. Only the repo owner / members / collaborators can
+# which fires decompose-on-issue.yml. Comment `/delegate-pi` to apply `delegate-pi`
+# instead, which fires the pi.dev variant (decompose-on-issue-pidev.yml) — same gesture,
+# other harness (#1077 / #669 WS7). Only the repo owner / members / collaborators can
 # trigger it.
 #
 # AUTH (#519 WS5): the label is applied with a Nuxt Harness GitHub App installation token, so
@@ -49,16 +51,22 @@ jobs:
             const issue_number = context.payload.issue.number
             const comment_id = context.payload.comment.id
 
-            // Fire a FRESH `delegate` labeled event: decompose-on-issue only triggers on the
+            // Pick the harness label. Check `/delegate-pi` FIRST — `/delegate` is a
+            // substring of it, so the order is load-bearing (#1077).
+            const body = context.payload.comment.body || ''
+            const label = body.includes('/delegate-pi') ? 'delegate-pi' : 'delegate'
+
+            // Fire a FRESH labeled event: both decompose workflows only trigger on the
             // label being *added* (not merely present), so if it's already there, remove first.
             const cur = (context.payload.issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
-            if (cur.includes('delegate')) {
-              try { await github.rest.issues.removeLabel({ owner, repo, issue_number, name: 'delegate' }) } catch (e) {}
+            if (cur.includes(label)) {
+              try { await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label }) } catch (e) {}
             }
-            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: ['delegate'] })
+            await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [label] })
 
             // Acknowledge so the commenter sees it registered (handy on mobile).
             try { await github.rest.reactions.createForIssueComment({ owner, repo, comment_id, content: 'rocket' }) } catch (e) {}
+            const harness = label === 'delegate-pi' ? 'pi.dev' : 'claude'
             await github.rest.issues.createComment({ owner, repo, issue_number,
-              body: `▶️ Dispatched by comment — applied \`delegate\`, the agent pipeline is picking up #${issue_number}.` })
-            core.info(`Dispatched #${issue_number} via comment.`)
+              body: `▶️ Dispatched by comment — applied \`${label}\`, the ${harness} agent pipeline is picking up #${issue_number}.` })
+            core.info(`Dispatched #${issue_number} via comment (label: ${label}).`)

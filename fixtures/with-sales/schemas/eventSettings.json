@@ -1,0 +1,7 @@
+{
+  "id": { "type": "uuid", "meta": { "primaryKey": true } },
+  "eventId": { "type": "uuid", "refTarget": "events", "meta": { "required": true, "label": "Event" } },
+  "settingKey": { "type": "string", "meta": { "required": true, "label": "Setting Key", "maxLength": 100 } },
+  "settingValue": { "type": "text", "meta": { "label": "Setting Value" } },
+  "description": { "type": "text", "meta": { "label": "Description" } }
+}

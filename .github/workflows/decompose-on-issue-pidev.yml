@@ -67,17 +67,23 @@ on:
   # PROMOTED past dispatch-only (#1017): a human applying the `delegate-pi` label starts a pi
   # run. We fire on EVERY labeled event but the job `if` gates to the exact `delegate-pi` label,
   # so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
+  # `opened` added for the WS7 flip (#1077): when AGENT_HARNESS=pi, an issue *created with* the
+  # plain `delegate` label must land here (the claude flow handles that shape and now yields).
   issues:
-    types: [labeled]
+    types: [labeled, opened]
 
 jobs:
   decompose-pi:
-    # Fire on EITHER: a manual dispatch opting into pi, OR the `delegate-pi` label freshly applied
-    # to an issue (#1017). The specific-label check is what stops a re-fire loop when the worker
-    # adds its own labels (#535). Anything else (other labels, AGENT_HARNESS off) → no run.
+    # Fire on: a manual dispatch opting into pi, OR the `delegate-pi` label freshly applied
+    # to an issue (#1017), OR — when the WS7 flip is ON (vars.AGENT_HARNESS == 'pi', #1077) —
+    # the same plain-`delegate` shapes the claude flow handles (which then yields via its own
+    # guard). The specific-label checks are what stop a re-fire loop when the worker adds its
+    # own labels (#535). Anything else (other labels, AGENT_HARNESS off) → no run.
     if: |
       (github.event_name == 'workflow_dispatch' && (inputs.harness == 'pi' || vars.AGENT_HARNESS == 'pi')) ||
-      (github.event_name == 'issues' && github.event.label.name == 'delegate-pi')
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-pi') ||
+      (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
+      (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate'))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # No `id-token` — pi uses a provider key, not OIDC. The write scopes are for the
@@ -162,7 +168,9 @@ jobs:
           # with the issue number appended.
           PROMPT_FILE="decompose-pidev-prompt-${{ github.run_id }}.txt"
           cat > "$PROMPT_FILE" <<'PI_PROMPT'
-          You are running NON-INTERACTIVELY in CI. No human is attached and there is no terminal to read input from. NEVER pause, ask a question, or wait for confirmation, and do not invoke pi-ask-user. When a choice is ambiguous, pick the most sensible default, record the assumption in an issue or PR comment, and PROCEED. The run only succeeds if it produces a real deliverable: a PR (Closes #N), created sub-issues, or a held sign-off (status:blocked plus a review). Merely listing options or asking what to do is a FAILED run. Given that, do the following now:
+          You are running NON-INTERACTIVELY in CI. No human is attached and there is no terminal to read input from. NEVER pause, ask a question, or wait for confirmation, and do not invoke pi-ask-user. When a choice is ambiguous, pick the most sensible default, record the assumption in an issue or PR comment, and PROCEED. The run only succeeds if it produces a real deliverable: a PR (Closes #N), created sub-issues, or a held sign-off (status:blocked plus a review). Merely listing options or asking what to do is a FAILED run.
+          OPERATING CONTRACT (non-negotiable, #1022): (1) NEVER merge a pull request — not even one you opened. Open it and stop; the automerge workflow merges epic sub-PRs after CI passes. (2) Hold any sign-off as a TOP-LEVEL issue comment plus the status:blocked label — never inside a PR review body. (3) Reuse an existing epic/NNN-* branch idempotently — never create a duplicate epic branch. (4) You CANNOT modify .github/workflows/** (the App token lacks the workflows scope, by deliberate policy #1076): commit everything else, embed the needed workflow patch verbatim in the PR body under a "## Workflow patch (human applies)" heading, mention @pmcp in an issue comment, add status:blocked, and finish — that counts as a successful deliverable.
+          Given that, do the following now:
           PI_PROMPT
           printf '/task-decompose #%s\n' "$ISSUE" >> "$PROMPT_FILE"
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
@@ -245,6 +253,49 @@ jobs:
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
                   body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`delegate-pi\` label_\n\n${what}`,
+                })
+              }
+              return
+            }
+
+            // ── CHILD deliverables (#1074) ─────────────────────────────────────────────
+            // When the labeled issue is ALREADY decomposed, the correct behaviour is
+            // "resume the tree, work the remaining open leaf" — the fresh deliverable
+            // lands on a CHILD issue, invisible to the checks above (the #1050 false-fail:
+            // pi merged a real PR on child #1053 and this gate still went red). Scan the
+            // sub-issue tree for the same fresh-since-t0 signals. Only runs when the
+            // primary checks found nothing. Kept in sync with decompose-on-issue.yml.
+            let childDeliverable = ''
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+                ...context.repo, issue_number, per_page: 100,
+              })
+              for (const s of subs) {
+                if (s.state === 'closed' && s.closed_at && new Date(s.closed_at).getTime() >= sinceMs) {
+                  childDeliverable = `child #${s.number} closed this run`; break
+                }
+                const tl = await github.paginate(github.rest.issues.listEventsForTimeline, {
+                  ...context.repo, issue_number: s.number,
+                })
+                if (tl.some(e => e.event === 'cross-referenced' && e.source && e.source.issue &&
+                    e.source.issue.pull_request && new Date(e.created_at).getTime() >= sinceMs)) {
+                  childDeliverable = `PR linked to child #${s.number} this run`; break
+                }
+                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+                if (childBlocked) {
+                  const cc = await github.paginate(github.rest.issues.listComments, {
+                    ...context.repo, issue_number: s.number, since,
+                  })
+                  if (cc.length > 0) { childDeliverable = `child #${s.number} held for sign-off this run`; break }
+                }
+              }
+            } catch (e) { core.warning(`child-deliverable check skipped: ${e.message}`) }
+            if (childDeliverable) {
+              core.info(`Artifact-gate OK for #${issue_number} via child deliverable: ${childDeliverable}`)
+              if (process.env.TRIGGER === 'issues') {
+                await github.rest.issues.createComment({
+                  ...context.repo, issue_number,
+                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`delegate-pi\` label_\n\nresumed the existing tree → ${childDeliverable}`,
                 })
               }
               return

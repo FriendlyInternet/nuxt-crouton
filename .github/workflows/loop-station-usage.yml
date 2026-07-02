@@ -1,0 +1,106 @@
+name: loop-station-usage
+
+# Cross-run usage rollup (Loop Station WS-A, #1064). Weekly: download the week's
+# loop-station-trace-* artifacts (shipped by ./.github/actions/loop-station-trace
+# from every LLM workflow), aggregate them into per-skill/agent invocation counts,
+# and commit ONE record to writeups/loop-station/usage.jsonl. Deterministic, no
+# LLM. This is the usage side of the dead-weight join — the observatory panel
+# (#1065) and the advisor's dead-weight rule (#1066) read the committed record.
+#
+# Fail-loud contract (#1037): an artifact-listing failure FAILS the job (an
+# outage must not read as a quiet week); zero artifacts is NOT a failure — it
+# appends a visible meta-only record (a gap you can see). Raw traces stay
+# artifact-only; only the aggregate (names + counts) is committed (#929).
+
+on:
+  schedule:
+    - cron: '41 6 * * 1'   # Mondays 06:41 UTC — before the 07:23 advisor run
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit the new usage.jsonl line back to main
+  actions: read   # list + download trace artifacts
+
+concurrency:
+  group: loop-station-usage
+  cancel-in-progress: false # never drop a data point mid-write
+
+jobs:
+  rollup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the commit-back rebases cleanly
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # List this window's trace artifacts. `gh api` exits non-zero on API
+      # failure → the job fails loudly instead of recording a false quiet week.
+      - name: List trace artifacts (last 7 days)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CUTOFF=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+            --jq ".artifacts[] | select(.name | startswith(\"loop-station-trace-\")) | select(.expired == false) | select(.created_at >= \"${CUTOFF}\") | \"\(.id) \(.name)\"" \
+            > artifacts.txt
+          echo "$(wc -l < artifacts.txt) artifact(s) in window (cutoff ${CUTOFF})"
+
+      # Zero artifacts is fine (meta-only record downstream); download failures
+      # of individual artifacts are tolerated (an expired/corrupt one shouldn't
+      # sink the week), but we log what was dropped.
+      - name: Download traces
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p traces
+          COUNT=0; DROPPED=0
+          while read -r id name; do
+            [ -z "$id" ] && continue
+            if gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "traces/${name}.zip" \
+               && unzip -o -q "traces/${name}.zip" -d "traces/${name}"; then
+              COUNT=$((COUNT+1))
+            else
+              DROPPED=$((DROPPED+1)); echo "::warning::could not fetch artifact ${name} (${id})"
+            fi
+          done < artifacts.txt
+          echo "downloaded ${COUNT}, dropped ${DROPPED}"
+
+      - name: Aggregate into one usage record
+        run: |
+          FILES=$(find traces -name '*.jsonl' 2>/dev/null || true)
+          # shellcheck disable=SC2086 — file list is intentionally word-split
+          node .claude/skills/loop-station/aggregate-usage.mjs --window 7 $FILES > usage.record.json
+          cat usage.record.json
+
+      - name: Append to usage.jsonl (idempotent per ISO week)
+        id: append
+        run: |
+          APPENDED=$(node .claude/skills/loop-station/append-usage.mjs < usage.record.json)
+          echo "appended=${APPENDED}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit the new data point
+        if: steps.append.outputs.appended == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add writeups/loop-station/usage.jsonl
+          git commit -m "chore(loop-station): record weekly usage rollup [skip ci]"
+          # Rebase onto any concurrent main movement, then push.
+          for i in 1 2 3 4; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            echo "push attempt $i failed; retrying…"; sleep $((2 ** i))
+          done
+          exit 1
+
+      - name: Upload record artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loop-station-usage-record
+          path: usage.record.json
+          if-no-files-found: ignore
