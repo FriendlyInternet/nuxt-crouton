@@ -1,0 +1,37 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "entry": [
+    "src/index.{ts,tsx,js,jsx}",
+    "src/main.{ts,tsx,js,jsx}"
+  ],
+  "workspaces": {
+    "packages": [
+      "packages/*",
+      "apps/*",
+      "docs",
+      "pocs/*",
+      "examples/*",
+      "workers/*",
+      "fixtures/*",
+      "sandboxes/*"
+    ]
+  },
+  "ignorePatterns": [
+    "_archive/**",
+    "retired/**",
+    "**/.nuxt/**",
+    "**/.output/**",
+    "**/dist/**"
+  ],
+  "duplicates": {
+    // Hide pair-only clones; focus on widespread copy-paste
+    // worth refactoring. Lower to 2 to report every duplicate pair.
+    "minOccurrences": 3,
+    "ignore": [
+      "fixtures/**" // throwaway generated e2e apps — duplication is by design
+    ]
+  },
+  "rules": {
+    "unused-dependencies": "warn"
+  }
+}
