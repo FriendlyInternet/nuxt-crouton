@@ -155,10 +155,11 @@
     "expect": "top-level panes wiggle; sliding within the card reorders (green 'Move here'); pulling past the detach margin detaches; under the threshold it springs back; tap-outside/Esc/Done cancels",
     "hook": "",
     "howToTest": "1. long-press a merged node → its top-level panes wiggle  2. slide a pane to another slot → 'Move here', release → reordered  3. pull a pane far out (>~64px) → detaches as its own node",
-    "status": "proposed",
+    "status": "settled",
     "supersedes": "",
     "consideredRejected": [],
-    "note": "A1 contradiction (didn't work for a layout nested inside a layout) resolved by NARROWING, 2026-07-02: the POC only makes top-level panes grabbable by design ('each top-level pane', SpikeBlockNode) — the nested case was never implemented, so the entry over-claimed depth. Narrowed to the built behaviour; depth-recursive detach/reorder carried as its own Add entry (detach-reorder-nested). Awaiting sign-off on the narrowed contract."
+    "signedOff": "lgtm 999 · Maarten · 2026-07-02 · A1 narrowed-contract sign-off (via session chat, recorded on #999)",
+    "note": "A1 contradiction (didn't work for a layout nested inside a layout) resolved by NARROWING, 2026-07-02: the POC only makes top-level panes grabbable by design ('each top-level pane', SpikeBlockNode) — the nested case was never implemented, so the entry over-claimed depth. Narrowed to the built behaviour; depth-recursive detach/reorder carried as its own Add entry (detach-reorder-nested)."
   },
   {
     "id": "detach-reorder-nested",
