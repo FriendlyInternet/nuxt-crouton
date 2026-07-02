@@ -78,6 +78,14 @@
     // Internal notes/prototypes, not part of any code graph
     "writeups/**"
   ],
+  // Deps that ARE used, via mechanisms invisible to import analysis (verified #1144)
+  "ignoreDependencies": [
+    "@iconify-json/vscode-icons", // Nuxt Icon discovers icon collections by package name
+    "better-sqlite3",             // @nuxt/content local-dev driver, loaded dynamically
+    "y-protocols",                // subpath-imported at runtime; wired via vite optimizeDeps
+    "@fyit/crouton-events",       // meta-package distribution dep: makes extends resolvable
+    "@ai-sdk/ui-utils"            // imported by crouton-ai's built dist .d.ts (dist is ignored)
+  ],
   "duplicates": {
     // Hide pair-only clones; focus on widespread copy-paste
     // worth refactoring. Lower to 2 to report every duplicate pair.

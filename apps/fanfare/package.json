@@ -32,9 +32,7 @@
     "@fyit/crouton-pages": "workspace:*",
     "@fyit/crouton-printing": "workspace:*",
     "@fyit/crouton-sales": "workspace:*",
-    "@libsql/client": "catalog:",
     "drizzle-orm": "catalog:",
-    "node-thermal-printer": "^4.6.0",
     "nuxt": "catalog:",
     "vue": "catalog:",
     "vue-router": "catalog:"
