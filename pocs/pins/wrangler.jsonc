@@ -1,0 +1,46 @@
+{
+  // Cloudflare WORKERS (static assets) config for the `pins` POC.
+  //
+  // Nitro's `cloudflare_module` preset reads this file at build time and writes
+  // the deployable config to `.output/server/wrangler.json`, injecting `main`
+  // + the `assets` binding (→ ../public) automatically.
+  //
+  // Bootstrap vs committed: the FIRST deploy can use id-less D1/KV bindings —
+  // wrangler auto-provisions them. But remote `d1 migrations apply` reads THIS
+  // source file and needs the real `database_id`, so once provisioned the ids
+  // get written back here by scripts/sync-wrangler-ids.mjs.
+  "name": "pins",
+  "compatibility_date": "2024-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pins-db",
+      "migrations_dir": "server/db/migrations/sqlite"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "KV" }
+  ],
+
+  // Staging environment — its OWN isolated D1 + KV, id-less so they auto-provision
+  // on the first `wrangler deploy --env staging`. NuxtHub/Nitro strip this `env`
+  // block from the generated .output/server/wrangler.json (nitro#3429), so
+  // `pnpm cf:staging` re-injects it post-build via scripts/inject-wrangler-env.mjs.
+  "env": {
+    "staging": {
+      "routes": [{ "pattern": "pins.pmcp.dev", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "pins-preview-db",
+          "migrations_dir": "server/db/migrations/sqlite"
+        }
+      ],
+      "kv_namespaces": [
+        { "binding": "KV", "id": "fc1c9eb0ce104541854d45d2f9f4946c" }
+      ]
+    }
+  }
+}
