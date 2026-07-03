@@ -163,7 +163,7 @@ export interface ${prefixedPascalCase}FormProps {
   items: string[] // Array of IDs for delete action
   activeItem: ${prefixedPascalCase} | Record<string, never> // ${prefixedPascalCase} for update, empty object for create
   collection: string
-  loading: string
+  loading?: string // optional: the form reads useCrouton().loading; a bare layout block passes none
   action: 'create' | 'update' | 'delete'
 }`
 }
