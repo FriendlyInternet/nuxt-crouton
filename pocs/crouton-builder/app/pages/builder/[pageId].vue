@@ -23,7 +23,7 @@ import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 const route = useRoute()
 const pageId = computed(() => String(route.params.pageId))
 
-const { items: pages, pending } = await useCollectionQuery('builderPages')
+const { items: pages } = await useCollectionQuery('builderPages')
 const page = computed(() => (pages.value as BuilderPage[]).find((p) => p.id === pageId.value) ?? null)
 
 useHead({ title: () => `Builder · ${page.value?.title ?? 'Page'}` })
@@ -52,13 +52,25 @@ function starterTree(): LayoutTree {
 // "constantly reloading". `loadedFor` gates the seed to real page changes.
 const tree = ref<LayoutTree | null>(null)
 const loadedFor = ref<string | null>(null)
+// `ready` gates the loading UI ONCE — after the first seed the board stays
+// mounted for good. Never gate it on the query's `pending`: a save refetches the
+// builderPages query, `pending` flips, and gating on it would unmount the board to
+// "Loading…" and back on every save — the flicker the user sees as "constantly
+// reloading" (and the remount re-measures panes → another save → a real loop).
+const ready = ref(false)
+// Last serialised tree we loaded/saved — so we never re-save an unchanged tree
+// (a spurious pane re-measure emitting the same layout can't start a save loop).
+const lastSaved = ref<string | null>(null)
 watch(
   [page, pageId] as const,
   ([p, id]) => {
     if (!p || loadedFor.value === id) return
     const stored = (p.board as Record<string, unknown> | null)?.layout
-    tree.value = (typeof stored === 'string' ? parseLayoutTree(stored) : null) ?? starterTree()
+    const seeded = (typeof stored === 'string' ? parseLayoutTree(stored) : null) ?? starterTree()
+    tree.value = seeded
+    lastSaved.value = serializeLayoutTree(seeded)
     loadedFor.value = id
+    ready.value = true
   },
   { immediate: true },
 )
@@ -86,9 +98,12 @@ watchDebounced(
   async (next) => {
     // Guard against a stale save landing on a page we've since navigated away from.
     if (!next || loadedFor.value !== pageId.value) return
+    const serialized = serializeLayoutTree(next)
+    if (serialized === lastSaved.value) return // no real change — don't churn the API / refetch
     saveState.value = 'saving'
     try {
-      await update(pageId.value, { board: { layout: serializeLayoutTree(next) } })
+      await update(pageId.value, { board: { layout: serialized } })
+      lastSaved.value = serialized
       saveState.value = 'saved'
     } catch {
       saveState.value = 'idle'
@@ -151,7 +166,7 @@ watchDebounced(
     </header>
 
     <div class="relative min-h-0 flex-1">
-      <div v-if="pending || !tree" class="flex h-full items-center justify-center text-sm text-muted">
+      <div v-if="!ready || !tree" class="flex h-full items-center justify-center text-sm text-muted">
         Loading board…
       </div>
       <!-- The package's editable board: a palette of registered blocks + the pane
