@@ -48,6 +48,24 @@ const snapHere = computed(() => {
   const p = snapPreview?.value
   return p && p.targetNode === props.data.node ? p : null
 })
+
+// pane-drop (spec: `pane-drop-beside`) — when the preview is a pane-drop, the guide band sits on
+// one edge of the TARGETED PANE (a fraction of the card), not the card's outer edge. Positioned
+// inline from `paneDrop.rect` (0..1 fractions). The plain edge-snap case uses the `.e-*` classes.
+const paneGuideStyle = computed(() => {
+  const p = snapHere.value?.paneDrop
+  if (!p) return undefined
+  const r = p.rect
+  const pct = (v: number) => `${v * 100}%`
+  const t = `${snapHere.value!.armed ? 6 : 10}px`
+  switch (p.edge) {
+    case 'right': return { left: pct(r.left + r.width), top: pct(r.top), height: pct(r.height), width: t, transform: 'translateX(-50%)' }
+    case 'left': return { left: pct(r.left), top: pct(r.top), height: pct(r.height), width: t, transform: 'translateX(-50%)' }
+    case 'top': return { left: pct(r.left), top: pct(r.top), width: pct(r.width), height: t, transform: 'translateY(-50%)' }
+    case 'bottom': return { left: pct(r.left), top: pct(r.top + r.height), width: pct(r.width), height: t, transform: 'translateY(-50%)' }
+  }
+  return undefined
+})
 </script>
 
 <template>
@@ -82,14 +100,17 @@ const snapHere = computed(() => {
       {{ data.region }}
     </UBadge>
 
-    <!-- snap-guide hook: this card is the snap target; the bar rides the edge the dragged
-         card will click onto — soft blue, then green (armed) after the dwell. -->
+    <!-- snap-guide / ghost-pane hook: this card is the target. Edge-snap → a bar on the card's
+         outer edge (data-handoff="snap-guide"). Pane-drop → a bar on the targeted pane's edge
+         (data-handoff="ghost-pane" data-edge). Soft blue, then green (armed) after the dwell. -->
     <div
       v-if="snapHere"
-      data-handoff="snap-guide"
+      :data-handoff="snapHere.paneDrop ? 'ghost-pane' : 'snap-guide'"
       :data-armed="snapHere.armed"
+      :data-edge="snapHere.edge"
       class="builder-snap-guide"
-      :class="[snapHere.armed ? 'armed' : 'soft', `e-${snapHere.edge}`]"
+      :class="snapHere.paneDrop ? (snapHere.armed ? 'armed' : 'soft') : [snapHere.armed ? 'armed' : 'soft', `e-${snapHere.edge}`]"
+      :style="snapHere.paneDrop ? paneGuideStyle : undefined"
     />
 
     <!-- A board node is a STATIC thumbnail — a plain nested-flex render of the layout

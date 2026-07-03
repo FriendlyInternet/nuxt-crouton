@@ -27,5 +27,12 @@ export interface BuilderSnapPreview {
   targetNode: LayoutNode
   edge: PaneDropEdge
   armed: boolean
+  /**
+   * When set, this is a DROP-BESIDE-PANE (spec: `pane-drop-beside`) — the dragged card is OVER a
+   * composed target and will land beside the pane at `path` on `edge`, not merge onto the card's
+   * outer edge. `rect` is that pane's box as a 0..1 fraction of the target card, so the guide band
+   * can draw on the right edge of the specific pane.
+   */
+  paneDrop?: { path: number[], edge: PaneDropEdge, rect: { left: number, top: number, width: number, height: number } }
 }
 export const BUILDER_SNAP_KEY: InjectionKey<ShallowRef<BuilderSnapPreview | null>> = Symbol('builder-snap')

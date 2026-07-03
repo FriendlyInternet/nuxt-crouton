@@ -23,8 +23,8 @@
 import { markRaw, shallowRef, provide } from 'vue'
 import type { LayoutNode, LayoutTree, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
 import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize'
-import { dropNode } from '@fyit/crouton-layout/app/utils/layout-edit'
-import { snapEdge } from '@fyit/crouton-layout/app/utils/layout-snap'
+import { dropNode, applyPaneDrop } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { snapEdge, rectsOverlapFrac } from '@fyit/crouton-layout/app/utils/layout-snap'
 import BuilderBlockNode from '~/components/BuilderBlockNode.vue'
 import { BUILDER_SNAP_KEY, type BuilderRegion, type BuilderSnapPreview } from '~/utils/builder-keys'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
@@ -189,6 +189,7 @@ function addBlock(item: DrawerItem) {
 // node). The merge is the graduated `dropNode`; the geometry is the graduated `snapEdge`.
 const SNAP_DWELL_MS = 600
 const SNAP_OPTS = { gap: 160, align: 0.25 }
+const PANE_DROP_MIN = 0.35 // ≥35% of the dragged card over a composed target → drop-beside-pane
 const snapPreview = shallowRef<BuilderSnapPreview | null>(null)
 provide(BUILDER_SNAP_KEY, snapPreview)
 
@@ -212,24 +213,61 @@ function onNodeDrag(id: string, pos: { x: number, y: number }) {
   const moved = nodes.value.find(n => n.id === id)
   if (!moved) { resetSnap(); return }
   const drag = { x: pos.x, y: pos.y, ...sizeOf(moved.data.node) }
+  const dcx = drag.x + drag.width / 2
+  const dcy = drag.y + drag.height / 2
 
-  let best: { node: FlowNode, edge: BuilderSnapPreview['edge'], gap: number } | null = null
+  type Cand = { target: FlowNode, edge: BuilderSnapPreview['edge'], key: string, paneDrop?: BuilderSnapPreview['paneDrop'] }
+  let cand: Cand | null = null
+
+  // 1) pane-drop (spec: `pane-drop-beside`) — over a COMPOSED target by ≥35% → land beside the
+  //    pane under the cursor (flatten into the row/column, or wrap it perpendicular — applyPaneDrop).
+  let bestOverlap = 0, overTarget: FlowNode | null = null
   for (const n of nodes.value) {
-    if (n.id === id) continue
-    const r = snapEdge(drag, rectOf(n), SNAP_OPTS)
-    if (r && (!best || r.gap < best.gap)) best = { node: n, edge: r.edge, gap: r.gap }
+    if (n.id === id || n.data.node.type !== 'split') continue
+    const frac = rectsOverlapFrac(drag, { x: n.position.x, y: n.position.y, ...sizeOf(n.data.node) })
+    if (frac >= PANE_DROP_MIN && frac > bestOverlap) { bestOverlap = frac; overTarget = n }
   }
-  if (!best) { resetSnap(); return }
+  if (overTarget) {
+    const box = { left: overTarget.position.x, top: overTarget.position.y, ...sizeOf(overTarget.data.node) }
+    const leaves = collectLeaves(overTarget.data.node, box)
+    const cx = Math.max(box.left, Math.min(box.left + box.width, dcx))
+    const cy = Math.max(box.top, Math.min(box.top + box.height, dcy))
+    const hit = leaves.find(l => cx >= l.rect.left && cx <= l.rect.left + l.rect.width && cy >= l.rect.top && cy <= l.rect.top + l.rect.height) ?? leaves[0]
+    if (hit) {
+      const rx = (cx - hit.rect.left) / hit.rect.width - 0.5
+      const ry = (cy - hit.rect.top) / hit.rect.height - 0.5
+      const edge: BuilderSnapPreview['edge'] = Math.abs(rx) >= Math.abs(ry) ? (rx >= 0 ? 'right' : 'left') : (ry >= 0 ? 'bottom' : 'top')
+      const fr = { left: (hit.rect.left - box.left) / box.width, top: (hit.rect.top - box.top) / box.height, width: hit.rect.width / box.width, height: hit.rect.height / box.height }
+      cand = { target: overTarget, edge, key: `pane:${overTarget.id}:${hit.path.join('.')}`, paneDrop: { path: hit.path, edge, rect: fr } }
+    }
+  }
 
-  const key = `${best.node.id}:${best.edge}`
-  if (key === snapKey) {
-    // Same candidate — keep the armed state, just refresh the record (target ref may change).
-    snapPreview.value = { targetId: best.node.id, targetNode: best.node.data.node, edge: best.edge, armed: snapPreview.value?.armed === true }
-    return
+  // 2) else edge-snap onto a nearby card (the two-loose-cards merge).
+  if (!cand) {
+    let best: { node: FlowNode, edge: BuilderSnapPreview['edge'], gap: number } | null = null
+    for (const n of nodes.value) {
+      if (n.id === id) continue
+      const r = snapEdge(drag, rectOf(n), SNAP_OPTS)
+      if (r && (!best || r.gap < best.gap)) best = { node: n, edge: r.edge, gap: r.gap }
+    }
+    if (best) cand = { target: best.node, edge: best.edge, key: `${best.node.id}:${best.edge}` }
   }
-  snapKey = key
+
+  if (!cand) { resetSnap(); return }
+
+  // Shared dwell/arm: keyed on target+pane/edge, so a small jitter that flips the nearest edge
+  // doesn't reset the timer; a still finger still arms (the timer fires with no drag events).
+  const rec: BuilderSnapPreview = {
+    targetId: cand.target.id,
+    targetNode: cand.target.data.node,
+    edge: cand.edge,
+    armed: cand.key === snapKey ? snapPreview.value?.armed === true : false,
+    paneDrop: cand.paneDrop,
+  }
+  if (cand.key === snapKey) { snapPreview.value = rec; return }
+  snapKey = cand.key
   clearSnapTimer()
-  snapPreview.value = { targetId: best.node.id, targetNode: best.node.data.node, edge: best.edge, armed: false }
+  snapPreview.value = rec
   snapTimer = window.setTimeout(() => {
     const p = snapPreview.value
     if (p) snapPreview.value = { ...p, armed: true }
@@ -250,7 +288,10 @@ function onRowsUpdate(rowsRaw: Record<string, unknown>[]) {
     const moved = rows.find(n => n.id === movedId)
     const target = rows.find(n => n.id === armed.targetId)
     if (moved && target) {
-      const mergedNode = dropNode(target.data.node, [], moved.data.node, armed.edge)
+      // Over a composed target → drop beside the targeted pane; else merge onto the outer edge.
+      const mergedNode = armed.paneDrop
+        ? applyPaneDrop(target.data.node, { path: armed.paneDrop.path, edge: armed.paneDrop.edge }, moved.data.node)
+        : dropNode(target.data.node, [], moved.data.node, armed.edge)
       const merged: FlowNode = {
         ...target,
         data: { ...target.data, node: mergedNode, isPage: target.data.isPage || moved.data.isPage, justAdded: false },

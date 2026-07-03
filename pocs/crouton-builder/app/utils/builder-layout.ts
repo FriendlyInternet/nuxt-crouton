@@ -38,6 +38,39 @@ export function sizeOf(node: LayoutNode): { width: number, height: number } {
   return { width: f.cols * BUILDER_BASE_W, height: f.rows * BUILDER_BASE_H }
 }
 
+/** A pane (leaf) of a composed node + the box it occupies. Box units match the `rect` passed in
+ *  (flow px when seeded with the card's flow rect; 0..1 fractions when seeded with the unit rect). */
+export interface BuilderPaneRect { path: number[], rect: { left: number, top: number, width: number, height: number } }
+
+/**
+ * Walk a composed node into its top-level panes' sub-rects — mirroring exactly how
+ * `BuilderNodePreview` divides space (by each child's `defaultSize`, else an equal share). Used by
+ * pane-drop (spec: `pane-drop-beside`) to find WHICH pane a dragged card is over and place it beside
+ * that pane. A `nested` node is treated as one opaque pane (its inner layout edits in its own space).
+ */
+export function collectLeaves(
+  node: LayoutNode,
+  rect: { left: number, top: number, width: number, height: number } = { left: 0, top: 0, width: 1, height: 1 },
+  path: number[] = [],
+  out: BuilderPaneRect[] = [],
+): BuilderPaneRect[] {
+  if (node.type === 'leaf' || node.type === 'nested') { out.push({ path, rect }); return out }
+  const kids = node.children
+  const sizes = kids.map(c => (c.defaultSize && c.defaultSize > 0 ? c.defaultSize : 0))
+  const total = sizes.reduce((s, v) => s + v, 0)
+  const equal = 1 / kids.length
+  let acc = 0
+  kids.forEach((c, i) => {
+    const frac = total > 0 && sizes[i]! > 0 ? sizes[i]! / total : equal
+    const sub = node.direction === 'horizontal'
+      ? { left: rect.left + acc * rect.width, top: rect.top, width: frac * rect.width, height: rect.height }
+      : { left: rect.left, top: rect.top + acc * rect.height, width: rect.width, height: frac * rect.height }
+    collectLeaves(c, sub, [...path, i], out)
+    acc += frac
+  })
+  return out
+}
+
 /**
  * Block sizing descriptor — "the component decides its own size" as DECLARED DATA. Each block
  * declares how it fills a pane per axis: `fill` stretches to the pane, `hug` sizes to its own
