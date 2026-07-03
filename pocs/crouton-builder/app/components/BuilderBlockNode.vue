@@ -14,9 +14,9 @@
  *
  * `footprint` / `sizeOf` / `BUILDER_BASE_*` are auto-imported from app/utils/builder-layout.
  */
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import type { LayoutNode, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
-import type { BuilderRegion } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, type BuilderRegion } from '~/utils/builder-keys'
 
 const props = defineProps<{
   data: {
@@ -38,6 +38,15 @@ const props = defineProps<{
 const size = computed(() => {
   const f = footprint(props.data.node)
   return { width: `${f.cols * BUILDER_BASE_W}px`, height: `${f.rows * BUILDER_BASE_H}px` }
+})
+
+// snap-dwell (spec: `snap-dwell-arm`) — the board provides a live snap preview; this card is
+// the target when the preview points at ITS node (matched by object identity — Vue Flow doesn't
+// forward the node id). Light the edge it will snap to: soft blue, then green once armed.
+const snapPreview = inject(BUILDER_SNAP_KEY, null)
+const snapHere = computed(() => {
+  const p = snapPreview?.value
+  return p && p.targetNode === props.data.node ? p : null
 })
 </script>
 
@@ -73,6 +82,16 @@ const size = computed(() => {
       {{ data.region }}
     </UBadge>
 
+    <!-- snap-guide hook: this card is the snap target; the bar rides the edge the dragged
+         card will click onto — soft blue, then green (armed) after the dwell. -->
+    <div
+      v-if="snapHere"
+      data-handoff="snap-guide"
+      :data-armed="snapHere.armed"
+      class="builder-snap-guide"
+      :class="[snapHere.armed ? 'armed' : 'soft', `e-${snapHere.edge}`]"
+    />
+
     <!-- A board node is a STATIC thumbnail — a plain nested-flex render of the layout
          tree (no reka Splitter, no ResizeObserver). The live CroutonLayoutRenderer loops
          and OOM-crashes mobile Safari inside a transform-scaled Vue Flow node; see
@@ -95,4 +114,24 @@ const size = computed(() => {
 .builder-drag-glow {
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.55), 0 0 18px 4px rgba(16, 185, 129, 0.35);
 }
+/* snap-guide (spec: snap-dwell-arm) — the edge bar on the snap target. soft = blue/pulse
+   (approached), armed = green/glow (held past the dwell → release will snap). */
+.builder-snap-guide {
+  position: absolute;
+  z-index: 40;
+  border-radius: 9999px;
+  pointer-events: none;
+  transition: all 0.15s ease;
+}
+.builder-snap-guide.soft { background: rgba(56, 189, 248, 0.85); animation: builder-snap-pulse 1s ease-in-out infinite; }
+.builder-snap-guide.armed { background: rgb(16, 185, 129); box-shadow: 0 0 12px 2px rgba(16, 185, 129, 0.7); }
+.builder-snap-guide.e-right { top: 6px; bottom: 6px; right: -5px; }
+.builder-snap-guide.e-left { top: 6px; bottom: 6px; left: -5px; }
+.builder-snap-guide.e-top { left: 6px; right: 6px; top: -5px; }
+.builder-snap-guide.e-bottom { left: 6px; right: 6px; bottom: -5px; }
+.builder-snap-guide.soft.e-right, .builder-snap-guide.soft.e-left { width: 10px; }
+.builder-snap-guide.armed.e-right, .builder-snap-guide.armed.e-left { width: 6px; }
+.builder-snap-guide.soft.e-top, .builder-snap-guide.soft.e-bottom { height: 10px; }
+.builder-snap-guide.armed.e-top, .builder-snap-guide.armed.e-bottom { height: 6px; }
+@keyframes builder-snap-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 </style>

@@ -20,11 +20,13 @@
  *
  * Hooks: `page-badge` + `region-pill` (on the node), `floor-readout` (header).
  */
-import { markRaw } from 'vue'
+import { markRaw, shallowRef, provide } from 'vue'
 import type { LayoutNode, LayoutTree, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
 import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize'
+import { dropNode } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { snapEdge } from '@fyit/crouton-layout/app/utils/layout-snap'
 import BuilderBlockNode from '~/components/BuilderBlockNode.vue'
-import type { BuilderRegion } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, type BuilderRegion, type BuilderSnapPreview } from '~/utils/builder-keys'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 const blockNode = markRaw(BuilderBlockNode)
@@ -180,9 +182,85 @@ function addBlock(item: DrawerItem) {
   toast.add({ title: `Added ${item.label}`, icon: 'i-lucide-plus', duration: 1100 })
 }
 
-// Vue Flow re-emits moved rows on drag stop — accept the reposition (slice 1: no snap-merge yet).
+// ── snap-dwell + merge (spec: `snap-dwell-arm`) ─────────────────────────────────
+// Drag a card near another's edge → soft guide; hold ~600ms → armed (green); release while
+// armed → the two merge into a split. The board owns the live preview + the dwell timer; the
+// target card lights its edge (BuilderBlockNode reads `snapPreview` by object identity of its
+// node). The merge is the graduated `dropNode`; the geometry is the graduated `snapEdge`.
+const SNAP_DWELL_MS = 600
+const SNAP_OPTS = { gap: 160, align: 0.25 }
+const snapPreview = shallowRef<BuilderSnapPreview | null>(null)
+provide(BUILDER_SNAP_KEY, snapPreview)
+
+let snapKey: string | null = null
+let snapTimer: number | null = null
+let draggedId: string | null = null
+
+function clearSnapTimer() { if (snapTimer != null) { window.clearTimeout(snapTimer); snapTimer = null } }
+function resetSnap() { clearSnapTimer(); snapKey = null; snapPreview.value = null }
+
+function rectOf(n: FlowNode) {
+  const s = sizeOf(n.data.node)
+  return { x: n.position.x, y: n.position.y, width: s.width, height: s.height }
+}
+
+// Live drag (CroutonFlow @node-drag, throttled ~50ms): find the nearest snap edge and (re)arm
+// the dwell. The arm timer is keyed on target+edge, so brushing between edges doesn't reset it,
+// and a still finger still arms (the timer fires even when no drag events do).
+function onNodeDrag(id: string, pos: { x: number, y: number }) {
+  draggedId = id
+  const moved = nodes.value.find(n => n.id === id)
+  if (!moved) { resetSnap(); return }
+  const drag = { x: pos.x, y: pos.y, ...sizeOf(moved.data.node) }
+
+  let best: { node: FlowNode, edge: BuilderSnapPreview['edge'], gap: number } | null = null
+  for (const n of nodes.value) {
+    if (n.id === id) continue
+    const r = snapEdge(drag, rectOf(n), SNAP_OPTS)
+    if (r && (!best || r.gap < best.gap)) best = { node: n, edge: r.edge, gap: r.gap }
+  }
+  if (!best) { resetSnap(); return }
+
+  const key = `${best.node.id}:${best.edge}`
+  if (key === snapKey) {
+    // Same candidate — keep the armed state, just refresh the record (target ref may change).
+    snapPreview.value = { targetId: best.node.id, targetNode: best.node.data.node, edge: best.edge, armed: snapPreview.value?.armed === true }
+    return
+  }
+  snapKey = key
+  clearSnapTimer()
+  snapPreview.value = { targetId: best.node.id, targetNode: best.node.data.node, edge: best.edge, armed: false }
+  snapTimer = window.setTimeout(() => {
+    const p = snapPreview.value
+    if (p) snapPreview.value = { ...p, armed: true }
+  }, SNAP_DWELL_MS)
+}
+
+// Drag stop — CroutonFlow re-emits the rows with new positions. If a snap was ARMED, merge the
+// dragged card onto the target's edge (dropNode → a split, the badge-carrying page consumes);
+// else just accept the reposition.
 function onRowsUpdate(rowsRaw: Record<string, unknown>[]) {
-  nodes.value = rowsRaw as unknown as FlowNode[]
+  const rows = rowsRaw as unknown as FlowNode[]
+  const armed = snapPreview.value?.armed ? snapPreview.value : null
+  const movedId = draggedId
+  resetSnap()
+  draggedId = null
+
+  if (armed && movedId && movedId !== armed.targetId) {
+    const moved = rows.find(n => n.id === movedId)
+    const target = rows.find(n => n.id === armed.targetId)
+    if (moved && target) {
+      const mergedNode = dropNode(target.data.node, [], moved.data.node, armed.edge)
+      const merged: FlowNode = {
+        ...target,
+        data: { ...target.data, node: mergedNode, isPage: target.data.isPage || moved.data.isPage, justAdded: false },
+      }
+      nodes.value = rows.filter(n => n.id !== movedId && n.id !== armed.targetId).concat(merged)
+      dirty.value = true
+      return
+    }
+  }
+  nodes.value = rows
   dirty.value = true
 }
 
@@ -286,6 +364,7 @@ async function saveBoard() {
           allow-drop
           :minimap="false"
           @node-drop="onNodeDrop"
+          @node-drag="onNodeDrag"
           @update:rows="onRowsUpdate"
           @node-dbl-click="onNodeDblClick"
         />
