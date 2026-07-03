@@ -3,6 +3,7 @@
   "key": null,
   "rows": [
     {
+      "artist": "Sample name 1",
       "venue": "Sample venue 1",
       "date": 1783023697,
       "fee": 1,
@@ -12,6 +13,7 @@
       }
     },
     {
+      "artist": "Sample name 2",
       "venue": "Sample venue 2",
       "date": 1782937297,
       "fee": 2,
@@ -21,6 +23,7 @@
       }
     },
     {
+      "artist": "Sample name 3",
       "venue": "Sample venue 3",
       "date": 1782850897,
       "fee": 3,

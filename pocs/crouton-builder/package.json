@@ -11,7 +11,7 @@
     "test": "vitest run",
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "cf:deploy": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler --cwd .output deploy && node scripts/sync-wrangler-ids.mjs && npx wrangler d1 migrations apply crouton-builder-db --remote",
-    "cf:staging": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && npx wrangler d1 migrations apply crouton-builder-staging-db --env staging --remote",
+    "cf:staging": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && npx wrangler d1 migrations apply crouton-builder-staging-db --env staging --remote && pnpm db:seed:staging",
     "sync:ids": "node scripts/sync-wrangler-ids.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npx wrangler d1 migrations apply crouton-builder-db --local",
