@@ -57,6 +57,16 @@ The contract (`SeedProvider`, `SeedContext`, `createPageWithBlocks`) lives in
 Wire it into an app with `db:seed:local` / `db:seed:remote` scripts (see
 `apps/fanfare/package.json`).
 
+**Scoped to the tables the app actually has (#1165):** provider discovery is by
+*dependency*, but a table only exists if the app *extended* that package's layer +
+migrated it. A "bundle" dep (`@fyit/crouton` pulling in bookings/pages/sales) makes
+those two sets diverge, so a **minimal** app would emit `INSERT INTO bookings_locations …`
+for a table it never created → the whole seed errors. Before executing, the runner
+queries `sqlite_master` for the real tables and **drops `INSERT`s for tables that
+don't exist** (logging `Skipped N row(s) for … not in <db>`). The probe is
+best-effort — if it can't read the table list it seeds unfiltered, so it never makes
+a working seed worse. Pure filter (`filterSqlToExistingTables`) is unit-tested.
+
 **Plus app-local collection fixtures (#298):** after the package providers, the
 runner also loads every generated collection's `layers/*/collections/*/seed.json`
 — a small, **editable** fixture of auto-derived sample rows the generator emits

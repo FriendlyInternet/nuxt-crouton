@@ -242,6 +242,76 @@ function collectDefaultLayoutSql(appDir: string, core: any, teamId: string): str
 }
 
 /**
+ * Drop `INSERT` statements whose target table doesn't exist in this app's DB.
+ *
+ * Provider discovery walks the DEPENDENCY graph (any installed `@fyit/crouton-*`
+ * seed provider), but a table only exists if the app actually EXTENDED that
+ * package's layer + migrated it. A "bundle" dep (`@fyit/crouton` pulling in
+ * bookings/pages/sales) makes those two sets diverge, so a minimal app would
+ * emit `INSERT INTO bookings_locations …` for a table it never created → the
+ * whole seed errors. This scopes the generated SQL to the tables that are
+ * actually present (queried from `sqlite_master`), keeping the rest.
+ *
+ * Pure + line-oriented: the assembled SQL is one `;`-terminated statement per
+ * line (as emitted by `buildUpsert`), so we filter by line. Non-INSERT lines
+ * are always kept. Unit-tested. (#1165)
+ */
+export function filterSqlToExistingTables(
+  sql: string,
+  existingTables: Iterable<string>
+): { sql: string, skipped: Map<string, number> } {
+  const present = new Set([...existingTables].map(t => t.toLowerCase()))
+  const skipped = new Map<string, number>()
+  const kept: string[] = []
+  for (const line of sql.split('\n')) {
+    const m = line.match(/^\s*INSERT\s+INTO\s+"?([A-Za-z0-9_]+)"?/i)
+    if (m && !present.has(m[1]!.toLowerCase())) {
+      skipped.set(m[1]!, (skipped.get(m[1]!) ?? 0) + 1)
+      continue
+    }
+    kept.push(line)
+  }
+  return { sql: kept.join('\n'), skipped }
+}
+
+/**
+ * The tables that actually exist in the app's D1, via
+ * `wrangler d1 execute … "SELECT name FROM sqlite_master WHERE type='table'"`.
+ * Returns null (→ caller skips filtering, runs unfiltered) when the probe can't
+ * run, so this safety net never makes a working seed worse. A plain SELECT needs
+ * only the D1-query permission the deploy token already has.
+ */
+function getExistingTables(db: string, remote: boolean): string[] | null {
+  try {
+    const out = execFileSync(
+      'npx',
+      [
+        'wrangler', 'd1', 'execute', db,
+        remote ? '--remote' : '--local',
+        '--command=SELECT name FROM sqlite_master WHERE type=\'table\'',
+        '--json', '--yes'
+      ],
+      { encoding: 'utf8', env: process.env, stdio: ['ignore', 'pipe', 'pipe'] }
+    )
+    // wrangler --json prints a JSON array to stdout; be tolerant of any preamble.
+    const start = out.indexOf('[')
+    const end = out.lastIndexOf(']')
+    if (start < 0 || end < start) return null
+    const json = JSON.parse(out.slice(start, end + 1))
+    const names: string[] = []
+    for (const block of (Array.isArray(json) ? json : [json])) {
+      for (const row of (block?.results ?? [])) {
+        if (row?.name) names.push(String(row.name))
+      }
+    }
+    return names
+  } catch (e: any) {
+    consola.warn(`Could not read existing tables from ${db} (${e?.message || e}) — seeding unfiltered.`)
+    return null
+  }
+}
+
+/**
  * Run the seed: discover → order → collect SQL → execute via wrangler.
  * Returns the generated SQL (handy for tests / dry runs).
  */
@@ -295,6 +365,25 @@ export async function seedApp(options: SeedAppOptions): Promise<string> {
     return sql
   }
 
+  // Scope to the tables this app actually migrated (#1165): provider discovery is
+  // by dependency, but a "bundle" dep can pull in packages whose tables the app
+  // never created. Drop their INSERTs so the seed doesn't error on a missing table.
+  let execSql = sql
+  const existing = getExistingTables(options.db, options.remote ?? false)
+  if (existing && existing.length) {
+    const { sql: filtered, skipped } = filterSqlToExistingTables(sql, existing)
+    if (skipped.size > 0) {
+      const total = [...skipped.values()].reduce((a, b) => a + b, 0)
+      const detail = [...skipped.entries()].map(([t, n]) => `${t} (${n})`).join(', ')
+      consola.info(`Skipped ${total} row(s) for ${skipped.size} table(s) not in ${options.db}: ${detail}`)
+    }
+    execSql = filtered
+  }
+  if (!execSql.trim()) {
+    consola.warn('Nothing to seed after scoping to existing tables.')
+    return sql
+  }
+
   // Pass the SQL via --command (the D1 query API), NOT --file. `--file` against
   // a remote D1 uses the bulk *import* API, which does a user-details lookup
   // that a Pages/D1-query-scoped CLOUDFLARE_API_TOKEN can't perform (fails with
@@ -310,7 +399,7 @@ export async function seedApp(options: SeedAppOptions): Promise<string> {
     'execute',
     options.db,
     options.remote ? '--remote' : '--local',
-    `--command=${sql}`,
+    `--command=${execSql}`,
     '--yes'
   ]
 
