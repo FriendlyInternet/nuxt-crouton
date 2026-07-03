@@ -80,7 +80,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           show_full_output: true
-          claude_args: "--max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **${{ matrix.gate }} subagent** defined in
             `.claude/agents/${{ matrix.gate }}.md`.

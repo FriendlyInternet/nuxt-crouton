@@ -47,7 +47,7 @@ jobs:
             The owner has replied to a blocking question — read the full issue comment
             thread (the latest comment is their answer), incorporate it, remove the
             `status:blocked` label, then continue via /task-decompose #${{ github.event.issue.number }}.
-          claude_args: "--max-turns 30"
+          claude_args: "--model claude-sonnet-5 --max-turns 30"
           show_full_output: true
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).

@@ -61,7 +61,7 @@ jobs:
           # create/update issues via tool calls directly; headless CI denies un-allowlisted
           # tools, so without the grant the agent can't file the issue — the sweep-shaped
           # form, same as a11y-daily.yml / red-team-daily.yml.
-          claude_args: "--max-turns 12 --permission-mode bypassPermissions"
+          claude_args: "--model claude-sonnet-5 --max-turns 12 --permission-mode bypassPermissions"
           prompt: |
             You are the **Loop Station advisor** (#933). Read `advisor-findings.json` in
             the repo root — it lists DETERMINISTIC findings about the harness's own

@@ -25,5 +25,5 @@
     { "flow": "prototype-example", "model": "claude-opus-4-8", "why": "exploratory prototype flow — quality over cost (replace with your real flow)" }
   ],
 
-  "_known_gaps": "The top-level workflow loop (claude.yml, decompose-on-issue.yml, fix-ci, the daily sweeps) runs on the claude-code-action DEFAULT model — UNPINNED. Pinning those is a follow-up; once pinned they become routes above."
+  "_known_gaps": "The top-level workflow loop (claude.yml, decompose-on-issue.yml, resume-on-comment, fix-ci-on-failure, a11y[-daily], frontend-review, red-team[-daily], gate-smoke, loop-station-advisor) is now PINNED to claude-sonnet-5 via `--model` in each step's claude_args (#1158, closing the earlier UNPINNED gap that let the action default to the older claude-sonnet-4-6). `--model` sets only the MAIN loop; Task-spawned sub-agents still resolve their own frontmatter model (task-worker = opus). OPEN: whether a sub-agent's `model: sonnet` frontmatter alias also resolves to sonnet-4-6 in the pinned action SHA — verify against a post-merge run's modelUsage and, if so, pin the full id in frontmatter too."
 }

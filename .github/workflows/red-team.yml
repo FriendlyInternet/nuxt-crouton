@@ -64,7 +64,7 @@ jobs:
           # --allowedTools REQUIRED (#834): the prompt has the top-level agent *act as* the
           # subagent and call Bash/Write directly; headless CI denies un-allowlisted tools, so
           # without this the agent can't write red-team-verdict.json / post the comment → fails OPEN.
-          claude_args: "--max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **red-team subagent** defined in `.claude/agents/red-team.md`.
             Input: { scope: "diff", depth: "quick" }.
