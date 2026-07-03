@@ -51,6 +51,6 @@ export interface BuilderArtistFormProps {
   items: string[] // Array of IDs for delete action
   activeItem: BuilderArtist | Record<string, never> // BuilderArtist for update, empty object for create
   collection: string
-  loading: string
+  loading?: string // optional: the form reads useCrouton().loading; rendered as a bare layout block it isn't passed
   action: 'create' | 'update' | 'delete'
 }

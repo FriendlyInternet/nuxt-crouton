@@ -55,6 +55,6 @@ export interface BuilderPageFormProps {
   items: string[] // Array of IDs for delete action
   activeItem: BuilderPage | Record<string, never> // BuilderPage for update, empty object for create
   collection: string
-  loading: string
+  loading?: string // optional: the form reads useCrouton().loading; rendered as a bare layout block it isn't passed
   action: 'create' | 'update' | 'delete'
 }
