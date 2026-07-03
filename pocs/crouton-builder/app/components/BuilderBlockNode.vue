@@ -4,8 +4,8 @@
  *
  * A freshly-added block is a single leaf; a composed page is a split of blocks. The card
  * sizes itself to the node's FOOTPRINT (a 2-high stack is twice as tall) and renders the
- * node's layout through the package's `CroutonLayoutRenderer`, so the board shows the real
- * arrangement over the real collections — WYSIWYG.
+ * node's layout through the static `BuilderNodePreview` (nested flex, no live layout engine),
+ * so the board shows the real arrangement over the real collections — WYSIWYG, but a thumbnail.
  *
  * Slice 1 (canvas skeleton): read-only card + `page-badge` / `region-pill` hooks + the
  * `drag-glow` while dragging or just-added. The heavy in-card gestures (snap guide, pull-to-
@@ -73,7 +73,11 @@ const size = computed(() => {
       {{ data.region }}
     </UBadge>
 
-    <CroutonLayoutRenderer :node="data.node" />
+    <!-- A board node is a STATIC thumbnail — a plain nested-flex render of the layout
+         tree (no reka Splitter, no ResizeObserver). The live CroutonLayoutRenderer loops
+         and OOM-crashes mobile Safari inside a transform-scaled Vue Flow node; see
+         BuilderNodePreview's header note. Editing panes happens in the focus-edit view. -->
+    <BuilderNodePreview :node="data.node" />
   </div>
 </template>
 
