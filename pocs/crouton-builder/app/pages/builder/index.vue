@@ -12,7 +12,9 @@
  */
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
-definePageMeta({ title: 'Builder · Site' })
+// Require auth: a logged-out visitor should land on login, not a builder shell whose
+// team-gated controls sit forever in "Preparing…" (there's no session → no team).
+definePageMeta({ title: 'Builder · Site', middleware: ['auth'] })
 useHead({ title: 'Builder · Site' })
 
 const { items: pages, pending, refresh } = await useCollectionQuery('builderPages')

@@ -29,6 +29,9 @@ import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 const blockNode = markRaw(BuilderBlockNode)
 
+// Require auth — same reason as the site page: no session → no team → a stuck board.
+definePageMeta({ middleware: ['auth'] })
+
 const route = useRoute()
 const pageId = computed(() => String(route.params.pageId))
 
