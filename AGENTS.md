@@ -126,6 +126,15 @@ introduced** (`git log -S`/`-G`, `blame`, `bisect`) — or rule it a non-code ca
 env, data) — and **record that** on the issue *before* fixing. A symptom-first fix can "repair" code
 that was never broken.
 
+**Reproduce against the running system — don't push a runtime fix blind.** For a *runtime* bug (a
+reload loop, a 500, a broken interaction), boot the thing locally and reproduce it — then verify the
+fix locally — *before* shipping. "I can't test this here" is a **hypothesis to probe**, not a fact:
+a claimed limitation (no browser, no local run, no CLI) is almost always narrower than it sounds. The
+anti-pattern is pushing an unverified guess and waiting on a slow deploy to learn it was wrong —
+every blind push burns a deploy cycle and erodes trust; one local reproduction usually finds it in
+minutes. Instrument, then observe — the mechanism, not a theory. (Stack-specific how-to lives in the
+stack adapter's run-and-operate runbook.)
+
 ## Observe the harness
 
 Treat the harness as a system worth measuring: its always-on context budget (size, redundancy, split

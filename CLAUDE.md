@@ -431,38 +431,14 @@ rule:** a prior session's (or a task brief's) claimed limitation is a
 same applies to any "X isn't available here" (TodoWrite, a CLI, a binary): probe,
 don't trust a stale assertion.
 
-### Run the app LOCALLY to reproduce + verify — never push a runtime fix blind (HARD RULE)
-
-**The sandbox CAN run a crouton app/POC** — `pnpm dev` boots it on `localhost:3000`
-with a local SQLite (`hub: { db: 'sqlite' }`), and the pre-installed chromium drives
-it. You **cannot** reach the *deployed* `*.pmcp.dev` (egress-blocked) or run a
-Cloudflare deploy — but that is **not** the same as "can't test." For a **runtime
-bug** (reload loop, 500, broken interaction), reproduce it locally and confirm the
-fix locally *before* pushing. Pushing an unverified guess and waiting ~15 min for a
-deploy to "see if it worked" is the anti-pattern — it wastes a full deploy cycle per
-guess and erodes trust. (Lesson from the #988 board reload: three blind pushes vs one
-local repro that found it in minutes — the fix was autosave→refetch→reload.)
-
-The recipe (a bespoke driver per bug is fine — `repro.local.mjs` at the repo root is
-the throwaway harness; don't commit it):
-
-```bash
-# 1) boot (background); wait for the port
-(BETTER_AUTH_URL=http://localhost:3000 nohup pnpm --dir pocs/<app> dev > /tmp/dev.log 2>&1 &)
-until curl -sfo /dev/null http://localhost:3000/; do sleep 3; done
-# 2) drive with the installed chromium (playwright resolves from repo node_modules,
-#    so the driver script must live INSIDE the repo tree, not /tmp)
-node ./repro.local.mjs   # imports 'playwright', executablePath=/opt/pw-browsers/chromium-*/chrome-linux/chrome
-```
-
-Auth/team bootstrap for a team-scoped page (better-auth needs an **`origin` header**
-on org calls, else `MISSING_OR_NULL_ORIGIN`):
-`POST /api/auth/sign-up/email` → `POST /api/auth/organization/create` (headers
-`{ origin, referer }`) → `POST /api/auth/organization/set-active` → create rows via
-the collection API `POST /api/teams/<orgId>/<collection>` → `page.goto('/…')`. Attach
-`page.on('console'|'load'|'framenavigated'|'pageerror'|'requestfailed')` to *see* the
-mechanism (a full-page reload in Nuxt is often chunk-error auto-reload; count `load`
-events to tell a reload from a re-render). **Instrument, then observe — don't theorise.**
+**The sandbox CAN run a crouton app** (`pnpm dev` + this chromium) — "can't reach
+`*.pmcp.dev` / can't CF-deploy" is **not** "can't test." For a **runtime** bug
+(reload loop, 500, broken interaction) reproduce + verify it locally *before*
+pushing — never push an unverified guess and wait ~15 min for a deploy to see if it
+worked (the #988 board-reload lesson: three blind pushes vs one local repro). The
+method rule lives in `AGENTS.md` (*Bug work → reproduce against the running system*);
+the concrete boot + browser-drive + auth/team bootstrap recipe is the
+**`crouton-run-and-operate`** skill (§ *Reproduce a runtime bug locally*).
 
 ## UI Sign-Off (deploy a live preview before you build) — epic #307
 
