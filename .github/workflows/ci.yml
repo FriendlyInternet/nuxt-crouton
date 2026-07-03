@@ -299,3 +299,33 @@ jobs:
 
       - name: Check TypeScript types (attw)
         run: pnpm check:attw
+
+  fallow-audit:
+    # Rung 1 of the check ladder (#632): the codebase-intelligence gate (#1145).
+    # `fallow audit` is diff-scoped — it judges only the changed code
+    # (pass/warn/fail) and excludes inherited findings by default, so the
+    # existing baseline never walls a PR red; it stops NEW dead code,
+    # duplication, and dependency drift at the door. Signal quality was
+    # proven by the #1143 triage (712 → 7 unused-file false positives).
+    name: Fallow Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: audit diffs against the merge-base with main
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run fallow audit (diff-scoped)
+        run: npx fallow audit

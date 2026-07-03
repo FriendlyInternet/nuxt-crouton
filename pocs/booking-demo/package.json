@@ -23,7 +23,6 @@
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-layout": "workspace:*",
-    "@libsql/client": "^0.17.0",
     "drizzle-orm": "^0.45.1",
     "nuxt": "^4.2.2",
     "vue": "^3.5.26",
@@ -32,7 +31,6 @@
   "devDependencies": {
     "@fyit/crouton-cli": "workspace:*",
     "@fyit/crouton-devtools": "workspace:*",
-    "@fyit/crouton-feedback": "workspace:*",
     "drizzle-kit": "^0.31.0",
     "wrangler": "^4.64.0"
   }

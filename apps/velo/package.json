@@ -31,7 +31,6 @@
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-layout": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",
-    "@libsql/client": "catalog:",
     "drizzle-orm": "catalog:",
     "nuxt": "catalog:",
     "vue": "catalog:",
