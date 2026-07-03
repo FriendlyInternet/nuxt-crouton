@@ -14,6 +14,15 @@ export const BUILDER_GHOST_LABEL_KEY: InjectionKey<Ref<string | null> | null> = 
 export type BuilderRegion = 'top' | 'bottom'
 
 /**
+ * Pin a node to a page region (spec: `page-regions-pin`) — the bounded-vocabulary expressiveness
+ * feature. A node can be pinned to the page's top or bottom edge (a sticky bar) from its toolbar;
+ * `null` clears it back to the main flow. A bounded ENUM an agent could equally pick, kept on the
+ * FlowNode data. The board provides this; BuilderBlockNode calls it (node by object identity of its
+ * `data.node`, like the snap callbacks — Vue Flow doesn't forward the node id).
+ */
+export const BUILDER_SET_REGION_KEY: InjectionKey<(node: LayoutNode, region: BuilderRegion | null) => void> = Symbol('builder-set-region')
+
+/**
  * Live snap preview (spec: `snap-dwell-arm`) — set continuously by the board WHILE a card is
  * dragged. It names the TARGET node the dragged card will click onto and the edge it snaps to,
  * so that target's card can light that edge up. `armed` is the two-stage dwell: `false` = soft

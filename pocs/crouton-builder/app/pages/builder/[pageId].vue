@@ -26,7 +26,7 @@ import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/u
 import { dropNode, applyPaneDrop } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { snapEdge, rectsOverlapFrac } from '@fyit/crouton-layout/app/utils/layout-snap'
 import BuilderBlockNode from '~/components/BuilderBlockNode.vue'
-import { BUILDER_SNAP_KEY, type BuilderRegion, type BuilderSnapPreview } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, type BuilderRegion, type BuilderSnapPreview } from '~/utils/builder-keys'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 const blockNode = markRaw(BuilderBlockNode)
@@ -192,6 +192,15 @@ const SNAP_OPTS = { gap: 160, align: 0.25 }
 const PANE_DROP_MIN = 0.35 // ≥35% of the dragged card over a composed target → drop-beside-pane
 const snapPreview = shallowRef<BuilderSnapPreview | null>(null)
 provide(BUILDER_SNAP_KEY, snapPreview)
+
+// page-regions-pin (spec: `page-regions-pin`) — pin/unpin a node to the page's top/bottom edge.
+// Bounded enum on the FlowNode data; the assembled sticky-bar page render is the app's real page
+// route (a follow-up) — the board carries the pin state + the region-pill hook.
+function setRegion(node: LayoutNode, region: BuilderRegion | null) {
+  nodes.value = nodes.value.map(n => (n.data.node === node ? { ...n, data: { ...n.data, region: region ?? undefined } } : n))
+  dirty.value = true
+}
+provide(BUILDER_SET_REGION_KEY, setRegion)
 
 let snapKey: string | null = null
 let snapTimer: number | null = null

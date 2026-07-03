@@ -16,7 +16,7 @@
  */
 import { computed, inject } from 'vue'
 import type { LayoutNode, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
-import { BUILDER_SNAP_KEY, type BuilderRegion } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, type BuilderRegion } from '~/utils/builder-keys'
 
 const props = defineProps<{
   data: {
@@ -52,6 +52,9 @@ const snapHere = computed(() => {
 // pane-drop (spec: `pane-drop-beside`) — when the preview is a pane-drop, the guide band sits on
 // one edge of the TARGETED PANE (a fraction of the card), not the card's outer edge. Positioned
 // inline from `paneDrop.rect` (0..1 fractions). The plain edge-snap case uses the `.e-*` classes.
+// page-regions-pin — pin this node to the page's top/bottom edge from its toolbar (shown on select).
+const setRegion = inject(BUILDER_SET_REGION_KEY, null)
+
 const paneGuideStyle = computed(() => {
   const p = snapHere.value?.paneDrop
   if (!p) return undefined
@@ -99,6 +102,28 @@ const paneGuideStyle = computed(() => {
     >
       {{ data.region }}
     </UBadge>
+
+    <!-- region toolbar (spec: page-regions-pin) — pin to the page's top/bottom edge; on select. -->
+    <div v-if="selected" class="nodrag absolute right-2 top-9 z-30 flex gap-1">
+      <UButton
+        size="xs"
+        icon="i-lucide-panel-top"
+        :color="data.region === 'top' ? 'primary' : 'neutral'"
+        :variant="data.region === 'top' ? 'solid' : 'subtle'"
+        data-handoff="pin-top"
+        aria-label="Pin to top"
+        @click.stop="setRegion?.(data.node, data.region === 'top' ? null : 'top')"
+      />
+      <UButton
+        size="xs"
+        icon="i-lucide-panel-bottom"
+        :color="data.region === 'bottom' ? 'primary' : 'neutral'"
+        :variant="data.region === 'bottom' ? 'solid' : 'subtle'"
+        data-handoff="pin-bottom"
+        aria-label="Pin to bottom"
+        @click.stop="setRegion?.(data.node, data.region === 'bottom' ? null : 'bottom')"
+      />
+    </div>
 
     <!-- snap-guide / ghost-pane hook: this card is the target. Edge-snap → a bar on the card's
          outer edge (data-handoff="snap-guide"). Pane-drop → a bar on the targeted pane's edge
