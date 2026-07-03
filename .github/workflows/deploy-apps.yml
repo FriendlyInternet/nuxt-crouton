@@ -182,3 +182,38 @@ jobs:
       # a WORKER_SECRETS_JSON bundle but it resolves empty (mis-scoped, #1094).
       require-worker-secrets: ${{ matrix.requireWorkerSecrets || false }}
     secrets: inherit
+
+  # "Cancelled ≠ failed" (#1150): deploy-app.yml's per-app concurrency group
+  # (deploy-<app>-<env>, cancel-in-progress: false) allows ONE waiting run per
+  # app, so a sibling PR's (or main's) newer run replaces — cancels — an older
+  # queued preview deploy. The resulting ✕ is queue mechanics, not a failure,
+  # but it reads as one (the #1127 diagnosis round). Say so on the PR.
+  report-bumped-preview:
+    needs: [detect, deploy]
+    if: always() && github.event_name == 'pull_request' && needs.deploy.result == 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Comment "bumped, not broken" on the PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '<!-- deploy-bumped -->',
+              '> 🤖 **Claude Code** · agent pipeline (CI) · _preview-deploy queue notice_',
+              '',
+              '⏳ **Preview deploy bumped, not broken.** This PR\'s staging preview deploy was cancelled because a newer run took the shared per-app staging queue slot (one waiting run per app — usually a sibling PR or a merge to `main` deploying the same app). **Nothing about this PR failed.**',
+              '',
+              'To get the previews: re-run the failed jobs of the **Deploy Apps (Cloudflare Workers)** run for this PR, or push any commit. Context: #1150.'
+            ].join('\n')
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100
+            })
+            const existing = comments.reverse().find(c => c.body && c.body.startsWith('<!-- deploy-bumped -->'))
+            if (existing) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body })
+            } else {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body })
+            }
