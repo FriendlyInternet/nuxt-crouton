@@ -172,16 +172,23 @@ const loginSubmitButton = computed(() => ({
   block: true
 }))
 
-// Prefill credentials from a shared link (e.g. /auth/login?email=…&password=…)
-// when the login form mounts. Fills the fields only — the user still clicks
-// Sign in (we never auto-submit). Re-applies if the form remounts (e.g. magic-
-// link toggle) while still in login mode.
+// Prefill credentials from a shared link (e.g. /auth/login?email=…&password=…).
+// Fills the fields only — the user still clicks Sign in (we never auto-submit).
+// Re-apply whenever the form ref appears OR the prefill values change, with
+// `immediate` + `flush:'post'` so the exposed UAuthForm state is ready: the old
+// one-shot `watch(loginFormRef)` silently did nothing if the prefill state
+// wasn't present the instant the ref first resolved, or if it arrived after the
+// form mounted (#1153).
 const loginFormRef = useTemplateRef('loginForm')
-watch(loginFormRef, (form) => {
-  if (!form?.state) return
-  if (state.value.prefillEmail) form.state.email = state.value.prefillEmail
-  if (state.value.prefillPassword) form.state.password = state.value.prefillPassword
-})
+watch(
+  [loginFormRef, () => state.value.prefillEmail, () => state.value.prefillPassword] as const,
+  ([form, email, password]) => {
+    if (!form?.state) return
+    if (email) form.state.email = email
+    if (password) form.state.password = password
+  },
+  { immediate: true, flush: 'post' },
+)
 
 async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: string, rememberMe?: boolean }>) {
   formError.value = null
@@ -189,6 +196,15 @@ async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: 
 
   if (showMagicLink.value) {
     await handleMagicLink(event.data.email)
+    submitting.value = false
+    return
+  }
+
+  // The login UAuthForm carries no schema, so `required` is cosmetic — guard an
+  // empty submit here rather than let the server reject it with a raw Zod error
+  // ("[body.email] expected string, received undefined") (#1153).
+  if (!event.data.email || !event.data.password) {
+    formError.value = t('auth.enterEmailAndPassword')
     submitting.value = false
     return
   }

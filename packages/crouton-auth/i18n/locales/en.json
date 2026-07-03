@@ -7,6 +7,7 @@
     "resetLinkSentDescription": "We sent a password reset link to your email. Click the link to reset your password.",
     "magicLinkSentDescription": "We sent a magic link to your email. Click the link to sign in.",
     "tryAnotherEmail": "Try another email",
+    "enterEmailAndPassword": "Enter your email and password.",
     "continueWith": "Continue with {provider}",
     "placeholders": {
       "email": "you{'@'}example.com",

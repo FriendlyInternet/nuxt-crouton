@@ -7,6 +7,7 @@
     "resetLinkSentDescription": "We hebben een link om je wachtwoord te resetten naar je e-mail gestuurd. Klik op de link om je wachtwoord te resetten.",
     "magicLinkSentDescription": "We hebben een magic link naar je e-mail gestuurd. Klik op de link om in te loggen.",
     "tryAnotherEmail": "Probeer een ander e-mailadres",
+    "enterEmailAndPassword": "Voer je e-mailadres en wachtwoord in.",
     "continueWith": "Doorgaan met {provider}",
     "placeholders": {
       "email": "jij{'@'}voorbeeld.com",
