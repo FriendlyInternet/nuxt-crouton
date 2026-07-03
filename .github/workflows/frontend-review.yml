@@ -49,7 +49,7 @@ jobs:
           fetch-depth: 0
 
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         id: agent
         # The VERDICT FILE is the gate — NOT this step's exit code. The agent can exit non-zero
         # on `max_turns` (it flails writing the verdict / the SDK errors) even when it found
@@ -71,7 +71,7 @@ jobs:
           # bytes written. Bash covers `gh` (comment) + writing the verdict; Write/Edit for the
           # file; Read/Grep/Glob for the scan. Bump max-turns now that turns aren't wasted on
           # denied retries. NB: a11y.yml / red-team.yml share this exact latent bug.
-          claude_args: "--max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **frontend-review subagent** defined in `.claude/agents/frontend-review.md`.
             Input: { scope: "diff", depth: "quick", fix: false }.

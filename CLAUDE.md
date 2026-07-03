@@ -200,7 +200,7 @@ The pattern, end to end:
 - **`wrangler.jsonc`** (Workers): **no** `pages_build_output_dir`; `compatibility_flags: ["nodejs_compat"]`; bindings `DB` (D1), `KV`/`BLOB` (R2) as needed — **id-less** so the first deploy auto-provisions them; plus an **`env.staging`** block with **separate** staging ids + a `<app>.pmcp.dev` custom-domain `route` (bindings do NOT inherit across envs). `name`/`main`/`assets` are injected by the preset at build.
 - **Build preset**: `NITRO_PRESET=cloudflare_module nuxt build` → output in `.output/`.
 - **Scripts**: `cf:deploy` (prod: build → `wrangler deploy` auto-provision → `sync:ids` → migrate `--remote`), `cf:staging` (build → `inject-wrangler-env` → `wrangler deploy --env staging` → `sync:ids` → migrate), `sync:ids` (writes provisioned ids back into `wrangler.jsonc`), `db:migrate*`. NB: the staging migrate step must **not** pass `--config .output/...` (doubles the path → "no migrations"; #138).
-- **CI** (`.github/workflows/deploy-<app>.yml`): a thin caller of the reusable **`deploy-app.yml`** (#114). Merge to `main` (path-filtered) → staging; manual `workflow_dispatch` env=production → prod (#347). The caller's `deploy` job must declare `permissions: { contents: read, pull-requests: write }`. Auth via `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (the token needs **account** Workers Scripts/D1/KV/R2 Edit **and** **zone** Workers Routes + DNS Edit for custom-domain binding).
+- **CI** (`.github/workflows/deploy-apps.yml` — ONE generic workflow for all apps, #481/#638; the old per-app `deploy-<app>.yml` callers are retired): an app opts in with a `deploy.config.json` (`stagingUrl` / `productionUrl` / `layerPackages` / `watchPaths`); the `detect` job matches changed files against each app's `watchPaths` and fans out one reusable **`deploy-app.yml`** call per affected app. Merge to `main` / PR (path-filtered) → staging; manual `workflow_dispatch` env=production → prod (#347). Auth via **repo-level** secrets `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (the token needs **account** Workers Scripts/D1/KV/R2 Edit **and** **zone** Workers Routes + DNS Edit for custom-domain binding).
 - **First-time setup / migrating a Pages app**: run the **`/deploy` skill** — don't hand-roll it. Worker secrets do NOT transfer from Pages — re-set them (`wrangler secret bulk … --env staging`), pointing `BETTER_AUTH_URL` at the deployed URL.
 
 **Local-only testing** needs no Cloudflare: `pnpm dev` with `hub: { db: 'sqlite' }`. For a quick public URL without a full deploy, a Cloudflare Tunnel over `pnpm dev` works; a stable URL means `cf:staging` / the `/deploy` skill.
@@ -383,8 +383,14 @@ throw createError({ statusCode: 404, statusMessage: 'Not found' })
 ### ISR/SWR Caching
 ```typescript
 routeRules: {
-  '/api/teams/*/pages/**': { isr: 3600 },      // ISR: cached + revalidated
-  '/api/teams/*/translations/**': { swr: 600 }, // SWR: stale-while-revalidate
+  // ✅ Safe: static assets + specific prefixes OUTSIDE the generated collection API
+  '/_nuxt/**': { headers: { 'cache-control': 'public, max-age=31536000, immutable' } },
+  '/api/crouton-bookings/teams/*/availability': { swr: 300 }, // SWR: stale-while-revalidate
+
+  // ❌ NEVER add wildcard rules on the generated /api/teams/* prefix:
+  // '/api/teams/*/pages/**': { isr: 3600 }  // BROKEN — the wildcard conflicts with
+  // radix3's :id routing and breaks ALL /api/teams/:id/* generated collection routes
+  // (disabled with this warning in packages/crouton-pages/nuxt.config.ts and apps/velo/nuxt.config.ts)
 }
 ```
 
@@ -584,7 +590,7 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 | Skill | `.claude/skills/graduate/SKILL.md` | The deliberate **"step back and rebuild"** checkpoint after heavy POC iteration — **spec-driven** (#992): the POC *discovers* a behaviour spec (the `<poc>/spec.json` ledger, captured at each sign-off), graduation *freezes* it authoritative, and the app is **rebuilt the crouton way to satisfy it** — never a port. A POC is a **floor, not a ceiling**, so the app is a *superset* in three buckets: **Preserve** (proven experience → C1 side-by-side) · **Replace** (POC fakes → real crouton) · **Add** (completeness the POC left open → its own schema/UI/test gate). Promotes only when **both** acceptance axes are signed off — experience (C1) **and** crouton-conformance (`/conformance`, C2). "Done" is *derived* from a recorded `lgtm`, never a green build (the #988 lesson). Use when a POC is "done" / "graduate this poc" / "make it a real app" (#916, #992) |
 | Skill | `.claude/skills/conformance/SKILL.md` | The **crouton-conformance gate** — graduation's second acceptance axis (C2; the first is the experience side-by-side, C1). Certifies a graduated app is a *real crouton app* — **CLI-scaffolded** (`server/db/schema.ts` present, the #988 500) · **real collections** not stub blocks · **consumes the correct packages without reinventing them** (DRY) — by **composing** the existing probes (`/frontend-review`, `/a11y`, `/e2e-smoke`, `pnpm typecheck`) plus crouton-structural checks, then rendering a *required, signed-off* checklist on the graduation PR (holds on `status:blocked`). A gate, not a finding-rater. Run at `/graduate` stage C2, or "is this app crouton-native" (#992) |
 | Skill | `.claude/skills/bug-archaeology/SKILL.md` | First step of bug work (HARD GATE): research how & when a bug was introduced — `git log -S`/`blame`/`bisect` to the first-bad commit, or rule it a non-code cause (stale install/env/data) — and record the finding on the issue/PR before fixing. Use the moment a bug/regression/broken build is reported (#424) |
-| Skill | `.claude/skills/red-team/SKILL.md` | Adversarially probe the monorepo for security flaws at the right depth — steers the `red-team` subagent (`quick`/`standard`/`deep`), collates findings into a `writeups/reports/red-team-*.md` report, and files `security`/`sec:*` issues for confirmed high/criticals. The on-demand brain behind the per-PR CI gate + daily deep sweep. Use to "red-team", "try to hack this", "pentest this package/app" (#540) |
+| Skill | `.claude/skills/red-team/SKILL.md` | Adversarially probe the monorepo for security flaws at the right depth — steers the `red-team` subagent (`quick`/`standard`/`deep`), collates findings into a `writeups/reports/red-team-*.md` report, and files `security`/`sec:*` issues for confirmed high/criticals. The on-demand brain behind the per-PR CI gate + the dispatch-only deep sweep (#823). Use to "red-team", "try to hack this", "pentest this package/app" (#540) |
 | Agent | `.claude/agents/red-team.md` | Adversarial security prober — given `{ scope, depth }` reads code as an attacker (cross-team IDOR, auth bypass, injection, secret exposure, SSRF, upload/cache/rate-limit) and returns structured findings; static-first, `deep` dynamically confirms against a fixture. Reports only, never patches. Steered by `/red-team` + the CI/daily workflows (#540) |
 | Skill | `.claude/skills/a11y/SKILL.md` | Accessibility review — the code-cleaning analog of `/code-review` for WCAG/ARIA. Reviews just your diff (or `--scope <pkg>`/`--file`) via the depth-aware `a11y` subagent (`quick`=eslint-a11y + ARIA/keyboard smells, `standard`=one package, `deep`=boot a fixture + `@axe-core/playwright`), rates findings (axe critical/serious → 🔴, moderate → 🟡, minor → 🔵, reusing `/review`'s 3-level format), then `--comment` (inline PR comments) or `--fix` (safe `alt`/`aria-label`/label-for/`role`+`tabindex` → `pnpm typecheck`). On-demand layer atop the warn-first eslint-a11y rules (#726/#729) |
 | Agent | `.claude/agents/a11y.md` | Accessibility prober — given `{ scope, depth, fix }` reads templates as a screen-reader/keyboard user (ARIA-without-keyboard, missing `alt`/labels, positive `tabindex`, bad roles) and returns structured severity-rated findings; static-first via eslint-a11y, `deep` runs `@axe-core/playwright` against a fixture. Reports only; patches the safe set under `fix:true`. Steered by `/a11y` (#726/#729) |
@@ -595,6 +601,7 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 | Agent | `.claude/agents/task-decomposer.md` | Recursive: LEAF TEST one issue → spawn a worker (leaf) or split into sub-issues + spawn a decomposer per child |
 | Agent | `.claude/agents/task-worker.md` | Implements one leaf issue on an isolated worktree branch → `pnpm typecheck` → `/commit` → PR (`Closes #NN`) |
 | MCP Server | `packages/crouton-mcp/` | AI collection generation |
+| MCP Server | `fallow-mcp` (root devDep, [fallow](https://docs.fallow.tools/)) | Deterministic codebase intelligence — `audit` / `dead_code` / `dupes` / `health` tools for dead code, duplication, complexity, and dependency hygiene. CLI: `npx fallow audit` (diff-scoped PR verdict), `npx fallow health --score`, `npx fallow dead-code`. Config: `.fallowrc.json` (root; `_archive`/`retired`/build output ignored). Prefer it over grep for "who imports this / is this export used / what's duplicated" (#1120). **⚠️ Deletion protocol (#1149): a zero-imports finding is a hypothesis, not a verdict** — before deleting a "dead" file, rule out the *dynamic* mechanisms a static graph can't see: directory scanners (`@nuxtjs/mcp-toolkit` loads `server/mcp/**` at runtime — the #1143 near-miss), `@nuxt/kit` resolver paths (module runtime dirs), spawn-by-path (crouton-cli `bin/` → `lib/`), config-string refs (nuxt.config `css:`, vite `optimizeDeps`), and published-exports consumers outside this repo. Grep for the *loader*, not just the import |
 | Themes | `packages/crouton-themes/` | Swappable UI themes |
 
 ### MCP Server Tools
@@ -609,7 +616,7 @@ Available: `KO` theme (hardware-inspired). Usage: `extends: ['@fyit/crouton-them
 
 When any task reveals repetitive work an MCP tool/resource/prompt could automate, capture with `/mcp-idea <description>` or add to `.claude/mcp-ideas.md`.
 
-MCP Servers: CLI MCP (`packages/crouton-mcp/`), Docs MCP (`docs/server/mcp/`)
+MCP Servers: CLI MCP (`packages/crouton-mcp/`), Docs MCP (`docs/server/mcp/`), Fallow MCP (`fallow-mcp` — codebase intelligence, #1120)
 
 ## Key Reminders
 

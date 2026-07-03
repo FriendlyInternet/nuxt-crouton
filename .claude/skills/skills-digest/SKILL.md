@@ -1,5 +1,6 @@
 ---
 name: skills-digest
+layer: method
 description: Generate a monthly digest of the skills in this repo's flow system — a render-only HTML + plain-text email listing every skill grouped by job, plus a "what was added / updated / removed since last digest" band computed from git history. Use when asked for a "skills digest", "what skills do we have", "skills report", "what skills changed", or to keep the skill surface from sprawling.
 allowed-tools: Read, Write, Bash
 ---
@@ -102,6 +103,25 @@ This is the digest ↔ observatory wiring: loop-station is the **producer** (it 
 the digest only **reads the latest record and renders** — it never recomputes. Everything **degrades to a
 no-op** when the record is absent (no header line, no badges; the digest is unchanged). loop-station's own
 `fetch-depth`/commit-back concerns are its business; the digest just reads the committed JSONL.
+
+## 🪦 Dead weight — freshness × usage (#1100 WS5)
+
+The **"🪦 Dead weight"** band joins two signals to surface **retire candidates** — a knowledge
+skill that is both *stale* and *unused*:
+
+- **Freshness** from `scripts/skill-freshness.mjs` (`computeSkillFreshness()`): which provenance-
+  stamped skills have a **vanished citation** or a **`verified:` stamp aged past 90d**.
+- **Usage** from the committed **loop-station usage rollup** (`writeups/loop-station/usage.jsonl`,
+  #1064): per-skill **CI invocation counts**, gated by `usageCoverage()` (advisor.mjs).
+
+A skill that is stale (stamp overdue **or** a vanished citation) **and** has 0 CI invocations over
+the covered window becomes a **retire candidate**. It **never judges "unused" blind**: with no
+rollup (or thin coverage) `usageCoverage()` returns `judged: false`, so the band renders
+**freshness-only** and states the verdict is withheld. Counts are **pipeline scope** — interactive
+session usage isn't measured yet (#1067), so a `0` means "never fired *in CI*", not "provably dead".
+
+Like the budget band, the digest is a **reader/renderer** (freshness + usage are the producers) and
+**degrades to a no-op** — a green "✅ all N knowledge skills fresh" line — when nothing is stale.
 
 ## Cadence + delivery (config-as-data)
 

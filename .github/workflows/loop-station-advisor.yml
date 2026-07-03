@@ -48,7 +48,7 @@ jobs:
       # Only here does the LLM run — to turn deterministic findings into a human-readable
       # recommendation issue. Pinned to the same SHA as the repo's other claude-code-action
       # workflows — bump together.
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         id: llm
         if: steps.advisor.outputs.actionable == 'true'
         # An LLM outage must not kill the run before the deterministic fallback below —
@@ -61,7 +61,7 @@ jobs:
           # create/update issues via tool calls directly; headless CI denies un-allowlisted
           # tools, so without the grant the agent can't file the issue — the sweep-shaped
           # form, same as a11y-daily.yml / red-team-daily.yml.
-          claude_args: "--max-turns 12 --permission-mode bypassPermissions"
+          claude_args: "--model claude-sonnet-5 --max-turns 12 --permission-mode bypassPermissions"
           prompt: |
             You are the **Loop Station advisor** (#933). Read `advisor-findings.json` in
             the repo root — it lists DETERMINISTIC findings about the harness's own

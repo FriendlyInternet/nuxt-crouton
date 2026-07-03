@@ -48,13 +48,35 @@ A **"why not" is as load-bearing as a "why"** — it's the evidence the chosen p
 
 - Add a short **`Considered & rejected`** note — one line per option: `option → ❌ why not`. It lives in the **🤖 For agents** block by default (or its own small block, or a comment on the issue/epic).
 - **Required only when alternatives were actually weighed** — trivial chores opt out (same as the hypothesis framing).
-- The **epic** is the natural home for a cross-cutting "why not": post it as a comment *when the decision is made*, while the reasoning is fresh.
+- The **epic** is the natural home for a cross-cutting "why not" — record it in the epic's **Decisions log** (below), *when the decision is made*, while the reasoning is fresh.
 
 Worked example (from epic #392):
 > **Considered & rejected — E2E perf**
 > - Bump Playwright workers → ❌ the harness shares one dev server + SQLite *per job*; parallel workers race on mutated state → flaky.
 > - Shared "build packages once" prebuild job → ❌ serialises a parallel matrix; saves CI *minutes*, not wall-clock.
 > - Cache the built packages → ❌ a stale cache makes the regression smoke pass *falsely* — defeating its purpose.
+
+## The epic's Decisions log (capture the call *when it's made*)
+
+`Considered & rejected` catches the alternatives you weighed **when you write the issue**. But the decisions that leak worst are the ones made **halfway through the work** — "team-scope at the query layer", "layout composition is deterministic, not LLM", "fake the payment in the POC". At authoring time they don't exist yet, so no up-front section can catch them; by close they're lost to chat.
+
+So every epic carries a running **`## 🧭 Decisions`** log — in the epic body, or a maintained pinned comment on the epic — that you **append to the moment a real design call is made**, mid-work, while the reasoning is fresh. It's the *same reflex* as updating a POC's `HANDOFF.md` / `spec.json` at a sign-off (the `spec` skill), pointed at the epic: one concept, two homes.
+
+**The format** — newest at the bottom, one line per decision:
+
+```
+[YYYY-MM-DD] Decision → why → (Rejected: X — why not)
+```
+
+**Append-only — reversals are kept, never edited away.** This is the one deliberate difference from the POC `spec.json`, which *supersedes* (newest wins, prune the stale entry — "this is how it behaves *now*"). A decision log does the opposite: when a decision is later reversed, append a **new** line recording the reversal and the rule learned — don't touch the original. The reversal *is* the lesson, exactly as `AGENTS.md` demands ("negative results are first-class data — record the reversal and extract the rule, don't delete it"). A ledger that erases its own reversals is the re-litigation trap wearing a fresh coat.
+
+**Keep it a habit, not a gate.** Like the hypothesis framing, this is a strongly-modeled convention with a worked example — *not* a required section and *not* hook-enforced. Decision capture dies the instant it's a box you tick to unblock a merge (you get "N/A" and "see chat"). Trivial epics opt out.
+
+Worked example (a running log on an epic):
+> ## 🧭 Decisions
+> - [2026-06-14] Team-scope at the **query layer** (drizzle `where team_id`), not per-route middleware → one choke-point you can't forget to add on a new endpoint → (Rejected: per-route guard — trivially omitted on the next route added; Rejected: DB row-level security — D1/SQLite has none).
+> - [2026-06-20] POC default layout is **deterministic** (`layout-compose.ts` rules), not LLM-generated → reproducible, reviewable, no token cost on every boot → (Rejected: LLM "place the blocks" — non-deterministic and slow, can't diff two runs).
+> - [2026-06-28] **Reversed** the 06-14 call *for the reporting endpoints only*: they team-scope in **middleware** after all → their cross-collection joins made per-query scoping duplicative and error-prone → rule learned: query-layer scoping for single-collection reads, middleware for joins.
 
 ## How to test (REQUIRED on every closeable issue/PR — written for a human)
 
@@ -107,12 +129,13 @@ Don't stop at the issue you were asked about; closing the leaf without checking 
 
 ## Core rules
 
-1. **Every issue maps to a package or an app — never "root".** If it feels like root-level work (CI, deploy, ops), label it with the **app it serves** (e.g. CI that builds fanfare → `app:fanfare`). There is deliberately no `root` label.
+1. **Every issue maps to a package or an app — never "root".** If it feels like root-level work (CI, deploy, ops), label it with the **app it serves** (e.g. CI that builds fanfare → `app:fanfare`). Harness / method work that serves the *whole* monorepo rather than one app — `.claude/**`, `AGENTS.md`, skill/agent/hook changes — maps to **`meta:agents`** (see rule 3). There is deliberately no `root` label.
 2. **Exactly one `type:*` label** per issue — except an **epic**, which carries `epic` instead of a type.
 3. **Component label = where the source actually changes** (mirrors the commit-scope convention):
    - `pkg:<name>` for package source (`packages/*`, e.g. `pkg:crouton-sales`)
    - `app:<name>` for app/deployment/ops work (`apps/*`, e.g. `app:fanfare`)
    - `worker:<name>` for `workers/*`
+   - **`meta:agents`** for **harness / method** work with no single app or package owner — `.claude/**` (skills, agents, hooks), `AGENTS.md`, and cross-cutting method changes. This *is* the component for that work: it serves the whole monorepo, so it satisfies rule 1's "never root" rather than being an exception to it.
    - Package work that also lands a schema/config change in an app gets **both** (e.g. `pkg:crouton-sales` + `app:fanfare`).
 4. Use meta labels where they apply: `epic`, `spike`, `needs-triage`.
 5. **Link issues & PRs when talking to the user.** Any time you mention an issue/PR in a chat reply, render it as a clickable link to the full URL (`[#303](https://github.com/FriendlyInternet/nuxt-crouton/issues/303)`, `[#376](https://github.com/FriendlyInternet/nuxt-crouton/pull/376)`) so the owner can open it in one click. This is a **chat-reply** convention only — commit messages keep bare `(#NN)`, and PR bodies use `Closes #NN` (not a URL) so GitHub auto-closes the issue on merge.
@@ -130,6 +153,8 @@ Issues, sub-issues, and labels are managed through the GitHub MCP tools:
 - Create / update: `mcp__github__issue_write` (`method: create|update`, pass `labels: [...]`).
 - Link a child under a parent: `mcp__github__sub_issue_write` (`method: add`, `issue_number` = parent, `sub_issue_id` = the child's **id** from its create response — not its number).
 - Read / list: `mcp__github__issue_read`, `mcp__github__list_issues`, `mcp__github__search_issues`.
+
+**Scan without overflowing the context.** A broad `list_issues` / `search_issues` (e.g. `labels: ["epic"]`, or a keyword search with no `in:title`) can return a 90k–140k-char blob that overflows the tool result and has to be sliced out-of-band — pure wasted turns. For any repo-wide scan (the dedup and epic walk-up steps are where this bites): pass **`minimal_output: true`**, keep **`perPage` small (5–10)**, and prefer **`in:title`** filters over broad body matches. Only widen when a narrow query genuinely misses.
 
 **Labels must already exist** before you can apply them — applying an unknown label errors. New labels are added via labels-as-code (below), not by the API.
 
@@ -150,7 +175,7 @@ GitHub issues slot into the repo's task-execution flow (see `CLAUDE.md`):
 3. **Branch + do the work** — work on a feature branch; follow `CLAUDE.md` patterns; run `pnpm typecheck`.
 4. **Commit** — use the `/commit` skill, referencing the issue in the body (e.g. `(#NN)`).
 5. **Open a PR** — early is fine. Put `Closes #NN` in the body so the issue auto-closes on merge. Let CI run and fix failures (the PR can be watched/autofixed).
-6. **Squash-merge** → the issue closes automatically and the branch is deleted. Don't push feature work straight to `main`.
+6. **Merge preserving commits** (merge/rebase — don't squash by default; squash only a noisy `wip`/`oops` history, per `AGENTS.md` § Commits → Merge policy) → the issue closes automatically and the branch is deleted. Don't push feature work straight to `main`.
 7. **Walk up the epic tree (REQUIRED — part of the merge, not an afterthought).** The moment the merge auto-closes the leaf issue, run the parent check in *"Closing a child? Always check the parent"* above. If that merge closed the epic's **last** open child, post the `## 🧪 Verify the whole thing` rollup on the epic, run the **`postmortem`** skill (retro + improvement proposals — see step 4 there), and **ask the owner to close it** (close on confirmation). A merge is not "done" until the parent epic is either closed or explicitly handed off for the verify + postmortem pass. When watching/auto-merging a PR, do this walk-up as soon as the merge lands.
 
 Work lands via **PRs**, not direct pushes to `main`. Issues are the source of truth for *what* to do; `docs/PROGRESS_TRACKER.md` (if used) becomes an optional phase-level rollup, not the per-task tracker.
@@ -163,4 +188,5 @@ Work lands via **PRs**, not direct pushes to `main`. Issues are the source of tr
 | Feature touching a package + app schema/config | `type:feat` `pkg:<name>` `app:<name>` |
 | App/deployment/ops/CI work | `type:chore`/`type:docs` `app:<name>` |
 | Cross-cutting initiative | `epic` `pkg:<name>` (+ `app:<name>`) |
+| Harness / skill / agent / method change (`.claude/**`, `AGENTS.md`) | `type:docs`/`type:chore` `meta:agents` (+ `epic` if an epic) |
 | Time-boxed proof-of-concept | `spike` `type:feat` `<component>` |

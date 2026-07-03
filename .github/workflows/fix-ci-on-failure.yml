@@ -126,11 +126,11 @@ jobs:
       # Anthropic terms). Pinned to the same SHA as claude.yml — keep in sync when bumping.
       # github_token is the App token so the agent's git push re-triggers CI (above).
       - if: steps.gate.outputs.proceed == 'true'
-        uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.app-token.outputs.token }}
-          claude_args: "--max-turns 30"
+          claude_args: "--model claude-sonnet-5 --max-turns 30"
           show_full_output: true
           prompt: |
             CI failed on this pipeline PR — you are the fix-bot. This is auto-fix attempt

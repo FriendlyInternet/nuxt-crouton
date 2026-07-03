@@ -471,18 +471,17 @@ const dbPullCmd = defineCommand({
 
 // ─── deploy-setup ─────────────────────────────────────────────────
 
+// Retired (#1137): this command set up the Cloudflare PAGES deploy the crouton
+// standard migrated away from (Workers + auto-provisioning, #108/#114). A fresh
+// `crouton init` already ships the Workers setup; a second scaffold path is drift.
 const deploySetupCmd = defineCommand({
-  meta: { name: 'deploy-setup', description: 'Interactive Cloudflare Pages deployment setup (create resources, generate CI workflow)' },
-  args: {
-    dryRun: { type: 'boolean', description: 'Preview without creating resources or writing files' },
-    skipResources: { type: 'boolean', description: 'Skip Cloudflare resource creation (D1, KV, R2)' },
-  },
-  async run({ args }) {
-    const { deploySetup } = await tsImport(join(__dirname, '..', 'lib', 'deploy-setup.ts'))
-    await deploySetup(process.cwd(), {
-      dryRun: args.dryRun,
-      skipResources: args.skipResources,
-    })
+  meta: { name: 'deploy-setup', description: '(deprecated) Cloudflare Pages setup — retired; use `crouton init` (Workers) instead' },
+  async run() {
+    console.error('crouton deploy-setup is retired: it set up the deprecated Cloudflare Pages deploy.')
+    console.error('The Workers deploy needs no setup command — a fresh `crouton init` app ships the')
+    console.error('id-less wrangler.jsonc + cf:deploy/cf:staging scripts, and the first deploy')
+    console.error('auto-provisions D1/KV. See the deployment guide: https://nuxt-crouton.dev/guides/deployment')
+    process.exit(1)
   }
 })
 

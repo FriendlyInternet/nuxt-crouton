@@ -78,7 +78,10 @@ reveal its own gaps; running the real thing next to the contract can.
 *We think that* if X then Y · *We'll do that by* … · *We'll be right if* … · *We'll know by* …
 
 **Record what you didn't do** — when alternatives were real, a `Considered & rejected` note
-(`option → ❌ why not`) stops future-us re-litigating it.
+(`option → ❌ why not`) stops future-us re-litigating it. That note is authoring-time; the calls made
+*mid-work* go in the epic's running **Decisions log** — one dated line (`decision → why → rejected`)
+appended *when the call is made*, **append-only so reversals stay visible** (a reversed decision gets a
+new line, never an edit — the reversal is the lesson, per *Observe the harness*). It's a habit, not a gate.
 
 **Two audiences**, in this order: **👤 humans** lead — plain language, what changed + why it matters
 (a diagram only if it clarifies); **🤖 agents** — scope, exact paths/symbols, behaviour, acceptance,
@@ -128,6 +131,12 @@ that was never broken.
 Treat the harness as a system worth measuring: its always-on context budget (size, redundancy, split
 by layer) and how the loops actually ran. At epic close, **postmortem** (went well / was hard, with
 evidence / 1–3 proposals) and mint accepted proposals as tracked tasks. This is how the loop tightens.
+
+**The evidence bar for claiming a result** (internally or publicly): one mechanism must explain *all*
+observations — including the negatives — and survive an adversarial attempt to refute it; the
+hypothesis states its numbers *before* the run (the issue's "We'll know by", made quantitative); and
+negative results are first-class data — record the reversal and extract the rule, don't delete it.
+A claim that ignores its own counter-evidence is the proxy-for-done failure wearing a lab coat.
 
 ## Maintaining this method
 

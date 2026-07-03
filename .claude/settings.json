@@ -48,7 +48,7 @@
     "crouton": {
       "command": "node",
       "args": [
-        "./packages/nuxt-crouton-mcp-server/dist/index.js"
+        "./packages/crouton-mcp/dist/index.js"
       ]
     },
     "thinkgraph": {
@@ -56,6 +56,13 @@
     },
     "nuxt-ui": {
       "url": "https://ui.nuxt.com/mcp"
+    },
+    "fallow": {
+      "command": "pnpm",
+      "args": [
+        "exec",
+        "fallow-mcp"
+      ]
     }
   }
 }

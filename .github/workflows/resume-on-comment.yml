@@ -39,7 +39,7 @@ jobs:
       # AUTH: this is headless/unattended, so it MUST use an API key. Do NOT swap in a
       # subscription CLAUDE_CODE_OAUTH_TOKEN — subscription OAuth is for interactive
       # Claude Code use only, not CI automation (Anthropic Legal & Compliance terms).
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
@@ -47,7 +47,7 @@ jobs:
             The owner has replied to a blocking question — read the full issue comment
             thread (the latest comment is their answer), incorporate it, remove the
             `status:blocked` label, then continue via /task-decompose #${{ github.event.issue.number }}.
-          claude_args: "--max-turns 30"
+          claude_args: "--model claude-sonnet-5 --max-turns 30"
           show_full_output: true
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).

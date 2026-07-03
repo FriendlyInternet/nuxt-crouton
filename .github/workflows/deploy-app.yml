@@ -72,16 +72,31 @@ on:
         required: false
         default: false
         type: boolean
+      require-worker-secrets:
+        description: >-
+          Fail the deploy if WORKER_SECRETS_JSON resolves empty (#1094). Guards the
+          mis-scoping trap: an Environment-scoped WORKER_SECRETS_JSON silently
+          resolves empty on this call path (see the secrets block below), which
+          would otherwise deploy a Worker with no secrets. Callers set this from
+          the app's deploy.config.json `secrets.required`.
+        required: false
+        default: false
+        type: boolean
     secrets:
       CLOUDFLARE_ACCOUNT_ID:
         required: true
       CLOUDFLARE_API_TOKEN:
         required: true
       # Optional: a JSON object of { "NAME": "value", … } pushed to the Worker as
-      # secrets on every deploy (wrangler secret bulk). Store it as a GitHub
-      # *Environment* secret so production and staging can hold env-specific values
-      # (e.g. different BETTER_AUTH_URL). Omit it to manage Worker secrets manually
-      # (they persist across deploys, so a one-time `wrangler secret bulk` also works).
+      # secrets on every deploy (wrangler secret bulk). MUST be a *repository-level*
+      # Actions secret, NOT an *Environment* secret: this workflow is reached via
+      # `secrets: inherit` from caller jobs that declare no `environment:`, so an
+      # Environment-scoped secret is never in scope and resolves EMPTY with no error
+      # (the sync step below then silently skips — or fails, when the app sets
+      # `secrets.required` in deploy.config.json). One bundle serves both envs;
+      # env-specific values (e.g. BETTER_AUTH_URL) are handled by the deploy itself
+      # or a one-time manual `wrangler secret bulk`. Omit it to manage Worker
+      # secrets manually (they persist across deploys).
       WORKER_SECRETS_JSON:
         required: false
       # Optional repo-level secret used only to derive the throwaway review login's
@@ -179,6 +194,14 @@ jobs:
       # during a whole-monorepo install; the app's own prepare runs below.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
+
+      # Best-effort: the deployed smoke's SCREENSHOT wants a Playwright browser; the
+      # smoke itself passes without one (evidence, not a gate — #1126). On the
+      # self-hosted runner this downloads once into the persistent ms-playwright
+      # cache and is a no-op afterwards; on hosted runners it costs ~30s. Never
+      # fails the deploy.
+      - name: Ensure Playwright browser (smoke screenshots)
+        run: npx playwright install chromium 2>&1 | tail -2 || true
 
       # --ignore-scripts above also skips native-module build steps. @nuxt/content
       # (the docs app) needs better-sqlite3's native binding at BUILD time to process
@@ -308,17 +331,28 @@ jobs:
       #
       # IMPORTANT — scoping: WORKER_SECRETS_JSON MUST be a *repository-level* Actions
       # secret, NOT an *Environment* secret. This job is reached via `secrets: inherit`
-      # from a thin caller whose calling job declares no `environment:`, so
-      # Environment-scoped secrets are never in scope to inherit and resolve to EMPTY
-      # (they silently skip). Repository-level secrets inherit correctly.
+      # from callers (deploy-apps.yml / deploy-pocs.yml) whose calling jobs declare no
+      # `environment:`, so Environment-scoped secrets are never in scope to inherit and
+      # resolve to EMPTY (they silently skip). Repository-level secrets inherit
+      # correctly. Apps that depend on the bundle set `secrets.required` in their
+      # deploy.config.json → require-worker-secrets makes an empty resolution FAIL
+      # loudly here instead of deploying a Worker with no secrets (#1094).
       - name: Sync explicit Worker secrets (optional override)
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
           SECRETS_JSON: ${{ secrets.WORKER_SECRETS_JSON }}
         run: |
           if [ -z "$SECRETS_JSON" ]; then
+            if [ "${{ inputs['require-worker-secrets'] }}" = "true" ]; then
+              echo "::error::WORKER_SECRETS_JSON resolved EMPTY but ${{ inputs.app }} declares secrets.required in deploy.config.json. Most likely cause: the secret is stored as an *Environment* secret — it must be a *repository-level* Actions secret (Environment scopes are unreachable on this secrets:inherit path and resolve empty with no error, #1094)."
+              exit 1
+            fi
             echo "No WORKER_SECRETS_JSON provided — the Ensure BETTER_AUTH_SECRET step below covers auth."
             exit 0
+          fi
+          if ! printf '%s' "$SECRETS_JSON" | jq -e 'type == "object" and length > 0' >/dev/null 2>&1; then
+            echo "::error::WORKER_SECRETS_JSON is set but is not a non-empty JSON object — refusing to deploy with a broken secrets bundle (#1094)."
+            exit 1
           fi
           printf '%s' "$SECRETS_JSON" > "$RUNNER_TEMP/worker-secrets.json"
           if [ "${{ inputs.environment }}" = "production" ]; then

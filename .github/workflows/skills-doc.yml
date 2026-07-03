@@ -1,19 +1,24 @@
 name: skills-doc
 
-# Keep writeups/architecture/skills-and-triggers.html in sync with .claude/skills/.
-# The generator uses only Node built-ins, so no install step is needed.
+# Keep writeups/architecture/skills-and-triggers.html in sync with .claude/skills/,
+# and every skill/agent tagged with a harness layer (method|stage|stack, epic #952).
+# Both checkers use only Node built-ins, so no install step is needed.
 
 on:
   pull_request:
     paths:
       - '.claude/skills/**'
+      - '.claude/agents/**'
       - 'scripts/gen-skills-doc.mjs'
+      - 'scripts/harness-layers.mjs'
       - 'writeups/architecture/skills-and-triggers.html'
   push:
     branches: [main]
     paths:
       - '.claude/skills/**'
+      - '.claude/agents/**'
       - 'scripts/gen-skills-doc.mjs'
+      - 'scripts/harness-layers.mjs'
 
 jobs:
   check:
@@ -25,3 +30,5 @@ jobs:
           node-version: '20'
       - name: Verify skills doc is up to date
         run: node scripts/gen-skills-doc.mjs --check
+      - name: Verify every skill/agent carries a layer tag (#1098)
+        run: node scripts/harness-layers.mjs --check

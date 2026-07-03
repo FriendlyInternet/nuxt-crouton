@@ -19,8 +19,11 @@ on:
       - '.github/workflows/ci.yml'
 
 jobs:
-  lint-and-typecheck:
-    name: Lint & Type Check
+  # Was `lint-and-typecheck` — renamed under #1097: the job never ran eslint and
+  # only typechecks the MCP server, so the old name overclaimed. App typecheck
+  # is the separate `typecheck-apps` job below.
+  typecheck-mcp:
+    name: Type Check MCP Server
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,12 +46,64 @@ jobs:
       - name: Type check MCP Server
         run: pnpm --filter @fyit/crouton-mcp typecheck
 
+  typecheck-apps:
+    # The CI backing for CLAUDE.md's "EVERY change requires pnpm typecheck"
+    # (#1097) — runs the exact local sweep (`pnpm typecheck` =
+    # `pnpm -r --filter './apps/*' typecheck`) so a type regression in an app
+    # goes red on the PR instead of on the next unlucky local run. Docs-only
+    # PRs never pay for this: the workflow-level `paths:` filter already
+    # excludes them. Build set: every workspace dep of every app (`{./apps/*}^...`
+    # — packages without a build script are skipped), because the dist-consumed
+    # layers must exist before `nuxt prepare` can resolve them.
+    name: Type Check Apps
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Cache app workspace-dependency builds
+        id: app-dep-cache
+        uses: actions/cache@v4
+        with:
+          path: packages/*/dist
+          key: app-dep-builds-${{ hashFiles('packages/**/*.ts', 'packages/**/*.vue', 'pnpm-lock.yaml') }}
+
+      - name: Build the apps' workspace dependencies
+        if: steps.app-dep-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter '{./apps/*}^...' build
+
+      - name: Prepare apps
+        run: |
+          for dir in apps/*/; do
+            if [ -f "$dir/nuxt.config.ts" ]; then
+              echo "Preparing $dir"
+              (cd "$dir" && npx nuxt prepare)
+            fi
+          done
+
+      - name: Type check apps
+        run: pnpm typecheck
+        env:
+          NODE_OPTIONS: '--max-old-space-size=8192'
+
   build-fanfare:
     # Dual-target smoke test: fanfare must build for both the Cloudflare
     # (cloud) and node-server (venue/Pi) presets, or the unused path silently
     # rots. The build itself is the smoke test — node-server boot was proven in
-    # #63. Scoped to fanfare to stay fast; typecheck is intentionally NOT gated
-    # here (fanfare carries a known pre-existing baseline of type errors).
+    # #63. Scoped to fanfare to stay fast. (Typecheck used to be skipped here
+    # for a "known pre-existing baseline of type errors" — that baseline is
+    # gone: fanfare typechecks green and is gated by typecheck-apps, #1097.)
     name: Build fanfare (${{ matrix.preset }})
     runs-on: ubuntu-latest
     strategy:
@@ -244,3 +299,33 @@ jobs:
 
       - name: Check TypeScript types (attw)
         run: pnpm check:attw
+
+  fallow-audit:
+    # Rung 1 of the check ladder (#632): the codebase-intelligence gate (#1145).
+    # `fallow audit` is diff-scoped — it judges only the changed code
+    # (pass/warn/fail) and excludes inherited findings by default, so the
+    # existing baseline never walls a PR red; it stops NEW dead code,
+    # duplication, and dependency drift at the door. Signal quality was
+    # proven by the #1143 triage (712 → 7 unused-file false positives).
+    name: Fallow Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history: audit diffs against the merge-base with main
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Run fallow audit (diff-scoped)
+        run: npx fallow audit

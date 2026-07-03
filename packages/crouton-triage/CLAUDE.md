@@ -196,7 +196,7 @@ export default defineNuxtConfig({
 ## Dependencies
 
 - **Required**: `@fyit/crouton-core`, `@fyit/crouton-ai`
-- **Runtime**: `cheerio`, `human-id`
+- **Runtime**: `cheerio`
 - **Peer**: `nuxt`, `zod`
 
 ## Table Naming Convention

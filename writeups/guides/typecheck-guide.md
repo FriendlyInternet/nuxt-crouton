@@ -6,9 +6,9 @@
 pnpm typecheck
 ```
 
-This runs `pnpm -r --filter './apps/*' typecheck`, which executes `nuxt typecheck` inside each app directory. Currently checks 3 apps: **docs**, **triage**, **velo**.
+This runs `pnpm -r --filter './apps/*' typecheck`, which executes `nuxt typecheck` inside each app directory. Currently checks the `apps/*` apps: **fanfare**, **triage**, **velo** (the docs site lives at top-level `docs/`, outside the filter — it has its own `pnpm --filter @crouton/docs typecheck`).
 
-The scope shows "4 of 30 workspace projects" because the monorepo has 30 workspace entries (packages + apps), but only the 4 `apps/*` projects match the filter. Packages are Nuxt layers — they don't have their own typecheck script. They're checked transitively when the apps that extend them are checked.
+The scope line reports only a handful of the monorepo’s ~50 workspace entries because only the `apps/*` projects match the filter. Packages are Nuxt layers — they don't have their own typecheck script. They're checked transitively when the apps that extend them are checked.
 
 ### Important
 

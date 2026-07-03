@@ -50,7 +50,7 @@ jobs:
           fetch-depth: 0
 
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
-      - uses: anthropics/claude-code-action@c26cb6427d54362f5fd9834ac6818cbaaf82490a
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         id: agent
         # The VERDICT FILE is the gate — NOT this step's exit code. The agent can exit non-zero
         # on `max_turns` (it flails writing the verdict / the SDK errors) even when it found
@@ -64,7 +64,7 @@ jobs:
           # --allowedTools REQUIRED (#834): the prompt has the top-level agent *act as* the
           # subagent and call Bash/Write directly; headless CI denies un-allowlisted tools, so
           # without this the agent can't write red-team-verdict.json / post the comment → fails OPEN.
-          claude_args: "--max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **red-team subagent** defined in `.claude/agents/red-team.md`.
             Input: { scope: "diff", depth: "quick" }.

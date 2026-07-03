@@ -100,13 +100,16 @@ jobs:
               echo "skip: apps/$app has no deploy.config.json (not opted in)"
               return
             fi
-            local su pu lp
+            local su pu lp rq
             su=$(jq -r '.stagingUrl // ""' "$cfg")
             pu=$(jq -r '.productionUrl // ""' "$cfg")
             lp=$(jq -r '.layerPackages // ""' "$cfg")
+            # secrets.required → the deploy fails loudly if WORKER_SECRETS_JSON
+            # resolves empty (the Environment-scoping trap, #1094)
+            rq=$(jq '.secrets.required // false' "$cfg")
             include=$(printf '%s' "$include" | jq \
-              --arg a "$app" --arg e "$env" --arg su "$su" --arg pu "$pu" --arg lp "$lp" \
-              '. + [{app:$a, environment:$e, stagingUrl:$su, productionUrl:$pu, layerPackages:$lp}]')
+              --arg a "$app" --arg e "$env" --arg su "$su" --arg pu "$pu" --arg lp "$lp" --argjson rq "$rq" \
+              '. + [{app:$a, environment:$e, stagingUrl:$su, productionUrl:$pu, layerPackages:$lp, requireWorkerSecrets:$rq}]')
           }
 
           if [ "$EVENT" = "workflow_dispatch" ]; then
@@ -175,4 +178,42 @@ jobs:
       # events have no such input, so this resolves false for them (and the gate
       # itself only fires on environment=production anyway).
       skip-staging-smoke: ${{ inputs.skip_staging_smoke || false }}
+      # From deploy.config.json secrets.required — fail loudly when the app expects
+      # a WORKER_SECRETS_JSON bundle but it resolves empty (mis-scoped, #1094).
+      require-worker-secrets: ${{ matrix.requireWorkerSecrets || false }}
     secrets: inherit
+
+  # "Cancelled ≠ failed" (#1150): deploy-app.yml's per-app concurrency group
+  # (deploy-<app>-<env>, cancel-in-progress: false) allows ONE waiting run per
+  # app, so a sibling PR's (or main's) newer run replaces — cancels — an older
+  # queued preview deploy. The resulting ✕ is queue mechanics, not a failure,
+  # but it reads as one (the #1127 diagnosis round). Say so on the PR.
+  report-bumped-preview:
+    needs: [detect, deploy]
+    if: always() && github.event_name == 'pull_request' && needs.deploy.result == 'cancelled'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Comment "bumped, not broken" on the PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = [
+              '<!-- deploy-bumped -->',
+              '> 🤖 **Claude Code** · agent pipeline (CI) · _preview-deploy queue notice_',
+              '',
+              '⏳ **Preview deploy bumped, not broken.** This PR\'s staging preview deploy was cancelled because a newer run took the shared per-app staging queue slot (one waiting run per app — usually a sibling PR or a merge to `main` deploying the same app). **Nothing about this PR failed.**',
+              '',
+              'To get the previews: re-run the failed jobs of the **Deploy Apps (Cloudflare Workers)** run for this PR, or push any commit. Context: #1150.'
+            ].join('\n')
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number, per_page: 100
+            })
+            const existing = comments.reverse().find(c => c.body && c.body.startsWith('<!-- deploy-bumped -->'))
+            if (existing) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body })
+            } else {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body })
+            }
