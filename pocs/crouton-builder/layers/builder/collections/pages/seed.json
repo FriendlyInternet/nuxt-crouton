@@ -1,0 +1,28 @@
+{
+  "table": "builder_pages",
+  "key": "slug",
+  "rows": [
+    {
+      "title": "Home",
+      "slug": "home",
+      "status": "published",
+      "isHome": true,
+      "showInNavigation": true,
+      "parentId": null,
+      "path": "/home",
+      "depth": 0,
+      "order": 0
+    },
+    {
+      "title": "Bookings",
+      "slug": "bookings",
+      "status": "draft",
+      "isHome": false,
+      "showInNavigation": true,
+      "parentId": null,
+      "path": "/bookings",
+      "depth": 0,
+      "order": 1
+    }
+  ]
+}
