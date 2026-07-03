@@ -5,7 +5,7 @@
   "pr": 1124,
   "title": "Crouton Builder — Graduation Plan",
   "subtitle": "POC (crouton-builder-demo) → crouton-layout package + builder app",
-  "intro": "The plan is DERIVED from the frozen 26-entry spec ledger — every card below is a real spec entry, so the plan can't drift from the contract. Read top to bottom: Contract (done) → Rebuild the app to satisfy the spec → prove it two ways (experience + conformance). Statuses are updated as increments land; re-render with `node scripts/graduation-plan.mjs crouton-builder`.",
+  "intro": "Each card leads with what changed and how to check it on this preview. Tap any behaviour listed under a card for the technical detail (what to expect · the DOM hook · the test). It's derived from the frozen 26-behaviour spec, so the plan can't drift from what we actually agreed.",
   "statusLegend": {
     "done": "landed + verified",
     "active": "being built now",
@@ -18,8 +18,8 @@
       "id": "A",
       "name": "Contract",
       "status": "done",
-      "summary": "Freeze the spec ledger as the authoritative contract. Every downstream gate compares against it — not against the agent's memory of the POC.",
-      "worksNow": "The 26-entry spec is frozen (15 Preserve / 4 Replace / 7 Add). A1 contradictions resolved, A2 Replace-table agreed. All three A-gates signed off.",
+      "summary": "What changed: the list of behaviours the app must have is locked. From here on, \"done\" means \"matches this list\" — not \"the build is green\".",
+      "worksNow": "How to check: there's nothing to click — this IS the reference. Read the 26 behaviours in the cards below (tap one to see its test), or open the 🥽 menu → Plan to see this same list in-app.",
       "steps": [
         { "name": "A0 · Freeze spec ledger", "status": "done", "test": "spec.json has 26 entries; every `settled` entry carries a recorded `signedOff`." },
         { "name": "A1 · Resolve contradictions", "status": "done", "test": "No entry contradicts another; superseded entries pruned." },
@@ -30,15 +30,15 @@
       "id": "B",
       "name": "Rebuild the app to satisfy the spec",
       "status": "active",
-      "summary": "Build `pocs/crouton-builder` on crouton-layout primitives so it satisfies the frozen spec — Preserve verbatim, Replace per A2, Add through their own gates. A POC is a floor, not a ceiling: the app is a superset.",
+      "summary": "What changed: the builder is being rebuilt on real crouton pieces so it does everything the locked list says — keeping what the prototype proved, swapping its fakes for the real thing, and adding what it left open.",
       "increments": [
         {
           "id": "B1",
           "name": "Spine",
           "status": "done",
           "flow": "sequential",
-          "note": "The skeleton the rest hangs off. Built on the crouton-layout package, not a port of POC code.",
-          "worksNow": "A two-level Site flow (pages as a wireable graph) opens a per-page board over REAL crouton collections (artists / bookings / pages). Board edits persist to the collection and serialise to a clean, diffable LayoutTree. All 5 data-handoff hooks are present in the DOM.",
+          "note": "What changed: the skeleton everything hangs off — built on the crouton-layout package, not copied from the prototype.",
+          "worksNow": "How to check: 1. Open /builder → you get a flow of page cards (the Site). 2. Tap a card → its board opens over REAL Artists / Bookings data. 3. Edit the board and hit Save, then reload → your layout is still there (it persisted to the collection).",
           "specs": ["site-page-two-level", "real-collections", "page-site-routing", "board-persistence", "layouttree-serialise", "intrinsic-block-sizing", "composite-derive-sizing"]
         },
         {
@@ -46,8 +46,8 @@
           "name": "Canvas & gestures",
           "status": "active",
           "flow": "staggered",
-          "note": "Rebuild the board on the POC's Vue Flow (CroutonFlow) canvas — this is where the 11 Preserve gestures live. Staggered on purpose: C1 can start walking each behaviour the moment it lands, instead of a big-bang at the end. drag-glow / add-block-land / spacer-block are independent and can land in parallel.",
-          "worksNow": "The board becomes a candidate canvas: many layout candidates + loose drafts as nodes, with the proven drag / snap-dwell / pinch-zoom / detach gestures.",
+          "note": "What changed: the board is the prototype's canvas, and the heavy gestures land on it one at a time — so you can check each the moment it ships instead of all at the end.",
+          "worksNow": "How to check (live now — focus editing): 1. Open a page board. 2. Double-click a card → a full-screen editor opens (device ruler, width slider, live panes over real data). 3. Drag a splitter or pick a variant → the change sticks. 4. Esc or ✕ to leave. Still coming on this card: snap-to-merge, drag-to-detach, pinch-zoom, per-card resize, region pinning.",
           "specs": ["page-model-one-node", "focus-edit-view", "per-element-resize", "snap-dwell-arm", "pane-drop-beside", "ghost-ease-apart", "detach-reorder", "enter-page-fit", "add-block-land", "pinch-zoom", "drag-glow", "spacer-block", "page-site-transition"]
         },
         {
@@ -55,8 +55,8 @@
           "name": "Additions (the app's superset)",
           "status": "next",
           "flow": "parallel",
-          "note": "Independent of each other — parallelisable once the canvas is stable. Each is a NEW behaviour the POC left open, so each goes through its own gate (schema / UI / test-first), NOT the side-by-side comparison.",
-          "worksNow": "Region pinning, bounded display variants, depth-recursive detach, and the round-trip-onto-ticket seat (#974) — completeness the POC only gestured at.",
+          "note": "What changed: nothing yet — these are new abilities the prototype only gestured at. Each ships behind its own review (schema / UI / test), not the side-by-side.",
+          "worksNow": "How to check: not built yet. Coming: pin a card to the top/bottom of the page, switch a list between rows / cards / table, detach panes nested deep, and save a layout back onto its GitHub ticket.",
           "specs": ["page-regions-pin", "display-variants", "detach-reorder-nested", "round-trip-ticket"]
         },
         {
@@ -64,8 +64,8 @@
           "name": "Deferred — the agent⇄human seat",
           "status": "later",
           "flow": "parallel",
-          "note": "The AI + collab seat (#974). Not required for graduation; it's WHY the clean contract matters, built once the contract is real.",
-          "worksNow": "(not started)",
+          "note": "What changed: nothing — the AI-arrange + multiplayer seat (#974). It's WHY the clean contract matters, but it's not needed for graduation.",
+          "worksNow": "How to check: not started. Deferred until after graduation.",
           "specs": ["magic-ai-arrange", "multiplayer-collab"]
         }
       ]
@@ -74,16 +74,16 @@
       "id": "C1",
       "name": "Prove it — experience side-by-side",
       "status": "blocked",
-      "summary": "Walk each Preserve (`settled`) entry on the POC and the app together — same hook, same gesture, same result. This is the first of graduation's TWO acceptance axes.",
-      "worksNow": "Every settled behaviour behaves identically on POC and app; each signed off (lgtm per entry). Staggered: begins per-item as each B2 gesture lands.",
-      "gate": "C1 signed off — a recorded lgtm per Preserve entry (done is derived from the sign-off, never a green build)."
+      "summary": "What changed: nothing yet — this is the first sign-off. It checks every KEPT behaviour looks and works the same on the prototype and the new app, side by side.",
+      "worksNow": "How to check: walk each behaviour on both, and reply `lgtm <behaviour-id>` when it matches. It starts per-behaviour as each B2 gesture lands, so you're never waiting for a big-bang at the end.",
+      "gate": "C1 signed off — a recorded lgtm per kept behaviour (done comes from the sign-off, never from a green build)."
     },
     {
       "id": "C2",
       "name": "Prove it — crouton-conformance",
       "status": "blocked",
-      "summary": "Run `/conformance` — the second acceptance axis. Certifies the app is a REAL crouton app: CLI-scaffolded (server/db/schema.ts present), real collections not stub blocks, consumes crouton-layout without reinventing it (DRY).",
-      "worksNow": "A signed-off conformance checklist on the graduation PR, composing /frontend-review + /a11y + /e2e-smoke + pnpm typecheck plus the crouton-structural checks.",
+      "summary": "What changed: nothing yet — this is the second sign-off. It checks the app is a REAL crouton app under the hood: properly scaffolded, real collections, reusing crouton-layout instead of reinventing it.",
+      "worksNow": "How to check: a conformance checklist on the PR (frontend + accessibility + e2e + typecheck + structure). Approve it when it's green.",
       "gate": "C2 checklist signed off. Graduation promotes ONLY when both C1 and C2 are signed off."
     }
   ]
