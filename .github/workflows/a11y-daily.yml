@@ -54,7 +54,7 @@ jobs:
           # deep sweep couldn't write its report, update the standing issue, or file a11y issues.
           # Broader than the per-PR gate's allowlist because this run also files GitHub issues
           # (MCP) + writes reports; the gate-package-edits hook still protects packages/.
-          claude_args: "--max-turns 60 --permission-mode bypassPermissions"
+          claude_args: "--model claude-sonnet-5 --max-turns 60 --permission-mode bypassPermissions"
           prompt: |
             Run the **`/a11y`** skill (`.claude/skills/a11y/SKILL.md`) at
             **depth=deep, scope=repo**. Sweep the `vuejs-accessibility/*` eslint rules across

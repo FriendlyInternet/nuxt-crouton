@@ -50,7 +50,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: "/task-decompose #${{ github.event.issue.number }}"
-          claude_args: "--max-turns 30"
+          claude_args: "--model claude-sonnet-5 --max-turns 30"
           show_full_output: true
           # WS5 (#535): the `delegate` label is now applied by the Nuxt Harness App, so this run is
           # actored as nuxt-harness[bot]. Allow exactly that bot past the bot-actor guard — nothing

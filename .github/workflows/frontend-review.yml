@@ -71,7 +71,7 @@ jobs:
           # bytes written. Bash covers `gh` (comment) + writing the verdict; Write/Edit for the
           # file; Read/Grep/Glob for the scan. Bump max-turns now that turns aren't wasted on
           # denied retries. NB: a11y.yml / red-team.yml share this exact latent bug.
-          claude_args: "--max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **frontend-review subagent** defined in `.claude/agents/frontend-review.md`.
             Input: { scope: "diff", depth: "quick", fix: false }.

@@ -46,7 +46,7 @@ jobs:
       - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: "--max-turns 100 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          claude_args: "--model claude-sonnet-5 --max-turns 100 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           show_full_output: true
 
       # Loop Station WS2 (#929) / usage rollup (#1064): ship this runner's
