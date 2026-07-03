@@ -450,7 +450,7 @@ onBeforeUnmount(() => {
       />
 
       <!-- Actions dropdown -->
-      <div v-if="!hideActions && !isGhost" class="opacity-0 group-hover:opacity-100 transition-opacity">
+      <div v-if="!hideActions && !isGhost" class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
         <UDropdownMenu
           :items="getItemActions(item)"
           :content="{ align: 'end' }"
@@ -467,7 +467,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Inline add dropdown (replaces full-width bar) -->
-      <div v-if="showAddButton && !isGhost" class="opacity-0 group-hover:opacity-100 transition-opacity">
+      <div v-if="showAddButton && !isGhost" class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
         <UDropdownMenu
           :items="getAddActions(item)"
           :content="{ align: 'end' }"
