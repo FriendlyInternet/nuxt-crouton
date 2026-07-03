@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crouton Builder — Graduation Plan</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --fg: #1a1a1a; --muted: #6b7280; --card: #fff; --line: #e5e7eb;
+    --done: #16a34a; --active: #2563eb; --next: #7c3aed; --blocked: #9ca3af; --later: #d1d5db;
+    --preserve: #16a34a; --replace: #d97706; --add: #2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111214; --fg: #e8e8e8; --muted: #9ca3af; --card: #1a1c1f; --line: #2a2d31;
+      --later: #3a3d42; --blocked: #52565c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding: 16px; max-width: 760px; margin-inline: auto; }
+  header h1 { font-size: 22px; margin: 0 0 4px; }
+  header .sub { color: var(--muted); font-size: 14px; margin: 0 0 12px; }
+  header .links { font-size: 13px; margin: 0 0 12px; }
+  header .links a { color: var(--active); text-decoration: none; }
+  .intro { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; font-size: 13.5px; color: var(--fg); margin-bottom: 14px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 12px; color: var(--muted);
+    margin-bottom: 20px; }
+  .legend .lg { display: inline-flex; align-items: center; gap: 5px; }
+  .pill { display: inline-block; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .03em; padding: 2px 7px; border-radius: 999px; color: #fff; white-space: nowrap; }
+  .st-done { background: var(--done); } .st-active { background: var(--active); }
+  .st-next { background: var(--next); } .st-blocked { background: var(--blocked); }
+  .st-later { background: var(--later); color: #555; }
+  .phase { background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+    padding: 14px 16px; margin-bottom: 16px; }
+  .phase.p-active { border-color: var(--active); box-shadow: 0 0 0 1px var(--active) inset; }
+  .phase-head, .inc-head { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+  .phase-id { font-weight: 800; font-size: 18px; color: var(--muted);
+    border: 2px solid var(--line); border-radius: 8px; width: 30px; height: 30px;
+    display: grid; place-items: center; }
+  .phase h2 { font-size: 18px; margin: 0; flex: 1; }
+  .phase .summary { color: var(--fg); font-size: 14px; margin: 10px 0; }
+  .worksnow { background: color-mix(in srgb, var(--active) 8%, transparent);
+    border-left: 3px solid var(--active); padding: 8px 11px; border-radius: 0 8px 8px 0;
+    font-size: 13.5px; margin: 10px 0; }
+  .gate { font-size: 13.5px; color: var(--muted); margin: 8px 0; }
+  .steps { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+  .step { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: 13.5px; }
+  .step-name { font-weight: 600; } .step-test { color: var(--muted); font-size: 12.5px; }
+  .incs { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+  .inc { border: 1px solid var(--line); border-radius: 11px; padding: 12px 13px; }
+  .inc.s-active { border-color: var(--active); }
+  .inc.s-done { opacity: .92; }
+  .inc.s-later { opacity: .6; }
+  .inc h4 { font-size: 15px; margin: 0; flex: 1; }
+  .tag { font-weight: 800; font-size: 12px; color: var(--muted); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+  .flow { font-size: 12px; font-weight: 600; margin: 8px 0 2px; }
+  .flow-sequential { color: var(--muted); } .flow-staggered { color: var(--active); }
+  .flow-parallel { color: var(--next); }
+  .note { font-size: 13px; color: var(--muted); margin: 6px 0; }
+  .spec-count { font-size: 11.5px; color: var(--muted); margin: 8px 0 6px; font-weight: 600; }
+  .specs { display: flex; flex-direction: column; gap: 5px; }
+  .spec { border: 1px solid var(--line); border-radius: 8px; background: var(--bg); overflow: hidden; }
+  .spec summary { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
+    padding: 8px 10px; cursor: pointer; list-style: none; }
+  .spec summary::-webkit-details-marker { display: none; }
+  .spec summary::before { content: "▸"; color: var(--muted); font-size: 11px; }
+  .spec[open] summary::before { content: "▾"; }
+  .bkt { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+    padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+  .b-settled .bkt { background: color-mix(in srgb, var(--preserve) 18%, transparent); color: var(--preserve); }
+  .b-stopgap .bkt { background: color-mix(in srgb, var(--replace) 20%, transparent); color: var(--replace); }
+  .b-new .bkt { background: color-mix(in srgb, var(--add) 18%, transparent); color: var(--add); }
+  /* behaviour text always gets its own full-width line so a nowrap ✓ badge can't crush it */
+  .beh { flex: 1 1 100%; min-width: 0; font-size: 13.5px; order: 3; }
+  .signed { font-size: 11px; color: var(--done); font-weight: 600; white-space: nowrap; }
+  .spec-body { padding: 2px 12px 12px; font-size: 13px; border-top: 1px solid var(--line); }
+  .spec-body p { margin: 8px 0; }
+  .spec-body .meta { color: var(--muted); font-size: 11.5px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em;
+    background: color-mix(in srgb, var(--muted) 15%, transparent); padding: 1px 4px; border-radius: 4px; }
+  footer { color: var(--muted); font-size: 11.5px; margin-top: 24px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Crouton Builder — Graduation Plan</h1>
+  <p class="sub">POC (crouton-builder-demo) → crouton-layout package + builder app</p>
+  <p class="links">
+    <a href="https://github.com/FriendlyInternet/nuxt-crouton/issues/983">Epic #983</a>
+     · <a href="https://github.com/FriendlyInternet/nuxt-crouton/pull/1124">PR #1124</a>
+    · 26 spec entries
+  </p>
+</header>
+<p class="intro">The plan is DERIVED from the frozen 26-entry spec ledger — every card below is a real spec entry, so the plan can't drift from the contract. Read top to bottom: Contract (done) → Rebuild the app to satisfy the spec → prove it two ways (experience + conformance). Statuses are updated as increments land; re-render with `node scripts/graduation-plan.mjs crouton-builder`.</p>
+<div class="legend"><span class="lg"><span class="pill st-done">done</span> landed + verified</span><span class="lg"><span class="pill st-active">active</span> being built now</span><span class="lg"><span class="pill st-next">next</span> queued, unblocked</span><span class="lg"><span class="pill st-later">later</span> deferred (post-graduation)</span><span class="lg"><span class="pill st-blocked">blocked</span> waiting on an earlier phase</span></div>
+<section class="phase p-done">
+  <div class="phase-head">
+    <span class="phase-id">A</span>
+    <h2>Contract</h2>
+    <span class="pill st-done">done</span>
+  </div>
+  <p class="summary">Freeze the spec ledger as the authoritative contract. Every downstream gate compares against it — not against the agent's memory of the POC.</p>
+  <p class="worksnow phase-works"><b>▶ Should work now:</b> The 26-entry spec is frozen (15 Preserve / 4 Replace / 7 Add). A1 contradictions resolved, A2 Replace-table agreed. All three A-gates signed off.</p>
+  
+  <div class="steps"><div class="step s-done">
+    <span class="pill st-done">done</span>
+    <span class="step-name">A0 · Freeze spec ledger</span>
+    <span class="step-test">🧪 spec.json has 26 entries; every `settled` entry carries a recorded `signedOff`.</span>
+  </div>
+<div class="step s-done">
+    <span class="pill st-done">done</span>
+    <span class="step-name">A1 · Resolve contradictions</span>
+    <span class="step-test">🧪 No entry contradicts another; superseded entries pruned.</span>
+  </div>
+<div class="step s-done">
+    <span class="pill st-done">done</span>
+    <span class="step-name">A2 · Replace-table (POC fakes → real crouton)</span>
+    <span class="step-test">🧪 Each `stopgap` entry names the real crouton thing that replaces it at graduation.</span>
+  </div></div>
+  
+</section>
+<section class="phase p-active">
+  <div class="phase-head">
+    <span class="phase-id">B</span>
+    <h2>Rebuild the app to satisfy the spec</h2>
+    <span class="pill st-active">active</span>
+  </div>
+  <p class="summary">Build `pocs/crouton-builder` on crouton-layout primitives so it satisfies the frozen spec — Preserve verbatim, Replace per A2, Add through their own gates. A POC is a floor, not a ceiling: the app is a superset.</p>
+  
+  
+  
+  <div class="incs"><div class="inc s-done">
+  <div class="inc-head">
+    <span class="tag">B1</span>
+    <h4>Spine</h4>
+    <span class="pill st-done">done</span>
+  </div>
+  <div class="flow flow-sequential">→ sequential</div>
+  <p class="note">The skeleton the rest hangs off. Built on the crouton-layout package, not a port of POC code.</p>
+  <p class="worksnow"><b>▶ Should work now:</b> A two-level Site flow (pages as a wireable graph) opens a per-page board over REAL crouton collections (artists / bookings / pages). Board edits persist to the collection and serialise to a clean, diffable LayoutTree. All 5 data-handoff hooks are present in the DOM.</p>
+  <div class="spec-count">3 Preserve · 1 Add · 3 Replace</div>
+  <div class="specs"><details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">Two levels on one screen: a Site flow (pages as a wireable sitemap) and a Page board (compose blocks). You land on the Site.</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> a CroutonFlow canvas of page cards (lines = parentId); tapping a card (or ⤢ / double-click) opens that page's board; 'Pages ←' returns to the flow</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> 1. open /spike-app → see the Site flow of page cards  2. tap a card → its LayoutTree loads onto the board  3. tap 'Pages ←' → back to the flow</p>
+    <p class="meta">spec <code>site-page-two-level</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-new">
+  <summary>
+    <span class="bkt">Add</span>
+    <span class="beh">The graduated builder app is a real crouton app whose data model is real collections (crouton CLI/config → generated CRUD/API/migrations), not the POC's backend-free demo blocks. The builder composes those collections' blocks.</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> CLI-scaffolded app + real collections (server/db/schema.ts present, generated layers, a migration); demo blocks are replaced by blocks over real collections</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> GRADUATED (conformance C2): the app boots, server/db/schema.ts exists, collections are generated (not stubs), CRUD works</p>
+    <p class="meta">spec <code>real-collections</code> · completeness the POC left open — its own gate, not the comparison</p>
+  </div>
+</details>
+<details class="spec b-stopgap">
+  <summary>
+    <span class="bkt">Replace</span>
+    <span class="beh">Page ⇄ Site is REAL routing, not one view. The POC fakes it: /spike-app is one route and selectedPageId v-if/v-else-swaps with a cross-fade (a visual transition pretending to be navigation).</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> POC: one URL, no history. GRADUATED: /builder = Site flow, /builder/[pageId] = that page's board (deep-linkable), browser back/forward works, page-to-page is a plain route link</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> POC: 1. open a page → URL stays /spike-app  2. browser back → doesn't return to the flow. GRADUATED target: URL is /builder/[pageId]; back returns to /builder</p>
+    <p class="meta">spec <code>page-site-routing</code> · a POC fake → the real crouton thing (an expected C1 diff)</p>
+  </div>
+</details>
+<details class="spec b-stopgap">
+  <summary>
+    <span class="bkt">Replace</span>
+    <span class="beh">Board state is ephemeral (in-memory only): each page's board is cached in a pageBoards Map and restored on re-entry, but nothing persists — a reload starts from composeDefault. By design for the POC.</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> POC: re-entering the page restores the in-memory board, but a full reload resets to composeDefault. GRADUATED: durable persistence — the LayoutTree round-trips to a store / the ticket (#974)</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> POC: 1. compose a board  2. leave and re-enter → restored  3. reload the page → back to default (not saved). GRADUATED target: survives reload</p>
+    <p class="meta">spec <code>board-persistence</code> · a POC fake → the real crouton thing (an expected C1 diff)</p>
+  </div>
+</details>
+<details class="spec b-stopgap">
+  <summary>
+    <span class="bkt">Replace</span>
+    <span class="beh">The board serialises to a clean, diffable LayoutTree (layouts → blocks → splits/sizes/breakpoints) — the canonical interchange format an agent and the builder both read/write. In the POC the model exists but lives in POC utils + inferred app.config.</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> a stable, human-readable LayoutTree serialiser on a typed package surface (the editable renderer + serialisation already landed in @fyit/crouton-layout via #987/#990 — re-validate it satisfies this, don't rebuild)</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> GRADUATED: serialise a composed board → a stable diffable tree; reload it → identical layout (round-trips)</p>
+    <p class="meta">spec <code>layouttree-serialise</code> · a POC fake → the real crouton thing (an expected C1 diff)</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">A component decides its own size as declared data: each block carries sizing {width,height: fill|hug}. hug = size to content. A Top bar / Bottom nav declare height:hug, so a pinned bar comes out as a short pill — no per-instance size UI.</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> the hug block renders short (content height); the fill block stretches; a card can't be resized below its hard floor</p>
+    <p class="hook"><b>Hook:</b> <code>floor-readout</code></p>
+    <p class="howto"><b>🧪 How to test:</b> 1. add a Top bar block → it renders as a short pill (declares height:hug)  2. add a List → it fills  3. try to resize a card below its floor → it won't go (floor readout shows 'stacks &lt;Npx · floor Mpx')</p>
+    <p class="meta">spec <code>intrinsic-block-sizing</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">Composites DERIVE their rules from children, component-driven all the way up: a split/nested layout publishes the same contract its leaves do, folded bottom-up by deriveSizing (hard floor = widest leaf; soft floor = sum across a row / max across a column).</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> the card shows a derived floor readout; the per-element resize can't drag it below its hard floor (a layout can't violate its components' rules)</p>
+    <p class="hook"><b>Hook:</b> <code>floor-readout</code></p>
+    <p class="howto"><b>🧪 How to test:</b> 1. compose a 2-pane row → select it  2. read the derived floor (hard = widest leaf, soft = sum)  3. resize down → stops at the hard floor</p>
+    <p class="meta">spec <code>composite-derive-sizing</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details></div>
+</div>
+<div class="inc s-active">
+  <div class="inc-head">
+    <span class="tag">B2</span>
+    <h4>Canvas &amp; gestures</h4>
+    <span class="pill st-active">active</span>
+  </div>
+  <div class="flow flow-staggered">⇥ staggered — verify each as it lands</div>
+  <p class="note">Rebuild the board on the POC's Vue Flow (CroutonFlow) canvas — this is where the 11 Preserve gestures live. Staggered on purpose: C1 can start walking each behaviour the moment it lands, instead of a big-bang at the end. drag-glow / add-block-land / spacer-block are independent and can land in parallel.</p>
+  <p class="worksnow"><b>▶ Should work now:</b> The board becomes a candidate canvas: many layout candidates + loose drafts as nodes, with the proven drag / snap-dwell / pinch-zoom / detach gestures.</p>
+  <div class="spec-count">12 Preserve · 1 Replace</div>
+  <div class="specs"><details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">The board holds many layout candidates + loose drafts, but exactly one node is 'the page' (★-badged) — the live layout a user would see.</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> one node carries the ★ page badge; 'Set as page' promotes another; 'Duplicate' clones one as a free draft; a merge involving the page always consumes (the badge survives)</p>
+    <p class="hook"><b>Hook:</b> <code>page-badge</code></p>
+    <p class="howto"><b>🧪 How to test:</b> 1. open a board with 2+ nodes → exactly one shows the ★ badge  2. Set as page on another → badge moves  3. merge the page into another node → the result keeps the ★ badge</p>
+    <p class="meta">spec <code>page-model-one-node</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">Editing a layout opens a dedicated full-screen edit VIEW, not a Vue Flow camera zoom (the camera zoom raced VF's re-measure and framed off-screen).</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> a full-screen overlay hosting the breakpoint author (min-width ruler, device buttons, width slider, per-block variants, splitter drags); 'Done' returns; the node's layout persists via the page's zoomTree</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> 1. double-click a composed node → full-screen edit view opens (no camera wobble)  2. drag a splitter → keypoint sizes change  3. Done → returns, changes persisted</p>
+    <p class="meta">spec <code>focus-edit-view</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">Responsiveness is per-element, not global — each card has a corner resize handle and renders responsively at the set width (the old board-wide responsive slider is gone).</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> a corner handle sets the node width/height; once a width is set the card switches to a read-only responsive preview (splitter drags then resize the card, not its panes); opening edit lands at that width</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> 1. select a card → corner handle appears  2. drag it narrower → the card's content reflows responsively  3. open edit → lands at the resized width</p>
+    <p class="meta">spec <code>per-element-resize</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">Snapping is a two-stage dwell-to-arm gesture: near a snap point → soft (blue, wide, pulsing); hold ~0.6s → armed (green, release-to-snap). The arm timer is keyed on the target only, so finger jitter that flips the nearest seam doesn't reset it.</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> a soft blue guide first, then a green armed ring/guide after the dwell; releasing while armed snaps</p>
+    <p class="hook"><b>Hook:</b> <code>snap-guide</code></p>
+    <p class="howto"><b>🧪 How to test:</b> 1. drag a card toward another's edge → soft blue guide (data-armed=false)  2. hold ~0.6s → turns green (data-armed=true)  3. release → snaps into place</p>
+    <p class="meta">spec <code>snap-dwell-arm</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">Drop a card OVER a composed layout (≥35% overlap) → add it beside the targeted pane on the nearest side (L/R/T/B by quadrant). Flattens into the parent row/column when the side runs along it, else wraps the pane in a new perpendicular split — so you can add 'right of a pane in a vertical stack', which seam-only insert couldn't reach.</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> the pane under the cursor is targeted; the card joins as a sibling on the nearest side; flatten vs wrap as above; the drop commits by tracking the dragged node's id</p>
+    <p class="hook"><b>Hook:</b> <code>ghost-pane</code></p>
+    <p class="howto"><b>🧪 How to test:</b> 1. drag a card over a 2-pane row, near the right pane's right edge → it joins the row (flatten)  2. drag over a vertical stack, to the right of a pane → wraps in a new horizontal split</p>
+    <p class="meta">spec <code>pane-drop-beside</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">On an armed pane-drop the target renders a ghost skeleton matching the dragged node's footprint (every leaf → a dashed placeholder, splits/nested preserved) and the real panes ease apart via FLIP to make room — a 2-row stack opens a 2-row slot, not a flat sliver. Reverts on un-arm.</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> a dashed ghost matching the dragged footprint appears; panes slide apart and the card grows to fit; un-arming reverts it</p>
+    <p class="hook"><b>Hook:</b> <code>ghost-pane</code></p>
+    <p class="howto"><b>🧪 How to test:</b> 1. drag a 2-row card over a layout and arm it → a 2-row dashed ghost opens  2. real panes ease apart (FLIP)  3. move away to un-arm → reverts</p>
+    <p class="meta">spec <code>ghost-ease-apart</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">Long-press a merged node → its TOP-LEVEL panes wiggle (grabbable). Reorder is the default: slide a pane to another slot ('Move here') and release. Detach needs a clear pull OUT past a ~64px margin beyond the card edge, so a small overshoot while reordering doesn't tip into a detach. Scope: top-level panes only — a layout nested inside a layout is grabbed as ONE pane; its inner panes aren't individually grabbable in the POC.</span>
+    <span class="signed">✓ lgtm 999 · Maarten · 2026-07-02 · A1 narrowed-contract sign-off (via session chat, recorded on #999)</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> top-level panes wiggle; sliding within the card reorders (green 'Move here'); pulling past the detach margin detaches; under the threshold it springs back; tap-outside/Esc/Done cancels</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> 1. long-press a merged node → its top-level panes wiggle  2. slide a pane to another slot → 'Move here', release → reordered  3. pull a pane far out (&gt;~64px) → detaches as its own node</p>
+    <p class="meta">spec <code>detach-reorder</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">Entering a page snaps to a fitted frame instantly, framed by the node's known geometry (position + footprint), not Vue Flow's measured size (stale on fresh mount), with duration 0 (no zoom-out wobble).</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> the page node is framed cleanly and immediately, no zoom-out wobble or off-screen framing</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> 1. from the Site flow, open a page → the board frames the page node instantly and centred (no wobble)</p>
+    <p class="meta">spec <code>enter-page-fit</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">Adding a block lands it in a clear spot right of every existing node (from real footprints), the camera centres on it at a moderate zoom, and a green 'just added' glow fades after ~2.5s.</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> the new block appears in a clear area (never under a wide/moved layout), camera centres on it, green glow fades</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> 1. add a block from the palette → it lands clear to the right, camera centres, green glow fades ~2.5s later</p>
+    <p class="meta">spec <code>add-block-land</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">A 2-finger pinch starting on a node zooms the board (the node's drag would otherwise swallow it); SpikeBlockNode catches the gesture in the capture phase and the page drives zoom via setCenter, keeping the pinched point under the fingers. One finger still drags/long-presses.</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> the board zooms around the pinched point; single-finger still drags/long-presses</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> 1. (touch) start a 2-finger pinch on a card → board zooms, pinched point stays under the fingers  2. one finger → still drags</p>
+    <p class="meta">spec <code>pinch-zoom</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">A dragged card carries a light-green halo (Vue Flow dragging, forwarded by CroutonFlow), fading on drop. Snap rings (emerald armed / sky soft) outrank the glow.</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> a light-green halo while dragging, fading on drop; snap rings take visual priority when present</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> 1. drag a card → light-green halo  2. bring it near a snap → the snap ring outranks the glow  3. drop → halo fades</p>
+    <p class="meta">spec <code>drag-glow</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-settled">
+  <summary>
+    <span class="bkt">Preserve</span>
+    <span class="beh">The Spacer is a real, snappable layout primitive that holds empty space (faint dashed hint in the builder); it snaps/reorders/resizes like any block to push neighbours around or hold a gap, with a small minWidth (40) so it can be a thin gutter.</span>
+    <span class="signed">✓ A1 spec-walk · Maarten · 2026-07-02</span>
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> an empty space block with a faint dashed hint; behaves like any block (snap/reorder/resize); can be a thin gutter</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> 1. add a Spacer → dashed empty block  2. snap it between two blocks → pushes them apart  3. resize narrow → thin gutter</p>
+    <p class="meta">spec <code>spacer-block</code> · proven experience — must survive C1 verbatim</p>
+  </div>
+</details>
+<details class="spec b-stopgap">
+  <summary>
+    <span class="bkt">Replace</span>
+    <span class="beh">The Page⇄Site transition is a simultaneous cross-fade + subtle directional scale (a gentle zoom). Explicitly a stopgap.</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> POC: cross-fade (both views stacked, one in as the other out). GRADUATED: View Transitions API shared-element morph — matching view-transition-name on the flow card and the page board so the card grows into the board and shrinks back</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> POC: 1. open/close a page → cross-fade. GRADUATED target: the page card morphs into the board (shared-element)</p>
+    <p class="meta">spec <code>page-site-transition</code> · a POC fake → the real crouton thing (an expected C1 diff)</p>
+  </div>
+</details></div>
+</div>
+<div class="inc s-next">
+  <div class="inc-head">
+    <span class="tag">B3</span>
+    <h4>Additions (the app's superset)</h4>
+    <span class="pill st-next">next</span>
+  </div>
+  <div class="flow flow-parallel">⇉ parallel — independent</div>
+  <p class="note">Independent of each other — parallelisable once the canvas is stable. Each is a NEW behaviour the POC left open, so each goes through its own gate (schema / UI / test-first), NOT the side-by-side comparison.</p>
+  <p class="worksnow"><b>▶ Should work now:</b> Region pinning, bounded display variants, depth-recursive detach, and the round-trip-onto-ticket seat (#974) — completeness the POC only gestured at.</p>
+  <div class="spec-count">4 Add</div>
+  <div class="specs"><details class="spec b-new">
+  <summary>
+    <span class="bkt">Add</span>
+    <span class="beh">A node can be pinned to the page's top/bottom edge (a sticky pill/bar) from its toolbar — the first bounded-vocabulary expressiveness feature. Region is a bounded enum (top|bottom|main), agent-pickable, serialisable. No free-floating positioning.</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> the badge shows 'Pinned top/bottom'; the GRADUATED app assembles the real rendered page from regions — pinned-top in a sticky top bar, pinned-bottom in a sticky bottom bar, the ★ page in a scrolling main between</p>
+    <p class="hook"><b>Hook:</b> <code>region-pill</code></p>
+    <p class="howto"><b>🧪 How to test:</b> GRADUATED: 1. pin a node to top → region pill shows 'Pinned top'  2. pin another to bottom  3. open the page (its real route/render) → sticky top bar + sticky bottom bar + scrolling main</p>
+    <p class="meta">spec <code>page-regions-pin</code> · completeness the POC left open — its own gate, not the comparison</p>
+  </div>
+</details>
+<details class="spec b-new">
+  <summary>
+    <span class="bkt">Add</span>
+    <span class="beh">A block can expose bounded display variants — enumerated layouts of the same data (e.g. Artists list: rows / cards / table). A variant is an enum an agent could equally pick, declared on the registry, serialised on the leaf, so it persists and round-trips.</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> a Display chip row is DISCOVERABLE the moment a variant-capable block is selected (not buried behind a second toggle); a tap re-renders the block in that variant; the choice serialises onto leaf.config.variant</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> GRADUATED: 1. edit a List block → select its pane  2. Display row offers rows/cards/table, visible without hunting  3. pick 'table' → re-renders; reopen → still table (persisted on the leaf)</p>
+    <p class="meta">spec <code>display-variants</code> · completeness the POC left open — its own gate, not the comparison</p>
+  </div>
+</details>
+<details class="spec b-new">
+  <summary>
+    <span class="bkt">Add</span>
+    <span class="beh">Depth-recursive detach/reorder: the wiggle gesture reaches panes INSIDE a layout nested in a layout — an inner pane can be reordered within its nested group or pulled out past the detach margin, the same two-stage gesture as top-level.</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> inner panes are individually grabbable; sliding reorders within the nested group; pulling past the margin detaches the inner pane as its own node; the nested layout itself stays grabbable as a whole at its own level</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> GRADUATED: 1. compose a layout containing a nested layout  2. long-press → both levels' panes wiggle  3. slide an inner pane → reorders inside the nested group  4. pull it far out (&gt;~64px) → detaches as its own node</p>
+    <p class="meta">spec <code>detach-reorder-nested</code> · completeness the POC left open — its own gate, not the comparison</p>
+  </div>
+</details>
+<details class="spec b-new">
+  <summary>
+    <span class="bkt">Add</span>
+    <span class="beh">Persist a version back to the GitHub ticket: a human's edited layout saves onto the tracking issue as the command/spec for the agent to (re)build from. Agent writes the tree → human edits visually → edit posts back → agent reads it. The North Star — the builder is the human's seat in an agent pipeline.</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> the serialised LayoutTree is posted to the issue as a diffable spec; the round-trip works both ways (mirrors the schema-review / ui-proposal sign-off loops, but the artifact is the layout tree)</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> GRADUATED: edit a layout → 'save version' → the tree appears on the issue → an agent reads it back and rebuilds the same layout</p>
+    <p class="meta">spec <code>round-trip-ticket</code> · completeness the POC left open — its own gate, not the comparison</p>
+  </div>
+</details></div>
+</div>
+<div class="inc s-later">
+  <div class="inc-head">
+    <span class="tag">B4</span>
+    <h4>Deferred — the agent⇄human seat</h4>
+    <span class="pill st-later">later</span>
+  </div>
+  <div class="flow flow-parallel">⇉ parallel — independent</div>
+  <p class="note">The AI + collab seat (#974). Not required for graduation; it's WHY the clean contract matters, built once the contract is real.</p>
+  <p class="worksnow"><b>▶ Should work now:</b> (not started)</p>
+  <div class="spec-count">2 Add</div>
+  <div class="specs"><details class="spec b-new">
+  <summary>
+    <span class="bkt">Add</span>
+    <span class="beh">Two-tier magic arrange: ✨ Magic arrange (deterministic compose of placed blocks) and ✨ Magic (AI) — a free-text 'Describe the app' intent → an LLM arranges the placed blocks — shown only when the crouton-ai add-on is installed (hasApp('ai')). Both write the same LayoutTree (the agent→human arrow, in-app).</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> Magic arrange deterministically composes a first-cut layout; with crouton-ai installed, an AI tier takes a free-text intent and arranges; both produce a LayoutTree</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> GRADUATED: 1. place blocks → Magic arrange → a composed layout  2. with crouton-ai → type an intent → AI arranges the same blocks</p>
+    <p class="meta">spec <code>magic-ai-arrange</code> · completeness the POC left open — its own gate, not the comparison</p>
+  </div>
+</details>
+<details class="spec b-new">
+  <summary>
+    <span class="bkt">Add</span>
+    <span class="beh">Build together: sync the board through crouton-collab (a CollabRoom over Yjs — flowId + synced data mode + presence). The POC runs Vue Flow ephemeral/non-synced. When synced, undo must switch to Y.UndoManager (per-user transaction undo) — the POC's whole-board snapshot stack is a single-user placeholder that would clobber others' edits.</span>
+    
+  </summary>
+  <div class="spec-body">
+    <p class="expect"><b>Expect:</b> edits and presence sync via a CollabRoom; undo is per-user (Y.UndoManager), not a whole-board snapshot</p>
+    
+    <p class="howto"><b>🧪 How to test:</b> GRADUATED: 1. two clients join the same board → edits sync + presence shows  2. user A undo → only A's last edit reverts, not B's</p>
+    <p class="meta">spec <code>multiplayer-collab</code> · completeness the POC left open — its own gate, not the comparison</p>
+  </div>
+</details></div>
+</div></div>
+</section>
+<section class="phase p-blocked">
+  <div class="phase-head">
+    <span class="phase-id">C1</span>
+    <h2>Prove it — experience side-by-side</h2>
+    <span class="pill st-blocked">blocked</span>
+  </div>
+  <p class="summary">Walk each Preserve (`settled`) entry on the POC and the app together — same hook, same gesture, same result. This is the first of graduation's TWO acceptance axes.</p>
+  <p class="worksnow phase-works"><b>▶ Should work now:</b> Every settled behaviour behaves identically on POC and app; each signed off (lgtm per entry). Staggered: begins per-item as each B2 gesture lands.</p>
+  <p class="gate"><b>🔒 Gate:</b> C1 signed off — a recorded lgtm per Preserve entry (done is derived from the sign-off, never a green build).</p>
+  
+  
+</section>
+<section class="phase p-blocked">
+  <div class="phase-head">
+    <span class="phase-id">C2</span>
+    <h2>Prove it — crouton-conformance</h2>
+    <span class="pill st-blocked">blocked</span>
+  </div>
+  <p class="summary">Run `/conformance` — the second acceptance axis. Certifies the app is a REAL crouton app: CLI-scaffolded (server/db/schema.ts present), real collections not stub blocks, consumes crouton-layout without reinventing it (DRY).</p>
+  <p class="worksnow phase-works"><b>▶ Should work now:</b> A signed-off conformance checklist on the graduation PR, composing /frontend-review + /a11y + /e2e-smoke + pnpm typecheck plus the crouton-structural checks.</p>
+  <p class="gate"><b>🔒 Gate:</b> C2 checklist signed off. Graduation promotes ONLY when both C1 and C2 are signed off.</p>
+  
+  
+</section>
+<footer>Derived from <code>../crouton-builder-demo/spec.json</code> — re-render: <code>node scripts/graduation-plan.mjs crouton-builder</code></footer>
+</body>
+</html>
