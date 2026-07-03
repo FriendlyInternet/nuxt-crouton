@@ -127,12 +127,25 @@ function onExpand(blockId: string) {
   onToggleCollapse(blockId)
 }
 
+// Changing the SIMULATED WIDTH (ruler / device / marker) reflows the reka splitter, which
+// re-emits `layoutChange` for the width-driven re-proportion — NOT a user drag. Without a
+// guard that authors a spurious checkpoint at every width you scrub past (the ruler fills
+// with dots). So suppress the auto-breakpoint for a short window after any width change:
+// sliding NAVIGATES widths; only a real change (splitter drag / collapse / variant) authors
+// one. (Restores the POC shell's `suppressResize` guard, dropped in the #874 extraction.)
+const RESIZE_SUPPRESS_MS = 400
+// Seed the window so the FIRST splitter reflow on mount (reka emits one for the initial
+// proportioning) doesn't author a checkpoint at the seed width either.
+let suppressResizeUntil = (import.meta.client ? Date.now() : 0) + 600
+
 // Author BY DEMONSTRATION, continued: dragging a splitter at the current width is *also*
 // a change — it authors a breakpoint here whose `root` override locks the new pane sizes
 // in from this width up (#874 follow-up). The renderer hands us the resized split's path
 // within the resolved root; we apply the sizes onto our own (structurally identical)
 // resolve and snapshot the whole resolved state, exactly like authorHere().
 function onResize(path: NodePath, sizes: number[]) {
+  // Ignore reflow-induced resizes that ride a width change (see suppressResizeUntil).
+  if (Date.now() < suppressResizeUntil) return
   update(patchBreakpoint(tree.value, simWidth.value, {
     root: applySizes(resolved.value.root, path, sizes),
     collapsed: [...resolved.value.collapsed],
@@ -151,9 +164,11 @@ function onMarkerClick(minWidth: number) {
   simWidth.value = minWidth // jump to it…
   armedDelete.value = minWidth // …and arm it (shows a red ✕)
 }
-// Dragging the ruler away from an armed marker disarms it.
+// Dragging the ruler away from an armed marker disarms it; and open a window in which the
+// splitter's width-driven reflow does NOT author a checkpoint (see onResize / suppressResizeUntil).
 watch(simWidth, () => {
   if (armedDelete.value !== null && armedDelete.value !== simWidth.value) armedDelete.value = null
+  suppressResizeUntil = Date.now() + RESIZE_SUPPRESS_MS
 })
 
 // --- the scaled device frame ----------------------------------------------
