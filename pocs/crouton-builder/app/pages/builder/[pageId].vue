@@ -186,6 +186,24 @@ function onRowsUpdate(rowsRaw: Record<string, unknown>[]) {
   dirty.value = true
 }
 
+// ── focus-edit-view (spec: `focus-edit-view`) — double-click a node → full-screen edit ──
+// overlay hosting the graduated breakpoint author. NOT a camera zoom (that raced VF's
+// re-measure and framed off-screen). Editing a copy; the board commits only on 'Done'.
+const editing = ref<FlowNode | null>(null)
+function onNodeDblClick(id: string) {
+  editing.value = nodes.value.find(n => n.id === id) ?? null
+}
+function onFocusSave(tree: LayoutTree) {
+  const target = editing.value
+  if (target) {
+    nodes.value = nodes.value.map(n => (n.id === target.id
+      ? { ...n, data: { ...n.data, node: tree.root, bp: tree.breakpoints } }
+      : n))
+    dirty.value = true
+  }
+  editing.value = null
+}
+
 const paletteOpen = ref(false)
 
 // ── Durable persistence — EXPLICIT Save (never autosave: autosave → refetch → reseed loop). ──
@@ -269,6 +287,7 @@ async function saveBoard() {
           :minimap="false"
           @node-drop="onNodeDrop"
           @update:rows="onRowsUpdate"
+          @node-dbl-click="onNodeDblClick"
         />
       </ClientOnly>
 
@@ -303,5 +322,15 @@ async function saveBoard() {
         </div>
       </template>
     </UDrawer>
+
+    <!-- focus-edit-view — full-screen pane editor over the double-clicked node. -->
+    <BuilderFocusShell
+      v-if="editing"
+      :node="editing.data.node"
+      :breakpoints="editing.data.bp"
+      :title="editing.data.label"
+      @save="onFocusSave"
+      @close="editing = null"
+    />
   </div>
 </template>
