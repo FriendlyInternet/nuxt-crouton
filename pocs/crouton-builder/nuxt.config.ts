@@ -43,6 +43,13 @@ export default defineNuxtConfig({
   croutonAuth: {
     methods: {
       passkeys: false
+    },
+    // /builder is a root route (no [team] param), so team context comes entirely from the
+    // session's active org. Give every new signup a personal workspace so they always have a
+    // team — without it a fresh user has zero orgs and the app has no teamId (verified on the
+    // deployed build). The ensure-team.client plugin covers already-accountless sessions too.
+    teams: {
+      autoCreateOnSignup: true
     }
   },
 
