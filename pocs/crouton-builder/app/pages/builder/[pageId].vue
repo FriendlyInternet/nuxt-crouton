@@ -14,7 +14,6 @@
  * Hooks reproduced here: `page-badge` (this node is "the page") and `floor-readout`
  * (the board's derived floor, folded bottom-up by `deriveSizing`).
  */
-import { watchDebounced } from '@vueuse/core'
 import type { LayoutTree } from '@fyit/crouton-core/app/types/layout'
 import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize'
 import { deriveSizing } from '@fyit/crouton-layout/app/utils/layout-viability'
@@ -22,6 +21,17 @@ import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 const route = useRoute()
 const pageId = computed(() => String(route.params.pageId))
+
+// TEMP diagnostic (#988 reload) — remove once the reload cause is confirmed.
+// A fresh `iid` each setup: many rapid iids = a remount/navigation loop; one iid
+// with repeated seed/edit = a reactivity loop; the tab fully reloading = the log
+// clears and a new iid appears per reload. Prefixed so it's easy to filter.
+const iid = Math.floor(Math.random() * 1e5).toString(36)
+function blog(...a: unknown[]) { if (import.meta.client) console.log(`[board ${iid}]`, ...a) }
+blog('setup · pageId=', pageId.value)
+onMounted(() => blog('mounted'))
+onBeforeUnmount(() => blog('UNMOUNT'))
+onErrorCaptured((e) => { blog('errorCaptured', e); return false })
 
 const { items: pages } = await useCollectionQuery('builderPages')
 const page = computed(() => (pages.value as BuilderPage[]).find((p) => p.id === pageId.value) ?? null)
@@ -58,19 +68,16 @@ const loadedFor = ref<string | null>(null)
 // "Loading…" and back on every save — the flicker the user sees as "constantly
 // reloading" (and the remount re-measures panes → another save → a real loop).
 const ready = ref(false)
-// Last serialised tree we loaded/saved — so we never re-save an unchanged tree
-// (a spurious pane re-measure emitting the same layout can't start a save loop).
-const lastSaved = ref<string | null>(null)
 watch(
   [page, pageId] as const,
   ([p, id]) => {
+    blog('seed watch fired · hasPage=', !!p, 'loadedFor=', loadedFor.value, 'id=', id)
     if (!p || loadedFor.value === id) return
     const stored = (p.board as Record<string, unknown> | null)?.layout
-    const seeded = (typeof stored === 'string' ? parseLayoutTree(stored) : null) ?? starterTree()
-    tree.value = seeded
-    lastSaved.value = serializeLayoutTree(seeded)
+    tree.value = (typeof stored === 'string' ? parseLayoutTree(stored) : null) ?? starterTree()
     loadedFor.value = id
     ready.value = true
+    blog('seeded tree · ready=true')
   },
   { immediate: true },
 )
@@ -80,37 +87,33 @@ watch(
 const { blocks } = useCroutonLayoutBlocks()
 const derived = computed(() => (tree.value ? deriveSizing(tree.value.root, blocks.value) : null))
 
-// Durable persistence — save ONLY on a genuine editor edit (via the board's
-// update:modelValue), never on the programmatic seed above. That breaks the
-// save⇄refetch⇄re-seed feedback loop: a refetch no longer re-seeds (loadedFor
-// guard) and the seed no longer triggers a save.
+// Durable persistence — EXPLICIT, not autosave. Autosave called update() on every
+// edit → invalidateCache refetched the builderPages query → cascaded into a
+// reload/flicker loop. A manual Save can't auto-fire, so the board is a stable base
+// to test on. An edit just marks the board dirty; the Save button commits it.
 const { update } = useCollectionMutation('builderPages')
 const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
-const pendingSave = ref<LayoutTree | null>(null)
+const dirty = ref(false)
 
 function onBoardEdit(next: LayoutTree | null) {
+  blog('onBoardEdit (CroutonLayout emitted update:model-value)')
   tree.value = next
-  pendingSave.value = next
+  dirty.value = true
+  saveState.value = 'idle'
 }
 
-watchDebounced(
-  pendingSave,
-  async (next) => {
-    // Guard against a stale save landing on a page we've since navigated away from.
-    if (!next || loadedFor.value !== pageId.value) return
-    const serialized = serializeLayoutTree(next)
-    if (serialized === lastSaved.value) return // no real change — don't churn the API / refetch
-    saveState.value = 'saving'
-    try {
-      await update(pageId.value, { board: { layout: serialized } })
-      lastSaved.value = serialized
-      saveState.value = 'saved'
-    } catch {
-      saveState.value = 'idle'
-    }
-  },
-  { debounce: 700 },
-)
+async function saveBoard() {
+  if (!tree.value) return
+  const serialized = serializeLayoutTree(tree.value)
+  saveState.value = 'saving'
+  try {
+    await update(pageId.value, { board: { layout: serialized } })
+    dirty.value = false
+    saveState.value = 'saved'
+  } catch {
+    saveState.value = 'idle'
+  }
+}
 </script>
 
 <template>
@@ -153,15 +156,21 @@ watchDebounced(
         <template v-else>floor {{ derived.hardMinWidth }}px</template>
       </span>
 
-      <div class="ml-auto flex items-center gap-2 text-xs text-muted">
-        <UIcon
-          v-if="saveState === 'saving'"
-          name="i-lucide-loader-circle"
-          class="size-4 animate-spin"
-        />
-        <span v-else-if="saveState === 'saved'" class="flex items-center gap-1">
+      <div class="ml-auto flex items-center gap-2">
+        <span v-if="saveState === 'saved' && !dirty" class="flex items-center gap-1 text-xs text-muted">
           <UIcon name="i-lucide-check" class="size-4 text-primary" /> Saved
         </span>
+        <UButton
+          size="sm"
+          icon="i-lucide-save"
+          :color="dirty ? 'primary' : 'neutral'"
+          :variant="dirty ? 'solid' : 'ghost'"
+          :loading="saveState === 'saving'"
+          :disabled="!dirty && saveState !== 'saving'"
+          @click="saveBoard"
+        >
+          Save
+        </UButton>
       </div>
     </header>
 
