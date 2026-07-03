@@ -20,6 +20,17 @@ export default defineNuxtConfig({
   experimental: {
     viewTransition: true
   },
+
+  // Surface the spec-derived graduation plan IN-APP as a @fyit/crouton-feedback
+  // "Plan" tool (a badged launcher row, like the Changelog tool) — so the
+  // human-in-the-loop reads it on the running preview. Data-first: it renders
+  // graduation-plan.json (joined with the spec ledger it points at via
+  // `specSource`) natively with Nuxt UI; the badge is the active phase.
+  croutonFeedback: {
+    plan: {
+      dataPath: 'graduation-plan.json'
+    }
+  },
   hub: {
     db: 'sqlite',
     kv: true
