@@ -1,8 +1,11 @@
-import { describe, it, expect, vi } from 'vitest'
+// @vitest-environment happy-dom
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createConsoleTool, type ErudaLike } from '../src/runtime/tools/console'
 import type { ConsoleCapture } from '../src/runtime/tools/console-capture'
 
 describe('console tool', () => {
+  afterEach(() => { document.body.innerHTML = '' })
+
   it('exposes the menu metadata', () => {
     const tool = createConsoleTool(null, async () => ({ init: vi.fn(), show: vi.fn(), hide: vi.fn() }))
     expect(tool.id).toBe('console')
@@ -54,5 +57,30 @@ describe('console tool', () => {
     const capture: ConsoleCapture = { entries: [], errorCount: () => 0, record: vi.fn(), replay: vi.fn(), uninstall: vi.fn() }
     expect(createConsoleTool(capture).badge!()).toBeNull()
     expect(createConsoleTool(null).badge!()).toBeNull()
+  })
+
+  it('injects a reachable "Close console" ✕ on activate, wired to onRequestClose; removes it on deactivate (#1174)', async () => {
+    const eruda: ErudaLike = { init: vi.fn(), show: vi.fn(), hide: vi.fn() }
+    const onRequestClose = vi.fn()
+    const tool = createConsoleTool(null, async () => eruda, onRequestClose)
+
+    await tool.activate!()
+    const btn = document.querySelector('button[aria-label="Close console"]') as HTMLButtonElement | null
+    expect(btn, 'close ✕ present after activate').not.toBeNull()
+
+    btn!.click()
+    expect(onRequestClose, '✕ requests close via the registry, not a bare eruda.hide()').toHaveBeenCalledOnce()
+
+    tool.deactivate!()
+    expect(document.querySelector('button[aria-label="Close console"]'), 'close ✕ removed on deactivate').toBeNull()
+    expect(eruda.hide).toHaveBeenCalledOnce()
+  })
+
+  it('falls back to eruda.hide() when no onRequestClose is wired', async () => {
+    const eruda: ErudaLike = { init: vi.fn(), show: vi.fn(), hide: vi.fn() }
+    const tool = createConsoleTool(null, async () => eruda)
+    await tool.activate!()
+    ;(document.querySelector('button[aria-label="Close console"]') as HTMLButtonElement).click()
+    expect(eruda.hide).toHaveBeenCalledOnce()
   })
 })

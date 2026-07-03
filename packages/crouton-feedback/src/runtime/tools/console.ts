@@ -22,10 +22,43 @@ export interface ErudaLike {
 export function createConsoleTool(
   capture?: ConsoleCapture | null,
   loadEruda: () => Promise<ErudaLike> = async () =>
-    (await import('eruda')).default as unknown as ErudaLike
+    (await import('eruda')).default as unknown as ErudaLike,
+  // Called when the user taps the panel's own ✕ — the plugin wires this to the registry's
+  // `deactivate(tool)` so the launcher's active state stays in sync (not a bare eruda.hide()).
+  onRequestClose?: () => void
 ): FeedbackTool {
   let eruda: ErudaLike | null = null
   let replayed = false
+  // eruda hides its own entry button (it overlaps the glasses launcher), so the panel would
+  // otherwise have NO visible way to close (#1174). We inject our own ✕ — top-left, clear of
+  // the bottom-right launcher — above eruda's panel, wired to close the tool cleanly.
+  let closeBtn: HTMLButtonElement | null = null
+
+  function showCloseButton() {
+    if (typeof document === 'undefined' || closeBtn) return
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.setAttribute('aria-label', 'Close console')
+    btn.textContent = '✕'
+    btn.style.cssText = [
+      'position:fixed', 'top:max(12px,env(safe-area-inset-top))', 'left:12px',
+      'z-index:2147483645', 'width:36px', 'height:36px', 'border-radius:9999px',
+      'border:none', 'background:rgba(17,17,17,0.86)', 'color:#fff', 'font-size:16px',
+      'line-height:36px', 'text-align:center', 'padding:0', 'cursor:pointer',
+      'box-shadow:0 2px 8px rgba(0,0,0,0.4)', 'pointer-events:auto',
+    ].join(';')
+    btn.addEventListener('click', () => {
+      if (onRequestClose) onRequestClose()
+      else eruda?.hide()
+    })
+    document.body.appendChild(btn)
+    closeBtn = btn
+  }
+
+  function hideCloseButton() {
+    closeBtn?.remove()
+    closeBtn = null
+  }
 
   return {
     id: 'console',
@@ -57,8 +90,10 @@ export function createConsoleTool(
         })
       }
       eruda.show()
+      showCloseButton()
     },
     deactivate: () => {
+      hideCloseButton()
       eruda?.hide()
     }
   }

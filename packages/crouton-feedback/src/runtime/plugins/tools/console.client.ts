@@ -28,5 +28,9 @@ export default defineNuxtPlugin((nuxtApp) => {
     prevWarn?.(msg, instance, trace)
   }
 
-  useFeedbackTools().registerTool(createConsoleTool(capture))
+  // Wire the panel's ✕ to the registry's deactivate so the launcher's active state stays in
+  // sync (the tool refers to itself via `toolRef`, assigned before any close click fires).
+  const { registerTool, deactivate } = useFeedbackTools()
+  const toolRef = createConsoleTool(capture, undefined, () => deactivate(toolRef))
+  registerTool(toolRef)
 })

@@ -162,7 +162,7 @@ consumed by the tool).
 | `src/runtime/composables/useFeedbackTools.ts` | Tool **registry** — `registerTool()` + reactive `tools`/`toggle` the launcher reads. Unit-tested. |
 | `src/runtime/components/FeedbackLauncher.vue` | The glasses launcher — Nuxt UI `UPopover` of toggleable tool rows. |
 | `src/runtime/overlay/mount.ts` | `mountOverlayInBody()` — appContext-mount helper (launcher + future overlays). |
-| `src/runtime/tools/console.ts` | **Console** tool factory — eruda, lazy-loaded on toggle; injectable loader (unit-tested). |
+| `src/runtime/tools/console.ts` | **Console** tool factory — eruda, lazy-loaded on toggle; injectable loader (unit-tested). Injects a floating **Close console ✕** on activate (top-left, clear of the bottom-right launcher) wired to the registry's `deactivate` via the `onRequestClose` callback — eruda hides its own entry button, so this is the panel's only reachable close (#1174). |
 | `src/runtime/tools/annotate.ts` | **Annotate** tool factory — maps activate/deactivate → select-mode start/stop. |
 | `src/runtime/tools/changelog.ts` | **Changelog** tool factory — `vNN` badge + open/close the timeline (unit-tested). |
 | `src/runtime/tools/changelog-data.ts` | Pure changelog helpers (`normalizeChangelog` / `latestVersion` / `buildCommitUrl`) — shared by the module (build) + composable (runtime). Unit-tested, no Vue. |
