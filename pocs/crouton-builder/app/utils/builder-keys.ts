@@ -23,6 +23,15 @@ export type BuilderRegion = 'top' | 'bottom'
 export const BUILDER_SET_REGION_KEY: InjectionKey<(node: LayoutNode, region: BuilderRegion | null) => void> = Symbol('builder-set-region')
 
 /**
+ * Per-element resize (spec: `per-element-resize`) — each card carries its own display width/height;
+ * dragging its corner handle sets them (the handle IS the per-element size control, replacing any
+ * board-wide slider). `width: null` clears back to the intrinsic footprint size. The board provides
+ * this; BuilderBlockNode calls it (node by object identity of its `data.node`).
+ */
+export interface BuilderNodeSize { width: number | null, height?: number | null }
+export const BUILDER_SET_SIZE_KEY: InjectionKey<(node: LayoutNode, size: BuilderNodeSize) => void> = Symbol('builder-set-size')
+
+/**
  * Live snap preview (spec: `snap-dwell-arm`) — set continuously by the board WHILE a card is
  * dragged. It names the TARGET node the dragged card will click onto and the edge it snaps to,
  * so that target's card can light that edge up. `armed` is the two-stage dwell: `false` = soft

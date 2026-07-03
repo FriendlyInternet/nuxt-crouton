@@ -26,7 +26,7 @@ import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/u
 import { dropNode, applyPaneDrop } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { snapEdge, rectsOverlapFrac } from '@fyit/crouton-layout/app/utils/layout-snap'
 import BuilderBlockNode from '~/components/BuilderBlockNode.vue'
-import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, type BuilderRegion, type BuilderSnapPreview } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, type BuilderRegion, type BuilderNodeSize, type BuilderSnapPreview } from '~/utils/builder-keys'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 const blockNode = markRaw(BuilderBlockNode)
@@ -201,6 +201,15 @@ function setRegion(node: LayoutNode, region: BuilderRegion | null) {
   dirty.value = true
 }
 provide(BUILDER_SET_REGION_KEY, setRegion)
+
+// per-element-resize — write a card's explicit display width/height (null clears to footprint).
+function setNodeSize(node: LayoutNode, size: BuilderNodeSize) {
+  nodes.value = nodes.value.map(n => (n.data.node === node
+    ? { ...n, data: { ...n.data, width: size.width ?? undefined, height: size.width === null ? undefined : (size.height ?? n.data.height) } }
+    : n))
+  dirty.value = true
+}
+provide(BUILDER_SET_SIZE_KEY, setNodeSize)
 
 let snapKey: string | null = null
 let snapTimer: number | null = null

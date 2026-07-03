@@ -14,9 +14,9 @@
  *
  * `footprint` / `sizeOf` / `BUILDER_BASE_*` are auto-imported from app/utils/builder-layout.
  */
-import { computed, inject } from 'vue'
+import { computed, inject, ref } from 'vue'
 import type { LayoutNode, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
-import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, type BuilderRegion } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, type BuilderRegion } from '~/utils/builder-keys'
 
 const props = defineProps<{
   data: {
@@ -35,10 +35,48 @@ const props = defineProps<{
   dragging?: boolean
 }>()
 
+// per-element-resize — an explicit width/height wins over the intrinsic footprint size.
 const size = computed(() => {
   const f = footprint(props.data.node)
-  return { width: `${f.cols * BUILDER_BASE_W}px`, height: `${f.rows * BUILDER_BASE_H}px` }
+  const w = typeof props.data.width === 'number' ? props.data.width : f.cols * BUILDER_BASE_W
+  const h = typeof props.data.height === 'number' ? props.data.height : f.rows * BUILDER_BASE_H
+  return { width: `${w}px`, height: `${h}px` }
 })
+
+// The corner handle sets this card's width/height. Zoom-compensated so the drag tracks 1:1 on
+// screen; floored at the node's derived hard-min-width so a layout can't be dragged below its
+// components' rules (deriveSizing folds the leaf minWidths). Auto-imported from crouton-layout.
+const setSize = inject(BUILDER_SET_SIZE_KEY, null)
+const { blocks } = useCroutonLayoutBlocks()
+const resizeFloorW = computed(() => Math.max(120, deriveSizing(props.data.node, blocks.value).hardMinWidth || 0))
+const resizing = ref(false)
+function currentZoom(): number {
+  const el = document.querySelector('.vue-flow__transformationpane') as HTMLElement | null
+  if (!el) return 1
+  try { return new DOMMatrix(getComputedStyle(el).transform).a || 1 } catch { return 1 }
+}
+function onResizeDown(e: PointerEvent) {
+  if (!setSize || e.button !== 0) return
+  e.stopPropagation(); e.preventDefault()
+  resizing.value = true
+  const z = currentZoom()
+  const card = (e.currentTarget as HTMLElement).closest('.builder-block-node') as HTMLElement | null
+  const rect = card?.getBoundingClientRect()
+  const startW = typeof props.data.width === 'number' ? props.data.width : (rect ? rect.width / z : 256)
+  const startH = typeof props.data.height === 'number' ? props.data.height : (rect ? rect.height / z : 184)
+  const ox = e.clientX, oy = e.clientY
+  const floorW = resizeFloorW.value
+  const move = (ev: PointerEvent) => {
+    setSize!(props.data.node, {
+      width: Math.max(floorW, Math.round(startW + (ev.clientX - ox) / z)),
+      height: Math.max(120, Math.round(startH + (ev.clientY - oy) / z)),
+    })
+  }
+  const up = () => { resizing.value = false; window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', up)
+}
+function resetSize() { setSize?.(props.data.node, { width: null }) }
 
 // snap-dwell (spec: `snap-dwell-arm`) — the board provides a live snap preview; this card is
 // the target when the preview points at ITS node (matched by object identity — Vue Flow doesn't
@@ -124,6 +162,16 @@ const paneGuideStyle = computed(() => {
         @click.stop="setRegion?.(data.node, data.region === 'bottom' ? null : 'bottom')"
       />
     </div>
+
+    <!-- per-element-resize corner handle (spec: per-element-resize) — shown on select. -->
+    <div
+      v-if="selected"
+      class="nodrag nopan absolute bottom-1 right-1 z-30 size-3.5 cursor-nwse-resize rounded-sm border-2 border-primary bg-elevated shadow"
+      data-handoff="resize-handle"
+      title="Drag to resize · double-click to reset"
+      @pointerdown="onResizeDown"
+      @dblclick.stop="resetSize"
+    />
 
     <!-- snap-guide / ghost-pane hook: this card is the target. Edge-snap → a bar on the card's
          outer edge (data-handoff="snap-guide"). Pane-drop → a bar on the targeted pane's edge
