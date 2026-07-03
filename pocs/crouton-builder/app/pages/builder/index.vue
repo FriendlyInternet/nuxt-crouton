@@ -17,6 +17,16 @@ useHead({ title: 'Builder · Site' })
 
 const { items: pages, pending, refresh } = await useCollectionQuery('builderPages')
 
+// Team context resolves ASYNCHRONOUSLY after login: the session bootstrap lists the
+// user's orgs and sets the first active, which can take a couple of seconds. Until it
+// lands, `getTeamId()` is undefined — the page query is skipped (it auto-refetches when
+// the team resolves) and any mutation would REJECT. So we gate "New page" on readiness:
+// disabled + a spinner ("preparing") while the team resolves, so an early tap can't fire
+// a silently-failing create (spec: the #988 lesson — never let a control lie about working).
+const { teamId } = useTeamContext()
+const teamReady = computed(() => !!teamId.value)
+const notify = useNotify()
+
 // Map the collection rows into the shape CroutonFlowSiteFlow renders: id · label ·
 // parentId (→ edges) · a hint icon · the slug subtitle.
 const pageRows = computed(() =>
@@ -41,6 +51,15 @@ const creating = ref(false)
 async function newPage() {
   creating.value = true
   try {
+    // Belt-and-suspenders: if the team resolved between render and tap, wait it out
+    // (up to 8s) rather than reject. Normally the button is disabled until ready.
+    if (!teamReady.value) {
+      await until(teamReady).toBe(true, { timeout: 8000 }).catch(() => {})
+    }
+    if (!teamReady.value) {
+      notify.error('Still preparing your workspace', { description: 'Team context is loading — try again in a moment.' })
+      return
+    }
     const n = (pages.value?.length ?? 0) + 1
     await create({
       title: `Page ${n}`,
@@ -70,10 +89,11 @@ async function newPage() {
         <UButton
           icon="i-lucide-plus"
           size="sm"
-          :loading="creating"
+          :loading="creating || !teamReady"
+          :disabled="!teamReady"
           @click="newPage"
         >
-          New page
+          {{ teamReady ? 'New page' : 'Preparing…' }}
         </UButton>
       </div>
     </header>
