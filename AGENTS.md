@@ -128,12 +128,20 @@ that was never broken.
 
 **Reproduce against the running system — don't push a runtime fix blind.** For a *runtime* bug (a
 reload loop, a 500, a broken interaction), boot the thing locally and reproduce it — then verify the
-fix locally — *before* shipping. "I can't test this here" is a **hypothesis to probe**, not a fact:
-a claimed limitation (no browser, no local run, no CLI) is almost always narrower than it sounds. The
-anti-pattern is pushing an unverified guess and waiting on a slow deploy to learn it was wrong —
-every blind push burns a deploy cycle and erodes trust; one local reproduction usually finds it in
-minutes. Instrument, then observe — the mechanism, not a theory. (Stack-specific how-to lives in the
-stack adapter's run-and-operate runbook.)
+fix locally — *before* shipping. But verification has a **fidelity ladder** — `typecheck/unit →
+local dev → the deployed environment (real build, real data) → the end-user's actual device` — and
+each rung catches a class the ones below cannot: a local run can't see deploy-only state (a remote DB,
+a seed that never ran) or a production-build regression, and no headless engine substitutes for the
+user's real browser (a WebKit/iOS crash a local Chromium won't reproduce). So **"works" must name its
+rung** — a claim is only as strong as the highest rung you actually exercised, and "green locally" is
+necessary, not sufficient, for "works deployed." "I can't test this here" is a **hypothesis to probe**,
+not a fact: a claimed limitation (no browser, no local run, no CLI, no network to the deploy) is almost
+always narrower than it sounds — and when that limitation is exactly what blocks you from the rung that
+matters, the move is to **fix the limitation** (it is often a single setting) rather than design around
+it with a lossy workaround. The anti-pattern is pushing an unverified guess and waiting on a slow deploy
+to learn it was wrong — every blind push burns a deploy cycle and erodes trust; one reproduction at the
+right rung usually finds it in minutes. Instrument, then observe — the mechanism, not a theory.
+(Stack-specific how-to lives in the stack adapter's run-and-operate runbook.)
 
 ## Observe the harness
 

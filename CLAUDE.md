@@ -431,14 +431,25 @@ rule:** a prior session's (or a task brief's) claimed limitation is a
 same applies to any "X isn't available here" (TodoWrite, a CLI, a binary): probe,
 don't trust a stale assertion.
 
-**The sandbox CAN run a crouton app** (`pnpm dev` + this chromium) — "can't reach
-`*.pmcp.dev` / can't CF-deploy" is **not** "can't test." For a **runtime** bug
-(reload loop, 500, broken interaction) reproduce + verify it locally *before*
-pushing — never push an unverified guess and wait ~15 min for a deploy to see if it
-worked (the #988 board-reload lesson: three blind pushes vs one local repro). The
-method rule lives in `AGENTS.md` (*Bug work → reproduce against the running system*);
-the concrete boot + browser-drive + auth/team bootstrap recipe is the
-**`crouton-run-and-operate`** skill (§ *Reproduce a runtime bug locally*).
+**The sandbox can BOTH run a crouton app locally AND reach the live staging preview.**
+Local: `pnpm dev` + this chromium. Deployed: `*.pmcp.dev` staging egress is now
+**allowlisted** (#760), so from a web session you can `curl`/`$fetch`-drive the **real
+deployed build** — log in with the review creds, hit the live API, and observe
+deploy-only state (remote D1, a seed that actually ran) that local dev cannot show
+(verified: signup → set-active → create round-trips against a live `*.pmcp.dev`).
+Match the bug to the right rung of the **fidelity ladder** (`typecheck → local dev →
+deployed staging → the user's device`): a **runtime** bug (reload loop, 500, broken
+interaction) reproduce + verify **locally** first (the #988 board-reload lesson: three
+blind pushes vs one local repro), but a **deploy-only / production-build** bug must be
+checked against the **live** preview, not local. **Two residual gaps:** (a) **iOS/WebKit**
+— no Safari engine here, so a device-specific crash stays the user's call to confirm;
+(b) live **screenshots** — Playwright's bundled chromium `ERR_CONNECTION_RESET`s on the
+egress proxy's re-terminated TLS, so pixel capture of a `*.pmcp.dev` page needs the proxy
+CA trusted in a chromium NSS profile first (**#1172**; functional/API drive already works).
+Never push an unverified guess and wait ~15 min for a deploy to learn it was wrong. The
+method rule lives in `AGENTS.md` (*Bug work → reproduce against the running system*, incl.
+the fidelity ladder); the concrete boot + browser-drive + auth/team recipe is the
+**`crouton-run-and-operate`** skill.
 
 ## UI Sign-Off (deploy a live preview before you build) — epic #307
 
