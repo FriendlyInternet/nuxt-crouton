@@ -1,9 +1,10 @@
 import { readFileSync, existsSync } from 'node:fs'
-import { resolve as resolvePath } from 'node:path'
+import { resolve as resolvePath, dirname } from 'node:path'
 import { execSync } from 'node:child_process'
 import { defineNuxtModule, createResolver, addImports, addPlugin, addServerHandler } from '@nuxt/kit'
 import { createSourceStampTransform } from './runtime/transform/sourceStamp'
 import { normalizeChangelog, type ChangelogEntry } from './runtime/tools/changelog-data'
+import { composePlan, type ComposedPlan } from './runtime/tools/plan-data'
 
 /**
  * @fyit/crouton-feedback — in-page feedback toolkit for any Nuxt UI app.
@@ -73,6 +74,26 @@ export interface FeedbackModuleOptions {
     /** Stamp the current git short SHA at build (default true). */
     stampGitCommit?: boolean
   }
+  /**
+   * The **Plan** tool — a badged launcher row that opens a plan in an overlay,
+   * rendered natively with Nuxt UI (no iframe). DATA-first: point it at a plan
+   * overlay JSON (phases/increments); its `specSource` (or `specPath`) locates
+   * the spec ledger the module joins in. The row badge is the active phase.
+   * Omit the whole block and the tool simply hides itself.
+   */
+  plan?: {
+    /** Inline composed plan, bypassing file lookup (mainly for tests). */
+    data?: unknown
+    /** Path (relative to the app root) to the plan overlay JSON. */
+    dataPath?: string
+    /**
+     * Path (relative to the app root) to the spec-ledger JSON. When unset, the
+     * module resolves the plan JSON's own `specSource` relative to it.
+     */
+    specPath?: string
+    /** Overlay title override (else the plan JSON's `title`, else "Plan"). */
+    title?: string
+  }
 }
 
 /** Read + normalize changelog entries from inline options or a JSON file. */
@@ -97,6 +118,45 @@ function readChangelogEntries(
     }
   }
   return []
+}
+
+/** Read + parse a JSON file, or null when absent/malformed. */
+function readJson(file: string): unknown {
+  try {
+    if (existsSync(file)) return JSON.parse(readFileSync(file, 'utf8'))
+  } catch {
+    // ignore a malformed/unreadable file
+  }
+  return null
+}
+
+/**
+ * Compose the Plan tool's data at build: the plan overlay JSON (inline or from a
+ * file) joined with its spec ledger (resolved via `specPath`, else the plan
+ * JSON's own `specSource` relative to it). Returns the `ComposedPlan` injected
+ * into `runtimeConfig.public.croutonPlan`; an empty `phases` when no plan is
+ * configured (→ the tool hides itself).
+ */
+function readPlan(
+  opts: NonNullable<FeedbackModuleOptions['plan']>,
+  rootDir: string
+): ComposedPlan {
+  const planRaw = opts.data ?? (opts.dataPath ? readJson(resolvePath(rootDir, opts.dataPath)) : null)
+
+  // The spec ledger: an explicit specPath, else the plan JSON's `specSource`
+  // resolved relative to the plan file's directory (that's what it's for).
+  let specRaw: unknown = null
+  if (opts.specPath) {
+    specRaw = readJson(resolvePath(rootDir, opts.specPath))
+  } else if (opts.dataPath && planRaw && typeof planRaw === 'object') {
+    const specSource = (planRaw as { specSource?: string }).specSource
+    if (specSource) {
+      specRaw = readJson(resolvePath(dirname(resolvePath(rootDir, opts.dataPath)), specSource))
+    }
+  }
+
+  const composed = composePlan(planRaw, specRaw)
+  return opts.title ? { ...composed, title: opts.title } : composed
 }
 
 /** Current short SHA at build; empty string when git is unavailable (e.g. CI). */
@@ -174,6 +234,19 @@ export default defineNuxtModule<FeedbackModuleOptions>({
     }
     addPlugin({
       src: resolver.resolve('./runtime/plugins/tools/changelog.client'),
+      mode: 'client'
+    })
+
+    // Fourth tool: Plan — a badged launcher row that opens a plan document
+    // (self-contained HTML) in an overlay iframe. HTML-first (the ONE renderer
+    // stays authoritative); the plan JSON drives the badge + title. Hidden when
+    // unconfigured. Exposed to the client via runtimeConfig.public.
+    ;(nuxt.options.runtimeConfig.public as Record<string, unknown>).croutonPlan = readPlan(
+      options.plan ?? {},
+      nuxt.options.rootDir
+    )
+    addPlugin({
+      src: resolver.resolve('./runtime/plugins/tools/plan.client'),
       mode: 'client'
     })
 

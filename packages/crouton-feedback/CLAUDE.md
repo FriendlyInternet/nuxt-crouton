@@ -18,6 +18,13 @@ dropdown of toggleable tools:
   JSON-first: entries come from a committed `changelog.json`; an optional
   build-time git stamp fills the current deployed commit. Hides itself when the
   app ships no entries, so it costs nothing until an app provides one.
+- **Plan** — a phase-badged row that opens a **plan** in an overlay (#1155).
+  DATA-first (like Changelog): a committed plan JSON (phases/increments) is
+  joined at build with the spec ledger it points at, and the overlay renders it
+  **natively with Nuxt UI** (UModal · UBadge · UCard · UAlert · UCollapsible) —
+  no iframe. The row badge is the active phase (e.g. `B2`). Hides itself when no
+  plan is configured. Lets a build/graduation plan track *in the running
+  preview*, next to Changelog, instead of in a separate file.
 
 This package was extracted from `@fyit/crouton-devtools` (epic
 [#960](https://github.com/FriendlyInternet/nuxt-crouton/issues/960)) so the
@@ -108,6 +115,45 @@ injecting `{ entries, commitUrlTemplate, buildCommit }` into
 commit until it's backfilled on the next push; when git is absent (some CI
 builds) the stamp is simply empty. No entries ⇒ the tool hides itself.
 
+## Plan tool config (#1155)
+
+DATA-first data source (like the Changelog tool). Point the module at a plan
+overlay JSON; its `specSource` (or an explicit `specPath`) locates the spec
+ledger the module joins in:
+
+```ts
+// nuxt.config.ts
+croutonFeedback: {
+  plan: {
+    dataPath: 'graduation-plan.json',   // the plan overlay (phases/increments)
+    specPath: 'spec.json',              // optional — else the plan's own `specSource`
+    title: 'Graduation Plan'            // optional override (else the JSON's title)
+  }
+}
+```
+
+At build the module reads the plan JSON + the spec ledger and calls
+`composePlan(planRaw, specRaw)` (pure, unit-tested): each phase/increment's
+`specs` (a list of ids) is resolved to full ledger entries tagged with their
+**bucket** (`settled`→Preserve · `stopgap`→Replace · `new`→Add), and the
+**badge** is the id of the deepest `status: "active"` phase/increment (e.g.
+`B2`). The composed `ComposedPlan` is injected into
+`runtimeConfig.public.croutonPlan`; the overlay maps over it with plain Nuxt UI
+(UModal's `#body` owns the scroll — no custom height; status/bucket colours are
+Nuxt UI `color` props). No phases ⇒ the tool hides itself.
+
+**Gotcha — no arbitrary Tailwind in package components.** A package SFC's
+arbitrary classes (`h-[78dvh]`, `bg-primary/5`) aren't in the consuming app's
+Tailwind content scan, so they emit no CSS. Stick to standard utilities +
+Nuxt UI components (UAlert for callouts, `color` props for tint) — verified by
+the earlier iframe-height regression.
+
+The plan overlay JSON for the crouton-builder graduation is
+`pocs/crouton-builder/graduation-plan.json`; a standalone HTML render (for
+sharing offline) is produced by `node scripts/graduation-plan.mjs
+crouton-builder` → `graduation-plan.html` (same data, separate artifact — not
+consumed by the tool).
+
 ## Key Files
 
 | File | Purpose |
@@ -123,6 +169,12 @@ builds) the stamp is simply empty. No entries ⇒ the tool hides itself.
 | `src/runtime/composables/useChangelog.ts` | Reads `runtimeConfig.public.croutonChangelog` (entries + commit template + build SHA); shared open flag for the overlay. |
 | `src/runtime/components/ChangelogOverlay.vue` | The version-timeline modal (newest first, current entry accented, configurable commit links). |
 | `src/runtime/plugins/tools/changelog.client.ts` | Registers the Changelog tool + mounts its overlay. |
+| `src/runtime/tools/plan.ts` | **Plan** tool factory — phase badge + open/close the plan overlay (unit-tested). |
+| `src/runtime/tools/plan-data.ts` | Pure plan helpers (`composePlan` = join plan JSON + spec ledger → render-ready `ComposedPlan` · `planBadge` = deepest active phase id · `planTitle`) — shared by the module (build) + composable (runtime). Unit-tested, no Vue. |
+| `src/runtime/composables/usePlan.ts` | Reads `runtimeConfig.public.croutonPlan` (the composed plan + badge); shared open flag for the overlay. |
+| `src/runtime/components/PlanOverlay.vue` | The plan modal — renders the composed plan natively with Nuxt UI (UModal `#body` · UCard · UAlert · UBadge). No iframe, no custom height. |
+| `src/runtime/components/PlanSpecRow.vue` | One spec-ledger entry as a `UCollapsible` (bucket + behaviour → expect/hook/how-to-test). |
+| `src/runtime/plugins/tools/plan.client.ts` | Registers the Plan tool + mounts its overlay. |
 | `src/runtime/composables/useAnnotate.ts` | Annotate state + DOM select/highlight + POST to `/api/_feedback`. |
 | `src/runtime/components/AnnotateOverlay.vue` | Annotate overlay — highlight + Nuxt UI comment panel. |
 | `src/runtime/overlay/capture.ts` | Pure capture helpers + `formatAnnotationMarkdown` (selector / source-file / Markdown). Unit-tested. |
