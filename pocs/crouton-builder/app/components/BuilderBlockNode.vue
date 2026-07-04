@@ -113,6 +113,13 @@ const topPanes = computed(() => {
   })
 })
 
+// The LayoutNode a top-level pane holds (for the drag ghost's content) + the grabbed pane's box.
+function paneNode(i: number): LayoutNode {
+  const n = props.data.node
+  return n.type === 'split' ? (n.children[i] ?? n) : n
+}
+const activePane = computed(() => (activeIndex.value != null ? topPanes.value.find(p => p.index === activeIndex.value) ?? null : null))
+
 function clearPress() {
   if (pressTimer != null) { window.clearTimeout(pressTimer); pressTimer = null }
   window.removeEventListener('pointermove', onCardMove)
@@ -289,8 +296,9 @@ const paneGuideStyle = computed(() => {
          BuilderNodePreview's header note. Editing panes happens in the focus-edit view. -->
     <BuilderNodePreview :node="data.node" />
 
-    <!-- detach-reorder faces: long-press a composed card → its top-level panes wiggle and become
-         grabbable. Slide to another slot → reorder; pull out past the margin → detach. -->
+    <!-- detach-reorder (spec: detach-reorder): long-press → top-level panes become grabbable.
+         Each pane is a face at its own slot; the grabbed pane's slot goes EMPTY and a clean ghost
+         (its real content) lifts out and follows the finger — no more static content bleeding through. -->
     <template v-if="jiggling">
       <div
         v-for="p in topPanes"
@@ -299,19 +307,34 @@ const paneGuideStyle = computed(() => {
         data-handoff="pane-face"
         :class="[
           activeIndex === null ? 'wiggle' : '',
-          activeIndex === p.index ? (past ? 'detaching' : 'grabbed') : '',
+          activeIndex === p.index ? 'source-empty' : 'slot',
           reorderTo === p.index && activeIndex !== null && activeIndex !== p.index && !past ? 'drop-target' : '',
         ]"
-        :style="{
-          left: `${p.left * 100}%`, top: `${p.top * 100}%`, width: `${p.width * 100}%`, height: `${p.height * 100}%`,
-          ...(activeIndex === p.index ? { transform: `translate(${pull.x}px, ${pull.y}px)`, zIndex: 50 } : {}),
-        }"
+        :style="{ left: `${p.left * 100}%`, top: `${p.top * 100}%`, width: `${p.width * 100}%`, height: `${p.height * 100}%` }"
         @pointerdown="onPaneDown(p.index, $event)"
       >
-        <span v-if="activeIndex === p.index" class="builder-pane-label" :data-detach="past ? 'true' : 'false'">
+        <span v-if="activeIndex === p.index" class="builder-slot-hint">moved out</span>
+      </div>
+
+      <!-- the ghost: the grabbed pane's real content, lifted onto the canvas, following the finger. -->
+      <div
+        v-if="activePane"
+        class="builder-pane-ghost nodrag nopan"
+        data-handoff="pane-ghost"
+        :data-detach="past ? 'true' : 'false'"
+        :class="past ? 'detaching' : 'grabbed'"
+        :style="{
+          left: `${activePane.left * 100}%`, top: `${activePane.top * 100}%`,
+          width: `${activePane.width * 100}%`, height: `${activePane.height * 100}%`,
+          transform: `translate(${pull.x}px, ${pull.y}px)`,
+        }"
+      >
+        <BuilderNodePreview :node="paneNode(activePane.index)" />
+        <span class="builder-pane-label" :data-detach="past ? 'true' : 'false'">
           {{ past ? 'Release to detach' : 'Move' }}
         </span>
       </div>
+
       <span class="builder-jiggle-hint">drag a pane out to detach · Esc to cancel</span>
     </template>
   </div>
@@ -357,20 +380,36 @@ const paneGuideStyle = computed(() => {
   position: absolute;
   z-index: 45;
   border-radius: 0.5rem;
-  border: 2px dashed rgba(99, 102, 241, 0.5);
-  background: rgba(99, 102, 241, 0.06);
+  border: 1.5px dashed rgba(99, 102, 241, 0.45);
+  background: transparent;
   cursor: grab;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
   touch-action: none;
 }
 .builder-pane-face.wiggle { animation: builder-wiggle 0.5s ease-in-out infinite; }
-.builder-pane-face.grabbed { cursor: grabbing; background: rgba(16, 185, 129, 0.14); border-color: rgb(16, 185, 129); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); }
-.builder-pane-face.detaching { background: rgba(239, 68, 68, 0.16); border-color: rgb(239, 68, 68); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3); }
+.builder-pane-face.slot { border-color: rgba(99, 102, 241, 0.35); }
 .builder-pane-face.drop-target { background: rgba(16, 185, 129, 0.12); border-color: rgb(16, 185, 129); }
-.builder-pane-label { font-size: 11px; font-weight: 700; color: rgb(16, 185, 129); background: var(--ui-bg-elevated, #fff); padding: 2px 8px; border-radius: 999px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }
+/* the grabbed pane's original slot — an opaque cover so the source reads as EMPTY (no double-vision) */
+.builder-pane-face.source-empty { cursor: grabbing; background: var(--ui-bg-elevated, #fff); border: 2px dashed rgba(120, 120, 120, 0.45); }
+.builder-slot-hint { font-size: 10px; color: var(--ui-text-muted, #999); }
+
+/* the lifted ghost tile — clean, opaque, elevated, carrying the pane's real content on the canvas. */
+.builder-pane-ghost {
+  position: absolute;
+  z-index: 55;
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: var(--ui-bg-elevated, #fff);
+  border: 2px solid rgb(16, 185, 129);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+  cursor: grabbing;
+  pointer-events: none;
+}
+.builder-pane-ghost.detaching { border-color: rgb(239, 68, 68); box-shadow: 0 14px 34px rgba(239, 68, 68, 0.35); }
+.builder-pane-label { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; color: rgb(16, 185, 129); background: var(--ui-bg-elevated, #fff); padding: 2px 8px; border-radius: 999px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); white-space: nowrap; }
 .builder-pane-label[data-detach="true"] { color: rgb(239, 68, 68); }
 .builder-jiggle-hint {
   position: absolute;
