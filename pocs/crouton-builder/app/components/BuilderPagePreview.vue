@@ -79,27 +79,30 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
       </UButton>
     </header>
 
-    <!-- The assembled page inside a device frame: sticky top bar · scrolling main · sticky bottom. -->
+    <!-- The assembled page scrolls like a NORMAL PAGE: the FRAME is the single scroller, the ★ page
+         content flows at its natural height (region-main is content-height, so the renderer's h-full
+         panes resolve to auto and flow — one scrollbar, not a nested pane-per-scroller app shell),
+         and pinned top/bottom regions become true sticky bars over that one scroll. -->
     <div class="min-h-0 flex-1 overflow-hidden p-3" :class="simWidth ? 'bg-muted/20' : ''">
       <div
-        class="mx-auto flex h-full flex-col overflow-hidden bg-default"
+        class="mx-auto flex h-full flex-col overflow-y-auto bg-default"
         :style="simWidth
           ? { width: `${simWidth}px`, maxWidth: '100%', border: '1px solid var(--ui-border)', borderRadius: '0.6rem', boxShadow: '0 8px 30px rgba(0,0,0,0.15)' }
           : { width: '100%' }"
         data-handoff="preview-frame"
       >
-        <div v-if="top.length" data-handoff="region-top" class="shrink-0 border-b border-default bg-elevated/40">
+        <div v-if="top.length" data-handoff="region-top" class="sticky top-0 z-10 shrink-0 border-b border-default bg-elevated/95 backdrop-blur">
           <CroutonLayoutRenderer v-for="(n, i) in top" :key="`t-${i}`" :node="n" :interactive="false" />
         </div>
 
-        <div class="min-h-0 flex-1 overflow-auto" data-handoff="region-main">
+        <div data-handoff="region-main">
           <CroutonLayoutRenderer v-if="main" :node="main" :interactive="false" />
-          <div v-else class="flex h-full items-center justify-center text-sm text-muted">
+          <div v-else class="flex min-h-48 items-center justify-center text-sm text-muted">
             No page node to render.
           </div>
         </div>
 
-        <div v-if="bottom.length" data-handoff="region-bottom" class="shrink-0 border-t border-default bg-elevated/40">
+        <div v-if="bottom.length" data-handoff="region-bottom" class="sticky bottom-0 z-10 mt-auto shrink-0 border-t border-default bg-elevated/95 backdrop-blur">
           <CroutonLayoutRenderer v-for="(n, i) in bottom" :key="`b-${i}`" :node="n" :interactive="false" />
         </div>
       </div>
