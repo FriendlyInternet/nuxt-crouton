@@ -229,6 +229,37 @@ expressiveness boundary: a variant is an **enum an agent could equally pick**, n
   are POC-side. On graduation, fold the picker into the package author and keep variant declaration on
   the typed block definition.
 
+### Page-context render + the card IS the preview (graduation direction, #983)
+
+Two decisions that surfaced *during* graduation (not proven POC-side — captured here as the settled
+direction for the build; `new` entries in `spec.json`). They resolve the render-model tension that a
+separate Preview overlay kept exposing: **admin fills-and-scrolls; a page flows.**
+
+- **A collection block renders differently on a PAGE than in the ADMIN.** In the admin a list *fills
+  its pane and scrolls internally* (a working dashboard surface) — correct there. On a **page** that
+  makes no sense: a list is a **content-sized block** showing a *set number of items* (default **10**,
+  settable per block), then **more via a bounded viewer option** — **load-more** (default), **paginate**
+  (numbered), or **search/filter** — plus the existing **display variant** (rows/cards/table). Empty →
+  a **small block**, not a full-height void. This is NOT new machinery: the block already slices to a
+  page + has the pager/search/variants (the #970 "collection viewer options"); page-context render just
+  reuses them **at content height, no internal scrollbar**. It stays inside the expressiveness boundary
+  — you pick from *bounded, enumerated* viewer options, never hand-tune per-instance flex (the rejected
+  control). **Not** "force everything to flow": the LIST has a page render; the page scrolls as one.
+
+- **The board card IS the live page preview — there is no separate Preview.** Two renders of the same
+  page (a board thumbnail + a Preview overlay) is two sources of truth, free to diverge — the root of
+  the Preview whack-a-mole (it was removed, #983). Instead the **card on the Vue Flow canvas renders the
+  real page**, live, at its own width: reflows responsively (the `@container` CSS grid), shows the
+  page-context render above, and **scrolls inside itself** when content exceeds the card (a screen).
+  Resize the card = resize the screen. WYSIWYG, one render, zero board/preview drift. **Feasible only
+  because #1178** replaced the reka-Splitter ResizeObserver (which OOM-crashed inside a zoomed VF node —
+  the reason the card was frozen to a static thumbnail) with an **observer-free CSS-grid render**. Two
+  real unknowns to verify on device before trusting it: (a) **scroll-inside-a-card vs pan-the-canvas**
+  under zoom (the crash is gone, but nested-scroll-in-a-transform is where it got hairy); (b) whether
+  **all cards render live** or only the focused one (perf — many data-bound renders). Build order: the
+  page-context list render first; "card = live preview" then falls out of pointing the card at that
+  render instead of `BuilderNodePreview`.
+
 ### Board gestures (direct manipulation)
 
 - **Snap = two-stage dwell-to-arm (#941, #948).** Near a snap point → **soft** (blue, wide, pulsing).

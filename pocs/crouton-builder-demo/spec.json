@@ -325,5 +325,35 @@
     "status": "new",
     "supersedes": "",
     "consideredRejected": []
+  },
+  {
+    "id": "collection-page-render",
+    "behaviour": "A collection (list) block renders differently on a PAGE than in the ADMIN. Admin: fills its pane, scrolls internally. Page: a content-sized block showing a set number of items (default 10, settable per block), then more via a bounded viewer option (load-more default / paginate / search-filter), plus the display variant (rows/cards/table). Empty = a small block, not a full-height void.",
+    "when": "the same collection block is rendered on a page (interactive=false) instead of the admin dashboard",
+    "expect": "content-height, no internal scrollbar; the block shows page-size items then a load-more/paginate/search control; an empty list collapses to a compact block; the page scrolls as one document",
+    "hook": "",
+    "howToTest": "1. put an Artists list on a page  2. it shows up to 10 rows at natural height, no inner scroll  3. with >10 items a load-more (or pager) appears; picking 'paginate' shows numbered pages, 'search' shows a filter  4. an empty list is a small block, not full-height",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": [
+      "fixed 'few high' block -> a list you cannot scroll/page through isn't a list",
+      "make everything document-flow -> wrong; admin genuinely wants fill+scroll. The LIST gets a page render, not the whole engine",
+      "per-instance flex/height panel -> rejected (POC): stay inside bounded enumerated viewer options (#970), never hand-tuned config"
+    ]
+  },
+  {
+    "id": "card-is-live-preview",
+    "behaviour": "The board card IS the live page preview -- there is no separate Preview overlay. The card on the Vue Flow canvas renders the real page, live, at its own width (responsive @container grid + the page-context render), and scrolls inside itself when content exceeds the card. Resize the card = resize the screen.",
+    "when": "you look at / resize a page card on the board",
+    "expect": "the card shows the real page render (not a static thumbnail), reflowing to the card width and scrolling internally like a screen; no separate preview overlay exists",
+    "hook": "board-node",
+    "howToTest": "1. select a page card, resize it narrow  2. its layout reflows responsively (stacks per its floor)  3. content taller than the card scrolls inside the card  4. what you see is exactly what the served page shows",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": [
+      "separate Preview overlay -> removed (#983): two renders of one page diverge -- the whack-a-mole source",
+      "keep the static BuilderNodePreview thumbnail -> it smooshes when small; only a workaround for the reka-observer OOM that #1178 removed",
+      "unverified: scroll-inside-card vs pan-canvas under zoom, and all-cards-live vs focused-only (perf) -- both to confirm on device"
+    ]
   }
 ]
