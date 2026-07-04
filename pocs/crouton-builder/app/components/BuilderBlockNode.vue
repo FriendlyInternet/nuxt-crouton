@@ -307,11 +307,17 @@ const paneGuideStyle = computed(() => {
       :style="snapHere.paneDrop ? paneGuideStyle : undefined"
     />
 
-    <!-- A board node is a STATIC thumbnail — a plain nested-flex render of the layout
-         tree (no reka Splitter, no ResizeObserver). The live CroutonLayoutRenderer loops
-         and OOM-crashes mobile Safari inside a transform-scaled Vue Flow node; see
-         BuilderNodePreview's header note. Editing panes happens in the focus-edit view. -->
-    <BuilderNodePreview :node="data.node" />
+    <!-- card-is-live-preview (spec: card-is-live-preview, #983): the card IS the live
+         page. It renders the REAL page through CroutonLayoutRenderer at interactive=false
+         — the observer-free CSS-grid render (#1178) + the page-context collection render —
+         at the card's OWN width, and the card is the single scroll container (`.nowheel`
+         so a wheel scrolls the card, not the canvas). This replaces the static
+         BuilderNodePreview thumbnail: one render, no board/preview drift. Feasible only
+         because #1178 removed the reka-Splitter ResizeObserver that OOM-crashed a
+         transform-scaled Vue Flow node — the reason the card was frozen to a thumbnail. -->
+    <div class="builder-node-live nowheel" data-handoff="node-live">
+      <CroutonLayoutRenderer :node="data.node" :interactive="false" />
+    </div>
 
     <!-- detach-reorder (spec: detach-reorder): long-press → top-level panes become grabbable.
          Each pane is a face at its own slot; the grabbed pane's slot goes EMPTY and a clean ghost
@@ -377,6 +383,16 @@ const paneGuideStyle = computed(() => {
   border-radius: 0.75rem;
   border: 1px solid var(--ui-border, rgba(120, 120, 120, 0.2));
   background: var(--ui-bg-elevated, rgba(255, 255, 255, 0.6));
+}
+/* card-is-live-preview — the live page render fills the card and is the SINGLE
+   scroll container: content taller than the card scrolls inside it (a screen),
+   never a nested scrollbar. Overlays (badges, snap guide, wiggle faces) are
+   absolute to the card, so they don't scroll with the content. */
+.builder-node-live {
+  height: 100%;
+  width: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 /* While a pane is lifted (detach), stop clipping so the ghost can roam the canvas
    past the card edge instead of being cut off at the border. Transient — only for
