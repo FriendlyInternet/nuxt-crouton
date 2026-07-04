@@ -12,6 +12,15 @@ A POC (`pocs/*`) is an **incubator**: messy, heavily-iterated, safe-to-fail code
 deliberate moment that proven shape becomes a real product. The output is **an app AND one
 or more packages** — the app is the proving consumer; the **packages are the durable value**.
 
+**Order matters: `incubator → launched → shared` (`AGENTS.md` *Stages*).** The **app is a
+first-class milestone, signed off *before* extraction** — you rebuild the proven behaviour as a real
+app and get both acceptance axes (C1 experience + C2 conformance) signed off, and *then* extract the
+settled parts into packages as a deliberate later move. The package is **extracted from the proven
+app**, never written first and never a prerequisite for the app. (If the spike already *grew* a
+shared package instead of just *consuming* one — as the layout engine did during the builder spike,
+#1175 — that's stage-inversion debt: note it, don't repeat it. A spike consumes shared packages; it
+does not add shared surface. New capability is built in the app, then extracted.)
+
 ## The model — spec-driven graduation
 
 > **The POC *discovers* the spec → graduation *freezes* it as authoritative → the app is

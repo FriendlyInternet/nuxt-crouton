@@ -42,6 +42,18 @@ the stage, not the name):
 Edit-guarded stages need explicit, scoped approval before a change (granted once per initiative,
 never committed).
 
+**Flow through the stages in order — a capability matures `incubator → launched → shared`, and code
+lives at the stage it has *earned*.** The spike proves the idea and produces the spec/handoff; the
+**app** is the clean reference built to satisfy it; the **package** is *extracted from the proven
+app* as a deliberate third move — not written first and not produced simultaneously with the app.
+The trap is inverting it: growing a shared package with a spike's exploratory code, so unproven work
+lands in the tier every app inherits. So the rule is **consume vs grow**: a spike (or app) may freely
+*consume* an existing shared package, but must not *grow* one — no new shared surface until an app
+has proven it and you extract it on purpose. When a spike genuinely needs new capability, build it
+**in the app** (`launched`), prove it, then extract to `shared`. (Extraction is real package work —
+issue-first, the edit gate, cross-app typecheck — precisely because it's the promotion to the tier
+everyone inherits.)
+
 ## Sign-off gates
 
 A probabilistic runtime needs gates where a human should decide. A gate proposes the right thing and

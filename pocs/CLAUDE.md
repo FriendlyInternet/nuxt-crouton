@@ -4,19 +4,28 @@ This folder holds **real, working crouton Nuxt apps that double as proving groun
 
 ## The idea
 
-New crouton capabilities are not designed as packages up front. They start life as
-ordinary feature code **inside a real app here** — built against a concrete use case,
-with real data, real UI, real deploys. Only once a capability is *proven in an app*
-(it works, the API has settled, the pattern is worth reusing) do we **extract it into
-a `packages/@fyit/crouton-*` layer** and have apps consume it from there.
+New crouton capabilities are not designed as packages up front. They mature through **three
+stages, in order** (the `AGENTS.md` *Stages*: `incubator → launched → shared`):
 
 ```
-build it in a poc app  →  prove it against a real use case  →  extract into packages/  →  apps/ consume the package
+poc (spike, HERE)  →  app (the clean rebuild)  →  package (extracted from the proven app)  →  apps/ consume it
+prove + spec/handoff    the reference impl,          the deliberate 3rd move — not written        …from the package
+                        built the crouton way        first, not produced with the app
 ```
 
-So a poc is allowed to contain code that *will eventually live in a package* but
-doesn't yet. That's the point. The messiness is intentional — it's where we learn the
-right shape before committing to a shared API.
+1. **poc / spike (here in `pocs/`)** — try the idea against a concrete use case (real data, UI,
+   deploys). Churny and safe-to-fail. Its *output* is a proven behaviour + a spec/handoff, **not**
+   the shipping code.
+2. **app (`apps/`)** — graduation *rebuilds* the proven behaviour cleanly as a real app (the
+   `/graduate` skill). This is the **reference implementation** and where new feature code lives.
+3. **package (`packages/`)** — once the app has proven a capability and its API has settled, you
+   **extract** it into a `@fyit/crouton-*` layer, as a deliberate later move, and apps consume it.
+
+So a poc may hold pre-package feature code that *will eventually live in a package* — that's the
+point, it's where we learn the right shape. **But it must not *grow* a shared package**: a spike
+(and an app) may freely *consume* an existing `packages/*` layer, but adding **new shared surface**
+happens only at step 3, extracted from the proven app — never written straight into a package during
+the spike. (Prove it in the app, then extract.) See `AGENTS.md` *Stages* for the general rule.
 
 ## How pocs differ from the rest of the monorepo
 
