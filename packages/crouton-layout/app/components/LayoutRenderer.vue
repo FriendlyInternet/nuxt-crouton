@@ -21,7 +21,7 @@
  * `panelMinSizePct`. Splitter primitives are SSR-safe (no <ClientOnly> needed);
  * the floor falls back to the authored `minSize` until the group has measured.
  */
-import { computed, inject, nextTick, ref, useId, watch } from 'vue'
+import { computed, inject, nextTick, provide, ref, useId, watch, type Ref } from 'vue'
 import { useElementSize, unrefElement } from '@vueuse/core'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layout'
@@ -31,6 +31,7 @@ import { siblingKeys } from '../utils/layout-flip'
 import { useLayoutFlip } from '../composables/useLayoutFlip'
 import { isSubtreeCollapsed } from '../utils/layout-responsive'
 import { LAYOUT_VARIANTS_KEY, LAYOUT_COLLAPSE_KEY, LAYOUT_CONTAINER_WIDTH_KEY } from '../composables/useCroutonLayoutResponsive'
+import { LAYOUT_RENDER_CONTEXT_KEY, type LayoutRenderContext } from '../composables/useCroutonLayoutRenderContext'
 
 const props = withDefaults(
   defineProps<{
@@ -53,6 +54,16 @@ const props = withDefaults(
 // no overrides. A leaf's variant is merged into its config so the block can read
 // `variant` like any other prop.
 const variants = inject(LAYOUT_VARIANTS_KEY, ref({} as Record<string, string>))
+
+// Render context (#983): a read-only render (`interactive=false` — a served page
+// or the builder board's live preview) is a PAGE; the authoring render is ADMIN.
+// A data-bound leaf (a collection list) injects this to pick a content-sized page
+// render vs the fill-and-scroll admin render. Threaded consistently through the
+// recursion, so providing it per-instance off THIS node's `interactive` is exact.
+provide<Ref<LayoutRenderContext>>(
+  LAYOUT_RENDER_CONTEXT_KEY,
+  computed(() => (props.interactive ? 'admin' : 'page')),
+)
 
 // In-place collapse context (WS6 #875), provided only when an in-place collapse
 // style is active. Absent (the default — plain renderer, editor, gutter-tabs path)
@@ -172,14 +183,25 @@ const viewTracks = computed(() => {
   return props.node.children
     .map((c, i) => {
       if (hugAlongAxis.value[i]) return 'auto'
-      const floor = Math.round(horizontal ? childSizings.value[i]!.hardMinWidth : childSizings.value[i]!.minHeight)
-      const size = c.defaultSize ?? (100 / n)
-      return `minmax(${floor}px, ${size}fr)`
+      // Horizontal split → COLUMN widths keep their proportion (`fr`), floored at
+      // the block's min-width. Vertical split → ROW heights FLOW to content
+      // (`auto`, floored at min-height): a page render sizes to its content and
+      // scrolls as one document, rather than carving the frame into equal `fr`
+      // slabs (the admin fill). (#983 page render — the view path is `!interactive`.)
+      if (horizontal) {
+        const floor = Math.round(childSizings.value[i]!.hardMinWidth)
+        const size = c.defaultSize ?? (100 / n)
+        return `minmax(${floor}px, ${size}fr)`
+      }
+      return `minmax(${Math.round(childSizings.value[i]!.minHeight)}px, auto)`
     })
     .join(' ')
 })
 const viewGridStyle = computed(() => {
-  const base = { display: 'grid', gap: '1px', height: '100%', width: '100%' } as Record<string, string>
+  // `minHeight:100%` (not a fixed `height`) so a short page still fills its frame
+  // but a tall one grows past it and the frame (the served page / the board card)
+  // scrolls as one — no nested scrollbars. (#983)
+  const base = { display: 'grid', gap: '1px', minHeight: '100%', width: '100%' } as Record<string, string>
   if (props.node.type !== 'split') return base
   return props.node.direction === 'horizontal'
     ? { ...base, gridTemplateColumns: viewTracks.value, gridAutoFlow: 'column' }
@@ -264,7 +286,8 @@ watch(
        viewport. Every pane is its own container, so this composes recursively. -->
   <div
     v-if="node.type === 'leaf'"
-    class="croutonpane h-full w-full"
+    class="croutonpane w-full"
+    :class="interactive ? 'h-full' : ''"
   >
     <!-- Collapsed in place (WS6 #875): the block becomes its style's resting handle,
          in its own pane slot, click-to-expand. -->
@@ -275,11 +298,14 @@ watch(
       :block-id="node.blockId"
       @expand="collapseCtx.expand(node.blockId)"
     />
+    <!-- Admin (`interactive`): fill the pane + scroll internally. Page
+         (`!interactive`, #983): content-height, no internal scrollbar — the block
+         sizes to its content so the page flows and the frame scrolls as one. -->
     <component
       :is="componentName"
       v-else-if="componentName"
       v-bind="safeConfig"
-      class="h-full w-full overflow-auto"
+      :class="interactive ? 'h-full w-full overflow-auto' : 'w-full'"
     />
     <div
       v-else
@@ -294,7 +320,8 @@ watch(
        Read-only here; persisting a nested resize is part of nested authoring (WS4). -->
   <div
     v-else-if="node.type === 'nested'"
-    class="croutonpane h-full w-full"
+    class="croutonpane w-full"
+    :class="interactive ? 'h-full' : ''"
   >
     <CroutonLayoutRenderer
       :node="node.layout.root"
