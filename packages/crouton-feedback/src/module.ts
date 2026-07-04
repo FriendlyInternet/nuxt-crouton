@@ -250,6 +250,15 @@ export default defineNuxtModule<FeedbackModuleOptions>({
       mode: 'client'
     })
 
+    // Fifth tool: Spec walk — the "does it still work?" facet (#1038). No build
+    // data of its own: it reuses the composed plan above (plan ⋈ spec ledger),
+    // walks the LIVE behaviours against the running build, and exports the
+    // `lgtm <id>` sign-off. Hidden when the app configures no plan.
+    addPlugin({
+      src: resolver.resolve('./runtime/plugins/tools/specwalk.client'),
+      mode: 'client'
+    })
+
     // Build-time source stamping: inject `data-feedback-src="<relative .vue>"`
     // on each component's root element so a click resolves to the owning file.
     // Runs in the Vue compiler, so it survives `nuxt build` (present in the

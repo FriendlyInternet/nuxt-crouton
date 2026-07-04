@@ -25,6 +25,17 @@ dropdown of toggleable tools:
   no iframe. The row badge is the active phase (e.g. `B2`). Hides itself when no
   plan is configured. Lets a build/graduation plan track *in the running
   preview*, next to Changelog, instead of in a separate file.
+- **Spec walk** — the "does it still work?" facet (#1038 WS1). A `marked/total`-
+  badged row that opens a **non-blocking bottom sheet** (no backdrop — the app
+  stays interactive so you perform each step) and walks the app's LIVE
+  behaviours one at a time: how-to-test steps, a `data-handoff` outline that
+  tracks the current behaviour's element through pan/zoom, ✅ works / ⚠️ issue
+  per entry, and an Export that emits the `lgtm <id>` C1 sign-off. **No build
+  data of its own** — it reuses the same composed plan the Plan tool ships
+  (`runtimeConfig.public.croutonPlan`), pulling the behaviours under `done`/
+  `active` phases + increments. Hides itself when no plan is configured, so it
+  costs nothing until an app sets `croutonFeedback.plan`. Body-mounted from its
+  plugin (NOT page/app.vue — the #1039 lesson).
 
 This package was extracted from `@fyit/crouton-devtools` (epic
 [#960](https://github.com/FriendlyInternet/nuxt-crouton/issues/960)) so the
@@ -154,6 +165,26 @@ sharing offline) is produced by `node scripts/graduation-plan.mjs
 crouton-builder` → `graduation-plan.html` (same data, separate artifact — not
 consumed by the tool).
 
+## Spec walk tool (#1038 WS1)
+
+**No config of its own — it piggybacks on the Plan tool's data.** Set
+`croutonFeedback.plan` (above) and the Spec walk row appears automatically,
+badged `marked/total`. It reads the SAME composed plan
+(`runtimeConfig.public.croutonPlan`) and flattens the behaviour entries under
+`done`/`active` phases + increments into an ordered walk (an id listed under
+both a phase and its increment appears once, first wins). No plan ⇒ no walk ⇒
+the row hides itself.
+
+The walk is the C1 sign-off gate made in-app: each behaviour shows its
+`howToTest` steps and, via its `hook`, outlines the live element it targets
+(rAF-tracked so it survives the app's own pan/zoom). Mark ✅ works / ⚠️ issue per
+entry (persisted to `localStorage`, keyed `specwalk:<plan-title-slug>` so two
+apps don't collide); **Sign off** exports `lgtm <id>` lines for the ✅s (plus the
+⚠️ issues + notes) to paste back to the agent — that recorded `lgtm` is what the
+done-rule derives from (never a green build). The panel is a **non-blocking**
+bottom sheet (no backdrop) so you can actually perform each gesture while it's
+open, and it body-mounts from the plugin (NOT page/app.vue — the #1039 lesson).
+
 ## Key Files
 
 | File | Purpose |
@@ -175,6 +206,11 @@ consumed by the tool).
 | `src/runtime/components/PlanOverlay.vue` | The plan modal — renders the composed plan natively with Nuxt UI (UModal `#body` · UCard · UAlert · UBadge). No iframe, no custom height. |
 | `src/runtime/components/PlanSpecRow.vue` | One spec-ledger entry as a `UCollapsible` (bucket + behaviour → expect/hook/how-to-test). |
 | `src/runtime/plugins/tools/plan.client.ts` | Registers the Plan tool + mounts its overlay. |
+| `src/runtime/tools/specwalk.ts` | **Spec walk** tool factory — `marked/total` badge + open/close the walk panel (unit-tested). |
+| `src/runtime/tools/specwalk-data.ts` | Pure spec-walk helpers (`walkEntries` = flatten a `ComposedPlan`'s LIVE behaviours · `stepsOf` · `selectorFor` · `exportText` = the `lgtm <id>` sign-off) — no Vue, unit-tested. |
+| `src/runtime/composables/useSpecWalk.ts` | Reads `runtimeConfig.public.croutonPlan`, holds the walk + per-behaviour verdicts (localStorage, per-app scoped); shared open flag for the panel. |
+| `src/runtime/components/SpecWalkOverlay.vue` | The non-blocking bottom-sheet walk panel — steps, `data-handoff` outline tracker (rAF), verdicts, `lgtm <id>` Export. Standard-utility styling (no arbitrary Tailwind — see the gotcha above). |
+| `src/runtime/plugins/tools/specwalk.client.ts` | Registers the Spec-walk tool + body-mounts its panel (`mountOverlayInBody`, the #1039 lesson). |
 | `src/runtime/composables/useAnnotate.ts` | Annotate state + DOM select/highlight + POST to `/api/_feedback`. |
 | `src/runtime/components/AnnotateOverlay.vue` | Annotate overlay — highlight + Nuxt UI comment panel. |
 | `src/runtime/overlay/capture.ts` | Pure capture helpers + `formatAnnotationMarkdown` (selector / source-file / Markdown). Unit-tested. |
