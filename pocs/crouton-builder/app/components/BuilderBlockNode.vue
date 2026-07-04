@@ -14,7 +14,8 @@
  *
  * `footprint` / `sizeOf` / `BUILDER_BASE_*` are auto-imported from app/utils/builder-layout.
  */
-import { computed, inject, ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { computed, inject, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { useElementSize } from '@vueuse/core'
 import type { LayoutNode, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
 import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion } from '~/utils/builder-keys'
 
@@ -94,10 +95,46 @@ let pressOrigin = { x: 0, y: 0 }
 
 const isGroup = computed(() => props.data.node.type === 'split' && props.data.node.children.length >= 2)
 
-// Top-level panes of a split root, each as a 0..1 fraction box (mirrors BuilderNodePreview's split).
-const topPanes = computed(() => {
+type PaneBox = { index: number, left: number, top: number, width: number, height: number }
+
+// The wiggle/detach FACES + the reorder slot hit-test must sit exactly over the panes the card
+// ACTUALLY draws. The card now renders the LIVE layout (card-is-live-preview, #983), which reflows —
+// it enforces each block's min-width and a horizontal split STACKS vertically when narrow (`@container`,
+// the "stacks <580" you see) — none of which `defaultSize` reflects. So computing faces from the tree
+// drifts (IMG_1336). We MEASURE the real top-level panes instead (the same lesson as the POC's
+// SpikeBlockNode): the shallowest `[data-panel]`/`[data-crouton-pane]` inside the card, as 0..1 of the
+// card box, clamped to it; fall back to the `defaultSize` math only until a measurement lands.
+const measuredPanes = ref<PaneBox[]>([])
+function syncPanes() {
+  const card = rootEl.value
   const n = props.data.node
-  if (n.type !== 'split') return [] as { index: number, left: number, top: number, width: number, height: number }[]
+  if (!card || n.type !== 'split') { measuredPanes.value = []; return }
+  const cr = card.getBoundingClientRect()
+  if (!cr.width || !cr.height) { measuredPanes.value = []; return }
+  // Shallowest panes only (no ancestor pane) = the TOP-LEVEL row/column, in document = child order.
+  const els = Array.from(card.querySelectorAll<HTMLElement>('[data-panel],[data-crouton-pane]'))
+    .filter(el => !el.parentElement?.closest('[data-panel],[data-crouton-pane]'))
+  if (els.length !== n.children.length) { measuredPanes.value = []; return }
+  const cw = cr.width, ch = cr.height
+  measuredPanes.value = els.map((el, i) => {
+    const r = el.getBoundingClientRect()
+    // Clamp every edge into the card box — when content overflows a scrolling card a lower pane's raw
+    // rect spills past it, which drew the face sprawling outside the card; clamp keeps a face on the
+    // pane's VISIBLE portion (a pane scrolled fully out collapses to zero → an invisible face).
+    const left = Math.min(Math.max(0, r.left - cr.left), cw)
+    const top = Math.min(Math.max(0, r.top - cr.top), ch)
+    const right = Math.min(Math.max(0, r.right - cr.left), cw)
+    const bottom = Math.min(Math.max(0, r.bottom - cr.top), ch)
+    return { index: i, left: left / cw, top: top / ch, width: (right - left) / cw, height: (bottom - top) / ch }
+  })
+}
+// nextTick (DOM settled) + a short follow-up (the reka/flex sizing + `@container` reflow settle async).
+function scheduleSyncPanes() { nextTick(syncPanes); window.setTimeout(syncPanes, 60) }
+
+// Tree-derived fallback: mirror the renderer's `child.defaultSize ?? equal` along the split axis.
+const treePanes = computed<PaneBox[]>(() => {
+  const n = props.data.node
+  if (n.type !== 'split') return []
   const kids = n.children
   const sizes = kids.map(c => (c.defaultSize && c.defaultSize > 0 ? c.defaultSize : 0))
   const total = sizes.reduce((s, v) => s + v, 0)
@@ -112,6 +149,16 @@ const topPanes = computed(() => {
     return box
   })
 })
+const childCount = computed(() => (props.data.node.type === 'split' ? props.data.node.children.length : 0))
+// Measured when the counts agree (the reliable read), else the tree fallback.
+const topPanes = computed<PaneBox[]>(() =>
+  measuredPanes.value.length === childCount.value && childCount.value > 0
+    ? measuredPanes.value
+    : treePanes.value,
+)
+// Faces to actually draw — drop a pane clamped to ~nothing (scrolled out of an overflowing card),
+// so it doesn't leave a stray dashed sliver. The reorder hit-test still reads the full `topPanes`.
+const faces = computed<PaneBox[]>(() => topPanes.value.filter(p => p.width > 0.005 && p.height > 0.005))
 
 // The LayoutNode a top-level pane holds (for the drag ghost's content) + the grabbed pane's box.
 function paneNode(i: number): LayoutNode {
@@ -154,10 +201,12 @@ function onPaneDown(i: number, e: PointerEvent) {
     const outside = Math.max(r.left - ev.clientX, ev.clientX - r.right, r.top - ev.clientY, ev.clientY - r.bottom, 0)
     past.value = outside > DETACH_MARGIN
     if (!past.value) {
-      const horiz = props.data.node.type === 'split' && props.data.node.direction === 'horizontal'
-      const frac = horiz ? (ev.clientX - r.left) / r.width : (ev.clientY - r.top) / r.height
-      const n = topPanes.value.length
-      reorderTo.value = Math.max(0, Math.min(n - 1, Math.floor(frac * n)))
+      // Which slot is the finger over? Hit-test the MEASURED pane boxes (0..1 of the card) so it
+      // tracks the panes as the live layout actually laid them out — including a narrow stack.
+      const cx = (ev.clientX - r.left) / r.width
+      const cy = (ev.clientY - r.top) / r.height
+      const hit = topPanes.value.find(p => cx >= p.left && cx <= p.left + p.width && cy >= p.top && cy <= p.top + p.height)
+      reorderTo.value = hit ? hit.index : (activeIndex.value ?? 0)
     }
   }
   const up = () => {
@@ -185,7 +234,19 @@ watch(jiggling, (on) => {
   if (on) window.addEventListener('pointerdown', onOutsidePointer, true)
   else window.removeEventListener('pointerdown', onOutsidePointer, true)
 })
-onMounted(() => window.addEventListener('keydown', onEscKey))
+
+// Re-measure the rendered panes whenever the geometry can change: the card resizes (per-node resize /
+// canvas zoom), the wiggle arms (faces appear), or the layout tree restructures (reorder / detach).
+const { width: cardW, height: cardH } = useElementSize(rootEl)
+watch(
+  [cardW, cardH, jiggling, () => props.data.node, () => props.data.width, () => props.data.height],
+  scheduleSyncPanes,
+)
+
+onMounted(() => {
+  window.addEventListener('keydown', onEscKey)
+  scheduleSyncPanes()
+})
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onEscKey)
   window.removeEventListener('pointerdown', onOutsidePointer, true)
@@ -315,7 +376,22 @@ const paneGuideStyle = computed(() => {
          BuilderNodePreview thumbnail: one render, no board/preview drift. Feasible only
          because #1178 removed the reka-Splitter ResizeObserver that OOM-crashed a
          transform-scaled Vue Flow node — the reason the card was frozen to a thumbnail. -->
-    <div class="builder-node-live nowheel" data-handoff="node-live">
+    <!-- drag grip — the live preview below claims ONE-finger touch for SCROLLING (nodrag/nopan +
+         touch-action:pan-y), so a card is moved / composed from this handle instead (Vue Flow still
+         node-drags it, since the grip isn't nodrag). One finger scrolls the page inside the card;
+         two fingers pinch-pan the canvas; this grip moves the card. (Requested on mobile: "scroll
+         with one finger, drag with the handle".) Hidden while the card wiggles (faces own the card). -->
+    <div
+      v-if="selected && !jiggling"
+      class="builder-drag-grip"
+      data-handoff="drag-grip"
+      title="Drag to move this card"
+      aria-label="Drag to move this card"
+    >
+      <UIcon name="i-lucide-grip-horizontal" class="size-4" />
+    </div>
+
+    <div class="builder-node-live nowheel nopan nodrag" data-handoff="node-live">
       <CroutonLayoutRenderer :node="data.node" :interactive="false" />
     </div>
 
@@ -335,7 +411,7 @@ const paneGuideStyle = computed(() => {
         ✓ Done
       </button>
       <div
-        v-for="p in topPanes"
+        v-for="p in faces"
         :key="p.index"
         class="builder-pane-face nodrag nopan"
         data-handoff="pane-face"
@@ -393,7 +469,34 @@ const paneGuideStyle = computed(() => {
   width: 100%;
   overflow-y: auto;
   overflow-x: hidden;
+  /* One finger SCROLLS the card content (paired with `nodrag`/`nopan`, which stop Vue Flow from
+     grabbing the touch to drag the node / pan the canvas). Two-finger gestures pass through to the
+     canvas (pinch-pan/zoom); the card is moved from `.builder-drag-grip`. */
+  touch-action: pan-y;
 }
+/* The move handle — a subtle grip pill at the card's top. NOT `nodrag`, so Vue Flow drags the card
+   from it (the one-finger-drag the content gave up to scrolling). */
+.builder-drag-grip {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 36;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  padding: 0 12px;
+  border-radius: 999px;
+  color: var(--ui-text-muted, #8a8a8a);
+  background: var(--ui-bg-elevated, rgba(255, 255, 255, 0.9));
+  border: 1px solid var(--ui-border, rgba(120, 120, 120, 0.22));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
+  opacity: 0.75;
+  cursor: grab;
+  touch-action: none;
+}
+.builder-drag-grip:active { cursor: grabbing; opacity: 1; }
 /* While a pane is lifted (detach), stop clipping so the ghost can roam the canvas
    past the card edge instead of being cut off at the border. Transient — only for
    the active drag (activePane); the card re-clips its content the instant you release. */
