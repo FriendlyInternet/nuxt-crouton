@@ -46,7 +46,7 @@ interface FlowNode {
   id: string
   type: string
   position: { x: number, y: number }
-  data: { node: LayoutNode, label?: string, bp?: LayoutBreakpoint[], isPage?: boolean, justAdded?: boolean, region?: BuilderRegion }
+  data: { node: LayoutNode, label?: string, bp?: LayoutBreakpoint[], isPage?: boolean, justAdded?: boolean, region?: BuilderRegion, width?: number, height?: number }
 }
 const nodes = ref<FlowNode[]>([])
 let seq = 0
@@ -244,8 +244,16 @@ let draggedId: string | null = null
 function clearSnapTimer() { if (snapTimer != null) { window.clearTimeout(snapTimer); snapTimer = null } }
 function resetSnap() { clearSnapTimer(); snapKey = null; snapPreview.value = null }
 
-function rectOf(n: FlowNode) {
+// EFFECTIVE on-screen size — the per-element-resize (`data.width`/`data.height`, set by the corner
+// handle) WINS over the intrinsic footprint (`sizeOf`). Snap/pane-drop geometry must use this: after
+// you resize a card, its real bounds are the resized ones, so computing snaps from `sizeOf` targeted
+// the ORIGINAL size — the green connect indicator showed up where the card used to be (IMG_1337).
+function effSize(n: FlowNode) {
   const s = sizeOf(n.data.node)
+  return { width: n.data.width ?? s.width, height: n.data.height ?? s.height }
+}
+function rectOf(n: FlowNode) {
+  const s = effSize(n)
   return { x: n.position.x, y: n.position.y, width: s.width, height: s.height }
 }
 
@@ -256,7 +264,7 @@ function onNodeDrag(id: string, pos: { x: number, y: number }) {
   draggedId = id
   const moved = nodes.value.find(n => n.id === id)
   if (!moved) { resetSnap(); return }
-  const drag = { x: pos.x, y: pos.y, ...sizeOf(moved.data.node) }
+  const drag = { x: pos.x, y: pos.y, ...effSize(moved) }
   const dcx = drag.x + drag.width / 2
   const dcy = drag.y + drag.height / 2
 
@@ -268,11 +276,11 @@ function onNodeDrag(id: string, pos: { x: number, y: number }) {
   let bestOverlap = 0, overTarget: FlowNode | null = null
   for (const n of nodes.value) {
     if (n.id === id || n.data.node.type !== 'split') continue
-    const frac = rectsOverlapFrac(drag, { x: n.position.x, y: n.position.y, ...sizeOf(n.data.node) })
+    const frac = rectsOverlapFrac(drag, { x: n.position.x, y: n.position.y, ...effSize(n) })
     if (frac >= PANE_DROP_MIN && frac > bestOverlap) { bestOverlap = frac; overTarget = n }
   }
   if (overTarget) {
-    const box = { left: overTarget.position.x, top: overTarget.position.y, ...sizeOf(overTarget.data.node) }
+    const box = { left: overTarget.position.x, top: overTarget.position.y, ...effSize(overTarget) }
     const leaves = collectLeaves(overTarget.data.node, box)
     const cx = Math.max(box.left, Math.min(box.left + box.width, dcx))
     const cy = Math.max(box.top, Math.min(box.top + box.height, dcy))
