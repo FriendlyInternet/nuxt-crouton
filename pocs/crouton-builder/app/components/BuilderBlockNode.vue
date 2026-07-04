@@ -14,7 +14,7 @@
  *
  * `footprint` / `sizeOf` / `BUILDER_BASE_*` are auto-imported from app/utils/builder-layout.
  */
-import { computed, inject, ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, inject, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import type { LayoutNode, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
 import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion } from '~/utils/builder-keys'
 
@@ -174,8 +174,23 @@ function onPaneDown(i: number, e: PointerEvent) {
 }
 
 function onEscKey(e: KeyboardEvent) { if (e.key === 'Escape' && jiggling.value) jiggling.value = false }
+// Exit the wiggle by tapping anywhere OUTSIDE the card (mobile has no Esc, and the pane faces cover
+// the whole card so a tap on it can't reach onCardDown). Capture-phase so it sees the tap before a
+// face swallows it; `contains` keeps taps inside the card (faces / Done) from exiting.
+const rootEl = ref<HTMLElement | null>(null)
+function onOutsidePointer(e: PointerEvent) {
+  if (rootEl.value && !rootEl.value.contains(e.target as Node)) jiggling.value = false
+}
+watch(jiggling, (on) => {
+  if (on) window.addEventListener('pointerdown', onOutsidePointer, true)
+  else window.removeEventListener('pointerdown', onOutsidePointer, true)
+})
 onMounted(() => window.addEventListener('keydown', onEscKey))
-onBeforeUnmount(() => { window.removeEventListener('keydown', onEscKey); clearPress() })
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onEscKey)
+  window.removeEventListener('pointerdown', onOutsidePointer, true)
+  clearPress()
+})
 
 // snap-dwell (spec: `snap-dwell-arm`) — the board provides a live snap preview; this card is
 // the target when the preview points at ITS node (matched by object identity — Vue Flow doesn't
@@ -210,6 +225,7 @@ const paneGuideStyle = computed(() => {
 
 <template>
   <div
+    ref="rootEl"
     class="builder-block-node transition-[box-shadow] duration-300 ease-out"
     :class="[
       (dragging || data.justAdded) ? 'builder-drag-glow' : selected ? 'ring-2 ring-primary shadow-lg' : '',
@@ -300,6 +316,17 @@ const paneGuideStyle = computed(() => {
          Each pane is a face at its own slot; the grabbed pane's slot goes EMPTY and a clean ghost
          (its real content) lifts out and follows the finger — no more static content bleeding through. -->
     <template v-if="jiggling">
+      <!-- exit affordance: mobile has no Esc and the faces cover the card, so a visible Done is the
+           reliable way out (plus tap-outside / Esc). -->
+      <button
+        type="button"
+        class="builder-jiggle-done nodrag nopan"
+        data-handoff="jiggle-done"
+        @pointerdown.stop
+        @click.stop="jiggling = false"
+      >
+        ✓ Done
+      </button>
       <div
         v-for="p in topPanes"
         :key="p.index"
@@ -335,7 +362,7 @@ const paneGuideStyle = computed(() => {
         </span>
       </div>
 
-      <span class="builder-jiggle-hint">drag a pane out to detach · Esc to cancel</span>
+      <span class="builder-jiggle-hint">drag a pane out to detach · tap Done to finish</span>
     </template>
   </div>
 </template>
@@ -411,6 +438,22 @@ const paneGuideStyle = computed(() => {
 .builder-pane-ghost.detaching { border-color: rgb(239, 68, 68); box-shadow: 0 14px 34px rgba(239, 68, 68, 0.35); }
 .builder-pane-label { position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 700; color: rgb(16, 185, 129); background: var(--ui-bg-elevated, #fff); padding: 2px 8px; border-radius: 999px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); white-space: nowrap; }
 .builder-pane-label[data-detach="true"] { color: rgb(239, 68, 68); }
+.builder-jiggle-done {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 70;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: rgb(16, 185, 129);
+  padding: 4px 14px;
+  border-radius: 999px;
+  border: none;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
 .builder-jiggle-hint {
   position: absolute;
   left: 50%;
