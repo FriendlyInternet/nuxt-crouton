@@ -106,6 +106,13 @@ watch(
 
 const pageNode = computed(() => nodes.value.find(n => n.data.isPage) ?? null)
 
+// page-regions-pin (render half) — assemble the board into a real page: pinned-top/bottom cards
+// become sticky bars, the ★ page is the scrolling main. Powers the Preview overlay.
+const regionTop = computed(() => nodes.value.filter(n => n.data.region === 'top').map(n => n.data.node))
+const regionBottom = computed(() => nodes.value.filter(n => n.data.region === 'bottom').map(n => n.data.node))
+const regionMain = computed(() => pageNode.value?.data.node ?? null)
+const previewing = ref(false)
+
 // floor-readout hook — the page's derived floor (folded bottom-up over the block registry).
 const { blocks } = useCroutonLayoutBlocks()
 const derived = computed(() => (pageNode.value ? deriveSizing(pageNode.value.data.node, blocks.value) : null))
@@ -389,6 +396,17 @@ async function saveBoard() {
       </span>
 
       <div class="ml-auto flex items-center gap-2">
+        <UButton
+          size="sm"
+          icon="i-lucide-eye"
+          color="neutral"
+          variant="ghost"
+          data-handoff="preview-open"
+          title="Preview the assembled page"
+          @click="previewing = true"
+        >
+          Preview
+        </UButton>
         <span v-if="saveState === 'saved' && !dirty" class="flex items-center gap-1 text-xs text-muted">
           <UIcon name="i-lucide-check" class="size-4 text-primary" /> Saved
         </span>
@@ -469,6 +487,16 @@ async function saveBoard() {
       :title="editing.data.label"
       @save="onFocusSave"
       @close="editing = null"
+    />
+
+    <!-- page-regions-pin (render half) — the assembled page: sticky bars + scrolling main. -->
+    <BuilderPagePreview
+      v-if="previewing"
+      :top="regionTop"
+      :main="regionMain"
+      :bottom="regionBottom"
+      :title="page?.title"
+      @close="previewing = false"
     />
   </div>
 </template>
