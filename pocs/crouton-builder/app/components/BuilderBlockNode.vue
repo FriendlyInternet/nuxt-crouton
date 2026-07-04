@@ -345,15 +345,18 @@ const paneGuideStyle = computed(() => {
       />
     </div>
 
-    <!-- per-element-resize corner handle (spec: per-element-resize) — shown on select. -->
+    <!-- per-element-resize corner handle (spec: per-element-resize) — shown on select.
+         Sized for a fingertip (mobile): a ~28px grip, not a 14px dot. -->
     <div
       v-if="selected"
-      class="nodrag nopan absolute bottom-1 right-1 z-30 size-3.5 cursor-nwse-resize rounded-sm border-2 border-primary bg-elevated shadow"
+      class="nodrag nopan absolute bottom-1 right-1 z-30 flex size-7 items-center justify-center cursor-nwse-resize rounded-md border-2 border-primary bg-elevated shadow"
       data-handoff="resize-handle"
       title="Drag to resize · double-click to reset"
       @pointerdown="onResizeDown"
       @dblclick.stop="resetSize"
-    />
+    >
+      <UIcon name="i-lucide-move-diagonal-2" class="size-3.5 text-primary" />
+    </div>
 
     <!-- snap-guide / ghost-pane hook: this card is the target. Edge-snap → a bar on the card's
          outer edge (data-handoff="snap-guide"). Pane-drop → a bar on the targeted pane's edge
@@ -388,7 +391,7 @@ const paneGuideStyle = computed(() => {
       title="Drag to move this card"
       aria-label="Drag to move this card"
     >
-      <UIcon name="i-lucide-grip-horizontal" class="size-4" />
+      <UIcon name="i-lucide-grip-horizontal" class="size-5" />
     </div>
 
     <div class="builder-node-live nowheel nopan nodrag" data-handoff="node-live">
@@ -478,21 +481,21 @@ const paneGuideStyle = computed(() => {
    from it (the one-finger-drag the content gave up to scrolling). */
 .builder-drag-grip {
   position: absolute;
-  top: 4px;
+  top: 5px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 36;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 20px;
-  padding: 0 12px;
+  height: 30px;
+  padding: 0 22px;
   border-radius: 999px;
   color: var(--ui-text-muted, #8a8a8a);
-  background: var(--ui-bg-elevated, rgba(255, 255, 255, 0.9));
-  border: 1px solid var(--ui-border, rgba(120, 120, 120, 0.22));
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.14);
-  opacity: 0.75;
+  background: var(--ui-bg-elevated, rgba(255, 255, 255, 0.92));
+  border: 1px solid var(--ui-border, rgba(120, 120, 120, 0.25));
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.16);
+  opacity: 0.92;
   cursor: grab;
   touch-action: none;
 }
