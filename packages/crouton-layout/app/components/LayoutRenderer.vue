@@ -5,7 +5,11 @@
  * runtime min-width enforcement Sprint 3 #706).
  *
  * - `split` node → a SplitterGroup with one SplitterPanel per child (recursing),
- *   interleaved with resize handles. Nesting = a group inside a panel.
+ *   interleaved with resize handles. Nesting = a group inside a panel. In VIEW mode
+ *   (`interactive=false`: a served page / Preview) there's nothing to drag, so it
+ *   renders plain flex at the stored proportions instead of reka's SplitterGroup —
+ *   avoiding reka's internal ResizeObserver churn (the benign "loop completed" flood,
+ *   #983) that a read-only view has no reason to pay for. Same proportions, no handles.
  * - `leaf` node  → one block, resolved id → component NAME through the
  *   ALLOWLISTED `croutonLayoutBlocks` registry (#704). An unknown id renders a
  *   safe fallback — NEVER an arbitrary component. Per-block config is sanitized
@@ -295,6 +299,36 @@ watch(
       <CroutonLayoutRenderer
         :node="child"
         :interactive="interactive"
+        @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
+      />
+    </div>
+  </div>
+
+  <!-- Split, VIEW mode (#983) — a read-only render (`interactive=false`: a served page /
+       Preview) has nothing to drag, so it doesn't need reka-ui's SplitterGroup at all — and
+       reka's internal ResizeObserver is what floods the console with the benign "loop
+       completed with undelivered notifications" as its panes settle. Render plain flex at the
+       stored proportions instead: `flex-grow: <defaultSize>` over a 0 basis distributes each
+       pane its authored share (sizes sum to 100), matching reka's proportional layout with
+       zero observer churn. `groupRef` stays for the stack/min-width measuring (its useElementSize
+       callback only sets refs — it never resizes synchronously, so it doesn't trip the warning).
+       Excludes the in-place-collapse path, which still needs reka's collapsible panels. -->
+  <div
+    v-else-if="node.type === 'split' && !interactive && !inPlace"
+    ref="groupRef"
+    class="flex h-full w-full"
+    :class="node.direction === 'horizontal' ? 'flex-row' : 'flex-col'"
+  >
+    <div
+      v-for="(child, i) in node.children"
+      :key="i"
+      data-crouton-pane
+      class="croutonpane min-h-0 min-w-0 overflow-hidden"
+      :style="{ flex: `${child.defaultSize ?? (100 / node.children.length)} 1 0` }"
+    >
+      <CroutonLayoutRenderer
+        :node="child"
+        :interactive="false"
         @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
       />
     </div>
