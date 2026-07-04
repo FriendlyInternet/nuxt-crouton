@@ -230,6 +230,7 @@ const paneGuideStyle = computed(() => {
     :class="[
       (dragging || data.justAdded) ? 'builder-drag-glow' : selected ? 'ring-2 ring-primary shadow-lg' : '',
       jiggling ? 'ring-2 ring-primary/70' : '',
+      activePane ? 'builder-detach-lift' : '',
     ]"
     :style="size"
     data-handoff="board-node"
@@ -376,6 +377,12 @@ const paneGuideStyle = computed(() => {
   border-radius: 0.75rem;
   border: 1px solid var(--ui-border, rgba(120, 120, 120, 0.2));
   background: var(--ui-bg-elevated, rgba(255, 255, 255, 0.6));
+}
+/* While a pane is lifted (detach), stop clipping so the ghost can roam the canvas
+   past the card edge instead of being cut off at the border. Transient — only for
+   the active drag (activePane); the card re-clips its content the instant you release. */
+.builder-block-node.builder-detach-lift {
+  overflow: visible;
 }
 /* drag-glow (spec: drag-glow) — a light-green halo while the card is dragged or just added. */
 .builder-drag-glow {
