@@ -32,6 +32,19 @@ export interface BuilderNodeSize { width: number | null, height?: number | null 
 export const BUILDER_SET_SIZE_KEY: InjectionKey<(node: LayoutNode, size: BuilderNodeSize) => void> = Symbol('builder-set-size')
 
 /**
+ * Detach / reorder (spec: `detach-reorder`) — the inverse of snap, ON the board. Long-press a
+ * composed card → its top-level panes wiggle (grabbable). Sliding a pane to another slot REORDERS
+ * (moveChild); pulling it OUT past the detach margin DETACHES it into its own free card (detachNode).
+ * The board owns `nodes`, so it provides these; BuilderBlockNode calls them (group by object
+ * identity of its `data.node`). `dropOffset` is the pulled pane's flow-space offset from the group's
+ * top-left, so the freed card lands where you dropped it. Scope: top-level panes only.
+ */
+export interface BuilderDetachPayload { index: number, dropOffset: { x: number, y: number } }
+export const BUILDER_DETACH_KEY: InjectionKey<(group: LayoutNode, payload: BuilderDetachPayload) => void> = Symbol('builder-detach')
+export interface BuilderReorderPayload { from: number, to: number }
+export const BUILDER_REORDER_KEY: InjectionKey<(group: LayoutNode, payload: BuilderReorderPayload) => void> = Symbol('builder-reorder')
+
+/**
  * Live snap preview (spec: `snap-dwell-arm`) — set continuously by the board WHILE a card is
  * dragged. It names the TARGET node the dragged card will click onto and the edge it snaps to,
  * so that target's card can light that edge up. `armed` is the two-stage dwell: `false` = soft

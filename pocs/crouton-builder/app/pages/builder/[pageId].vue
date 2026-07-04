@@ -23,10 +23,10 @@
 import { markRaw, shallowRef, provide } from 'vue'
 import type { LayoutNode, LayoutTree, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
 import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize'
-import { dropNode, applyPaneDrop } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { dropNode, applyPaneDrop, detachNode, moveChild } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { snapEdge, rectsOverlapFrac } from '@fyit/crouton-layout/app/utils/layout-snap'
 import BuilderBlockNode from '~/components/BuilderBlockNode.vue'
-import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, type BuilderRegion, type BuilderNodeSize, type BuilderSnapPreview } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion, type BuilderNodeSize, type BuilderDetachPayload, type BuilderReorderPayload, type BuilderSnapPreview } from '~/utils/builder-keys'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 const blockNode = markRaw(BuilderBlockNode)
@@ -217,6 +217,32 @@ function setNodeSize(node: LayoutNode, size: BuilderNodeSize) {
   dirty.value = true
 }
 provide(BUILDER_SET_SIZE_KEY, setNodeSize)
+
+// detach-reorder — reorder a composed card's top-level panes, or pull one out into its own card.
+function onReorder(group: LayoutNode, { from, to }: BuilderReorderPayload) {
+  const next = moveChild(group, [], from, to)
+  nodes.value = nodes.value.map(n => (n.data.node === group ? { ...n, data: { ...n.data, node: next } } : n))
+  dirty.value = true
+}
+function onDetach(group: LayoutNode, { index, dropOffset }: BuilderDetachPayload) {
+  const host = nodes.value.find(n => n.data.node === group)
+  if (!host) return
+  const { root, detached } = detachNode(group, [index])
+  if (!detached) return
+  const freed: FlowNode = {
+    id: `block-${++seq}`,
+    type: 'default',
+    position: { x: Math.round(host.position.x + dropOffset.x), y: Math.round(host.position.y + dropOffset.y) },
+    data: { node: detached, justAdded: true },
+  }
+  const kept = nodes.value
+    .map(n => (n.data.node === group ? (root ? { ...n, data: { ...n.data, node: root } } : null) : n))
+    .filter(Boolean) as FlowNode[]
+  nodes.value = [...kept, freed]
+  dirty.value = true
+}
+provide(BUILDER_DETACH_KEY, onDetach)
+provide(BUILDER_REORDER_KEY, onReorder)
 
 let snapKey: string | null = null
 let snapTimer: number | null = null

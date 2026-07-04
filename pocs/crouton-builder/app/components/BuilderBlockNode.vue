@@ -14,9 +14,9 @@
  *
  * `footprint` / `sizeOf` / `BUILDER_BASE_*` are auto-imported from app/utils/builder-layout.
  */
-import { computed, inject, ref } from 'vue'
+import { computed, inject, ref, onMounted, onBeforeUnmount } from 'vue'
 import type { LayoutNode, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
-import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, type BuilderRegion } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion } from '~/utils/builder-keys'
 
 const props = defineProps<{
   data: {
@@ -78,6 +78,98 @@ function onResizeDown(e: PointerEvent) {
 }
 function resetSize() { setSize?.(props.data.node, { width: null }) }
 
+// ── detach-reorder (spec: `detach-reorder`) ─────────────────────────────────────
+// Long-press a composed card → its top-level panes wiggle. Slide a pane to another slot →
+// reorder (moveChild); pull it OUT past the margin → detach into its own card (detachNode).
+const LONG_PRESS_MS = 420, MOVE_CANCEL_PX = 8, DETACH_MARGIN = 64
+const detach = inject(BUILDER_DETACH_KEY, null)
+const reorder = inject(BUILDER_REORDER_KEY, null)
+const jiggling = ref(false)
+const activeIndex = ref<number | null>(null)
+const pull = ref({ x: 0, y: 0 })
+const past = ref(false)            // pulled far enough to detach
+const reorderTo = ref<number | null>(null)
+let pressTimer: number | null = null
+let pressOrigin = { x: 0, y: 0 }
+
+const isGroup = computed(() => props.data.node.type === 'split' && props.data.node.children.length >= 2)
+
+// Top-level panes of a split root, each as a 0..1 fraction box (mirrors BuilderNodePreview's split).
+const topPanes = computed(() => {
+  const n = props.data.node
+  if (n.type !== 'split') return [] as { index: number, left: number, top: number, width: number, height: number }[]
+  const kids = n.children
+  const sizes = kids.map(c => (c.defaultSize && c.defaultSize > 0 ? c.defaultSize : 0))
+  const total = sizes.reduce((s, v) => s + v, 0)
+  const equal = 1 / kids.length
+  let acc = 0
+  return kids.map((_, i) => {
+    const frac = total > 0 && sizes[i]! > 0 ? sizes[i]! / total : equal
+    const box = n.direction === 'horizontal'
+      ? { index: i, left: acc, top: 0, width: frac, height: 1 }
+      : { index: i, left: 0, top: acc, width: 1, height: frac }
+    acc += frac
+    return box
+  })
+})
+
+function clearPress() {
+  if (pressTimer != null) { window.clearTimeout(pressTimer); pressTimer = null }
+  window.removeEventListener('pointermove', onCardMove)
+  window.removeEventListener('pointerup', onCardUp)
+}
+function onCardMove(e: PointerEvent) {
+  if (pressTimer != null && Math.hypot(e.clientX - pressOrigin.x, e.clientY - pressOrigin.y) > MOVE_CANCEL_PX) clearPress()
+}
+function onCardUp() { clearPress() }
+function onCardDown(e: PointerEvent) {
+  if (!isGroup.value || !detach) return
+  if (jiggling.value) { jiggling.value = false; return } // tap the card while armed → exit
+  pressOrigin = { x: e.clientX, y: e.clientY }
+  pressTimer = window.setTimeout(() => { jiggling.value = true; pressTimer = null }, LONG_PRESS_MS)
+  window.addEventListener('pointermove', onCardMove)
+  window.addEventListener('pointerup', onCardUp)
+}
+
+// Pull a top-level pane: reorder within the card, or detach when pulled out past the margin.
+function onPaneDown(i: number, e: PointerEvent) {
+  if (!jiggling.value) return
+  e.stopPropagation(); e.preventDefault()
+  activeIndex.value = i; pull.value = { x: 0, y: 0 }; past.value = false; reorderTo.value = i
+  const origin = { x: e.clientX, y: e.clientY }
+  const z = currentZoom()
+  const card = (e.currentTarget as HTMLElement).closest('.builder-block-node') as HTMLElement | null
+  try { (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId) } catch {}
+  const move = (ev: PointerEvent) => {
+    pull.value = { x: (ev.clientX - origin.x) / z, y: (ev.clientY - origin.y) / z }
+    const r = card?.getBoundingClientRect()
+    if (!r) return
+    const outside = Math.max(r.left - ev.clientX, ev.clientX - r.right, r.top - ev.clientY, ev.clientY - r.bottom, 0)
+    past.value = outside > DETACH_MARGIN
+    if (!past.value) {
+      const horiz = props.data.node.type === 'split' && props.data.node.direction === 'horizontal'
+      const frac = horiz ? (ev.clientX - r.left) / r.width : (ev.clientY - r.top) / r.height
+      const n = topPanes.value.length
+      reorderTo.value = Math.max(0, Math.min(n - 1, Math.floor(frac * n)))
+    }
+  }
+  const up = () => {
+    window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up)
+    const i2 = activeIndex.value
+    if (i2 != null) {
+      if (past.value && detach) detach(props.data.node, { index: i2, dropOffset: { x: pull.value.x, y: pull.value.y } })
+      else if (reorderTo.value != null && reorderTo.value !== i2 && reorder) reorder(props.data.node, { from: i2, to: reorderTo.value })
+    }
+    activeIndex.value = null; pull.value = { x: 0, y: 0 }; past.value = false; reorderTo.value = null
+    jiggling.value = false
+  }
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up)
+}
+
+function onEscKey(e: KeyboardEvent) { if (e.key === 'Escape' && jiggling.value) jiggling.value = false }
+onMounted(() => window.addEventListener('keydown', onEscKey))
+onBeforeUnmount(() => { window.removeEventListener('keydown', onEscKey); clearPress() })
+
 // snap-dwell (spec: `snap-dwell-arm`) — the board provides a live snap preview; this card is
 // the target when the preview points at ITS node (matched by object identity — Vue Flow doesn't
 // forward the node id). Light the edge it will snap to: soft blue, then green once armed.
@@ -112,9 +204,14 @@ const paneGuideStyle = computed(() => {
 <template>
   <div
     class="builder-block-node transition-[box-shadow] duration-300 ease-out"
-    :class="(dragging || data.justAdded) ? 'builder-drag-glow' : selected ? 'ring-2 ring-primary shadow-lg' : ''"
+    :class="[
+      (dragging || data.justAdded) ? 'builder-drag-glow' : selected ? 'ring-2 ring-primary shadow-lg' : '',
+      jiggling ? 'ring-2 ring-primary/70' : '',
+    ]"
     :style="size"
     data-handoff="board-node"
+    :data-jiggling="jiggling ? 'true' : undefined"
+    @pointerdown="onCardDown"
   >
     <!-- page-badge hook: this node IS "the page" (the live layout). -->
     <UBadge
@@ -191,6 +288,32 @@ const paneGuideStyle = computed(() => {
          and OOM-crashes mobile Safari inside a transform-scaled Vue Flow node; see
          BuilderNodePreview's header note. Editing panes happens in the focus-edit view. -->
     <BuilderNodePreview :node="data.node" />
+
+    <!-- detach-reorder faces: long-press a composed card → its top-level panes wiggle and become
+         grabbable. Slide to another slot → reorder; pull out past the margin → detach. -->
+    <template v-if="jiggling">
+      <div
+        v-for="p in topPanes"
+        :key="p.index"
+        class="builder-pane-face nodrag nopan"
+        data-handoff="pane-face"
+        :class="[
+          activeIndex === null ? 'wiggle' : '',
+          activeIndex === p.index ? (past ? 'detaching' : 'grabbed') : '',
+          reorderTo === p.index && activeIndex !== null && activeIndex !== p.index && !past ? 'drop-target' : '',
+        ]"
+        :style="{
+          left: `${p.left * 100}%`, top: `${p.top * 100}%`, width: `${p.width * 100}%`, height: `${p.height * 100}%`,
+          ...(activeIndex === p.index ? { transform: `translate(${pull.x}px, ${pull.y}px)`, zIndex: 50 } : {}),
+        }"
+        @pointerdown="onPaneDown(p.index, $event)"
+      >
+        <span v-if="activeIndex === p.index" class="builder-pane-label" :data-detach="past ? 'true' : 'false'">
+          {{ past ? 'Release to detach' : 'Move' }}
+        </span>
+      </div>
+      <span class="builder-jiggle-hint">drag a pane out to detach · Esc to cancel</span>
+    </template>
   </div>
 </template>
 
@@ -228,4 +351,41 @@ const paneGuideStyle = computed(() => {
 .builder-snap-guide.soft.e-top, .builder-snap-guide.soft.e-bottom { height: 10px; }
 .builder-snap-guide.armed.e-top, .builder-snap-guide.armed.e-bottom { height: 6px; }
 @keyframes builder-snap-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+/* detach-reorder (spec: detach-reorder) — grabbable top-level pane faces while the card wiggles. */
+.builder-pane-face {
+  position: absolute;
+  z-index: 45;
+  border-radius: 0.5rem;
+  border: 2px dashed rgba(99, 102, 241, 0.5);
+  background: rgba(99, 102, 241, 0.06);
+  cursor: grab;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+  touch-action: none;
+}
+.builder-pane-face.wiggle { animation: builder-wiggle 0.5s ease-in-out infinite; }
+.builder-pane-face.grabbed { cursor: grabbing; background: rgba(16, 185, 129, 0.14); border-color: rgb(16, 185, 129); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25); }
+.builder-pane-face.detaching { background: rgba(239, 68, 68, 0.16); border-color: rgb(239, 68, 68); box-shadow: 0 8px 22px rgba(0, 0, 0, 0.3); }
+.builder-pane-face.drop-target { background: rgba(16, 185, 129, 0.12); border-color: rgb(16, 185, 129); }
+.builder-pane-label { font-size: 11px; font-weight: 700; color: rgb(16, 185, 129); background: var(--ui-bg-elevated, #fff); padding: 2px 8px; border-radius: 999px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); }
+.builder-pane-label[data-detach="true"] { color: rgb(239, 68, 68); }
+.builder-jiggle-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  z-index: 60;
+  font-size: 10px;
+  white-space: nowrap;
+  color: var(--ui-text-muted, #888);
+  background: var(--ui-bg-elevated, #fff);
+  padding: 2px 8px;
+  border-radius: 999px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+}
+@keyframes builder-wiggle { 0%, 100% { transform: rotate(-0.6deg); } 50% { transform: rotate(0.6deg); } }
 </style>
