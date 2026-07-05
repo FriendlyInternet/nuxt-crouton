@@ -3,9 +3,9 @@
     "id": "site-page-two-level",
     "behaviour": "Two levels on one screen: a Site flow (pages as a wireable sitemap) and a Page board (compose blocks). You land on the Site.",
     "when": "open the builder",
-    "expect": "a CroutonFlow canvas of page cards (lines = parentId); tapping a card (or ⤢ / double-click) opens that page's board; 'Pages ←' returns to the flow",
+    "expect": "a canvas of page cards (a line links a page to its parent); tap a card (or its ⤢) to open that page's board; 'Pages ←' returns to the flow",
     "hook": "",
-    "howToTest": "1. open /spike-app → see the Site flow of page cards  2. tap a card → its LayoutTree loads onto the board  3. tap 'Pages ←' → back to the flow",
+    "howToTest": "1. open /builder → the Site: a canvas of page cards  2. tap a card → its board opens  3. tap 'Pages ←' → back to the Site",
     "status": "settled",
     "supersedes": "",
     "consideredRejected": [
@@ -28,10 +28,10 @@
   {
     "id": "focus-edit-view",
     "behaviour": "Editing a layout opens a dedicated full-screen edit VIEW, not a Vue Flow camera zoom (the camera zoom raced VF's re-measure and framed off-screen).",
-    "when": "double-click a layout node",
+    "when": "double-tap a card",
     "expect": "a full-screen overlay hosting the breakpoint author (min-width ruler, device buttons, width slider, per-block variants, splitter drags); 'Done' returns; the node's layout persists via the page's zoomTree",
     "hook": "",
-    "howToTest": "1. double-click a composed node → full-screen edit view opens (no camera wobble)  2. drag a splitter → keypoint sizes change  3. Done → returns, changes persisted",
+    "howToTest": "1. double-tap a composed card → a full-screen edit view opens (no wobble)  2. drag a splitter → pane sizes change  3. tap Done → returns, changes kept",
     "status": "settled",
     "supersedes": "",
     "consideredRejected": [
@@ -126,7 +126,7 @@
     "id": "pane-drop-beside",
     "behaviour": "Drop a card OVER a composed layout (≥35% overlap) → add it beside the targeted pane on the nearest side (L/R/T/B by quadrant). Flattens into the parent row/column when the side runs along it, else wraps the pane in a new perpendicular split — so you can add 'right of a pane in a vertical stack', which seam-only insert couldn't reach.",
     "when": "drag a card over a multi-pane layout near one pane's edge",
-    "expect": "the pane under the cursor is targeted; the card joins as a sibling on the nearest side; flatten vs wrap as above; the drop commits by tracking the dragged node's id",
+    "expect": "the pane under your finger is targeted; the card joins as a sibling on the nearest side; flatten vs wrap as above; the drop commits by tracking the dragged node's id",
     "hook": "ghost-pane",
     "howToTest": "1. drag a card over a 2-pane row, near the right pane's right edge → it joins the row (flatten)  2. drag over a vertical stack, to the right of a pane → wraps in a new horizontal split",
     "status": "settled",
