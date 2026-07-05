@@ -20,20 +20,22 @@ import PlanSpecRow from './PlanSpecRow.vue'
  * the gesture. Each behaviour row reflects its live walk verdict (✅ / ⚠️ / ✓).
  */
 const { plan, badge, open } = usePlan()
-const { open: walkOpen, jumpTo, isWalkable, verdictOf, marked, walk } = useSpecWalk()
+const { open: walkOpen, jumpTo, walkScoped, walkAll, isWalkable, verdictOf, markedTotal, total } = useSpecWalk()
 
 const phases = computed(() => plan.value.phases ?? [])
 
 type UiColor = 'primary' | 'success' | 'info' | 'warning' | 'error' | 'neutral'
 
-// Plan status → a Nuxt UI badge colour (theme-aware, no custom CSS).
+// Plan status → a Nuxt UI badge colour (theme-aware, no custom CSS). `active` is
+// deliberately DISTINCT from `done` (this app's `primary` reads as the same green
+// as `success`, so active ≠ done needs a different hue) — active = info (blue).
 function statusColor(status: string): UiColor {
   return ({
-    done: 'success',
-    active: 'primary',
-    next: 'info',
-    blocked: 'neutral',
-    later: 'neutral'
+    done: 'success', // green — finished
+    active: 'info', // blue — the one you're on (distinct from done)
+    next: 'warning', // amber — on deck
+    blocked: 'error', // red — stuck
+    later: 'neutral' // grey — parked
   } as Record<string, UiColor>)[status] ?? 'neutral'
 }
 
@@ -56,18 +58,18 @@ const flowLabel: Record<string, string> = {
 const ghUrl = (n: number | null | undefined, kind: 'issues' | 'pull') =>
   n ? `https://github.com/FriendlyInternet/nuxt-crouton/${kind}/${n}` : undefined
 
-// The first LIVE (walkable) behaviour id under a set of specs — the target the
-// "walk it" callouts jump to.
-const firstWalkable = (specs: { id: string }[]): string | undefined =>
-  specs.find(s => isWalkable(s.id))?.id
+// The LIVE (walkable) behaviour ids under a set of specs — the scope the
+// section "Walk & sign off" buttons pass.
+const walkableIds = (specs: { id: string }[]): string[] =>
+  specs.filter(s => isWalkable(s.id)).map(s => s.id)
 
-// Leave the plan and enter the Spec walk — on a specific behaviour when given,
-// else just open it (falls through when the id isn't a live entry).
-function startWalk(id?: string) {
-  open.value = false
-  if (id && jumpTo(id)) return
-  walkOpen.value = true
-}
+// Leave the plan, enter the Spec walk — three scopes:
+//  · ALL      — the full regression walk (the top "Check & sign off" bar)
+//  · SECTION  — just an increment's / phase's behaviours ("what we just did")
+//  · ONE      — just a single behaviour ("does this one work?")
+function startWalkAll() { open.value = false; walkAll() }
+function startWalkScope(ids: string[]) { open.value = false; walkScoped(ids) }
+function startWalkOne(id: string) { open.value = false; if (!jumpTo(id)) walkOpen.value = true }
 </script>
 
 <template>
@@ -103,23 +105,23 @@ function startWalk(id?: string) {
           >PR #{{ plan.pr }}</UButton>
         </div>
 
-        <!-- Check & sign off — where we are, one tap into the walk. -->
+        <!-- Check & sign off — where we are; walk EVERYTHING (the full regression). -->
         <div
-          v-if="walk.length"
+          v-if="total"
           class="flex items-center gap-3 rounded-lg border border-default p-3"
         >
           <UIcon name="i-lucide-list-checks" class="size-5 shrink-0 text-primary" />
           <div class="min-w-0 flex-1">
             <p class="text-sm font-medium">Check &amp; sign off</p>
-            <p class="text-xs text-muted">{{ marked }} of {{ walk.length }} behaviours marked</p>
+            <p class="text-xs text-muted">{{ markedTotal }} of {{ total }} behaviours marked</p>
           </div>
           <UButton
             size="xs"
             color="primary"
             variant="soft"
             icon="i-lucide-play"
-            label="Walk"
-            @click="startWalk()"
+            label="Walk all"
+            @click="startWalkAll()"
           />
         </div>
 
@@ -155,13 +157,13 @@ function startWalk(id?: string) {
                   :description="phase.worksNow"
                 />
                 <UButton
-                  v-if="firstWalkable([...phase.specs, ...phase.increments.flatMap(i => i.specs)])"
+                  v-if="walkableIds([...phase.specs, ...phase.increments.flatMap(i => i.specs)]).length"
                   size="xs"
                   color="primary"
                   variant="ghost"
                   icon="i-lucide-list-checks"
-                  label="Walk & sign off"
-                  @click="startWalk(firstWalkable([...phase.specs, ...phase.increments.flatMap(i => i.specs)]))"
+                  label="Walk this section"
+                  @click="startWalkScope(walkableIds([...phase.specs, ...phase.increments.flatMap(i => i.specs)]))"
                 />
               </div>
 
@@ -213,13 +215,13 @@ function startWalk(id?: string) {
                         :description="inc.worksNow"
                       />
                       <UButton
-                        v-if="firstWalkable(inc.specs)"
+                        v-if="walkableIds(inc.specs).length"
                         size="xs"
                         color="primary"
                         variant="ghost"
                         icon="i-lucide-list-checks"
-                        label="Walk & sign off"
-                        @click="startWalk(firstWalkable(inc.specs))"
+                        label="Walk this section"
+                        @click="startWalkScope(walkableIds(inc.specs))"
                       />
                     </div>
                     <div v-if="inc.specs.length" class="space-y-1">
@@ -230,7 +232,7 @@ function startWalk(id?: string) {
                         :bucket-color="bucketColor"
                         :verdict="verdictOf(spec.id)"
                         :walkable="isWalkable(spec.id)"
-                        @walk="startWalk"
+                        @walk="startWalkOne"
                       />
                     </div>
                   </div>
@@ -246,7 +248,7 @@ function startWalk(id?: string) {
                   :bucket-color="bucketColor"
                   :verdict="verdictOf(spec.id)"
                   :walkable="isWalkable(spec.id)"
-                  @walk="startWalk"
+                  @walk="startWalkOne"
                 />
               </div>
             </div>

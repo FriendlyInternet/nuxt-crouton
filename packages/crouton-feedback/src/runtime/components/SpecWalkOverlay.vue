@@ -19,8 +19,8 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useSpecWalk } from '../composables/useSpecWalk'
 
 const {
-  open, idx, walk, verdicts, marked, current,
-  setVerdict, setNote, go, exportText, stepsOf, selectorFor
+  open, idx, walk, verdicts, marked, current, scoped,
+  setVerdict, setNote, go, walkAll, exportText, stepsOf, selectorFor
 } = useSpecWalk()
 
 const showExport = ref(false)
@@ -57,7 +57,7 @@ onBeforeUnmount(() => cancelAnimationFrame(raf))
 
 const verdictOf = computed(() => (current.value ? verdicts.value[current.value.id]?.verdict : undefined))
 const noteOf = computed(() => (current.value ? verdicts.value[current.value.id]?.note || '' : ''))
-const pct = computed(() => (walk.length ? Math.round(marked.value / walk.length * 100) : 0))
+const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.value.length * 100) : 0))
 </script>
 
 <template>
@@ -82,9 +82,15 @@ const pct = computed(() => (walk.length ? Math.round(marked.value / walk.length 
         <div class="flex items-center gap-2">
           <UIcon name="i-lucide-list-checks" class="size-4 text-primary" />
           <span class="text-sm font-semibold">Check &amp; sign off</span>
+          <UBadge v-if="scoped" color="info" variant="soft" size="sm" title="Just this section of the plan">section</UBadge>
           <span class="font-mono text-xs text-muted">{{ showExport ? 'sign-off' : `${idx + 1} / ${walk.length}` }}</span>
           <UBadge color="primary" variant="soft" size="sm" class="ms-1">{{ marked }}/{{ walk.length }}</UBadge>
           <div class="ms-auto flex items-center gap-1">
+            <UButton
+              v-if="scoped && !showExport"
+              size="xs" color="neutral" variant="ghost" icon="i-lucide-list"
+              label="All" title="Walk everything (the full regression)" @click="walkAll()"
+            />
             <UButton
               size="xs" color="neutral" variant="ghost" icon="i-lucide-clipboard-check"
               :label="showExport ? 'Walk' : 'Sign off'" @click="showExport = !showExport"

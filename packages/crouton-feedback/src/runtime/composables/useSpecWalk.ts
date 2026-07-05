@@ -59,9 +59,27 @@ export function useSpecWalk() {
     try { localStorage.setItem(_store, JSON.stringify(verdicts.value)) } catch { /* ignore */ }
   }
 
-  const marked = computed(() => walk.filter(e => verdicts.value[e.id]?.verdict).length)
-  const current = computed(() => walk[idx.value])
-  const badge = computed<string | null>(() => (walk.length ? `${marked.value}/${walk.length}` : null))
+  // --- Scope (#1180 follow-up) -------------------------------------------------
+  // The full walk (`allWalk`) is the growing regression check — "does everything
+  // still work". But you often just want to check WHAT YOU JUST ADDED: a scope is
+  // a subset of behaviour ids (one behaviour, or one increment's set) the Plan
+  // tool sets when you tap its Walk buttons. `active` is the list you're walking:
+  // the scope when set, else the whole thing. Verdicts stay global (keyed by id),
+  // so a scoped pass still counts toward the overall marked/total.
+  const allWalk = walk
+  const scopeIds = ref<string[] | null>(null)
+  const active = computed<WalkEntry[]>(() => {
+    const s = scopeIds.value
+    return s && s.length ? allWalk.filter(e => s.includes(e.id)) : allWalk
+  })
+  const scoped = computed(() => !!(scopeIds.value && scopeIds.value.length))
+
+  const marked = computed(() => active.value.filter(e => verdicts.value[e.id]?.verdict).length)
+  const markedTotal = computed(() => allWalk.filter(e => verdicts.value[e.id]?.verdict).length)
+  const total = computed(() => allWalk.length)
+  const current = computed(() => active.value[idx.value])
+  // The launcher badge tracks OVERALL progress (not the current scope).
+  const badge = computed<string | null>(() => (allWalk.length ? `${markedTotal.value}/${allWalk.length}` : null))
 
   function setVerdict(v: Verdict) {
     const e = current.value
@@ -69,7 +87,7 @@ export function useSpecWalk() {
     verdicts.value = { ...verdicts.value, [e.id]: { ...(verdicts.value[e.id] || {}), verdict: v } }
     persist()
     // Advance on a pass so a clean walk is one-tap-per-behaviour.
-    if (v === 'works' && idx.value < walk.length - 1) setTimeout(() => { idx.value++ }, 160)
+    if (v === 'works' && idx.value < active.value.length - 1) setTimeout(() => { idx.value++ }, 160)
   }
   function setNote(val: string) {
     const e = current.value
@@ -77,24 +95,41 @@ export function useSpecWalk() {
     verdicts.value = { ...verdicts.value, [e.id]: { ...(verdicts.value[e.id] || {}), note: val } }
     persist()
   }
-  const go = (d: number) => { idx.value = Math.min(walk.length - 1, Math.max(0, idx.value + d)) }
+  const go = (d: number) => { idx.value = Math.min(active.value.length - 1, Math.max(0, idx.value + d)) }
 
-  // Open the walk focused on a specific behaviour id (from the Plan tool — tap a
-  // behaviour → walk it). Returns false if the id isn't a live (walkable) entry.
+  // Open the walk focused on a single behaviour id (Plan → a behaviour's "Walk &
+  // sign off"): scope to JUST that one. Returns false if it isn't a live entry.
   function jumpTo(id: string): boolean {
-    const i = walk.findIndex(e => e.id === id)
-    if (i < 0) return false
-    idx.value = i
+    if (!allWalk.some(e => e.id === id)) return false
+    scopeIds.value = [id]
+    idx.value = 0
     open.value = true
     return true
   }
-  const isWalkable = (id: string) => walk.some(e => e.id === id)
+  // Walk a SECTION (Plan → an increment's / phase's "Walk & sign off"): scope to
+  // its live behaviours. Empty ⇒ falls back to the full walk.
+  function walkScoped(ids: string[]) {
+    const valid = ids.filter(id => allWalk.some(e => e.id === id))
+    scopeIds.value = valid.length ? valid : null
+    idx.value = 0
+    open.value = true
+  }
+  // Walk EVERYTHING (Plan → the top "Check & sign off" bar): the full regression.
+  function walkAll() {
+    scopeIds.value = null
+    idx.value = 0
+    open.value = true
+  }
+  const isWalkable = (id: string) => allWalk.some(e => e.id === id)
   const verdictOf = (id: string) => verdicts.value[id]?.verdict
 
-  const text = computed(() => buildExport(walk, verdicts.value))
+  // Sign-off export: the current scope when scoped (sign off just what you
+  // checked), else the whole accumulated set.
+  const text = computed(() => buildExport(scoped.value ? active.value : allWalk, verdicts.value))
 
   return {
-    open, idx, walk, verdicts, marked, current, badge,
-    setVerdict, setNote, go, jumpTo, isWalkable, verdictOf, exportText: text, stepsOf, selectorFor
+    open, idx, walk: active, verdicts, marked, markedTotal, total, current, badge, scoped,
+    setVerdict, setNote, go, jumpTo, walkScoped, walkAll, isWalkable, verdictOf,
+    exportText: text, stepsOf, selectorFor
   }
 }
