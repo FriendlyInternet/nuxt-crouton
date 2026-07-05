@@ -1,22 +1,26 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { usePlan } from '../composables/usePlan'
+import { useSpecWalk } from '../composables/useSpecWalk'
 import PlanSpecRow from './PlanSpecRow.vue'
 
 /**
- * PlanOverlay — the plan modal for the Plan tool.
+ * PlanOverlay — the plan modal for the Plan tool (#1155), fused with the Spec
+ * walk (#1180).
  *
- * Mounted once (via plan.client plugin) into the host app's context and toggled
- * by the shared `open` flag from usePlan. Renders the composed plan natively
- * with basic Nuxt UI components (UModal · UBadge · UCard · UAlert · UCollapsible)
- * over the data the module ships — NO iframe, NO custom height. UModal's default
- * `#body` slot owns the scroll + max-height, so it behaves like every other
- * modal in the app and is theme-aware. Colours come from Nuxt UI `color` props,
- * and only standard utility classes are used (a package component's arbitrary
- * `[..]` classes aren't in the app's Tailwind content scan, so they'd emit no
- * CSS).
+ * Renders the composed plan natively with Nuxt UI (UModal · UBadge · UAlert ·
+ * UCollapsible) — no iframe, no custom height, standard utilities only (a package
+ * SFC's arbitrary `[..]` classes aren't in the app's Tailwind scan → no CSS).
+ *
+ * Readable on mobile: phases + increments are **collapsible**, default-open only
+ * the ACTIVE one, so the overlay opens as a scannable outline instead of a wall.
+ * And it's one flow — the plan is the map; a behaviour's **Walk & sign off**
+ * (and each "should work now" callout) drops straight into the Spec walk on that
+ * entry (`jumpTo`), closing the plan so the non-blocking walk lets you perform
+ * the gesture. Each behaviour row reflects its live walk verdict (✅ / ⚠️ / ✓).
  */
 const { plan, badge, open } = usePlan()
+const { open: walkOpen, jumpTo, isWalkable, verdictOf, marked, walk } = useSpecWalk()
 
 const phases = computed(() => plan.value.phases ?? [])
 
@@ -51,6 +55,19 @@ const flowLabel: Record<string, string> = {
 
 const ghUrl = (n: number | null | undefined, kind: 'issues' | 'pull') =>
   n ? `https://github.com/FriendlyInternet/nuxt-crouton/${kind}/${n}` : undefined
+
+// The first LIVE (walkable) behaviour id under a set of specs — the target the
+// "walk it" callouts jump to.
+const firstWalkable = (specs: { id: string }[]): string | undefined =>
+  specs.find(s => isWalkable(s.id))?.id
+
+// Leave the plan and enter the Spec walk — on a specific behaviour when given,
+// else just open it (falls through when the id isn't a live entry).
+function startWalk(id?: string) {
+  open.value = false
+  if (id && jumpTo(id)) return
+  walkOpen.value = true
+}
 </script>
 
 <template>
@@ -62,7 +79,7 @@ const ghUrl = (n: number | null | undefined, kind: 'issues' | 'pull') =>
     data-crouton-ui
   >
     <template #body>
-      <div class="space-y-5" data-crouton-ui>
+      <div class="space-y-4" data-crouton-ui>
         <p v-if="plan.intro" class="text-sm text-muted">{{ plan.intro }}</p>
 
         <div v-if="plan.epic || plan.pr" class="flex flex-wrap items-center gap-2">
@@ -86,91 +103,155 @@ const ghUrl = (n: number | null | undefined, kind: 'issues' | 'pull') =>
           >PR #{{ plan.pr }}</UButton>
         </div>
 
-        <!-- Phases -->
-        <section
+        <!-- Check & sign off — where we are, one tap into the walk. -->
+        <div
+          v-if="walk.length"
+          class="flex items-center gap-3 rounded-lg border border-default p-3"
+        >
+          <UIcon name="i-lucide-list-checks" class="size-5 shrink-0 text-primary" />
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium">Check &amp; sign off</p>
+            <p class="text-xs text-muted">{{ marked }} of {{ walk.length }} behaviours marked</p>
+          </div>
+          <UButton
+            size="xs"
+            color="primary"
+            variant="soft"
+            icon="i-lucide-play"
+            label="Walk"
+            @click="startWalk()"
+          />
+        </div>
+
+        <!-- Phases — collapsible; the ACTIVE one opens by default. -->
+        <UCollapsible
           v-for="phase in phases"
           :key="phase.id"
-          class="rounded-lg border border-default p-3"
+          :default-open="phase.status === 'active'"
+          class="rounded-lg border border-default"
         >
-          <div class="flex items-center gap-2">
+          <button
+            type="button"
+            class="flex w-full items-center gap-2 p-3 text-left hover:bg-elevated"
+          >
             <UBadge color="neutral" variant="outline" size="sm">{{ phase.id }}</UBadge>
             <h4 class="flex-1 text-sm font-semibold">{{ phase.name }}</h4>
             <UBadge :color="statusColor(phase.status)" variant="subtle" size="sm">
               {{ phase.status }}
             </UBadge>
-          </div>
+            <UIcon name="i-lucide-chevron-down" class="size-4 shrink-0 text-muted" />
+          </button>
 
-          <p v-if="phase.summary" class="mt-2 text-sm text-muted">{{ phase.summary }}</p>
+          <template #content>
+            <div class="space-y-3 px-3 pb-3">
+              <p v-if="phase.summary" class="text-sm text-muted">{{ phase.summary }}</p>
 
-          <UAlert
-            v-if="phase.worksNow"
-            class="mt-3"
-            color="primary"
-            variant="soft"
-            icon="i-lucide-play"
-            title="Should work now"
-            :description="phase.worksNow"
-          />
-
-          <p v-if="phase.gate" class="mt-2 flex items-start gap-1.5 text-xs text-muted">
-            <UIcon name="i-lucide-lock" class="mt-0.5 size-3.5 shrink-0" />
-            <span>{{ phase.gate }}</span>
-          </p>
-
-          <!-- Steps -->
-          <ul v-if="phase.steps.length" class="mt-3 space-y-1.5">
-            <li
-              v-for="s in phase.steps"
-              :key="s.name"
-              class="flex flex-wrap items-baseline gap-2 text-sm"
-            >
-              <UBadge :color="statusColor(s.status)" variant="subtle" size="sm">{{ s.status }}</UBadge>
-              <span class="font-medium">{{ s.name }}</span>
-              <span v-if="s.test" class="text-xs text-muted">🧪 {{ s.test }}</span>
-            </li>
-          </ul>
-
-          <!-- Increments -->
-          <div v-if="phase.increments.length" class="mt-3 space-y-3">
-            <UCard v-for="inc in phase.increments" :key="inc.id" :ui="{ body: 'p-3 sm:p-3' }">
-              <div class="flex items-center gap-2">
-                <UBadge color="neutral" variant="outline" size="sm">{{ inc.id }}</UBadge>
-                <span class="flex-1 text-sm font-semibold">{{ inc.name }}</span>
-                <UBadge :color="statusColor(inc.status)" variant="subtle" size="sm">{{ inc.status }}</UBadge>
+              <div v-if="phase.worksNow" class="space-y-1.5">
+                <UAlert
+                  color="primary"
+                  variant="soft"
+                  icon="i-lucide-play"
+                  title="Should work now"
+                  :description="phase.worksNow"
+                />
+                <UButton
+                  v-if="firstWalkable([...phase.specs, ...phase.increments.flatMap(i => i.specs)])"
+                  size="xs"
+                  color="primary"
+                  variant="ghost"
+                  icon="i-lucide-list-checks"
+                  label="Walk & sign off"
+                  @click="startWalk(firstWalkable([...phase.specs, ...phase.increments.flatMap(i => i.specs)]))"
+                />
               </div>
-              <p v-if="inc.flow" class="mt-1 text-xs font-medium text-muted">
-                {{ flowLabel[inc.flow] ?? inc.flow }}
+
+              <p v-if="phase.gate" class="flex items-start gap-1.5 text-xs text-muted">
+                <UIcon name="i-lucide-lock" class="mt-0.5 size-3.5 shrink-0" />
+                <span>{{ phase.gate }}</span>
               </p>
-              <p v-if="inc.note" class="mt-1.5 text-xs text-muted">{{ inc.note }}</p>
-              <UAlert
-                v-if="inc.worksNow"
-                class="mt-2"
-                color="primary"
-                variant="soft"
-                icon="i-lucide-play"
-                :description="inc.worksNow"
-              />
-              <div v-if="inc.specs.length" class="mt-2 space-y-1">
+
+              <ul v-if="phase.steps.length" class="space-y-1.5">
+                <li
+                  v-for="s in phase.steps"
+                  :key="s.name"
+                  class="flex flex-wrap items-baseline gap-2 text-sm"
+                >
+                  <UBadge :color="statusColor(s.status)" variant="subtle" size="sm">{{ s.status }}</UBadge>
+                  <span class="font-medium">{{ s.name }}</span>
+                  <span v-if="s.test" class="text-xs text-muted">🧪 {{ s.test }}</span>
+                </li>
+              </ul>
+
+              <!-- Increments — also collapsible; active opens by default. -->
+              <UCollapsible
+                v-for="inc in phase.increments"
+                :key="inc.id"
+                :default-open="inc.status === 'active'"
+                class="rounded-lg border border-default"
+              >
+                <button
+                  type="button"
+                  class="flex w-full items-center gap-2 p-2.5 text-left hover:bg-elevated"
+                >
+                  <UBadge color="neutral" variant="outline" size="sm">{{ inc.id }}</UBadge>
+                  <span class="flex-1 text-sm font-semibold">{{ inc.name }}</span>
+                  <UBadge :color="statusColor(inc.status)" variant="subtle" size="sm">{{ inc.status }}</UBadge>
+                  <UIcon name="i-lucide-chevron-down" class="size-4 shrink-0 text-muted" />
+                </button>
+
+                <template #content>
+                  <div class="space-y-2 px-2.5 pb-2.5">
+                    <p v-if="inc.flow" class="text-xs font-medium text-muted">
+                      {{ flowLabel[inc.flow] ?? inc.flow }}
+                    </p>
+                    <p v-if="inc.note" class="text-xs text-muted">{{ inc.note }}</p>
+                    <div v-if="inc.worksNow" class="space-y-1.5">
+                      <UAlert
+                        color="primary"
+                        variant="soft"
+                        icon="i-lucide-play"
+                        :description="inc.worksNow"
+                      />
+                      <UButton
+                        v-if="firstWalkable(inc.specs)"
+                        size="xs"
+                        color="primary"
+                        variant="ghost"
+                        icon="i-lucide-list-checks"
+                        label="Walk & sign off"
+                        @click="startWalk(firstWalkable(inc.specs))"
+                      />
+                    </div>
+                    <div v-if="inc.specs.length" class="space-y-1">
+                      <PlanSpecRow
+                        v-for="spec in inc.specs"
+                        :key="spec.id"
+                        :spec="spec"
+                        :bucket-color="bucketColor"
+                        :verdict="verdictOf(spec.id)"
+                        :walkable="isWalkable(spec.id)"
+                        @walk="startWalk"
+                      />
+                    </div>
+                  </div>
+                </template>
+              </UCollapsible>
+
+              <!-- Phase-level specs (no increments) -->
+              <div v-if="phase.specs.length" class="space-y-1">
                 <PlanSpecRow
-                  v-for="spec in inc.specs"
+                  v-for="spec in phase.specs"
                   :key="spec.id"
                   :spec="spec"
                   :bucket-color="bucketColor"
+                  :verdict="verdictOf(spec.id)"
+                  :walkable="isWalkable(spec.id)"
+                  @walk="startWalk"
                 />
               </div>
-            </UCard>
-          </div>
-
-          <!-- Phase-level specs (no increments) -->
-          <div v-if="phase.specs.length" class="mt-3 space-y-1">
-            <PlanSpecRow
-              v-for="spec in phase.specs"
-              :key="spec.id"
-              :spec="spec"
-              :bucket-color="bucketColor"
-            />
-          </div>
-        </section>
+            </div>
+          </template>
+        </UCollapsible>
       </div>
     </template>
   </UModal>

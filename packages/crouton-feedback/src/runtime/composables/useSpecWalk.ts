@@ -79,10 +79,22 @@ export function useSpecWalk() {
   }
   const go = (d: number) => { idx.value = Math.min(walk.length - 1, Math.max(0, idx.value + d)) }
 
+  // Open the walk focused on a specific behaviour id (from the Plan tool — tap a
+  // behaviour → walk it). Returns false if the id isn't a live (walkable) entry.
+  function jumpTo(id: string): boolean {
+    const i = walk.findIndex(e => e.id === id)
+    if (i < 0) return false
+    idx.value = i
+    open.value = true
+    return true
+  }
+  const isWalkable = (id: string) => walk.some(e => e.id === id)
+  const verdictOf = (id: string) => verdicts.value[id]?.verdict
+
   const text = computed(() => buildExport(walk, verdicts.value))
 
   return {
     open, idx, walk, verdicts, marked, current, badge,
-    setVerdict, setNote, go, exportText: text, stepsOf, selectorFor
+    setVerdict, setNote, go, jumpTo, isWalkable, verdictOf, exportText: text, stepsOf, selectorFor
   }
 }
