@@ -76,27 +76,20 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
       }"
     />
 
-    <!-- Minimized — a compact pill so you can test the app; tap to restore (state kept). -->
-    <button
-      v-if="open && minimized"
-      type="button"
-      class="fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-default bg-elevated px-4 py-2 shadow-2xl"
-      data-handoff="spec-walk-min"
-      @click="minimized = false"
+    <!-- The walk is a stock Nuxt UI Drawer in NON-MODAL mode (`:modal="false"` +
+         `:overlay="false"`) — no backdrop, so the app stays interactive while you
+         perform each gesture. Minimize just swaps the body to its compact header
+         (vaul auto-resizes the drawer); state is module-singleton + localStorage,
+         so nothing is lost. -->
+    <UDrawer
+      v-model:open="open"
+      :modal="false"
+      :overlay="false"
+      :handle="true"
+      direction="bottom"
     >
-      <UIcon name="i-lucide-list-checks" class="size-4 text-primary" />
-      <span class="text-xs font-medium">Check &amp; sign off</span>
-      <UBadge color="primary" variant="soft" size="sm">{{ marked }}/{{ walk.length }}</UBadge>
-      <UIcon name="i-lucide-chevron-up" class="size-4 text-muted" />
-    </button>
-
-    <div
-      v-if="open && !minimized"
-      class="fixed inset-x-0 bottom-0 z-50 overflow-y-auto rounded-t-2xl border-t border-default bg-elevated shadow-2xl"
-      style="max-height: 52dvh"
-      data-handoff="spec-walk"
-    >
-      <div class="mx-auto flex max-w-2xl flex-col gap-3 p-4">
+      <template #body>
+        <div class="mx-auto flex max-w-2xl flex-col gap-3" data-handoff="spec-walk">
         <div class="flex flex-wrap items-center gap-2">
           <UIcon name="i-lucide-list-checks" class="size-4 shrink-0 text-primary" />
           <span class="text-sm font-semibold">Check &amp; sign off</span>
@@ -105,18 +98,24 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
           <UBadge color="primary" variant="soft" size="sm">{{ marked }}/{{ walk.length }}</UBadge>
           <div class="ms-auto flex items-center gap-1">
             <UButton
-              v-if="scoped && !showExport"
+              v-if="!minimized && scoped && !showExport"
               size="xs" color="neutral" variant="ghost" icon="i-lucide-list"
               aria-label="Walk everything" title="Walk everything (the full regression)" @click="walkAll()"
             />
             <UButton
+              v-if="!minimized"
               size="xs" color="neutral" variant="ghost" icon="i-lucide-clipboard-check"
               :label="showExport ? 'Walk' : 'Sign off'" @click="showExport = !showExport"
             />
             <UButton
-              v-if="!showExport"
+              v-if="!minimized && !showExport"
               size="xs" color="neutral" variant="ghost" icon="i-lucide-chevron-down"
               aria-label="Minimize" title="Minimize — keep your place, test the app" @click="minimized = true"
+            />
+            <UButton
+              v-else-if="minimized"
+              size="xs" color="neutral" variant="ghost" icon="i-lucide-chevron-up"
+              aria-label="Expand" title="Expand the walk" @click="minimized = false"
             />
             <UButton
               size="xs" color="neutral" variant="ghost" icon="i-lucide-x"
@@ -125,6 +124,7 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
           </div>
         </div>
 
+        <template v-if="!minimized">
         <div class="h-1.5 overflow-hidden rounded-full bg-default">
           <div class="h-full rounded-full bg-primary transition-all" :style="{ width: `${pct}%` }" />
         </div>
@@ -153,7 +153,7 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
           <div v-if="current.expect" class="rounded-lg bg-default p-3 text-sm leading-relaxed text-default">
             <span class="text-xs font-semibold uppercase tracking-wide text-primary">Expect </span>{{ current.expect }}
           </div>
-          <ol class="list-decimal space-y-1.5 ps-5 text-sm leading-relaxed text-default marker:text-muted">
+          <ol class="list-decimal space-y-1.5 ps-5 text-sm leading-relaxed text-default">
             <li v-for="(s, i) in stepsOf(current)" :key="i">{{ s }}</li>
           </ol>
           <p v-if="current.hook && !hl.show" class="text-xs text-warning">
@@ -193,7 +193,9 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
             />
           </div>
         </template>
-      </div>
-    </div>
+        </template>
+        </div>
+      </template>
+    </UDrawer>
   </div>
 </template>
