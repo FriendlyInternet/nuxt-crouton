@@ -10,6 +10,7 @@ import {
   type Verdict,
   type VerdictMap
 } from '../tools/specwalk-data'
+import { readEnvProfile, formatEnv } from '../overlay/envProfile'
 
 /**
  * The client-side view of the Spec-walk tool. It reads the SAME composed plan
@@ -127,8 +128,13 @@ export function useSpecWalk() {
   const verdictOf = (id: string) => verdicts.value[id]?.verdict
 
   // Sign-off export: the current scope when scoped (sign off just what you
-  // checked), else the whole accumulated set.
-  const text = computed(() => buildExport(scoped.value ? active.value : allWalk, verdicts.value))
+  // checked), else the whole accumulated set — stamped with the environment it
+  // was checked in (#1181) so the sign-off says WHERE it was taken.
+  const text = computed(() => buildExport(
+    scoped.value ? active.value : allWalk,
+    verdicts.value,
+    import.meta.client ? formatEnv(readEnvProfile()) : '',
+  ))
 
   return {
     open, idx, walk: active, verdicts, marked, markedTotal, total, current, badge, scoped,

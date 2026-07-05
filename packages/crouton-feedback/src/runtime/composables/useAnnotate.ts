@@ -1,5 +1,6 @@
 import { ref, shallowRef } from 'vue'
 import { buildAnnotation } from '../overlay/capture'
+import { readEnvProfile } from '../overlay/envProfile'
 
 /** Viewport-relative box for the highlight outline. */
 export interface AnnotateBox {
@@ -105,7 +106,7 @@ async function send(text: string): Promise<void> {
   try {
     const res = await $fetch<{ data?: { ok?: boolean } | null, error?: string | null }>(
       '/api/_feedback',
-      { method: 'POST', body: buildAnnotation(p.el, trimmed, window.location.pathname) }
+      { method: 'POST', body: buildAnnotation(p.el, trimmed, window.location.pathname, readEnvProfile()) }
     )
     showToast(res?.data?.ok ? 'Sent ✓' : (res?.error ? `Not sent: ${res.error.slice(0, 50)}` : 'Not sent'))
   }

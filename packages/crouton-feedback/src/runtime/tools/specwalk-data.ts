@@ -87,10 +87,12 @@ export function selectorFor(hook: string): string {
  * (the C1 sign-off tokens the done-rule derives from), then the ⚠️ issues with
  * their notes. Empty state is explicit so the export never reads as "all good".
  */
-export function exportText(walk: WalkEntry[], verdicts: VerdictMap): string {
+export function exportText(walk: WalkEntry[], verdicts: VerdictMap, env = ''): string {
   const ok = walk.filter(e => verdicts[e.id]?.verdict === 'works').map(e => `lgtm ${e.id}`)
   const issues = walk
     .filter(e => verdicts[e.id]?.verdict === 'issue')
     .map(e => `⚠️ ${e.id}${verdicts[e.id]?.note ? ` — ${verdicts[e.id]!.note}` : ''}`)
-  return [...ok, ...(issues.length ? ['', ...issues] : [])].join('\n') || '(nothing marked yet)'
+  const body = [...ok, ...(issues.length ? ['', ...issues] : [])].join('\n') || '(nothing marked yet)'
+  // The environment stamp (#1181) rides along so a sign-off says WHERE it was checked.
+  return env ? `${env}\n\n${body}` : body
 }
