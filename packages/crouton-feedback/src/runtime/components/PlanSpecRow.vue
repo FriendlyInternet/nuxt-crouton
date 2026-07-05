@@ -25,16 +25,22 @@ defineEmits<{ walk: [id: string] }>()
 
 <template>
   <UCollapsible>
+    <!-- Mobile: the tags sit ON THEIR OWN ROW ABOVE the behaviour text (which then
+         gets the full width, so it's readable — IMG_1394). sm+ everything inlines:
+         [bucket] [behaviour flex-1] [verdict][chevron]. One flex-wrap container +
+         responsive `order`/`w-full` does both without nesting. -->
     <button
       type="button"
-      class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-elevated"
+      class="flex w-full flex-wrap items-center gap-x-2 gap-y-1.5 rounded-md px-2 py-1.5 text-left hover:bg-elevated"
     >
-      <UBadge :color="bucketColor(spec.bucket)" variant="subtle" size="sm">{{ spec.bucket }}</UBadge>
-      <span class="flex-1 text-sm">{{ spec.behaviour }}</span>
-      <UBadge v-if="spec.signedOff" color="success" variant="soft" size="sm" icon="i-lucide-check" />
-      <UBadge v-else-if="verdict === 'works'" color="success" variant="soft" size="sm">✅</UBadge>
-      <UBadge v-else-if="verdict === 'issue'" color="warning" variant="soft" size="sm">⚠️</UBadge>
-      <UIcon name="i-lucide-chevron-down" class="size-4 shrink-0 text-muted" />
+      <UBadge :color="bucketColor(spec.bucket)" variant="subtle" size="sm" class="order-1">{{ spec.bucket }}</UBadge>
+      <span class="order-2 ms-auto flex items-center gap-1.5 sm:order-3 sm:ms-0">
+        <UBadge v-if="spec.signedOff" color="success" variant="soft" size="sm" icon="i-lucide-check" />
+        <UBadge v-else-if="verdict === 'works'" color="success" variant="soft" size="sm">✅</UBadge>
+        <UBadge v-else-if="verdict === 'issue'" color="warning" variant="soft" size="sm">⚠️</UBadge>
+        <UIcon name="i-lucide-chevron-down" class="size-4 shrink-0 text-muted" />
+      </span>
+      <span class="order-3 w-full text-sm sm:order-2 sm:w-auto sm:flex-1">{{ spec.behaviour }}</span>
     </button>
 
     <template #content>

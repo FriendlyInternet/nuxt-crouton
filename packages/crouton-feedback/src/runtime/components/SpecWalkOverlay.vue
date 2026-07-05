@@ -24,10 +24,11 @@ const {
 } = useSpecWalk()
 
 const showExport = ref(false)
-// Minimize (#1180 follow-up) — tuck the sheet to a small pill so you can test the
-// app, then restore. State (idx / verdicts / notes / scope) is module-singleton +
-// localStorage, so minimizing loses nothing; `open` stays true, this just re-renders.
-const minimized = ref(false)
+// Minimize is the drawer's OWN snap points (#1180) — drag the native grab handle
+// down to the small snap (a peek: header + progress) or up for the full walk. No
+// custom control; the handle does it. State (idx/verdicts/notes/scope) is
+// module-singleton + localStorage, so snapping small loses nothing.
+const snap = ref<number | string | null>(0.92)
 const copied = ref(false)
 const hl = reactive({ show: false, x: 0, y: 0, w: 0, h: 0 })
 
@@ -46,7 +47,7 @@ let raf = 0
 function track() {
   const e = current.value
   const sel = e ? selectorFor(e.hook) : ''
-  const el = sel && open.value && !showExport.value && !minimized.value ? document.querySelector(sel) : null
+  const el = sel && open.value && !showExport.value ? document.querySelector(sel) : null
   if (el) {
     const r = el.getBoundingClientRect()
     hl.show = r.width > 0 && r.height > 0
@@ -83,6 +84,8 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
          so nothing is lost. -->
     <UDrawer
       v-model:open="open"
+      v-model:active-snap-point="snap"
+      :snap-points="[0.4, 0.92]"
       :modal="false"
       :overlay="false"
       :handle="true"
@@ -98,24 +101,13 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
           <UBadge color="primary" variant="soft" size="sm">{{ marked }}/{{ walk.length }}</UBadge>
           <div class="ms-auto flex items-center gap-1">
             <UButton
-              v-if="!minimized && scoped && !showExport"
+              v-if="scoped && !showExport"
               size="xs" color="neutral" variant="ghost" icon="i-lucide-list"
               aria-label="Walk everything" title="Walk everything (the full regression)" @click="walkAll()"
             />
             <UButton
-              v-if="!minimized"
               size="xs" color="neutral" variant="ghost" icon="i-lucide-clipboard-check"
               :label="showExport ? 'Walk' : 'Sign off'" @click="showExport = !showExport"
-            />
-            <UButton
-              v-if="!minimized && !showExport"
-              size="xs" color="neutral" variant="ghost" icon="i-lucide-chevron-down"
-              aria-label="Minimize" title="Minimize — keep your place, test the app" @click="minimized = true"
-            />
-            <UButton
-              v-else-if="minimized"
-              size="xs" color="neutral" variant="ghost" icon="i-lucide-chevron-up"
-              aria-label="Expand" title="Expand the walk" @click="minimized = false"
             />
             <UButton
               size="xs" color="neutral" variant="ghost" icon="i-lucide-x"
@@ -124,7 +116,6 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
           </div>
         </div>
 
-        <template v-if="!minimized">
         <div class="h-1.5 overflow-hidden rounded-full bg-default">
           <div class="h-full rounded-full bg-primary transition-all" :style="{ width: `${pct}%` }" />
         </div>
@@ -192,7 +183,6 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
               icon="i-lucide-clipboard-check" label="Sign off" @click="showExport = true"
             />
           </div>
-        </template>
         </template>
         </div>
       </template>
