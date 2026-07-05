@@ -25,9 +25,13 @@ import {
 export type { WalkEntry, Verdict } from '../tools/specwalk-data'
 
 // Module-singletons — one shared reactive source across plugin + overlay chunks.
+// (MUST be module-level, not per-`useSpecWalk()` call: the Plan tool sets the
+// scope in one component and the walk overlay reads it in another — a per-call
+// ref wouldn't be shared, so "Walk this section" fell back to the full walk.)
 const open = ref(false)
 const idx = ref(0)
 const verdicts = ref<VerdictMap>({})
+const scopeIds = ref<string[] | null>(null)
 
 let _walk: WalkEntry[] | null = null
 let _store = ''
@@ -67,7 +71,6 @@ export function useSpecWalk() {
   // the scope when set, else the whole thing. Verdicts stay global (keyed by id),
   // so a scoped pass still counts toward the overall marked/total.
   const allWalk = walk
-  const scopeIds = ref<string[] | null>(null)
   const active = computed<WalkEntry[]>(() => {
     const s = scopeIds.value
     return s && s.length ? allWalk.filter(e => s.includes(e.id)) : allWalk
