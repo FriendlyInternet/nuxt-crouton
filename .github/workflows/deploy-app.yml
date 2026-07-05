@@ -246,7 +246,11 @@ jobs:
         with:
           path: |
             packages/*/dist
-          key: layer-builds-${{ steps.layer-set.outputs.hash }}-${{ hashFiles('packages/**/*.ts') }}
+          # Hash ALL package source, not just *.ts — a package whose only change is a
+          # .vue/.css/.mjs/.json file (e.g. a crouton-feedback overlay component) must
+          # still bust the cache, else the deploy restores a stale dist and ships old
+          # code with a green build (the #1180 spec-walk handle that "wouldn't update").
+          key: layer-builds-${{ steps.layer-set.outputs.hash }}-${{ hashFiles('packages/**/*.ts', 'packages/**/*.vue', 'packages/**/*.css', 'packages/**/*.mjs', 'packages/**/*.json') }}
 
       - name: Build layer packages
         if: steps.layer-cache.outputs.cache-hit != 'true'
