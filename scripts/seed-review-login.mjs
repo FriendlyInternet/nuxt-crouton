@@ -213,6 +213,18 @@ async function main() {
         env: process.env
       })
       info(`attached ${email} to seeded team "${args.seedTeam}" (${orgId}).`)
+      // Make the seeded team the review account's ONLY membership so a fresh browser
+      // login resolves it as the ACTIVE org. Without this, an `autoCreateOnSignup` app
+      // also mints a personal workspace that wins as trySetDefaultOrg's "first org",
+      // leaving the reviewer in an empty team while the seeded data sits in test1 (#1185).
+      // Scoped to this throwaway review user; the orphaned personal org is harmless.
+      const pruneSql =
+        `DELETE FROM "member" WHERE "userId"=${sqlStr(userId)} AND "organizationId"<>${sqlStr(orgId)};`
+      execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${pruneSql}`, '--yes'], {
+        stdio: 'inherit',
+        env: process.env
+      })
+      info(`pruned ${email}'s other memberships — seeded team is now sole/active.`)
       const { res: sa } = await post('/api/auth/organization/set-active', { organizationId: orgId })
       if (sa.ok) {
         info('set seeded team active for the session.')
