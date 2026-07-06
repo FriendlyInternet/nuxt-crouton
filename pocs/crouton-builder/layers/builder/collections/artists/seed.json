@@ -3,35 +3,42 @@
   "key": "name",
   "rows": [
     {
-      "name": "Sample name 1",
-      "genre": {
-        "value": "rock",
-        "label": "Rock"
-      },
+      "name": "Nova Sirens",
+      "genre": { "value": "electronic", "label": "Electronic" },
       "image": "",
-      "bio": "Sample bio content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-      "rating": 1,
+      "bio": "Synthwave trio from Antwerp — neon-drenched live sets and a cult following.",
+      "rating": 5,
       "active": true
     },
     {
-      "name": "Sample name 2",
-      "genre": {
-        "value": "jazz",
-        "label": "Jazz"
-      },
+      "name": "The Copper Owls",
+      "genre": { "value": "rock", "label": "Rock" },
       "image": "",
-      "bio": "Sample bio content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-      "rating": 2,
+      "bio": "Garage-rock four-piece. Loud, warm, and a little unhinged.",
+      "rating": 4,
+      "active": true
+    },
+    {
+      "name": "Miyu Tanaka",
+      "genre": { "value": "jazz", "label": "Jazz" },
+      "image": "",
+      "bio": "Pianist and composer — late-night standards and originals.",
+      "rating": 5,
+      "active": true
+    },
+    {
+      "name": "Basten",
+      "genre": { "value": "hip-hop", "label": "Hip-hop" },
+      "image": "",
+      "bio": "Dutch-language MC with a sharp pen and a heavy low end. Currently on hiatus.",
+      "rating": 4,
       "active": false
     },
     {
-      "name": "Sample name 3",
-      "genre": {
-        "value": "hip-hop",
-        "label": "Hip-hop"
-      },
+      "name": "Marée Haute",
+      "genre": { "value": "pop", "label": "Pop" },
       "image": "",
-      "bio": "Sample bio content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "bio": "Francophone dream-pop — festival main-stage energy.",
       "rating": 3,
       "active": true
     }

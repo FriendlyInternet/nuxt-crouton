@@ -14,15 +14,26 @@
       "order": 0
     },
     {
-      "title": "Bookings",
-      "slug": "bookings",
-      "status": "draft",
+      "title": "Roster",
+      "slug": "roster",
+      "status": "published",
       "isHome": false,
       "showInNavigation": true,
       "parentId": null,
-      "path": "/bookings",
+      "path": "/roster",
       "depth": 0,
       "order": 1
+    },
+    {
+      "title": "Shows",
+      "slug": "shows",
+      "status": "published",
+      "isHome": false,
+      "showInNavigation": true,
+      "parentId": null,
+      "path": "/shows",
+      "depth": 0,
+      "order": 2
     }
   ]
 }
