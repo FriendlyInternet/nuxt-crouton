@@ -453,17 +453,29 @@ jobs:
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
           APP: ${{ inputs.app }}
+          APP_DIR: ${{ inputs.workspace }}/${{ inputs.app }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REF_NAME: ${{ github.ref_name }}
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
         run: |
           set -o pipefail
-          # Stable per-preview key: the PR number when this is a PR, else the ref.
-          if [ -n "$PR_NUMBER" ]; then KEY="pr${PR_NUMBER}"; else KEY="$(printf '%s' "$REF_NAME" | tr -c 'a-zA-Z0-9' '-')"; fi
-          EMAIL="review+${APP}-${KEY}@example.com"
-          # Deterministic password so redeploys reprint the same working login.
-          SALT="${REVIEW_SEED_SECRET:-crouton-review-seed}"
-          PW="$(printf '%s' "${SALT}:${APP}:${KEY}" | sha256sum | cut -c1-24)"
+          # A FIXED review login (deploy.config.json `.reviewLogin`) — for an app that
+          # advertises a stable, documented account (e.g. crouton-builder's
+          # review@crouton.dev) instead of the derived disposable one (#1185). Both paths
+          # flow through `--seed-team test1` below, so the advertised login lands in the
+          # seeded team (#832). Falls back to the deterministic per-preview account (#608).
+          FIXED_EMAIL="$(jq -r '.reviewLogin.email // empty' "$APP_DIR/deploy.config.json" 2>/dev/null || true)"
+          FIXED_PW="$(jq -r '.reviewLogin.password // empty' "$APP_DIR/deploy.config.json" 2>/dev/null || true)"
+          if [ -n "$FIXED_EMAIL" ] && [ -n "$FIXED_PW" ]; then
+            EMAIL="$FIXED_EMAIL"; PW="$FIXED_PW"
+          else
+            # Stable per-preview key: the PR number when this is a PR, else the ref.
+            if [ -n "$PR_NUMBER" ]; then KEY="pr${PR_NUMBER}"; else KEY="$(printf '%s' "$REF_NAME" | tr -c 'a-zA-Z0-9' '-')"; fi
+            EMAIL="review+${APP}-${KEY}@example.com"
+            # Deterministic password so redeploys reprint the same working login.
+            SALT="${REVIEW_SEED_SECRET:-crouton-review-seed}"
+            PW="$(printf '%s' "${SALT}:${APP}:${KEY}" | sha256sum | cut -c1-24)"
+          fi
           echo "::add-mask::$PW"
           # Attach the review login to the SEEDED demo team (#832) so the advertised
           # login lands in the team the content seed populated (test1 → seed:org:test1),
