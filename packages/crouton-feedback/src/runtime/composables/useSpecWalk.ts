@@ -30,6 +30,10 @@ export type { WalkEntry, Verdict } from '../tools/specwalk-data'
 // scope in one component and the walk overlay reads it in another — a per-call
 // ref wouldn't be shared, so "Walk this section" fell back to the full walk.)
 const open = ref(false)
+// `started` outlives `open`: once a walk is opened it stays true even after the
+// drawer is dismissed (drag-down), so the re-entry PILL can show. `end()` clears
+// both — the pill's only way to fully leave the session (the drawer has no ✕).
+const started = ref(false)
 const idx = ref(0)
 const verdicts = ref<VerdictMap>({})
 const scopeIds = ref<string[] | null>(null)
@@ -108,6 +112,7 @@ export function useSpecWalk() {
     scopeIds.value = [id]
     idx.value = 0
     open.value = true
+    started.value = true
     return true
   }
   // Walk a SECTION (Plan → an increment's / phase's "Walk & sign off"): scope to
@@ -117,12 +122,19 @@ export function useSpecWalk() {
     scopeIds.value = valid.length ? valid : null
     idx.value = 0
     open.value = true
+    started.value = true
   }
   // Walk EVERYTHING (Plan → the top "Check & sign off" bar): the full regression.
   function walkAll() {
     scopeIds.value = null
     idx.value = 0
     open.value = true
+    started.value = true
+  }
+  // Fully leave the walk session (from the re-entry pill's ✕) — clears the pill.
+  function end() {
+    open.value = false
+    started.value = false
   }
   const isWalkable = (id: string) => allWalk.some(e => e.id === id)
   const verdictOf = (id: string) => verdicts.value[id]?.verdict
@@ -137,8 +149,8 @@ export function useSpecWalk() {
   ))
 
   return {
-    open, idx, walk: active, verdicts, marked, markedTotal, total, current, badge, scoped,
-    setVerdict, setNote, go, jumpTo, walkScoped, walkAll, isWalkable, verdictOf,
+    open, started, idx, walk: active, verdicts, marked, markedTotal, total, current, badge, scoped,
+    setVerdict, setNote, go, jumpTo, walkScoped, walkAll, end, isWalkable, verdictOf,
     exportText: text, stepsOf, selectorFor
   }
 }

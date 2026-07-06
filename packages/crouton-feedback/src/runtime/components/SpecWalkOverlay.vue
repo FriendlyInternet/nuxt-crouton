@@ -19,16 +19,23 @@ import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useSpecWalk } from '../composables/useSpecWalk'
 
 const {
-  open, idx, walk, verdicts, marked, current, scoped,
-  setVerdict, setNote, go, walkAll, exportText, stepsOf, selectorFor
+  open, started, idx, walk, verdicts, marked, markedTotal, total, current, scoped,
+  setVerdict, setNote, go, walkAll, end, exportText, stepsOf, selectorFor
 } = useSpecWalk()
 
 const showExport = ref(false)
 // Minimize is the drawer's OWN snap points (#1180) — drag the native grab handle
-// down to the small snap (a peek: header + progress) or up for the full walk. No
-// custom control; the handle does it. State (idx/verdicts/notes/scope) is
-// module-singleton + localStorage, so snapping small loses nothing.
+// down to the small snap (a peek: header + progress), up for the full walk, or all
+// the way down to DISMISS (open→false). No ✕ (#1180 follow-up); when dismissed the
+// re-entry pill brings it back. State (idx/verdicts/notes/scope) is module-singleton
+// + localStorage, so snapping/dismissing loses nothing.
 const snap = ref<number | string | null>(0.92)
+
+// Re-open from the pill at full height (not whatever peek it was dismissed from).
+function reopen() {
+  snap.value = 0.92
+  open.value = true
+}
 const copied = ref(false)
 const hl = reactive({ show: false, x: 0, y: 0, w: 0, h: 0 })
 
@@ -109,10 +116,7 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
               size="xs" color="neutral" variant="ghost" icon="i-lucide-clipboard-check"
               :label="showExport ? 'Walk' : 'Sign off'" @click="showExport = !showExport"
             />
-            <UButton
-              size="xs" color="neutral" variant="ghost" icon="i-lucide-x"
-              aria-label="Close" @click="open = false"
-            />
+            <!-- No ✕ (#1180 follow-up): drag the handle down to dismiss; the pill re-opens. -->
           </div>
         </div>
 
@@ -187,5 +191,32 @@ const pct = computed(() => (walk.value.length ? Math.round(marked.value / walk.v
         </div>
       </template>
     </UDrawer>
+
+    <!-- Re-entry PILL — once a walk has been STARTED, if the drawer is dismissed
+         (drag the handle down) a floating pill brings it back without the
+         Plan → walk round-trip. Its ✕ ends the session (clears the pill). Sits
+         bottom-centre, clear of the bottom-right glasses launcher. -->
+    <div
+      v-if="started && !open"
+      class="fixed bottom-4 left-1/2 z-40 flex -translate-x-1/2 items-center gap-1 rounded-full bg-primary p-1 shadow-lg"
+    >
+      <button
+        type="button"
+        class="flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium text-inverted"
+        @click="reopen"
+      >
+        <UIcon name="i-lucide-list-checks" class="size-4" />
+        <span>Check &amp; sign off</span>
+        <span class="font-mono opacity-80">{{ markedTotal }}/{{ total }}</span>
+      </button>
+      <button
+        type="button"
+        class="flex size-7 items-center justify-center rounded-full text-inverted opacity-80 hover:bg-black/10"
+        aria-label="End walk"
+        @click="end()"
+      >
+        <UIcon name="i-lucide-x" class="size-4" />
+      </button>
+    </div>
   </div>
 </template>
