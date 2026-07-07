@@ -23,6 +23,14 @@ a feature branch.
 
 ## Procedure
 
+> **Execute the documented command — don't reverse-engineer the CLI (efficiency HARD RULE, #1223).**
+> If a task has a known command, *run it*. **Scaffolding a new app/POC = `crouton init <name> --poc`**
+> (→ `pocs/<name>`, does scaffold→generate→doctor); a launched app = `crouton init <name>`. Adding a
+> collection to an existing app = `crouton config` / `generate_collection`. Do **NOT** read
+> `crouton-cli/lib/init-app.ts` / `scaffold-app.ts` to "figure out how to scaffold" — that source-dive
+> burned the entire 30-min budget on #1213 and produced nothing. Once you've read the issue + the
+> relevant skill/CLAUDE.md, **act**; a leaf that only investigates and never executes is a failed run.
+
 1. **Read the issue.** `mcp__github__issue_read` (method `get`). The acceptance criteria
    and `## 🧪 How to test` are your spec. Also read the **epic** (the `epic` number in
    your prompt) so you know the epic's stated design/invariants.
