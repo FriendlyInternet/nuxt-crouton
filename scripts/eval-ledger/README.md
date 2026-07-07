@@ -21,6 +21,7 @@ higher-volume sink later — it's just not reviewable/diffable, which is what le
 |---|---|
 | `schema.mjs` | record shape + `validate()` + scoring helpers (`isSuccess`/`isRevert`/`parseLedger`) |
 | `append.mjs` | validate + append ONE record (the capture entry point a flow calls) |
+| `from-pi-session.mjs` | roll a pi.dev **session jsonl** into one record (reads #938's native `usage`/`cost` feed) → pipe to `append.mjs` |
 | `scoreboard.mjs` | read the ledger → per-(model × flow) rollup → Markdown / `--json` |
 | `../../writeups/reports/eval-ledger.jsonl` | the append-only ledger (seeded with the #862 revert) |
 
@@ -86,11 +87,27 @@ issue (**📊 Model routing scoreboard**). Deterministic — no LLM, no secrets 
 gates it to the send day, exactly like `housekeeping`. A manual `workflow_dispatch` always sends.
 Change the cadence in `digests.yml`, never the workflow cron.
 
+## Capturing a pi.dev run (#1203)
+
+pi already writes per-turn `usage`/`cost` to its session jsonl (#938 —
+`writeups/architecture/pi-telemetry-feed.md`), so a run needs no new instrumentation — just roll
+the session up and append:
+
+```bash
+node scripts/eval-ledger/from-pi-session.mjs --latest \
+  --flow a11y-reports --outcome report --ref <run-url> \
+| node scripts/eval-ledger/append.mjs --stdin
+```
+
+`from-pi-session.mjs` sums `message.usage.cost.total` (anthropic-provider turns — `pi-claude-cli`
+usage is unreliable, #938), counts assistant turns, derives `wall_s` from the message timestamps,
+and provider-qualifies the model. It runs where the session file lives (the mac-mini box).
+
 ## Wiring into flows (follow-ups)
 
 - **Reports-only pi.dev a11y (#867/#869)** is the first capture site — start here, it's safe (a
-  bad model can't hurt `main`). Once #869 merges, add an `append.mjs` call in its trusted posting
-  step (it already computes `model` / `wall` / `conclusion` for the run summary). Tracked on #883.
+  bad model can't hurt `main`). Feed it with `from-pi-session.mjs` (#1203) against the run's
+  session jsonl; a real datapoint (2026-07-07 a11y-pidev, $0.365) is already seeded.
 - **task-worker / decompose** capture (appending a row from those flows) is the remaining piece —
   the periodic scoreboard post itself ships here (`eval-scoreboard.yml`).
 - **Golden-task eval** rows (`flow: golden-*`, on fixtures, never `main`) are #885.
