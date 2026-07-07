@@ -210,6 +210,26 @@ For repeater fields where each item needs translations (e.g., time slots, option
 }
 ```
 
+## Scaffold a NEW app or POC — `crouton init` (run this FIRST for a new app)
+
+**Creating a new app/POC from scratch? Run ONE command — do NOT reverse-engineer the CLI.**
+`crouton init <name>` does the whole thing end-to-end (scaffold → generate → doctor → summary):
+
+```bash
+crouton init <name> --poc                     # → pocs/<name>   (the incubator — default for a new POC)
+crouton init <name>                            # → apps/<name>   (a launched app)
+crouton init <name> --out <dir>                # explicit target directory
+crouton init <name> --features bookings,pages --theme ko -d sqlite   # options
+crouton init <name> --poc --dry-run            # preview, writes nothing
+```
+
+Flags: `--poc` (→ `pocs/<name>`) · `--out <dir>` · `--features a,b,c` · `--theme <t>` · `-d sqlite|pg`
+· `--no-cf` · `--domain <zone>` · `--dry-run`. If a `crouton.config.js` already exists in the target,
+init also generates its collections. **This is the command a POC-scaffold task runs — it is not
+undocumented; don't read `init-app.ts`/`scaffold-app.ts` to figure it out (that's the #1213/#1223
+30-min timeout).** Adding a collection to an *existing* app is the separate `crouton config` /
+`generate_collection` flow below.
+
 ## Process
 
 ### Step 1: Gather Requirements
