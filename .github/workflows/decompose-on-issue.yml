@@ -39,10 +39,21 @@ jobs:
       # Mark the issue in-progress the moment the pipeline picks it up (#1218) — deterministic,
       # so "where is it at" is visible without waiting for an agent to set it. Safe re: re-trigger:
       # the job guard fires only when the *`delegate`* label is added, so this label event can't
-      # re-fire the workflow.
+      # re-fire THIS workflow.
+      #
+      # CRUCIAL: add the label with the HARNESS APP TOKEN, not the default GITHUB_TOKEN. The label
+      # must *trigger* project-status.yml (which maps status:in-progress → the board's "In progress"
+      # column) — and events from the default GITHUB_TOKEN do NOT trigger other workflows. A
+      # default-token add would set the label but never move the board card. (#1218)
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
       - name: Mark the issue in-progress
         uses: actions/github-script@v7
         with:
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             try {
               await github.rest.issues.addLabels({
