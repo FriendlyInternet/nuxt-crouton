@@ -76,6 +76,16 @@ block has no `cd`, the folder doesn't matter for that command (e.g. `brew instal
 
 ## 0. Prerequisites
 
+> ⚡ **Recreate the whole box in one shot (#1200).** Everything from here down is automated,
+> idempotently, by:
+> ```bash
+> RUNNER_TOKEN=<fresh reg token> ./scripts/mac-mini-runner/bootstrap-mac-mini.sh [FLEET]
+> ```
+> It stands up a bare/wiped mini → fleet online (toolchain · runner #1 · fleet of N · launchd ·
+> no-sleep · watchdog), skipping anything already present. `DRY_RUN=1` prints the plan without
+> changing anything. Pi extensions/settings are **not** in scope (→ #1060). The manual steps
+> below are the reference — what the bootstrap does, and the path when you want to do it by hand.
+
 🖥️ **MINI (terminal)** — SSH in from your own Mac first, then run everything in this section
 there:
 
@@ -116,7 +126,9 @@ local name** regardless of which version URL you paste, so the `tar` line always
 
 ```bash
 cd ~/actions-runner
-# Use the download URL GitHub's runners page shows you; the -o name stays fixed:
+# Download to the FIXED name actions-runner.tar.gz — this is what add-runner.sh / the
+# bootstrap look for first. (They also fall back to the versioned actions-runner-osx-*.tar.gz
+# name, so an already-set-up box won't break, but the fixed name keeps things tidy — #1200.)
 curl -L -o actions-runner.tar.gz \
   https://github.com/actions/runner/releases/download/v2.XXX.X/actions-runner-osx-arm64-2.XXX.X.tar.gz
 tar xzf actions-runner.tar.gz
