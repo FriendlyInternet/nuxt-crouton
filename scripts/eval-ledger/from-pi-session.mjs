@@ -91,21 +91,24 @@ process.stdout.write(JSON.stringify(record) + '\n')
 // ── helpers ───────────────────────────────────────────────────────────────────────────────
 function newestSession(dir) {
   let best = null, bestMtime = -1
-  const walk = (d) => {
-    let entries
-    try { entries = readdirSync(d, { withFileTypes: true }) } catch { return }
-    for (const e of entries) {
-      const p = join(d, e.name)
-      if (e.isDirectory()) walk(p)
-      else if (e.name.endsWith('.jsonl')) {
-        const mt = statSync(p).mtimeMs
-        if (mt > bestMtime) { bestMtime = mt; best = p }
-      }
-    }
+  for (const f of jsonlFiles(dir)) {
+    const mt = statSync(f).mtimeMs
+    if (mt > bestMtime) { bestMtime = mt; best = f }
   }
-  walk(dir)
   return best
 }
+// pi sessions live exactly one level deep: <sessions>/<cwd-slug>/<ts>_<id>.jsonl
+function jsonlFiles(dir) {
+  const out = []
+  for (const slug of readdirSafe(dir)) collectJsonl(join(dir, slug), out)
+  return out
+}
+function collectJsonl(sub, out) {
+  if (!isDir(sub)) return
+  for (const f of readdirSafe(sub)) if (f.endsWith('.jsonl')) out.push(join(sub, f))
+}
+function readdirSafe(d) { try { return readdirSync(d) } catch { return [] } }
+function isDir(p) { try { return statSync(p).isDirectory() } catch { return false } }
 function topKey(map) {
   let best = null, bestN = -1
   for (const [k, n] of map) if (n > bestN) { bestN = n; best = k }
@@ -118,11 +121,10 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (!a.startsWith('--')) continue
-    const key = a.slice(2)
-    const next = argv[i + 1]
-    if (key === 'latest') { out[key] = true; continue }
-    if (next === undefined || next.startsWith('--')) out[key] = true
-    else { out[key] = next; i++ }
+    // a bare flag (--latest) or one whose next token is another flag → boolean true
+    const takesVal = isValue(argv[i + 1])
+    out[a.slice(2)] = takesVal ? argv[++i] : true
   }
   return out
 }
+function isValue(tok) { return tok !== undefined && !tok.startsWith('--') }
