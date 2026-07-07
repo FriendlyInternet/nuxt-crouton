@@ -36,6 +36,20 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Mark the issue in-progress the moment the pipeline picks it up (#1218) — deterministic,
+      # so "where is it at" is visible without waiting for an agent to set it. Safe re: re-trigger:
+      # the job guard fires only when the *`delegate`* label is added, so this label event can't
+      # re-fire the workflow.
+      - name: Mark the issue in-progress
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.addLabels({
+                ...context.repo, issue_number: context.payload.issue.number, labels: ['status:in-progress'],
+              })
+            } catch (e) { core.warning(`could not add status:in-progress: ${e.message}`) }
+
       # Timestamp the run start so the artifact-gate can tell "produced during this run"
       # from pre-existing comments/PRs.
       - id: t0
