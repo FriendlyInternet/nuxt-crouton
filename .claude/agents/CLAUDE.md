@@ -160,6 +160,9 @@ only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
   GitHub/app notification), apply `status:blocked`, and stop — the human answers by
   replying on the issue. Small ambiguities are decided with a default + a noted
   assumption (no ping). Change the handle in this file and in the task-decompose skill.
+  **When** to ask vs decide is the 3-part test in `AGENTS.md` → *Deciding vs asking* (ask only
+  when the fork is irreversible/expensive **and** not derivable **and** genuinely the human's;
+  else decide + log). Not "no assumptions" — assume the derivable/reversible, escalate the rest.
 - **A block comment is a HANDOFF, not just a question (#639).** The owner's reply spawns a
   **brand-new session** (`resume-on-comment.yml`) that has **zero memory** of your reasoning
   and checks out `main` — not your worktree, which is gone. So the blocking comment must be

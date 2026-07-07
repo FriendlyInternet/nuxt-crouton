@@ -65,6 +65,32 @@ no `lgtm`, not done. Where the work has an enumerable contract (a behaviour spec
 comes from **comparison against the expected result**, not from re-reading the list: a list can't
 reveal its own gaps; running the real thing next to the contract can.
 
+## Deciding vs asking
+
+The sign-off gates above are *pre-declared* decision points. Most forks aren't those — they surface
+mid-work, and both extremes are wrong: "assume nothing, ask about everything" stalls an owner holding
+many async threads; "never ask" ships a confident wrong guess. So the rule is neither. **Ask only when
+all three hold:**
+
+1. **Irreversible or expensive** to undo — a destructive / data-migrating / publishing act, not
+   something a later commit quietly corrects.
+2. **Not derivable** — the answer isn't in the code, the docs, the conventions, or the issue itself,
+   and you've actually looked.
+3. **Genuinely the human's** — taste, priority, or product intent; not a mechanical choice that has a
+   defensible default.
+
+Fail any one → **decide and log**: make the call, append one dated line to the epic's Decisions log
+(append-only, so a later reversal shows as a new line), and keep moving. This replaces a blunt "no
+assumptions": the goal isn't to avoid assuming — it's to assume the *derivable and reversible* things
+and escalate *only* the rest.
+
+**When you do ask, the ask is async — never a blocking prompt.** An agent may be headless (a CI job,
+no terminal), so an in-run "ask the user" call times out or stalls the run — never use one in a
+pipeline. Instead post the ask as a comment, `@mention` the owner *only because an action is needed*,
+set `blocked`, and stop; the reply resumes a fresh run. Batch open questions into one comment rather
+than dripping pings. (The comment's *shape* — a scannable, recommendation-first handoff — is its own
+concern.)
+
 ## Issues — the unit of work
 
 - **Search before creating** — sessions are ephemeral; continue an existing epic, don't duplicate.
