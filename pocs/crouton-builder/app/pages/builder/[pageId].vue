@@ -26,7 +26,7 @@ import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/u
 import { dropNode, applyPaneDrop, detachNode, moveChild } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { snapEdge, rectsOverlapFrac } from '@fyit/crouton-layout/app/utils/layout-snap'
 import BuilderBlockNode from '~/components/BuilderBlockNode.vue'
-import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion, type BuilderNodeSize, type BuilderDetachPayload, type BuilderReorderPayload, type BuilderSnapPreview } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, BUILDER_SET_PAGE_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion, type BuilderNodeSize, type BuilderDetachPayload, type BuilderReorderPayload, type BuilderSnapPreview } from '~/utils/builder-keys'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 const blockNode = markRaw(BuilderBlockNode)
@@ -127,11 +127,14 @@ function fitPage() {
 }
 
 // add-block-land — a clear spot to the RIGHT of every node (never under one).
+// Measure neighbours with `effSize` (the per-element-resized/expanded on-screen size),
+// NOT the intrinsic `sizeOf` footprint — else a new block lands *behind* a card that was
+// resized wider than its footprint (spec: `page-model-one-node`, IMG feedback 2026-07).
 function clearSpot(): { x: number, y: number } {
   if (!nodes.value.length) return { x: 80, y: 80 }
   let maxRight = -Infinity, topY = Infinity
   for (const n of nodes.value) {
-    const s = sizeOf(n.data.node)
+    const s = effSize(n)
     maxRight = Math.max(maxRight, n.position.x + s.width)
     topY = Math.min(topY, n.position.y)
   }
@@ -201,6 +204,14 @@ function setRegion(node: LayoutNode, region: BuilderRegion | null) {
   dirty.value = true
 }
 provide(BUILDER_SET_REGION_KEY, setRegion)
+
+// page-model-one-node — mark a card as THE page (the ★-badged live layout a visitor sees), clearing
+// the flag on every other card so exactly one is the page. Save serialises whichever node is the page.
+function setPage(node: LayoutNode) {
+  nodes.value = nodes.value.map(n => ({ ...n, data: { ...n.data, isPage: n.data.node === node } }))
+  dirty.value = true
+}
+provide(BUILDER_SET_PAGE_KEY, setPage)
 
 // per-element-resize — write a card's explicit display width/height (null clears to footprint).
 function setNodeSize(node: LayoutNode, size: BuilderNodeSize) {

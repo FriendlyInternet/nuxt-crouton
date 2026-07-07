@@ -17,7 +17,7 @@
 import { computed, inject, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useElementSize } from '@vueuse/core'
 import type { LayoutNode, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
-import { BUILDER_SNAP_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, BUILDER_SET_PAGE_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion } from '~/utils/builder-keys'
 
 const props = defineProps<{
   data: {
@@ -267,6 +267,9 @@ const snapHere = computed(() => {
 // inline from `paneDrop.rect` (0..1 fractions). The plain edge-snap case uses the `.e-*` classes.
 // page-regions-pin — pin this node to the page's top/bottom edge from its toolbar (shown on select).
 const setRegion = inject(BUILDER_SET_REGION_KEY, null)
+// page-model-one-node — "Set as page" moves the ★ badge to THIS card (shown on select when it isn't
+// already the page). The board clears the flag on every other card so exactly one stays the page.
+const setPage = inject(BUILDER_SET_PAGE_KEY, null)
 
 const paneGuideStyle = computed(() => {
   const p = snapHere.value?.paneDrop
@@ -323,8 +326,20 @@ const paneGuideStyle = computed(() => {
       {{ data.region }}
     </UBadge>
 
-    <!-- region toolbar (spec: page-regions-pin) — pin to the page's top/bottom edge; on select. -->
+    <!-- region toolbar (spec: page-regions-pin) — pin to the page's top/bottom edge; on select.
+         Leads with "Set as page" (spec: page-model-one-node) when this card isn't the page yet. -->
     <div v-if="selected" class="nodrag absolute right-2 top-9 z-30 flex gap-1">
+      <UButton
+        v-if="!data.isPage"
+        size="xs"
+        icon="i-lucide-star"
+        color="neutral"
+        variant="subtle"
+        data-handoff="set-page"
+        aria-label="Set as page"
+        title="Set as the page"
+        @click.stop="setPage?.(data.node)"
+      />
       <UButton
         size="xs"
         icon="i-lucide-panel-top"

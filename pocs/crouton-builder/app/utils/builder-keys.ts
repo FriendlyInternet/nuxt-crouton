@@ -10,6 +10,14 @@ import type { PaneDropEdge } from '@fyit/crouton-layout/app/utils/layout-edit'
 /** The label of the item a ghost pane stands in for (threaded to BuilderGhostPane). */
 export const BUILDER_GHOST_LABEL_KEY: InjectionKey<Ref<string | null> | null> = Symbol('builder-ghost-label')
 
+/**
+ * Set-as-page (spec: `page-model-one-node`) — move the ★ page badge to another card. Exactly one
+ * node on a board is "the page" (the live layout a visitor sees); this marks the given node as the
+ * page and clears the flag on every other card. The board provides it; BuilderBlockNode calls it
+ * (node by object identity of its `data.node`, like the other node callbacks).
+ */
+export const BUILDER_SET_PAGE_KEY: InjectionKey<(node: LayoutNode) => void> = Symbol('builder-set-page')
+
 /** A node pinned to a page edge as a sticky region (bounded enum; undefined = main flow). */
 export type BuilderRegion = 'top' | 'bottom'
 
