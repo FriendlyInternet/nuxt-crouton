@@ -35,6 +35,22 @@ jobs:
       - id: t0
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # ── Collect the answer payload across media (WS5, #1191) ─────────────────────
+      # The owner may answer in the medium the question came in — a top-level reply, an
+      # inline PR *review* comment (e.g. on a schema `.md`), a `🎯 Preview feedback`
+      # comment, or an edited Excalidraw diagram. The resume agent only reads the top-level
+      # thread by default, so an in-medium answer would be invisible. This gathers all of
+      # them into `.resume-answer.md` for the prompt below. Dependency-free (system node +
+      # fetch); the `||` fallback guarantees the file exists so the resume never fails on it.
+      - name: Collect the answer payload
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          node scripts/resume-answer-payload.mjs "$ISSUE" > .resume-answer.md \
+            || echo '_(answer-payload collection skipped — resume from the top-level thread)_' > .resume-answer.md
+          echo "── collected answer payload ──"; cat .resume-answer.md
+
       # Pinned to the same SHA as claude.yml — keep these in sync when bumping.
       # AUTH: this is headless/unattended, so it MUST use an API key. Do NOT swap in a
       # subscription CLAUDE_CODE_OAUTH_TOKEN — subscription OAuth is for interactive
@@ -44,9 +60,14 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
             Resume the task-decomposition pipeline for issue #${{ github.event.issue.number }}.
-            The owner has replied to a blocking question — read the full issue comment
-            thread (the latest comment is their answer), incorporate it, remove the
-            `status:blocked` label, then continue via /task-decompose #${{ github.event.issue.number }}.
+            The owner has replied to a blocking question. Their answer may be in the medium the
+            question came in — this run collected it across every surface into `.resume-answer.md`
+            (the latest reply, any inline PR review comments, any `🎯` preview-feedback comments,
+            and a flag if an Excalidraw diagram was edited). **Read `.resume-answer.md` first** and
+            treat it as their answer; if it flags an edited diagram, run
+            `node scripts/ticket-excalidraw-import.mjs <png>` to decode the scene before acting.
+            Then incorporate the answer, remove the `status:blocked` label, and continue via
+            /task-decompose #${{ github.event.issue.number }}.
           claude_args: "--model claude-sonnet-5 --max-turns 30"
           show_full_output: true
 
