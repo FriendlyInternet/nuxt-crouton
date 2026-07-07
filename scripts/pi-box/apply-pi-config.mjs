@@ -35,6 +35,9 @@ const manifest = loadJson(manifestPath)
 if (!manifest) die(`cannot read manifest ${manifestPath}`)
 const live = loadJson(settingsPath) || { packages: [] }
 const livePkgs = Array.isArray(live.packages) ? live.packages : []
+// Declared before planBase() runs (line ~42): a `const` read by a hoisted function is in the
+// temporal dead zone until this line executes, so it must sit above the first top-level call.
+const wantBase = manifest.base ? manifest.base.version : null
 
 log(`\n\x1b[1mpi box config apply\x1b[0m ${dry ? '(DRY RUN — no changes)' : ''}`)
 log(`manifest ${rel(manifestPath)} · settings ${rel(settingsPath)}`)
@@ -53,7 +56,6 @@ applySettings()
 log('\n✅ applied. Verify: `pi list` + `node scripts/pi-box/apply-pi-config.mjs --dry-run` (should be a no-op).')
 
 // ── planning ────────────────────────────────────────────────────────────────────────────
-const wantBase = manifest.base ? manifest.base.version : null
 function readBaseMarker() { return existsSync(markerPath) ? readFileSync(markerPath, 'utf8').trim() : null }
 function runReason(have) { return have ? `version ${have}→${wantBase}` : 'no recorded base' }
 function planBase() {
