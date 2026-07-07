@@ -1,0 +1,38 @@
+{
+  "$comment": "GitOps'd pi.dev box config (#1060). The mac-mini's pi setup as code: an opinionated installer pinned as the BASE, plus only OUR deltas + settings overrides on top — we do NOT re-vendor the installer's curated package list. Apply with `node scripts/pi-box/apply-pi-config.mjs` (--dry-run first). A base version bump is a deliberate, reviewed change here. Snapshot: 2026-07-07 from Maartens-Mac-mini.",
+  "pi": {
+    "package": "@earendil-works/pi-coding-agent",
+    "version": "0.80.3"
+  },
+  "base": {
+    "installer": "@robzolkos/lazypi",
+    "version": "0.6.3",
+    "note": "Opinionated one-shot installer; lays down the 24-package curated baseline. Run via `npx @robzolkos/lazypi@<version>`. It overwrites ~/.pi/agent/settings.json (backing up the old), so our `add` + `settings` are re-layered AFTER it."
+  },
+  "add": [
+    "npm:pi-otel@0.1.0",
+    "npm:@jademind/pi-telemetry@0.1.4",
+    "git:github.com/supabitapp/supaterm-skills@5b17a56f0caf9ba9932ba624face75a81a1af560"
+  ],
+  "remove": [],
+  "settings": {
+    "otel": {
+      "enabled": true,
+      "endpoint": "http://localhost:4317",
+      "protocol": "grpc",
+      "captureContent": "metadata_only",
+      "signals": { "traces": true, "metrics": false, "logs": false }
+    },
+    "subagents": {
+      "agentOverrides": {
+        "context-builder": { "model": "" },
+        "planner": { "model": "" },
+        "researcher": { "model": "" },
+        "reviewer": { "model": "" },
+        "scout": { "model": "" },
+        "worker": { "model": "" }
+      }
+    },
+    "theme": "dark"
+  }
+}
