@@ -17,6 +17,7 @@
 import { computed, inject, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useElementSize } from '@vueuse/core'
 import type { LayoutNode, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
+import { resolveLayoutAtWidth } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { BUILDER_SNAP_KEY, BUILDER_SET_PAGE_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion } from '~/utils/builder-keys'
 
 const props = defineProps<{
@@ -37,11 +38,27 @@ const props = defineProps<{
 }>()
 
 // per-element-resize — an explicit width/height wins over the intrinsic footprint size.
+const effWidthPx = computed(() => {
+  const f = footprint(props.data.node)
+  return typeof props.data.width === 'number' ? props.data.width : f.cols * BUILDER_BASE_W
+})
 const size = computed(() => {
   const f = footprint(props.data.node)
-  const w = typeof props.data.width === 'number' ? props.data.width : f.cols * BUILDER_BASE_W
+  const w = effWidthPx.value
   const h = typeof props.data.height === 'number' ? props.data.height : f.rows * BUILDER_BASE_H
   return { width: `${w}px`, height: `${h}px` }
+})
+
+// focus-edit-view visibility (spec) — apply the card's AUTHORED breakpoints (`data.bp`) so the
+// keypoints edited in the focus view actually show on the board. Resolve the tree at the card's
+// width PURELY (`resolveLayoutAtWidth`, no DOM/observer) and render the resolved root through the
+// observer-free CroutonLayoutRenderer — NOT CroutonLayoutResponsiveRenderer, whose container-measure
+// would re-introduce the ResizeObserver that OOM-crashes a transform-scaled Vue Flow node (#1178).
+// (Resolves the structural/size override; authored variants/collapse still preview in the editor.)
+const renderNode = computed<LayoutNode>(() => {
+  const bp = props.data.bp
+  if (!bp || !bp.length) return props.data.node
+  return resolveLayoutAtWidth({ renderer: 'panes', root: props.data.node, breakpoints: bp }, effWidthPx.value).root
 })
 
 // The corner handle sets this card's width/height. Zoom-compensated so the drag tracks 1:1 on
@@ -410,7 +427,7 @@ const paneGuideStyle = computed(() => {
     </div>
 
     <div class="builder-node-live nowheel nopan nodrag" data-handoff="node-live">
-      <CroutonLayoutRenderer :node="data.node" :interactive="false" />
+      <CroutonLayoutRenderer :node="renderNode" :interactive="false" />
     </div>
 
     <!-- detach-reorder (spec: detach-reorder): long-press → top-level panes become grabbable.

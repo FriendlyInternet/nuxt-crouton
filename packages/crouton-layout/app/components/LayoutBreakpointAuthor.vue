@@ -35,7 +35,16 @@ const COLLAPSE_STYLE_LABELS: Record<LayoutCollapseStyle, string> = {
   'iris-portal': 'Iris portal',
 }
 
-const props = defineProps<{ modelValue: LayoutTree }>()
+const props = defineProps<{
+  modelValue: LayoutTree
+  /**
+   * Seed the ruler at a specific width instead of the viewport default — so a host that opens the
+   * author FROM a card of a known width (the builder's focus-edit / per-element-resize, #983) starts
+   * on that card's width, not 390/1280. Clamped to the ruler range. One-time seed (the author mounts
+   * fresh per edit); omit for the mobile-first-on-phone / desktop-first-on-wide default.
+   */
+  initialWidth?: number
+}>()
 const emit = defineEmits<{ 'update:modelValue': [tree: LayoutTree] }>()
 
 const tree = computed(() => props.modelValue)
@@ -46,9 +55,15 @@ function update(next: LayoutTree) {
 // --- the ruler -------------------------------------------------------------
 const MIN = 320
 const MAX = 1600
-// Start at the viewport's own size so authoring is mobile-first on a phone (you land on
-// the phone checkpoint) and desktop-first on a wide screen. Clamped to the ruler range.
-const simWidth = ref(import.meta.client ? Math.min(MAX, Math.max(MIN, window.innerWidth < 560 ? 390 : 1280)) : 1280)
+// Start at `initialWidth` (a host opening from a known card width) if given, else the viewport's own
+// size so authoring is mobile-first on a phone (you land on the phone checkpoint) and desktop-first on
+// a wide screen. Clamped to the ruler range.
+const clampW = (w: number) => Math.min(MAX, Math.max(MIN, Math.round(w)))
+const simWidth = ref(
+  props.initialWidth != null
+    ? clampW(props.initialWidth)
+    : (import.meta.client ? clampW(window.innerWidth < 560 ? 390 : 1280) : 1280),
+)
 
 const DEVICES = [
   { label: 'Phone', width: 390, icon: 'i-lucide-smartphone' },

@@ -21,6 +21,9 @@ const props = defineProps<{
   node: LayoutNode
   breakpoints?: LayoutBreakpoint[]
   title?: string
+  /** The card's authored on-screen width — the editor opens at THIS width (spec: focus-edit-view /
+   *  per-element-resize), not the viewport default. Undefined for an unsized card (footprint width). */
+  initialWidth?: number
 }>()
 
 const emit = defineEmits<{
@@ -83,7 +86,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onEsc))
     </header>
 
     <div class="min-h-0 flex-1 overflow-auto">
-      <CroutonLayoutBreakpointAuthor v-model="localTree" />
+      <CroutonLayoutBreakpointAuthor v-model="localTree" :initial-width="initialWidth" />
     </div>
   </div>
 </template>

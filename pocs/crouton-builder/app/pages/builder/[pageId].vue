@@ -512,6 +512,7 @@ async function saveBoard() {
       :node="editing.data.node"
       :breakpoints="editing.data.bp"
       :title="editing.data.label"
+      :initial-width="effSize(editing).width"
       @save="onFocusSave"
       @close="editing = null"
     />
