@@ -43,9 +43,20 @@ version (`~/.pi/agent/.pi-box-base`) differs from the manifest — so a re-run w
 is a **no-op**. Flags: `--skip-base` (reconcile deltas+settings only), `--force-base`, `--settings`
 / `--base-marker` / `--manifest` (override paths, e.g. for testing against a copy).
 
-## What's not here yet (phase 2)
+## Applying from GitHub (phase 2)
 
-A `workflow_dispatch` job on the mac-mini runner that runs this apply from a manifest PR — the full
-"flip an extension from GitHub → box updates" loop (#1060 "We'll know by"). Needs a scoped token
-(not human creds — the #656/#670 lesson). Until then, apply is run on the box by hand from a merged
-manifest change.
+`.github/workflows/pi-box-apply.yml` runs this apply on the self-hosted **mac-mini** runner, so a
+manifest change lands on the box with no manual step — the full "flip an extension from GitHub → box
+updates" loop (#1060 "We'll know by"). Two triggers:
+
+- **push → `main`** (path-filtered on the manifest / apply script) — a **merged** manifest change
+  applies for real. A push fires only for already-reviewed, merged code, so untrusted fork code
+  never reaches the box; the manifest diff **is** the supply-chain review.
+- **workflow_dispatch** — a manual run, defaulting to `--dry-run` (flip `dry_run` off to apply);
+  `skip_base` / `force_base` pass through to the script.
+
+**Scoped token, not human creds (#656/#670):** applying a manifest is code execution on the box, so
+the runner uses only the ephemeral, auto-expiring `GITHUB_TOKEN` scoped to `contents: read` — no
+PAT, no Harness App token. The apply mutates the box locally (no GitHub writes); its result is shown
+in the run's job summary. No `setup-node` — node/npm/pi resolve via the runner's launchd `.path` so
+the box's **real** global `~/.pi` is reconciled, not an ephemeral CI node prefix.
