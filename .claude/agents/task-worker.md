@@ -368,16 +368,18 @@ choices don't need a ping — make them and note them in the PR body.
 **The comment is a HANDOFF, not just a question (#639).** The owner's reply spawns a
 **brand-new session** (`resume-on-comment.yml`) with **zero memory** of your reasoning — it
 checks out `main`, not this worktree (which is gone on stop). So the comment must let a cold
-agent resume without re-deriving or diverging. Use the canonical handoff block (see
-`.claude/agents/CLAUDE.md` → "A block comment is a HANDOFF"):
+agent resume without re-deriving or diverging. **Emit it via the `ask-human` skill** (#1189) —
+it carries the canonical shape: lead with the one decision **and a recommendation**, stay
+10-second-scannable, always propose an answer (never a naked "what do you want?"):
 
 ```
-## 🔀 Blocked — need a decision (handoff)
-**Question for @pmcp:** <the one thing only you can decide>
-**Why it blocks:** <what cannot proceed until answered>
-**State so far:** <what's done · branch name + pushed? · what's NOT done>
-**After you answer:** a NEW session resumes from THIS ticket —
-  Option A → <next steps> · Option B → <next steps>
+## 🔀 Blocked — <the one decision, in one line>
+> 🤖 provenance header (interactive @pmcp-account disclaimer)
+**TL;DR — recommend <X>:** <decision restated + why X, first>
+**Status:** <what's done · branch name + pushed? · what's NOT done>
+**Why it came up:** <what cannot proceed until answered>
+**Options:** A) … _(recommended)_ · B) …
+**Reply:** `A`/`B` (or in-medium) → a NEW session resumes from THIS ticket
 **Don't lose:** <decisions/assumptions already made the next agent must keep>
 ```
 
