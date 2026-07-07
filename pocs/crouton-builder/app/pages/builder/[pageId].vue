@@ -287,8 +287,18 @@ function onNodeDrag(id: string, pos: { x: number, y: number }) {
   let bestOverlap = 0, overTarget: FlowNode | null = null
   for (const n of nodes.value) {
     if (n.id === id || n.data.node.type !== 'split') continue
-    const frac = rectsOverlapFrac(drag, { x: n.position.x, y: n.position.y, ...effSize(n) })
-    if (frac >= PANE_DROP_MIN && frac > bestOverlap) { bestOverlap = frac; overTarget = n }
+    const box = { x: n.position.x, y: n.position.y, ...effSize(n) }
+    const frac = rectsOverlapFrac(drag, box)
+    // SIZE-INDEPENDENT "over" test (spec: pane-drop-beside): the raw overlap fraction is normalized by
+    // the SMALLER rect, so a LARGE card clipping a SMALL pane at its edge rarely clears 35% — the drop
+    // never armed. Treat the target as "over" when either centre sits inside the other rect (the big-
+    // over-small / small-over-big cases), which then counts as at least the threshold; otherwise fall
+    // back to the real overlap. So a big card dropping beside a small pane now registers.
+    const dragCentreIn = dcx >= box.x && dcx <= box.x + box.width && dcy >= box.y && dcy <= box.y + box.height
+    const tcx = box.x + box.width / 2, tcy = box.y + box.height / 2
+    const targetCentreIn = tcx >= drag.x && tcx <= drag.x + drag.width && tcy >= drag.y && tcy <= drag.y + drag.height
+    const score = (dragCentreIn || targetCentreIn) ? Math.max(frac, PANE_DROP_MIN) : frac
+    if (score >= PANE_DROP_MIN && score > bestOverlap) { bestOverlap = score; overTarget = n }
   }
   if (overTarget) {
     const box = { left: overTarget.position.x, top: overTarget.position.y, ...effSize(overTarget) }
