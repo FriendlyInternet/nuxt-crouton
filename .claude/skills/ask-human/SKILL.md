@@ -51,13 +51,33 @@ Rules that make it work:
   and name that branch under *Status* — an unpushed worktree is lost on stop (#639).
 - Then apply `status:blocked` and **stop**.
 
-## Attach the right medium (WS4 — #1190)
+## Attach the right medium
 
-If the question is **visual or structural**, prose is the wrong channel — attach the
-artifact that shows it and let the owner reply *on it*: a live preview (`ui-proposal`), a
-diagram (`ticket-diagram`), a schema render (`schema-review`), a screenshot
-(`scripts/app-shots.mjs`), or a short video (`demo-video`). The medium-selection guide lives
-in this skill under WS4; until then, reach for the one that lets the owner answer at a glance.
+**Prose is the fallback, not the default.** If the question is visual or structural, a
+paragraph is the *wrong* channel — the owner shouldn't have to reconstruct a layout or a data
+model in their head. Attach the artifact that **shows** it, and let them reply *on the artifact
+itself* (the reply loop is WS5, #1191). We already own every medium — pick by what the question
+*is*, not by habit.
+
+| Your question is about… | Attach (medium) | Produce it with | Owner replies by |
+|---|---|---|---|
+| **How it looks / feels** (a rendered UI, spacing, copy, states) | live preview | `ui-proposal` (staging deploy, `NUXT_PUBLIC_CROUTON_REVIEW=true`) — or a screenshot if no runnable app | pinning feedback on the preview → `🎯 Preview feedback` comment naming the file; or `A`/`B` |
+| **One screen / one state** (a single view, an error, a before/after) | screenshot | `node scripts/app-shots.mjs <baseUrl> <path[:name]>` → `screenshots/<name>.png` | commenting / `A`/`B` |
+| **A flow or interaction** (multi-step, timing, motion) | short video | `demo-video` (WebM storyboard) | commenting |
+| **The data model** (fields, types, relationships) | schema render | `schema-review` (→ PNG/HTML/MD) | inline comment on the committed `.md`; or `A`/`B` |
+| **Structure / status / dependencies** (what depends on what, where the tree is) | diagram | `ticket-diagram` (Excalidraw on the epic) | editing the Excalidraw → `scripts/ticket-excalidraw-import.mjs` round-trips it back; or `A`/`B` |
+| **A tradeoff / priority / naming** (no visual or structural surface) | prose | the block above | `A`/`B`/`lgtm` |
+
+Rules:
+- **One artifact, the most direct one.** Don't attach three renders "to be safe" — pick the
+  medium that answers *this* question fastest and link it from the blocking comment.
+- **The artifact supplements the block; it doesn't replace it.** Still lead with the decision +
+  recommendation in text — the artifact is the evidence, the block is the ask.
+- **Screenshots land in `screenshots/`** (gitignored) — never the repo root or an app dir.
+- **Reuse the skill, don't reinvent it.** Each medium is its own skill/script with its own
+  gotchas; invoke it, don't hand-roll a render.
+- If producing the artifact would cost more than the answer is worth (a deploy for a one-line
+  copy tweak), fall back to a screenshot or prose — match the effort to the stakes.
 
 ## Why this shape
 
