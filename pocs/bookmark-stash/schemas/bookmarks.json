@@ -1,0 +1,35 @@
+{
+  "title": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "maxLength": 200,
+      "label": "Title"
+    }
+  },
+  "url": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "maxLength": 2048,
+      "label": "URL",
+      "help": "The bookmarked link (e.g. https://example.com)"
+    }
+  },
+  "tags": {
+    "type": "string",
+    "meta": {
+      "required": false,
+      "maxLength": 500,
+      "label": "Tags",
+      "help": "Comma-separated tags (e.g. work, reading, reference) — no relation table for this POC"
+    }
+  },
+  "notes": {
+    "type": "text",
+    "meta": {
+      "required": false,
+      "label": "Notes"
+    }
+  }
+}
