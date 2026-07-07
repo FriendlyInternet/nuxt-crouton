@@ -158,20 +158,25 @@ sequence (`manualMigrationSteps()`) instead of silently shipping no migrations.
 Single entry point to go from nothing to a working app:
 
 ```bash
-# Create app with default settings
+# Create app in apps/my-app (a launched app — default)
 crouton init my-app
+
+# Create a POC in pocs/my-app (the incubator)
+crouton init my-app --poc
 
 # With features and theme
 crouton init my-app --features bookings,pages,editor --theme ko
 
 # Preview without writing
-crouton init my-app --dry-run
+crouton init my-app --poc --dry-run
 ```
 
 ### Init Options
 
 | Option | Description |
 |--------|-------------|
+| `--poc` | Scaffold into `pocs/<name>` (the incubator) instead of `apps/<name>` (#1223) |
+| `--out <dir>` | Explicit target directory (overrides `--poc`; default `apps/<name>`) (#1223) |
 | `--features <list>` | Comma-separated features (e.g., `bookings,pages,editor`) |
 | `--theme <name>` | Theme to wire into extends (e.g., `ko`) |
 | `-d, --dialect <type>` | `sqlite` or `pg` (default: sqlite) |
@@ -181,7 +186,8 @@ crouton init my-app --dry-run
 
 ### What `crouton init` Does
 
-1. **scaffold-app** — Creates the app skeleton (nuxt.config, package.json, schemas/, etc.)
+1. **scaffold-app** — Creates the app skeleton (nuxt.config, package.json, schemas/, etc.) in
+   `apps/<name>` (or `pocs/<name>` with `--poc`, or `--out <dir>`)
 2. **generate** — Generates collections from `crouton.config.js` (if collections are defined)
 3. **migrations** — Generates the initial D1 migrations **build-first** (see the
    `crouton add` section). Runs only when deps are already installed; on a bare
