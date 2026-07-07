@@ -526,6 +526,53 @@ The watchdog (§4c) needs **no reconfiguration** — it discovers every installe
    so fine") and restarts just it.
 4. Regression: a single dispatched job still routes to the mini as before.
 
+## 7. Cut the Claude bill: interactive Claude Code under a Max subscription (#652)
+
+The self-hosted runner (§1–§6) cuts **GitHub Actions minutes**, not the **Claude bill** —
+the agent jobs it runs still call the metered `ANTHROPIC_API_KEY`. The lever for the Claude
+bill is a different axis entirely: **auth mode, not machine.**
+
+- **The cost lever is device-independent.** `claude login` is OAuth against your *account*, so
+  **interactive** ("human in the loop") Claude Code draws on your flat-fee Max/Pro quota
+  **wherever you run it** — your laptop, another Mac, Claude Code on your **phone**, *or* the
+  mini. The mini is **not** required for this, and isn't special for it: interactive work has a
+  human present by definition, and that human is wherever they are.
+- **What's actually mini-specific is the opposite half.** The always-on **runner** runs
+  **unattended**, and unattended automation must use the **API key** — never the subscription
+  (Anthropic terms; see the constraint below). "Always-on" matters for *CI*, not for
+  interactive work.
+
+So the split is: **interactive → subscription (any device)** · **runner/CI → `ANTHROPIC_API_KEY`
+(the mini)**. This section documents both so the two never get crossed.
+
+🖥️ **ANY interactive device (incl. the mini)** — authenticate Claude Code via subscription
+OAuth, **not** an API key:
+
+```bash
+claude login          # opens the OAuth flow → sign in with the Max/Pro account
+# confirm: no ANTHROPIC_API_KEY in the interactive shell's env (that would force metered API)
+env | grep -i ANTHROPIC_API_KEY || echo "good — no API key, running on the subscription"
+```
+
+Verify the account is on a paid plan — the OAuth profile in `~/.claude.json` should show
+`organizationType: claude_max` (or `claude_pro`) and `billingType: stripe_subscription`.
+
+**🚫 Hard constraint — do not wire this into CI.** Subscription OAuth is for **interactive
+use only** (Anthropic Legal & Compliance terms). It must **NOT** back any unattended
+workflow. The CI agent flows (`decompose-on-issue`, `resume-on-comment`, the pi.dev
+pipeline, …) **stay on `ANTHROPIC_API_KEY`** — see the note in
+`.github/workflows/decompose-on-issue.yml`. *Considered & rejected:* pointing CI at
+`CLAUDE_CODE_OAUTH_TOKEN` for flat-fee automation → ❌ disallowed by the terms (and fragile:
+token rotation, no per-run isolation).
+
+✅ **Checkpoint (#652 acceptance):**
+1. `claude login` reports the **subscription** account (not API); no `ANTHROPIC_API_KEY` in
+   the interactive env.
+2. A real coding task is done interactively (on the mini or any device you're signed in on).
+3. 🌐 **Anthropic console** — the **API** usage dashboard shows **no API spend** attributable to
+   that interactive work (it drew on the subscription quota instead). Any spend on the key is
+   *automation* — the CI/runner flows — which is expected to be metered.
+
 ---
 
 ## Three acceptance tests, in one place
