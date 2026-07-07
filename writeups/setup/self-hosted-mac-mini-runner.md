@@ -526,6 +526,40 @@ The watchdog (§4c) needs **no reconfiguration** — it discovers every installe
    so fine") and restarts just it.
 4. Regression: a single dispatched job still routes to the mini as before.
 
+## 7. Cut the Claude bill: interactive Claude Code under a Max subscription (#652)
+
+The self-hosted runner (§1–§6) cuts **GitHub Actions minutes**, not the **Claude bill** —
+the agent jobs it runs still call the metered `ANTHROPIC_API_KEY`. The lever for the Claude
+bill is different: do the **interactive** ("human in the loop") dev/agent work on the mini
+**signed in with a subscription**, so it draws on a flat-fee Max/Pro quota instead of
+per-token API billing. The always-on mini is the natural home for it.
+
+🖥️ **MINI (terminal)** — authenticate Claude Code via subscription OAuth, **not** an API key:
+
+```bash
+claude login          # opens the OAuth flow → sign in with the Max/Pro account
+# confirm: no ANTHROPIC_API_KEY in the interactive shell's env (that would force metered API)
+env | grep -i ANTHROPIC_API_KEY || echo "good — no API key, running on the subscription"
+```
+
+Verify the account is on a paid plan — the OAuth profile in `~/.claude.json` should show
+`organizationType: claude_max` (or `claude_pro`) and `billingType: stripe_subscription`.
+
+**🚫 Hard constraint — do not wire this into CI.** Subscription OAuth is for **interactive
+use only** (Anthropic Legal & Compliance terms). It must **NOT** back any unattended
+workflow. The CI agent flows (`decompose-on-issue`, `resume-on-comment`, the pi.dev
+pipeline, …) **stay on `ANTHROPIC_API_KEY`** — see the note in
+`.github/workflows/decompose-on-issue.yml`. *Considered & rejected:* pointing CI at
+`CLAUDE_CODE_OAUTH_TOKEN` for flat-fee automation → ❌ disallowed by the terms (and fragile:
+token rotation, no per-run isolation).
+
+✅ **Checkpoint (#652 acceptance):**
+1. `claude login` reports the **subscription** account (not API); no `ANTHROPIC_API_KEY` in
+   the interactive env.
+2. A real coding task is done interactively on the mini.
+3. 🌐 **Anthropic console** — the **API** usage dashboard shows **no API spend** for that
+   window (the work drew on the subscription quota instead).
+
 ---
 
 ## Three acceptance tests, in one place
