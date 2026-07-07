@@ -163,22 +163,25 @@ only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
   **When** to ask vs decide is the 3-part test in `AGENTS.md` → *Deciding vs asking* (ask only
   when the fork is irreversible/expensive **and** not derivable **and** genuinely the human's;
   else decide + log). Not "no assumptions" — assume the derivable/reversible, escalate the rest.
-- **A block comment is a HANDOFF, not just a question (#639).** The owner's reply spawns a
-  **brand-new session** (`resume-on-comment.yml`) that has **zero memory** of your reasoning
-  and checks out `main` — not your worktree, which is gone. So the blocking comment must be
-  self-contained enough for a cold agent to resume from. Post this structured block (it
-  doubles as the question *and* the resume brief):
+- **A block comment is a HANDOFF, not just a question (#639) — emit it via the `ask-human`
+  skill (#1189).** The owner's reply spawns a **brand-new session** (`resume-on-comment.yml`)
+  that has **zero memory** of your reasoning and checks out `main` — not your worktree, which
+  is gone. So the blocking comment must be self-contained enough for a cold agent to resume
+  from, **and** 10-second-scannable for an owner holding many threads: lead with the one
+  decision **and a recommendation**, never a naked "what do you want?". The skill carries the
+  canonical shape (it doubles as the question *and* the resume brief):
   ```
-  ## 🔀 Blocked — need a decision (handoff)
-  **Question for @pmcp:** <the one thing only you can decide>
-  **Why it blocks:** <what cannot proceed until answered>
-  **State so far:** <what's done · branch name + pushed? · what's NOT done>
-  **After you answer:** a NEW session resumes from THIS ticket —
-    Option A → <next steps> · Option B → <next steps>
+  ## 🔀 Blocked — <the one decision, in one line>
+  > 🤖 provenance header (interactive @pmcp-account disclaimer)
+  **TL;DR — recommend <X>:** <decision restated + why X, first>
+  **Status:** <what's done · branch name + pushed? · what's NOT done>
+  **Why it came up:** <what cannot proceed until answered>
+  **Options:** A) … _(recommended)_ · B) …
+  **Reply:** `A`/`B` (or in-medium) → a NEW session resumes from THIS ticket
   **Don't lose:** <decisions/assumptions already made the next agent must keep>
   ```
   And **push before you block**: if you've written anything, `git push -u origin <branch>`
-  first and name that branch under *State so far* — an unpushed worktree is lost on stop, a
+  first and name that branch under *Status* — an unpushed worktree is lost on stop, a
   pushed branch is recoverable by the resuming session.
 - **The PING is a TOP-LEVEL comment, never a PR *review* body.** Post the handoff/sign-off via
   `add_issue_comment` (a top-level issue/PR comment) — that reliably notifies. A PR **review**
