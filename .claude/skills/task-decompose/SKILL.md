@@ -145,6 +145,12 @@ If a leaf's work needs a workflow-file change (new trigger, path filter, job):
        **blocks the create without it** (#297).
 2. **Launch the orchestrator.** Spawn it via the `Agent` tool:
    - `subagent_type: "task-orchestrator"`
+   - **`run_in_background: false` — MANDATORY. Spawn it SYNCHRONOUSLY and wait for it to finish.**
+     The `Agent` tool defaults to background; in the one-shot CI job (`decompose-on-issue.yml`) a
+     backgrounded orchestrator is **killed when the job ends**, so the sub-issue tree never persists
+     and the artifact-gate fails the run (the #1209/#1210 fire-and-forget). **Never** end your turn
+     with "orchestration is running in the background / I'll be notified" — you will **not** be
+     re-invoked here. Hold until the orchestrator returns (sub-issues created + epic branch pushed).
    - prompt: `{ epic_issue_number: <epic number>, depth: 0 }` + a short restatement of the
      task so it doesn't need an extra read.
    - **If `#NN` is a CHILD issue (it has a `parent_issue_url`), not an epic** — e.g. someone

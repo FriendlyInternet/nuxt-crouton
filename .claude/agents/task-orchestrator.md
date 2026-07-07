@@ -173,6 +173,9 @@ reinventing CMS bits that already shipped.
    concurrently (single message); **wave-gate** dependency-ordered children (spawn the
    foundation first; spawn dependents on a re-run once it has merged into `epic_branch`):
    - `subagent_type: "task-decomposer"`
+   - **`run_in_background: false` on every `Agent` call — spawn SYNCHRONOUSLY and wait.** The tool
+     defaults to background; a backgrounded child is killed when this one-shot job ends (#1210).
+     "Concurrently" = issue the synchronous calls in a single message, not fire-and-forget.
    - prompt: `{ issue_number: <child number>, depth: 1, epic: <epic number>, epic_branch: <epic_branch> }`
      plus a one-line summary **and the epic's design invariants** so the child has context
      without a round-trip and can't silently diverge.

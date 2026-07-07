@@ -69,6 +69,9 @@ To split:
 3. Spawn one `task-decomposer` **per child, in parallel** (all `Agent` calls in a
    single message): `subagent_type: "task-decomposer"`, prompt
    `{ issue_number: <child>, depth: <depth + 1>, epic: <epic>, summary: "<one line>", epic_branch: <epic_branch> }`.
+   **`run_in_background: false` on every call — synchronous, wait for them.** The tool defaults to
+   background; a backgrounded child dies when this one-shot job ends (#1210). "In parallel" = the
+   synchronous calls share one message, not fire-and-forget.
 4. Report the children created + that decomposers were spawned. Stop.
 
 **Dependency order (when children depend on each other).** If one child must land before a
@@ -82,6 +85,9 @@ them up). Independent children still go out in parallel.
 
 Spawn one `task-worker` via the `Agent` tool:
 - `subagent_type: "task-worker"`
+- **`run_in_background: false` — spawn SYNCHRONOUSLY and wait for the worker to finish.** The tool
+  defaults to background; a backgrounded worker is killed when this one-shot job ends, so its PR is
+  never opened and the artifact-gate fails (#1210).
 - `isolation: "worktree"` — workers run in isolated git worktrees so parallel workers
   never collide on branches/files.
 - prompt: `{ issue_number: <this issue>, epic: <epic>, epic_branch: <epic_branch> }` plus a

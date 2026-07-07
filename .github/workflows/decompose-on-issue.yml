@@ -193,12 +193,22 @@ jobs:
                     action = 'Check the run log for the SDK/tooling error, fix the cause, then re-apply `delegate`.'
                   }
                 } else if (result) {
-                  // Ran to completion but produced nothing on the issue — usually an underspecified
-                  // task: the agent asked for clarification instead of building.
+                  // Ran to completion but produced nothing on the issue. DIAGNOSE the cause from the
+                  // agent's own final message — don't guess "underspecified" (#1210: that misdiagnosis
+                  // sent a human down the wrong path when the real cause was fire-and-forget).
                   const snippet = text.length > 600 ? text.slice(0, 600) + '…' : text
                   why = 'the agent finished its turn without opening a PR, creating sub-issues, or holding for sign-off'
-                  action = 'This usually means the issue is underspecified — add a concrete description + '
-                    + 'acceptance criteria so there is something to build, then re-apply `delegate`.'
+                  const backgrounded = /in the background|i['’]?ll be notified|running in the background|notified when (it|the) .*complet/i.test(text)
+                  if (backgrounded) {
+                    why = 'the agent **backgrounded its orchestration and exited** — in a one-shot CI job a '
+                      + 'backgrounded agent is killed when the job ends, so nothing persisted (fire-and-forget, #1210)'
+                    action = 'This is NOT an underspecified issue — it is a fire-and-forget bug. Spawned agents '
+                      + 'must run SYNCHRONOUSLY (`run_in_background: false`; see the `task-decompose` skill / #1210). '
+                      + 'Re-apply `delegate` once the pipeline fix is merged.'
+                  } else {
+                    action = 'This usually means the issue is underspecified — add a concrete description + '
+                      + 'acceptance criteria so there is something to build, then re-apply `delegate`.'
+                  }
                   if (snippet) why += `. Its final message was:\n\n> ${snippet.replace(/\n/g, '\n> ')}`
                 }
               }
