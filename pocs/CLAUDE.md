@@ -29,6 +29,11 @@ right shape before committing to a shared API.
 
 ## Working in here
 
+- **Scaffold a new POC with ONE command — `crouton init <name> --poc`.** It scaffolds into
+  `pocs/<name>` and runs the full pipeline (scaffold → generate → doctor → summary). Don't
+  reverse-engineer the CLI from `crouton-cli/lib/*` — that's the #1213/#1223 30-min timeout. Add
+  `--features a,b,c` / `--theme <t>` / `-d sqlite|pg` as needed; `--dry-run` to preview. (Details:
+  the `crouton` skill → "Scaffold a NEW app or POC".)
 - A poc may legitimately contain feature code destined for a package — that's not a
   layering violation here the way it would be in `apps/`. The `packages/` hard gate
   still applies to actual `packages/` edits; building the *precursor* inside a poc is

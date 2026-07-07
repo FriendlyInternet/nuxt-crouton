@@ -31,6 +31,22 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Acknowledge the trigger comment immediately: 👀 = "picked up, working on it". The
+      # final step swaps this for 🚀 (done) / 😕 (failed). The job guard already ensures we
+      # only get here for comments we actually act on, so the reaction is never spurious.
+      # (GitHub comment reactions have no ✅/❌ — 🚀/😕 are the closest.)
+      - name: React 👀 — resume picked up
+        id: eyes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const r = await github.rest.reactions.createForIssueComment({
+                ...context.repo, comment_id: context.payload.comment.id, content: 'eyes',
+              })
+              core.setOutput('id', String(r.data.id))
+            } catch (e) { core.warning(`could not add 👀 reaction: ${e.message}`) }
+
       # Timestamp run start so the artifact-gate (below) can tell "produced during THIS run".
       - id: t0
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
@@ -55,7 +71,8 @@ jobs:
       # AUTH: this is headless/unattended, so it MUST use an API key. Do NOT swap in a
       # subscription CLAUDE_CODE_OAUTH_TOKEN — subscription OAuth is for interactive
       # Claude Code use only, not CI automation (Anthropic Legal & Compliance terms).
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+      - id: agent
+        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
@@ -203,3 +220,44 @@ jobs:
                 + 'comment, not closed, and the block was cleared) — a silent no-op (the #590 failure mode). '
                 + 'Re-dispatch with `/delegate` to retry.' })
             core.setFailed(`Resume on #${issue_number} produced no artifact — likely a no-op; re-dispatch.`)
+
+      # Final feedback on the trigger comment: clear the 👀 and stamp the outcome — 🚀 done /
+      # 😕 failed (GitHub reactions have no ✅/❌). Comment ONLY on a hard agent error; a no-op
+      # is already explained by the artifact-gate above, so we don't duplicate it (#1216).
+      - name: React outcome — 🚀 done / 😕 failed
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment_id = context.payload.comment.id
+            const ok = '${{ job.status }}' === 'success'
+            const rid = '${{ steps.eyes.outputs.id }}'
+            if (rid) {
+              try { await github.rest.reactions.deleteForIssueComment({ ...context.repo, comment_id, reaction_id: Number(rid) }) }
+              catch (e) { core.warning(`could not remove 👀: ${e.message}`) }
+            }
+            try {
+              await github.rest.reactions.createForIssueComment({ ...context.repo, comment_id, content: ok ? 'rocket' : 'confused' })
+            } catch (e) { core.warning(`could not add outcome reaction: ${e.message}`) }
+            // Comment only when the agent step itself errored (billing / max-turns / tooling) —
+            // the artifact-gate already comments on the no-op case, so this avoids a duplicate.
+            if (!ok && '${{ steps.agent.outcome }}' === 'failure') {
+              const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.issue.number,
+                body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume failed_\n\n'
+                  + '😕 The resume from your comment **errored before finishing** (billing / max-turns / tooling). '
+                  + `🔗 [Run log](${runUrl}) — fix the cause, then comment again to retry.` })
+            }
+
+      # A cancelled resume (the 30-min timeout) must announce itself, not vanish silently (#1220).
+      - name: Flag a timeout / cancellation
+        if: cancelled()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume timed out_\n\n'
+                + '⏱️ This resume was **cancelled** — almost always the 30-min job timeout. It may have '
+                + `partially progressed. 🔗 [Run log](${runUrl}) — comment again to retry.` })

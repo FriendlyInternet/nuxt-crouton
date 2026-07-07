@@ -36,6 +36,31 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Mark the issue in-progress the moment the pipeline picks it up (#1218) — deterministic,
+      # so "where is it at" is visible without waiting for an agent to set it. Safe re: re-trigger:
+      # the job guard fires only when the *`delegate`* label is added, so this label event can't
+      # re-fire THIS workflow.
+      #
+      # CRUCIAL: add the label with the HARNESS APP TOKEN, not the default GITHUB_TOKEN. The label
+      # must *trigger* project-status.yml (which maps status:in-progress → the board's "In progress"
+      # column) — and events from the default GITHUB_TOKEN do NOT trigger other workflows. A
+      # default-token add would set the label but never move the board card. (#1218)
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+      - name: Mark the issue in-progress
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            try {
+              await github.rest.issues.addLabels({
+                ...context.repo, issue_number: context.payload.issue.number, labels: ['status:in-progress'],
+              })
+            } catch (e) { core.warning(`could not add status:in-progress: ${e.message}`) }
+
       # Timestamp the run start so the artifact-gate can tell "produced during this run"
       # from pre-existing comments/PRs.
       - id: t0
@@ -237,3 +262,21 @@ jobs:
 
             await github.rest.issues.createComment({ ...context.repo, issue_number, body })
             core.setFailed(`Artifact-gate: run on #${issue_number} produced no deliverable (no PR, not held for sign-off).`)
+
+      # A cancelled run (almost always the 30-min timeout-minutes cap on a heavy leaf like
+      # crouton init / a cold @fyit/* workspace build) must ANNOUNCE itself — not vanish
+      # silently on the Actions tab (#1220). `if: cancelled()` reliably fires on a timeout
+      # cancellation (the artifact-gate `if: always()` above already runs in that case).
+      - name: Flag a timeout / cancellation
+        if: cancelled()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _run timed out_\n\n'
+                + '⏱️ This run was **cancelled** — almost always the 30-min job timeout (a heavy leaf '
+                + 'like `crouton init` / a cold `@fyit/*` workspace build eating the budget). It may have '
+                + `partially progressed. 🔗 [Run log](${runUrl}) — re-apply the \`delegate\` label to `
+                + 'continue (idempotent, #611).' })
