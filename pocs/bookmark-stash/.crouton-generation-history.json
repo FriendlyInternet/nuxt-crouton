@@ -1,0 +1,15 @@
+[
+  {
+    "collection": "bookmarks",
+    "fields": [
+      "title",
+      "url",
+      "tags",
+      "notes"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-07-08T08:08:54.456Z",
+    "layer": "main",
+    "gitSha": "a8afe0fc"
+  }
+]
