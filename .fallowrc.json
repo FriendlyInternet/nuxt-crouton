@@ -11,6 +11,9 @@
     // Generated collection components: auto-registered (BookingsBookingsList) and
     // resolved dynamically via the croutonCollections registry — invisible statically
     "**/layers/**/app/components/**/*.vue",
+    // Generated collection composables + column defs: Nuxt auto-imported, used without an
+    // explicit import (useMainNotes / mainNotesColumns) — invisible statically (#1252)
+    "**/layers/**/app/composables/**/*.ts",
     // Loaded by crouton-core's nuxt.config at build time (join(process.cwd(), ...))
     "**/crouton.config.js",
     // Referenced from nuxt.config `css:` arrays, not imports
@@ -78,20 +81,45 @@
     // Internal notes/prototypes, not part of any code graph
     "writeups/**"
   ],
+  // Generated per-POC/app type aggregator: re-exports layer collection types resolved via Nuxt's
+  // .nuxt/tsconfig path aliases, which aren't built at audit time (fallback "resolver-less") — #1252
+  "ignoreUnresolvedImports": [
+    "**/collections/**/types"
+  ],
   // Deps that ARE used, via mechanisms invisible to import analysis (verified #1144)
   "ignoreDependencies": [
     "@iconify-json/vscode-icons", // Nuxt Icon discovers icon collections by package name
     "better-sqlite3",             // @nuxt/content local-dev driver, loaded dynamically
     "y-protocols",                // subpath-imported at runtime; wired via vite optimizeDeps
     "@fyit/crouton-events",       // meta-package distribution dep: makes extends resolvable
-    "@ai-sdk/ui-utils"            // imported by crouton-ai's built dist .d.ts (dist is ignored)
+    "@ai-sdk/ui-utils",           // imported by crouton-ai's built dist .d.ts (dist is ignored)
+    "@libsql/client"              // D1/sqlite runtime driver in generated scaffolds, loaded dynamically (like better-sqlite3) — #1252
   ],
   "duplicates": {
     // Hide pair-only clones; focus on widespread copy-paste
     // worth refactoring. Lower to 2 to report every duplicate pair.
     "minOccurrences": 3,
     "ignore": [
-      "fixtures/**" // throwaway generated e2e apps — duplication is by design
+      "fixtures/**", // throwaway generated e2e apps — duplication is by design
+      // Generated deploy-scaffold scripts — byte-identical across every app/POC by design (#1252)
+      "**/scripts/sync-wrangler-ids.mjs",
+      "**/scripts/inject-wrangler-env.mjs",
+      // Generated collection code (CRUD API routes, List/_Form, queries) — every collection is the
+      // same crouton template, so cross-collection duplication is by design, not copy-paste (#1252)
+      "**/layers/**/collections/**",
+      // Generated per-app scaffold files — byte-identical across every crouton app/POC (#1252)
+      "**/server/db/translations-ui.ts",
+      "**/server/utils/_cf-stubs/**"
+    ]
+  },
+  // Generated crouton code is boilerplate, not hand-maintained — exclude it from complexity
+  // (the CRAP is in the template, fixed once there, not per-POC). Same spirit as fixtures. (#1252)
+  "health": {
+    "ignore": [
+      "**/scripts/sync-wrangler-ids.mjs",
+      "**/scripts/inject-wrangler-env.mjs",
+      "**/layers/**/app/components/**/*.vue",
+      "**/layers/**/collections/**/server/**"
     ]
   },
   // Complexity/unit-size (CRAP, big functions) is advisory, not walling (#1235/#1236).
@@ -105,6 +133,13 @@
     "healthBaseline": ".fallow-health-baseline.json"
   },
   "rules": {
-    "unused-dependencies": "warn"
+    "unused-dependencies": "warn",
+    // Crouton apps/POCs `extends` the layer stack, which PROVIDES @nuxt/ui, zod, nanoid,
+    // tailwindcss, @fyit/crouton-auth etc. — so a consuming workspace imports them without
+    // re-declaring them in its own package.json. fallow's per-workspace check can't see the
+    // `extends`-provided deps, flagging them "unlisted" repo-wide. Advisory, not walling — the
+    // build + deploy are the real gate. Declaring them in generated package.json is the proper
+    // long-term fix (crouton-cli). (#1252)
+    "unlisted-dependencies": "warn"
   }
 }
