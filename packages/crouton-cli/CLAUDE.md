@@ -181,7 +181,13 @@ crouton init my-app --dry-run
 
 ### What `crouton init` Does
 
-1. **scaffold-app** — Creates the app skeleton (nuxt.config, package.json, schemas/, etc.)
+1. **scaffold-app** — Creates the app skeleton (nuxt.config, package.json, schemas/, etc.) and
+   writes a **`.crouton.json`** identifier (`{ name, kind: poc|app, cliVersion, scaffoldedAt }`) —
+   provenance + the marker the guard reads. **It refuses only a dir that's already scaffolded**
+   (has `.crouton.json` or `package.json`); it **scaffolds *into* a config-only dir** (one that has
+   just `crouton.config.js`, e.g. the schema-sign-off step's output) and **preserves that reviewed
+   config** — so the schema-first pipeline is a single `crouton init` command, not a manual
+   workaround (#1233).
 2. **generate** — Generates collections from `crouton.config.js` (if collections are defined)
 3. **migrations** — Generates the initial D1 migrations **build-first** (see the
    `crouton add` section). Runs only when deps are already installed; on a bare
