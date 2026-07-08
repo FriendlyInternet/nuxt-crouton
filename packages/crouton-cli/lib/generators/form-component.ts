@@ -79,10 +79,302 @@ function formatOptionLabel(value: unknown): string {
     .replace(/\b\w/g, char => char.toUpperCase())
 }
 
-export function generateFormComponent(data: Record<string, any>, config: Record<string, any> = {}): string {
-  const { pascalCase, pascalCasePlural, layerPascalCase, layerCamelCase, fields, singular, plural, layer, hierarchy } = data
-  const prefixedPascalCase = `${layerPascalCase}${pascalCase}`
-  const prefixedPascalCasePlural = `${layerPascalCase}${pascalCasePlural}`
+// Helper to resolve component names (handles component aliasing)
+function resolveComponentName(componentName: string): string {
+  // Transform EditorSimple to CroutonEditorSimple to match actual registration
+  if (componentName === 'EditorSimple') {
+    return 'CroutonEditorSimple'
+  }
+  // Transform ColorPicker to CroutonFormColorPicker (popover-based picker with presets)
+  if (componentName === 'ColorPicker') {
+    return 'CroutonFormColorPicker'
+  }
+  return componentName
+}
+
+// ── i18n field labels ──────────────────────────────────────────────────────
+// Field labels resolve through useT() so they can be translated/overridden per
+// team, with a humanized fallback so untranslated keys still render readable text.
+// Key convention: `{layer}.{plural}.fields.{fieldName}` (seed these in your locales).
+function createLabelAttr(fieldsI18nPrefix: string) {
+  return (field: Record<string, any>, fallbackOverride?: string): string => {
+    const fallback = fallbackOverride ?? field.meta?.label ?? humanizeFieldName(field.name)
+    return `:label="t('${fieldsI18nPrefix}.${field.name}', '${escapeLabel(fallback)}')"`
+  }
+}
+
+// ── Field markup rendering ─────────────────────────────────────────────────
+// Per-collection values the module-scope field/group renderers need (so they
+// don't close over generateFormComponent locals).
+interface FieldMarkupContext {
+  layerCamelCase: string
+  layerPascalCase: string
+  pascalCasePlural: string
+  formEnhancements: Record<string, any>
+  labelAttr: (field: Record<string, any>, fallbackOverride?: string) => string
+}
+
+// Field with a custom component specified in meta (e.g. EditorSimple)
+function renderCustomComponentField(field: Record<string, any>, ctx: FieldMarkupContext): string {
+  const componentName = resolveComponentName(field.meta.component)
+  return `        <UFormField ${ctx.labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <${componentName} v-model="state.${field.name}" />
+        </UFormField>`
+}
+
+// Dependent field (slotButtonGroup): options load from another field's selected value
+function renderDependentField(field: Record<string, any>, ctx: FieldMarkupContext): string {
+  const dependsOn = field.meta.dependsOn
+  const dependsOnField = field.meta.dependsOnField
+  const dependsOnCollection = field.meta.dependsOnCollection
+
+  // Resolve the collection name with layer prefix
+  const refCases = toCase(dependsOnCollection)
+  const resolvedCollection = `${ctx.layerCamelCase}${refCases.pascalCasePlural}`
+
+  // Determine dependent label (capitalize first letter)
+  const dependentLabel = dependsOn.charAt(0).toUpperCase() + dependsOn.slice(1)
+
+  return `        <UFormField ${ctx.labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <CroutonFormDependentFieldLoader
+            v-model="state.${field.name}"
+            :dependent-value="state.${dependsOn}"
+            dependent-collection="${resolvedCollection}"
+            dependent-field="${dependsOnField}"
+            dependent-label="${dependentLabel}"
+          />
+        </UFormField>`
+}
+
+// Static options select field (inline meta.options array → `${name}Options` const in the script)
+function renderInlineOptionsField(field: Record<string, any>, ctx: FieldMarkupContext): string {
+  return `        <UFormField ${ctx.labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <USelect
+            v-model="state.${field.name}"
+            :items="${field.name}Options"
+            class="w-full"
+            size="xl"
+          />
+        </UFormField>`
+}
+
+// Options select field backed by an options collection (admin-configurable dropdown)
+function renderOptionsCollectionField(field: Record<string, any>, ctx: FieldMarkupContext): string {
+  const optionsCollection = field.meta.optionsCollection
+  const optionsField = field.meta.optionsField
+  const creatable = field.meta.creatable !== false // Default to true
+
+  // Resolve the collection name with layer prefix
+  // If optionsCollection already starts with layer prefix, use as-is
+  // Otherwise add the layer prefix (for backwards compatibility with short names like "settings")
+  let resolvedOptionsCollection
+  if (optionsCollection.startsWith(ctx.layerCamelCase)) {
+    // Already has prefix (e.g., "bookingsSettings")
+    resolvedOptionsCollection = optionsCollection
+  } else {
+    // Add prefix (e.g., "settings" -> "bookingsSettings")
+    const refCases = toCase(optionsCollection)
+    resolvedOptionsCollection = `${ctx.layerCamelCase}${refCases.pascalCasePlural}`
+  }
+
+  return `        <UFormField ${ctx.labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <CroutonFormOptionsSelect
+            v-model="state.${field.name}"
+            options-collection="${resolvedOptionsCollection}"
+            options-field="${optionsField}"
+            ${ctx.labelAttr(field)}${!creatable
+              ? `
+            :creatable="false"`
+              : ''}
+          />
+        </UFormField>`
+}
+
+// Reference field (has refTarget): read-only card, multi-select or single reference select
+function renderReferenceField(field: Record<string, any>, ctx: FieldMarkupContext): string {
+  let resolvedCollection
+
+  // Check refScope to determine how to resolve the reference
+  if (field.refScope === 'adapter') {
+    // Adapter-scoped reference: use target as-is (no layer prefix)
+    // These are managed by connector packages (e.g., @fyit/crouton-supersaas)
+    resolvedCollection = field.refTarget
+  } else {
+    // Local layer reference: add layer prefix
+    const refCases = toCase(field.refTarget)
+    resolvedCollection = `${ctx.layerCamelCase}${refCases.pascalCasePlural}`
+  }
+
+  // Check if this is a read-only reference field
+  if (field.meta?.readOnly) {
+    return `        <UFormField ${ctx.labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <CroutonItemCardMini
+            v-if="state.${field.name}"
+            :id="state.${field.name}"
+            collection="${resolvedCollection}"
+          />
+          <span v-else class="text-gray-400 text-sm">Not set</span>
+        </UFormField>`
+  }
+
+  // Build optional label-key and filter-fields props when labelField is specified
+  const labelField = field.meta?.labelField
+  const labelKeyAttr = labelField && labelField !== 'title'
+    ? `\n            label-key="${labelField}"\n            :filter-fields="['${labelField}']"`
+    : ''
+
+  // Check if this is an array type (multi-select reference)
+  if (field.type === 'array') {
+    return `        <UFormField ${ctx.labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <CroutonFormReferenceSelect
+            v-model="state.${field.name}"
+            collection="${resolvedCollection}"
+            ${ctx.labelAttr(field)}${labelKeyAttr}
+            multiple
+          />
+        </UFormField>`
+  }
+
+  return `        <UFormField ${ctx.labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <CroutonFormReferenceSelect
+            v-model="state.${field.name}"
+            collection="${resolvedCollection}"
+            ${ctx.labelAttr(field)}${labelKeyAttr}
+          />
+        </UFormField>`
+}
+
+// Fallback rendering keyed on the field's (canonical) type
+function renderDefaultTypeField(field: Record<string, any>, ctx: FieldMarkupContext): string {
+  const { labelAttr } = ctx
+
+  // Image field type — base fallback uses CroutonImageUpload (crouton-assets contribution overrides with CroutonAssetsPicker)
+  if (field.type === 'image') {
+    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <CroutonImageUpload
+            v-model="state.${field.name}"
+            :crop="true"
+          />
+        </UFormField>`
+  }
+
+  // File field type — base fallback uses CroutonImageUpload
+  if (field.type === 'file') {
+    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <CroutonImageUpload
+            v-model="state.${field.name}"
+          />
+        </UFormField>`
+  }
+
+  // Default component selection based on field type
+  if (field.type === 'text') {
+    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <UTextarea v-model="state.${field.name}" class="w-full" size="xl" />
+        </UFormField>`
+  } else if (field.type === 'boolean') {
+    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <UCheckbox v-model="state.${field.name}" />
+        </UFormField>`
+  } else if (field.type === 'number' || field.type === 'decimal') {
+    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <UInputNumber v-model="state.${field.name}" class="w-full" />
+        </UFormField>`
+  } else if (field.type === 'date') {
+    const pickerProp = field.meta?.picker ? ' picker' : ''
+    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <CroutonCalendar v-model:date="state.${field.name}"${pickerProp} />
+        </UFormField>`
+  } else if (field.type === 'repeater') {
+    // Use the field's Input component from the field components folder
+    const fieldCases = toCase(field.name)
+    const componentName = `${ctx.layerPascalCase}${ctx.pascalCasePlural}${fieldCases.pascalCase}Input`
+    const addLabel = field.meta?.addLabel || 'Add Item'
+    const sortable = field.meta?.sortable !== false // Default to true
+
+    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <CroutonFormRepeater
+            v-model="state.${field.name}"
+            component-name="${componentName}"
+            add-label="${addLabel}"
+            ${sortable ? ':sortable="true"' : ':sortable="false"'}
+          />
+        </UFormField>`
+  } else if (field.type === 'json') {
+    // JSON field - use textarea with JSON serialization
+    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <UTextarea
+            :model-value="typeof state.${field.name} === 'string' ? state.${field.name} : JSON.stringify(state.${field.name}, null, 2)"
+            @update:model-value="(val) => { try { state.${field.name} = val ? JSON.parse(val) : {} } catch (e) { console.error('Invalid JSON:', e) } }"
+            class="w-full font-mono text-sm"
+            :rows="8"
+            placeholder="Enter JSON object"
+          />
+        </UFormField>`
+  } else if (field.type === 'array' && !field.refTarget) {
+    // Array field without refTarget - use textarea with array handling
+    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <UTextarea
+            :model-value="Array.isArray(state.${field.name}) ? state.${field.name}.join('\\n') : ''"
+            @update:model-value="(val) => state.${field.name} = val ? val.split('\\n').filter(Boolean) : []"
+            class="w-full"
+            :rows="6"
+            placeholder="Enter one value per line"
+          />
+          <p class="text-sm text-gray-500 mt-1">Enter one value per line</p>
+        </UFormField>`
+  } else {
+    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+          <UInput v-model="state.${field.name}" class="w-full" size="xl" />
+        </UFormField>`
+  }
+}
+
+// Render the form markup for one field, dispatching to the renderer matching its
+// meta/type shape. Order matters: contribution overrides win, then explicit
+// component/display hints, then references, then type-based defaults.
+function generateFieldMarkup(field: Record<string, any>, ctx: FieldMarkupContext): string {
+  // ── Contribution override takes priority ─────────────────────────────
+  const override = ctx.formEnhancements.fieldOverrides?.[field.name]
+  if (override !== undefined) {
+    // Empty string means hide the field; otherwise use the override template
+    return override
+  }
+
+  // Check if a custom component is specified in meta
+  if (field.meta?.component) {
+    return renderCustomComponentField(field, ctx)
+  }
+
+  // Check if this is a dependent field
+  if (field.meta?.displayAs === 'slotButtonGroup' && field.meta?.dependsOn && field.meta?.dependsOnField && field.meta?.dependsOnCollection) {
+    return renderDependentField(field, ctx)
+  }
+
+  // Check if this is a static options select field (inline meta.options array)
+  if (field.meta?.displayAs === 'optionsSelect' && Array.isArray(field.meta?.options) && !field.meta?.optionsCollection) {
+    return renderInlineOptionsField(field, ctx)
+  }
+
+  // Check if this is an options select field (admin-configurable dropdown)
+  if (field.meta?.displayAs === 'optionsSelect' && field.meta?.optionsCollection && field.meta?.optionsField) {
+    return renderOptionsCollectionField(field, ctx)
+  }
+
+  // Check if this is a reference field (has refTarget)
+  if (field.refTarget) {
+    return renderReferenceField(field, ctx)
+  }
+
+  return renderDefaultTypeField(field, ctx)
+}
+
+// ── Field analysis ─────────────────────────────────────────────────────────
+// Derive the field partitions and feature flags the generator branches on:
+// hierarchy handling, translatable vs regular fields, contribution exclusions,
+// and the display / inline-options lists.
+function analyzeFields(data: Record<string, any>, config: Record<string, any>) {
+  const { fields, plural, hierarchy } = data
 
   // Check for hierarchy support
   const hasHierarchy = hierarchy?.enabled === true
@@ -137,267 +429,31 @@ export function generateFormComponent(data: Record<string, any>, config: Record<
       && !f.meta?.optionsCollection
   )
 
-  // Helper to resolve component names (handles component aliasing)
-  const resolveComponentName = (componentName) => {
-    // Transform EditorSimple to CroutonEditorSimple to match actual registration
-    if (componentName === 'EditorSimple') {
-      return 'CroutonEditorSimple'
-    }
-    // Transform ColorPicker to CroutonFormColorPicker (popover-based picker with presets)
-    if (componentName === 'ColorPicker') {
-      return 'CroutonFormColorPicker'
-    }
-    return componentName
+  return {
+    hasHierarchy,
+    parentField,
+    translatableFieldNames,
+    hasTranslations,
+    translatableFields,
+    regularFields,
+    hasDateFields,
+    formEnhancements,
+    excludedFieldNames,
+    fieldsToDisplay,
+    fieldsWithInlineOptions
   }
+}
 
-  // ── i18n field labels ──────────────────────────────────────────────────────
-  // Field labels resolve through useT() so they can be translated/overridden per
-  // team, with a humanized fallback so untranslated keys still render readable text.
-  // Key convention: `{layer}.{plural}.fields.{fieldName}` (seed these in your locales).
-  const fieldsI18nPrefix = `${layer}.${plural}.fields`
-  const labelAttr = (field, fallbackOverride?: string): string => {
-    const fallback = fallbackOverride ?? field.meta?.label ?? humanizeFieldName(field.name)
-    return `:label="t('${fieldsI18nPrefix}.${field.name}', '${escapeLabel(fallback)}')"`
-  }
-
-  const generateFieldMarkup = (field) => {
-    // ── Contribution override takes priority ─────────────────────────────
-    const override = formEnhancements.fieldOverrides?.[field.name]
-    if (override !== undefined) {
-      // Empty string means hide the field; otherwise use the override template
-      return override
-    }
-
-    const fieldName = field.name.charAt(0).toUpperCase() + field.name.slice(1)
-
-    // Check if a custom component is specified in meta
-    if (field.meta?.component) {
-      const componentName = resolveComponentName(field.meta.component)
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <${componentName} v-model="state.${field.name}" />
-        </UFormField>`
-    }
-
-    // Check if this is a dependent field
-    if (field.meta?.displayAs === 'slotButtonGroup' && field.meta?.dependsOn && field.meta?.dependsOnField && field.meta?.dependsOnCollection) {
-      const dependsOn = field.meta.dependsOn
-      const dependsOnField = field.meta.dependsOnField
-      const dependsOnCollection = field.meta.dependsOnCollection
-
-      // Resolve the collection name with layer prefix
-      const refCases = toCase(dependsOnCollection)
-      const resolvedCollection = `${layerCamelCase}${refCases.pascalCasePlural}`
-
-      // Determine dependent label (capitalize first letter)
-      const dependentLabel = dependsOn.charAt(0).toUpperCase() + dependsOn.slice(1)
-
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonFormDependentFieldLoader
-            v-model="state.${field.name}"
-            :dependent-value="state.${dependsOn}"
-            dependent-collection="${resolvedCollection}"
-            dependent-field="${dependsOnField}"
-            dependent-label="${dependentLabel}"
-          />
-        </UFormField>`
-    }
-
-    // Check if this is a static options select field (inline meta.options array)
-    if (field.meta?.displayAs === 'optionsSelect' && Array.isArray(field.meta?.options) && !field.meta?.optionsCollection) {
-      const label = field.meta.label || fieldName
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <USelect
-            v-model="state.${field.name}"
-            :items="${field.name}Options"
-            class="w-full"
-            size="xl"
-          />
-        </UFormField>`
-    }
-
-    // Check if this is an options select field (admin-configurable dropdown)
-    if (field.meta?.displayAs === 'optionsSelect' && field.meta?.optionsCollection && field.meta?.optionsField) {
-      const optionsCollection = field.meta.optionsCollection
-      const optionsField = field.meta.optionsField
-      const label = field.meta.label || fieldName
-      const creatable = field.meta.creatable !== false // Default to true
-
-      // Resolve the collection name with layer prefix
-      // If optionsCollection already starts with layer prefix, use as-is
-      // Otherwise add the layer prefix (for backwards compatibility with short names like "settings")
-      let resolvedOptionsCollection
-      if (optionsCollection.startsWith(layerCamelCase)) {
-        // Already has prefix (e.g., "bookingsSettings")
-        resolvedOptionsCollection = optionsCollection
-      } else {
-        // Add prefix (e.g., "settings" -> "bookingsSettings")
-        const refCases = toCase(optionsCollection)
-        resolvedOptionsCollection = `${layerCamelCase}${refCases.pascalCasePlural}`
-      }
-
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonFormOptionsSelect
-            v-model="state.${field.name}"
-            options-collection="${resolvedOptionsCollection}"
-            options-field="${optionsField}"
-            ${labelAttr(field)}${!creatable
-              ? `
-            :creatable="false"`
-              : ''}
-          />
-        </UFormField>`
-    }
-
-    // Check if this is a reference field (has refTarget)
-    if (field.refTarget) {
-      let resolvedCollection
-
-      // Check refScope to determine how to resolve the reference
-      if (field.refScope === 'adapter') {
-        // Adapter-scoped reference: use target as-is (no layer prefix)
-        // These are managed by connector packages (e.g., @fyit/crouton-supersaas)
-        resolvedCollection = field.refTarget
-      } else {
-        // Local layer reference: add layer prefix
-        const refCases = toCase(field.refTarget)
-        resolvedCollection = `${layerCamelCase}${refCases.pascalCasePlural}`
-      }
-
-      // Check if this is a read-only reference field
-      if (field.meta?.readOnly) {
-        return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonItemCardMini
-            v-if="state.${field.name}"
-            :id="state.${field.name}"
-            collection="${resolvedCollection}"
-          />
-          <span v-else class="text-gray-400 text-sm">Not set</span>
-        </UFormField>`
-      }
-
-      // Build optional label-key and filter-fields props when labelField is specified
-      const labelField = field.meta?.labelField
-      const labelKeyAttr = labelField && labelField !== 'title'
-        ? `\n            label-key="${labelField}"\n            :filter-fields="['${labelField}']"`
-        : ''
-
-      // Check if this is an array type (multi-select reference)
-      if (field.type === 'array') {
-        return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonFormReferenceSelect
-            v-model="state.${field.name}"
-            collection="${resolvedCollection}"
-            ${labelAttr(field)}${labelKeyAttr}
-            multiple
-          />
-        </UFormField>`
-      }
-
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonFormReferenceSelect
-            v-model="state.${field.name}"
-            collection="${resolvedCollection}"
-            ${labelAttr(field)}${labelKeyAttr}
-          />
-        </UFormField>`
-    }
-
-    // Image field type — base fallback uses CroutonImageUpload (crouton-assets contribution overrides with CroutonAssetsPicker)
-    if (field.type === 'image') {
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonImageUpload
-            v-model="state.${field.name}"
-            :crop="true"
-          />
-        </UFormField>`
-    }
-
-    // File field type — base fallback uses CroutonImageUpload
-    if (field.type === 'file') {
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonImageUpload
-            v-model="state.${field.name}"
-          />
-        </UFormField>`
-    }
-
-    // Default component selection based on field type
-    if (field.type === 'text') {
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UTextarea v-model="state.${field.name}" class="w-full" size="xl" />
-        </UFormField>`
-    } else if (field.type === 'boolean') {
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UCheckbox v-model="state.${field.name}" />
-        </UFormField>`
-    } else if (field.type === 'number' || field.type === 'decimal') {
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UInputNumber v-model="state.${field.name}" class="w-full" />
-        </UFormField>`
-    } else if (field.type === 'date') {
-      const pickerProp = field.meta?.picker ? ' picker' : ''
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonCalendar v-model:date="state.${field.name}"${pickerProp} />
-        </UFormField>`
-    } else if (field.type === 'repeater') {
-      // Use the field's Input component from the field components folder
-      const fieldCases = toCase(field.name)
-      const componentName = `${layerPascalCase}${pascalCasePlural}${fieldCases.pascalCase}Input`
-      const addLabel = field.meta?.addLabel || 'Add Item'
-      const sortable = field.meta?.sortable !== false // Default to true
-
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonFormRepeater
-            v-model="state.${field.name}"
-            component-name="${componentName}"
-            add-label="${addLabel}"
-            ${sortable ? ':sortable="true"' : ':sortable="false"'}
-          />
-        </UFormField>`
-    } else if (field.type === 'json') {
-      // JSON field - use textarea with JSON serialization
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UTextarea
-            :model-value="typeof state.${field.name} === 'string' ? state.${field.name} : JSON.stringify(state.${field.name}, null, 2)"
-            @update:model-value="(val) => { try { state.${field.name} = val ? JSON.parse(val) : {} } catch (e) { console.error('Invalid JSON:', e) } }"
-            class="w-full font-mono text-sm"
-            :rows="8"
-            placeholder="Enter JSON object"
-          />
-        </UFormField>`
-    } else if (field.type === 'array' && !field.refTarget) {
-      // Array field without refTarget - use textarea with array handling
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UTextarea
-            :model-value="Array.isArray(state.${field.name}) ? state.${field.name}.join('\\n') : ''"
-            @update:model-value="(val) => state.${field.name} = val ? val.split('\\n').filter(Boolean) : []"
-            class="w-full"
-            :rows="6"
-            placeholder="Enter one value per line"
-          />
-          <p class="text-sm text-gray-500 mt-1">Enter one value per line</p>
-        </UFormField>`
-    } else {
-      return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UInput v-model="state.${field.name}" class="w-full" size="xl" />
-        </UFormField>`
-    }
-  }
-
-  // Generate parent picker section for hierarchy-enabled collections
-  // This uses CroutonFormParentSelect which excludes self and descendants
-  const parentPickerSection = hasHierarchy
-    ? `
-        <UFormField :label="t('crouton.form.parent', 'Parent')" name="${parentField}" class="not-last:pb-4">
-          <CroutonFormParentSelect
-            v-model="state.${parentField}"
-            collection="${layerCamelCase}${pascalCasePlural}"
-            :current-id="state.id"
-            :label="t('crouton.form.parent', 'Parent')"
-          />
-        </UFormField>`
-    : ''
-
+// ── Group assembly ─────────────────────────────────────────────────────────
+// Group the displayable fields by area (main/sidebar) and then by group,
+// ensuring groups that have contribution injections exist in the maps
+// (e.g. the coordinate field's group may be filtered out but we still need to inject the map)
+function buildFieldGroups(
+  fieldsToDisplay: Record<string, any>[],
+  fields: Record<string, any>[],
+  excludedFieldNames: Set<string>,
+  formEnhancements: Record<string, any>
+) {
   // Group fields by area and then by group
   const mainFields = fieldsToDisplay.filter(f => !f.meta?.area || f.meta.area === 'main')
   const sidebarFields = fieldsToDisplay.filter(f => f.meta?.area === 'sidebar')
@@ -405,8 +461,6 @@ export function generateFormComponent(data: Record<string, any>, config: Record<
   const mainGroups = groupFieldsByGroup(mainFields)
   const sidebarGroups = groupFieldsByGroup(sidebarFields)
 
-  // Ensure groups that have contribution injections exist in the map
-  // (e.g. the coordinate field's group may be filtered out but we still need to inject the map)
   for (const groupName of Object.keys(formEnhancements.groupInjections || {})) {
     if (!mainGroups.has(groupName === '' ? null : groupName) && !sidebarGroups.has(groupName === '' ? null : groupName)) {
       // Check if the excluded field that belonged to this group was main or sidebar
@@ -420,51 +474,49 @@ export function generateFormComponent(data: Record<string, any>, config: Record<
     }
   }
 
-  // Determine if we should use tabs (multiple main groups)
-  const useTabs = mainGroups.size > 1
-  // Sidebar is shown if there are sidebar fields OR if hierarchy is enabled (for parent picker)
-  const hasSidebar = sidebarGroups.size > 0 || hasHierarchy
+  return { mainGroups, sidebarGroups }
+}
 
-  // Generate navigation items from main groups
-  const navigationItems = useTabs
-    ? Array.from(mainGroups.keys()).map(groupName => ({
-        label: humanizeGroupName(groupName),
-        value: groupName || 'general'
-      }))
-    : []
+// Helper to generate a group section with flex layout
+function buildGroupSection(groupName: string | null, groupFields: Record<string, any>[], showConditionally: boolean, ctx: FieldMarkupContext): string {
+  const groupValue = groupName || 'general'
+  const fieldsMarkup = groupFields.map(field => generateFieldMarkup(field, ctx)).join('\n')
 
-  // Helper to generate a group section with flex layout
-  const generateGroupSection = (groupName, groupFields, showConditionally = false) => {
-    const title = humanizeGroupName(groupName)
-    const groupValue = groupName || 'general'
-    const fieldsMarkup = groupFields.map(generateFieldMarkup).join('\n')
+  // Inject contribution-provided content after this group
+  const groupKey = groupName || ''
+  const groupInjection = ctx.formEnhancements.groupInjections?.[groupKey] || ''
 
-    // Inject contribution-provided content after this group
-    const groupKey = groupName || ''
-    const groupInjection = formEnhancements.groupInjections?.[groupKey] || ''
+  const conditionalWrapper = showConditionally
+    ? `      <div v-show="!tabs || activeSection === '${groupValue}'" class="flex flex-col gap-4 p-1">\n`
+    : `      <div class="flex flex-col gap-4 p-1">\n`
 
-    const conditionalWrapper = showConditionally
-      ? `      <div v-show="!tabs || activeSection === '${groupValue}'" class="flex flex-col gap-4 p-1">\n`
-      : `      <div class="flex flex-col gap-4 p-1">\n`
-
-    return `${conditionalWrapper}${fieldsMarkup}${groupInjection}
+  return `${conditionalWrapper}${fieldsMarkup}${groupInjection}
       </div>`
-  }
+}
 
-  // Generate main area groups
-  const mainAreaMarkup = Array.from(mainGroups.entries())
-    .map(([groupName, groupFields]) => generateGroupSection(groupName, groupFields, useTabs))
-    .join('\n\n')
+// ── Template section builders ──────────────────────────────────────────────
 
-  // Generate sidebar area groups
-  const sidebarAreaMarkup = hasSidebar
-    ? Array.from(sidebarGroups.entries())
-        .map(([groupName, groupFields]) => generateGroupSection(groupName, groupFields, false))
-        .join('\n\n')
+// Generate parent picker section for hierarchy-enabled collections
+// This uses CroutonFormParentSelect which excludes self and descendants
+function buildParentPickerSection(hasHierarchy: boolean, parentField: string, layerCamelCase: string, pascalCasePlural: string): string {
+  return hasHierarchy
+    ? `
+        <UFormField :label="t('crouton.form.parent', 'Parent')" name="${parentField}" class="not-last:pb-4">
+          <CroutonFormParentSelect
+            v-model="state.${parentField}"
+            collection="${layerCamelCase}${pascalCasePlural}"
+            :current-id="state.id"
+            :label="t('crouton.form.parent', 'Parent')"
+          />
+        </UFormField>`
     : ''
+}
 
+// Add CroutonI18nInput if there are translatable fields
+// Use fallback to empty string to ensure string type compatibility
+function buildTranslationField(hasTranslations: boolean, translatableFieldNames: string[], translatableFields: Record<string, any>[], plural: string): string {
   // Build fieldComponents map for translatable fields with custom components
-  const fieldComponentsMap = {}
+  const fieldComponentsMap: Record<string, string> = {}
   translatableFields.forEach((field) => {
     if (field.meta?.component) {
       fieldComponentsMap[field.name] = resolveComponentName(field.meta.component)
@@ -472,9 +524,7 @@ export function generateFormComponent(data: Record<string, any>, config: Record<
   })
   const hasFieldComponents = Object.keys(fieldComponentsMap).length > 0
 
-  // Add CroutonI18nInput if there are translatable fields
-  // Use fallback to empty string to ensure string type compatibility
-  const translationField = hasTranslations
+  return hasTranslations
     ? `
 
       <CroutonI18nInput
@@ -493,49 +543,13 @@ export function generateFormComponent(data: Record<string, any>, config: Record<
         :label="t('crouton.form.translations', 'Translations')"
       />`
     : ''
+}
 
-  // Generate initial state fields with proper defaults (excluding id)
-  const stateFields = fields.filter(field => field.name !== 'id').map((field) => {
-    // Dependent fields need to default to null (CroutonFormDependentFieldLoader expects null or array)
-    if (field.meta?.dependsOn || field.meta?.displayAs === 'slotButtonGroup') {
-      return `  ${field.name}: null`
-    }
+// ── Script section builders ────────────────────────────────────────────────
 
-    // Array fields should default to [] or null
-    if (field.type === 'array') {
-      // Check if it's a reference field that might be nullable
-      if (field.refTarget) {
-        return `  ${field.name}: []`
-      }
-      return `  ${field.name}: []`
-    }
-
-    const defaultVal = field.type === 'boolean'
-      ? 'false'
-      : field.type === 'number' || field.type === 'decimal'
-        ? '0'
-        : field.type === 'date'
-          ? 'null'
-          : field.type === 'repeater' ? '[]' : '\'\''
-    return `  ${field.name}: ${defaultVal}`
-  }).join(',\n')
-
-  // Add translations to state if needed
-  const translationsState = hasTranslations ? ',\n  translations: {}' : ''
-
-  // Add hierarchy fields to state if needed (parentId, path, depth, order are auto-generated)
-  const hierarchyState = hasHierarchy
-    ? `,
-  ${parentField}: null,
-  ${hierarchy.pathField || 'path'}: '/',
-  ${hierarchy.depthField || 'depth'}: 0,
-  ${hierarchy.orderField || 'order'}: 0`
-    : ''
-
-  const typesPath = '../../types'
-
-  // Generate navigation items array for the template
-  const navigationItemsCode = useTabs
+// Generate navigation items array for the template (tabbed forms)
+function buildNavigationItemsCode(useTabs: boolean, navigationItems: Array<{ label: string, value: string }>): string {
+  return useTabs
     ? `const navigationItems = [
   ${navigationItems.map(item => `{ label: '${item.label}', value: '${item.value}' }`).join(',\n  ')}
 ]
@@ -543,9 +557,11 @@ export function generateFormComponent(data: Record<string, any>, config: Record<
 const tabs = ref(true)
 const activeSection = ref('${navigationItems[0]?.value || 'general'}')`
     : 'const tabs = ref(false)'
+}
 
-  // Generate inline options arrays for static USelect fields
-  const inlineOptionsCode = fieldsWithInlineOptions.length > 0
+// Generate inline options arrays for static USelect fields
+function buildInlineOptionsCode(fieldsWithInlineOptions: Record<string, any>[]): string {
+  return fieldsWithInlineOptions.length > 0
     ? fieldsWithInlineOptions.map((field) => {
         const options = field.meta.options
         const optionsArray = options.map((opt) => {
@@ -558,10 +574,12 @@ const activeSection = ref('${navigationItems[0]?.value || 'general'}')`
         return `const ${field.name}Options = [\n${optionsArray}\n]`
       }).join('\n\n')
     : ''
+}
 
-  // Generate field-to-group mapping for error tracking
+// Generate field-to-group mapping for error tracking
+function buildFieldToGroupCode(useTabs: boolean, mainGroups: Map<string | null, Record<string, any>[]>): string {
   const fieldGroupMapping = useTabs ? mainGroups : new Map()
-  const fieldToGroupCode = useTabs
+  return useTabs
     ? `
 // Map field names to their tab groups for error tracking
 const fieldToGroup: Record<string, string> = {
@@ -572,10 +590,10 @@ ${Array.from(fieldGroupMapping.entries())
   .join(',\n')}
 }`
     : ''
+}
 
-  // Generate error tracking code (only if tabs are used)
-  const errorTrackingCode = useTabs
-    ? `
+// Error tracking code (only emitted if tabs are used)
+const ERROR_TRACKING_CODE = `
 // Track validation errors for tab indicators
 const validationErrors = ref<Array<{ name: string; message: string }>>([])
 
@@ -602,16 +620,89 @@ const tabErrorCounts = computed(() => {
 const switchToTab = (tabValue: string) => {
   activeSection.value = tabValue
 }`
+
+// Hierarchy defaults snippet: new items get parentId/path/depth/order seeded
+function buildHierarchyDefaultsCode(hasHierarchy: boolean, hierarchy: Record<string, any>, parentField: string): string {
+  return hasHierarchy
+    ? `
+// Hierarchy defaults for new items (parentId, path, depth, order)
+const hierarchyDefaults = {
+  ${parentField}: null,
+  ${hierarchy.pathField || 'path'}: '/',
+  ${hierarchy.depthField || 'depth'}: 0,
+  ${hierarchy.orderField || 'order'}: 0
+}`
     : ''
+}
 
-  // Contribution script additions (geocoding, etc.)
-  const scriptAdditions = (formEnhancements.scriptAdditions || []).join('\n')
+// Date-hydration snippet: convert stored ISO strings to Date objects when editing
+function buildDateInitCode(hasDateFields: boolean, regularFields: Record<string, any>[]): string {
+  return hasDateFields
+    ? `
 
-  // Generate AI context header
-  const apiPath = `${layer}-${plural}`
-  const aiHeader = generateAIHeader(data, apiPath)
+// Convert date strings to Date objects for date fields during editing
+if (props.action === 'update' && props.activeItem?.id) {${regularFields
+  .filter(f => f.type === 'date')
+  .map(field => `
+  if (initialValues.${field.name}) {
+    initialValues.${field.name} = new Date(initialValues.${field.name})
+  }`).join('')}
+}`
+    : ''
+}
 
-  return `${aiHeader}<template>
+// The generated handleSubmit body (create/update/delete + optional date serialization)
+function buildHandleSubmitCode(hasDateFields: boolean, regularFields: Record<string, any>[], useTabs: boolean): string {
+  return `const handleSubmit = async () => {
+  try {${hasDateFields
+    ? `
+    // Serialize Date objects to ISO strings for API submission
+    const serializedData: Record<string, any> = { ...state.value }${regularFields
+      .filter(f => f.type === 'date')
+      .map(field => `
+    if (serializedData.${field.name} instanceof Date) {
+      serializedData.${field.name} = serializedData.${field.name}.toISOString()
+    }`).join('')}
+`
+    : ''}
+    if (props.action === 'create') {
+      await create(${hasDateFields ? 'serializedData' : 'state.value'})
+    } else if (props.action === 'update' && state.value.id) {
+      await update(state.value.id, ${hasDateFields ? 'serializedData' : 'state.value'})
+    } else if (props.action === 'delete') {
+      await deleteItems(props.items)
+    }
+${useTabs
+  ? `
+    // Clear validation errors on successful submission
+    validationErrors.value = []
+`
+  : ''}
+    close()
+
+  } catch (error) {
+    console.error('Form submission failed:', error)
+    // You can add toast notification here if available
+    // toast.add({ title: 'Error', description: 'Failed to submit form', color: 'red' })
+  }
+}`
+}
+
+// ── SFC assembly ───────────────────────────────────────────────────────────
+
+// Assemble the <template> half of the generated SFC
+function renderTemplateSection(opts: {
+  useTabs: boolean
+  mainAreaMarkup: string
+  translationField: string
+  hasSidebar: boolean
+  hasHierarchy: boolean
+  parentPickerSection: string
+  sidebarAreaMarkup: string
+}): string {
+  const { useTabs, mainAreaMarkup, translationField, hasSidebar, hasHierarchy, parentPickerSection, sidebarAreaMarkup } = opts
+
+  return `<template>
   <CroutonFormActionButton
     v-if="action === 'delete'"
     :action="action"
@@ -668,9 +759,40 @@ ${sidebarAreaMarkup}
       </template>
     </CroutonFormLayout>
   </UForm>
-</template>
+</template>`
+}
 
-<script setup lang="ts">
+// Assemble the <script setup> half of the generated SFC
+function renderScriptSection(opts: {
+  prefixedPascalCase: string
+  prefixedPascalCasePlural: string
+  typesPath: string
+  navigationItemsCode: string
+  inlineOptionsCode: string
+  fieldToGroupCode: string
+  errorTrackingCode: string
+  hierarchyDefaultsCode: string
+  hasHierarchy: boolean
+  dateInitCode: string
+  scriptAdditions: string
+  handleSubmitCode: string
+}): string {
+  const {
+    prefixedPascalCase,
+    prefixedPascalCasePlural,
+    typesPath,
+    navigationItemsCode,
+    inlineOptionsCode,
+    fieldToGroupCode,
+    errorTrackingCode,
+    hierarchyDefaultsCode,
+    hasHierarchy,
+    dateInitCode,
+    scriptAdditions,
+    handleSubmitCode
+  } = opts
+
+  return `<script setup lang="ts">
 import type { ${prefixedPascalCase}FormProps, ${prefixedPascalCase}FormData } from '${typesPath}'
 import use${prefixedPascalCasePlural} from '../composables/use${prefixedPascalCasePlural}'
 
@@ -691,68 +813,105 @@ const { create, update, deleteItems } = useCollectionMutation(collection)
 // useCrouton still manages modal state
 const { close, loading } = useCrouton()
 
-// Initialize form state with proper values (no watch needed!)${hasHierarchy
-  ? `
-// Hierarchy defaults for new items (parentId, path, depth, order)
-const hierarchyDefaults = {
-  ${parentField}: null,
-  ${hierarchy.pathField || 'path'}: '/',
-  ${hierarchy.depthField || 'depth'}: 0,
-  ${hierarchy.orderField || 'order'}: 0
-}`
-  : ''}
+// Initialize form state with proper values (no watch needed!)${hierarchyDefaultsCode}
 const initialValues = props.action === 'update' && props.activeItem?.id
   ? { ...defaultValue, ...props.activeItem }
-  : { ...defaultValue${hasHierarchy ? ', ...hierarchyDefaults' : ''} }${hasDateFields
-    ? `
-
-// Convert date strings to Date objects for date fields during editing
-if (props.action === 'update' && props.activeItem?.id) {${regularFields
-  .filter(f => f.type === 'date')
-  .map(field => `
-  if (initialValues.${field.name}) {
-    initialValues.${field.name} = new Date(initialValues.${field.name})
-  }`).join('')}
-}`
-    : ''}
+  : { ...defaultValue${hasHierarchy ? ', ...hierarchyDefaults' : ''} }${dateInitCode}
 
 // Draft state: seeded from defaults (required fields may start null/empty until
 // the user fills them; the zod schema validates on submit), so cast the initial
 // values to the validated shape.
 const state = ref<${prefixedPascalCase}FormData & { id?: string | null }>(initialValues as ${prefixedPascalCase}FormData & { id?: string | null })${scriptAdditions}
 
-const handleSubmit = async () => {
-  try {${hasDateFields
-    ? `
-    // Serialize Date objects to ISO strings for API submission
-    const serializedData: Record<string, any> = { ...state.value }${regularFields
-      .filter(f => f.type === 'date')
-      .map(field => `
-    if (serializedData.${field.name} instanceof Date) {
-      serializedData.${field.name} = serializedData.${field.name}.toISOString()
-    }`).join('')}
-`
-    : ''}
-    if (props.action === 'create') {
-      await create(${hasDateFields ? 'serializedData' : 'state.value'})
-    } else if (props.action === 'update' && state.value.id) {
-      await update(state.value.id, ${hasDateFields ? 'serializedData' : 'state.value'})
-    } else if (props.action === 'delete') {
-      await deleteItems(props.items)
-    }
-${useTabs
-  ? `
-    // Clear validation errors on successful submission
-    validationErrors.value = []
-`
-  : ''}
-    close()
-
-  } catch (error) {
-    console.error('Form submission failed:', error)
-    // You can add toast notification here if available
-    // toast.add({ title: 'Error', description: 'Failed to submit form', color: 'red' })
-  }
-}
+${handleSubmitCode}
 </script>`
+}
+
+export function generateFormComponent(data: Record<string, any>, config: Record<string, any> = {}): string {
+  const { pascalCase, pascalCasePlural, layerPascalCase, layerCamelCase, fields, plural, layer, hierarchy } = data
+  const prefixedPascalCase = `${layerPascalCase}${pascalCase}`
+  const prefixedPascalCasePlural = `${layerPascalCase}${pascalCasePlural}`
+
+  const {
+    hasHierarchy,
+    parentField,
+    translatableFieldNames,
+    hasTranslations,
+    translatableFields,
+    regularFields,
+    hasDateFields,
+    formEnhancements,
+    excludedFieldNames,
+    fieldsToDisplay,
+    fieldsWithInlineOptions
+  } = analyzeFields(data, config)
+
+  // Context handed to the module-scope field/group renderers
+  const ctx: FieldMarkupContext = {
+    layerCamelCase,
+    layerPascalCase,
+    pascalCasePlural,
+    formEnhancements,
+    labelAttr: createLabelAttr(`${layer}.${plural}.fields`)
+  }
+
+  const { mainGroups, sidebarGroups } = buildFieldGroups(fieldsToDisplay, fields, excludedFieldNames, formEnhancements)
+
+  // Determine if we should use tabs (multiple main groups)
+  const useTabs = mainGroups.size > 1
+  // Sidebar is shown if there are sidebar fields OR if hierarchy is enabled (for parent picker)
+  const hasSidebar = sidebarGroups.size > 0 || hasHierarchy
+
+  // Generate navigation items from main groups
+  const navigationItems = useTabs
+    ? Array.from(mainGroups.keys()).map(groupName => ({
+        label: humanizeGroupName(groupName),
+        value: groupName || 'general'
+      }))
+    : []
+
+  // Generate main area groups
+  const mainAreaMarkup = Array.from(mainGroups.entries())
+    .map(([groupName, groupFields]) => buildGroupSection(groupName, groupFields, useTabs, ctx))
+    .join('\n\n')
+
+  // Generate sidebar area groups
+  const sidebarAreaMarkup = hasSidebar
+    ? Array.from(sidebarGroups.entries())
+        .map(([groupName, groupFields]) => buildGroupSection(groupName, groupFields, false, ctx))
+        .join('\n\n')
+    : ''
+
+  // Generate AI context header
+  const apiPath = `${layer}-${plural}`
+  const aiHeader = generateAIHeader(data, apiPath)
+
+  const templateSection = renderTemplateSection({
+    useTabs,
+    mainAreaMarkup,
+    translationField: buildTranslationField(hasTranslations, translatableFieldNames, translatableFields, plural),
+    hasSidebar,
+    hasHierarchy,
+    parentPickerSection: buildParentPickerSection(hasHierarchy, parentField, layerCamelCase, pascalCasePlural),
+    sidebarAreaMarkup
+  })
+
+  const scriptSection = renderScriptSection({
+    prefixedPascalCase,
+    prefixedPascalCasePlural,
+    typesPath: '../../types',
+    navigationItemsCode: buildNavigationItemsCode(useTabs, navigationItems),
+    inlineOptionsCode: buildInlineOptionsCode(fieldsWithInlineOptions),
+    fieldToGroupCode: buildFieldToGroupCode(useTabs, mainGroups),
+    errorTrackingCode: useTabs ? ERROR_TRACKING_CODE : '',
+    hierarchyDefaultsCode: buildHierarchyDefaultsCode(hasHierarchy, hierarchy, parentField),
+    hasHierarchy,
+    dateInitCode: buildDateInitCode(hasDateFields, regularFields),
+    scriptAdditions: (formEnhancements.scriptAdditions || []).join('\n'),
+    handleSubmitCode: buildHandleSubmitCode(hasDateFields, regularFields, useTabs)
+  })
+
+  return `${aiHeader}${templateSection}
+
+${scriptSection}`
 }
