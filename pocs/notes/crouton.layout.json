@@ -1,0 +1,33 @@
+{
+  "id": "default",
+  "renderer": "panes",
+  "pattern": "master-detail",
+  "viable": true,
+  "tree": {
+    "renderer": "panes",
+    "root": {
+      "type": "split",
+      "direction": "horizontal",
+      "children": [
+        {
+          "type": "leaf",
+          "blockId": "collection-list",
+          "config": {
+            "collection": "mainNotes",
+            "heading": "Notes"
+          },
+          "defaultSize": 40
+        },
+        {
+          "type": "leaf",
+          "blockId": "entity-form",
+          "config": {
+            "collection": "mainNotes",
+            "heading": "Notes"
+          },
+          "defaultSize": 60
+        }
+      ]
+    }
+  }
+}
