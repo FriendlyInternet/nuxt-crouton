@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1783530770740,
+      "tag": "0000_tranquil_devos",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1783531027319,
+      "tag": "0001_melted_agent_brand",
+      "breakpoints": true
+    }
+  ]
+}
