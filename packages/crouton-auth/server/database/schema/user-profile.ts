@@ -7,7 +7,7 @@
  */
 import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
 import { relations } from 'drizzle-orm'
-import { user } from './auth'
+import { user } from './user'
 
 export const userProfile = sqliteTable('user_profile', {
   id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),

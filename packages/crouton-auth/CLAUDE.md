@@ -214,7 +214,7 @@ GITHUB_CLIENT_SECRET=
 
 ## Database Schema
 
-Located in `server/database/schema/auth.ts`:
+Located in `server/database/schema/auth.ts` (the `user` table itself lives in `schema/user.ts` so satellite tables like `user-profile.ts` can reference it without a circular import; `auth.ts` re-exports it):
 
 - `user` - User accounts
 - `session` - Active sessions
