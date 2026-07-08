@@ -18,6 +18,7 @@
  * </script>
  * ```
  */
+import type { Ref } from 'vue'
 import type { Session, User, Team } from '../../types'
 import { useAuthClientSafe } from '../../types/auth-client'
 
@@ -26,13 +27,29 @@ export interface SessionData {
   user: User
 }
 
-export function useSession() {
-  const authClient = useAuthClientSafe()
-  const config = useRuntimeConfig()
-  const debug = (config.public?.crouton?.auth as { debug?: boolean } | undefined)?.debug ?? false
-  const headers = import.meta.server ? useRequestHeaders() : undefined
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyRef = Ref<any>
 
-  // Shared state using useState (works in components, middleware, plugins)
+/**
+ * Everything the session helpers need: the auth client, request context,
+ * and the shared refs. Helpers receive the refs themselves (never `.value`)
+ * so reactivity is preserved.
+ */
+interface SessionContext {
+  authClient: ReturnType<typeof useAuthClientSafe>
+  debug: boolean
+  headers: ReturnType<typeof useRequestHeaders> | undefined
+  sessionState: AnyRef
+  userState: AnyRef
+  activeOrgState: AnyRef
+  userProfileState: AnyRef
+  isPendingState: Ref<boolean>
+  errorState: Ref<Error | null>
+  isListening: Ref<boolean>
+}
+
+// Shared state using useState (works in components, middleware, plugins)
+function createSessionState() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sessionState = useState<any>('crouton-auth-session', () => null)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,201 +64,231 @@ export function useSession() {
   // Track if we've set up the signal listener (once per app)
   const isListening = useState('crouton-auth-listening', () => false)
 
-  // Fetch session from Better Auth
-  async function fetchSession(): Promise<void> {
+  return {
+    sessionState,
+    userState,
+    activeOrgState,
+    userProfileState,
+    isPendingState,
+    errorState,
+    isListening
+  }
+}
+
+// Server-side session fetch: authClient is not available (client-only plugin), use $fetch directly
+async function fetchSessionOnServer(ctx: SessionContext): Promise<void> {
+  const { debug, headers, sessionState, userState } = ctx
+
+  const requestHeaders = headers ?? {}
+  const data = await ($fetch as (url: string, opts?: Record<string, unknown>) => Promise<{ session: unknown; user: unknown } | null>)(
+    '/api/auth/get-session',
+    { headers: requestHeaders }
+  ).catch(() => null)
+
+  sessionState.value = data?.session ?? null
+  userState.value = data?.user ?? null
+
+  if (debug) {
+    console.log('[@crouton/auth] useSession: server fetched', {
+      hasSession: !!data?.session,
+      user: (data?.user as Record<string, unknown> | null)?.email ?? null
+    })
+  }
+}
+
+// Client-side session fetch: use Better Auth client
+async function fetchSessionOnClient(ctx: SessionContext): Promise<void> {
+  const { authClient, debug, headers, sessionState, userState, errorState } = ctx
+
+  if (!authClient) return
+
+  const { data, error } = await authClient.getSession({
+    fetchOptions: { headers }
+  })
+
+  if (error) {
     if (debug) {
-      console.log('[@crouton/auth] useSession: fetching session...')
+      console.log('[@crouton/auth] useSession: fetch error', error)
     }
+    errorState.value = new Error(error.message ?? 'Session error')
+    sessionState.value = null
+    userState.value = null
+  } else {
+    sessionState.value = data?.session ?? null
+    userState.value = data?.user ?? null
 
-    isPendingState.value = true
-    errorState.value = null
-
-    try {
-      if (import.meta.server) {
-        // Server-side: authClient is not available (client-only plugin), use $fetch directly
-        const requestHeaders = headers ?? {}
-        const data = await ($fetch as (url: string, opts?: Record<string, unknown>) => Promise<{ session: unknown; user: unknown } | null>)(
-          '/api/auth/get-session',
-          { headers: requestHeaders }
-        ).catch(() => null)
-
-        sessionState.value = data?.session ?? null
-        userState.value = data?.user ?? null
-
-        if (debug) {
-          console.log('[@crouton/auth] useSession: server fetched', {
-            hasSession: !!data?.session,
-            user: (data?.user as Record<string, unknown> | null)?.email ?? null
-          })
-        }
-      } else {
-        // Client-side: use Better Auth client
-        if (!authClient) return
-
-        const { data, error } = await authClient.getSession({
-          fetchOptions: { headers }
-        })
-
-        if (error) {
-          if (debug) {
-            console.log('[@crouton/auth] useSession: fetch error', error)
-          }
-          errorState.value = new Error(error.message ?? 'Session error')
-          sessionState.value = null
-          userState.value = null
-        } else {
-          sessionState.value = data?.session ?? null
-          userState.value = data?.user ?? null
-
-          if (debug) {
-            console.log('[@crouton/auth] useSession: fetched', {
-              hasSession: !!data?.session,
-              user: data?.user?.email ?? null
-            })
-          }
-        }
-      }
-    } catch (err) {
-      console.error('[@crouton/auth] useSession: fetch failed', err)
-      errorState.value = err instanceof Error ? err : new Error('Session fetch failed')
-      sessionState.value = null
-      userState.value = null
-    } finally {
-      isPendingState.value = false
+    if (debug) {
+      console.log('[@crouton/auth] useSession: fetched', {
+        hasSession: !!data?.session,
+        user: data?.user?.email ?? null
+      })
     }
   }
+}
 
-  // Fetch active organization
-  // If no active org is set (400 error), try to find and set one automatically
-  async function fetchActiveOrg(): Promise<void> {
-    // Don't fetch org data if user is not authenticated (prevents 401 console errors)
-    if (!userState.value) return
-    if (!authClient?.organization?.getFullOrganization) return
+// Fetch session from Better Auth
+async function fetchSession(ctx: SessionContext): Promise<void> {
+  const { debug, sessionState, userState, isPendingState, errorState } = ctx
 
-    try {
-      const { data, error } = await authClient.organization.getFullOrganization({
+  if (debug) {
+    console.log('[@crouton/auth] useSession: fetching session...')
+  }
+
+  isPendingState.value = true
+  errorState.value = null
+
+  try {
+    if (import.meta.server) {
+      await fetchSessionOnServer(ctx)
+    } else {
+      await fetchSessionOnClient(ctx)
+    }
+  } catch (err) {
+    console.error('[@crouton/auth] useSession: fetch failed', err)
+    errorState.value = err instanceof Error ? err : new Error('Session fetch failed')
+    sessionState.value = null
+    userState.value = null
+  } finally {
+    isPendingState.value = false
+  }
+}
+
+// Fetch active organization
+// If no active org is set (400 error), try to find and set one automatically
+async function fetchActiveOrg(ctx: SessionContext): Promise<void> {
+  const { authClient, debug, headers, userState, activeOrgState } = ctx
+
+  // Don't fetch org data if user is not authenticated (prevents 401 console errors)
+  if (!userState.value) return
+  if (!authClient?.organization?.getFullOrganization) return
+
+  try {
+    const { data, error } = await authClient.organization.getFullOrganization({
+      fetchOptions: { headers }
+    })
+
+    if (error || !data) {
+      // No active org set - try to find and set one (personal/single-tenant mode)
+      if (debug) {
+        console.log('[@crouton/auth] useSession: no active org, trying to find one...')
+      }
+      await trySetDefaultOrg(ctx)
+      return
+    }
+
+    activeOrgState.value = data
+
+    if (debug) {
+      console.log('[@crouton/auth] useSession: fetched active org', {
+        org: data?.slug ?? null
+      })
+    }
+  } catch (err) {
+    if (debug) {
+      console.log('[@crouton/auth] useSession: getFullOrganization failed, trying to find org', err)
+    }
+    // Try to find and set an org
+    await trySetDefaultOrg(ctx)
+  }
+}
+
+// Try to find and set a default organization (for personal/single-tenant modes)
+async function trySetDefaultOrg(ctx: SessionContext): Promise<void> {
+  const { authClient, debug, headers, userState, activeOrgState } = ctx
+
+  // Don't try to set org if user is not authenticated (prevents 401 console errors)
+  if (!userState.value) return
+  if (!authClient?.organization) return
+
+  try {
+    // List user's organizations
+    const { data: orgs } = await authClient.organization.list({
+      fetchOptions: { headers }
+    })
+
+    if (debug) {
+      console.log('[@crouton/auth] useSession: found orgs', orgs?.length ?? 0)
+    }
+
+    if (orgs && orgs.length > 0) {
+      // Set the first org as active
+      const firstOrg = orgs[0]!
+      await authClient.organization.setActive({
+        organizationId: firstOrg.id
+      })
+
+      if (debug) {
+        console.log('[@crouton/auth] useSession: set active org to', firstOrg.slug)
+      }
+
+      // Now fetch the full org data
+      const { data: fullOrg } = await authClient.organization.getFullOrganization({
         fetchOptions: { headers }
       })
 
-      if (error || !data) {
-        // No active org set - try to find and set one (personal/single-tenant mode)
-        if (debug) {
-          console.log('[@crouton/auth] useSession: no active org, trying to find one...')
-        }
-        await trySetDefaultOrg()
-        return
-      }
-
-      activeOrgState.value = data
-
-      if (debug) {
-        console.log('[@crouton/auth] useSession: fetched active org', {
-          org: data?.slug ?? null
-        })
-      }
-    } catch (err) {
-      if (debug) {
-        console.log('[@crouton/auth] useSession: getFullOrganization failed, trying to find org', err)
-      }
-      // Try to find and set an org
-      await trySetDefaultOrg()
+      activeOrgState.value = fullOrg ?? null
     }
+  } catch (err) {
+    if (debug) {
+      console.log('[@crouton/auth] useSession: failed to set default org', err)
+    }
+    activeOrgState.value = null
   }
+}
 
-  // Try to find and set a default organization (for personal/single-tenant modes)
-  async function trySetDefaultOrg(): Promise<void> {
-    // Don't try to set org if user is not authenticated (prevents 401 console errors)
-    if (!userState.value) return
-    if (!authClient?.organization) return
+// Fetch user profile (locale, timezone, etc.) — separate from session
+async function fetchUserProfile(ctx: SessionContext): Promise<void> {
+  const { debug, headers, userState, userProfileState } = ctx
 
-    try {
-      // List user's organizations
-      const { data: orgs } = await authClient.organization.list({
-        fetchOptions: { headers }
+  if (!userState.value) return
+
+  try {
+    const profile = await $fetch('/api/users/me/profile', {
+      headers: headers as Record<string, string> | undefined,
+    })
+    userProfileState.value = profile
+
+    // Auto-apply saved locale on login
+    if (import.meta.client && profile && (profile as Record<string, unknown>).locale) {
+      try {
+        const { setLocale } = useI18n()
+        setLocale((profile as Record<string, unknown>).locale as any)
+      } catch {
+        // i18n not available — skip
+      }
+    }
+
+    if (debug) {
+      console.log('[@crouton/auth] useSession: fetched user profile', {
+        locale: (profile as Record<string, unknown>)?.locale ?? null,
       })
-
-      if (debug) {
-        console.log('[@crouton/auth] useSession: found orgs', orgs?.length ?? 0)
-      }
-
-      if (orgs && orgs.length > 0) {
-        // Set the first org as active
-        const firstOrg = orgs[0]!
-        await authClient.organization.setActive({
-          organizationId: firstOrg.id
-        })
-
-        if (debug) {
-          console.log('[@crouton/auth] useSession: set active org to', firstOrg.slug)
-        }
-
-        // Now fetch the full org data
-        const { data: fullOrg } = await authClient.organization.getFullOrganization({
-          fetchOptions: { headers }
-        })
-
-        activeOrgState.value = fullOrg ?? null
-      }
-    } catch (err) {
-      if (debug) {
-        console.log('[@crouton/auth] useSession: failed to set default org', err)
-      }
-      activeOrgState.value = null
     }
+  } catch {
+    // Profile not found or endpoint not available — that's fine
+    userProfileState.value = null
   }
+}
 
-  // Fetch user profile (locale, timezone, etc.) — separate from session
-  async function fetchUserProfile(): Promise<void> {
-    if (!userState.value) return
+// Update user profile fields
+async function updateUserProfileImpl(ctx: SessionContext, data: { locale?: string | null }): Promise<void> {
+  if (!ctx.userState.value) return
 
-    try {
-      const profile = await $fetch('/api/users/me/profile', {
-        headers: headers as Record<string, string> | undefined,
-      })
-      userProfileState.value = profile
-
-      // Auto-apply saved locale on login
-      if (import.meta.client && profile && (profile as Record<string, unknown>).locale) {
-        try {
-          const { setLocale } = useI18n()
-          setLocale((profile as Record<string, unknown>).locale as any)
-        } catch {
-          // i18n not available — skip
-        }
-      }
-
-      if (debug) {
-        console.log('[@crouton/auth] useSession: fetched user profile', {
-          locale: (profile as Record<string, unknown>)?.locale ?? null,
-        })
-      }
-    } catch {
-      // Profile not found or endpoint not available — that's fine
-      userProfileState.value = null
-    }
+  try {
+    const profile = await $fetch('/api/users/me/profile', {
+      method: 'PATCH',
+      body: data,
+    })
+    ctx.userProfileState.value = profile
+  } catch (err) {
+    console.warn('[@crouton/auth] useSession: failed to update user profile', err)
   }
+}
 
-  // Update user profile fields
-  async function updateUserProfile(data: { locale?: string | null }): Promise<void> {
-    if (!userState.value) return
+// Set up the client signal listener (once per app lifecycle) + initial fetches,
+// and the server-side one-time SSR fetch
+function setupSessionSync(ctx: SessionContext): void {
+  const { authClient, debug, userState, isPendingState, isListening } = ctx
 
-    try {
-      const profile = await $fetch('/api/users/me/profile', {
-        method: 'PATCH',
-        body: data,
-      })
-      userProfileState.value = profile
-    } catch (err) {
-      console.warn('[@crouton/auth] useSession: failed to update user profile', err)
-    }
-  }
-
-  // Convenience: update user locale
-  async function updateUserLocale(locale: string): Promise<void> {
-    return updateUserProfile({ locale })
-  }
-
-  // Set up signal listener on client (once per app lifecycle)
   if (import.meta.client && authClient && !isListening.value) {
     isListening.value = true
 
@@ -258,19 +305,19 @@ export function useSession() {
         console.log('[@crouton/auth] useSession: session signal received')
       }
 
-      await fetchSession()
+      await fetchSession(ctx)
       // Only fetch org and profile if user is authenticated (prevents 401 console errors)
       if (userState.value) {
-        await fetchActiveOrg()
-        await fetchUserProfile()
+        await fetchActiveOrg(ctx)
+        await fetchUserProfile(ctx)
       }
     })
 
     // Initial fetch - only fetch org and profile if session exists
-    fetchSession().then(() => {
+    fetchSession(ctx).then(() => {
       if (userState.value) {
-        fetchActiveOrg()
-        fetchUserProfile()
+        fetchActiveOrg(ctx)
+        fetchUserProfile(ctx)
       }
     })
   }
@@ -279,16 +326,62 @@ export function useSession() {
   if (import.meta.server && isPendingState.value) {
     // Use callOnce to avoid duplicate fetches during SSR
     callOnce('crouton-auth-ssr-fetch', async () => {
-      await fetchSession()
+      await fetchSession(ctx)
       // Only fetch org and profile if user is authenticated (prevents 401 console errors)
       if (userState.value) {
-        await fetchActiveOrg()
-        await fetchUserProfile()
+        await fetchActiveOrg(ctx)
+        await fetchUserProfile(ctx)
       }
     })
   }
+}
 
-  // Computed accessors for cleaner API
+// Normalize the raw Better Auth organization payload into a Team
+function mapActiveOrganization(rawOrg: unknown): Team {
+  const org = rawOrg as {
+    id: string
+    name: string
+    slug: string
+    logo?: string | null
+    metadata?: string | Record<string, unknown> | null
+    personal?: boolean | number | null
+    isDefault?: boolean | number | null
+    ownerId?: string | null
+    createdAt: string | Date
+  }
+
+  // Parse metadata if it's a string
+  let metadata: Record<string, unknown> = {}
+  if (org.metadata) {
+    try {
+      metadata = typeof org.metadata === 'string' ? JSON.parse(org.metadata) : org.metadata
+    } catch {
+      metadata = {}
+    }
+  }
+
+  // SQLite returns 0/1 for booleans
+  const isPersonal = org.personal === true || org.personal === 1 || metadata.personal === true
+  const isDefaultOrg = org.isDefault === true || org.isDefault === 1 || metadata.isDefault === true
+
+  return {
+    id: org.id,
+    name: org.name,
+    slug: org.slug,
+    logo: org.logo ?? null,
+    metadata,
+    personal: isPersonal,
+    isDefault: isDefaultOrg,
+    ownerId: org.ownerId ?? (metadata.ownerId as string | undefined),
+    createdAt: new Date(org.createdAt),
+    updatedAt: new Date(org.createdAt)
+  }
+}
+
+// Computed accessors for cleaner API
+function createSessionComputeds(ctx: SessionContext) {
+  const { sessionState, userState, activeOrgState, userProfileState, isPendingState, errorState } = ctx
+
   const session = computed<Session | null>(() => {
     if (!sessionState.value) return null
     const s = sessionState.value as Record<string, unknown>
@@ -321,44 +414,7 @@ export function useSession() {
 
   const activeOrganization = computed<Team | null>(() => {
     if (!activeOrgState.value) return null
-    const org = activeOrgState.value as {
-      id: string
-      name: string
-      slug: string
-      logo?: string | null
-      metadata?: string | Record<string, unknown> | null
-      personal?: boolean | number | null
-      isDefault?: boolean | number | null
-      ownerId?: string | null
-      createdAt: string | Date
-    }
-
-    // Parse metadata if it's a string
-    let metadata: Record<string, unknown> = {}
-    if (org.metadata) {
-      try {
-        metadata = typeof org.metadata === 'string' ? JSON.parse(org.metadata) : org.metadata
-      } catch {
-        metadata = {}
-      }
-    }
-
-    // SQLite returns 0/1 for booleans
-    const isPersonal = org.personal === true || org.personal === 1 || metadata.personal === true
-    const isDefaultOrg = org.isDefault === true || org.isDefault === 1 || metadata.isDefault === true
-
-    return {
-      id: org.id,
-      name: org.name,
-      slug: org.slug,
-      logo: org.logo ?? null,
-      metadata,
-      personal: isPersonal,
-      isDefault: isDefaultOrg,
-      ownerId: org.ownerId ?? (metadata.ownerId as string | undefined),
-      createdAt: new Date(org.createdAt),
-      updatedAt: new Date(org.createdAt)
-    }
+    return mapActiveOrganization(activeOrgState.value)
   })
 
   const userLocale = computed<string | null>(() => {
@@ -378,27 +434,76 @@ export function useSession() {
     }
   })
 
+  // Raw active org state (includes members from getFullOrganization)
+  const activeOrgRaw = computed(() => activeOrgState.value)
+
+  return {
+    session,
+    user,
+    activeOrganization,
+    userLocale,
+    isPending,
+    error,
+    isAuthenticated,
+    sessionData,
+    activeOrgRaw
+  }
+}
+
+export function useSession() {
+  const authClient = useAuthClientSafe()
+  const config = useRuntimeConfig()
+  const debug = (config.public?.crouton?.auth as { debug?: boolean } | undefined)?.debug ?? false
+  const headers = import.meta.server ? useRequestHeaders() : undefined
+
+  const ctx: SessionContext = {
+    authClient,
+    debug,
+    headers,
+    ...createSessionState()
+  }
+
+  setupSessionSync(ctx)
+
+  const {
+    session,
+    user,
+    activeOrganization,
+    userLocale,
+    isPending,
+    error,
+    isAuthenticated,
+    sessionData,
+    activeOrgRaw
+  } = createSessionComputeds(ctx)
+
   // Methods
   async function refresh(): Promise<void> {
     if (debug) {
       console.log('[@crouton/auth] useSession: refresh called')
     }
-    await fetchSession()
-    await fetchActiveOrg()
+    await fetchSession(ctx)
+    await fetchActiveOrg(ctx)
   }
 
   async function clear(): Promise<void> {
     if (authClient) {
       await authClient.signOut()
     }
-    sessionState.value = null
-    userState.value = null
-    activeOrgState.value = null
-    userProfileState.value = null
+    ctx.sessionState.value = null
+    ctx.userState.value = null
+    ctx.activeOrgState.value = null
+    ctx.userProfileState.value = null
   }
 
-  // Raw active org state (includes members from getFullOrganization)
-  const activeOrgRaw = computed(() => activeOrgState.value)
+  async function updateUserProfile(data: { locale?: string | null }): Promise<void> {
+    return updateUserProfileImpl(ctx, data)
+  }
+
+  // Convenience: update user locale
+  async function updateUserLocale(locale: string): Promise<void> {
+    return updateUserProfile({ locale })
+  }
 
   return {
     // Raw data (for advanced use)
