@@ -100,6 +100,16 @@
       "fixtures/**" // throwaway generated e2e apps — duplication is by design
     ]
   },
+  // Complexity/unit-size (CRAP, big functions) is advisory, not walling (#1235/#1236).
+  // fallow bundles dead-code + complexity + duplication into ONE audit pass/fail with no
+  // per-category "warn" switch — so we snapshot today's complexity and gate only on findings
+  // WORSE than the snapshot: touching a legacy big function passes, NEW mess is still blocked,
+  // dead-code + duplication stay strict. Regenerate the ratchet as we burn legacy down:
+  //   npx fallow health --save-baseline .fallow-health-baseline.json
+  // (kept at repo root, not .fallow/, because fallow self-ignores its .fallow/ cache dir.)
+  "audit": {
+    "healthBaseline": ".fallow-health-baseline.json"
+  },
   "rules": {
     "unused-dependencies": "warn"
   }
