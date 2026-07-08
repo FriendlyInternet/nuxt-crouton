@@ -17,13 +17,14 @@ import { readFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { validate } from './schema.mjs'
+import { parseArgs } from '../lib/cli-args.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const DEFAULT_LEDGER = join(ROOT, 'writeups/reports/eval-ledger.jsonl')
 
-const args = parseArgs(process.argv.slice(2))
+const args = parseArgs(process.argv.slice(2), { boolean: ['stdin', 'check'] })
 const ledgerPath = args.ledger ? String(args.ledger) : DEFAULT_LEDGER
-const checkOnly = '--check' in rawFlags(process.argv)
+const checkOnly = 'check' in args
 
 let input
 if ('stdin' in args) {
@@ -74,23 +75,3 @@ if (checkOnly) {
 if (!existsSync(dirname(ledgerPath))) mkdirSync(dirname(ledgerPath), { recursive: true })
 appendFileSync(ledgerPath, JSON.stringify(res.record) + '\n')
 console.log(`✓ appended to ${ledgerPath.replace(ROOT + '/', '')} (${res.record.flow} · ${res.record.model} · ${res.record.outcome})`)
-
-// --- tiny arg parser (no deps) ---
-function parseArgs(argv) {
-  const out = {}
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (!a.startsWith('--')) continue
-    const key = a.slice(2)
-    if (key === 'stdin' || key === 'check') { out[key] = true; continue }
-    const next = argv[i + 1]
-    if (next === undefined || next.startsWith('--')) { out[key] = true }
-    else { out[key] = next; i++ }
-  }
-  return out
-}
-function rawFlags(argv) {
-  const f = {}
-  for (const a of argv) if (a.startsWith('--')) f[a] = true
-  return f
-}

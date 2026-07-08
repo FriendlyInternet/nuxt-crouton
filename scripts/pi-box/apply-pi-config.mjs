@@ -22,6 +22,7 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseArgs } from '../lib/cli-args.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const HOME = process.env.HOME || ''
@@ -105,13 +106,3 @@ function plural(n, verb) { return n === 0 ? `nothing to ${verb}` : `${n} to ${ve
 function str(v, d) { return typeof v === 'string' ? v : d }
 function log(m) { process.stdout.write(m + '\n') }
 function die(m) { process.stderr.write(`ERROR: ${m}\n`); process.exit(1) }
-function parseArgs(argv) {
-  const out = {}
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (!a.startsWith('--')) continue
-    out[a.slice(2)] = isValue(argv[i + 1]) ? argv[++i] : true
-  }
-  return out
-}
-function isValue(tok) { return tok !== undefined && !tok.startsWith('--') }
