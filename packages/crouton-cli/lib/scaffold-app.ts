@@ -2,10 +2,18 @@
 import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import consola from 'consola'
 import { loadModules } from './module-registry.ts'
 import { getFrameworkPackages } from './utils/framework-packages.ts'
+
+// crouton-cli version, stamped into each scaffolded app's .crouton.json (provenance, #1233).
+const CROUTON_CLI_VERSION = (() => {
+  try {
+    return JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8')).version
+  } catch { return 'unknown' }
+})()
 
 // Wrangler helper scripts are shipped as raw templates (they're app-name-agnostic —
 // they read the app's own wrangler.jsonc at runtime) and copied verbatim into the
@@ -616,6 +624,15 @@ export async function scaffoldApp(
     { path: 'package.json', content: tmplPackageJson(vars) },
     { path: 'nuxt.config.ts', content: tmplNuxtConfig(vars) },
     { path: 'crouton.config.js', content: tmplCroutonConfig(vars) },
+    // Identifier + provenance (#1233): marks the dir as a scaffolded crouton app (the guard reads
+    // it to distinguish "already scaffolded" from a config-only dir) and records how it was made.
+    { path: '.crouton.json', content: JSON.stringify({
+      crouton: true,
+      name,
+      kind: (outDir || '').startsWith('pocs/') ? 'poc' : 'app',
+      cliVersion: CROUTON_CLI_VERSION,
+      scaffoldedAt: new Date().toISOString(),
+    }, null, 2) + '\n' },
     { path: '.env', content: tmplEnv(authSecret) },
     { path: '.env.example', content: tmplEnvExample() },
     { path: '.gitignore', content: tmplGitignore() },
@@ -662,16 +679,28 @@ export async function scaffoldApp(
     return { files, appDir }
   }
 
-  // Check if directory already exists
-  if (await access(appDir).then(() => true).catch(() => false)) {
-    throw new Error(`Directory "${appDir}" already exists. Remove it first or choose a different name.`)
+  // Refuse a dir that's ALREADY a scaffolded crouton app (`.crouton.json`) or some other project
+  // (`package.json`) — but ALLOW scaffolding INTO a config-only dir, e.g. the schema-sign-off step
+  // already wrote `crouton.config.js` (#1233). That's what makes the schema-first pipeline a single
+  // `crouton init` command instead of a 100-turn improvised workaround.
+  const exists = (f: string) => access(join(appDir, f)).then(() => true).catch(() => false)
+  if (await exists('.crouton.json')) {
+    throw new Error(`"${appDir}" is already a scaffolded crouton app (.crouton.json present). Remove it or choose a different name.`)
   }
+  if (await exists('package.json')) {
+    throw new Error(`"${appDir}" already exists and looks like a project (has package.json). Remove it or choose a different name.`)
+  }
+  const hadConfig = await exists('crouton.config.js')
 
-  // Write all files
-  consola.info(`\n  Scaffolding ${name}...\n`)
+  // Write all files (preserving an already-present crouton.config.js — the reviewed schema).
+  consola.info(`\n  Scaffolding ${name}${hadConfig ? ' (into existing config-only dir)' : ''}...\n`)
 
   for (const file of files) {
     const filePath = join(appDir, file.path)
+    if (file.path === 'crouton.config.js' && hadConfig) {
+      consola.info('  • crouton.config.js exists — preserving the reviewed config')
+      continue
+    }
     await mkdir(join(filePath, '..'), { recursive: true })
     await writeFile(filePath, file.content)
     consola.success('  + ' + file.path)
