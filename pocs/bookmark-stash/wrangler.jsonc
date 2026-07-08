@@ -30,7 +30,7 @@
   // via scripts/inject-wrangler-env.mjs before deploying.
   "env": {
     "staging": {
-      "routes": [{ "pattern": "bookmark-stash-staging.pmcp.dev", "custom_domain": true }],
+      "routes": [{ "pattern": "bookmark-stash.pmcp.dev", "custom_domain": true }],
       "d1_databases": [
         {
           "binding": "DB",
