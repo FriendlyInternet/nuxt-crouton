@@ -1,0 +1,24 @@
+{
+  "table": "main_bookmarks",
+  "key": "title",
+  "rows": [
+    {
+      "title": "Nuxt documentation",
+      "url": "https://nuxt.com/docs",
+      "tags": "reference, nuxt",
+      "notes": "Official Nuxt 4 docs — start here for module/config questions."
+    },
+    {
+      "title": "Vue 3 Composition API guide",
+      "url": "https://vuejs.org/guide/extras/composition-api-faq.html",
+      "tags": "reference, vue",
+      "notes": "Good refresher on when to reach for the Composition API."
+    },
+    {
+      "title": "Cloudflare Workers pricing",
+      "url": "https://developers.cloudflare.com/workers/platform/pricing/",
+      "tags": "reading",
+      "notes": "Check before scaling up a Worker-based deploy."
+    }
+  ]
+}
