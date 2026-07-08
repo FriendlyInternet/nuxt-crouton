@@ -49,6 +49,16 @@ a feature branch.
      + **stop** (see "Asking the human"). The pipeline (epic branch + dependency order)
      is supposed to give you the prerequisite; if it's absent, the right move is to wait,
      not to invent it.
+   - **The documented/expected path fails unexpectedly ⇒ STOP (do NOT improvise) (#1229).**
+     If the command or approach the issue/skill/docs told you to run fails in a way you didn't
+     anticipate — a tool errors (e.g. `crouton init` → *"directory already exists"*), a generator
+     refuses, a step behaves differently than documented — do **NOT** improvise an alternative,
+     hand-roll what the tool was supposed to do, or grind through a workaround. That is how the
+     #1213 pi run turned a one-command scaffold into **109 turns / $4.14** of manual work that was
+     off-standard **and hid the real bug**. An unexpected failure of the *intended* path is a
+     **stop signal**, not a puzzle to solve: comment the exact error + what you tried + what you'd
+     need to proceed, `@mention` `NOTIFY_HANDLE`, set `status:blocked`, and **stop**. Bounded cost
+     (~5 turns, not 100+), the real problem surfaced for a one-time fix, no non-conformant output.
    - **Don't silently diverge from the epic's design.** If implementing the issue as
      written would contradict the epic's stated model/invariant (e.g. the epic says "use
      the generic `print_jobs` table" but the path of least resistance is to extend the old
