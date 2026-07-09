@@ -51,7 +51,13 @@
     "docs/scripts/**",
     // Package test harnesses incl. mocks wired via vitest config aliases
     "packages/*/tests/**",
-    "pocs/*/scripts/**"
+    "pocs/*/scripts/**",
+    // Nuxt `#alias` targets (nuxt.config alias maps) — invisible to import analysis (#1239):
+    // '#crouton/types' → collections.ts (crouton-core/nuxt.config.ts:175), consumed by
+    // useCollectionQuery/Mutation + every generated crouton-collections.d.ts;
+    // '#crouton-audio/types/player' → player.ts, consumed by useAudioPlayer + Player.vue
+    "packages/crouton-core/app/types/collections.ts",
+    "packages/crouton-audio/app/types/player.ts"
   ],
   "workspaces": {
     "packages": [
