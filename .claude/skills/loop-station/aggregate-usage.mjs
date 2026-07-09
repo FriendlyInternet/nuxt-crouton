@@ -35,6 +35,9 @@ export function aggregate(texts, opts = {}) {
   const workflows = new Set()
   const byName = {}
   let events = 0
+  // Metered cost rollup (#1268): each run's meta carries a computed `cost` block; sum it
+  // total + per-workflow so the committed record shows WHERE the API spend went.
+  const cost = { usd: 0, tokens: 0, runs: 0, byWorkflow: {} }
 
   for (const text of texts) {
     if (!text) continue
@@ -52,6 +55,13 @@ export function aggregate(texts, opts = {}) {
         meta = obj
         if (obj.run) runs.add(String(obj.run))
         if (obj.workflow) workflows.add(obj.workflow)
+        if (obj.cost && typeof obj.cost.usd === 'number' && obj.cost.usd > 0) {
+          cost.usd += obj.cost.usd
+          cost.tokens += obj.cost.tokens || 0
+          cost.runs++
+          const wf = obj.workflow || 'unknown'
+          cost.byWorkflow[wf] = Math.round(((cost.byWorkflow[wf] || 0) + obj.cost.usd) * 1e6) / 1e6
+        }
         continue
       }
       if (!obj.kind || !obj.name) continue
@@ -100,6 +110,14 @@ export function aggregate(texts, opts = {}) {
     runs: runs.size,
     workflows: [...workflows].sort(),
     events,
+    // Metered API cost across the window (#1268): total + per-workflow, computed from
+    // transcript tokens. Zero when no priced trace shipped (pi/subscription runs).
+    cost: {
+      usd: Math.round(cost.usd * 1e6) / 1e6,
+      tokens: cost.tokens,
+      runs: cost.runs,
+      byWorkflow: Object.fromEntries(Object.entries(cost.byWorkflow).sort((a, b) => b[1] - a[1]))
+    },
     byName: byNameOut
   }
   if (events === 0) record.note = 'no trace events in window'

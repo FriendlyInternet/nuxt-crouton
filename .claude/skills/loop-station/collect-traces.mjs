@@ -26,6 +26,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { parseSession } from './parse-transcripts.mjs'
+import { costFromFile } from '../../../scripts/lib/session-cost.mjs'
+
+/**
+ * This session's metered cost from its transcript token usage (#1268) — the shared
+ * reader (claude turns priced from tokens; a pi turn's exact cost.total is used if present).
+ * Returns null when the session left no billable turn, so the meta stays clean.
+ */
+function sessionCost(projDir, session) {
+  const r = costFromFile(path.join(projDir, session + '.jsonl'))
+  return r.turns > 0 ? { usd: r.usd, tokens: r.tokens, turns: r.turns, model: r.model } : null
+}
 
 function flag(name, fallback = null) {
   const i = process.argv.indexOf(name)
@@ -85,22 +96,34 @@ const picked = ALL ? sessions : sessions.slice(0, 1)
 const lines = []
 let totalEvents = 0
 const parsed = []
+const cost = { usd: 0, tokens: 0, turns: 0, model: null } // #1268 — metered spend for this run
 for (const { projDir, session } of picked) {
   const result = parseSession({ projDir, session })
   if (result.events.length === 0) continue
-  parsed.push({ session: result.session, layout: result.layout, events: result.events.length })
+  const c = sessionCost(projDir, session)
+  parsed.push({ session: result.session, layout: result.layout, events: result.events.length, cost: c })
+  if (c) {
+    cost.usd += c.usd
+    cost.tokens += c.tokens
+    cost.turns += c.turns
+    cost.model = c.model || cost.model
+  }
   for (const e of result.events) {
     lines.push(JSON.stringify({ ...e, run: run.run, session: result.session }))
     totalEvents++
   }
 }
+cost.usd = Math.round(cost.usd * 1e6) / 1e6
 
 const meta = {
   kind: 'meta',
   generatedAt: process.env.LOOP_STATION_NOW || new Date().toISOString(),
   ...run,
   sessions: parsed,
-  eventCount: totalEvents
+  eventCount: totalEvents,
+  // Metered cost for this run, computed from transcript tokens (#1268). null-ish (0 turns)
+  // for pi/subscription runs that leave no priced claude transcript here.
+  cost: cost.turns > 0 ? cost : null
 }
 
 fs.writeFileSync(OUT, [JSON.stringify(meta), ...lines].join('\n') + '\n')
