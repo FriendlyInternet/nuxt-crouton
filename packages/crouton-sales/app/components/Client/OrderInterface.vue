@@ -20,22 +20,35 @@
                borders sit on the same line regardless of content height. -->
           <div class="h-14 px-2 border-b border-default shrink-0 flex items-center gap-2">
             <div class="flex-1 min-w-0">
+              <!-- :key remounts the tabs when edit mode flips — the sortable
+                   (tab drag-reorder) is armed once at setup, gated on editable. -->
               <SalesClientCategoryTabs
+                :key="editing ? 'edit' : 'view'"
                 v-model="selectedCategory"
                 :categories="sortedCategories"
                 :counts="cartCountsByCategory"
                 :show-all="false"
-                :editable="editable"
+                :editable="editing"
                 :reorder-pending="reorderingCategories"
                 @rename="handleCategoryRename"
                 @create="handleCategoryCreate"
                 @reorder="handleCategoryReorder"
               />
             </div>
+            <!-- Admin: all catalog editing hides behind this one toggle -->
+            <UButton
+              v-if="editable"
+              size="sm"
+              :color="editing ? 'primary' : 'neutral'"
+              :variant="editing ? 'solid' : 'soft'"
+              :icon="editing ? 'i-lucide-check' : 'i-lucide-pencil'"
+              :aria-label="editing ? t('sales.workspace.doneEditing') : t('sales.workspace.editCatalog')"
+              @click="editMode = !editMode"
+            />
           </div>
           <!-- Admin toolbar: add product + show-inactive, pinned above the list -->
           <div
-            v-if="editable"
+            v-if="editing"
             class="shrink-0 flex items-center justify-between gap-3 p-2 pb-0"
           >
             <UButton
@@ -56,9 +69,12 @@
             />
           </div>
           <div class="flex-1 overflow-y-auto p-2">
+            <!-- :key remounts the list when edit mode flips — its sortable
+                 (product drag-reorder) is armed once at setup, gated on editable. -->
             <SalesClientProductList
+              :key="editing ? 'edit' : 'view'"
               :products="filteredProducts"
-              :editable="editable"
+              :editable="editing"
               @select="handleProductSelect"
               @edit="openEditProduct"
               @reorder="handleReorder"
@@ -390,9 +406,20 @@ watch(sortedCategories, (cats) => {
   }
 }, { immediate: true })
 
+// Admin edit mode: the editable prop only grants the CAPABILITY — the actual
+// editing affordances (add/rename/reorder/inactive toggle) stay hidden until
+// the admin arms them via the pencil toggle, so the kassa reads clean by default.
+const editMode = ref(false)
+const editing = computed(() => !!props.editable && editMode.value)
+
 // Admin-only: include inactive products (dimmed in the list; clicking one
 // opens its edit form instead of the cart).
 const showInactive = ref(false)
+
+// Leaving edit mode also drops the inactive products back out of the list.
+watch(editing, (on) => {
+  if (!on) showInactive.value = false
+})
 
 // Cart quantities per category — drives the count badge on each category tab so
 // it's clear how many items were added from that tab (hidden when zero).
@@ -410,7 +437,7 @@ const cartCountsByCategory = computed(() => {
 // the admin toggles them visible.
 const filteredProducts = computed(() => {
   const allProducts = ([...(products.value || [])] as SalesProduct[])
-    .filter(p => p.isActive !== false || (props.editable && showInactive.value))
+    .filter(p => p.isActive !== false || (editing.value && showInactive.value))
     .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.title.localeCompare(b.title))
   if (selectedCategory.value === null) return allProducts
   return allProducts.filter(p => p.categoryId === selectedCategory.value)
