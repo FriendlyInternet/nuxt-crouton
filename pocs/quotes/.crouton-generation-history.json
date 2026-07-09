@@ -1,0 +1,15 @@
+[
+  {
+    "collection": "quotes",
+    "fields": [
+      "text",
+      "author",
+      "source",
+      "tags"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-07-09T19:33:47.304Z",
+    "layer": "main",
+    "gitSha": "beab8c1"
+  }
+]
