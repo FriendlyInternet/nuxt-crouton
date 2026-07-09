@@ -71,7 +71,9 @@ jobs:
           # bytes written. Bash covers `gh` (comment) + writing the verdict; Write/Edit for the
           # file; Read/Grep/Glob for the scan. Bump max-turns now that turns aren't wasted on
           # denied retries. NB: a11y.yml / red-team.yml share this exact latent bug.
-          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          # Haiku, not Sonnet (#1272/#823): reports-only convention review — pattern-matching v3
+          # component names / raw-HTML re-impls that Haiku handles at ~3× lower cost. Reversible.
+          claude_args: "--model claude-haiku-4-5-20251001 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **frontend-review subagent** defined in `.claude/agents/frontend-review.md`.
             Input: { scope: "diff", depth: "quick", fix: false }.
