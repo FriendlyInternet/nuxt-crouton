@@ -281,6 +281,18 @@ crouton db-pull --config ./custom-wrangler.jsonc
 | `--no-tests` | Skip the per-collection tests — schema-smoke (#785) + API route handler test (#791); both emitted by default |
 | `--dry-run` | Preview without writing |
 
+### Regeneration is non-destructive (#1260)
+
+Re-running the generator over an existing collection **preserves files that already exist**
+by default — it never silently clobbers hand-edits — and reports what it skipped
+(`⏭ preserved N existing file(s) — use --force to overwrite`). Files that don't exist yet are
+always written, so a schema change still scaffolds new artifacts. Pass **`--force`** to overwrite
+existing scaffold files (this is what the generated files' *"regeneration requires --force flag"*
+note refers to). Only the per-collection scaffold files are guarded this way; derived
+machine-owned files (the schema index, type/query registries, `app.config.ts` entries) are
+rewritten every run regardless. Guarded by the write loop in `writeScaffold`
+(`lib/generate-collection.ts`); contract test: `tests/integration/regenerate-preserve.test.ts`.
+
 ## Key Files
 
 | File | Purpose |

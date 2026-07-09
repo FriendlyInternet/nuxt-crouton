@@ -1339,10 +1339,24 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     ...(noTests ? [] : buildCollectionTestFiles({ base, data, config, cases, layerPascalCase }))
   ]
 
-  // Write all files
+  // Write all files. Per-collection scaffold files are user-editable, so regeneration
+  // must NOT silently clobber hand-edits: skip a file that already exists unless --force
+  // is set (which the generated files' own "regeneration requires --force" note promises).
+  // Files that don't exist yet are always written, so a schema change still scaffolds new
+  // artifacts. Derived machine-owned files (schema index, registries, app.config.ts) are
+  // written by later steps and keep always-rewriting — only these scaffold files are guarded.
+  const preserved: string[] = []
   for (const file of files) {
+    if (!force && existsSync(file.path)) {
+      preserved.push(file.path)
+      continue
+    }
     await fsp.writeFile(file.path, file.content, 'utf8')
     console.log(`  ✓ ${path.relative(base, file.path)}`)
+  }
+  if (preserved.length > 0) {
+    console.log(`  ⏭ preserved ${preserved.length} existing file(s) — use --force to overwrite:`)
+    for (const p of preserved) console.log(`     · ${path.relative(base, p)}`)
   }
 
   // Note: team-auth utility is now provided by @fyit/crouton package
