@@ -32,7 +32,35 @@ function getPackageDirectories() {
   }
 }
 
+function printUsage() {
+  console.log(`Check Documentation
+
+Verifies all packages under packages/ have a CLAUDE.md file. Used in CI to
+ensure AI-facing package documentation stays complete.
+
+Usage:
+  node scripts/check-docs.mjs [options]
+
+Options:
+  -h, --help   Show this help message and exit
+
+Behavior:
+  - Scans packages/ for directories containing a package.json
+  - Reports which of those packages have/are missing a CLAUDE.md
+  - Exits 1 if any package is missing CLAUDE.md, or if no packages are found
+  - Exits 0 if every package has CLAUDE.md
+
+Environment:
+  (none — no environment variables are read)
+`)
+}
+
 function main() {
+  if (process.argv.includes('--help') || process.argv.includes('-h')) {
+    printUsage()
+    process.exit(0)
+  }
+
   console.log('🔍 Checking package documentation...\n')
 
   const packages = getPackageDirectories()
