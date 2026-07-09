@@ -19,5 +19,5 @@ export type {
 export { buildUpsert, sqlValue, raw, SqlRaw } from './sql'
 export type { UpsertOptions } from './sql'
 export { seedId, seedOrgId } from './id'
-export { topoSort, collectSeedSql } from './runner'
-export type { CollectSeedSqlOptions } from './runner'
+export { topoSort, collectSeedSql, runSeedSql } from './runner'
+export type { CollectSeedSqlOptions, RunSeedSqlOptions, SeedSqlExecute } from './runner'
