@@ -1,0 +1,10 @@
+{
+  "collection": "quote",
+  "fields": {
+    "id": { "type": "string", "meta": { "primaryKey": true } },
+    "text": { "type": "text", "meta": { "required": true } },
+    "author": { "type": "string", "meta": { "maxLength": 255 } },
+    "source": { "type": "string", "meta": { "maxLength": 255 } },
+    "tags": { "type": "array" }
+  }
+}
