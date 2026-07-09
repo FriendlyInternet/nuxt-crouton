@@ -513,6 +513,8 @@
       "currencyEur": "Euro (€)",
       "currencyUsd": "Dollar ($)",
       "showInactive": "Produits inactifs",
+      "editCatalog": "Modifier",
+      "doneEditing": "Terminé",
       "clientsPanel": {
         "button": "Clients",
         "title": "Additions clients",

@@ -5,7 +5,7 @@
  * store, but a booted fixture serves from NuxtHub's `.data/db/sqlite.db` — a
  * DIFFERENT database. So instead of the CLI, this route reuses the SAME
  * declarative sales seed provider (`@fyit/crouton-sales/seed`) via
- * `collectSeedSql` from `@fyit/crouton-core/shared/seed`, then executes the
+ * `runSeedSql` from `@fyit/crouton-core/shared/seed` (#797), executing the
  * generated idempotent SQL against the LIVE db the app actually reads
  * (`useDB()`), so the seeded event/products are visible to the order endpoints.
  *
@@ -26,7 +26,7 @@
  */
 import { sql } from 'drizzle-orm'
 import { provider as salesSeedProvider } from '@fyit/crouton-sales/seed'
-import { collectSeedSql, seedId } from '@fyit/crouton-core/shared/seed'
+import { runSeedSql, seedId } from '@fyit/crouton-core/shared/seed'
 
 interface SeedBody {
   teamId: string
@@ -51,26 +51,15 @@ export default defineEventHandler(async (event) => {
 
   const db = useDB()
 
-  // 1. Build the declarative sales catalog SQL (event + categories + products)
-  //    from the package's own seed provider — same rows the CLI seeds, but run
+  // 1. Seed the declarative sales catalog (event + categories + products) from
+  //    the package's own seed provider — same rows the CLI seeds, but run
   //    against the live NuxtHub DB the app reads.
-  const seedSql = await collectSeedSql({
+  await runSeedSql(stmt => db.run(sql.raw(stmt)), {
     providers: [salesSeedProvider],
     teamSlug: body.teamSlug,
     teamId: body.teamId,
     locale: 'nl'
   })
-
-  // Each upsert is one line ending in `;` (JSON payloads are single-line), so
-  // splitting on newlines yields one statement per row.
-  const statements = seedSql
-    .split('\n')
-    .map(s => s.trim())
-    .filter(s => s.length > 0)
-
-  for (const statement of statements) {
-    await db.run(sql.raw(statement))
-  }
 
   // 2. The provider doesn't create a printer; #355 needs one. Insert a kitchen
   //    location + a kitchen printer pointed at the fake :9100 server. Stable

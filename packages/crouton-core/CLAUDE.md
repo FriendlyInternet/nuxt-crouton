@@ -126,9 +126,21 @@ runtime), exported at `@fyit/crouton-core/shared/seed`:
   withStaff, createPageWithBlocks })` order providers by `dependsOn` and return
   the combined SQL. The CLI `crouton-seed` command wraps this with discovery +
   `wrangler d1 execute` transport (see crouton-cli CLAUDE.md).
+- `runSeedSql(execute, options)` (#797) — the **dev-only executor** for a
+  *booted* app: same options as `collectSeedSql`, but runs each statement
+  sequentially (dependency order) through the injected
+  `execute: (statement: string) => Promise<unknown>` — typically
+  `stmt => db.run(sql.raw(stmt))` with the app's live `useDB()`. Use it in a
+  dev seed route when the app must see the rows (the CLI writes the
+  wrangler-D1 store, but a booted app reads NuxtHub's `.data/db/sqlite.db` — a
+  different database). The db call is injected because shared/seed stays
+  dependency-free (crouton-core does not declare drizzle-orm). Throws in a
+  production bundle (`import.meta.dev === false`). Reference consumer:
+  `fixtures/with-sales/server/api/_seed.post.ts`.
 
-Seeding generates SQL executed via `wrangler d1`, so it runs identically against
-local SQLite and remote D1 with no live DB connection.
+Seeding generates SQL executed via `wrangler d1` (CLI path) or via the live
+connection (`runSeedSql`), so it runs identically against local SQLite and
+remote D1.
 
 ## Encryption Utility (server/utils/encryption.ts)
 
