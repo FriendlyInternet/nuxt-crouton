@@ -30,7 +30,8 @@
     "@vue-flow/core": "^1.41.2",
     "@vue-flow/node-resizer": "^1.5.1",
     "drizzle-orm": "catalog:",
-    "nuxt": "catalog:"
+    "nuxt": "catalog:",
+    "zod": "^4.2.1"
   },
   "devDependencies": {
     "@fyit/crouton-cli": "workspace:*",
