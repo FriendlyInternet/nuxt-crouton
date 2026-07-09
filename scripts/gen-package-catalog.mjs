@@ -21,6 +21,22 @@ import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(`gen-package-catalog.mjs — regenerate the internal package catalog the
+task-decomposition pipeline reads for its "package-fit check" (step 0, #292).
+
+Scans each packages/<name>/package.json (name + description, falling back to the
+first prose line of the package's CLAUDE.md) and writes a Markdown table to
+.claude/skills/task-decompose/package-catalog.md.
+
+Usage:
+  node scripts/gen-package-catalog.mjs            Write the catalog
+  node scripts/gen-package-catalog.mjs --check     CI: fail if the committed catalog is out of date
+  node scripts/gen-package-catalog.mjs --help, -h  Show this help and exit
+`)
+  process.exit(0)
+}
+
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const pkgDir = resolve(root, 'packages')
 const outPath = resolve(root, '.claude/skills/task-decompose/package-catalog.md')
