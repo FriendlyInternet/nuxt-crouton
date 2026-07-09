@@ -142,6 +142,11 @@ a feature branch.
      linked issue when the PR merges into the **default branch** (`main`); an epic-branch
      PR won't — the epic→`main` PR closes them later. So the breadcrumb comment (above) is
      how the issue reflects "done-for-now," not the merge.
+   - **`Closes` ONLY your own issue — `Refs`, never `Closes`, any OTHER blocked issue (#1253).**
+     A root-cause-fix PR that `Closes` a `status:blocked` retest/sibling issue auto-closes it
+     out from under the owner's pending reply (PR #1234 closed the #1233 retest 2s before the
+     owner's answer). Reference related blocked issues with `Refs #NN`; only the issue this PR
+     implements gets `Closes`. `warn-closes-blocked.yml` flags violations on non-epic PRs.
    - **Do not squash by default** (merge policy) — your commits are curated and atomic.
    - **If a sign-off gate already opened a draft PR** (step 5 — UI or schema), don't open a
      second one — reuse it: push the implementation/generated files, then mark it ready for
