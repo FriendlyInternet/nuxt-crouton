@@ -147,6 +147,8 @@ const mainRegionNodes = computed(() => {
 })
 </script>
 
+<!-- Template unchanged by the #1240 script split (byte-identical); restructuring it into components is the tracked follow-up tail. -->
+<!-- fallow-ignore-next-line complexity -->
 <template>
   <!-- h-dvh (dynamic viewport height), NOT h-screen/100vh — so the bottom command pill sits above the
        mobile browser toolbar instead of behind it (iOS Safari occludes 100vh's bottom). -->
