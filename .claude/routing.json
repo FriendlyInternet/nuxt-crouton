@@ -16,8 +16,8 @@
     "task-orchestrator": { "tier": "medium", "why": "reads epic → workstreams; no code written. Moved opus→Sonnet 5 on an N=4 decompose A/B (Sonnet 5 matched/beat Opus 4.8 on 3 of 4 real epics, ~5× cheaper, fewer NEEDS-SPLIT recursion rounds). Refines #824: the strong-but-cheaper model is a peer planner, not the blunt one that decision guarded against." },
     "task-decomposer":   { "tier": "medium", "why": "LEAF test + split issues; no code written. Moved opus→Sonnet 5 with the orchestrator on the same N=4 A/B evidence. Refines #824." },
     "red-team":          { "tier": "medium", "why": "security analysis, reports only — opus was overkill; moved to Sonnet 5 (no code written, daily deep sweep is the cost). Free win per #823/#824." },
-    "a11y":              { "tier": "medium", "proposed": "small", "why": "template review, reports only" },
-    "frontend-review":   { "tier": "medium", "proposed": "small", "why": "convention review, reports only" }
+    "a11y":              { "tier": "small", "why": "template review, reports only — Sonnet→Haiku (#1272/#823); reversible if the #865 scoreboard shows missed axe findings" },
+    "frontend-review":   { "tier": "small", "why": "convention review, reports only — Sonnet→Haiku (#1272/#823); reversible if it stops catching v3 names" }
   },
 
   "_overrides": "Per-flow exceptions that pin an exact model regardless of tier. This is where a one-off flow declares itself VISIBLY instead of burying the decision in a branch.",

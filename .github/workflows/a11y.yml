@@ -76,7 +76,9 @@ jobs:
           # --allowedTools REQUIRED (#834): the prompt has the top-level agent *act as* the
           # subagent and call Bash/Write directly; headless CI denies un-allowlisted tools, so
           # without this the agent can't write a11y-verdict.json / post the comment → fails OPEN.
-          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          # Haiku, not Sonnet (#1272/#823): reports-only a11y review — ARIA/label/alt/tabindex
+          # pattern-matching that Haiku handles at ~3× lower cost. Reversible if axe findings slip.
+          claude_args: "--model claude-haiku-4-5-20251001 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **a11y subagent** defined in `.claude/agents/a11y.md`.
             Input: { scope: "diff", depth: "quick", fix: false }.

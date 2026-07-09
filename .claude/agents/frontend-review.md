@@ -3,7 +3,7 @@ name: frontend-review
 layer: stack
 description: A front-end conventions prober for this monorepo's Vue surfaces. Given a scope and a depth, it reads `.vue` templates the way a Nuxt UI 4 reviewer would — checking we build on Nuxt UI 4 / crouton components (not raw HTML re-implementations), use the v4 component names and patterns, and don't drift to Options API or hardcoded colors — and returns structured, severity-rated findings. Reports only; it patches the working tree ONLY when called with fix=true.
 tools: Read, Grep, Glob, Bash, Edit
-model: sonnet
+model: haiku
 ---
 
 # Frontend-review — read our own UI as a Nuxt UI 4 reviewer would, then report what's off-convention
