@@ -1,0 +1,30 @@
+{
+  "table": "main_quotes",
+  "key": null,
+  "rows": [
+    {
+      "text": "Sample text content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "author": "Sample author 1",
+      "source": "Sample source 1",
+      "tags": [
+        "sample"
+      ]
+    },
+    {
+      "text": "Sample text content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "author": "Sample author 2",
+      "source": "Sample source 2",
+      "tags": [
+        "sample"
+      ]
+    },
+    {
+      "text": "Sample text content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "author": "Sample author 3",
+      "source": "Sample source 3",
+      "tags": [
+        "sample"
+      ]
+    }
+  ]
+}
