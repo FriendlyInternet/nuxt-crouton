@@ -92,6 +92,14 @@
     "@fyit/crouton-events",       // meta-package distribution dep: makes extends resolvable
     "@ai-sdk/ui-utils"            // imported by crouton-ai's built dist .d.ts (dist is ignored)
   ],
+  "health": {
+    // INTERIM until the coverage feed lands (#1256): with no coverage
+    // data, CRAP degenerates to cyclomatic²+cyclomatic,
+    // so the default 30 fires on every cyc≥5 function — pure noise that blocks
+    // hotspot-splitting PRs. 420 aligns CRAP with the maxCyclomatic 20 gate
+    // (dormant, not disabled). REVERT to 30 when `--coverage` is wired into CI.
+    "maxCrap": 420
+  },
   "duplicates": {
     // Hide pair-only clones; focus on widespread copy-paste
     // worth refactoring. Lower to 2 to report every duplicate pair.
