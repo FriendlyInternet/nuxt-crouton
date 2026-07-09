@@ -31,7 +31,9 @@ export function parseUsageLine(line) {
   const m = j.message
   if (m?.role && m.role !== 'assistant') return null
   const usage = m?.usage ?? j.usage
-  return usage ? { usage, model: m?.model ?? j.model ?? null } : null
+  // Claude Code logs the SAME assistant response 2-3× (identical message.id, different line
+  // uuid) — carry the id so the summer counts each API message once, not per log line (#1268).
+  return usage ? { usage, model: m?.model ?? j.model ?? null, id: m?.id ?? null } : null
 }
 
 /** Yield each billable assistant turn from raw NDJSON text. */
@@ -46,10 +48,15 @@ export function* usageTurns(text) {
  * Sum a session's cost from its NDJSON text. Returns {usd, tokens, turns, model, exact}.
  * `exact` is false if any turn had to be priced from tokens (i.e. a claude/computed session).
  */
-// fallow-ignore-next-line complexity -- linear accumulation over turns; the branch count is the exact-vs-computed pick, not nesting. Covered by session-cost.test.mjs (#1268)
+// fallow-ignore-next-line complexity -- linear accumulation over turns; the branch count is the exact-vs-computed pick + the dedup guard, not nesting. Covered by session-cost.test.mjs (#1268)
 export function costFromText(text) {
   let usd = 0, tokens = 0, turns = 0, model = null, exact = true
-  for (const { usage, model: m } of usageTurns(text)) {
+  const seen = new Set() // dedup claude's repeated message.id logs; pi turns have no id → always count
+  for (const { usage, model: m, id } of usageTurns(text)) {
+    if (id) {
+      if (seen.has(id)) continue
+      seen.add(id)
+    }
     const reported = usage.cost?.total
     if (typeof reported === 'number') usd += reported
     else {

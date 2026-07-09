@@ -30,6 +30,17 @@ test('claude session: COMPUTED cost from tokens (marks exact=false)', () => {
   assert.equal(r.exact, false)
 })
 
+test('claude dedup: the same message.id logged 3× counts ONCE (#1268 overcount fix)', () => {
+  const dupLine = JSON.stringify({
+    type: 'assistant',
+    message: { role: 'assistant', id: 'msg_ABC', model: 'claude-sonnet-5', usage: { input_tokens: 1e6, output_tokens: 1e6 } }
+  })
+  const text = [dupLine, dupLine, dupLine].join('\n') // Claude Code logs the turn 3×
+  const r = costFromText(text)
+  assert.equal(r.turns, 1) // not 3
+  assert.equal(r.usd, 18) // $18 once, not $54
+})
+
 test('mixed/empty is handled; pi role tagged as message still counts', () => {
   assert.deepEqual(costFromText(''), { usd: 0, tokens: 0, turns: 0, model: null, exact: true })
   // pi line has top-level type:'message' — must NOT be filtered out
