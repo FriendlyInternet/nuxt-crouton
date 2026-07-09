@@ -37,6 +37,9 @@ export function parseCSVLine(line: string): string[] {
 }
 
 /** Parse YAML frontmatter from markdown (simple parser, no external deps) */
+// Clone family with the sintlukas/alexdeforce POC seed copies is known; the real
+// dedup is a shared package extraction (WS2 lane of epic #1235), not cross-app imports.
+// fallow-ignore-next-line code-duplication
 export function parseFrontmatter(md: string): { data: Record<string, any>; content: string } {
   const match = md.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
   if (!match) return { data: {}, content: md }

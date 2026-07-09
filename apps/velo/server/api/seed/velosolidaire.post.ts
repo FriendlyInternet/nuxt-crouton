@@ -263,12 +263,8 @@ async function ensureOrgMembership(db: any, now: Date, userId: string, orgId: st
   return true
 }
 
-// 2. Create Users + Members (with deduplication)
-//    IMPORTANT: Only users with bookings + admin get org membership.
-//    D1/SQLite has a 99 variable limit; Better Auth's findFullOrganization
-//    does WHERE user.id IN (...all members), so we must keep member count < 99.
-async function seedUsersAndMembers(db: any, log: string[], now: Date, orgId: string): Promise<{ userEmailToId: Record<string, string>; adminUserId: string }> {
-  // First, collect emails that appear in reservations (these need org membership)
+/** Collect emails that appear in reservations (these need org membership) */
+function collectBookingEmails(): Set<string> {
   const reservationsCSVForEmails = readSeedFile('reservations.csv')
   const reservationsForEmails = parseCSV(reservationsCSVForEmails)
   const bookingEmails = new Set<string>()
@@ -276,6 +272,22 @@ async function seedUsersAndMembers(db: any, log: string[], now: Date, orgId: str
     const email = row.email?.toLowerCase().trim()
     if (email) bookingEmails.add(email)
   }
+  return bookingEmails
+}
+
+/** Track admin: your account always wins; else the first admin-role user */
+function pickAdminUserId(current: string, email: string, role: string, userId: string): string {
+  if (email === 'hi@maartenlauwaert.eu') return userId
+  if (role === 'admin' && !current) return userId
+  return current
+}
+
+// 2. Create Users + Members (with deduplication)
+//    IMPORTANT: Only users with bookings + admin get org membership.
+//    D1/SQLite has a 99 variable limit; Better Auth's findFullOrganization
+//    does WHERE user.id IN (...all members), so we must keep member count < 99.
+async function seedUsersAndMembers(db: any, log: string[], now: Date, orgId: string): Promise<{ userEmailToId: Record<string, string>; adminUserId: string }> {
+  const bookingEmails = collectBookingEmails()
 
   const usersCSV = readSeedFile('users.csv')
   const usersData = parseCSV(usersCSV)
@@ -298,12 +310,7 @@ async function seedUsersAndMembers(db: any, log: string[], now: Date, orgId: str
 
     userEmailToId[email] = userId
 
-    // Track admin
-    if (email === 'hi@maartenlauwaert.eu') {
-      adminUserId = userId
-    } else if (role === 'admin' && !adminUserId) {
-      adminUserId = userId
-    }
+    adminUserId = pickAdminUserId(adminUserId, email, role, userId)
 
     // Only add org membership for: admin users + users who have bookings
     const needsMembership = role === 'admin' || email === 'hi@maartenlauwaert.eu' || bookingEmails.has(email)
@@ -323,8 +330,70 @@ async function seedUsersAndMembers(db: any, log: string[], now: Date, orgId: str
 }
 
 // 3. Create Locations (3 locations: abattoirs, marolles, evere)
+type ParsedMd = ReturnType<typeof parseFrontmatter>
+type LocationSlot = { id: string; label: string; startTime: string; endTime: string }
+
+/** fr frontmatter -> a translation block (used verbatim for both en and fr) */
+function locationTranslationFr(frParsed: ParsedMd, loc: { slug: string }) {
+  return {
+    title: frParsed.data.title || loc.slug,
+    street: frParsed.data.street || '',
+    zip: frParsed.data.zip || '',
+    city: frParsed.data.city || '',
+    content: frParsed.content ? markdownToHtml(frParsed.content) : ''
+  }
+}
+
+/** nl frontmatter -> translation block, falling back to fr field by field */
+function locationTranslationNl(nlParsed: ParsedMd, frParsed: ParsedMd) {
+  return {
+    title: nlParsed.data.title || frParsed.data.title,
+    street: nlParsed.data.street || frParsed.data.street,
+    zip: nlParsed.data.zip || frParsed.data.zip,
+    city: nlParsed.data.city || frParsed.data.city,
+    content: nlParsed.content ? markdownToHtml(nlParsed.content) : (frParsed.content ? markdownToHtml(frParsed.content) : '')
+  }
+}
+
+/** Parsed location markdown -> bookingsLocations insert row */
+function locationRow(ctx: SeedContext, loc: { slug: string }, frParsed: ParsedMd, nlParsed: ParsedMd, locationId: string, slots: LocationSlot[], order: number) {
+  const { now, orgId, adminUserId } = ctx
+  // Open Monday-Friday (1=Mon ... 5=Fri)
+  const openDays = [1, 2, 3, 4, 5]
+  return {
+    id: locationId,
+    teamId: orgId,
+    owner: adminUserId,
+    order,
+    title: frParsed.data.title || loc.slug,
+    color: null,
+    street: frParsed.data.street || null,
+    zip: frParsed.data.zip || null,
+    city: frParsed.data.city || null,
+    location: frParsed.data.location || null,
+    content: frParsed.content ? markdownToHtml(frParsed.content) : null,
+    allowedMemberIds: null,
+    slots,
+    openDays,
+    slotSchedule: {},
+    blockedDates: null,
+    inventoryMode: false,
+    quantity: 0,
+    maxBookingsPerMonth: 0,
+    translations: {
+      en: locationTranslationFr(frParsed, loc),
+      fr: locationTranslationFr(frParsed, loc),
+      nl: locationTranslationNl(nlParsed, frParsed)
+    },
+    createdAt: now,
+    updatedAt: now,
+    createdBy: adminUserId,
+    updatedBy: adminUserId
+  }
+}
+
 async function seedLocations(ctx: SeedContext): Promise<{ locationIdMap: Record<string, string>; locationSlotIds: Record<string, LocationSlotIds> }> {
-  const { db, log, now, orgId, adminUserId } = ctx
+  const { db, log } = ctx
   const locationIdMap: Record<string, string> = {} // idInSheet -> db id
   const locationSlotIds: Record<string, LocationSlotIds> = {}
 
@@ -351,57 +420,7 @@ async function seedLocations(ctx: SeedContext): Promise<{ locationIdMap: Record<
       { id: fulldayId, label: 'Toute la journée', startTime: '09:30', endTime: '16:30' }
     ]
 
-    // Open Monday-Friday (1=Mon ... 5=Fri)
-    const openDays = [1, 2, 3, 4, 5]
-
-    await (db as any).insert(bookingsLocations).values({
-      id: locationId,
-      teamId: orgId,
-      owner: adminUserId,
-      order: locIdx,
-      title: frParsed.data.title || loc.slug,
-      color: null,
-      street: frParsed.data.street || null,
-      zip: frParsed.data.zip || null,
-      city: frParsed.data.city || null,
-      location: frParsed.data.location || null,
-      content: frParsed.content ? markdownToHtml(frParsed.content) : null,
-      allowedMemberIds: null,
-      slots,
-      openDays,
-      slotSchedule: {},
-      blockedDates: null,
-      inventoryMode: false,
-      quantity: 0,
-      maxBookingsPerMonth: 0,
-      translations: {
-        en: {
-          title: frParsed.data.title || loc.slug,
-          street: frParsed.data.street || '',
-          zip: frParsed.data.zip || '',
-          city: frParsed.data.city || '',
-          content: frParsed.content ? markdownToHtml(frParsed.content) : ''
-        },
-        fr: {
-          title: frParsed.data.title || loc.slug,
-          street: frParsed.data.street || '',
-          zip: frParsed.data.zip || '',
-          city: frParsed.data.city || '',
-          content: frParsed.content ? markdownToHtml(frParsed.content) : ''
-        },
-        nl: {
-          title: nlParsed.data.title || frParsed.data.title,
-          street: nlParsed.data.street || frParsed.data.street,
-          zip: nlParsed.data.zip || frParsed.data.zip,
-          city: nlParsed.data.city || frParsed.data.city,
-          content: nlParsed.content ? markdownToHtml(nlParsed.content) : (frParsed.content ? markdownToHtml(frParsed.content) : '')
-        }
-      },
-      createdAt: now,
-      updatedAt: now,
-      createdBy: adminUserId,
-      updatedBy: adminUserId
-    })
+    await (db as any).insert(bookingsLocations).values(locationRow(ctx, loc, frParsed, nlParsed, locationId, slots, locIdx))
 
     log.push(`Created location: ${frParsed.data.title} (${locationId})`)
   }
@@ -434,8 +453,74 @@ async function seedBookingSettings(ctx: SeedContext): Promise<void> {
 }
 
 // 5. Create Email Templates (3 types x 3 locations, with translations)
+
+/** Determine days offset for a template type */
+function emailTemplateDaysOffset(type: string): number | null {
+  let daysOffset: number | null = null
+  if (type === 'confirmation') daysOffset = 0
+  if (type === 'reminder') daysOffset = -2
+  if (type === 'retour') daysOffset = 1
+  return daysOffset
+}
+
+/** Parsed location mails -> bookingsEmailtemplates insert row */
+function emailTemplateRow(ctx: SeedContext, args: {
+  templateId: string
+  locationId: string
+  type: string
+  frParsed: ParsedMd
+  nlParsed: ParsedMd
+  frMail: Record<string, any>
+  nlMail: Record<string, any>
+}) {
+  const { now, orgId, adminUserId } = ctx
+  const { templateId, locationId, type, frParsed, nlParsed, frMail, nlMail } = args
+
+  const frBodyHtml = convertEmailBody(frMail.body || '')
+  const nlBodyHtml = convertEmailBody(nlMail.body || frMail.body || '')
+
+  const enName = `${frParsed.data.title} - ${typeNameMap[type] || type}`
+
+  return {
+    id: templateId,
+    teamId: orgId,
+    owner: adminUserId,
+    order: 0,
+    name: `${frParsed.data.title} - ${type}`,
+    subject: frMail.subject || `${type} email`,
+    body: frBodyHtml,
+    fromEmail: frMail.from || 'info@velosolidaire.be',
+    triggerType: triggerTypeMap[type] || type,
+    recipientType: 'customer',
+    isActive: true,
+    daysOffset: emailTemplateDaysOffset(type),
+    locationId,
+    translations: {
+      en: {
+        name: enName,
+        subject: frMail.subject || `${type} email`,
+        body: frBodyHtml
+      },
+      fr: {
+        name: `${frParsed.data.title} - ${type}`,
+        subject: frMail.subject || `${type} email`,
+        body: frBodyHtml
+      },
+      nl: {
+        name: `${nlParsed.data.title || frParsed.data.title} - ${type}`,
+        subject: nlMail.subject || frMail.subject || '',
+        body: nlBodyHtml
+      }
+    },
+    createdAt: now,
+    updatedAt: now,
+    createdBy: adminUserId,
+    updatedBy: adminUserId
+  }
+}
+
 async function seedEmailTemplates(ctx: SeedContext, locationIdMap: Record<string, string>): Promise<Record<string, string>> {
-  const { db, log, now, orgId, adminUserId } = ctx
+  const { db, log } = ctx
   const templateIdMap: Record<string, string> = {} // `${type}-${locationSlug}` -> template id
 
   for (const loc of locationConfigs) {
@@ -448,59 +533,18 @@ async function seedEmailTemplates(ctx: SeedContext, locationIdMap: Record<string
     const locationId = locationIdMap[frParsed.data.idInSheet || loc.slug]!
 
     for (const type of templateTypes) {
-      const frMail = frMails[type] || {}
-      const nlMail = nlMails[type] || {}
       const templateId = nanoid()
       templateIdMap[`${type}-${loc.slug}`] = templateId
 
-      const triggerType = triggerTypeMap[type] || type
-
-      let daysOffset: number | null = null
-      if (type === 'confirmation') daysOffset = 0
-      if (type === 'reminder') daysOffset = -2
-      if (type === 'retour') daysOffset = 1
-
-      const frBodyHtml = convertEmailBody(frMail.body || '')
-      const nlBodyHtml = convertEmailBody(nlMail.body || frMail.body || '')
-
-      const enName = `${frParsed.data.title} - ${typeNameMap[type] || type}`
-
-      await (db as any).insert(bookingsEmailtemplates).values({
-        id: templateId,
-        teamId: orgId,
-        owner: adminUserId,
-        order: 0,
-        name: `${frParsed.data.title} - ${type}`,
-        subject: frMail.subject || `${type} email`,
-        body: frBodyHtml,
-        fromEmail: frMail.from || 'info@velosolidaire.be',
-        triggerType,
-        recipientType: 'customer',
-        isActive: true,
-        daysOffset,
+      await (db as any).insert(bookingsEmailtemplates).values(emailTemplateRow(ctx, {
+        templateId,
         locationId,
-        translations: {
-          en: {
-            name: enName,
-            subject: frMail.subject || `${type} email`,
-            body: frBodyHtml
-          },
-          fr: {
-            name: `${frParsed.data.title} - ${type}`,
-            subject: frMail.subject || `${type} email`,
-            body: frBodyHtml
-          },
-          nl: {
-            name: `${nlParsed.data.title || frParsed.data.title} - ${type}`,
-            subject: nlMail.subject || frMail.subject || '',
-            body: nlBodyHtml
-          }
-        },
-        createdAt: now,
-        updatedAt: now,
-        createdBy: adminUserId,
-        updatedBy: adminUserId
-      })
+        type,
+        frParsed,
+        nlParsed,
+        frMail: frMails[type] || {},
+        nlMail: nlMails[type] || {}
+      }))
     }
 
     log.push(`Created 3 email templates for ${frParsed.data.title}`)
