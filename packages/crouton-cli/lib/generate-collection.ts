@@ -439,6 +439,172 @@ async function createDatabaseTable(config: { name: string; layer: string; fields
   }
 }
 
+// Build the Zod fields-schema body shared by the composable and the server
+// endpoints — regular + translatable fields, the hierarchy parentId, and the
+// translations record with its default-locale required-fields refinement.
+function buildFieldsSchema(params: {
+  fields: Field[]
+  config: Record<string, any> | null
+  hierarchy: HierarchyConfig
+  cases: any
+  layerCamelCase: string
+}): string {
+  const { fields, config, hierarchy, cases, layerCamelCase } = params
+  const translatableFieldNames = config?.translations?.collections?.[cases.plural] || []
+  const hierarchyFieldNames = hierarchy?.enabled ? ['parentId', 'path', 'depth', 'order'] : []
+  const regularFieldsSchema = fields
+    .filter(f => f.name !== 'id' && !translatableFieldNames.includes(f.name) && !hierarchyFieldNames.includes(f.name))
+    .map((f) => {
+      const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
+      const hasRepeaterProperties = f.type === 'repeater' && (f.meta?.translatableProperties || f.meta?.properties)
+      let baseZod = isDependentField ? 'z.array(z.string())' : f.zod
+      // Dates arrive as ISO strings (forms/JSON) — coerce so validation accepts them.
+      if (f.type === 'date') baseZod = 'z.coerce.date()'
+      if (hasRepeaterProperties) {
+        const { pascalCase: fieldPascalCase } = toCase(f.name)
+        const itemSchemaName = `${layerCamelCase}${cases.pascalCasePlural}${fieldPascalCase}ItemSchema`
+        baseZod = `z.array(${itemSchemaName})`
+      }
+      if (f.meta?.required) {
+        if (isDependentField) {
+          return `${f.name}: ${baseZod}.min(1, '${f.name} is required')`
+        } else if (f.type === 'date') {
+          // z.coerce.date() (no Zod-3 `required_error`, which is invalid in Zod 4)
+          return `${f.name}: ${baseZod}`
+        } else if (f.type === 'string' || f.type === 'text') {
+          return `${f.name}: ${baseZod}.min(1, '${f.name} is required')`
+        } else if (f.type === 'number' || f.type === 'decimal') {
+          return `${f.name}: ${baseZod}`
+        } else if (f.type === 'boolean') {
+          return `${f.name}: ${baseZod}`
+        } else if (f.type === 'json') {
+          return `${f.name}: ${baseZod}`
+        } else if (f.type === 'repeater') {
+          return `${f.name}: ${baseZod}`
+        } else {
+          return `${f.name}: ${baseZod}`
+        }
+      } else {
+        // json commonly arrives as null (empty config/metadata) — allow it.
+        const suffix = (f.meta?.nullable || f.type === 'json' || f.type === 'date') ? '.nullish()' : '.optional()'
+        return `${f.name}: ${baseZod}${suffix}`
+      }
+    })
+  const translatableFieldsSchema = fields
+    .filter(f => translatableFieldNames.includes(f.name))
+    .map(f => `${f.name}: ${f.zod}.optional()`)
+  let allFieldsSchema = [...regularFieldsSchema, ...translatableFieldsSchema].join(',\n  ')
+  if (hierarchy?.enabled) {
+    const hierarchySchemaField = `parentId: z.string().nullable().optional()`
+    allFieldsSchema = allFieldsSchema ? `${allFieldsSchema},\n  ${hierarchySchemaField}` : hierarchySchemaField
+  }
+  if (translatableFieldNames.length > 0) {
+    const translatableFields = fields.filter(f => translatableFieldNames.includes(f.name))
+    const requiredTranslatableFields = translatableFields.filter(f => f.meta?.required)
+    const translationsFieldSchema = translatableFields.map((f) => {
+      if (f.meta?.required) {
+        return `      ${f.name}: z.string().min(1, '${f.name.charAt(0).toUpperCase() + f.name.slice(1)} is required')`
+      } else {
+        return `      ${f.name}: z.string().optional()`
+      }
+    }).join(',\n')
+    // Validate the app's default locale (not a hardcoded 'en') — single-language
+    // apps (e.g. defaultLocale: 'nl') must validate that locale, not English.
+    const defaultLocale = config?.defaultLocale || 'en'
+    const requiredFieldsCheck = requiredTranslatableFields.length > 0
+      ? `.refine(
+    (translations) => translations.${defaultLocale} && ${requiredTranslatableFields.map(f => `translations.${defaultLocale}.${f.name}`).join(' && ')},
+    { message: 'Translations for ${requiredTranslatableFields.map(f => f.name).join(', ')} (${defaultLocale}) are required' }
+  )`
+      : ''
+    return `${allFieldsSchema},\n  translations: z.record(
+    z.string(),
+    z.object({
+${translationsFieldSchema}
+    })
+  )${requiredFieldsCheck}`
+  }
+  return allFieldsSchema
+}
+
+// Build the default-values object body for the generated form state.
+function buildFieldsDefault(params: {
+  fields: Field[]
+  config: Record<string, any> | null
+  hierarchy: HierarchyConfig
+  cases: any
+}): string {
+  const { fields, config, hierarchy, cases } = params
+  const hierarchyDefaultNames = hierarchy?.enabled ? ['parentId', 'path', 'depth', 'order'] : []
+  let fieldDefaults = fields.filter(f => f.name !== 'id' && !hierarchyDefaultNames.includes(f.name)).map((f) => {
+    const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
+    if (isDependentField) {
+      return `${f.name}: null`
+    }
+    return `${f.name}: ${f.default}`
+  }).join(',\n    ')
+  if (hierarchy?.enabled) {
+    fieldDefaults = fieldDefaults ? `${fieldDefaults},\n    parentId: null` : 'parentId: null'
+  }
+  const hasTranslations = config?.translations?.collections?.[cases.plural]?.length > 0
+  return hasTranslations ? `${fieldDefaults},\n    translations: {}` : fieldDefaults
+}
+
+// Build the table-columns array body for the generated list component.
+function buildFieldsColumns(fields: Field[], config: Record<string, any> | null, cases: any): string {
+  const baseColumns = fields.map(f =>
+    `{ accessorKey: '${f.name}', header: '${f.name.charAt(0).toUpperCase() + f.name.slice(1)}' }`
+  ).join(',\n  ')
+  const hasTranslations = config?.translations?.collections?.[cases.plural]?.length > 0
+  const translationsColumn = hasTranslations
+    ? ',\n  { accessorKey: \'translations\', header: \'Translations\' }'
+    : ''
+  return baseColumns + translationsColumn
+}
+
+// Build the TypeScript interface body for the generated types.ts, keeping the
+// optional/null-ness of each property in sync with the Zod schema.
+function buildFieldsTypes(params: {
+  fields: Field[]
+  config: Record<string, any> | null
+  hierarchy: HierarchyConfig
+  cases: any
+}): string {
+  const { fields, config, hierarchy, cases } = params
+  const translatableFieldNames = config?.translations?.collections?.[cases.plural] || []
+  const typeLines = fields.filter(f => f.name !== 'id').map((f) => {
+    const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
+    let tsType = isDependentField ? 'string[] | null' : f.tsType
+    if (f.meta?.required) {
+      // Required ⇒ the zod schema enforces a present, non-null value, so the
+      // interface must not widen to null (some tsTypes, e.g. date, default to
+      // `T | null`). Otherwise FormData/New<Type> reject the validated body.
+      tsType = tsType.replace(/\s*\|\s*null\b/g, '')
+    } else if ((f.meta?.nullable || f.type === 'json') && !tsType.includes('null')) {
+      // Non-required json/nullable fields are `.nullish()` in the zod schema
+      // (the body may be null) — the interface must allow null to match.
+      tsType += ' | null'
+    }
+    // Translatable fields are validated as optional in the zod schema (the real
+    // value lives in translations.<locale>; the root column is a cache/fallback) —
+    // keep the interface optional to match, otherwise New<Type> rejects the body.
+    const optional = !f.meta?.required || translatableFieldNames.includes(f.name)
+    return `${f.name}${optional ? '?' : ''}: ${tsType}`
+  })
+  // Hierarchy system fields (parentId/path/depth/order) live in the DB schema and
+  // are set by the generated POST endpoint, but aren't declared collection fields —
+  // include them so New<Type> (used by create*) accepts them.
+  if (hierarchy?.enabled) {
+    typeLines.push(
+      `${hierarchy.parentField || 'parentId'}?: string | null`,
+      `${hierarchy.pathField || 'path'}?: string`,
+      `${hierarchy.depthField || 'depth'}?: number`,
+      `${hierarchy.orderField || 'order'}?: number`
+    )
+  }
+  return typeLines.join('\n  ')
+}
+
 function buildGeneratorData(params: {
   layer: string
   collection: string
@@ -460,145 +626,13 @@ function buildGeneratorData(params: {
     .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
     .join('')
 
-  const fieldsSchema = (() => {
-    const translatableFieldNames = config?.translations?.collections?.[cases.plural] || []
-    const hierarchyFieldNames = hierarchy?.enabled ? ['parentId', 'path', 'depth', 'order'] : []
-    const regularFieldsSchema = fields
-      .filter(f => f.name !== 'id' && !translatableFieldNames.includes(f.name) && !hierarchyFieldNames.includes(f.name))
-      .map((f) => {
-        const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
-        const hasRepeaterProperties = f.type === 'repeater' && (f.meta?.translatableProperties || f.meta?.properties)
-        let baseZod = isDependentField ? 'z.array(z.string())' : f.zod
-        // Dates arrive as ISO strings (forms/JSON) — coerce so validation accepts them.
-        if (f.type === 'date') baseZod = 'z.coerce.date()'
-        if (hasRepeaterProperties) {
-          const { pascalCase: fieldPascalCase } = toCase(f.name)
-          const itemSchemaName = `${layerCamelCase}${cases.pascalCasePlural}${fieldPascalCase}ItemSchema`
-          baseZod = `z.array(${itemSchemaName})`
-        }
-        if (f.meta?.required) {
-          if (isDependentField) {
-            return `${f.name}: ${baseZod}.min(1, '${f.name} is required')`
-          } else if (f.type === 'date') {
-            // z.coerce.date() (no Zod-3 `required_error`, which is invalid in Zod 4)
-            return `${f.name}: ${baseZod}`
-          } else if (f.type === 'string' || f.type === 'text') {
-            return `${f.name}: ${baseZod}.min(1, '${f.name} is required')`
-          } else if (f.type === 'number' || f.type === 'decimal') {
-            return `${f.name}: ${baseZod}`
-          } else if (f.type === 'boolean') {
-            return `${f.name}: ${baseZod}`
-          } else if (f.type === 'json') {
-            return `${f.name}: ${baseZod}`
-          } else if (f.type === 'repeater') {
-            return `${f.name}: ${baseZod}`
-          } else {
-            return `${f.name}: ${baseZod}`
-          }
-        } else {
-          // json commonly arrives as null (empty config/metadata) — allow it.
-          const suffix = (f.meta?.nullable || f.type === 'json' || f.type === 'date') ? '.nullish()' : '.optional()'
-          return `${f.name}: ${baseZod}${suffix}`
-        }
-      })
-    const translatableFieldsSchema = fields
-      .filter(f => translatableFieldNames.includes(f.name))
-      .map(f => `${f.name}: ${f.zod}.optional()`)
-    let allFieldsSchema = [...regularFieldsSchema, ...translatableFieldsSchema].join(',\n  ')
-    if (hierarchy?.enabled) {
-      const hierarchySchemaField = `parentId: z.string().nullable().optional()`
-      allFieldsSchema = allFieldsSchema ? `${allFieldsSchema},\n  ${hierarchySchemaField}` : hierarchySchemaField
-    }
-    if (translatableFieldNames.length > 0) {
-      const translatableFields = fields.filter(f => translatableFieldNames.includes(f.name))
-      const requiredTranslatableFields = translatableFields.filter(f => f.meta?.required)
-      const translationsFieldSchema = translatableFields.map((f) => {
-        if (f.meta?.required) {
-          return `      ${f.name}: z.string().min(1, '${f.name.charAt(0).toUpperCase() + f.name.slice(1)} is required')`
-        } else {
-          return `      ${f.name}: z.string().optional()`
-        }
-      }).join(',\n')
-      // Validate the app's default locale (not a hardcoded 'en') — single-language
-      // apps (e.g. defaultLocale: 'nl') must validate that locale, not English.
-      const defaultLocale = config?.defaultLocale || 'en'
-      const requiredFieldsCheck = requiredTranslatableFields.length > 0
-        ? `.refine(
-    (translations) => translations.${defaultLocale} && ${requiredTranslatableFields.map(f => `translations.${defaultLocale}.${f.name}`).join(' && ')},
-    { message: 'Translations for ${requiredTranslatableFields.map(f => f.name).join(', ')} (${defaultLocale}) are required' }
-  )`
-        : ''
-      return `${allFieldsSchema},\n  translations: z.record(
-    z.string(),
-    z.object({
-${translationsFieldSchema}
-    })
-  )${requiredFieldsCheck}`
-    }
-    return allFieldsSchema
-  })()
+  const fieldsSchema = buildFieldsSchema({ fields, config, hierarchy, cases, layerCamelCase })
 
-  const fieldsDefault = (() => {
-    const hierarchyDefaultNames = hierarchy?.enabled ? ['parentId', 'path', 'depth', 'order'] : []
-    let fieldDefaults = fields.filter(f => f.name !== 'id' && !hierarchyDefaultNames.includes(f.name)).map((f) => {
-      const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
-      if (isDependentField) {
-        return `${f.name}: null`
-      }
-      return `${f.name}: ${f.default}`
-    }).join(',\n    ')
-    if (hierarchy?.enabled) {
-      fieldDefaults = fieldDefaults ? `${fieldDefaults},\n    parentId: null` : 'parentId: null'
-    }
-    const hasTranslations = config?.translations?.collections?.[cases.plural]?.length > 0
-    return hasTranslations ? `${fieldDefaults},\n    translations: {}` : fieldDefaults
-  })()
+  const fieldsDefault = buildFieldsDefault({ fields, config, hierarchy, cases })
 
-  const fieldsColumns = (() => {
-    const baseColumns = fields.map(f =>
-      `{ accessorKey: '${f.name}', header: '${f.name.charAt(0).toUpperCase() + f.name.slice(1)}' }`
-    ).join(',\n  ')
-    const hasTranslations = config?.translations?.collections?.[cases.plural]?.length > 0
-    const translationsColumn = hasTranslations
-      ? ',\n  { accessorKey: \'translations\', header: \'Translations\' }'
-      : ''
-    return baseColumns + translationsColumn
-  })()
+  const fieldsColumns = buildFieldsColumns(fields, config, cases)
 
-  const fieldsTypes = (() => {
-    const translatableFieldNames = config?.translations?.collections?.[cases.plural] || []
-    const typeLines = fields.filter(f => f.name !== 'id').map((f) => {
-      const isDependentField = (f.meta?.dependsOn && f.meta?.dependsOnCollection) || f.meta?.displayAs === 'slotButtonGroup'
-      let tsType = isDependentField ? 'string[] | null' : f.tsType
-      if (f.meta?.required) {
-        // Required ⇒ the zod schema enforces a present, non-null value, so the
-        // interface must not widen to null (some tsTypes, e.g. date, default to
-        // `T | null`). Otherwise FormData/New<Type> reject the validated body.
-        tsType = tsType.replace(/\s*\|\s*null\b/g, '')
-      } else if ((f.meta?.nullable || f.type === 'json') && !tsType.includes('null')) {
-        // Non-required json/nullable fields are `.nullish()` in the zod schema
-        // (the body may be null) — the interface must allow null to match.
-        tsType += ' | null'
-      }
-      // Translatable fields are validated as optional in the zod schema (the real
-      // value lives in translations.<locale>; the root column is a cache/fallback) —
-      // keep the interface optional to match, otherwise New<Type> rejects the body.
-      const optional = !f.meta?.required || translatableFieldNames.includes(f.name)
-      return `${f.name}${optional ? '?' : ''}: ${tsType}`
-    })
-    // Hierarchy system fields (parentId/path/depth/order) live in the DB schema and
-    // are set by the generated POST endpoint, but aren't declared collection fields —
-    // include them so New<Type> (used by create*) accepts them.
-    if (hierarchy?.enabled) {
-      typeLines.push(
-        `${hierarchy.parentField || 'parentId'}?: string | null`,
-        `${hierarchy.pathField || 'path'}?: string`,
-        `${hierarchy.depthField || 'depth'}?: number`,
-        `${hierarchy.orderField || 'order'}?: number`
-      )
-    }
-    return typeLines.join('\n  ')
-  })()
+  const fieldsTypes = buildFieldsTypes({ fields, config, hierarchy, cases })
 
   // Repeater fields with properties reference a named item schema (e.g.
   // `...SlotItemSchema`) in fieldsSchema. The composable exports those, but
@@ -632,12 +666,33 @@ ${translationsFieldSchema}
   }
 }
 
-async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, noTests = false }: WriteScaffoldOptions): Promise<void> {
-  const cases = toCase(collection)
-  const base = path.resolve('layers', layer, 'collections', cases.plural)
+// ---------------------------------------------------------------------------
+// writeScaffold helpers — one per scaffold step
+// ---------------------------------------------------------------------------
 
+interface GeneratedFile {
+  path: string
+  content: string
+}
+
+interface HierarchyConfig {
+  enabled: boolean
+  parentField?: string
+  orderField?: string
+  pathField?: string
+  depthField?: string
+}
+
+interface SortableConfig {
+  enabled: boolean
+  orderField?: string
+}
+
+// Resolve the structural options (hierarchy / sortable / collab) from the
+// collection config or CLI flag.
+function resolveStructureConfig(collectionConfig: Record<string, any> | null, hierarchyFlag: boolean): { hierarchy: HierarchyConfig; sortable: SortableConfig; collab: { enabled: boolean } } {
   // Detect hierarchy configuration from collection config or CLI flag
-  const hierarchy = collectionConfig?.hierarchy === true || hierarchyFlag === true
+  const hierarchy: HierarchyConfig = collectionConfig?.hierarchy === true || hierarchyFlag === true
     ? {
         enabled: true,
         parentField: 'parentId',
@@ -656,7 +711,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
         : { enabled: false })
 
   // Detect sortable configuration (simpler than hierarchy, just needs order field for drag-and-drop)
-  const sortable = collectionConfig?.sortable === true
+  const sortable: SortableConfig = collectionConfig?.sortable === true
     ? {
         enabled: true,
         orderField: collectionConfig.orderField || 'order'
@@ -673,8 +728,24 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     ? { enabled: true }
     : { enabled: false }
 
-  // Handle translation configuration
-  // Priority: 1) field-level meta.translatable, 2) collection-level translatable, 3) config.translations.collections
+  return { hierarchy, sortable, collab }
+}
+
+// Handle translation configuration.
+// Priority: 1) field-level meta.translatable, 2) collection-level translatable, 3) config.translations.collections
+// Returns the (possibly created or replaced) config object; when translatable
+// fields are found, the existing config's translations map is updated in place
+// so the caller's config object observes the merged field list.
+function resolveTranslationConfig(params: {
+  fields: Field[]
+  config: Record<string, any> | null
+  collectionConfig: Record<string, any> | null
+  noTranslations: boolean
+  plural: string
+}): Record<string, any> | null {
+  const { fields, collectionConfig, noTranslations, plural } = params
+  let { config } = params
+
   if (!noTranslations) {
     // Check for field-level translatable markers (meta.translatable: true)
     const fieldLevelTranslatable = fields
@@ -694,7 +765,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     }
 
     // Get config-level translatable fields
-    const configLevelTranslatable = config?.translations?.collections?.[cases.plural] || []
+    const configLevelTranslatable = config?.translations?.collections?.[plural] || []
 
     // Merge all sources (field-level takes precedence, then collection-level, then config-level)
     const allTranslatableFields = [...new Set([
@@ -714,7 +785,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
       if (!config.translations.collections) {
         config.translations.collections = {}
       }
-      config.translations.collections[cases.plural] = allTranslatableFields
+      config.translations.collections[plural] = allTranslatableFields
 
       // Log the source of translatable fields
       if (fieldLevelTranslatable.length > 0) {
@@ -735,7 +806,12 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     }
   }
 
-  // Check for required modules/dependencies
+  return config
+}
+
+// Check for required modules/dependencies; aborts (exit 1) when dependencies
+// are missing and --force is not set.
+async function ensureRequiredDependencies(config: Record<string, any> | null, noTranslations: boolean, force: boolean): Promise<void> {
   console.log('↻ Checking for required dependencies...')
   const dependencies = await detectRequiredDependencies({
     ...config,
@@ -757,13 +833,24 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     // Ensure layers are extended in nuxt.config
     await ensureLayersExtended(dependencies.layers)
   }
+}
 
-  // Prepare data for all generators
-  // Typed as Record<string, any> so contribution results can be attached dynamically
-  const data: Record<string, any> = buildGeneratorData({ layer, collection, fields, hierarchy, sortable, collab, config, collectionConfig })
-  const { layerPascalCase, layerCamelCase } = data
+// Manifest-driven detection + contributions: compute detection results, run the
+// relevant packages' contribution functions, and attach the merged form/list
+// enhancements to the generator data. Returns the (possibly updated)
+// collectionConfig — a package contribution can auto-detect the form component.
+async function applyManifestEnhancements(params: {
+  data: Record<string, any>
+  fields: Field[]
+  config: Record<string, any> | null
+  collectionConfig: Record<string, any> | null
+  dialect: string
+  collection: string
+}): Promise<Record<string, any> | null> {
+  const { data, fields, config, dialect, collection } = params
+  let { collectionConfig } = params
+  const { layerCamelCase } = data
 
-  // ── Manifest-driven detection + contributions ──────────────────────────────
   // Discover manifests (cached after first call) and compute detection results
   const manifests = await discoverManifests()
   const detectors = await getGeneratorDetectors(manifests)
@@ -809,83 +896,101 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   const translatableFieldNames = config?.translations?.collections?.[toCase(collection).plural] || []
   data.formEnhancements = runFormContributions(contributions, data, dialect)
   data.listEnhancements = runListContributions(contributions, data, translatableFieldNames)
-  // ── End manifest-driven section ────────────────────────────────────────────
 
-  if (dryRun) {
-    const apiPath = `${layer}-${cases.plural}`
-    console.log('DRY RUN - Would generate:')
-    if (hierarchy.enabled) {
-      console.log(`\n🌳 HIERARCHY ENABLED - Additional files will be generated:`)
-      console.log(`   • Database fields: parentId, path, depth, order`)
-      console.log(`   • Tree queries: getTreeData(), updatePosition(), reorderSiblings()`)
-      console.log(`   • API endpoints: [id]/move.patch.ts, reorder.patch.ts`)
-      console.log(`   • Form: Parent picker component\n`)
-    }
-    if (!collectionConfig?.formComponent) {
-      console.log(`• ${base}/app/components/Form.vue`)
-    } else {
-      console.log(`• Form.vue skipped (using ${collectionConfig.formComponent})`)
-    }
-    console.log(`• ${base}/app/components/List.vue`)
+  return collectionConfig
+}
 
-    // Show repeater components
-    const repeaterFields = fields.filter(f => f.type === 'repeater')
-    const repeaterComponents = new Set()
-    for (const field of repeaterFields) {
-      const componentName = field.meta?.repeaterComponent
-      if (componentName && !repeaterComponents.has(componentName)) {
-        repeaterComponents.add(componentName)
-        console.log(`• ${base}/app/components/${componentName}.vue [PLACEHOLDER]`)
-      }
-    }
+// Print the dry-run plan (what would be generated) without writing anything.
+function printDryRunPlan(params: {
+  base: string
+  layer: string
+  cases: any
+  layerPascalCase: string
+  hierarchy: HierarchyConfig
+  collectionConfig: Record<string, any> | null
+  fields: Field[]
+  seed: boolean
+  seedCount: number
+  noTests: boolean
+  noDb: boolean
+}): void {
+  const { base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, noTests, noDb } = params
+  const apiPath = `${layer}-${cases.plural}`
+  console.log('DRY RUN - Would generate:')
+  if (hierarchy.enabled) {
+    console.log(`\n🌳 HIERARCHY ENABLED - Additional files will be generated:`)
+    console.log(`   • Database fields: parentId, path, depth, order`)
+    console.log(`   • Tree queries: getTreeData(), updatePosition(), reorderSiblings()`)
+    console.log(`   • API endpoints: [id]/move.patch.ts, reorder.patch.ts`)
+    console.log(`   • Form: Parent picker component\n`)
+  }
+  if (!collectionConfig?.formComponent) {
+    console.log(`• ${base}/app/components/Form.vue`)
+  } else {
+    console.log(`• Form.vue skipped (using ${collectionConfig.formComponent})`)
+  }
+  console.log(`• ${base}/app/components/List.vue`)
 
-    console.log(`• ${base}/app/composables/use${layerPascalCase}${cases.pascalCasePlural}.ts`)
-    console.log(`• ${base}/server/api/teams/[id]/${apiPath}/index.get.ts`)
-    console.log(`• ${base}/server/api/teams/[id]/${apiPath}/index.post.ts`)
-    console.log(`• ${base}/server/api/teams/[id]/${apiPath}/[${cases.camelCase}Id].patch.ts`)
-    console.log(`• ${base}/server/api/teams/[id]/${apiPath}/[${cases.camelCase}Id].delete.ts`)
-    if (hierarchy.enabled) {
-      console.log(`• ${base}/server/api/teams/[id]/${apiPath}/[${cases.camelCase}Id]/move.patch.ts`)
-      console.log(`• ${base}/server/api/teams/[id]/${apiPath}/reorder.patch.ts`)
+  // Show repeater components
+  const repeaterFields = fields.filter(f => f.type === 'repeater')
+  const repeaterComponents = new Set()
+  for (const field of repeaterFields) {
+    const componentName = field.meta?.repeaterComponent
+    if (componentName && !repeaterComponents.has(componentName)) {
+      repeaterComponents.add(componentName)
+      console.log(`• ${base}/app/components/${componentName}.vue [PLACEHOLDER]`)
     }
-    console.log(`• ${base}/server/database/queries.ts`)
-    console.log(`• ${base}/server/database/schema.ts`)
-    if (seed) {
-      console.log(`• ${base}/server/database/seed.ts (${seedCount} records)`)
-    }
-    console.log(`• ${base}/types.ts`)
-    if (!noTests) {
-      console.log(`• ${base}/${layerPascalCase}${cases.pascalCasePlural}.test.ts (schema smoke)`)
-      console.log(`• ${base}/${layerPascalCase}${cases.pascalCasePlural}.api.test.ts (route handlers)`)
-    }
-    console.log(`• ${base}/nuxt.config.ts`)
-    console.log(`• layers/${layer}/nuxt.config.ts (layer root config)`)
-    console.log(`• nuxt.config.ts (root config - add layer to extends)`)
-    if (!noDb) {
-      console.log(`• Would update server/db/schema.ts`)
-      console.log(`• Would generate database migration`)
-    }
-
-    if (repeaterComponents.size > 0) {
-      console.log(`\n• Would generate ${repeaterComponents.size} placeholder repeater component(s):`)
-      repeaterComponents.forEach((name) => {
-        console.log(`   - ${name}.vue`)
-      })
-    }
-    return
   }
 
-  // Create directories
-  // Use layer-prefixed API path
-  // For system collections, use simplified naming without layer prefix
-  let apiPath
+  console.log(`• ${base}/app/composables/use${layerPascalCase}${cases.pascalCasePlural}.ts`)
+  console.log(`• ${base}/server/api/teams/[id]/${apiPath}/index.get.ts`)
+  console.log(`• ${base}/server/api/teams/[id]/${apiPath}/index.post.ts`)
+  console.log(`• ${base}/server/api/teams/[id]/${apiPath}/[${cases.camelCase}Id].patch.ts`)
+  console.log(`• ${base}/server/api/teams/[id]/${apiPath}/[${cases.camelCase}Id].delete.ts`)
+  if (hierarchy.enabled) {
+    console.log(`• ${base}/server/api/teams/[id]/${apiPath}/[${cases.camelCase}Id]/move.patch.ts`)
+    console.log(`• ${base}/server/api/teams/[id]/${apiPath}/reorder.patch.ts`)
+  }
+  console.log(`• ${base}/server/database/queries.ts`)
+  console.log(`• ${base}/server/database/schema.ts`)
+  if (seed) {
+    console.log(`• ${base}/server/database/seed.ts (${seedCount} records)`)
+  }
+  console.log(`• ${base}/types.ts`)
+  if (!noTests) {
+    console.log(`• ${base}/${layerPascalCase}${cases.pascalCasePlural}.test.ts (schema smoke)`)
+    console.log(`• ${base}/${layerPascalCase}${cases.pascalCasePlural}.api.test.ts (route handlers)`)
+  }
+  console.log(`• ${base}/nuxt.config.ts`)
+  console.log(`• layers/${layer}/nuxt.config.ts (layer root config)`)
+  console.log(`• nuxt.config.ts (root config - add layer to extends)`)
+  if (!noDb) {
+    console.log(`• Would update server/db/schema.ts`)
+    console.log(`• Would generate database migration`)
+  }
+
+  if (repeaterComponents.size > 0) {
+    console.log(`\n• Would generate ${repeaterComponents.size} placeholder repeater component(s):`)
+    repeaterComponents.forEach((name) => {
+      console.log(`   - ${name}.vue`)
+    })
+  }
+}
+
+// Resolve the collection's API path segment.
+// For system collections, use simplified naming without layer prefix.
+function resolveApiPath(layer: string, collection: string, cases: any): string {
   if (layer.startsWith('crouton-')) {
     // System collection: use crouton-<collection_name> format
     // e.g., crouton-events + collectionEvents -> crouton-collection-events
-    apiPath = toSnakeCase(`crouton_${collection}`).replace(/_/g, '-')
-  } else {
-    apiPath = `${layer}-${cases.plural}`
+    return toSnakeCase(`crouton_${collection}`).replace(/_/g, '-')
   }
+  // Use layer-prefixed API path
+  return `${layer}-${cases.plural}`
+}
+
+// Create the collection's directory structure.
+async function createCollectionDirs(base: string, apiPath: string, hierarchy: HierarchyConfig, cases: any): Promise<void> {
   const dirs = [
     path.join(base, 'app', 'components'),
     path.join(base, 'app', 'composables'),
@@ -903,10 +1008,42 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   }
 
   console.log('✓ Directory structure created')
+}
 
-  // Generate all files using modules
+// Map every configured collection name to its layer (used by the queries
+// generator to resolve cross-collection references).
+function buildCollectionLayerMap(config: Record<string, any> | null): Map<string, string> {
+  const map = new Map<string, string>()
+  if (config?.targets) {
+    for (const t of config.targets) {
+      for (const c of t.collections) {
+        map.set(c.toLowerCase(), t.layer)
+      }
+    }
+  }
+  return map
+}
+
+// Build the core file set every collection gets: components, composable, CRUD
+// endpoints (+ hierarchy/sortable endpoints), queries, schema, types, the layer
+// nuxt.config and README.
+function buildCoreScaffoldFiles(params: {
+  base: string
+  apiPath: string
+  data: Record<string, any>
+  config: Record<string, any> | null
+  collectionConfig: Record<string, any> | null
+  dialect: string
+  layer: string
+  cases: any
+  layerPascalCase: string
+  hierarchy: HierarchyConfig
+  sortable: SortableConfig
+}): GeneratedFile[] {
+  const { base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable } = params
+
   // All endpoints now use @crouton/auth for team-based authentication
-  const files = [
+  const files: GeneratedFile[] = [
     // Only generate Form.vue if no custom formComponent specified
     ...(collectionConfig?.formComponent ? [] : [{
       path: path.join(base, 'app', 'components', '_Form.vue'),
@@ -938,17 +1075,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     },
     {
       path: path.join(base, 'server', 'database', 'queries.ts'),
-      content: generateQueries(data, config, layer, (() => {
-        const map = new Map<string, string>()
-        if (config?.targets) {
-          for (const t of config.targets) {
-            for (const c of t.collections) {
-              map.set(c.toLowerCase(), t.layer)
-            }
-          }
-        }
-        return map
-      })())
+      content: generateQueries(data, config, layer, buildCollectionLayerMap(config))
     },
     {
       path: path.join(base, 'server', 'database', 'schema.ts'),
@@ -988,8 +1115,14 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     })
   }
 
-  // Detect repeater fields and generate field components
-  // These are the source fields that other collections will depend on
+  return files
+}
+
+// Detect repeater fields and generate their field components (Input / Select /
+// CardMini). These are the source fields that other collections will depend on.
+// Creates each field's component folder as a side effect.
+async function buildRepeaterComponentFiles(base: string, fields: Field[], data: Record<string, any>): Promise<GeneratedFile[]> {
+  const files: GeneratedFile[] = []
   const repeaterFields = fields.filter(f => f.type === 'repeater')
   const generatedFieldComponents = new Set()
 
@@ -1023,6 +1156,21 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     }
   }
 
+  return files
+}
+
+// Build the seed artifacts: the optional drizzle-seed seed.ts (--seed) and the
+// always-emitted editable seed.json fixture (#298).
+function buildSeedFiles(params: {
+  base: string
+  data: Record<string, any>
+  config: Record<string, any> | null
+  seed: boolean
+  seedCount: number
+}): GeneratedFile[] {
+  const { base, data, config, seed, seedCount } = params
+  const files: GeneratedFile[] = []
+
   // Generate seed file if --seed flag is enabled
   if (seed) {
     files.push({
@@ -1048,37 +1196,54 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     console.log(`  Generating seed.json (${seedFixture.rows.length} sample rows)`)
   }
 
+  return files
+}
+
+// Build the per-collection tests — the schema-smoke test (#785) and the API
+// route handler test (#791). Caller gates on --no-tests.
+function buildCollectionTestFiles(params: {
+  base: string
+  data: Record<string, any>
+  config: Record<string, any> | null
+  cases: any
+  layerPascalCase: string
+}): GeneratedFile[] {
+  const { base, data, config, cases, layerPascalCase } = params
+  const files: GeneratedFile[] = []
+
   // Emit a schema-smoke test next to the collection (#785) — on by default,
   // suppressed by --no-tests. Runtime-free (zod only): asserts the generated
   // Zod schema accepts a valid record and rejects an invalid one. The e2e
   // fixture smoke owns boot + CRUD; this is the unit-level complement.
-  if (!noTests) {
-    files.push({
-      path: path.join(base, `${layerPascalCase}${cases.pascalCasePlural}.test.ts`),
-      content: generateCollectionTest(data, config),
-    })
-    console.log(`  Generating ${layerPascalCase}${cases.pascalCasePlural}.test.ts (schema smoke)`)
+  files.push({
+    path: path.join(base, `${layerPascalCase}${cases.pascalCasePlural}.test.ts`),
+    content: generateCollectionTest(data, config),
+  })
+  console.log(`  Generating ${layerPascalCase}${cases.pascalCasePlural}.test.ts (schema smoke)`)
 
-    // Emit the API route handler test (#791) — the depth deferred from #788.
-    // Drives the generated handlers with mocked team-auth + queries and a fake
-    // H3 event to cover team-scoping (unauth → rejected; queries called with the
-    // resolved team id) and error paths (invalid body → rejected, missing id →
-    // 400, not-found → 404). Same --no-tests gate.
-    files.push({
-      path: path.join(base, `${layerPascalCase}${cases.pascalCasePlural}.api.test.ts`),
-      content: generateApiTest(data, config),
-    })
-    console.log(`  Generating ${layerPascalCase}${cases.pascalCasePlural}.api.test.ts (route handlers)`)
-  }
+  // Emit the API route handler test (#791) — the depth deferred from #788.
+  // Drives the generated handlers with mocked team-auth + queries and a fake
+  // H3 event to cover team-scoping (unauth → rejected; queries called with the
+  // resolved team id) and error paths (invalid body → rejected, missing id →
+  // 400, not-found → 404). Same --no-tests gate.
+  files.push({
+    path: path.join(base, `${layerPascalCase}${cases.pascalCasePlural}.api.test.ts`),
+    content: generateApiTest(data, config),
+  })
+  console.log(`  Generating ${layerPascalCase}${cases.pascalCasePlural}.api.test.ts (route handlers)`)
 
-  // Write all files
-  for (const file of files) {
-    await fsp.writeFile(file.path, file.content, 'utf8')
-    console.log(`  ✓ ${path.relative(base, file.path)}`)
-  }
+  return files
+}
 
-  // Note: team-auth utility is now provided by @fyit/crouton package
-  // No need to generate it per-layer
+// Update the layer root nuxt.config (extend the new collection, wire i18n when
+// translations are enabled) and add the layer to the root nuxt.config extends.
+async function updateLayerAndRootConfigs(params: {
+  layer: string
+  collection: string
+  config: Record<string, any> | null
+  cases: any
+}): Promise<void> {
+  const { layer, collection, config, cases } = params
 
   // Check if we're using translations
   const hasTranslations = config?.translations?.collections?.[cases.plural]?.length > 0
@@ -1107,17 +1272,16 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     console.error(`! Could not update root nuxt.config.ts: ${nuxtResult.reason}`)
     console.log(`  Please manually add './layers/${layer}' to the extends array`)
   }
+}
 
-  // Create database table if requested
-  if (!noDb) {
-    await createDatabaseTable({ name: collection, layer, fields, force })
-
-    // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton
-    console.log(`↻ Ensuring translations_ui table...`)
-    await exportI18nSchema(force)
-  }
-
-  // Update collection registry
+// Register the collection in the app.config crouton collections registry.
+async function registerCollectionInAppConfig(params: {
+  layer: string
+  cases: any
+  layerPascalCase: string
+  layerCamelCase: string
+}): Promise<void> {
+  const { layer, cases, layerPascalCase, layerCamelCase } = params
   const collectionKey = `${layerCamelCase}${cases.pascalCasePlural}`
   const configExportName = `${layerCamelCase}${cases.pascalCasePlural}Config`
   const registryPath = await resolveAppConfigPath()
@@ -1135,6 +1299,69 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   } else {
     console.error(`Failed to update registry: ${registryResult.reason}`)
   }
+}
+
+async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, noTests = false }: WriteScaffoldOptions): Promise<void> {
+  const cases = toCase(collection)
+  const base = path.resolve('layers', layer, 'collections', cases.plural)
+
+  // Detect structural options (hierarchy / sortable / collab)
+  const { hierarchy, sortable, collab } = resolveStructureConfig(collectionConfig, hierarchyFlag)
+
+  // Handle translation configuration
+  config = resolveTranslationConfig({ fields, config, collectionConfig, noTranslations, plural: cases.plural })
+
+  // Check for required modules/dependencies
+  await ensureRequiredDependencies(config, noTranslations, force)
+
+  // Prepare data for all generators
+  // Typed as Record<string, any> so contribution results can be attached dynamically
+  const data: Record<string, any> = buildGeneratorData({ layer, collection, fields, hierarchy, sortable, collab, config, collectionConfig })
+  const { layerPascalCase, layerCamelCase } = data
+
+  // Manifest-driven detection + contributions (may auto-detect the form component)
+  collectionConfig = await applyManifestEnhancements({ data, fields, config, collectionConfig, dialect, collection })
+
+  if (dryRun) {
+    printDryRunPlan({ base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, noTests, noDb })
+    return
+  }
+
+  // Create directories
+  const apiPath = resolveApiPath(layer, collection, cases)
+  await createCollectionDirs(base, apiPath, hierarchy, cases)
+
+  // Generate all files using modules
+  const files: GeneratedFile[] = [
+    ...buildCoreScaffoldFiles({ base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable }),
+    ...await buildRepeaterComponentFiles(base, fields, data),
+    ...buildSeedFiles({ base, data, config, seed, seedCount }),
+    ...(noTests ? [] : buildCollectionTestFiles({ base, data, config, cases, layerPascalCase }))
+  ]
+
+  // Write all files
+  for (const file of files) {
+    await fsp.writeFile(file.path, file.content, 'utf8')
+    console.log(`  ✓ ${path.relative(base, file.path)}`)
+  }
+
+  // Note: team-auth utility is now provided by @fyit/crouton package
+  // No need to generate it per-layer
+
+  // Update the layer root + root nuxt.config (and i18n locale files when needed)
+  await updateLayerAndRootConfigs({ layer, collection, config, cases })
+
+  // Create database table if requested
+  if (!noDb) {
+    await createDatabaseTable({ name: collection, layer, fields, force })
+
+    // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton
+    console.log(`↻ Ensuring translations_ui table...`)
+    await exportI18nSchema(force)
+  }
+
+  // Update collection registry
+  await registerCollectionInAppConfig({ layer, cases, layerPascalCase, layerCamelCase })
 
   // Record generation history for DevTools Generators tab
   if (!dryRun) {
@@ -1162,60 +1389,59 @@ interface PostGenerationOptions {
   force: boolean
 }
 
-async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
-  const { allCollections, config, dryRun, noDb, force } = opts
+// Batch database setup: update the schema index for every generated collection,
+// ensure the i18n schema, and run the database migration once.
+async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer: string; fields: Field[] }>, force: boolean): Promise<void> {
+  console.log(`\n${'═'.repeat(60)}`)
+  console.log(`  DATABASE SETUP`)
+  console.log(`${'═'.repeat(60)}\n`)
+  console.log(`Updating schema index for ${allCollections.length} collections...`)
 
-  // Update schema index for all collections and run migration once (unless disabled)
-  if (!noDb && !dryRun && allCollections.length > 0) {
-    console.log(`\n${'═'.repeat(60)}`)
-    console.log(`  DATABASE SETUP`)
-    console.log(`${'═'.repeat(60)}\n`)
-    console.log(`Updating schema index for ${allCollections.length} collections...`)
-
-    // Update schema index for each collection
-    for (const col of allCollections) {
-      const { exportName: colExportName, importPath: colImportPath, schemaIndexPath: colSchemaIndexPath } = buildSchemaExportNames(col.name, col.layer)
-      const colSchemaResult = await addNamedSchemaExport(colSchemaIndexPath, colExportName, colImportPath, force)
-      if (!colSchemaResult.added && colSchemaResult.reason !== 'already exported') {
-        console.error(`  ✗ Failed to update schema index for ${col.name}: ${colSchemaResult.reason}`)
-      }
-    }
-
-    // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton
-    // Note: exportI18nSchema() already calls registerTranslationsUiCollection() internally
-    console.log(`\n↻ Ensuring translations_ui table...`)
-    await exportI18nSchema(force)
-
-    // Run database migration once for all collections
-    console.log(`\nRunning database migration...`)
-    console.log(`Command: npx nuxt db generate (30s timeout)`)
-
-    try {
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Command timed out after 30 seconds')), 30000)
-      })
-
-      const { stdout, stderr } = await Promise.race([
-        execAsync('npx nuxt db generate'),
-        timeoutPromise
-      ])
-
-      if (stderr && !stderr.includes('Warning')) {
-        console.error(`⚠ Warnings:`, stderr)
-      }
-      console.log(`\n✓ Database migration generated successfully`)
-    } catch (execError: any) {
-      if (execError.message.includes('timed out')) {
-        console.error(`\n✗ Database migration timed out after 30 seconds`)
-        console.error(`  Check server/db/schema.ts for conflicts`)
-      } else {
-        console.error(`\n✗ Failed to run database migration:`, execError.message)
-      }
-      console.log(`\nManual command: npx nuxt db generate\n`)
+  // Update schema index for each collection
+  for (const col of allCollections) {
+    const { exportName: colExportName, importPath: colImportPath, schemaIndexPath: colSchemaIndexPath } = buildSchemaExportNames(col.name, col.layer)
+    const colSchemaResult = await addNamedSchemaExport(colSchemaIndexPath, colExportName, colImportPath, force)
+    if (!colSchemaResult.added && colSchemaResult.reason !== 'already exported') {
+      console.error(`  ✗ Failed to update schema index for ${col.name}: ${colSchemaResult.reason}`)
     }
   }
 
-  // Setup CSS @source directive for Tailwind
+  // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton
+  // Note: exportI18nSchema() already calls registerTranslationsUiCollection() internally
+  console.log(`\n↻ Ensuring translations_ui table...`)
+  await exportI18nSchema(force)
+
+  // Run database migration once for all collections
+  console.log(`\nRunning database migration...`)
+  console.log(`Command: npx nuxt db generate (30s timeout)`)
+
+  try {
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Command timed out after 30 seconds')), 30000)
+    })
+
+    const { stdout, stderr } = await Promise.race([
+      execAsync('npx nuxt db generate'),
+      timeoutPromise
+    ])
+
+    if (stderr && !stderr.includes('Warning')) {
+      console.error(`⚠ Warnings:`, stderr)
+    }
+    console.log(`\n✓ Database migration generated successfully`)
+  } catch (execError: any) {
+    if (execError.message.includes('timed out')) {
+      console.error(`\n✗ Database migration timed out after 30 seconds`)
+      console.error(`  Check server/db/schema.ts for conflicts`)
+    } else {
+      console.error(`\n✗ Failed to run database migration:`, execError.message)
+    }
+    console.log(`\nManual command: npx nuxt db generate\n`)
+  }
+}
+
+// Setup the CSS @source directive for Tailwind.
+async function setupTailwindCss(): Promise<void> {
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  TAILWIND CSS SETUP`)
   console.log(`${'═'.repeat(60)}\n`)
@@ -1234,62 +1460,378 @@ async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
     console.log(`\n⚠️  Could not automatically setup CSS @source directive`)
     displayManualCssSetupInstructions()
   }
+}
 
-  // Generate type registry for type-safe CRUD composables
+// Generate the type registry (type-safe CRUD composables) and the server-side
+// query registry (lazy-loaded query lookups). Shared by the config batch
+// post-generation and the single-collection runGenerate.
+async function generateRegistryFiles(): Promise<void> {
+  console.log(`\n${'═'.repeat(60)}`)
+  console.log(`  TYPE REGISTRY`)
+  console.log(`${'═'.repeat(60)}\n`)
+
+  try {
+    const registryResult = await generateCollectionTypesRegistry(process.cwd())
+    console.log(`✓ Generated type registry with ${registryResult.collectionsCount} collection(s)`)
+    console.log(`  → ${registryResult.outputPath}`)
+  } catch (error: any) {
+    console.log(`⚠ Could not generate type registry: ${error.message}`)
+  }
+
+  // Generate server-side query registry for lazy-loaded query lookups
+  console.log(`\n${'═'.repeat(60)}`)
+  console.log(`  QUERY REGISTRY`)
+  console.log(`${'═'.repeat(60)}\n`)
+
+  try {
+    const queryRegistryResult = await generateQueryRegistryFile(process.cwd())
+    console.log(`✓ Generated query registry with ${queryRegistryResult.collectionsCount} collection(s)`)
+    console.log(`  → ${queryRegistryResult.outputPath}`)
+  } catch (error: any) {
+    console.log(`⚠ Could not generate query registry: ${error.message}`)
+  }
+}
+
+// Deterministic default layout (#709): arrange the generated collections into
+// a viable `layout_configs` tree the POC boots with (seeded by crouton-seed).
+async function composeDefaultLayoutStep(allCollections: Array<{ name: string; layer: string; fields: Field[] }>, config: Record<string, any>): Promise<void> {
+  console.log(`\n${'═'.repeat(60)}`)
+  console.log(`  DEFAULT LAYOUT`)
+  console.log(`${'═'.repeat(60)}\n`)
+
+  try {
+    const { writeDefaultLayout } = await import('./compose-layout.ts')
+    const layoutResult = await writeDefaultLayout({
+      allCollections,
+      features: config.features,
+      cwd: process.cwd(),
+    })
+    if (layoutResult.written) {
+      console.log(`✓ Composed default layout (${layoutResult.pattern}${layoutResult.viable ? ', viable' : ', NOT viable — review minWidths'})`)
+      console.log(`  → ${layoutResult.path}`)
+    } else {
+      console.log(`⚠ Skipped default layout (${layoutResult.reason})`)
+    }
+  } catch (error: any) {
+    console.log(`⚠ Could not compose default layout: ${error.message}`)
+  }
+}
+
+async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
+  const { allCollections, config, dryRun, noDb, force } = opts
+
+  // Update schema index for all collections and run migration once (unless disabled)
+  if (!noDb && !dryRun && allCollections.length > 0) {
+    await runBatchDatabaseSetup(allCollections, force)
+  }
+
+  // Setup CSS @source directive for Tailwind
+  await setupTailwindCss()
+
+  // Generate the type/query registries and the default layout
   if (!dryRun) {
-    console.log(`\n${'═'.repeat(60)}`)
-    console.log(`  TYPE REGISTRY`)
-    console.log(`${'═'.repeat(60)}\n`)
-
-    try {
-      const registryResult = await generateCollectionTypesRegistry(process.cwd())
-      console.log(`✓ Generated type registry with ${registryResult.collectionsCount} collection(s)`)
-      console.log(`  → ${registryResult.outputPath}`)
-    } catch (error: any) {
-      console.log(`⚠ Could not generate type registry: ${error.message}`)
-    }
-
-    // Generate server-side query registry for lazy-loaded query lookups
-    console.log(`\n${'═'.repeat(60)}`)
-    console.log(`  QUERY REGISTRY`)
-    console.log(`${'═'.repeat(60)}\n`)
-
-    try {
-      const queryRegistryResult = await generateQueryRegistryFile(process.cwd())
-      console.log(`✓ Generated query registry with ${queryRegistryResult.collectionsCount} collection(s)`)
-      console.log(`  → ${queryRegistryResult.outputPath}`)
-    } catch (error: any) {
-      console.log(`⚠ Could not generate query registry: ${error.message}`)
-    }
-
-    // Deterministic default layout (#709): arrange the generated collections into
-    // a viable `layout_configs` tree the POC boots with (seeded by crouton-seed).
-    console.log(`\n${'═'.repeat(60)}`)
-    console.log(`  DEFAULT LAYOUT`)
-    console.log(`${'═'.repeat(60)}\n`)
-
-    try {
-      const { writeDefaultLayout } = await import('./compose-layout.ts')
-      const layoutResult = await writeDefaultLayout({
-        allCollections,
-        features: config.features,
-        cwd: process.cwd(),
-      })
-      if (layoutResult.written) {
-        console.log(`✓ Composed default layout (${layoutResult.pattern}${layoutResult.viable ? ', viable' : ', NOT viable — review minWidths'})`)
-        console.log(`  → ${layoutResult.path}`)
-      } else {
-        console.log(`⚠ Skipped default layout (${layoutResult.reason})`)
-      }
-    } catch (error: any) {
-      console.log(`⚠ Could not compose default layout: ${error.message}`)
-    }
+    await generateRegistryFiles()
+    await composeDefaultLayoutStep(allCollections, config)
   }
 
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  ALL DONE!`)
   console.log(`${'═'.repeat(60)}\n`)
   console.log(`Next step: Restart your Nuxt dev server\n`)
+}
+
+// ---------------------------------------------------------------------------
+// runConfig helpers — one per config-run stage
+// ---------------------------------------------------------------------------
+
+// Load the crouton config via c12, resolve the config directory, and fold the
+// CLI flags / --only filter into it. Exits when no config file is found.
+async function loadAndPrepareConfig(options: RunConfigOptions): Promise<Record<string, any>> {
+  // Resolve configPath to absolute so c12 can locate it and _configDir is always correct
+  const resolvedConfigPath = options.configPath
+    ? path.resolve(process.cwd(), options.configPath)
+    : undefined
+  const configCwd = resolvedConfigPath ? path.dirname(resolvedConfigPath) : process.cwd()
+
+  const { config } = await loadConfig({
+    name: 'crouton',
+    cwd: configCwd,
+    configFile: resolvedConfigPath || undefined,
+    defaults: {
+      dialect: 'sqlite',
+      features: {},
+      flags: {}
+    }
+  })
+
+  if (!config || (Object.keys(config).length === 0)) {
+    console.error(`\n❌ Config file not found\n`)
+    process.exit(1)
+  }
+
+  // Store config file directory for downstream path resolution (fieldsFile in collections)
+  // Always derived from the resolved config path, not process.cwd()
+  config._configDir = resolvedConfigPath
+    ? path.dirname(resolvedConfigPath)
+    : (config._configFile ? path.dirname(config._configFile) : process.cwd())
+
+  // Merge CLI flags into config.flags (CLI flags override config file)
+  if (!config.flags) config.flags = {}
+  if (options.force) config.flags.force = true
+  if (options.dryRun) config.flags.dryRun = true
+  if (options.noTests) config.flags.noTests = true
+
+  // Single-collection filter
+  const onlyCollection = options.only || null
+  if (onlyCollection) {
+    console.log(`\n📌 Generating only: ${onlyCollection}\n`)
+  }
+  config._onlyCollection = onlyCollection
+
+  return config
+}
+
+// Sync framework packages in the root nuxt.config extends for enabled features.
+async function syncFeaturePackages(config: Record<string, any>): Promise<void> {
+  if (!config.features) return
+
+  console.log('\n' + '═'.repeat(60))
+  console.log('  FRAMEWORK PACKAGES')
+  console.log('═'.repeat(60) + '\n')
+  console.log('↻ Syncing framework packages...')
+  const nuxtConfigPath = path.resolve('nuxt.config.ts')
+  const result = await syncFrameworkPackages(nuxtConfigPath, config.features)
+  if (result.synced) {
+    console.log(`✓ Synced ${result.packages.length} framework packages to extends`)
+    result.packages.forEach(pkg => console.log(`  • ${pkg}`))
+  } else {
+    console.log(`⚠ Could not sync framework packages: ${result.reason}`)
+  }
+}
+
+// Persist prompted feature configs: runtimeConfig into nuxt.config.ts and the
+// feature's config object back into crouton.config.js.
+async function persistPromptedConfigs(
+  promptedConfigs: import('./utils/manifest-merge.ts').PromptedConfig[],
+  config: Record<string, any>
+): Promise<void> {
+  const nuxtConfigPath = path.resolve('nuxt.config.ts')
+
+  for (const pc of promptedConfigs) {
+    // Write runtimeConfig to nuxt.config.ts
+    if (pc.runtimeConfig) {
+      const rtResult = await addRuntimeConfig(nuxtConfigPath, pc.runtimeConfig.server, pc.runtimeConfig.public)
+      if (rtResult.added) {
+        console.log(`  ✓ Added runtimeConfig for ${pc.featureKey}`)
+      }
+    }
+  }
+
+  // Persist feature config back to crouton.config.js
+  const configFilePath = config._configDir
+    ? path.resolve(config._configDir, 'crouton.config.js')
+    : path.resolve('crouton.config.js')
+
+  try {
+    const { readFile, writeFile } = await import('node:fs/promises')
+    const configContent = await readFile(configFilePath, 'utf-8')
+    let updated = configContent
+
+    for (const pc of promptedConfigs) {
+      // Replace `featureKey: true` with the config object
+      // Match patterns like `bookings: true` (with optional trailing comma)
+      const boolPattern = new RegExp(`(${pc.featureKey}\\s*:\\s*)true`, 'g')
+      const configStr = JSON.stringify(pc.configObject, null, 2)
+        .replace(/\n/g, '\n    ') // indent to match config file nesting
+      updated = updated.replace(boolPattern, `$1${configStr}`)
+    }
+
+    if (updated !== configContent) {
+      await writeFile(configFilePath, updated, 'utf-8')
+      console.log(`  ✓ Updated ${path.basename(configFilePath)} with feature configs`)
+    }
+  } catch {
+    // Config file may not exist or not be writable — non-fatal
+  }
+}
+
+// Auto-merge package manifest collections for enabled features
+// (may prompt interactively for manifest configuration options).
+async function autoMergeFeatureCollections(config: Record<string, any>, options: RunConfigOptions): Promise<void> {
+  if (!config.features || options.noAutoMerge) return
+
+  const { mergeManifestCollections } = await import('./utils/manifest-merge.ts')
+  const mergeResult = await mergeManifestCollections(config)
+  const promptedConfigs: import('./utils/manifest-merge.ts').PromptedConfig[] = mergeResult.promptedConfigs
+
+  if (mergeResult.merged > 0) {
+    console.log('\n' + '═'.repeat(60))
+    console.log('  PACKAGE COLLECTIONS (auto-merged)')
+    console.log('═'.repeat(60))
+    mergeResult.collections.forEach(c =>
+      console.log(`  + ${c.layer}/${c.name} (from @fyit/crouton-${c.feature})`)
+    )
+    if (mergeResult.skipped.length > 0) {
+      console.log(`\n  Already in config: ${mergeResult.skipped.join(', ')}`)
+    }
+  }
+
+  // Persist prompted configs: update nuxt.config.ts runtimeConfig + crouton.config.js
+  if (promptedConfigs.length > 0 && !options.dryRun) {
+    await persistPromptedConfigs(promptedConfigs, config)
+  }
+}
+
+// Generate one collection entry from the enhanced config format. Returns the
+// entry to track for the batch db:generate, or null when the collection has no
+// fields file.
+async function generateConfigEntry(params: {
+  layer: string
+  collectionName: string
+  collectionConfig: Record<string, any> | undefined
+  config: Record<string, any>
+  typeMapping: any
+}): Promise<{ name: string; layer: string; fields: Field[] } | null> {
+  const { layer, collectionName, collectionConfig, config, typeMapping } = params
+
+  if (!collectionConfig?.fieldsFile) {
+    console.error(`Error: No fields file found for collection '${collectionName}'`)
+    return null
+  }
+
+  console.log(`\n${'─'.repeat(60)}`)
+  console.log(`Generating ${layer}/${collectionName}`)
+  console.log(`${'─'.repeat(60)}`)
+  console.log(`Schema: ${collectionConfig.fieldsFile}`)
+  if (collectionConfig.hierarchy) {
+    console.log(`Hierarchy: enabled`)
+  }
+
+  // Resolve fieldsFile path relative to config directory if needed
+  const resolvedFieldsFile = config._configDir && !path.isAbsolute(collectionConfig.fieldsFile)
+    ? path.resolve(config._configDir, collectionConfig.fieldsFile)
+    : collectionConfig.fieldsFile
+  const fields = await loadFields(resolvedFieldsFile, typeMapping)
+
+  // Check if this collection has translations
+  // Generate files but skip database creation (we'll do it in batch at the end)
+  // Determine seed settings from collection config or global config
+  const collectionSeed = collectionConfig?.seed === true
+    ? { count: config?.seed?.defaultCount || 25 }
+    : typeof collectionConfig?.seed === 'object'
+      ? collectionConfig.seed
+      : null
+
+  await writeScaffold({
+    layer,
+    collection: collectionName,
+    fields,
+    dialect: config.dialect || 'pg',
+    autoRelations: config.flags?.autoRelations || false,
+    dryRun: config.flags?.dryRun || false,
+    noDb: true, // Skip individual db:generate
+    force: config.flags?.force || false,
+    noTranslations: config.flags?.noTranslations || false,
+    config: config,
+    collectionConfig: collectionConfig, // Pass individual collection config for hierarchy detection
+    seed: !!collectionSeed,
+    seedCount: collectionSeed?.count || config?.seed?.defaultCount || 25,
+    noTests: config.flags?.noTests || collectionConfig?.tests === false || false
+  })
+
+  return { name: collectionName, layer, fields }
+}
+
+// Enhanced config format (collections[] + targets[]): generate every configured
+// collection, then run the batch post-generation steps.
+async function runEnhancedConfigFormat(config: Record<string, any>, typeMapping: any): Promise<void> {
+  if (!config.targets || !config.collections) {
+    console.error('Error: Invalid config file - missing targets or collections')
+    process.exit(1)
+  }
+
+  // Create a map of collection names to their full config (including fieldsFile, hierarchy, etc.)
+  const collectionConfigMap: Record<string, any> = {}
+  for (const col of config.collections) {
+    collectionConfigMap[col.name] = col
+  }
+
+  // Track all collections for batch db:generate
+  const allCollections: Array<{ name: string; layer: string; fields: Field[] }> = []
+
+  // Process each target
+  for (const target of config.targets) {
+    for (const collectionName of target.collections) {
+      // Skip if --only flag is set and this isn't the target collection
+      if (config._onlyCollection && collectionName !== config._onlyCollection) {
+        continue
+      }
+
+      const generated = await generateConfigEntry({
+        layer: target.layer,
+        collectionName,
+        collectionConfig: collectionConfigMap[collectionName],
+        config,
+        typeMapping
+      })
+      if (generated) {
+        allCollections.push(generated)
+      }
+    }
+  }
+
+  await runPostGeneration({
+    allCollections,
+    config,
+    dryRun: config.flags?.dryRun || false,
+    noDb: config.flags?.noDb || false,
+    force: config.flags?.force || false,
+  })
+}
+
+// Original simple config format (schemaPath + targets[]): every target collection
+// shares the one schema; then run the batch post-generation steps.
+async function runSimpleConfigFormat(config: Record<string, any>, typeMapping: any): Promise<void> {
+  const fields = await loadFields(config.schemaPath, typeMapping)
+
+  // Track all collections for batch db:generate
+  const allCollections: Array<{ name: string; layer: string; fields: Field[] }> = []
+
+  // Process each target
+  for (const target of config.targets) {
+    for (const collection of target.collections) {
+      console.log(`\nGenerating collection '${collection}' in layer '${target.layer}'...`)
+
+      // Check for global seed settings (this code path doesn't have per-collection config)
+      const globalSeed = config?.seed?.enabled === true || config?.flags?.seed === true
+
+      await writeScaffold({
+        layer: target.layer,
+        collection,
+        fields,
+        dialect: config.dialect || 'pg',
+        autoRelations: config.flags?.autoRelations || false,
+        dryRun: config.flags?.dryRun || false,
+        noDb: true, // Skip individual db:generate
+        force: config.flags?.force || false,
+        noTranslations: config.flags?.noTranslations || false,
+        config: config,
+        seed: globalSeed,
+        seedCount: config?.seed?.defaultCount || 25,
+        noTests: config.flags?.noTests || false
+      })
+
+      allCollections.push({ name: collection, layer: target.layer, fields })
+    }
+  }
+
+  await runPostGeneration({
+    allCollections,
+    config,
+    dryRun: config.flags?.dryRun || false,
+    noDb: config.flags?.noDb || false,
+    force: config.flags?.force || false,
+  })
 }
 
 /**
@@ -1299,268 +1841,80 @@ export async function runConfig(options: RunConfigOptions = {}): Promise<void> {
   try {
     const typeMapping = await loadTypeMapping()
 
-    // Resolve configPath to absolute so c12 can locate it and _configDir is always correct
-    const resolvedConfigPath = options.configPath
-      ? path.resolve(process.cwd(), options.configPath)
-      : undefined
-    const configCwd = resolvedConfigPath ? path.dirname(resolvedConfigPath) : process.cwd()
+    // Load the config file and fold CLI flags / the --only filter into it
+    const config = await loadAndPrepareConfig(options)
 
-    const { config } = await loadConfig({
-      name: 'crouton',
-      cwd: configCwd,
-      configFile: resolvedConfigPath || undefined,
-      defaults: {
-        dialect: 'sqlite',
-        features: {},
-        flags: {}
-      }
-    })
+    // Validate configuration before proceeding
+    const validation = await validateConfig(config)
 
-    if (!config || (Object.keys(config).length === 0)) {
-      console.error(`\n❌ Config file not found\n`)
+    if (!validation.valid) {
+      console.error('\n⛔ Cannot proceed with generation due to validation errors\n')
       process.exit(1)
     }
 
-    // Store config file directory for downstream path resolution (fieldsFile in collections)
-    // Always derived from the resolved config path, not process.cwd()
-    config._configDir = resolvedConfigPath
-      ? path.dirname(resolvedConfigPath)
-      : (config._configFile ? path.dirname(config._configFile) : process.cwd())
+    // Sync framework packages based on features config
+    await syncFeaturePackages(config)
 
-    // Merge CLI flags into config.flags (CLI flags override config file)
-    if (!config.flags) config.flags = {}
-    if (options.force) config.flags.force = true
-    if (options.dryRun) config.flags.dryRun = true
-    if (options.noTests) config.flags.noTests = true
+    // Auto-merge package manifest collections for enabled features
+    await autoMergeFeatureCollections(config, options)
 
-    // Single-collection filter
-    const onlyCollection = options.only || null
-    if (onlyCollection) {
-      console.log(`\n📌 Generating only: ${onlyCollection}\n`)
+    // Handle both config formats
+    if (config.collections && config.targets) {
+      // Enhanced config format with collections array
+      await runEnhancedConfigFormat(config, typeMapping)
+    } else if (config.targets && config.schemaPath) {
+      // Original simple config format
+      await runSimpleConfigFormat(config, typeMapping)
+    } else {
+      console.error('Error: Invalid config file')
+      console.error('Config must have either:')
+      console.error('  1. collections[] and targets[] (enhanced format)')
+      console.error('  2. schemaPath and targets[] (simple format)')
+      process.exit(1)
     }
-    config._onlyCollection = onlyCollection
-
-      // Validate configuration before proceeding
-      const validation = await validateConfig(config)
-
-      if (!validation.valid) {
-        console.error('\n⛔ Cannot proceed with generation due to validation errors\n')
-        process.exit(1)
-      }
-
-      // Sync framework packages based on features config
-      if (config.features) {
-        console.log('\n' + '═'.repeat(60))
-        console.log('  FRAMEWORK PACKAGES')
-        console.log('═'.repeat(60) + '\n')
-        console.log('↻ Syncing framework packages...')
-        const nuxtConfigPath = path.resolve('nuxt.config.ts')
-        const result = await syncFrameworkPackages(nuxtConfigPath, config.features)
-        if (result.synced) {
-          console.log(`✓ Synced ${result.packages.length} framework packages to extends`)
-          result.packages.forEach(pkg => console.log(`  • ${pkg}`))
-        } else {
-          console.log(`⚠ Could not sync framework packages: ${result.reason}`)
-        }
-      }
-
-      // Auto-merge package manifest collections for enabled features
-      // (may prompt interactively for manifest configuration options)
-      let promptedConfigs: import('./utils/manifest-merge.ts').PromptedConfig[] = []
-      if (config.features && !options.noAutoMerge) {
-        const { mergeManifestCollections } = await import('./utils/manifest-merge.ts')
-        const mergeResult = await mergeManifestCollections(config)
-        promptedConfigs = mergeResult.promptedConfigs
-
-        if (mergeResult.merged > 0) {
-          console.log('\n' + '═'.repeat(60))
-          console.log('  PACKAGE COLLECTIONS (auto-merged)')
-          console.log('═'.repeat(60))
-          mergeResult.collections.forEach(c =>
-            console.log(`  + ${c.layer}/${c.name} (from @fyit/crouton-${c.feature})`)
-          )
-          if (mergeResult.skipped.length > 0) {
-            console.log(`\n  Already in config: ${mergeResult.skipped.join(', ')}`)
-          }
-        }
-
-        // Persist prompted configs: update nuxt.config.ts runtimeConfig + crouton.config.js
-        if (promptedConfigs.length > 0 && !options.dryRun) {
-          const nuxtConfigPath = path.resolve('nuxt.config.ts')
-
-          for (const pc of promptedConfigs) {
-            // Write runtimeConfig to nuxt.config.ts
-            if (pc.runtimeConfig) {
-              const rtResult = await addRuntimeConfig(nuxtConfigPath, pc.runtimeConfig.server, pc.runtimeConfig.public)
-              if (rtResult.added) {
-                console.log(`  ✓ Added runtimeConfig for ${pc.featureKey}`)
-              }
-            }
-          }
-
-          // Persist feature config back to crouton.config.js
-          const configFilePath = config._configDir
-            ? path.resolve(config._configDir, 'crouton.config.js')
-            : path.resolve('crouton.config.js')
-
-          try {
-            const { readFile, writeFile } = await import('node:fs/promises')
-            const configContent = await readFile(configFilePath, 'utf-8')
-            let updated = configContent
-
-            for (const pc of promptedConfigs) {
-              // Replace `featureKey: true` with the config object
-              // Match patterns like `bookings: true` (with optional trailing comma)
-              const boolPattern = new RegExp(`(${pc.featureKey}\\s*:\\s*)true`, 'g')
-              const configStr = JSON.stringify(pc.configObject, null, 2)
-                .replace(/\n/g, '\n    ') // indent to match config file nesting
-              updated = updated.replace(boolPattern, `$1${configStr}`)
-            }
-
-            if (updated !== configContent) {
-              await writeFile(configFilePath, updated, 'utf-8')
-              console.log(`  ✓ Updated ${path.basename(configFilePath)} with feature configs`)
-            }
-          } catch {
-            // Config file may not exist or not be writable — non-fatal
-          }
-        }
-      }
-
-      // Handle both config formats
-      if (config.collections && config.targets) {
-        // Enhanced config format with collections array
-        if (!config.targets || !config.collections) {
-          console.error('Error: Invalid config file - missing targets or collections')
-          process.exit(1)
-        }
-
-        // Create a map of collection names to their full config (including fieldsFile, hierarchy, etc.)
-        const collectionConfigMap = {}
-        for (const col of config.collections) {
-          collectionConfigMap[col.name] = col
-        }
-
-        // Track all collections for batch db:generate
-        const allCollections = []
-
-        // Process each target
-        for (const target of config.targets) {
-          for (const collectionName of target.collections) {
-            // Skip if --only flag is set and this isn't the target collection
-            if (config._onlyCollection && collectionName !== config._onlyCollection) {
-              continue
-            }
-
-            const collectionConfig = collectionConfigMap[collectionName]
-            if (!collectionConfig?.fieldsFile) {
-              console.error(`Error: No fields file found for collection '${collectionName}'`)
-              continue
-            }
-
-            console.log(`\n${'─'.repeat(60)}`)
-            console.log(`Generating ${target.layer}/${collectionName}`)
-            console.log(`${'─'.repeat(60)}`)
-            console.log(`Schema: ${collectionConfig.fieldsFile}`)
-            if (collectionConfig.hierarchy) {
-              console.log(`Hierarchy: enabled`)
-            }
-
-            // Resolve fieldsFile path relative to config directory if needed
-            const resolvedFieldsFile = config._configDir && !path.isAbsolute(collectionConfig.fieldsFile)
-              ? path.resolve(config._configDir, collectionConfig.fieldsFile)
-              : collectionConfig.fieldsFile
-            const fields = await loadFields(resolvedFieldsFile, typeMapping)
-
-            // Check if this collection has translations
-            // Generate files but skip database creation (we'll do it in batch at the end)
-            // Determine seed settings from collection config or global config
-            const collectionSeed = collectionConfig?.seed === true
-              ? { count: config?.seed?.defaultCount || 25 }
-              : typeof collectionConfig?.seed === 'object'
-                ? collectionConfig.seed
-                : null
-
-            await writeScaffold({
-              layer: target.layer,
-              collection: collectionName,
-              fields,
-              dialect: config.dialect || 'pg',
-              autoRelations: config.flags?.autoRelations || false,
-              dryRun: config.flags?.dryRun || false,
-              noDb: true, // Skip individual db:generate
-              force: config.flags?.force || false,
-              noTranslations: config.flags?.noTranslations || false,
-              config: config,
-              collectionConfig: collectionConfig, // Pass individual collection config for hierarchy detection
-              seed: !!collectionSeed,
-              seedCount: collectionSeed?.count || config?.seed?.defaultCount || 25,
-              noTests: config.flags?.noTests || collectionConfig?.tests === false || false
-            })
-
-            allCollections.push({ name: collectionName, layer: target.layer, fields })
-          }
-        }
-
-        await runPostGeneration({
-          allCollections,
-          config,
-          dryRun: config.flags?.dryRun || false,
-          noDb: config.flags?.noDb || false,
-          force: config.flags?.force || false,
-        })
-      } else if (config.targets && config.schemaPath) {
-        // Original simple config format
-        const fields = await loadFields(config.schemaPath, typeMapping)
-
-        // Track all collections for batch db:generate
-        const allCollections = []
-
-        // Process each target
-        for (const target of config.targets) {
-          for (const collection of target.collections) {
-            console.log(`\nGenerating collection '${collection}' in layer '${target.layer}'...`)
-
-            // Check for global seed settings (this code path doesn't have per-collection config)
-            const globalSeed = config?.seed?.enabled === true || config?.flags?.seed === true
-
-            await writeScaffold({
-              layer: target.layer,
-              collection,
-              fields,
-              dialect: config.dialect || 'pg',
-              autoRelations: config.flags?.autoRelations || false,
-              dryRun: config.flags?.dryRun || false,
-              noDb: true, // Skip individual db:generate
-              force: config.flags?.force || false,
-              noTranslations: config.flags?.noTranslations || false,
-              config: config,
-              seed: globalSeed,
-              seedCount: config?.seed?.defaultCount || 25,
-              noTests: config.flags?.noTests || false
-            })
-
-            allCollections.push({ name: collection, layer: target.layer, fields })
-          }
-        }
-
-        await runPostGeneration({
-          allCollections,
-          config,
-          dryRun: config.flags?.dryRun || false,
-          noDb: config.flags?.noDb || false,
-          force: config.flags?.force || false,
-        })
-      } else {
-        console.error('Error: Invalid config file')
-        console.error('Config must have either:')
-        console.error('  1. collections[] and targets[] (enhanced format)')
-        console.error('  2. schemaPath and targets[] (simple format)')
-        process.exit(1)
-      }
   } catch (error: any) {
     console.error('Error:', error.message)
     process.exit(1)
+  }
+}
+
+// Validate the single-collection CLI arguments: the schema file exists, the
+// cwd is writable, and (unless --force) required dependencies are present.
+async function validateGenerateArgs(args: Record<string, any>): Promise<void> {
+  console.log('\n📋 Validating CLI arguments...\n')
+
+  // Check schema file exists
+  const schemaPath = path.resolve(args.fieldsFile)
+  try {
+    await fsp.access(schemaPath)
+    console.log(`✓ Schema file found: ${args.fieldsFile}`)
+  } catch {
+    console.error(`\n❌ Schema file not found: ${args.fieldsFile}\n`)
+    process.exit(1)
+  }
+
+  // Check for write permissions
+  try {
+    await fsp.access(process.cwd(), fsp.constants.W_OK)
+    console.log(`✓ Write permissions verified`)
+  } catch {
+    console.error(`\n❌ No write permissions in current directory\n`)
+    process.exit(1)
+  }
+
+  // Check dependencies unless force flag
+  if (!args.force) {
+    const dependencies = await detectRequiredDependencies()
+
+    if (dependencies.missing.length > 0) {
+      console.log('\n⚠️  Missing dependencies detected:')
+      displayMissingDependencies(dependencies)
+
+      if (!args.force) {
+        console.log('\nUse --force to skip this check or run:')
+        console.log('  crouton install\n')
+      }
+    }
   }
 }
 
@@ -1587,41 +1941,7 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
     }
 
     // Validate CLI arguments
-    console.log('\n📋 Validating CLI arguments...\n')
-
-    // Check schema file exists
-    const schemaPath = path.resolve(args.fieldsFile)
-    try {
-      await fsp.access(schemaPath)
-      console.log(`✓ Schema file found: ${args.fieldsFile}`)
-    } catch {
-      console.error(`\n❌ Schema file not found: ${args.fieldsFile}\n`)
-      process.exit(1)
-    }
-
-    // Check for write permissions
-    try {
-      await fsp.access(process.cwd(), fsp.constants.W_OK)
-      console.log(`✓ Write permissions verified`)
-    } catch {
-      console.error(`\n❌ No write permissions in current directory\n`)
-      process.exit(1)
-    }
-
-    // Check dependencies unless force flag
-    if (!args.force) {
-      const dependencies = await detectRequiredDependencies()
-
-      if (dependencies.missing.length > 0) {
-        console.log('\n⚠️  Missing dependencies detected:')
-        displayMissingDependencies(dependencies)
-
-        if (!args.force) {
-          console.log('\nUse --force to skip this check or run:')
-          console.log('  crouton install\n')
-        }
-      }
-    }
+    await validateGenerateArgs(args)
 
     console.log(`\n📦 Will generate:`)
     console.log(`  Layer: ${args.layer}`)
@@ -1647,32 +1967,9 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
     // Proceed with generation
     await writeScaffold({ ...args, fields })
 
-    // Generate type registry for type-safe CRUD composables
+    // Generate the type + query registries for type-safe CRUD composables
     if (!args.dryRun) {
-      console.log(`\n${'═'.repeat(60)}`)
-      console.log(`  TYPE REGISTRY`)
-      console.log(`${'═'.repeat(60)}\n`)
-
-      try {
-        const registryResult = await generateCollectionTypesRegistry(process.cwd())
-        console.log(`✓ Generated type registry with ${registryResult.collectionsCount} collection(s)`)
-        console.log(`  → ${registryResult.outputPath}`)
-      } catch (error: any) {
-        console.log(`⚠ Could not generate type registry: ${error.message}`)
-      }
-
-      // Generate server-side query registry
-      console.log(`\n${'═'.repeat(60)}`)
-      console.log(`  QUERY REGISTRY`)
-      console.log(`${'═'.repeat(60)}\n`)
-
-      try {
-        const queryRegistryResult = await generateQueryRegistryFile(process.cwd())
-        console.log(`✓ Generated query registry with ${queryRegistryResult.collectionsCount} collection(s)`)
-        console.log(`  → ${queryRegistryResult.outputPath}`)
-      } catch (error: any) {
-        console.log(`⚠ Could not generate query registry: ${error.message}`)
-      }
+      await generateRegistryFiles()
 
       // Print .env hints for prompted configurations
       if (promptedConfigs.length > 0) {
