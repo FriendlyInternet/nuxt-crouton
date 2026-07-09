@@ -141,6 +141,9 @@
 - name: "poc:skillissue"
   color: "fef2c0"
   description: "POC: pocs/skillissue (skill/issue marketing site)"
+- name: "poc:notes"
+  color: "fef2c0"
+  description: "POC: pocs/notes"
 
 # ── Sandboxes (sandboxes/*) — throwaway, human-eyeball test apps (delete-after) ──
 - name: "sandbox:minimal-theme-demo"
