@@ -198,6 +198,11 @@ only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
   so parallel leaves never collide on branches/files. One issue → one branch → one PR
   with `Closes #NN`. Workers obey the `packages/` HARD GATE and the `/commit` + no-squash
   merge policy.
+- **`Closes` only YOUR issue; `Refs` any other blocked issue (#1253).** A PR body's `Closes`
+  on someone else's `status:blocked` issue (e.g. a retest your fix unblocks) auto-closes it
+  out from under the owner's pending reply — the #1233/#1234 race. Use `Refs #NN` for those;
+  `warn-closes-blocked.yml` warns on violations (gate PRs on `epic/*` are exempt — closing
+  their own blocked issue via merge-on-approval is the designed flow).
 
 ### Integration-branch flow & safety (#348)
 

@@ -1,0 +1,71 @@
+name: Warn on Closes of a blocked issue
+
+# (#1253, Fix B) A root-cause-fix PR that writes `Closes #<retest issue>` auto-closes a
+# `status:blocked` issue out from under the owner's pending reply — the #1233/#1234 race,
+# where the resume then ran against a closed, superseded issue.
+#
+# WARNING ONLY — deliberately NOT a required check. Closing a blocked issue via `Closes`
+# is the NORMAL flow for sign-off gate PRs: resume-on-comment's merge-on-approval step
+# merges exactly the PR whose body says `Closes #<blocked issue>` while the label is still
+# on. Gate PRs target `epic/*` branches (the merge step keys on that), so the job guard
+# exempts them; a hard block here would red-flag every gate PR and could deadlock the
+# auto-merge chain. Convention: a root-cause fix uses `Refs #NN` on a retest issue.
+#
+# Known limits (accepted): body-only parsing — a `Closes` in a commit message is invisible
+# here; and the target's label can change after this ran. This narrows the cause; the
+# raced-reply symptom is handled by resume-on-comment's superseded-close re-check.
+
+on:
+  pull_request:
+    types: [opened, edited, reopened]
+
+permissions:
+  issues: read
+  pull-requests: write
+
+jobs:
+  warn:
+    # Gate PRs (base = epic/*) legitimately close their blocked issue — exempt.
+    if: ${{ !startsWith(github.event.pull_request.base.ref, 'epic/') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request
+            const body = pr.body || ''
+            // GitHub's closing keywords (close/closes/closed, fix/fixes/fixed,
+            // resolve/resolves/resolved, optional colon).
+            const re = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s*:?\s+#(\d+)/gi
+            const nums = [...new Set([...body.matchAll(re)].map(m => Number(m[1])))]
+            if (!nums.length) { core.info('No closing references in the PR body.'); return }
+
+            const blocked = []
+            for (const issue_number of nums) {
+              try {
+                const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
+                if (issue.pull_request) continue // a PR reference, not an issue
+                const isBlocked = (issue.labels || [])
+                  .some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+                if (issue.state === 'open' && isBlocked) blocked.push(issue_number)
+              } catch (e) { core.warning(`could not check #${issue_number}: ${e.message}`) }
+            }
+            if (!blocked.length) { core.info('No open status:blocked issues referenced.'); return }
+
+            // Warn once per PR — dedupe on the marker so `edited` events don't re-post.
+            const marker = '<!-- warn-closes-blocked -->'
+            const comments = await github.paginate(github.rest.issues.listComments,
+              { ...context.repo, issue_number: pr.number })
+            if (comments.some(c => (c.body || '').includes(marker))) {
+              core.info('Already warned on this PR.'); return
+            }
+
+            const list = blocked.map(n => `#${n}`).join(', ')
+            const plural = blocked.length > 1
+            await github.rest.issues.createComment({ ...context.repo, issue_number: pr.number,
+              body: `${marker}\n> 🤖 **Claude Code** · agent pipeline (CI) · _Closes-a-blocked-issue check (#1253)_\n\n`
+                + `⚠️ This PR's body \`Closes\` **${list}**, which ${plural ? 'are' : 'is'} \`status:blocked\` — `
+                + `merging will auto-close ${plural ? 'them' : 'it'} out from under a pending owner reply `
+                + '(the #1233 race). If this PR is a **root-cause fix** rather than the blocked work itself, '
+                + `use \`Refs ${list}\` instead of \`Closes\`. Warning only — not a required check.` })
+            core.warning(`PR #${pr.number} Closes blocked issue(s): ${list}`)
