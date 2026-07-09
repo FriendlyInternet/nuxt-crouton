@@ -101,13 +101,43 @@
     "@ai-sdk/ui-utils",           // imported by crouton-ai's built dist .d.ts (dist is ignored)
     "@libsql/client"              // D1/sqlite runtime driver in generated scaffolds, loaded dynamically (like better-sqlite3) — #1252
   ],
+  // ONE health block only: this file briefly carried two "health" keys and JSON
+  // last-key-wins silently discarded the first (#1256) — never add a second.
   "health": {
-    // INTERIM until the coverage feed lands (#1256): with no coverage
-    // data, CRAP degenerates to cyclomatic²+cyclomatic,
-    // so the default 30 fires on every cyc≥5 function — pure noise that blocks
-    // hotspot-splitting PRs. 420 aligns CRAP with the maxCyclomatic 20 gate
-    // (dormant, not disabled). REVERT to 30 when `--coverage` is wired into CI.
-    "maxCrap": 420
+    // CRAP gate (#1256): CI feeds real coverage into the audit (test job emits
+    // coverage/coverage-final.json → artifact → `fallow audit --coverage`); locally,
+    // fallow auto-discovers ./coverage/coverage-final.json after `pnpm test:coverage`.
+    // maxCrap 30 is meaningful only where coverage can exist, i.e. packages/* where
+    // test-first is required (#779) — the thresholdOverrides below noise-floor the
+    // zero-coverage stages, where CRAP degenerates to cyclomatic²+cyclomatic and 30
+    // fires on every cyc≥5 function. Cyclomatic/cognitive/unit-size gates still apply
+    // everywhere (overrides, unlike `ignore`, keep those intact).
+    "maxCrap": 30,
+    "thresholdOverrides": [
+      {
+        "files": [
+          "apps/**",
+          "pocs/**",
+          "fixtures/**",
+          "sandboxes/**",
+          "examples/**",
+          "workers/**",
+          "docs/**",
+          "scripts/**",
+          "e2e/**"
+        ],
+        "maxCrap": 420,
+        "reason": "zero-coverage stages (test-first off/opt-in, #779): CRAP degenerates to cyc²+cyc, so 30 would flag every new cyc≥5 function and re-block hotspot-splitting PRs (#1243); cyclomatic/cognitive/unit-size gates still apply"
+      }
+    ],
+    // Generated crouton code is boilerplate, not hand-maintained — exclude it from complexity
+    // (the CRAP is in the template, fixed once there, not per-POC). Same spirit as fixtures. (#1252)
+    "ignore": [
+      "**/scripts/sync-wrangler-ids.mjs",
+      "**/scripts/inject-wrangler-env.mjs",
+      "**/layers/**/app/components/**/*.vue",
+      "**/layers/**/collections/**/server/**"
+    ]
   },
   "duplicates": {
     // Hide pair-only clones; focus on widespread copy-paste
@@ -124,16 +154,6 @@
       // Generated per-app scaffold files — byte-identical across every crouton app/POC (#1252)
       "**/server/db/translations-ui.ts",
       "**/server/utils/_cf-stubs/**"
-    ]
-  },
-  // Generated crouton code is boilerplate, not hand-maintained — exclude it from complexity
-  // (the CRAP is in the template, fixed once there, not per-POC). Same spirit as fixtures. (#1252)
-  "health": {
-    "ignore": [
-      "**/scripts/sync-wrangler-ids.mjs",
-      "**/scripts/inject-wrangler-env.mjs",
-      "**/layers/**/app/components/**/*.vue",
-      "**/layers/**/collections/**/server/**"
     ]
   },
   // Complexity/unit-size (CRAP, big functions) is advisory, not walling (#1235/#1236).
