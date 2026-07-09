@@ -141,8 +141,14 @@ jobs:
         if: runner.os == 'macOS'
         run: command -v jq >/dev/null 2>&1 || brew install jq
 
+      # dest is keyed per app+env: on the self-hosted mini several app deploys run
+      # in parallel and the default shared ~/setup-pnpm races (ENOTEMPTY rmdir,
+      # #1254/#1255). The deploy-<app>-<env> concurrency group above guarantees one
+      # writer per dest; the dest set is bounded (apps × envs), so no disk creep. (#1258)
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+        with:
+          dest: ~/setup-pnpm-${{ inputs.app }}-${{ inputs.environment }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
