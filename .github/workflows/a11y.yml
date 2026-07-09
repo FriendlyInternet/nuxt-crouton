@@ -50,6 +50,10 @@ jobs:
       # eslint.config.mjs, warn-first) — so unlike red-team's pure static read, the subagent
       # needs node_modules to actually run `npx eslint`. Install before invoking it.
       - uses: pnpm/action-setup@v4
+        with:
+          # per-job dest — the default ~/setup-pnpm collides between the two
+          # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
+          dest: ${{ runner.temp }}/setup-pnpm
       - uses: actions/setup-node@v4
         with:
           node-version: 22

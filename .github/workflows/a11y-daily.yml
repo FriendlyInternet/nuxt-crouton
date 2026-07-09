@@ -38,6 +38,10 @@ jobs:
 
       # The deep pass runs eslint-a11y (needs deps) and may boot a fixture for axe.
       - uses: pnpm/action-setup@v4
+        with:
+          # per-job dest — the default ~/setup-pnpm collides between the two
+          # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
+          dest: ${{ runner.temp }}/setup-pnpm
       - uses: actions/setup-node@v4
         with:
           node-version: 22
