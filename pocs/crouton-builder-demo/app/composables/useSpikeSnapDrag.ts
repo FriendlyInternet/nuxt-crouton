@@ -6,9 +6,47 @@
 import { provide, shallowRef } from 'vue'
 import type { Ref } from 'vue'
 import { SPIKE_SNAP_KEY, applyPaneDrop, sizeOf } from '~/utils/spike-layout'
-import type { SpikeSnapPreview } from '~/utils/spike-layout'
+import type { SnapEdge, SpikeSnapPreview } from '~/utils/spike-layout'
 import { combineNodes, labelFor, snapIntent } from '~/utils/spike-board'
 import type { FlowNode } from '~/utils/spike-board'
+
+/** The merged group node for an EDGE merge onto a side of the target (the original snap). */
+function edgeMergedNode(target: FlowNode, moved: FlowNode, edge: SnapEdge, keepPage: { isPage?: boolean }): FlowNode {
+  const md = sizeOf(moved.data.node)
+  const horizontal = edge === 'left' || edge === 'right'
+  const targetFirst = edge === 'right' || edge === 'bottom'
+  const combined = combineNodes(target.data.node, moved.data.node, horizontal ? 'horizontal' : 'vertical', targetFirst)
+  const gx = edge === 'left' ? target.position.x - md.width : target.position.x
+  const gy = edge === 'top' ? target.position.y - md.height : target.position.y
+  return { ...target, position: { x: Math.round(gx), y: Math.round(gy) }, data: { node: combined, ...keepPage } }
+}
+
+// The merged/inserted row set for an ARMED release, or null to just place the rows as emitted.
+// The target FlowNode is matched by STABLE id (CroutonFlow re-emits rows on drag-end that don't keep
+// `data.node` by reference, so the old identity match missed and the drop silently no-op'd). Fall back
+// to node identity for safety.
+function applyArmedSnap(rows: FlowNode[], moved: FlowNode, armed: SpikeSnapPreview): FlowNode[] | null {
+  const target = rows.find(r => r.id !== moved.id && (r.id === armed.targetId || r.data.node === armed.node))
+  if (!target) return null
+  // Page (favorited) ALWAYS consumes (#942): if either side is the page, the result stays the page.
+  const keepPage = (target.data.isPage || moved.data.isPage) ? { isPage: true } : {}
+
+  // PANEDROP — add the dragged node beside the targeted pane (flatten into the row if the side runs
+  // along it, else wrap the pane perpendicular). Works on any pane edge, incl. the right of a pane in
+  // a vertical stack. The targeted pane may be a lone block (path []). (#972)
+  if (armed.paneDrop) {
+    const newNode = applyPaneDrop(target.data.node, armed.paneDrop, moved.data.node)
+    const groupNode: FlowNode = { ...target, data: { node: newNode, ...keepPage } }
+    return rows.filter(r => r.id !== moved.id && r.id !== target.id).concat(groupNode)
+  }
+
+  if (armed.edge) {
+    const groupNode = edgeMergedNode(target, moved, armed.edge, keepPage)
+    return rows.filter(r => r.id !== moved.id && r.id !== target.id).concat(groupNode)
+  }
+
+  return null
+}
 
 export function useSpikeSnapDrag(opts: { nodes: Ref<FlowNode[]>, pushUndo: () => void }) {
   const { nodes, pushUndo } = opts
@@ -84,39 +122,7 @@ export function useSpikeSnapDrag(opts: { nodes: Ref<FlowNode[]>, pushUndo: () =>
     // Released while only SOFT (not held long enough) → just place it; snapping requires the dwell.
     if (!armed) { nodes.value = rows; return }
 
-    // The target FlowNode — matched by STABLE id (CroutonFlow re-emits rows on drag-end that don't keep
-    // `data.node` by reference, so the old identity match missed and the drop silently no-op'd). Fall back
-    // to node identity for safety.
-    const target = rows.find(r => r.id !== moved.id && (r.id === armed.targetId || r.data.node === armed.node))
-    if (!target) { nodes.value = rows; return }
-    const md = sizeOf(moved.data.node)
-    // Page (favorited) ALWAYS consumes (#942): if either side is the page, the result stays the page.
-    const keepPage = (target.data.isPage || moved.data.isPage) ? { isPage: true } : {}
-
-    // PANEDROP — add the dragged node beside the targeted pane (flatten into the row if the side runs
-    // along it, else wrap the pane perpendicular). Works on any pane edge, incl. the right of a pane in
-    // a vertical stack. The targeted pane may be a lone block (path []). (#972)
-    if (armed.paneDrop) {
-      const newNode = applyPaneDrop(target.data.node, armed.paneDrop, moved.data.node)
-      const groupNode: FlowNode = { ...target, data: { node: newNode, ...keepPage } }
-      nodes.value = rows.filter(r => r.id !== moved.id && r.id !== target.id).concat(groupNode)
-      return
-    }
-
-    // EDGE merge onto a side of the target (the original snap).
-    if (armed.edge) {
-      const edge = armed.edge
-      const horizontal = edge === 'left' || edge === 'right'
-      const targetFirst = edge === 'right' || edge === 'bottom'
-      const combined = combineNodes(target.data.node, moved.data.node, horizontal ? 'horizontal' : 'vertical', targetFirst)
-      const gx = edge === 'left' ? target.position.x - md.width : target.position.x
-      const gy = edge === 'top' ? target.position.y - md.height : target.position.y
-      const groupNode: FlowNode = { ...target, position: { x: Math.round(gx), y: Math.round(gy) }, data: { node: combined, ...keepPage } }
-      nodes.value = rows.filter(r => r.id !== moved.id && r.id !== target.id).concat(groupNode)
-      return
-    }
-
-    nodes.value = rows
+    nodes.value = applyArmedSnap(rows, moved, armed) ?? rows
   }
 
   return { snapPreview, onNodeDragLive, onRowsUpdate, resetSnap }

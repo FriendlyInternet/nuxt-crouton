@@ -99,42 +99,49 @@ function collectLeaves(node: LayoutNode, rect: FlowRect, path: number[], out: { 
     collectLeaves(node.children[i]!, cr, [...path, i], out)
   }
 }
+/** The leaf pane whose centre is nearest the (clamped) cursor — fallback when no pane contains it. */
+function nearestLeaf(leaves: { path: number[], rect: FlowRect }[], ccx: number, ccy: number) {
+  let best: { path: number[], rect: FlowRect } | undefined
+  let bestD = Infinity
+  for (const l of leaves) {
+    const d = Math.hypot(ccx - (l.rect.x + l.rect.w / 2), ccy - (l.rect.y + l.rect.h / 2))
+    if (d < bestD) { bestD = d; best = l }
+  }
+  return best
+}
+// PANEDROP candidate for ONE target: the drag must OVERLAP it (≥35% of the dragged area) → drop
+// beside the PANE under the cursor. Find the leaf pane the cursor (clamped into the target) sits in,
+// then the side from which quadrant of that pane the cursor is over — so you can add to ANY edge of
+// ANY pane, incl. the right of a pane that lives in a vertical stack (no pre-existing seam needed).
+// A lone block is one pane (path []). (#972 — replaces the seam-only insert.)
+function paneDropIntent(o: FlowNode, pos: { x: number, y: number }, md: { width: number, height: number }): SnapIntent | null {
+  const dl = pos.x, dr = pos.x + md.width, dt = pos.y, db = pos.y + md.height
+  const node = o.data.node
+  const ts = sizeOf(node)
+  const tx = o.position.x, ty = o.position.y
+  const ox = Math.max(0, Math.min(dr, tx + ts.width) - Math.max(dl, tx))
+  const oy = Math.max(0, Math.min(db, ty + ts.height) - Math.max(dt, ty))
+  if ((ox * oy) / (md.width * md.height) < 0.35) return null // not enough over this node → try edge-snap
+  const ccx = clamp(pos.x + md.width / 2, tx, tx + ts.width), ccy = clamp(pos.y + md.height / 2, ty, ty + ts.height)
+  const leaves: { path: number[], rect: FlowRect }[] = []
+  collectLeaves(node, { x: tx, y: ty, w: ts.width, h: ts.height }, [], leaves)
+  // The pane containing the (clamped) cursor; else the nearest by centre.
+  const hit = leaves.find(l => ccx >= l.rect.x && ccx <= l.rect.x + l.rect.w && ccy >= l.rect.y && ccy <= l.rect.y + l.rect.h)
+    ?? nearestLeaf(leaves, ccx, ccy)
+  if (!hit) return null
+  const lr = hit.rect
+  const relx = (ccx - (lr.x + lr.w / 2)) / lr.w
+  const rely = (ccy - (lr.y + lr.h / 2)) / lr.h
+  const edge: SnapEdge = Math.abs(relx) >= Math.abs(rely) ? (relx >= 0 ? 'right' : 'left') : (rely >= 0 ? 'bottom' : 'top')
+  const rect = { left: ((lr.x - tx) / ts.width) * 100, top: ((lr.y - ty) / ts.height) * 100, width: (lr.w / ts.width) * 100, height: (lr.h / ts.height) * 100 }
+  return { kind: 'panedrop', target: o, paneDrop: { path: hit.path, edge, rect } }
+}
 export function snapIntent(movedNode: LayoutNode, pos: { x: number, y: number }, others: FlowNode[]): SnapIntent | null {
   const md = sizeOf(movedNode)
-  const cx = pos.x + md.width / 2
-  const cy = pos.y + md.height / 2
-  // 1) PANEDROP: the drag OVERLAPS a target (≥35% of the dragged area) → drop beside the PANE under the
-  // cursor. Find the leaf pane the cursor (clamped into the target) sits in, then the side from which
-  // quadrant of that pane the cursor is over — so you can add to ANY edge of ANY pane, incl. the right
-  // of a pane that lives in a vertical stack (no pre-existing seam needed). A lone block is one pane
-  // (path []). (#972 — replaces the seam-only insert.)
-  const dl = pos.x, dr = pos.x + md.width, dt = pos.y, db = pos.y + md.height
+  // 1) PANEDROP: dropped OVER a layout → add it beside the pane under the cursor.
   for (const o of others) {
-    const node = o.data.node
-    const ts = sizeOf(node)
-    const tx = o.position.x, ty = o.position.y
-    const ox = Math.max(0, Math.min(dr, tx + ts.width) - Math.max(dl, tx))
-    const oy = Math.max(0, Math.min(db, ty + ts.height) - Math.max(dt, ty))
-    if ((ox * oy) / (md.width * md.height) < 0.35) continue // not enough over this node → try edge-snap
-    const ccx = clamp(cx, tx, tx + ts.width), ccy = clamp(cy, ty, ty + ts.height)
-    const leaves: { path: number[], rect: FlowRect }[] = []
-    collectLeaves(node, { x: tx, y: ty, w: ts.width, h: ts.height }, [], leaves)
-    // The pane containing the (clamped) cursor; else the nearest by centre.
-    let hit = leaves.find(l => ccx >= l.rect.x && ccx <= l.rect.x + l.rect.w && ccy >= l.rect.y && ccy <= l.rect.y + l.rect.h)
-    if (!hit) {
-      let bestD = Infinity
-      for (const l of leaves) {
-        const d = Math.hypot(ccx - (l.rect.x + l.rect.w / 2), ccy - (l.rect.y + l.rect.h / 2))
-        if (d < bestD) { bestD = d; hit = l }
-      }
-    }
-    if (!hit) continue
-    const lr = hit.rect
-    const relx = (ccx - (lr.x + lr.w / 2)) / lr.w
-    const rely = (ccy - (lr.y + lr.h / 2)) / lr.h
-    const edge: SnapEdge = Math.abs(relx) >= Math.abs(rely) ? (relx >= 0 ? 'right' : 'left') : (rely >= 0 ? 'bottom' : 'top')
-    const rect = { left: ((lr.x - tx) / ts.width) * 100, top: ((lr.y - ty) / ts.height) * 100, width: (lr.w / ts.width) * 100, height: (lr.h / ts.height) * 100 }
-    return { kind: 'panedrop', target: o, paneDrop: { path: hit.path, edge, rect } }
+    const intent = paneDropIntent(o, pos, md)
+    if (intent) return intent
   }
   // 2) EDGE: proximity side-snap — merge onto the outer edge of a NEARBY (non-overlapping) card.
   const s = snapAt(movedNode, pos, others)
