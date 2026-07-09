@@ -3,6 +3,13 @@ node_modules
 .pnpm-store
 .pnpm-debug.log
 
+# pi coding agent's own local scratch dir (skills symlinks, npm cache, session
+# state it writes into the worktree during a pi-driven CI run) — never commit
+# anything from here EXCEPT the tracked project config (#1298, from PR #1296's
+# stray .pi/npm/.gitignore leak).
+.pi/*
+!.pi/settings.json
+
 # Node.js compile cache (NODE_COMPILE_CACHE runtime artifacts)
 node-compile-cache/
 
