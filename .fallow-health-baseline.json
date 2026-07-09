@@ -1,900 +1,13 @@
 {
   "finding_counts": {
-    "apps/fanfare/app/pages/admin/[team]/sales/events/index.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/app/pages/index.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId]/move.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/index.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/reorder.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/pages/collections/pages/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 5
-      }
-    },
-    "apps/fanfare/layers/pages/collections/pages/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/categories/server/api/teams/[id]/sales-categories/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/categories/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/fanfare/layers/sales/collections/categories/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/clients/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/clients/server/api/teams/[id]/sales-clients/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/clients/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "apps/fanfare/layers/sales/collections/clients/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/events/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/events/server/api/teams/[id]/sales-events/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/events/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 5
-      }
-    },
-    "apps/fanfare/layers/sales/collections/events/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/eventsettings/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/eventsettings/server/api/teams/[id]/sales-eventsettings/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/eventsettings/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/fanfare/layers/sales/collections/eventsettings/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/kdsbumps/app/components/List.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/kdsbumps/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/kdsbumps/server/api/teams/[id]/sales-kdsbumps/index.get.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/kdsbumps/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/fanfare/layers/sales/collections/kdsbumps/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/locations/server/api/teams/[id]/sales-locations/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/locations/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/fanfare/layers/sales/collections/locations/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/orderitems/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/orderitems/server/api/teams/[id]/sales-orderitems/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/orderitems/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/fanfare/layers/sales/collections/orderitems/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/orders/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/orders/server/api/teams/[id]/sales-orders/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/orders/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/fanfare/layers/sales/collections/orders/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/printers/server/api/teams/[id]/sales-printers/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/printers/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/fanfare/layers/sales/collections/printers/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/printqueues/app/components/List.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/printqueues/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/printqueues/server/api/teams/[id]/sales-printqueues/index.get.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/printqueues/server/database/queries.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/fanfare/layers/sales/collections/printqueues/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/products/app/components/List.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/products/app/components/Option/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/products/app/components/Option/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/products/server/api/teams/[id]/sales-products/index.get.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/products/server/api/teams/[id]/sales-products/reorder.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/layers/sales/collections/products/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/fanfare/layers/sales/collections/products/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/fanfare/scripts/sync-wrangler-ids.mjs": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/categorize/app/components/CategorizeCategorizeLayoutsCard.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/categorize/app/components/NotionCardNode.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "apps/triage/layers/categorize/app/pages/admin/[team]/categorize.vue": {
       "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 4
-      },
-      "crap_high": {
-        "count": 9
-      },
-      "crap_moderate": {
-        "count": 6
-      }
-    },
-    "apps/triage/layers/categorize/collections/categorize-layouts/app/components/_Form.vue": {
-      "crap_moderate": {
         "count": 1
-      }
-    },
-    "apps/triage/layers/categorize/collections/categorize-layouts/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/triage/layers/categorize/collections/categorize-layouts/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/categorize/server/api/teams/[id]/notion/database/[databaseId]/categorize.post.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/categorize/server/api/teams/[id]/notion/database/[databaseId]/pages.get.ts": {
-      "complexity_critical": {
-        "count": 2
       },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/categorize/server/api/teams/[id]/notion/database/[databaseId]/property.post.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/categorize/server/api/teams/[id]/notion/databases.get.ts": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
       },
       "crap_critical": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId]/move.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/index.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/reorder.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/pages/collections/pages/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/triage/layers/pages/collections/pages/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/accounts/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/accounts/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/triage/layers/triage/collections/accounts/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/discussions/app/components/List.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/discussions/app/components/_Form.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/discussions/server/database/queries.ts": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/triage/layers/triage/collections/discussions/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/flows/app/components/List.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/flows/app/components/_Form.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/flows/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/triage/layers/triage/collections/flows/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/inputs/app/components/_Form.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/inputs/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/triage/layers/triage/collections/inputs/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/jobs/app/components/List.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/jobs/app/components/_Form.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/jobs/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/triage/layers/triage/collections/jobs/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/messages/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "apps/triage/layers/triage/collections/messages/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/triage/layers/triage/collections/messages/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/outputs/app/components/List.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/outputs/app/components/_Form.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/outputs/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/triage/layers/triage/collections/outputs/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/tasks/app/components/_Form.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/tasks/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/triage/layers/triage/collections/tasks/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/users/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/layers/triage/collections/users/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "apps/triage/layers/triage/collections/users/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/triage/scripts/sync-wrangler-ids.mjs": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/bookings/app/components/List.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/bookings/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/bookings/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/velo/layers/bookings/collections/bookings/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/emaillogs/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/emaillogs/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/velo/layers/bookings/collections/emaillogs/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/emailtemplates/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/velo/layers/bookings/collections/emailtemplates/server/api/teams/[id]/bookings-emailtemplates/[emailtemplateId].patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/emailtemplates/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/velo/layers/bookings/collections/emailtemplates/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/locations/app/components/BlockedDate/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/locations/app/components/BlockedDate/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/locations/app/components/List.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/locations/app/components/Slot/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/locations/app/components/Slot/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/locations/app/components/_Form.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/locations/server/api/teams/[id]/bookings-locations/[locationId].patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/locations/server/database/queries.ts": {
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/velo/layers/bookings/collections/locations/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/settings/app/components/Group/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/settings/app/components/Group/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/settings/app/components/Statuse/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/settings/app/components/Statuse/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/settings/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/bookings/collections/settings/server/database/queries.ts": {
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/velo/layers/bookings/collections/settings/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/crouton/collections/assets/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/crouton/collections/assets/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/velo/layers/crouton/collections/assets/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId]/move.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/index.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/reorder.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/layers/pages/collections/pages/server/database/queries.ts": {
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "apps/velo/layers/pages/collections/pages/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/scripts/sync-wrangler-ids.mjs": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/server/api/seed/index.post.ts": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/server/api/seed/pages-fix.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/server/api/seed/velosolidaire.post.ts": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "apps/velo/server/plugins/auto-seed-bookings.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "docs/app/app.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "docs/app/components/AppFooter.vue": {
-      "crap_high": {
         "count": 1
       }
     },
@@ -906,60 +19,16 @@
         "count": 1
       }
     },
-    "docs/app/components/changelog/PackageFilter.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "docs/app/components/changelog/ReleaseCard.vue": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "docs/app/error.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "docs/app/pages/[...slug].vue": {
       "complexity_critical": {
         "count": 1
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_high": {
-        "count": 1
       }
     },
     "docs/app/pages/changelogs/index.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "docs/scripts/sync-changelogs.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "docs/server/api/changelogs/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "docs/server/mcp/tools/get-page.ts": {
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "docs/server/mcp/tools/list-sections.ts": {
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -968,602 +37,6 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 1
-      }
-    },
-    "docs/server/routes/raw/[...slug].md.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/minimal/layers/main/collections/items/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/minimal/layers/main/collections/items/server/api/teams/[id]/main-items/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/minimal/layers/main/collections/items/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/minimal/layers/main/collections/items/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-assets/layers/main/collections/items/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-assets/layers/main/collections/items/server/api/teams/[id]/main-items/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-assets/layers/main/collections/items/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/with-assets/layers/main/collections/items/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/bookings/app/components/List.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/bookings/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/bookings/server/api/teams/[id]/bookings-bookings/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/bookings/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/bookings/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/locations/app/components/BlockedDate/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/locations/app/components/BlockedDate/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/locations/app/components/List.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/locations/app/components/Slot/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/locations/app/components/Slot/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/locations/server/api/teams/[id]/bookings-locations/[locationId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/locations/server/api/teams/[id]/bookings-locations/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/locations/server/database/queries.ts": {
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/locations/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/settings/app/components/Group/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/settings/app/components/Group/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/settings/app/components/Status/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/settings/app/components/Status/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/settings/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/settings/server/api/teams/[id]/bookings-settings/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/settings/server/database/queries.ts": {
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/with-bookings/layers/bookings/collections/settings/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/main/collections/items/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/main/collections/items/server/api/teams/[id]/main-items/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-bookings/layers/main/collections/items/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/with-bookings/layers/main/collections/items/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-collab/layers/main/collections/items/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-collab/layers/main/collections/items/server/api/teams/[id]/main-items/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-collab/layers/main/collections/items/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/with-collab/layers/main/collections/items/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-devtools/layers/main/collections/items/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-devtools/layers/main/collections/items/server/api/teams/[id]/main-items/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-devtools/layers/main/collections/items/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/with-devtools/layers/main/collections/items/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-maps/layers/main/collections/items/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-maps/layers/main/collections/items/server/api/teams/[id]/main-items/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-maps/layers/main/collections/items/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/with-maps/layers/main/collections/items/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-maps/layers/main/collections/venues/app/components/_Form.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-maps/layers/main/collections/venues/server/api/teams/[id]/main-venues/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-maps/layers/main/collections/venues/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/with-maps/layers/main/collections/venues/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-pages/layers/main/collections/items/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-pages/layers/main/collections/items/server/api/teams/[id]/main-items/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-pages/layers/main/collections/items/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/with-pages/layers/main/collections/items/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-pages/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-pages/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId]/move.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-pages/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-pages/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/index.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-pages/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/reorder.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-pages/layers/pages/collections/pages/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 5
-      }
-    },
-    "fixtures/with-pages/layers/pages/collections/pages/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/categories/server/api/teams/[id]/sales-categories/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/categories/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/categories/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/clients/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/clients/server/api/teams/[id]/sales-clients/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/clients/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/clients/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/events/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/events/server/api/teams/[id]/sales-events/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/events/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 5
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/events/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/eventsettings/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/eventsettings/server/api/teams/[id]/sales-eventsettings/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/eventsettings/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/eventsettings/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/kdsbumps/app/components/List.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/kdsbumps/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/kdsbumps/server/api/teams/[id]/sales-kdsbumps/index.get.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/kdsbumps/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/kdsbumps/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/locations/server/api/teams/[id]/sales-locations/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/locations/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/locations/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/orderitems/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/orderitems/server/api/teams/[id]/sales-orderitems/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/orderitems/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/orderitems/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/orders/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/orders/server/api/teams/[id]/sales-orders/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/orders/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/orders/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/printers/server/api/teams/[id]/sales-printers/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/printers/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/printers/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/printqueues/app/components/List.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/printqueues/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/printqueues/server/api/teams/[id]/sales-printqueues/index.get.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/printqueues/server/database/queries.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/printqueues/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/products/app/components/List.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/products/app/components/Option/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/products/app/components/Option/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/products/server/api/teams/[id]/sales-products/index.get.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/products/server/api/teams/[id]/sales-products/reorder.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/products/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "fixtures/with-sales/layers/sales/collections/products/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "fixtures/with-sales/server/api/_seed.post.ts": {
-      "crap_high": {
         "count": 1
       }
     },
@@ -1926,11 +399,6 @@
         "count": 1
       }
     },
-    "packages/crouton-assets/app/composables/useAssetUpload.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "packages/crouton-assets/app/utils/asset.ts": {
       "crap_moderate": {
         "count": 2
@@ -2215,47 +683,49 @@
       }
     },
     "packages/crouton-auth/app/composables/useAuth.ts": {
-      "complexity_high": {
+      "complexity_moderate": {
         "count": 1
       },
+      "crap_moderate": {
+        "count": 3
+      }
+    },
+    "packages/crouton-auth/app/composables/usePasswordReset.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-auth/app/composables/useSession.ts": {
+      "crap_critical": {
+        "count": 3
+      },
       "crap_high": {
-        "count": 2
+        "count": 1
       },
       "crap_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-auth/app/composables/useScopedAccess.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-auth/app/composables/useSession.ts": {
+    "packages/crouton-auth/app/composables/useTeam.ts": {
       "complexity_critical": {
-        "count": 1
-      },
-      "complexity_moderate": {
         "count": 1
       },
       "crap_critical": {
         "count": 1
       },
+      "crap_high": {
+        "count": 3
+      },
       "crap_moderate": {
         "count": 4
       }
     },
-    "packages/crouton-auth/app/composables/useTeam.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
+    "packages/crouton-auth/app/composables/useTeamContext.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     },
-    "packages/crouton-auth/app/composables/useTeamContext.ts": {
-      "complexity_high": {
-        "count": 1
-      },
+    "packages/crouton-auth/app/composables/useTwoFactor.ts": {
       "crap_high": {
         "count": 1
       }
@@ -2334,7 +804,10 @@
       }
     },
     "packages/crouton-auth/app/utils/errors.ts": {
-      "crap_moderate": {
+      "crap_critical": {
+        "count": 1
+      },
+      "crap_high": {
         "count": 1
       }
     },
@@ -2408,8 +881,14 @@
       }
     },
     "packages/crouton-auth/server/lib/auth.ts": {
-      "crap_moderate": {
+      "crap_critical": {
         "count": 2
+      },
+      "crap_high": {
+        "count": 5
+      },
+      "crap_moderate": {
+        "count": 7
       }
     },
     "packages/crouton-auth/server/middleware/team-context.ts": {
@@ -2433,7 +912,7 @@
       }
     },
     "packages/crouton-auth/server/utils/team.ts": {
-      "crap_moderate": {
+      "crap_critical": {
         "count": 1
       }
     },
@@ -2866,16 +1345,16 @@
     },
     "packages/crouton-cli/lib/generate-collection.ts": {
       "complexity_critical": {
-        "count": 5
-      },
-      "crap_critical": {
-        "count": 9
-      },
-      "crap_high": {
         "count": 6
       },
+      "crap_critical": {
+        "count": 14
+      },
+      "crap_high": {
+        "count": 12
+      },
       "crap_moderate": {
-        "count": 3
+        "count": 9
       }
     },
     "packages/crouton-cli/lib/generators/api-test.ts": {
@@ -2889,15 +1368,7 @@
       }
     },
     "packages/crouton-cli/lib/generators/collection-seed-fixture.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "packages/crouton-cli/lib/generators/collection-test.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -2906,10 +1377,12 @@
         "count": 1
       }
     },
-    "packages/crouton-cli/lib/generators/database-queries.ts": {
-      "complexity_critical": {
+    "packages/crouton-cli/lib/generators/composable.ts": {
+      "crap_high": {
         "count": 1
-      },
+      }
+    },
+    "packages/crouton-cli/lib/generators/database-queries.ts": {
       "crap_critical": {
         "count": 1
       },
@@ -2940,20 +1413,25 @@
       }
     },
     "packages/crouton-cli/lib/generators/form-component.ts": {
-      "complexity_critical": {
-        "count": 2
+      "complexity_high": {
+        "count": 1
       },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
         "count": 2
       },
-      "crap_moderate": {
+      "crap_high": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-cli/lib/generators/list-component.ts": {
+      "crap_high": {
+        "count": 1
+      }
+    },
+    "packages/crouton-cli/lib/generators/types.ts": {
       "crap_high": {
         "count": 1
       }
@@ -3084,10 +1562,7 @@
       }
     },
     "packages/crouton-cli/lib/utils/dialects.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -3130,11 +1605,6 @@
     },
     "packages/crouton-cli/lib/utils/layer-discovery.ts": {
       "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-cli/lib/utils/load-fields.ts": {
-      "crap_high": {
         "count": 1
       }
     },
@@ -3249,11 +1719,6 @@
         "count": 2
       }
     },
-    "packages/crouton-collab/app/composables/useCollabConnection.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "packages/crouton-collab/app/composables/useCollabEditor.ts": {
       "crap_high": {
         "count": 1
@@ -3298,6 +1763,11 @@
       },
       "crap_moderate": {
         "count": 2
+      }
+    },
+    "packages/crouton-collab/app/utils/avatar.ts": {
+      "crap_moderate": {
+        "count": 1
       }
     },
     "packages/crouton-collab/server/durable-objects/CollabRoom.ts": {
@@ -3765,14 +2235,6 @@
     "packages/crouton-core/app/composables/useAdminStatusBar.ts": {
       "complexity_moderate": {
         "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "packages/crouton-core/app/composables/useCollectionExport.ts": {
-      "crap_high": {
-        "count": 1
       }
     },
     "packages/crouton-core/app/composables/useCollectionImport.ts": {
@@ -3789,16 +2251,10 @@
     "packages/crouton-core/app/composables/useCollectionMutation.ts": {
       "complexity_high": {
         "count": 1
-      },
-      "crap_high": {
-        "count": 1
       }
     },
     "packages/crouton-core/app/composables/useCrouton.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_high": {
         "count": 1
       }
     },
@@ -3820,11 +2276,6 @@
         "count": 1
       }
     },
-    "packages/crouton-core/app/composables/useDisplayConfig.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
     "packages/crouton-core/app/composables/useImageCrop.ts": {
       "crap_high": {
         "count": 1
@@ -3840,16 +2291,6 @@
       "crap_critical": {
         "count": 1
       },
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/composables/useNotify.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "packages/crouton-core/app/composables/useTableColumns.ts": {
       "crap_high": {
         "count": 1
       }
@@ -3965,10 +2406,7 @@
       }
     },
     "packages/crouton-core/server/utils/tiptap-renderer.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_high": {
         "count": 1
       },
       "crap_high": {
@@ -4537,8 +2975,14 @@
       }
     },
     "packages/crouton-flow/app/composables/useFlowLayout.ts": {
-      "crap_moderate": {
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
         "count": 3
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-flow/app/composables/useFlowPositionStore.ts": {
@@ -4552,16 +2996,16 @@
       }
     },
     "packages/crouton-flow/app/composables/useFlowSync.ts": {
-      "crap_moderate": {
+      "crap_critical": {
         "count": 1
+      },
+      "crap_moderate": {
+        "count": 2
       }
     },
     "packages/crouton-flow/app/composables/useFlowSyncBridge.ts": {
-      "complexity_high": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_high": {
-        "count": 2
       }
     },
     "packages/crouton-flow/app/pages/admin/[team]/flows.vue": {
@@ -4692,14 +3136,6 @@
         "count": 1
       }
     },
-    "packages/crouton-i18n/app/composables/useT.ts": {
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "packages/crouton-i18n/app/composables/useTranslationFields.ts": {
       "crap_high": {
         "count": 1
@@ -4782,8 +3218,8 @@
       }
     },
     "packages/crouton-layout/app/components/LayoutComposeCanvas.vue": {
-      "crap_moderate": {
-        "count": 1
+      "crap_high": {
+        "count": 3
       }
     },
     "packages/crouton-layout/app/components/LayoutComposePane.vue": {
@@ -4833,10 +3269,7 @@
       }
     },
     "packages/crouton-layout/app/composables/useCroutonComposeGestures.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -4846,6 +3279,11 @@
       }
     },
     "packages/crouton-layout/app/composables/useLayoutFlip.ts": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-layout/app/utils/layout-edit.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -4861,16 +3299,10 @@
       }
     },
     "packages/crouton-layout/app/utils/layout-tree.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
       "complexity_high": {
         "count": 1
       },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -5647,10 +4079,10 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 2
+        "count": 4
       },
       "crap_high": {
-        "count": 1
+        "count": 5
       },
       "crap_moderate": {
         "count": 1
@@ -5694,7 +4126,10 @@
         "count": 1
       }
     },
-    "packages/crouton-printing/server/utils/print-job-queue.ts": {
+    "packages/crouton-printing/server/utils/escpos-drainer.ts": {
+      "crap_high": {
+        "count": 1
+      },
       "crap_moderate": {
         "count": 1
       }
@@ -6532,14 +4967,14 @@
       }
     },
     "packages/crouton-triage/server/api/crouton-triage/webhooks/notion-input.post.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
       "crap_critical": {
-        "count": 1
+        "count": 4
+      },
+      "crap_high": {
+        "count": 3
       },
       "crap_moderate": {
-        "count": 1
+        "count": 3
       }
     },
     "packages/crouton-triage/server/api/crouton-triage/webhooks/notion.post.ts": {
@@ -6582,13 +5017,13 @@
     },
     "packages/crouton-triage/server/services/notion.ts": {
       "complexity_critical": {
-        "count": 2
+        "count": 1
       },
       "crap_critical": {
         "count": 4
       },
       "crap_high": {
-        "count": 5
+        "count": 7
       },
       "crap_moderate": {
         "count": 1
@@ -6596,16 +5031,16 @@
     },
     "packages/crouton-triage/server/services/processor.ts": {
       "complexity_critical": {
-        "count": 4
+        "count": 2
       },
       "crap_critical": {
-        "count": 6
+        "count": 9
       },
       "crap_high": {
-        "count": 1
+        "count": 8
       },
       "crap_moderate": {
-        "count": 4
+        "count": 10
       }
     },
     "packages/crouton-triage/server/services/reply-generator.ts": {
@@ -6633,9 +5068,6 @@
       "complexity_high": {
         "count": 2
       },
-      "crap_high": {
-        "count": 2
-      },
       "crap_moderate": {
         "count": 2
       }
@@ -6660,10 +5092,7 @@
       }
     },
     "packages/crouton-triage/server/utils/logger.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -6731,190 +5160,22 @@
         "count": 3
       }
     },
-    "pocs/alexdeforce/layers/content/collections/agendas/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/agendas/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/agendas/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/agendas/server/database/seed.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/articles/app/components/List.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/articles/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/articles/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 6
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/articles/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/articles/server/database/seed.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/categories/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/categories/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/categories/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/categories/server/database/seed.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/tags/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/tags/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/tags/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/content/collections/tags/server/database/seed.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/crouton/collections/assets/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/crouton/collections/assets/server/api/teams/[id]/crouton-assets/[assetId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/crouton/collections/assets/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/alexdeforce/layers/crouton/collections/assets/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId]/move.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/index.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/reorder.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/pages/collections/pages/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "pocs/alexdeforce/layers/pages/collections/pages/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/site/app/components/ArticleCard.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/site/app/components/Sidebar.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/site/app/pages/agenda/index.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/site/app/pages/archive/[category]/index.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/alexdeforce/layers/site/app/pages/index.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "pocs/alexdeforce/server/api/seed/content.post.ts": {
       "complexity_critical": {
-        "count": 3
+        "count": 2
+      },
+      "complexity_high": {
+        "count": 1
       },
       "crap_critical": {
-        "count": 4
+        "count": 2
       }
     },
     "pocs/alexdeforce/server/api/seed/fix-image-nodes.post.ts": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 1
-      }
-    },
-    "pocs/alexdeforce/server/api/seed/fix-slugs.post.ts": {
-      "crap_moderate": {
+      },
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -6928,162 +5189,21 @@
     },
     "pocs/alexdeforce/server/api/seed/pages.post.ts": {
       "complexity_critical": {
-        "count": 4
-      },
-      "crap_critical": {
-        "count": 4
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/bookings/app/components/List.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/bookings/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/bookings/server/api/teams/[id]/bookings-bookings/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/bookings/server/database/queries.ts": {
-      "crap_high": {
         "count": 1
       },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/bookings/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/locations/app/components/BlockedDate/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/locations/app/components/BlockedDate/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/locations/app/components/List.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/locations/app/components/Slot/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/locations/app/components/Slot/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/locations/server/api/teams/[id]/bookings-locations/[locationId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/locations/server/api/teams/[id]/bookings-locations/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/locations/server/database/queries.ts": {
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 3
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/locations/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/settings/app/components/Group/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/settings/app/components/Group/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/settings/app/components/Status/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/settings/app/components/Status/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/settings/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/settings/server/api/teams/[id]/bookings-settings/index.get.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/settings/server/database/queries.ts": {
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 3
-      }
-    },
-    "pocs/booking-demo/layers/bookings/collections/settings/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/scripts/sync-wrangler-ids.mjs": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/booking-demo/server/plugins/auto-seed-bookings.ts": {
-      "crap_moderate": {
-        "count": 1
       }
     },
     "pocs/crouton-builder-demo/app/components/SpikeBlockNode.vue": {
       "complexity_critical": {
-        "count": 2
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
       },
       "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 4
-      },
-      "crap_moderate": {
-        "count": 3
+        "count": 1
       }
     },
     "pocs/crouton-builder-demo/app/components/SpikeFocusShell.vue": {
@@ -7092,139 +5212,28 @@
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/crouton-builder-demo/app/components/SpikeListBlock.vue": {
-      "crap_moderate": {
-        "count": 1
       }
     },
     "pocs/crouton-builder-demo/app/components/SpikePageCard.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "pocs/crouton-builder-demo/app/components/SpikePagePreview.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/app/composables/useSpikeMagic.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 2
       }
     },
     "pocs/crouton-builder-demo/app/pages/hide-recipes.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "pocs/crouton-builder-demo/app/pages/spike-app.vue": {
       "complexity_critical": {
-        "count": 3
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 8
-      },
-      "crap_moderate": {
-        "count": 5
-      }
-    },
-    "pocs/crouton-builder-demo/app/utils/spike-layout.ts": {
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/crouton-builder-demo/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId]/move.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/index.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/reorder.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/layers/pages/collections/pages/server/database/queries.ts": {
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/crouton-builder-demo/layers/pages/collections/pages/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/scripts/sync-wrangler-ids.mjs": {
-      "complexity_critical": {
         "count": 1
       },
       "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/server/api/spike-magic-ai.post.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder/app/components/BuilderBlock.vue": {
-      "crap_high": {
         "count": 1
       }
     },
@@ -7233,153 +5242,16 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder/app/pages/builder/index.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder/server/api/builder/post-layout.post.ts": {
-      "crap_high": {
         "count": 1
       }
     },
     "pocs/kvr/app/components/PublicWerkvergunningForm.vue": {
       "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/app/components/SignaturePad.vue": {
-      "crap_high": {
         "count": 1
       },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/settings/app/components/Recipient/CardMini.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/settings/app/components/Recipient/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/settings/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/settings/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/settings/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/app/components/Cable/CardMini.vue": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
       },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/app/components/Cable/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/app/components/List.vue": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/app/components/Photo/CardMini.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/app/components/Photo/Input.vue": {
-      "crap_high": {
-        "count": 2
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/app/components/Photo/Select.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/app/components/_Form.vue": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/server/api/teams/[id]/kvr-werkvergunningens/[werkvergunningenId].patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/server/api/teams/[id]/kvr-werkvergunningens/[werkvergunningenId]/resend.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/server/database/queries.ts": {
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/server/api/public/kvr/submit.post.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/server/api/public/kvr/upload.post.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/kvr/server/utils/public-token.ts": {
       "crap_critical": {
         "count": 1
       }
@@ -7390,34 +5262,10 @@
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/loop-station/app/components/BudgetTrend.vue": {
-      "crap_high": {
-        "count": 1
       }
     },
     "pocs/loop-station/app/components/InventoryTable.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "pocs/loop-station/app/components/LoopGraph.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/loop-station/app/components/TraceTimeline.vue": {
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -7427,9 +5275,6 @@
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
       }
     },
     "pocs/loop-station/app/pages/index.vue": {
@@ -7438,350 +5283,31 @@
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "pocs/loop-station/scripts/prepare-data.mjs": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "pocs/pins/layers/main/collections/pins/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/pins/scripts/sync-wrangler-ids.mjs": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "pocs/sintlukas/app/components/ContentAteliersDetail.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/app/components/SiteFooter.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/app/components/SiteHeader.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/ateliers/app/components/List.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/ateliers/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/ateliers/server/api/teams/[id]/content-ateliers/[atelierId].patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/ateliers/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 6
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/ateliers/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/ateliers/server/database/seed.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/categories/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/categories/server/api/teams/[id]/content-categories/[categorieId].patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/categories/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/categories/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/categories/server/database/seed.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/downloads/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/downloads/server/api/teams/[id]/content-downloads/[downloadId].patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/downloads/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/downloads/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/downloads/server/database/seed.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/locations/app/components/_Form.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/locations/server/api/teams/[id]/content-locations/[locationId].patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/locations/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/locations/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/locations/server/database/seed.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/news/app/components/_Form.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/news/server/api/teams/[id]/content-news/[newId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/news/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/news/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/news/server/database/seed.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/persons/app/components/_Form.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/persons/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/persons/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/content/collections/persons/server/database/seed.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/crouton/collections/assets/server/api/teams/[id]/crouton-assets/[assetId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/crouton/collections/assets/server/database/queries.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/sintlukas/layers/crouton/collections/assets/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId].patch.ts": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/[pageId]/move.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/index.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/pages/collections/pages/server/api/teams/[id]/pages-pages/reorder.patch.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/pages/collections/pages/server/database/queries.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 4
-      }
-    },
-    "pocs/sintlukas/layers/pages/collections/pages/server/database/schema.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/site/app/components/AtelierCard.vue": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/site/app/components/LocationCard.vue": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/site/app/components/PersonCard.vue": {
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "pocs/sintlukas/layers/site/app/pages/[locale]/aanbod/[slug].vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/site/app/pages/[locale]/aanbod/index.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/site/app/pages/[locale]/academie.vue": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/site/app/pages/[locale]/contact.vue": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/sintlukas/layers/site/app/pages/[locale]/index.vue": {
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/layers/site/server/api/public/ateliers.get.ts": {
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "pocs/sintlukas/layers/site/server/api/public/ateliers/[slug].get.ts": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/scripts/seed-images.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "pocs/sintlukas/server/api/seed/content.post.ts": {
       "complexity_critical": {
-        "count": 3
+        "count": 2
+      },
+      "complexity_moderate": {
+        "count": 1
       },
       "crap_critical": {
-        "count": 4
-      },
-      "crap_high": {
         "count": 2
       }
     },
@@ -7791,146 +5317,38 @@
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/server/api/seed/pages.post.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/sintlukas/server/api/teams/[id]/content-ateliers/index.get.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "scripts/app-shots.mjs": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "scripts/check-docs.mjs": {
-      "crap_high": {
-        "count": 1
       }
     },
     "scripts/db-clone.mjs": {
       "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      }
-    },
-    "scripts/db-counts.mjs": {
-      "crap_critical": {
         "count": 1
       },
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
-      }
-    },
-    "scripts/eval-ledger/append.mjs": {
-      "crap_high": {
+      },
+      "crap_critical": {
         "count": 1
       }
     },
     "scripts/eval-ledger/schema.mjs": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "scripts/eval-ledger/scoreboard.mjs": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "scripts/gen-package-catalog.mjs": {
-      "crap_high": {
-        "count": 1
-      }
-    },
-    "scripts/gen-routing.mjs": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "scripts/gen-skills-doc.mjs": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "scripts/harness-layers.mjs": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "scripts/harness-stages.mjs": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "scripts/label-ready-epics.mjs": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
-    "scripts/lib/drawio.mjs": {
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "scripts/lib/excalidraw-png.mjs": {
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "scripts/lib/excalidraw.mjs": {
       "complexity_critical": {
-        "count": 3
-      },
-      "crap_critical": {
-        "count": 5
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "scripts/lib/wrangler-d1.mjs": {
-      "crap_high": {
         "count": 2
       },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
+      },
+      "crap_critical": {
+        "count": 2
       }
     },
     "scripts/seed-review-login.mjs": {
@@ -7939,26 +5357,11 @@
       },
       "crap_critical": {
         "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "scripts/skill-freshness.mjs": {
-      "complexity_critical": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
       }
     },
     "scripts/smoke-deployed.mjs": {
@@ -7966,13 +5369,7 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "scripts/teardown-app.mjs": {
@@ -7980,31 +5377,11 @@
         "count": 1
       },
       "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
         "count": 1
       }
     },
     "scripts/validate-field-types-sync.mjs": {
-      "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "workers/ticket-editor/src/index.ts": {
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_high": {
         "count": 2
       }
     }
@@ -8015,135 +5392,111 @@
     "packages/crouton-pages/app/composables/useNavigation.ts:high impact",
     "packages/crouton-triage/server/adapters/index.ts:dead code",
     "packages/crouton-triage/server/services/reply-generator.ts:dead code",
-    "packages/crouton-triage/server/services/processor.ts:complexity",
     "packages/crouton-pages/app/editor/extensions/block-commands.ts:dead code",
     "packages/crouton-triage/server/services/userMapping.ts:dead code",
     "packages/crouton-i18n/app/composables/useEntityTranslations.ts:high impact",
     "packages/crouton-pages/app/composables/usePageLink.ts:high impact",
-    "pocs/crouton-builder-demo/app/pages/spike-app.vue:complexity",
-    "pocs/alexdeforce/layers/content/collections/agendas/server/database/schema.ts:high impact",
+    "scripts/lib/wrangler-d1.mjs:high impact",
     "packages/crouton-i18n/app/components/ListCards.vue:untested risk",
-    "apps/velo/layers/bookings/collections/locations/app/composables/useBookingsLocations.ts:dead code",
+    "packages/crouton-pages/app/composables/useFooterPage.ts:untested risk",
     "packages/crouton-layout/app/utils/layout-tree.ts:high impact",
     "packages/crouton-core/app/composables/useCrouton.ts:complexity",
-    "scripts/lib/wrangler-d1.mjs:high impact",
     "packages/crouton-sales/app/components/EventWorkspace/ProductsTab.vue:untested risk",
-    "packages/crouton-pages/app/composables/useFooterPage.ts:untested risk",
-    "apps/triage/layers/triage/collections/jobs/server/database/schema.ts:high impact",
-    "packages/crouton-pages/app/components/CollectionBinderRenderer.vue:complexity",
-    "packages/crouton-bookings/app/composables/useBookingsList.ts:high impact",
-    "packages/crouton-bookings/app/composables/useScheduleRules.ts:untested risk",
-    "packages/crouton-cli/lib/utils/helpers.ts:high impact",
     "packages/crouton-designer/app/composables/useSchemaValidation.ts:complexity",
-    "packages/crouton-layout/app/components/LayoutRenderer.vue:complexity",
-    "pocs/booking-demo/layers/bookings/collections/locations/app/composables/useBookingsLocations.ts:dead code",
+    "packages/crouton-bookings/app/composables/useScheduleRules.ts:untested risk",
+    "pocs/crouton-builder-demo/app/utils/spike-board.ts:high impact",
     "packages/crouton-triage/server/adapters/figma.ts:dead code",
-    "apps/triage/layers/triage/collections/outputs/server/database/schema.ts:high impact",
+    "packages/crouton-pages/app/components/CollectionBinderRenderer.vue:complexity",
+    "pocs/crouton-builder-demo/app/composables/useSpikeNodeOps.ts:untested risk",
+    "packages/crouton-bookings/app/composables/useBookingsList.ts:high impact",
+    "packages/crouton-cli/lib/generators/database-schema.ts:complexity",
+    "packages/crouton-assets/app/utils/asset.ts:high impact",
+    "packages/crouton-cli/lib/utils/helpers.ts:high impact",
     "packages/crouton-core/server/utils/tiptap-renderer.ts:complexity",
-    "apps/fanfare/layers/sales/collections/events/server/database/schema.ts:high impact",
+    "packages/crouton-layout/app/components/LayoutRenderer.vue:complexity",
+    "packages/crouton-triage/app/composables/useTriageFeed.ts:untested risk",
     "packages/crouton-layout/app/utils/layout-responsive.ts:high impact",
     "packages/crouton-bookings/app/composables/useBookingSlots.ts:high impact",
-    "fixtures/with-sales/layers/sales/collections/products/server/database/schema.ts:high impact",
-    "packages/crouton-cli/lib/generators/database-schema.ts:complexity",
-    "apps/triage/layers/triage/collections/discussions/server/database/schema.ts:high impact",
-    "fixtures/with-sales/layers/sales/collections/clients/server/database/schema.ts:high impact",
     "packages/crouton-bookings/app/components/BookingCreateCard.vue:complexity",
-    "pocs/kvr/layers/kvr/collections/settings/server/database/schema.ts:high impact",
-    "fixtures/with-sales/layers/sales/collections/events/server/database/schema.ts:high impact",
-    "apps/fanfare/layers/sales/collections/products/server/database/schema.ts:high impact",
     "packages/crouton-sales/app/components/PrintqueuesCard.vue:untested risk",
-    "packages/crouton-triage/app/composables/useTriageFeed.ts:untested risk",
-    "apps/fanfare/layers/sales/collections/clients/server/database/schema.ts:high impact",
-    "packages/crouton-assets/app/utils/asset.ts:high impact",
-    "apps/velo/layers/bookings/collections/settings/server/database/schema.ts:high impact",
-    "packages/crouton-designer/app/components/ReviewPanel.vue:complexity",
-    "pocs/alexdeforce/layers/content/collections/articles/server/database/schema.ts:high impact",
-    "pocs/loop-station/app/composables/useLoopData.ts:high impact",
-    "apps/triage/layers/triage/collections/flows/server/database/schema.ts:high impact",
-    "apps/velo/layers/bookings/collections/bookings/server/database/schema.ts:high impact",
+    "pocs/crouton-builder-demo/app/composables/useSpikeSnapDrag.ts:untested risk",
     "packages/crouton-triage/server/adapters/notion.ts:dead code",
+    "packages/crouton-designer/app/components/ReviewPanel.vue:complexity",
+    "pocs/loop-station/app/composables/useLoopData.ts:high impact",
     "packages/crouton-triage/server/services/ai.ts:dead code",
-    "pocs/crouton-builder-demo/app/components/SpikeBlockNode.vue:complexity",
-    "packages/crouton-pages/app/components/Nav.vue:complexity",
     "packages/crouton-pages/app/components/Blocks/Views/ContactBlockView.vue:untested risk",
-    "packages/crouton-cli/lib/generate-collection.ts:complexity",
-    "packages/crouton-pages/app/components/Workspace/Editor.vue:complexity",
+    "pocs/crouton-builder-demo/app/components/SpikeBlockNode.vue:complexity",
     "packages/crouton-admin/app/components/TeamDomainSettings.vue:complexity",
+    "packages/crouton-pages/app/components/Nav.vue:complexity",
     "pocs/crouton-builder-demo/app/composables/useSpikeMagic.ts:untested risk",
+    "packages/crouton-pages/app/components/Workspace/Editor.vue:complexity",
+    "scripts/lib/sync-wrangler-ids.mjs:complexity",
+    "packages/crouton-designer/app/composables/useSchemaExport.ts:complexity",
+    "pocs/crouton-builder-demo/app/pages/spike-app.vue:complexity",
     "packages/crouton-core/app/components/Detail.vue:complexity",
     "packages/crouton-sales/app/components/EventWorkspace/OrderItems.vue:complexity",
     "pocs/crouton-builder/app/pages/builder/[pageId].vue:complexity",
-    "packages/crouton-triage/server/services/notion.ts:complexity",
-    "packages/crouton-designer/app/composables/useSchemaExport.ts:complexity",
-    "packages/crouton-bookings/server/api/crouton-bookings/teams/[id]/customer-bookings-batch.post.ts:complexity",
     "pocs/crouton-builder-demo/app/components/SpikeFocusShell.vue:complexity",
+    "apps/triage/layers/categorize/server/api/teams/[id]/notion/database/[databaseId]/pages.get.ts:untested risk",
+    "packages/crouton-bookings/server/api/crouton-bookings/teams/[id]/customer-bookings-batch.post.ts:complexity",
     "packages/crouton-auth/app/middleware/team-context.global.ts:complexity",
     "packages/crouton-printing/server/utils/receipt-formatter.ts:complexity",
+    "packages/crouton-editor/app/components/Preview.vue:complexity",
     "packages/crouton-sales/app/components/Client/Cart.vue:complexity",
     "packages/crouton-i18n/app/components/Input.vue:complexity",
     "packages/crouton-bookings/app/components/BookingCard.vue:complexity",
+    "packages/crouton-bookings/server/utils/email-service.ts:complexity",
     "packages/crouton-bookings/app/components/LocationForm.vue:complexity",
-    "packages/crouton-editor/app/components/Preview.vue:complexity",
-    "apps/triage/layers/categorize/server/api/teams/[id]/notion/database/[databaseId]/pages.get.ts:complexity",
     "packages/crouton-maps/app/components/Blocks/CollectionMapBlockRender.vue:untested risk",
-    "packages/crouton-auth/server/database/schema/auth.ts:circular dependency",
+    "scripts/lib/excalidraw.mjs:complexity",
+    "packages/crouton-pages/app/components/Blocks/Views/LogoBlockView.vue:complexity",
     "packages/crouton-layout/app/components/LayoutResponsiveRenderer.vue:complexity",
     "packages/crouton-flow/app/components/Flow.vue:complexity",
-    "pocs/sintlukas/server/api/seed/images.post.ts:complexity",
-    "packages/crouton-pages/app/components/Blocks/Views/LogoBlockView.vue:complexity",
-    "packages/crouton-pages/server/api/teams/[id]/pages/[...slug].get.ts:complexity",
-    "packages/crouton-bookings/server/utils/email-service.ts:complexity",
-    "packages/crouton-sales/app/components/Client/OrderInterface.vue:complexity",
     "packages/crouton-bookings/app/components/ScheduleGrid.vue:complexity",
-    "packages/crouton-designer/app/components/FieldRow.vue:complexity",
+    "pocs/sintlukas/server/api/seed/images.post.ts:complexity",
     "scripts/harness-stages.mjs:untested risk",
-    "scripts/lib/excalidraw.mjs:complexity",
-    "packages/crouton-auth/server/database/schema/user-profile.ts:circular dependency",
-    "packages/crouton-sales/app/components/EventWorkspace/OrdersTab.vue:complexity",
+    "packages/crouton-mcp/src/tools/validate-schema.ts:complexity",
+    "packages/crouton-sales/app/components/Client/OrderInterface.vue:complexity",
+    "packages/crouton-collab/app/components/CollabEditingBadge.vue:complexity",
+    "packages/crouton-designer/app/components/FieldRow.vue:complexity",
     "packages/crouton-auth/app/components/Team/Members.vue:complexity",
     "packages/crouton-auth/app/components/Auth/RouteModal.vue:complexity",
-    "packages/crouton-collab/app/components/CollabEditingBadge.vue:complexity",
+    "packages/crouton-sales/app/components/EventWorkspace/OrdersTab.vue:complexity",
+    "packages/crouton-cli/lib/utils/module-detector.ts:complexity",
     "packages/crouton-layout/app/components/Layout.vue:complexity",
     "packages/crouton-cli/lib/add-module.ts:complexity",
-    "packages/crouton-mcp/src/tools/validate-schema.ts:complexity",
-    "apps/triage/layers/categorize/app/pages/admin/[team]/categorize.vue:complexity",
     "packages/crouton-cli/lib/utils/validate-config.ts:complexity",
+    "apps/triage/layers/categorize/app/pages/admin/[team]/categorize.vue:complexity",
     "packages/crouton-designer/app/components/CollectionEditor.vue:complexity",
     "docs/app/pages/[...slug].vue:untested risk",
+    "packages/crouton-cli/lib/utils/manifest-merge.ts:complexity",
     "packages/crouton-bookings/app/components/List.vue:complexity",
     "packages/crouton-designer/app/components/GenerationSummary.vue:complexity",
     "packages/crouton-sales/app/components/Client/ProductList.vue:complexity",
     "packages/crouton-assets/app/components/FormUpdate.vue:complexity",
-    "packages/crouton-cli/lib/utils/module-detector.ts:complexity",
+    "packages/crouton-cli/lib/utils/layer-config.ts:complexity",
     "packages/crouton-core/app/components/Collection.vue:complexity",
     "packages/crouton-admin/app/pages/admin/index.vue:complexity",
-    "packages/crouton-cli/lib/utils/manifest-merge.ts:complexity",
     "packages/crouton-triage/server/api/crouton-triage/oauth/slack/callback.get.ts:complexity",
     "packages/crouton-core/app/components/DefaultCard.vue:complexity",
-    "packages/crouton-layout/app/components/LayoutBreakpointAuthor.vue:complexity",
     "pocs/sintlukas/server/api/seed/content.post.ts:complexity",
     "packages/crouton-core/app/components/stubs/CroutonEditorPreview.vue:untested risk",
+    "packages/crouton-layout/app/components/LayoutBreakpointAuthor.vue:complexity",
     "packages/crouton-pages/server/api/teams/[id]/pages.get.ts:complexity",
     "packages/crouton-admin/app/middleware/team-admin.ts:complexity",
     "packages/crouton-triage/app/components/PipelineBuilder.vue:complexity",
-    "apps/velo/server/api/seed/velosolidaire.post.ts:complexity",
-    "packages/crouton-cli/lib/generators/form-component.ts:complexity",
-    "packages/crouton-cli/lib/utils/layer-config.ts:complexity",
     "pocs/alexdeforce/server/api/seed/fix-image-nodes.post.ts:complexity",
     "packages/crouton-bookings/app/components/ActivityTimeline.vue:complexity",
-    "apps/velo/server/api/seed/index.post.ts:complexity",
     "packages/crouton-triage/app/components/Panel.vue:complexity",
-    "packages/crouton-sales/app/components/EventWorkspace/Shell.vue:complexity",
     "pocs/alexdeforce/server/api/seed/images.post.ts:complexity",
     "packages/crouton-pages/app/components/Blocks/Properties/LogosEditor.vue:complexity",
+    "packages/crouton-sales/app/components/EventWorkspace/Shell.vue:complexity",
     "packages/crouton-triage/app/pages/admin/[team]/triage/jobs.vue:complexity",
     "pocs/alexdeforce/server/api/seed/pages.post.ts:complexity",
     "scripts/teardown-app.mjs:complexity",
     "scripts/smoke-deployed.mjs:untested risk",
     "packages/crouton-devtools/src/runtime/server-rpc/eventsHealth.ts:complexity",
-    "pocs/kvr/layers/kvr/collections/werkvergunningens/app/components/_Form.vue:complexity",
     "pocs/alexdeforce/server/api/seed/content.post.ts:complexity",
-    "apps/triage/layers/triage/collections/discussions/app/components/_Form.vue:complexity",
     "packages/crouton-core/app/components/ImportPreviewModal.vue:complexity",
     "scripts/seed-review-login.mjs:complexity",
     "packages/crouton-bookings/app/components/Calendar.vue:complexity",
@@ -8153,23 +5506,16 @@
     "packages/crouton-i18n/app/components/InputWithEditor.vue:complexity",
     "scripts/db-clone.mjs:complexity",
     "packages/crouton-i18n/app/components/UiList.vue:complexity",
+    "packages/crouton-events/app/components/CroutonEventChangesTable.vue:complexity",
     "packages/crouton-pages/app/components/Blocks/Properties/ButtonRowEditor.vue:complexity",
     "packages/crouton-sales/app/components/EventWorkspace/ClientsPanel.vue:complexity",
     "packages/crouton-bookings/app/pages/admin/[team]/bookings/email-templates.vue:complexity",
-    "packages/crouton-triage/server/api/crouton-triage/webhooks/notion-input.post.ts:complexity",
-    "apps/fanfare/scripts/sync-wrangler-ids.mjs:complexity",
-    "apps/triage/scripts/sync-wrangler-ids.mjs:complexity",
-    "apps/velo/scripts/sync-wrangler-ids.mjs:complexity",
     "docs/server/mcp/tools/validate-schema.ts:complexity",
     "packages/crouton-bookings/app/components/PanelFilters.vue:complexity",
     "packages/crouton-cli/lib/templates/wrangler/sync-wrangler-ids.mjs:complexity",
     "packages/crouton-pages/app/components/Blocks/Properties/ImageEditor.vue:complexity",
-    "pocs/booking-demo/scripts/sync-wrangler-ids.mjs:complexity",
-    "pocs/crouton-builder-demo/scripts/sync-wrangler-ids.mjs:complexity",
-    "pocs/pins/scripts/sync-wrangler-ids.mjs:complexity",
     "packages/crouton-pages/app/components/Blocks/Render/ContactBlock.vue:complexity",
     "packages/crouton/src/module.ts:complexity",
-    "packages/crouton-events/app/components/CroutonEventChangesTable.vue:complexity",
     "packages/crouton-triage/app/pages/admin/[team]/triage/inbox.vue:complexity",
     "packages/crouton-atelier/app/components/GeneratePanel.vue:complexity",
     "packages/crouton-bookings/server/api/crouton-bookings/teams/[id]/availability.get.ts:complexity",

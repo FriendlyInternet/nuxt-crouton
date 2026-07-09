@@ -240,8 +240,17 @@ jobs:
             fi
           done
 
-      - name: Run all tests
-        run: pnpm test
+      - name: Run all tests (with coverage)
+        # Coverage feeds the fallow-audit job (#1256): with real per-function data,
+        # CRAP measures untested-complex code instead of degenerating to cyc²+cyc.
+        run: pnpm test:coverage
+
+      - name: Upload coverage for the fallow audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-coverage
+          path: coverage/coverage-final.json
+          retention-days: 1
 
   changeset-check:
     name: Changeset Check
@@ -309,6 +318,9 @@ jobs:
     # proven by the #1143 triage (712 → 7 unused-file false positives).
     name: Fallow Audit
     runs-on: ubuntu-latest
+    # Waits on the test job for its coverage artifact (#1256): real per-function
+    # coverage makes the restored maxCrap 30 measure untested-complex code.
+    needs: test
     steps:
       - uses: actions/checkout@v4
         with:
@@ -327,5 +339,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Run fallow audit (diff-scoped)
-        run: npx fallow audit
+      - name: Download vitest coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: vitest-coverage
+          path: coverage
+
+      - name: Run fallow audit (diff-scoped, coverage-fed)
+        # --coverage-root strips the generating checkout's prefix so per-function
+        # matching survives any root mismatch between the two jobs (#1256).
+        run: npx fallow audit --coverage coverage/coverage-final.json --coverage-root "$GITHUB_WORKSPACE"
