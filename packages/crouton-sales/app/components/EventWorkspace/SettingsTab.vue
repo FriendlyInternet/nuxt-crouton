@@ -223,6 +223,70 @@ const sections = computed(() => [
 ])
 const activeSection = ref('event')
 
+// Per-event print flow (#1324): which transport delivers this event's thermal
+// jobs — the venue device's in-process drainer, the router spooler, or nobody.
+// The setting lives in crouton-printing (print_transports); this is its authed
+// UI. Instant-apply like the requeue button — an operational switch, not a
+// form field, so it deliberately doesn't ride the panel's Save.
+interface PrintTransportState {
+  transport: string
+  lastSpoolerPollAt: string | null
+  lastDrainerTickAt: string | null
+}
+
+const printTransportEndpoint = computed(() =>
+  `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/print-transport`
+)
+// The GET resolves the no-row default ('router-spooler'), so transport is
+// always a concrete value.
+const { data: printTransport, refresh: refreshPrintTransport } = await useFetch<PrintTransportState>(printTransportEndpoint, {
+  default: () => ({ transport: 'router-spooler', lastSpoolerPollAt: null, lastDrainerTickAt: null })
+})
+const printTransportSaving = ref(false)
+
+// Keep the liveness readout honest while the panel is open: heartbeats are
+// stamped at most every 30s, so a light 10s poll is plenty.
+let printTransportPoll: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  printTransportPoll = setInterval(() => { refreshPrintTransport() }, 10000)
+})
+onUnmounted(() => {
+  if (printTransportPoll) clearInterval(printTransportPoll)
+})
+
+async function setPrintTransport(transport: 'local-drainer' | 'router-spooler' | 'none') {
+  printTransportSaving.value = true
+  try {
+    await $fetch(printTransportEndpoint.value, { method: 'PUT', body: { transport } })
+    await refreshPrintTransport()
+    notify.success(t('sales.printFlow.updated', 'Print flow updated'))
+  }
+  catch {
+    notify.error(t('sales.printFlow.updateError', 'Could not update the print flow'))
+  }
+  finally {
+    printTransportSaving.value = false
+  }
+}
+
+const printTransportItems = computed(() => [
+  {
+    value: 'local-drainer' as const,
+    label: t('sales.printFlow.localDrainer', 'Local device'),
+    description: t('sales.printFlow.localDrainerHelp', 'A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — works fully offline.')
+  },
+  {
+    value: 'router-spooler' as const,
+    label: t('sales.printFlow.routerSpooler', 'Via the venue router'),
+    description: t('sales.printFlow.routerSpoolerHelp', 'The on-site router fetches print jobs from the cloud app and sends them to the printers.')
+  },
+  {
+    value: 'none' as const,
+    label: t('sales.printFlow.paused', 'No physical printing'),
+    description: t('sales.printFlow.pausedHelp', 'No print jobs are created — orders simply appear on screen.')
+  }
+])
+
 // Event-level actions (moved out of the workspace header to declutter it).
 // Same useCollectionQuery cache as the Shell, so refresh() updates its list
 // before navigating to the duplicated event's slug.
@@ -408,9 +472,26 @@ function helperExpiry(value: string): string {
           />
         </template>
 
-        <!-- Receipt text settings, inline (saved via the panel's Save button) -->
+        <!-- Print flow (instant-apply) + receipt text settings (panel Save) -->
         <template #footer>
           <div class="space-y-4">
+            <div class="space-y-1">
+              <p class="text-sm font-medium leading-5">{{ t('sales.printFlow.title', 'Print flow') }}</p>
+              <p class="text-sm text-muted">{{ t('sales.printFlow.description', 'Who delivers the printed tickets for this event.') }}</p>
+            </div>
+            <CroutonPrintingTransportPicker
+              :transport="printTransport.transport"
+              :last-spooler-poll-at="printTransport.lastSpoolerPollAt"
+              :last-drainer-tick-at="printTransport.lastDrainerTickAt"
+              :loading="printTransportSaving"
+              :items="printTransportItems"
+              :last-seen-label="t('sales.printFlow.lastSeen', 'last seen')"
+              :never-seen-label="t('sales.printFlow.neverSeen', 'never seen')"
+              @update:transport="setPrintTransport"
+            />
+
+            <USeparator />
+
             <div class="space-y-1">
               <p class="text-sm font-medium leading-5">{{ t('sales.workspace.receiptSettings') }}</p>
               <p class="text-sm text-muted">{{ t('sales.receipt.customize') }}</p>
@@ -454,6 +535,7 @@ function helperExpiry(value: string): string {
               variant="ghost"
               icon="i-lucide-refresh-cw"
               :loading="activeHelpersPending"
+              :aria-label="t('sales.common.refresh')"
               @click="() => refreshActiveHelpers()"
             />
           </div>
