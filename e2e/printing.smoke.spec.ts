@@ -273,4 +273,79 @@ test.describe(`fixture "${FIXTURE}" sales/printing`, () => {
       await new Promise<void>(r => printer.close(() => r()))
     }
   })
+
+  // ── TIER 3 (per-event transport gating, #1324) ────────────────────────────
+  // The print_transports row decides WHO delivers the event's thermal jobs.
+  // Set to 'router-spooler': the in-process drainer must NOT print (job stays
+  // pending) while the spooler's /jobs GET serves it. Flip to 'local-drainer':
+  // the spooler GET goes soft-empty [] and the drainer drives the job to done.
+  // Runs LAST in this serial file and always resets to 'local-drainer' so a
+  // leftover row can never gate the drainer-driven tiers on a rerun.
+  test('tier 3: the per-event transport row routes jobs between drainer and spooler', async ({ page, baseURL }) => {
+    test.setTimeout(FIRST_HIT + DRAIN_TIMEOUT + 60000)
+    const base = baseURL || 'http://localhost:3000'
+
+    const printer = startFakePrinter([0x00, 0x00]) // online, paper present
+    const port = await listen(printer)
+
+    const spoolerHeaders = { 'x-api-key': '1234' } // dev default (print-server-auth)
+
+    async function putTransport(ctx: { teamId: string, eventId: string }, transport: string) {
+      const res = await page.request.put(
+        `${base}/api/crouton-sales/teams/${ctx.teamId}/events/${ctx.eventId}/print-transport`,
+        { headers: authHeaders(base), data: { transport } }
+      )
+      expect(res.ok(), `print-transport PUT failed: ${res.status()} ${await res.text()}`).toBeTruthy()
+    }
+
+    async function spoolerJobs(eventId: string) {
+      const res = await page.request.get(`${base}/api/print-server/events/${eventId}/jobs`, { headers: spoolerHeaders })
+      expect(res.ok(), `spooler jobs GET failed: ${res.status()}`).toBeTruthy()
+      return (await res.json()) as Array<{ id: string }>
+    }
+
+    let ctx: Awaited<ReturnType<typeof setup>> | undefined
+    try {
+      ctx = await setup(page, base, port)
+
+      // Route the event to the spooler, then order.
+      await putTransport(ctx, 'router-spooler')
+      const { orderId } = await placeOrder(page, base, ctx)
+
+      // The spooler sees the job…
+      await expect.poll(async () => (await spoolerJobs(ctx!.eventId)).length, {
+        message: 'spooler /jobs serves the pending job while transport=router-spooler',
+        timeout: 30000,
+        intervals: [1000, 2000]
+      }).toBeGreaterThan(0)
+
+      // …and the drainer must have left it alone: after 3+ drainer ticks (2s
+      // poll) the job is still PENDING. A gating bug prints it to the fake
+      // printer and flips it to '2', failing this assertion.
+      await page.waitForTimeout(7000)
+      const gated = await printStatus(page, base, ctx, orderId)
+      expect(gated.length).toBeGreaterThan(0)
+      expect(gated.every(j => j.status === '0'), 'drainer skipped the router-spooler event').toBeTruthy()
+
+      // Flip to the local drainer: spooler goes soft-empty, drainer delivers.
+      await putTransport(ctx, 'local-drainer')
+      await expect.poll(async () => (await spoolerJobs(ctx!.eventId)).length, {
+        message: 'spooler /jobs is soft-empty once transport=local-drainer',
+        timeout: 15000,
+        intervals: [1000, 2000]
+      }).toBe(0)
+      await expect.poll(async () => {
+        const jobs = await printStatus(page, base, ctx!, orderId)
+        return jobs.length > 0 && jobs.every(j => j.status === '2')
+      }, {
+        message: 'the drainer delivers the pending job after the flip',
+        timeout: DRAIN_TIMEOUT,
+        intervals: [1000, 2000, 2000]
+      }).toBe(true)
+    } finally {
+      // Leave the event drainer-friendly for reruns of the earlier tiers.
+      if (ctx) await putTransport(ctx, 'local-drainer').catch(() => {})
+      await new Promise<void>(r => printer.close(() => r()))
+    }
+  })
 })
