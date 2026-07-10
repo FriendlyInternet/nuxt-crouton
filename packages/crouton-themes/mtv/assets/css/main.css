@@ -1,0 +1,362 @@
+/* Early-MTV Theme (#1346)
+   1981: day-glo color blocking, hard offset shadows in a CLASHING neon
+   (pink slab, cyan shadow), a degree of tilt, zigzag rules, stickers.
+   Text stays ink-on-light everywhere — neon is for fills, shadows and
+   accents, never body copy (the #1304 KO readability rule).
+
+   No !important: the shared subtractive replacer (../lib/subtractive.ts)
+   strips the conflicting Nuxt UI defaults whenever an mtv- marker class
+   is present. */
+
+:root {
+  --mtv-ink: #17131f;
+  --mtv-paper: #f6f2ea;
+  --mtv-pink: #ff2d95;
+  --mtv-cyan: #00e5ff;
+  --mtv-yellow: #ffe600;
+  --mtv-purple: #7b2ff7;
+  --mtv-border: 2px;
+  --mtv-snap: 90ms;
+}
+
+/* ============================================
+   DATA-THEME AMBIENT — background only
+   ============================================ */
+
+[data-theme="mtv"],
+.theme-mtv {
+  background-color: var(--mtv-paper);
+}
+
+/* ============================================
+   SOLID BUTTONS — slab + clashing neon shadow
+   ============================================ */
+
+.mtv-btn {
+  background-color: var(--mtv-yellow);
+  color: var(--mtv-ink);
+  border: var(--mtv-border) solid var(--mtv-ink);
+  box-shadow: 4px 4px 0 var(--mtv-purple);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: transform var(--mtv-snap) ease-out, box-shadow var(--mtv-snap) ease-out;
+}
+
+.mtv-btn:hover {
+  transform: rotate(-1deg) translate(-1px, -1px);
+  box-shadow: 6px 6px 0 var(--mtv-purple);
+}
+
+.mtv-btn:active {
+  transform: rotate(0.5deg) translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--mtv-purple);
+}
+
+.mtv-btn--pink {
+  background-color: var(--mtv-pink);
+  color: var(--mtv-paper);
+  box-shadow: 4px 4px 0 var(--mtv-cyan);
+}
+
+.mtv-btn--pink:hover {
+  box-shadow: 6px 6px 0 var(--mtv-cyan);
+}
+
+.mtv-btn--pink:active {
+  box-shadow: 1px 1px 0 var(--mtv-cyan);
+}
+
+.mtv-btn--ink {
+  background-color: var(--mtv-ink);
+  color: var(--mtv-paper);
+  box-shadow: 4px 4px 0 var(--mtv-pink);
+}
+
+.mtv-btn--ink:hover {
+  box-shadow: 6px 6px 0 var(--mtv-pink);
+}
+
+.mtv-btn--ink:active {
+  box-shadow: 1px 1px 0 var(--mtv-pink);
+}
+
+.mtv-btn--cyan {
+  background-color: var(--mtv-cyan);
+  color: var(--mtv-ink);
+  box-shadow: 4px 4px 0 var(--mtv-pink);
+}
+
+.mtv-btn--cyan:hover {
+  box-shadow: 6px 6px 0 var(--mtv-pink);
+}
+
+.mtv-btn--cyan:active {
+  box-shadow: 1px 1px 0 var(--mtv-pink);
+}
+
+/* ============================================
+   OUTLINE — ink frame, neon flood on hover
+   ============================================ */
+
+.mtv-outline {
+  background-color: var(--mtv-paper);
+  color: var(--mtv-ink);
+  border: var(--mtv-border) solid var(--mtv-ink);
+  box-shadow: none;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: background-color var(--mtv-snap) ease-out, transform var(--mtv-snap) ease-out;
+}
+
+.mtv-outline:hover {
+  transform: rotate(-1deg);
+  background-color: var(--mtv-yellow);
+}
+
+.mtv-outline--pink:hover {
+  background-color: var(--mtv-pink);
+  color: var(--mtv-paper);
+}
+
+.mtv-outline--cyan:hover {
+  background-color: var(--mtv-cyan);
+}
+
+/* ============================================
+   SOFT — sticker slab, pre-tilted
+   ============================================ */
+
+.mtv-soft {
+  background-color: var(--mtv-yellow);
+  color: var(--mtv-ink);
+  border: none;
+  box-shadow: none;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transform: rotate(-1deg);
+  transition: transform var(--mtv-snap) ease-out;
+}
+
+.mtv-soft:hover {
+  transform: rotate(1deg) scale(1.04);
+}
+
+.mtv-soft--purple {
+  background-color: var(--mtv-purple);
+  color: var(--mtv-paper);
+}
+
+.mtv-soft--cyan {
+  background-color: var(--mtv-cyan);
+}
+
+/* ============================================
+   GHOST — quiet until it clashes
+   ============================================ */
+
+.mtv-ghost {
+  background-color: transparent;
+  color: var(--mtv-ink);
+  border: none;
+  box-shadow: none;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transition: color var(--mtv-snap) ease-out, background-color var(--mtv-snap) ease-out;
+}
+
+.mtv-ghost:hover {
+  background-color: var(--mtv-ink);
+  color: var(--mtv-yellow);
+}
+
+.mtv-ghost--cyan:hover {
+  color: var(--mtv-cyan);
+}
+
+/* ============================================
+   LINK — highlighter swipe
+   ============================================ */
+
+.mtv-link {
+  background-color: transparent;
+  color: var(--mtv-ink);
+  border: none;
+  box-shadow: none;
+  font-weight: 800;
+  text-decoration: none;
+  background-image: linear-gradient(var(--mtv-pink), var(--mtv-pink));
+  background-repeat: no-repeat;
+  background-size: 100% 0.4em;
+  background-position: 0 88%;
+  transition: background-size var(--mtv-snap) ease-out;
+}
+
+.mtv-link:hover {
+  background-size: 100% 100%;
+  color: var(--mtv-paper);
+}
+
+.mtv-link--cyan {
+  background-image: linear-gradient(var(--mtv-cyan), var(--mtv-cyan));
+}
+
+.mtv-link--cyan:hover {
+  color: var(--mtv-ink);
+}
+
+.mtv-link--yellow {
+  background-image: linear-gradient(var(--mtv-yellow), var(--mtv-yellow));
+}
+
+.mtv-link--yellow:hover {
+  color: var(--mtv-ink);
+}
+
+/* ============================================
+   INPUTS — a block you shout into
+   ============================================ */
+
+.mtv-input {
+  width: 100%;
+}
+
+.mtv-input-base {
+  background-color: #fff;
+  color: var(--mtv-ink);
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--mtv-cyan);
+  font-weight: 600;
+  caret-color: var(--mtv-pink);
+  transition: box-shadow var(--mtv-snap) ease-out;
+}
+
+.mtv-input-base::placeholder {
+  color: var(--mtv-ink);
+  opacity: 0.45;
+}
+
+.mtv-input-base:focus {
+  outline: none;
+  box-shadow: 4px 4px 0 var(--mtv-pink);
+}
+
+.mtv-input-base:disabled {
+  box-shadow: none;
+  border-style: dashed;
+  background-color: transparent;
+}
+
+/* ============================================
+   CARD — a taped-up promo
+   ============================================ */
+
+.mtv-card {
+  background-color: #fff;
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+  box-shadow: 8px 8px 0 var(--mtv-pink);
+  overflow: hidden;
+}
+
+.mtv-card-header {
+  background-color: var(--mtv-cyan);
+  border-bottom: var(--mtv-border) solid var(--mtv-ink);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1rem;
+}
+
+.mtv-card-body {
+  padding: 1rem;
+}
+
+.mtv-card-footer {
+  border-top: var(--mtv-border) solid var(--mtv-ink);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 10px,
+    var(--mtv-yellow) 10px 20px
+  );
+  padding: 0.75rem 1rem;
+}
+
+/* ============================================
+   SEPARATOR — zigzag rule
+   ============================================ */
+
+.mtv-separator {
+  border: none;
+  height: 8px;
+  background-image: linear-gradient(135deg, var(--mtv-pink) 25%, transparent 25%),
+    linear-gradient(225deg, var(--mtv-pink) 25%, transparent 25%);
+  background-size: 16px 8px;
+  background-repeat: repeat-x;
+}
+
+/* ============================================
+   BADGE — a sticker, slightly askew
+   ============================================ */
+
+.mtv-badge {
+  background-color: var(--mtv-yellow);
+  color: var(--mtv-ink);
+  border: 2px solid var(--mtv-ink);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 var(--mtv-purple);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  transform: rotate(-2deg);
+}
+
+/* ============================================
+   VARIANT-LESS CHROME — USwitch (#1333 pattern)
+   ============================================ */
+
+[data-theme="mtv"] button[role="switch"],
+.theme-mtv button[role="switch"] {
+  border-radius: 0;
+  border: var(--mtv-border) solid var(--mtv-ink);
+  background-color: #fff;
+  box-shadow: 2px 2px 0 var(--mtv-purple);
+  transition: background-color var(--mtv-snap) ease-out;
+}
+
+[data-theme="mtv"] button[role="switch"][data-state="checked"],
+.theme-mtv button[role="switch"][data-state="checked"] {
+  background-color: var(--mtv-pink);
+  box-shadow: 2px 2px 0 var(--mtv-cyan);
+}
+
+[data-theme="mtv"] button[role="switch"] > span,
+.theme-mtv button[role="switch"] > span {
+  border-radius: 0;
+  background-color: var(--mtv-ink);
+  transition: none;
+}
+
+/* ============================================
+   REDUCED MOTION — kill the wiggle, keep the look
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  .mtv-btn,
+  .mtv-outline,
+  .mtv-soft {
+    transition: none;
+  }
+
+  .mtv-btn:hover,
+  .mtv-btn:active,
+  .mtv-outline:hover,
+  .mtv-soft,
+  .mtv-soft:hover {
+    transform: none;
+  }
+}

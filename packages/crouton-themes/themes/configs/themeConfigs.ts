@@ -103,6 +103,18 @@ const brutalistConfig: ThemeUIConfig = {
   badge: { defaultVariants: { variant: 'brutalist' } }
 }
 
+// MTV — named variants registered by mtv/app.config.ts
+const mtvConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'fuchsia',
+    neutral: 'zinc'
+  },
+  button: { defaultVariants: { variant: 'mtv' } },
+  input: { defaultVariants: { variant: 'mtv' } },
+  card: { defaultVariants: { variant: 'mtv' } },
+  badge: { defaultVariants: { variant: 'mtv' } }
+}
+
 // Export all theme configs
 export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   default: defaultConfig,
@@ -110,5 +122,6 @@ export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   minimal: minimalConfig,
   kr11: kr11Config,
   blackandwhite: blackandwhiteConfig,
-  brutalist: brutalistConfig
+  brutalist: brutalistConfig,
+  mtv: mtvConfig
 }
