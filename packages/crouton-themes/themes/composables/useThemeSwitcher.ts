@@ -16,6 +16,12 @@ export interface ThemeConfig {
   colors: string[]
   /** Default base variant for this theme (solid, outline, ghost, etc.) */
   defaultVariant: BaseVariant
+  /**
+   * The color scheme this theme is designed for. Applying the theme pins the
+   * app's color mode to it (#1387 — a light-paper theme under dark-mode text
+   * tokens washes out). Omit for themes that adapt to both (blackandwhite).
+   */
+  colorMode?: 'light' | 'dark'
 }
 
 export const AVAILABLE_THEMES: ThemeConfig[] = [
@@ -31,21 +37,24 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     label: 'KO',
     description: 'Hardware-inspired (Teenage Engineering)',
     colors: ['#f97316', '#1c1917', '#faf5f0'], // orange, dark, cream
-    defaultVariant: 'solid' // KO uses solid tactile buttons
+    defaultVariant: 'solid', // KO uses solid tactile buttons
+    colorMode: 'light'
   },
   {
     name: 'minimal',
     label: 'Minimal',
     description: 'Clean, Bauhaus-inspired',
     colors: ['#000000', '#ffffff', '#e5e5e5'], // black, white, light gray
-    defaultVariant: 'outline' // Minimal uses clean outlined style
+    defaultVariant: 'outline', // Minimal uses clean outlined style
+    colorMode: 'light'
   },
   {
     name: 'kr11',
     label: 'KR-11',
     description: 'Friendly drum machine aesthetic',
     colors: ['#b8e9d2', '#e9d227', '#f7d3ca'], // play-mint, FILL-yellow, pad-1 salmon (#1347)
-    defaultVariant: 'soft' // KR-11 uses soft tactile pads
+    defaultVariant: 'soft', // KR-11 uses soft tactile pads
+    colorMode: 'light'
   },
   {
     name: 'blackandwhite',
@@ -59,56 +68,64 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     label: 'Brutalist',
     description: 'Thick borders, hard shadows, zero subtlety',
     colors: ['#0a0a0a', '#ffd800', '#fdfbf5'], // ink, shock yellow, paper
-    defaultVariant: 'solid'
+    defaultVariant: 'solid',
+    colorMode: 'light'
   },
   {
     name: 'mtv',
     label: 'MTV',
     description: 'Day-glo blocks, clashing neon shadows, Memphis energy',
     colors: ['#ff2d95', '#00e5ff', '#ffe600'], // pink, cyan, yellow
-    defaultVariant: 'solid'
+    defaultVariant: 'solid',
+    colorMode: 'light'
   },
   {
     name: 'terminal',
     label: 'Terminal',
     description: 'Green phosphor on black, scanlines, inverse video',
     colors: ['#33ff66', '#0a0f0a', '#ffb000'], // phosphor, tube, amber
-    defaultVariant: 'solid'
+    defaultVariant: 'solid',
+    colorMode: 'dark'
   },
   {
     name: 'braun',
     label: 'Braun',
     description: 'Warm analog hi-fi — cream, hairlines, one orange accent',
     colors: ['#f2efe9', '#f26c1d', '#2e2c29'], // cream, orange, charcoal
-    defaultVariant: 'solid'
+    defaultVariant: 'solid',
+    colorMode: 'light'
   },
   {
     name: 'gameboy',
     label: 'Game Boy',
     description: 'Four shades of olive green, chunky pixels',
     colors: ['#0f380f', '#8bac0f', '#9bbc0e'], // ink, light, screen
-    defaultVariant: 'solid'
+    defaultVariant: 'solid',
+    colorMode: 'light'
   },
   {
     name: 'riso',
     label: 'Riso',
     description: 'Two-color riso print — fluoro pink + teal, misregistered',
     colors: ['#ff48b0', '#00887a', '#f7f3e8'], // pink, teal, paper
-    defaultVariant: 'solid'
+    defaultVariant: 'solid',
+    colorMode: 'light'
   },
   {
     name: 'eink',
     label: 'E-ink',
     description: 'Greyscale reading mode — zero motion, newspaper type',
     colors: ['#1c1c1c', '#6b6b6b', '#f4f2ee'], // ink, gray, paper
-    defaultVariant: 'outline'
+    defaultVariant: 'outline',
+    colorMode: 'light'
   },
   {
     name: 'blueprint',
     label: 'Blueprint',
     description: 'Cyanotype drafting sheet — white line-work on blue',
     colors: ['#123a63', '#dce9f5', '#ffd66b'], // blue, line, pencil
-    defaultVariant: 'solid'
+    defaultVariant: 'solid',
+    colorMode: 'dark'
   }
 ]
 
@@ -116,6 +133,8 @@ const STORAGE_KEY = 'nuxt-crouton-theme'
 
 export function useThemeSwitcher() {
   const appConfig = useAppConfig()
+  // Captured in setup scope so setTheme can pin it from event handlers (#1387).
+  const colorMode = useColorMode()
 
   // Reactive theme state - uses useState for SSR compatibility
   const currentTheme = useState<ThemeName>('crouton-theme', () => 'default')
@@ -168,6 +187,13 @@ export function useThemeSwitcher() {
       updateAppConfig({
         ui: themeUIConfig as any
       })
+    }
+
+    // Pin the scheme the theme was designed for (#1387); adaptive themes
+    // (blackandwhite, default) leave the user's preference untouched.
+    const scheme = AVAILABLE_THEMES.find(t => t.name === theme)?.colorMode
+    if (scheme) {
+      colorMode.preference = scheme
     }
   }
 
