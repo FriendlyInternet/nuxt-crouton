@@ -68,5 +68,5 @@ jobs:
             try { await github.rest.reactions.createForIssueComment({ owner, repo, comment_id, content: 'rocket' }) } catch (e) {}
             const harness = label === 'delegate-pi' ? 'pi.dev' : 'claude'
             await github.rest.issues.createComment({ owner, repo, issue_number,
-              body: `▶️ Dispatched by comment — applied \`${label}\`, the ${harness} agent pipeline is picking up #${issue_number}.` })
+              body: `🟢 **On it — the ${harness} agent is picking this up now.**\n\n<sub>🤖 comment-dispatch · applied \`${label}\`</sub>` })
             core.info(`Dispatched #${issue_number} via comment (label: ${label}).`)
