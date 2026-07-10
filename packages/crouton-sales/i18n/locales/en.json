@@ -592,7 +592,7 @@
       "routerSpooler": "Via the venue router",
       "routerSpoolerHelp": "The on-site router fetches print jobs from the cloud app and sends them to the printers.",
       "paused": "No physical printing",
-      "pausedHelp": "Nothing is printed — print jobs simply queue up.",
+      "pausedHelp": "No print jobs are created — orders simply appear on screen.",
       "lastSeen": "last seen",
       "neverSeen": "never seen",
       "updated": "Print flow updated",

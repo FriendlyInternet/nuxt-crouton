@@ -592,7 +592,7 @@
       "routerSpooler": "Via de router",
       "routerSpoolerHelp": "De router op locatie haalt de printopdrachten op uit de cloud en stuurt ze naar de printers.",
       "paused": "Geen fysieke prints",
-      "pausedHelp": "Er wordt niets geprint — printopdrachten blijven gewoon in de wachtrij staan.",
+      "pausedHelp": "Er worden geen printopdrachten aangemaakt — bestellingen verschijnen gewoon op het scherm.",
       "lastSeen": "laatst gezien",
       "neverSeen": "nooit gezien",
       "updated": "Printflow aangepast",

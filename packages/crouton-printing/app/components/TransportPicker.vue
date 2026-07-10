@@ -48,7 +48,7 @@ const defaultItems: TransportPickerItem[] = [
   {
     value: 'none',
     label: 'No physical printing',
-    description: 'Nothing is printed — print jobs simply queue up.'
+    description: 'No print jobs are created — orders simply appear on screen.'
   }
 ]
 

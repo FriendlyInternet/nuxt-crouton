@@ -118,22 +118,28 @@ export default defineEventHandler(async (event) => {
   // Encode for the receipt printer's output driver (network-escpos = base64
   // ESC/POS, browser-print = JSON) and enqueue onto the generic print_jobs
   // queue. refType='tab' so the order auto-complete reactions skip it.
-  const driver = printer.driver ?? 'network-escpos'
-  const queueId = await enqueuePrintJob(db, {
-    source: 'sales',
-    printerId: printer.id,
-    printerIp: printer.ipAddress ?? null,
-    printerPort: printer.port != null ? Number(printer.port) : null,
-    printerTitle: printer.title ?? null,
-    driver,
-    payload: encodeTicket(receiptData, driver),
-    printMode: 'receipt',
-    locationId: null,
-    refType: 'tab',
-    refId: clientId,
-    eventId,
-    teamId: team.id
-  })
+  // Print flow 'none' (#1324): settle the tab but skip the paper — an
+  // enqueued job would sit pending forever (nothing delivers this event).
+  const transportRow = await getPrintTransport(db, eventId)
+  let queueId: string | null = null
+  if (transportRow?.transport !== PRINT_TRANSPORT.NONE) {
+    const driver = printer.driver ?? 'network-escpos'
+    queueId = await enqueuePrintJob(db, {
+      source: 'sales',
+      printerId: printer.id,
+      printerIp: printer.ipAddress ?? null,
+      printerPort: printer.port != null ? Number(printer.port) : null,
+      printerTitle: printer.title ?? null,
+      driver,
+      payload: encodeTicket(receiptData, driver),
+      printMode: 'receipt',
+      locationId: null,
+      refType: 'tab',
+      refId: clientId,
+      eventId,
+      teamId: team.id
+    })
+  }
 
   // Settled: hide the client from the POS picker and the clients panel.
   await db

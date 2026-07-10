@@ -350,6 +350,13 @@ test.describe(`fixture "${FIXTURE}" sales/printing`, () => {
         timeout: DRAIN_TIMEOUT,
         intervals: [1000, 2000, 2000]
       }).toBe(true)
+
+      // 'none' = no physical printing: an order enqueues NO print jobs at all
+      // (empty printQueueIds), so the kassa's print watcher never starts and
+      // can't warn "printer offline?" — the #1324 no-physical-printing rule.
+      await putTransport(ctx, 'none')
+      const quiet = await placeOrder(page, base, ctx)
+      expect(quiet.printQueueIds, 'no print jobs enqueued while transport=none').toHaveLength(0)
     } finally {
       // Leave the event drainer-friendly for reruns of the earlier tiers.
       if (ctx) await putTransport(ctx, 'local-drainer').catch(() => {})

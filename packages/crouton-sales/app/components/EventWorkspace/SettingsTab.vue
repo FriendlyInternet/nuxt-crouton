@@ -260,7 +260,7 @@ const printTransportItems = computed(() => [
   {
     value: 'none' as const,
     label: t('sales.printFlow.paused', 'No physical printing'),
-    description: t('sales.printFlow.pausedHelp', 'Nothing is printed — print jobs simply queue up.')
+    description: t('sales.printFlow.pausedHelp', 'No print jobs are created — orders simply appear on screen.')
   }
 ])
 

@@ -48,6 +48,17 @@ interface GenerateInsertOptions {
 export async function generateAndInsertPrintQueues(opts: GenerateInsertOptions): Promise<string[]> {
   const { db, orderId, eventId, teamId, helperDisplayName, helperId } = opts
 
+  // Print flow 'none' = no physical printing (#1324): don't enqueue at all.
+  // A parked job would never be delivered, so the kassa's print watcher would
+  // spin 60s and warn "printer offline?" on every order — an empty id list
+  // instead makes checkout behave like an event with zero printers (no
+  // watcher, no warning). Flipping to a real flow later only prints NEW
+  // orders; older ones stay reachable via the per-order manual reprint.
+  // getPrintTransport/PRINT_TRANSPORT are crouton-printing nitro globals,
+  // same as enqueuePrintJob below.
+  const transportRow = await getPrintTransport(db, eventId)
+  if (transportRow?.transport === PRINT_TRANSPORT.NONE) return []
+
   const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
   const { salesProducts } = await import('~~/layers/sales/collections/products/server/database/schema')
   const { salesLocations } = await import('~~/layers/sales/collections/locations/server/database/schema')

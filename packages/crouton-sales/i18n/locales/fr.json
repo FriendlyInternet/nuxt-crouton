@@ -591,7 +591,7 @@
       "routerSpooler": "Via le routeur",
       "routerSpoolerHelp": "Le routeur sur place récupère les tickets depuis le cloud et les envoie aux imprimantes.",
       "paused": "Pas d'impression physique",
-      "pausedHelp": "Rien n'est imprimé — les tickets restent simplement en file d'attente.",
+      "pausedHelp": "Aucun ticket n'est créé — les commandes apparaissent simplement à l'écran.",
       "lastSeen": "vu pour la dernière fois",
       "neverSeen": "jamais vu",
       "updated": "Flux d'impression mis à jour",
