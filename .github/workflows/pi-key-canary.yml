@@ -1,0 +1,119 @@
+name: Provider key canary
+
+# #1327 — a provider-agnostic "is our agent key funded?" canary.
+#
+# The pi.dev harness runs on a metered provider key (PI_PROVIDER_KEY). It drained silently
+# once (funded 2026-07-07, dry by 2026-07-10) and every delegate run just failed until a
+# human noticed. We deliberately DON'T use Anthropic Console auto-reload (top-ups stay
+# manual), and there is NO balance endpoint to poll (the #1327 ecosystem-check) — so the
+# only proactive signal that a key is dead is to actually CALL it. This does exactly that,
+# daily, and alerts (standing issue + email) when a key reads dry/auth-broken.
+#
+# MULTI-PROVIDER (#669): scripts/provider-key-canary.mjs iterates a PROVIDERS list — add a
+# provider there + map its secret to the env below, and this covers it too. OpenAI is wired
+# and inert until secrets.OPENAI_KEY exists (an unset key → 'unconfigured' → skipped).
+#
+# Green even when a key is dry: detection working IS success — the dry key is surfaced via
+# the issue + email, not a red run (mirrors the digests' degrade-to-green philosophy).
+
+on:
+  schedule:
+    - cron: '0 7 * * *' # daily 07:00 UTC — a cheap heads-up before the working day
+  workflow_dispatch: {} # run on demand to verify a fresh top-up landed
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Probe each configured provider key
+        id: canary
+        env:
+          # Map each provider's secret to the keyEnv the script expects. A secret that
+          # doesn't exist yet resolves to '' → that provider is reported 'unconfigured'.
+          ANTHROPIC_KEY: ${{ secrets.PI_PROVIDER_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+        run: node scripts/provider-key-canary.mjs | tee canary.json
+
+      # Alert rail 1 — a single STANDING issue (found by a hidden marker, not a new label so
+      # this needs no labels.yml change). Opened/updated when a key is dry; closed when all
+      # keys are healthy again, so the issue's open/closed state mirrors reality.
+      - name: Update the standing alert issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ANY_ALERT: ${{ steps.canary.outputs.any_alert }}
+          SUMMARY: ${{ steps.canary.outputs.summary }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          MARKER="<!-- provider-key-canary -->"
+          # Find the standing issue by its marker (search is body-aware).
+          NUM=$(gh issue list --state open --search "$MARKER in:body" --json number -q '.[0].number // empty')
+          if [ "$ANY_ALERT" = "true" ]; then
+            DETAIL=$(jq -c '.results' canary.json)
+            BODY="$MARKER
+          > 🤖 **Claude Code** · agent pipeline (CI) · _provider-key canary (#1327)_
+
+          **$SUMMARY**
+
+          A metered provider key read **dry** or **auth-broken** — the pi.dev harness will fail every run on it until it's topped up (or the harness fails over to a funded provider). Top up the named key, then re-run this workflow to confirm.
+
+          <details><summary>probe results</summary>
+
+          \`\`\`json
+          $DETAIL
+          \`\`\`
+          </details>
+
+          🔗 $RUN_URL"
+            if [ -n "$NUM" ]; then
+              gh issue edit "$NUM" --body "$BODY"
+              gh issue comment "$NUM" --body "> 🤖 canary re-checked $(date -u +%FT%TZ) — still needs attention: $SUMMARY"
+            else
+              gh issue create --title "🔑 Provider key canary: a key needs a top-up" --body "$BODY"
+            fi
+          else
+            # All healthy — close the standing issue if one is open.
+            if [ -n "$NUM" ]; then
+              gh issue comment "$NUM" --body "> 🤖 canary $(date -u +%FT%TZ) — all provider keys healthy again. Closing."
+              gh issue close "$NUM"
+            fi
+            echo "All provider keys OK."
+          fi
+
+      # Alert rail 2 — email (Resend, mirrors housekeeping.yml). Only on an alert; degrades
+      # to a green no-op when RESEND_API_KEY / recipients are unset.
+      - name: Email the alert (Resend)
+        if: steps.canary.outputs.any_alert == 'true'
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.DIGEST_EMAIL_FROM }}
+          EMAIL_TO: ${{ vars.DIGEST_REPORT_EMAIL }}
+          SUMMARY: ${{ steps.canary.outputs.summary }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$EMAIL_FROM" ] || [ -z "$EMAIL_TO" ]; then
+            echo "::warning::RESEND_API_KEY / DIGEST_EMAIL_FROM / DIGEST_DEFAULT_TO not set — skipping email (run stays green)."
+            exit 0
+          fi
+          BODY="$SUMMARY
+
+          A metered provider key is dry or auth-broken. The pi.dev harness will fail on it until topped up.
+          Run: $RUN_URL"
+          jq -n --arg from "$EMAIL_FROM" --arg to "$EMAIL_TO" \
+            --arg subject "🔑 Provider key needs a top-up — $(date -u +%F)" --arg body "$BODY" \
+            '{from:$from, to:($to|split(",")), subject:$subject, text:$body}' \
+          | curl -sS -X POST https://api.resend.com/emails \
+              -H "Authorization: Bearer $RESEND_API_KEY" -H "Content-Type: application/json" \
+              -d @- -w '\nHTTP %{http_code}\n'
