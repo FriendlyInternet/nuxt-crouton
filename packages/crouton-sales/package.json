@@ -60,7 +60,9 @@
   "dependencies": {
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-printing": "workspace:*",
-    "nanoid": "^5.0.0"
+    "@nuxt/ui": "catalog:",
+    "nanoid": "^5.0.0",
+    "reka-ui": "^2.9.0"
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",

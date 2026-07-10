@@ -1,12 +1,11 @@
 <script setup lang="ts">
 /**
- * Look and Feel Page
+ * Site Info Page
  *
- * Team theme and appearance settings.
- * Favicon + site information live on the sibling Site info tab (site-info.vue).
+ * Team favicon and site information settings (contact email, URLs, social links).
  * Only accessible by team admins/owners.
  *
- * @route /admin/[team]/team/look-and-feel
+ * @route /admin/[team]/team/site-info
  */
 const { teamSlug } = useTeamContext()
 const { t } = useT()
@@ -36,7 +35,9 @@ const { isAdmin } = useTeam()
     </div>
 
     <div v-else class="space-y-8">
-      <TeamThemeSettings />
+      <TeamFaviconSettings />
+      <USeparator />
+      <TeamSiteInfoSettings />
     </div>
   </div>
 </template>
