@@ -25,6 +25,11 @@ export default defineNuxtConfig({
     '@fyit/crouton-pages',
     '@fyit/crouton-printing',
     '@fyit/crouton-sales',
+    // Theme layers under test (#1303/#1332): the team Look-and-Feel presets
+    // inject ko-*/bw-* classes at runtime, but without these layers the CSS
+    // behind those classes never ships — presets were palette-only before.
+    '@fyit/crouton-themes/ko',
+    '@fyit/crouton-themes/blackandwhite',
     './layers/sales',
     './layers/pages'
   ],

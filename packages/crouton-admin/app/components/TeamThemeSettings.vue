@@ -13,6 +13,7 @@ import {
   NEUTRAL_COLORS,
   DEFAULT_THEME,
   THEME_PRESETS,
+  useAvailableThemePresets,
   type ThemePreset,
   type TeamThemeSettings
 } from '../composables/useTeamTheme'
@@ -120,7 +121,12 @@ function revertChanges() {
   localTheme.allowUserThemes = theme.value.allowUserThemes
 }
 
-const presetEntries = Object.entries(THEME_PRESETS) as [ThemePreset, (typeof THEME_PRESETS)[ThemePreset]][]
+// Only presets whose theme layer this app actually extends (#1332) — a
+// preset without its layer would apply palette-only (inert classes).
+const availablePresets = useAvailableThemePresets()
+const presetEntries = computed(() =>
+  Object.entries(availablePresets.value) as [ThemePreset, (typeof THEME_PRESETS)['custom']][]
+)
 </script>
 
 <template>
