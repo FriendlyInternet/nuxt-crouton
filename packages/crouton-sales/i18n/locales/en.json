@@ -528,6 +528,22 @@
         "printed": "Receipt printed for {client} — tab settled",
         "printError": "Could not print the receipt",
         "loadError": "Could not load clients"
+      },
+      "dataPanel": {
+        "button": "Data",
+        "title": "Data",
+        "revenueChart": "Revenue by day",
+        "productMatrix": "Sales per product × day"
+      },
+      "launcher": {
+        "ordersDesc": "All orders for this event — status, tickets, reprints",
+        "ordersStat": "orders",
+        "clientsDesc": "View and settle open client tabs",
+        "clientsStat": "open tabs",
+        "dataDesc": "Live sales numbers, charts and the product table",
+        "dataStat": "revenue",
+        "settingsDesc": "Event details, printers, receipt text and helpers",
+        "settingsStat": "printers"
       }
     },
     "helpers": {
@@ -545,9 +561,7 @@
       "notes": "Notes",
       "label": "Client",
       "selectOrCreate": "Select or create client...",
-      "createNew": "Create new client",
-      "nameLabel": "Client name",
-      "namePlaceholder": "Enter client name"
+      "createNamed": "Add \"{name}\""
     },
     "offline": {
       "title": "Offline",
@@ -583,6 +597,20 @@
         "sendFailed": "Could not send to printer",
         "generic": "Print job failed"
       }
+    },
+    "printFlow": {
+      "title": "Print flow",
+      "description": "Who delivers the printed tickets for this event.",
+      "localDrainer": "Local device",
+      "localDrainerHelp": "A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — works fully offline.",
+      "routerSpooler": "Via the venue router",
+      "routerSpoolerHelp": "The on-site router fetches print jobs from the cloud app and sends them to the printers.",
+      "paused": "No physical printing",
+      "pausedHelp": "No print jobs are created — orders simply appear on screen.",
+      "lastSeen": "last seen",
+      "neverSeen": "never seen",
+      "updated": "Print flow updated",
+      "updateError": "Could not update the print flow"
     }
   }
 }

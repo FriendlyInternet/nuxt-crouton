@@ -1396,6 +1396,9 @@ importers:
       '@fyit/crouton-core':
         specifier: workspace:*
         version: link:../crouton-core
+      '@vueuse/core':
+        specifier: ^13.3.0
+        version: 13.9.0(vue@3.5.38(typescript@5.9.3))
       nanoid:
         specifier: ^5.0.0
         version: 5.1.6
@@ -1424,12 +1427,21 @@ importers:
       '@fyit/crouton-printing':
         specifier: workspace:*
         version: link:../crouton-printing
+      '@nuxt/ui':
+        specifier: ^4.9.0
+        version: 4.9.0(e35571ed4d3716fd49479fca477900a2)
       '@nuxtjs/i18n':
         specifier: ^9.0.0 || ^10.0.0
         version: 9.5.6(@vue/compiler-dom@3.5.38)(eslint@9.39.2(jiti@2.7.0))(magicast@0.5.2)(rollup@4.62.0)(vue@3.5.38(typescript@5.9.3))
+      nanoid:
+        specifier: ^5.0.0
+        version: 5.1.6
       nuxt:
         specifier: ^4.4.8
         version: 4.4.8(acbda501943d3a88c40c15b150712194)
+      reka-ui:
+        specifier: ^2.9.0
+        version: 2.9.10(vue@3.5.38(typescript@5.9.3))
       zod:
         specifier: 4.2.1
         version: 4.2.1
@@ -7655,11 +7667,6 @@ packages:
 
   '@vueuse/shared@13.9.0':
     resolution: {integrity: sha512-e89uuTLMh0U5cZ9iDpEI2senqPGfbPRTHM/0AaQkcxnpqjkZqDYP8rpfm7edOz8s+pOCOROEy1PIveSW8+fL5g==}
-    peerDependencies:
-      vue: ^3.5.38
-
-  '@vueuse/shared@14.2.1':
-    resolution: {integrity: sha512-shTJncjV9JTI4oVNyF1FQonetYAiTBd+Qj7cY89SWbXSkx7gyhrgtEdF2ZAVWS1S3SHlaROO6F2IesJxQEkZBw==}
     peerDependencies:
       vue: ^3.5.38
 
@@ -22173,10 +22180,6 @@ snapshots:
     dependencies:
       vue: 3.5.38(typescript@5.9.3)
 
-  '@vueuse/shared@14.2.1(vue@3.5.38(typescript@5.9.3))':
-    dependencies:
-      vue: 3.5.38(typescript@5.9.3)
-
   '@vueuse/shared@14.3.0(vue@3.5.38(typescript@5.9.3))':
     dependencies:
       vue: 3.5.38(typescript@5.9.3)
@@ -29667,7 +29670,7 @@ snapshots:
       '@internationalized/number': 3.6.5
       '@tanstack/vue-virtual': 3.13.29(vue@3.5.38(typescript@5.9.3))
       '@vueuse/core': 14.3.0(vue@3.5.38(typescript@5.9.3))
-      '@vueuse/shared': 14.2.1(vue@3.5.38(typescript@5.9.3))
+      '@vueuse/shared': 14.3.0(vue@3.5.38(typescript@5.9.3))
       aria-hidden: 1.2.6
       defu: 6.1.7
       ohash: 2.0.11

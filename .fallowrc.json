@@ -99,7 +99,8 @@
     "y-protocols",                // subpath-imported at runtime; wired via vite optimizeDeps
     "@fyit/crouton-events",       // meta-package distribution dep: makes extends resolvable
     "@ai-sdk/ui-utils",           // imported by crouton-ai's built dist .d.ts (dist is ignored)
-    "@libsql/client"              // D1/sqlite runtime driver in generated scaffolds, loaded dynamically (like better-sqlite3) — #1252
+    "@libsql/client",             // D1/sqlite runtime driver in generated scaffolds, loaded dynamically (like better-sqlite3) — #1252
+    "@fyit/crouton-feedback"      // crouton-devtools loads it via installModule('@fyit/crouton-feedback') — string ref, invisible to import analysis (verified src/module.ts:63) — #1324
   ],
   // ONE health block only: this file briefly carried two "health" keys and JSON
   // last-key-wins silently discarded the first (#1256) — never add a second.

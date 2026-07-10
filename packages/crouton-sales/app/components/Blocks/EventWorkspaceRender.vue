@@ -60,6 +60,17 @@ const showInlineShell = computed(() => loggedIn.value && !isNarrow.value)
 // on first open. The helper session indicator + logout live in the page nav's
 // auth pill (the scoped-session-nav plugin bridges them), not here.
 const kassaOpen = ref(false)
+
+// Member quick access on the launcher: a card opens ONLY its pane (PaneHost
+// in its own fullscreen modal) — never the kassa behind it. "Open kassa" is
+// the kassa's own entry.
+const paneOpen = ref(false)
+const activePane = ref<'orders' | 'clients' | 'data' | 'settings'>('orders')
+
+function openPane(pane: 'orders' | 'clients' | 'data' | 'settings') {
+  activePane.value = pane
+  paneOpen.value = true
+}
 </script>
 
 <template>
@@ -92,10 +103,39 @@ const kassaOpen = ref(false)
     <template v-else>
       <div class="rounded-3xl border border-default bg-default p-8 flex flex-col items-center gap-5 text-center">
         <p class="text-sm text-muted">{{ t('sales.block.openKassaHint') }}</p>
-        <UButton size="xl" @click="kassaOpen = true">
+        <UButton size="xl" block class="max-w-md" @click="kassaOpen = true">
           {{ loggedIn ? t('sales.block.openKassa') : t('sales.block.makeOrder') }}
         </UButton>
+        <!-- Member quick access: one explained card per workspace surface,
+             each with a live headline number — straight into that pane, one
+             tap instead of two. Volunteers (no session) get only the big
+             button. -->
+        <SalesBlocksEventWorkspaceLauncherCards
+          v-if="loggedIn"
+          :event-slug="eventSlug"
+          class="max-w-md"
+          @open="openPane($event)"
+        />
       </div>
+
+      <!-- Pane deep-entry: just the pane, in its own fullscreen surface —
+           the kassa is never mounted behind it. -->
+      <UModal v-if="loggedIn" v-model:open="paneOpen" fullscreen :ui="{ content: 'bg-default' }">
+        <template #content>
+          <div class="flex flex-col h-full pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
+            <Suspense>
+              <SalesEventWorkspacePaneHost
+                :event-slug="eventSlug"
+                :pane="activePane"
+                @close="paneOpen = false"
+              />
+              <template #fallback>
+                <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
+              </template>
+            </Suspense>
+          </div>
+        </template>
+      </UModal>
 
       <UModal v-model:open="kassaOpen" fullscreen :ui="{ content: 'bg-default' }">
         <template #content>
@@ -103,22 +143,19 @@ const kassaOpen = ref(false)
                header off the notch and the cart bar above Safari's bottom bar
                (env() needs viewport-fit=cover — set by the viewport-meta plugin). -->
           <div class="flex flex-col h-full pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-            <!-- Member (narrow) → the full workspace shell. The shell has no
-                 exit affordance of its own, so add a close button above it. -->
+            <!-- Member (narrow) → the full workspace shell. Its top row (the
+                 strip on narrow, the header on wide) carries the exit ✕
+                 (closable) — no separate close row wasting a line. -->
             <template v-if="loggedIn">
-              <div class="flex items-center justify-end px-2 py-1 shrink-0 border-b border-default">
-                <UButton
-                  icon="i-lucide-x"
-                  variant="ghost"
-                  color="neutral"
-                  size="sm"
-                  :aria-label="t('sales.common.close')"
-                  @click="kassaOpen = false"
-                />
-              </div>
               <div class="flex-1 min-h-0 overflow-y-auto p-4">
                 <Suspense>
-                  <SalesEventWorkspaceShell :event-slug="eventSlug" :show-switcher="false" />
+                  <SalesEventWorkspaceShell
+                    :event-slug="eventSlug"
+                    :show-switcher="false"
+                    :show-strip="false"
+                    closable
+                    @close="kassaOpen = false"
+                  />
                   <template #fallback>
                     <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
                   </template>

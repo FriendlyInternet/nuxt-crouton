@@ -26,6 +26,7 @@
       "removeCustom": "Aangepast favicon verwijderen"
     },
     "siteInfo": {
+      "tab": "Site-info",
       "title": "Site-informatie",
       "description": "Algemene informatie over je teamsite",
       "contactEmail": "Contact e-mail",

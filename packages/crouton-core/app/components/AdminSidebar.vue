@@ -214,6 +214,12 @@ const teamItem = computed<NavigationMenuItem | null>(() => {
         active: route.path === `${teamPath}/look-and-feel` || route.path === `${teamPath}/look-and-feel/`
       },
       {
+        label: t('teams.siteInfo.tab') || 'Site info',
+        icon: 'i-lucide-info',
+        to: `${teamPath}/site-info`,
+        active: route.path === `${teamPath}/site-info` || route.path === `${teamPath}/site-info/`
+      },
+      {
         label: t('navigation.translations') || 'Translations',
         icon: 'i-lucide-languages',
         to: translationsPath,

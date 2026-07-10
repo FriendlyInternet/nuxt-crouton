@@ -527,6 +527,22 @@
         "printed": "Addition imprimée pour {client} — compte clôturé",
         "printError": "Impossible d'imprimer l'addition",
         "loadError": "Impossible de charger les clients"
+      },
+      "dataPanel": {
+        "button": "Données",
+        "title": "Données",
+        "revenueChart": "Revenu par jour",
+        "productMatrix": "Ventes par produit × jour"
+      },
+      "launcher": {
+        "ordersDesc": "Toutes les commandes de cet événement — statut, tickets, réimpressions",
+        "ordersStat": "commandes",
+        "clientsDesc": "Voir et régler les additions ouvertes",
+        "clientsStat": "additions ouvertes",
+        "dataDesc": "Chiffres de vente en direct, graphiques et tableau produits",
+        "dataStat": "chiffre d'affaires",
+        "settingsDesc": "Détails de l'événement, imprimantes, texte des tickets et aides",
+        "settingsStat": "imprimantes"
       }
     },
     "helpers": {
@@ -544,9 +560,7 @@
       "notes": "Notes",
       "label": "Client",
       "selectOrCreate": "Sélectionner ou créer un client...",
-      "createNew": "Créer un nouveau client",
-      "nameLabel": "Nom du client",
-      "namePlaceholder": "Saisir le nom du client"
+      "createNamed": "Ajouter « {name} »"
     },
     "offline": {
       "title": "Hors ligne",
@@ -582,6 +596,20 @@
         "sendFailed": "Échec de l'envoi à l'imprimante",
         "generic": "Échec de la tâche d'impression"
       }
+    },
+    "printFlow": {
+      "title": "Flux d'impression",
+      "description": "Qui imprime les tickets de cet événement.",
+      "localDrainer": "Appareil local",
+      "localDrainerHelp": "Un appareil sur place (Pi / mini-PC) exécute l'application et imprime directement vers les imprimantes — fonctionne entièrement hors ligne.",
+      "routerSpooler": "Via le routeur",
+      "routerSpoolerHelp": "Le routeur sur place récupère les tickets depuis le cloud et les envoie aux imprimantes.",
+      "paused": "Pas d'impression physique",
+      "pausedHelp": "Aucun ticket n'est créé — les commandes apparaissent simplement à l'écran.",
+      "lastSeen": "vu pour la dernière fois",
+      "neverSeen": "jamais vu",
+      "updated": "Flux d'impression mis à jour",
+      "updateError": "Impossible de mettre à jour le flux d'impression"
     }
   }
 }

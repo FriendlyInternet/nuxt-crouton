@@ -23,6 +23,8 @@ const props = withDefaults(defineProps<{
   teamParam?: string
   /** Allow admin editing affordances (only applies to team-member sessions). */
   editable?: boolean
+  /** Pass-through to OrderInterface: hide the inline edit pencil (host renders its own). */
+  hideEditToggle?: boolean
   /** Show the event title / logged-in-as header row. */
   showHeader?: boolean
   /** Render a close button on the header's right — set when the panel runs
@@ -34,6 +36,10 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ close: [] }>()
+
+// Pass-through model so a host (workspace Shell) can drive the kassa's edit
+// mode from outside; unbound it stays OrderInterface-local.
+const editMode = defineModel<boolean>('editMode', { default: false })
 
 const { t } = useT()
 const route = useRoute()
@@ -240,6 +246,10 @@ onUnmounted(unhookMutation)
           :requires-client="orderData.event.requiresClient"
           :currency="orderData.event.currency"
           :editable="editable"
+          :hide-edit-toggle="hideEditToggle"
+          :closable="closable && !showHeader"
+          v-model:edit-mode="editMode"
+          @close="emit('close')"
         />
       </div>
     </template>
