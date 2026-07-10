@@ -127,6 +127,18 @@ const terminalConfig: ThemeUIConfig = {
   badge: { defaultVariants: { variant: 'terminal' } }
 }
 
+// Braun — named variants registered by braun/app.config.ts
+const braunConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'orange',
+    neutral: 'stone'
+  },
+  button: { defaultVariants: { variant: 'braun' } },
+  input: { defaultVariants: { variant: 'braun' } },
+  card: { defaultVariants: { variant: 'braun' } },
+  badge: { defaultVariants: { variant: 'braun' } }
+}
+
 // Export all theme configs
 export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   default: defaultConfig,
@@ -136,5 +148,6 @@ export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   blackandwhite: blackandwhiteConfig,
   brutalist: brutalistConfig,
   mtv: mtvConfig,
-  terminal: terminalConfig
+  terminal: terminalConfig,
+  braun: braunConfig
 }

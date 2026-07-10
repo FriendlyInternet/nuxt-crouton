@@ -16,7 +16,7 @@
 // Pure + deterministic — SSR and client must compute the identical class string
 // (hydration-mismatch rule from #364). No Date/random/env reads here, ever.
 
-type ThemeKey = 'minimal' | 'ko' | 'kr11' | 'bw' | 'brutalist' | 'mtv' | 'terminal'
+type ThemeKey = 'minimal' | 'ko' | 'kr11' | 'bw' | 'brutalist' | 'mtv' | 'terminal' | 'braun'
 
 // First matching prefix wins; a resolved string only ever carries one theme's
 // markers because `variant` is single-valued and the bw markers live on the
@@ -28,7 +28,8 @@ const MARKERS: Array<[prefix: string, theme: ThemeKey]> = [
   ['bw-', 'bw'],
   ['brutalist-', 'brutalist'],
   ['mtv-', 'mtv'],
-  ['term-', 'terminal']
+  ['term-', 'terminal'],
+  ['braun-', 'braun']
 ]
 
 // text-* utilities that are NOT color (sizes, alignment, wrapping) — kept when a
@@ -78,6 +79,10 @@ const STRIP: Record<ThemeKey, (u: string) => boolean> = {
   // Terminal: monospace phosphor — owns typography wholesale (like ko/kr11)
   // plus color, decoration, motion and underlines.
   terminal: u => isColor(u) || /^text-/.test(u) || isDecor(u) || isMotion(u) || isType(u)
+    || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u),
+  // Braun: owns typography wholesale (small silkscreen labels) plus color,
+  // decoration, motion and underlines — like ko/kr11/terminal.
+  braun: u => isColor(u) || /^text-/.test(u) || isDecor(u) || isMotion(u) || isType(u)
     || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u)
 }
 

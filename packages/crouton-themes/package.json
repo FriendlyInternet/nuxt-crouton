@@ -19,7 +19,9 @@
     "./mtv": "./mtv/nuxt.config.ts",
     "./mtv/*": "./mtv/*",
     "./terminal": "./terminal/nuxt.config.ts",
-    "./terminal/*": "./terminal/*"
+    "./terminal/*": "./terminal/*",
+    "./braun": "./braun/nuxt.config.ts",
+    "./braun/*": "./braun/*"
   },
   "files": [
     "themes",
@@ -30,6 +32,7 @@
     "brutalist",
     "mtv",
     "terminal",
+    "braun",
     "lib"
   ],
   "keywords": [

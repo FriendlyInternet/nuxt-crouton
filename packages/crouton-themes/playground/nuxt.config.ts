@@ -24,6 +24,7 @@ export default defineNuxtConfig({
     '../blackandwhite',
     '../brutalist',
     '../mtv',
-    '../terminal'
+    '../terminal',
+    '../braun'
   ]
 })
