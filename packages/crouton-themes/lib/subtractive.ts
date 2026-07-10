@@ -16,7 +16,7 @@
 // Pure + deterministic — SSR and client must compute the identical class string
 // (hydration-mismatch rule from #364). No Date/random/env reads here, ever.
 
-type ThemeKey = 'minimal' | 'ko' | 'kr11' | 'bw' | 'brutalist'
+type ThemeKey = 'minimal' | 'ko' | 'kr11' | 'bw' | 'brutalist' | 'mtv'
 
 // First matching prefix wins; a resolved string only ever carries one theme's
 // markers because `variant` is single-valued and the bw markers live on the
@@ -26,7 +26,8 @@ const MARKERS: Array<[prefix: string, theme: ThemeKey]> = [
   ['ko-', 'ko'],
   ['kr-', 'kr11'],
   ['bw-', 'bw'],
-  ['brutalist-', 'brutalist']
+  ['brutalist-', 'brutalist'],
+  ['mtv-', 'mtv']
 ]
 
 // text-* utilities that are NOT color (sizes, alignment, wrapping) — kept when a
@@ -65,6 +66,11 @@ const STRIP: Record<ThemeKey, (u: string) => boolean> = {
   // Brutalist keeps text sizes + line-height; owns color, decoration, motion,
   // weight/family/tracking/case, and link underlines.
   brutalist: u => isColor(u) || isDecor(u) || isMotion(u)
+    || /^(font|tracking)(-|$)/.test(u)
+    || /^(uppercase|lowercase|capitalize|normal-case)$/.test(u)
+    || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u),
+  // MTV: same ownership profile as brutalist (slab formula with neon shadows).
+  mtv: u => isColor(u) || isDecor(u) || isMotion(u)
     || /^(font|tracking)(-|$)/.test(u)
     || /^(uppercase|lowercase|capitalize|normal-case)$/.test(u)
     || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u)

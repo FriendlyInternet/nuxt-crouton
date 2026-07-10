@@ -4,7 +4,7 @@
 
 import { THEME_UI_CONFIGS } from '../configs/themeConfigs'
 
-export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'default'
+export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'default'
 
 type BaseVariant = 'solid' | 'outline' | 'soft' | 'ghost' | 'link'
 
@@ -59,6 +59,13 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     label: 'Brutalist',
     description: 'Thick borders, hard shadows, zero subtlety',
     colors: ['#0a0a0a', '#ffd800', '#fdfbf5'], // ink, shock yellow, paper
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'mtv',
+    label: 'MTV',
+    description: 'Day-glo blocks, clashing neon shadows, Memphis energy',
+    colors: ['#ff2d95', '#00e5ff', '#ffe600'], // pink, cyan, yellow
     defaultVariant: 'solid'
   }
 ]

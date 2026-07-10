@@ -123,6 +123,22 @@ const { variant } = useThemeSwitcher()
 
 ## Available Themes
 
+### MTV Theme (`./mtv`)
+
+Early-MTV (1981): day-glo color blocking, hard shadows in a CLASHING neon,
+a degree of tilt, stickers everywhere. Text stays ink-on-light — neon is for
+fills/shadows/accents only.
+
+**Design Language:**
+- Slabs with 2px ink borders and offset shadows in a *different* neon
+  (pink slab → cyan shadow, ink → pink, cyan → pink)
+- Shock palette: `--mtv-{ink,paper,pink,cyan,yellow,purple}`
+- Hover tilts ~1deg (disabled under `prefers-reduced-motion`); stickers pre-tilted
+- Card = taped-up promo (cyan header band, hazard-stripe footer); link = highlighter swipe
+
+**Nuxt UI Variants:** `mtv` / `mtv-{solid,outline,soft,ghost,link}` (UButton);
+`mtv` for UInput, UCard, UBadge, USeparator. USwitch themed ambiently.
+
 ### Brutalist Theme (`./brutalist`)
 
 Thick borders, hard shadows, zero subtlety — the anti-"tasteful SaaS" theme.

@@ -15,7 +15,9 @@
     "./blackandwhite": "./blackandwhite/nuxt.config.ts",
     "./blackandwhite/*": "./blackandwhite/*",
     "./brutalist": "./brutalist/nuxt.config.ts",
-    "./brutalist/*": "./brutalist/*"
+    "./brutalist/*": "./brutalist/*",
+    "./mtv": "./mtv/nuxt.config.ts",
+    "./mtv/*": "./mtv/*"
   },
   "files": [
     "themes",
@@ -24,6 +26,7 @@
     "kr11",
     "blackandwhite",
     "brutalist",
+    "mtv",
     "lib"
   ],
   "keywords": [
