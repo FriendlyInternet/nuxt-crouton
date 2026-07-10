@@ -4,7 +4,7 @@
 
 import { THEME_UI_CONFIGS } from '../configs/themeConfigs'
 
-export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'default'
+export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'default'
 
 type BaseVariant = 'solid' | 'outline' | 'soft' | 'ghost' | 'link'
 
@@ -46,6 +46,13 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     description: 'Friendly drum machine aesthetic',
     colors: ['#6ee7b7', '#fcd34d', '#fca5a5'], // mint, gold, coral
     defaultVariant: 'soft' // KR-11 uses soft tactile pads
+  },
+  {
+    name: 'blackandwhite',
+    label: 'Black & White',
+    description: 'Compact monochrome dashboard theme',
+    colors: ['#000000', '#525252', '#ffffff'], // black, neutral, white
+    defaultVariant: 'outline' // Black & White favors outline/subtle surfaces
   }
 ]
 
@@ -70,10 +77,16 @@ export function useThemeSwitcher() {
     AVAILABLE_THEMES.find(t => t.name === currentTheme.value) ?? AVAILABLE_THEMES[0]
   )
 
-  // Get the variant name for Nuxt UI components
-  // 'default' returns undefined to use Nuxt UI's default variant
+  // Get the variant name for Nuxt UI components.
+  // 'default' returns undefined to use Nuxt UI's default variant. 'blackandwhite'
+  // also returns undefined: unlike ko/minimal/kr11 (which register a *named*
+  // `variant="<theme>"` value), blackandwhite overrides the standard variant
+  // slots directly (solid/outline/soft/ghost/link -> bw-*), so plain UButton
+  // usage with no explicit variant already renders themed.
   const variant = computed(() =>
-    currentTheme.value === 'default' ? undefined : currentTheme.value
+    currentTheme.value === 'default' || currentTheme.value === 'blackandwhite'
+      ? undefined
+      : currentTheme.value
   )
 
   // Set theme and persist
@@ -120,9 +133,11 @@ export function useThemeSwitcher() {
   }
 
   // Get variant with theme prefix for compound variants
-  // e.g., getVariant('ghost') returns 'ko-ghost' when KO theme is active
+  // e.g., getVariant('ghost') returns 'ko-ghost' when KO theme is active.
+  // blackandwhite has no prefixed variants (see `variant` above) — it remaps
+  // the base variant name itself, so the base variant passes through unchanged.
   function getVariant(baseVariant: string = 'solid'): string {
-    if (currentTheme.value === 'default') return baseVariant
+    if (currentTheme.value === 'default' || currentTheme.value === 'blackandwhite') return baseVariant
     return `${currentTheme.value}-${baseVariant}`
   }
 

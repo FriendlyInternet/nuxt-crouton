@@ -134,10 +134,22 @@ const kr11Config: ThemeUIConfig = {
   }
 }
 
+// Black & White Theme - compact monochrome dashboard
+// Variant CLASSES are already registered by the theme's own app.config.ts
+// (bw-solid/bw-outline/bw-soft/bw-ghost/bw-link); the switcher only needs the
+// color palette here since the theme has no per-color compoundVariants.
+const blackandwhiteConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'neutral',
+    neutral: 'neutral'
+  }
+}
+
 // Export all theme configs
 export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   default: defaultConfig,
   ko: koConfig,
   minimal: minimalConfig,
-  kr11: kr11Config
+  kr11: kr11Config,
+  blackandwhite: blackandwhiteConfig
 }
