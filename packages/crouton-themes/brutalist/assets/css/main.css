@@ -28,6 +28,32 @@
   background-color: var(--brutalist-paper);
 }
 
+/* Chrome without a variant hook (owner feedback on #1307: "the switcher could
+   be more in style"). USwitch has no `variant` dimension, so the marker-gated
+   replacer can never fire for it — theme it ambiently, scoped to the active
+   theme (body class from useThemeSwitcher, data-theme from the app presets).
+   Pattern doubles as the template for the other themes (#1333). */
+[data-theme="brutalist"] button[role="switch"],
+.theme-brutalist button[role="switch"] {
+  border-radius: 0;
+  border: 2px solid var(--brutalist-ink);
+  background-color: var(--brutalist-paper);
+  box-shadow: 2px 2px 0 var(--brutalist-ink);
+  transition: none;
+}
+
+[data-theme="brutalist"] button[role="switch"][data-state="checked"],
+.theme-brutalist button[role="switch"][data-state="checked"] {
+  background-color: var(--brutalist-accent);
+}
+
+[data-theme="brutalist"] button[role="switch"] > span,
+.theme-brutalist button[role="switch"] > span {
+  border-radius: 0;
+  background-color: var(--brutalist-ink);
+  transition: none;
+}
+
 /* ============================================
    SOLID BUTTONS — flat block + hard shadow
    ============================================ */
