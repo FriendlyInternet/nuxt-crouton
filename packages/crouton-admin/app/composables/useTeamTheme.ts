@@ -18,7 +18,7 @@
  */
 import { computed, watch, readonly } from 'vue'
 import { updateAppConfig, useAppConfig } from '#imports'
-import { THEME_PRESET_REGISTRY, type ThemePresetName } from '@fyit/crouton-themes/themes/configs/presets'
+import { THEME_PRESET_REGISTRY, type ThemePresetName, type ThemePresetEntry } from '@fyit/crouton-themes/presets'
 
 /**
  * Primary color options (Tailwind CSS colors)
@@ -67,7 +67,7 @@ export interface ThemePresetConfig {
   /** Hex color for the neutral preview swatch */
   previewNeutral: string
   /** Config passed to updateAppConfig({ ui: ... }) */
-  ui: Record<string, unknown>
+  ui: Record<string, unknown> | ThemePresetEntry['ui']
 }
 
 /**

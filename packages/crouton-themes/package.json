@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./themes": "./themes/nuxt.config.ts",
+    "./presets": "./themes/configs/presets.ts",
     "./themes/*": "./themes/*",
     "./ko": "./ko/nuxt.config.ts",
     "./ko/*": "./ko/*",
