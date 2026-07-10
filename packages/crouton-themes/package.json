@@ -20,7 +20,8 @@
     "ko",
     "minimal",
     "kr11",
-    "blackandwhite"
+    "blackandwhite",
+    "lib"
   ],
   "keywords": [
     "nuxt",

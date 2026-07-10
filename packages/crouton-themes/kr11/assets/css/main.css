@@ -88,63 +88,63 @@
    ============================================ */
 
 .kr-pad {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: var(--kr-pad-cream) !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-pad-radius) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: none;
+  border-radius: var(--kr-pad-radius);
   box-shadow:
     0 2px 4px rgba(0, 0, 0, 0.1),
     0 4px 8px rgba(0, 0, 0, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
-  transition: all var(--kr-transition-fast) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-pad:hover {
-  background-color: var(--kr-pad-cream-pressed) !important;
+  background-color: var(--kr-pad-cream-pressed);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.1),
     0 2px 4px rgba(0, 0, 0, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .kr-pad:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
   box-shadow:
     0 0 1px rgba(0, 0, 0, 0.1),
-    inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* Coral Pink Pad (Pad 1 style) */
 .kr-pad.kr-pad--coral {
-  background-color: var(--kr-pad-coral) !important;
-  color: var(--kr-text-dark) !important;
+  background-color: var(--kr-pad-coral);
+  color: var(--kr-text-dark);
 }
 
 .kr-pad.kr-pad--coral:hover {
-  background-color: var(--kr-pad-coral-pressed) !important;
+  background-color: var(--kr-pad-coral-pressed);
 }
 
 /* Golden Yellow Pad (Fill buttons) */
 .kr-pad.kr-pad--gold {
-  background-color: var(--kr-pad-gold) !important;
-  color: var(--kr-text-dark) !important;
+  background-color: var(--kr-pad-gold);
+  color: var(--kr-text-dark);
 }
 
 .kr-pad.kr-pad--gold:hover {
-  background-color: var(--kr-pad-gold-pressed) !important;
+  background-color: var(--kr-pad-gold-pressed);
 }
 
 /* Mint Green Pad (Play button) */
 .kr-pad.kr-pad--mint {
-  background-color: var(--kr-pad-mint) !important;
-  color: var(--kr-text-dark) !important;
+  background-color: var(--kr-pad-mint);
+  color: var(--kr-text-dark);
 }
 
 .kr-pad.kr-pad--mint:hover {
-  background-color: var(--kr-pad-mint-pressed) !important;
+  background-color: var(--kr-pad-mint-pressed);
 }
 
 /* ============================================
@@ -153,31 +153,33 @@
    ============================================ */
 
 .kr-mode-btn {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.75rem !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.02em !important;
-  background-color: var(--kr-pad-cream) !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-button-radius) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: none;
+  border-radius: var(--kr-button-radius);
+  /* !important stays: spacing utilities (px, py) are deliberately NOT stripped
+     by the subtractive replacer (#1304), so this must outrank them. */
   padding: 0.5rem 1rem !important;
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
-  transition: all var(--kr-transition-fast) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-mode-btn:hover {
-  background-color: var(--kr-pad-cream-pressed) !important;
+  background-color: var(--kr-pad-cream-pressed);
 }
 
 .kr-mode-btn:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
   box-shadow:
     0 0 1px rgba(0, 0, 0, 0.1),
-    inset 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+    inset 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* ============================================
@@ -189,26 +191,26 @@
 }
 
 .kr-input-base {
-  font-family: var(--kr-font) !important;
-  font-size: 0.875rem !important;
-  background-color: var(--kr-pad-cream) !important;
-  color: var(--kr-text-dark) !important;
-  border: 1px solid var(--kr-chassis-dark) !important;
-  border-radius: var(--kr-button-radius) !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05) !important;
-  transition: all var(--kr-transition) !important;
+  font-family: var(--kr-font);
+  font-size: 0.875rem;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: 1px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-button-radius);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all var(--kr-transition);
 }
 
 .kr-input-base::placeholder {
-  color: var(--kr-text-light) !important;
+  color: var(--kr-text-light);
 }
 
 .kr-input-base:focus {
-  outline: none !important;
-  border-color: var(--kr-pad-mint) !important;
+  outline: none;
+  border-color: var(--kr-pad-mint);
   box-shadow:
     inset 0 1px 2px rgba(0, 0, 0, 0.05),
-    0 0 0 2px rgba(126, 232, 199, 0.3) !important;
+    0 0 0 2px rgba(126, 232, 199, 0.3);
 }
 
 /* ============================================
@@ -217,31 +219,31 @@
    ============================================ */
 
 .kr-card {
-  font-family: var(--kr-font) !important;
-  background-color: var(--kr-chassis-light) !important;
-  border: none !important;
-  border-radius: var(--kr-card-radius) !important;
+  font-family: var(--kr-font);
+  background-color: var(--kr-chassis-light);
+  border: none;
+  border-radius: var(--kr-card-radius);
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.08),
     0 4px 16px rgba(0, 0, 0, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .kr-card-header {
-  font-weight: 600 !important;
-  font-size: 0.75rem !important;
-  letter-spacing: 0.05em !important;
-  text-transform: uppercase !important;
-  color: var(--kr-text-medium) !important;
-  border-bottom: 1px solid var(--kr-chassis-dark) !important;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kr-text-medium);
+  border-bottom: 1px solid var(--kr-chassis-dark);
 }
 
 .kr-card-body {
-  color: var(--kr-text-dark) !important;
+  color: var(--kr-text-dark);
 }
 
 .kr-card-footer {
-  border-top: 1px solid var(--kr-chassis-dark) !important;
+  border-top: 1px solid var(--kr-chassis-dark);
 }
 
 /* ============================================
@@ -249,14 +251,16 @@
    ============================================ */
 
 .kr-badge {
-  font-family: var(--kr-font) !important;
-  font-size: 0.625rem !important;
-  font-weight: 600 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-  background-color: var(--kr-display-bg) !important;
-  color: var(--kr-display-red) !important;
-  border-radius: 2px !important;
+  font-family: var(--kr-font);
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background-color: var(--kr-display-bg);
+  color: var(--kr-display-red);
+  border-radius: 2px;
+  /* !important stays: spacing utilities (px, py) are deliberately NOT stripped
+     by the subtractive replacer (#1304), so this must outrank them. */
   padding: 0.25rem 0.5rem !important;
 }
 
@@ -441,49 +445,49 @@
    ============================================ */
 
 .kr-outline {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: transparent !important;
-  color: var(--kr-text-dark) !important;
-  border: 2px solid var(--kr-chassis-dark) !important;
-  border-radius: var(--kr-pad-radius) !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--kr-text-dark);
+  border: 2px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-outline:hover {
-  background-color: var(--kr-chassis-light) !important;
+  background-color: var(--kr-chassis-light);
 }
 
 .kr-outline:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
 }
 
 .kr-outline.kr-outline--mint {
-  border-color: var(--kr-pad-mint) !important;
-  color: #2a9d6d !important;
+  border-color: var(--kr-pad-mint);
+  color: #2a9d6d;
 }
 
 .kr-outline.kr-outline--mint:hover {
-  background-color: rgba(126, 232, 199, 0.15) !important;
+  background-color: rgba(126, 232, 199, 0.15);
 }
 
 .kr-outline.kr-outline--gold {
-  border-color: var(--kr-pad-gold) !important;
-  color: #9a7832 !important;
+  border-color: var(--kr-pad-gold);
+  color: #9a7832;
 }
 
 .kr-outline.kr-outline--gold:hover {
-  background-color: rgba(212, 168, 83, 0.15) !important;
+  background-color: rgba(212, 168, 83, 0.15);
 }
 
 .kr-outline.kr-outline--coral {
-  border-color: var(--kr-pad-coral) !important;
-  color: #d4614f !important;
+  border-color: var(--kr-pad-coral);
+  color: #d4614f;
 }
 
 .kr-outline.kr-outline--coral:hover {
-  background-color: rgba(255, 154, 139, 0.15) !important;
+  background-color: rgba(255, 154, 139, 0.15);
 }
 
 /* ============================================
@@ -492,49 +496,49 @@
    ============================================ */
 
 .kr-soft {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: var(--kr-chassis-light) !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-pad-radius) !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: var(--kr-chassis-light);
+  color: var(--kr-text-dark);
+  border: none;
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-soft:hover {
-  background-color: var(--kr-chassis-dark) !important;
+  background-color: var(--kr-chassis-dark);
 }
 
 .kr-soft:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
 }
 
 .kr-soft.kr-soft--mint {
-  background-color: rgba(126, 232, 199, 0.2) !important;
-  color: #2a9d6d !important;
+  background-color: rgba(126, 232, 199, 0.2);
+  color: #2a9d6d;
 }
 
 .kr-soft.kr-soft--mint:hover {
-  background-color: rgba(126, 232, 199, 0.35) !important;
+  background-color: rgba(126, 232, 199, 0.35);
 }
 
 .kr-soft.kr-soft--gold {
-  background-color: rgba(212, 168, 83, 0.2) !important;
-  color: #9a7832 !important;
+  background-color: rgba(212, 168, 83, 0.2);
+  color: #9a7832;
 }
 
 .kr-soft.kr-soft--gold:hover {
-  background-color: rgba(212, 168, 83, 0.35) !important;
+  background-color: rgba(212, 168, 83, 0.35);
 }
 
 .kr-soft.kr-soft--coral {
-  background-color: rgba(255, 154, 139, 0.2) !important;
-  color: #d4614f !important;
+  background-color: rgba(255, 154, 139, 0.2);
+  color: #d4614f;
 }
 
 .kr-soft.kr-soft--coral:hover {
-  background-color: rgba(255, 154, 139, 0.35) !important;
+  background-color: rgba(255, 154, 139, 0.35);
 }
 
 /* ============================================
@@ -543,46 +547,46 @@
    ============================================ */
 
 .kr-ghost {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: transparent !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-pad-radius) !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--kr-text-dark);
+  border: none;
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-ghost:hover {
-  background-color: var(--kr-chassis-light) !important;
+  background-color: var(--kr-chassis-light);
 }
 
 .kr-ghost:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
 }
 
 .kr-ghost.kr-ghost--mint {
-  color: #2a9d6d !important;
+  color: #2a9d6d;
 }
 
 .kr-ghost.kr-ghost--mint:hover {
-  background-color: rgba(126, 232, 199, 0.15) !important;
+  background-color: rgba(126, 232, 199, 0.15);
 }
 
 .kr-ghost.kr-ghost--gold {
-  color: #9a7832 !important;
+  color: #9a7832;
 }
 
 .kr-ghost.kr-ghost--gold:hover {
-  background-color: rgba(212, 168, 83, 0.15) !important;
+  background-color: rgba(212, 168, 83, 0.15);
 }
 
 .kr-ghost.kr-ghost--coral {
-  color: #d4614f !important;
+  color: #d4614f;
 }
 
 .kr-ghost.kr-ghost--coral:hover {
-  background-color: rgba(255, 154, 139, 0.15) !important;
+  background-color: rgba(255, 154, 139, 0.15);
 }
 
 /* ============================================
@@ -591,29 +595,29 @@
    ============================================ */
 
 .kr-link {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: transparent !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  text-decoration: underline !important;
-  text-underline-offset: 3px !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--kr-text-dark);
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-link:hover {
-  text-decoration-thickness: 2px !important;
+  text-decoration-thickness: 2px;
 }
 
 .kr-link.kr-link--mint {
-  color: #2a9d6d !important;
+  color: #2a9d6d;
 }
 
 .kr-link.kr-link--gold {
-  color: #9a7832 !important;
+  color: #9a7832;
 }
 
 .kr-link.kr-link--coral {
-  color: #d4614f !important;
+  color: #d4614f;
 }

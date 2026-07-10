@@ -67,10 +67,21 @@ export function useThemeSwitcher() {
   // SSR-safe localStorage persistence via VueUse
   const storedTheme = useLocalStorage<ThemeName>(STORAGE_KEY, 'default')
 
-  // Initialize from stored preference on client
-  if (import.meta.client && AVAILABLE_THEMES.some(t => t.name === storedTheme.value)) {
-    currentTheme.value = storedTheme.value
-  }
+  // Restore the stored preference AFTER hydration (onMounted), never during
+  // setup: the server can't know localStorage, so a setup-time restore makes
+  // the client's first render differ from the SSR HTML → hydration class
+  // mismatch on every themed component (#1304). Post-mount it's a normal
+  // reactive update. Idempotent across the many components calling this.
+  // Guarded: plugins (themeProvider.client) call this composable outside any
+  // component instance, where onMounted can't register.
+  if (getCurrentInstance()) onMounted(() => {
+    if (
+      storedTheme.value !== currentTheme.value
+      && AVAILABLE_THEMES.some(t => t.name === storedTheme.value)
+    ) {
+      setTheme(storedTheme.value)
+    }
+  })
 
   // Computed for current theme config
   const currentThemeConfig = computed(() =>
@@ -78,15 +89,14 @@ export function useThemeSwitcher() {
   )
 
   // Get the variant name for Nuxt UI components.
-  // 'default' returns undefined to use Nuxt UI's default variant. 'blackandwhite'
-  // also returns undefined: unlike ko/minimal/kr11 (which register a *named*
-  // `variant="<theme>"` value), blackandwhite overrides the standard variant
-  // slots directly (solid/outline/soft/ghost/link -> bw-*), so plain UButton
-  // usage with no explicit variant already renders themed.
+  // 'default' returns undefined to use Nuxt UI's default variant. Every theme
+  // registers NAMED variants under its class prefix (ko, minimal, kr11, bw-*),
+  // and the runtime swap points defaultVariants.variant at the same name — so
+  // binding :variant="variant" and plain variant-less usage render identically.
   const variant = computed(() =>
-    currentTheme.value === 'default' || currentTheme.value === 'blackandwhite'
+    currentTheme.value === 'default'
       ? undefined
-      : currentTheme.value
+      : currentTheme.value === 'blackandwhite' ? 'bw-solid' : currentTheme.value
   )
 
   // Set theme and persist
@@ -122,23 +132,21 @@ export function useThemeSwitcher() {
     }
   })
 
-  // Initialize theme UI config on client
-  if (import.meta.client) {
-    const themeUIConfig = THEME_UI_CONFIGS[currentTheme.value]
-    if (themeUIConfig) {
-      updateAppConfig({
-        ui: themeUIConfig as any
-      })
-    }
-  }
+  // (No setup-time updateAppConfig: the onMounted restore above applies the
+  // stored theme's config post-hydration via setTheme.)
 
   // Get variant with theme prefix for compound variants
-  // e.g., getVariant('ghost') returns 'ko-ghost' when KO theme is active.
-  // blackandwhite has no prefixed variants (see `variant` above) — it remaps
-  // the base variant name itself, so the base variant passes through unchanged.
-  function getVariant(baseVariant: string = 'solid'): string {
-    if (currentTheme.value === 'default' || currentTheme.value === 'blackandwhite') return baseVariant
-    return `${currentTheme.value}-${baseVariant}`
+  // e.g., getVariant('ghost') returns 'ko-ghost' when KO theme is active and
+  // 'bw-ghost' under blackandwhite (whose named-variant prefix is 'bw', not
+  // the theme name). 'default' passes the base variant through unchanged.
+  // Returns `any`: the concrete union of registered variant names is generated
+  // per consuming app by Nuxt UI, so this composable can't name it — and a
+  // plain `string` fails assignment against that union in templates.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function getVariant(baseVariant: string = 'solid'): any {
+    if (currentTheme.value === 'default') return baseVariant
+    const prefix = currentTheme.value === 'blackandwhite' ? 'bw' : currentTheme.value
+    return `${prefix}-${baseVariant}`
   }
 
   return {
