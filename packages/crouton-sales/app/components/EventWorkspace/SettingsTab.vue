@@ -206,7 +206,7 @@ defineExpose({ save: saveSettings, dirty, saving })
 // UI. Instant-apply like the requeue button — an operational switch, not a
 // form field, so it deliberately doesn't ride the panel's Save.
 interface PrintTransportState {
-  transport: string | null
+  transport: string
   lastSpoolerPollAt: string | null
   lastDrainerTickAt: string | null
 }
@@ -214,10 +214,22 @@ interface PrintTransportState {
 const printTransportEndpoint = computed(() =>
   `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/print-transport`
 )
+// The GET resolves the no-row default ('router-spooler'), so transport is
+// always a concrete value.
 const { data: printTransport, refresh: refreshPrintTransport } = await useFetch<PrintTransportState>(printTransportEndpoint, {
-  default: () => ({ transport: null, lastSpoolerPollAt: null, lastDrainerTickAt: null })
+  default: () => ({ transport: 'router-spooler', lastSpoolerPollAt: null, lastDrainerTickAt: null })
 })
 const printTransportSaving = ref(false)
+
+// Keep the liveness readout honest while the panel is open: heartbeats are
+// stamped at most every 30s, so a light 10s poll is plenty.
+let printTransportPoll: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  printTransportPoll = setInterval(() => { refreshPrintTransport() }, 10000)
+})
+onUnmounted(() => {
+  if (printTransportPoll) clearInterval(printTransportPoll)
+})
 
 async function setPrintTransport(transport: 'local-drainer' | 'router-spooler' | 'none') {
   printTransportSaving.value = true
@@ -430,8 +442,6 @@ function helperExpiry(value: string): string {
               :last-drainer-tick-at="printTransport.lastDrainerTickAt"
               :loading="printTransportSaving"
               :items="printTransportItems"
-              :unset-title="t('sales.printFlow.unsetTitle', 'No print flow chosen for this event')"
-              :unset-description="t('sales.printFlow.unsetDescription', 'Both flows are currently allowed (legacy behaviour). Pick one to make it exclusive.')"
               :last-seen-label="t('sales.printFlow.lastSeen', 'last seen')"
               :never-seen-label="t('sales.printFlow.neverSeen', 'never seen')"
               @update:transport="setPrintTransport"

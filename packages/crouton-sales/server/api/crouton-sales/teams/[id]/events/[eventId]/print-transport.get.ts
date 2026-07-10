@@ -1,8 +1,9 @@
 /**
  * Read the event's print-transport choice (#1324) — which flow delivers this
  * event's thermal (`network-escpos`) print jobs: the in-process drainer on a
- * venue device, the on-site router spooler, or nobody. `transport: null`
- * means no choice recorded yet (legacy: both transports allowed).
+ * venue device, the on-site router spooler, or nobody. An event with no
+ * recorded row resolves to the default (`router-spooler`) — the choice is
+ * always exclusive.
  *
  * The setting itself lives in crouton-printing (`print_transports`); this
  * endpoint is the team-authed HTTP surface for it — crouton-printing depends
@@ -11,7 +12,7 @@
  */
 import { eq, and } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { getPrintTransport } from '@fyit/crouton-printing/server/utils/print-transport'
+import { DEFAULT_PRINT_TRANSPORT, getPrintTransport } from '@fyit/crouton-printing/server/utils/print-transport'
 import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
 
 export default defineEventHandler(async (event) => {
@@ -33,7 +34,7 @@ export default defineEventHandler(async (event) => {
 
   const row = await getPrintTransport(db, eventId)
   return {
-    transport: row?.transport ?? null,
+    transport: row?.transport ?? DEFAULT_PRINT_TRANSPORT,
     lastSpoolerPollAt: row?.lastSpoolerPollAt ?? null,
     lastDrainerTickAt: row?.lastDrainerTickAt ?? null
   }

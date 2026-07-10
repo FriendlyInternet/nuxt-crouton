@@ -593,8 +593,6 @@
       "routerSpoolerHelp": "The on-site router polls the cloud app and prints on the local network.",
       "paused": "Paused",
       "pausedHelp": "Nobody prints — jobs queue up as pending until a flow is chosen.",
-      "unsetTitle": "No print flow chosen for this event",
-      "unsetDescription": "Both flows are currently allowed (legacy behaviour). Pick one to make it exclusive.",
       "lastSeen": "last seen",
       "neverSeen": "never seen",
       "updated": "Print flow updated",

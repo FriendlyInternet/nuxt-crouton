@@ -592,8 +592,6 @@
       "routerSpoolerHelp": "Le routeur sur place interroge l'application cloud et imprime sur le réseau local.",
       "paused": "En pause",
       "pausedHelp": "Personne n'imprime — les tickets restent en file d'attente jusqu'au choix d'un flux.",
-      "unsetTitle": "Aucun flux d'impression choisi pour cet événement",
-      "unsetDescription": "Les deux flux sont actuellement autorisés (ancien comportement). Choisissez-en un pour le rendre exclusif.",
       "lastSeen": "vu pour la dernière fois",
       "neverSeen": "jamais vu",
       "updated": "Flux d'impression mis à jour",

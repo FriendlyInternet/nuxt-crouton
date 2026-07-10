@@ -593,8 +593,6 @@
       "routerSpoolerHelp": "De router op locatie haalt de printopdrachten op uit de cloud en print op het lokale netwerk.",
       "paused": "Gepauzeerd",
       "pausedHelp": "Niemand print — opdrachten blijven in de wachtrij tot een flow gekozen is.",
-      "unsetTitle": "Nog geen printflow gekozen voor dit evenement",
-      "unsetDescription": "Beide flows zijn nu toegelaten (oud gedrag). Kies er één om ze exclusief te maken.",
       "lastSeen": "laatst gezien",
       "neverSeen": "nooit gezien",
       "updated": "Printflow aangepast",

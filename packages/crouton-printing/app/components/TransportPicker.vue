@@ -4,12 +4,12 @@
  * thermal print jobs. Deliberately dumb: crouton-printing has no auth/routes,
  * so the embedding domain surface (e.g. the sales printers tab) fetches and
  * persists via its own team-authed endpoint and just binds this component.
+ * The endpoint resolves the no-row default, so `transport` always has a value.
  *
- * `transport: null` = no choice recorded yet (legacy: both transports allowed).
  * The heartbeat props render the liveness readout ("spooler last seen 4s ago")
  * from print_transports.lastSpoolerPollAt / lastDrainerTickAt.
  */
-import { useTimeAgo, useTimestamp } from '@vueuse/core'
+import { useTimestamp } from '@vueuse/core'
 
 export interface TransportPickerItem {
   value: 'local-drainer' | 'router-spooler' | 'none'
@@ -18,16 +18,14 @@ export interface TransportPickerItem {
 }
 
 const props = defineProps<{
-  /** 'local-drainer' | 'router-spooler' | 'none' | null (null = not set, legacy) */
-  transport: string | null
+  /** 'local-drainer' | 'router-spooler' | 'none' */
+  transport: string
   lastSpoolerPollAt?: string | null
   lastDrainerTickAt?: string | null
   loading?: boolean
   /** Override the option labels/descriptions (this package ships no i18n —
    *  the embedding domain passes its own translated strings). */
   items?: TransportPickerItem[]
-  unsetTitle?: string
-  unsetDescription?: string
   lastSeenLabel?: string
   neverSeenLabel?: string
 }>()
@@ -59,8 +57,6 @@ const itemLabel = (value: string) => pickerItems.value.find(i => i.value === val
 
 type TransportValue = TransportPickerItem['value']
 
-// URadioGroup wants the union (or undefined for "nothing selected" — the
-// legacy/unset state); null from the API maps onto undefined here.
 const selected = computed<TransportValue | undefined>({
   get: () => {
     const v = props.transport
@@ -72,31 +68,29 @@ const selected = computed<TransportValue | undefined>({
 })
 
 // Liveness readout. Heartbeats are stamped at most every 30s (throttled), so
-// anything under ~90s counts as alive. useTimestamp keeps "ago" + the dot
-// fresh while the tab stays open.
+// anything under ~90s counts as alive. useTimestamp keeps the age + the dot
+// fresh while the tab stays open. The age renders language-neutral (8s / 3m /
+// 2h / 5d) — this package ships no i18n, so no locale-specific words here.
 const now = useTimestamp({ interval: 5_000 })
-const spoolerAgo = useTimeAgo(() => props.lastSpoolerPollAt ?? 0)
-const drainerAgo = useTimeAgo(() => props.lastDrainerTickAt ?? 0)
 const ALIVE_MS = 90_000
 const isAlive = (iso?: string | null) => !!iso && now.value - Date.parse(iso) < ALIVE_MS
 
+function shortAge(iso: string): string {
+  const s = Math.max(0, Math.round((now.value - Date.parse(iso)) / 1000))
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m`
+  if (s < 86400) return `${Math.floor(s / 3600)}h`
+  return `${Math.floor(s / 86400)}d`
+}
+
 const heartbeats = computed(() => [
-  { label: itemLabel('local-drainer'), iso: props.lastDrainerTickAt, ago: drainerAgo.value },
-  { label: itemLabel('router-spooler'), iso: props.lastSpoolerPollAt, ago: spoolerAgo.value }
+  { label: itemLabel('local-drainer'), iso: props.lastDrainerTickAt },
+  { label: itemLabel('router-spooler'), iso: props.lastSpoolerPollAt }
 ])
 </script>
 
 <template>
   <div class="space-y-4">
-    <UAlert
-      v-if="transport === null"
-      color="warning"
-      variant="subtle"
-      icon="i-lucide-circle-help"
-      :title="unsetTitle ?? 'No print flow chosen for this event'"
-      :description="unsetDescription ?? 'Both transports are currently allowed (legacy behaviour). Pick one below to make it exclusive.'"
-    />
-
     <URadioGroup
       v-model="selected"
       :items="pickerItems"
@@ -116,7 +110,7 @@ const heartbeats = computed(() => [
           :class="isAlive(hb.iso) ? 'bg-success' : 'bg-neutral-300 dark:bg-neutral-700'"
         />
         <span class="font-medium">{{ hb.label }}</span>
-        <span v-if="hb.iso">{{ lastSeenLabel ?? 'last seen' }} {{ hb.ago }}</span>
+        <span v-if="hb.iso">{{ lastSeenLabel ?? 'last seen' }} {{ shortAge(hb.iso) }}</span>
         <span v-else>{{ neverSeenLabel ?? 'never seen' }}</span>
       </li>
     </ul>
