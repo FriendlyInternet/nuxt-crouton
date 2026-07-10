@@ -129,6 +129,9 @@ importers:
       '@fyit/crouton-sales':
         specifier: workspace:*
         version: link:../../packages/crouton-sales
+      '@fyit/crouton-themes':
+        specifier: workspace:*
+        version: link:../../packages/crouton-themes
       '@libsql/client':
         specifier: 'catalog:'
         version: 0.17.4

@@ -32,6 +32,7 @@
     "@fyit/crouton-pages": "workspace:*",
     "@fyit/crouton-printing": "workspace:*",
     "@fyit/crouton-sales": "workspace:*",
+    "@fyit/crouton-themes": "workspace:*",
     "@libsql/client": "catalog:",
     "drizzle-orm": "catalog:",
     "nuxt": "catalog:",

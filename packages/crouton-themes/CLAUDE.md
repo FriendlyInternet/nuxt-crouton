@@ -605,6 +605,16 @@ to own every structural class up front — not a routine crouton theme.
 
 Spikes: #364 (replacer), #1305 (unstyled); rollout to all themes: #1304.
 
+### Presets for apps (`themes/configs/presets.ts`) — #1332
+
+`THEME_PRESET_REGISTRY` derives an admin-facing preset per theme (label,
+description, preview swatches, scalars-only `ui` payload, and a `checkVariant`
+whose presence in the built app config proves the theme's layer is extended).
+crouton-admin's team Look-and-Feel picker consumes it via
+`useAvailableThemePresets()` — add a theme here, and every app that extends its
+layer gets it in the picker automatically. Never add arrays to the payload
+(next section).
+
 ### Runtime switching swaps SCALARS only (deepAssign hazard) — #1304
 
 `updateAppConfig()` merges with Nuxt's `deepAssign`, which merges **arrays by
