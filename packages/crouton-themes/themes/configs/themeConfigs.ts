@@ -1,137 +1,207 @@
-// Theme UI Configurations
-// Each theme defines how standard Nuxt UI variants should look
-// These are swapped at runtime via updateAppConfig()
+// Theme UI Configurations — the RUNTIME side of theme switching.
+//
+// ⚠️ Scalars only. `updateAppConfig()` merges with Nuxt's deepAssign, which
+// merges ARRAYS BY INDEX — a runtime write to `compoundVariants` overwrites
+// whatever entries happen to sit at those indices in the built config (the
+// #1306/#1304 playground bug: the layer-registered named variants lost their
+// compounds on every switch). So a theme's classes/variants/compoundVariants
+// live ONLY in its layer app.config (build-time, merge-safe); the runtime swap
+// is limited to scalar leaves:
+//   - `colors.*`                → the semantic palette
+//   - `<component>.defaultVariants.variant` → which (named) variant plain,
+//     variant-less usage resolves to, e.g. <UButton> → variant "ko"
+// Explicitly-set variants are the author's choice and are not remapped; use
+// useThemeSwitcher().getVariant('outline') to follow the active theme.
 
 import type { ThemeName } from '../composables/useThemeSwitcher'
 
-// Type for the UI config structure
 export interface ThemeUIConfig {
   colors?: {
     primary?: string
     neutral?: string
   }
-  button?: {
-    variants?: {
-      variant?: Record<string, string>
-    }
-    compoundVariants?: Array<{
-      variant?: string
-      color?: string
-      class: string
-    }>
-  }
-  input?: {
-    variants?: {
-      variant?: Record<string, string>
-    }
-    compoundVariants?: Array<{
-      variant?: string
-      class: string
-    }>
-  }
-  card?: {
-    variants?: {
-      variant?: Record<string, string>
-    }
-    compoundVariants?: Array<{
-      variant?: string
-      class: string
-    }>
-  }
+  button?: { defaultVariants?: { variant?: string } }
+  input?: { defaultVariants?: { variant?: string } }
+  card?: { defaultVariants?: { variant?: string } }
+  badge?: { defaultVariants?: { variant?: string } }
+  select?: { defaultVariants?: { variant?: string } }
+  textarea?: { defaultVariants?: { variant?: string } }
 }
 
-// Default theme - no overrides, use Nuxt UI defaults
+// Every config sets EVERY key the swap owns, so switching A → B never leaves
+// A's value behind (deepAssign only overwrites what the new object names).
+
+// Default theme — Nuxt UI's own defaults, restated as the reset values.
 const defaultConfig: ThemeUIConfig = {
   colors: {
     primary: 'emerald',
     neutral: 'slate'
   },
-  button: {
-    compoundVariants: []
-  }
+  button: { defaultVariants: { variant: 'solid' } },
+  input: { defaultVariants: { variant: 'outline' } },
+  card: { defaultVariants: { variant: 'outline' } },
+  badge: { defaultVariants: { variant: 'solid' } },
+  select: { defaultVariants: { variant: 'outline' } },
+  textarea: { defaultVariants: { variant: 'outline' } }
 }
 
-// KO Theme - Hardware-inspired (Teenage Engineering)
-// Override variant classes directly to replace Nuxt UI defaults
+// KO — named variants registered by ko/app.config.ts (variant="ko" etc.)
 const koConfig: ThemeUIConfig = {
   colors: {
     primary: 'orange',
     neutral: 'stone'
   },
-  button: {
-    // Override variant definitions - these REPLACE Nuxt UI defaults
-    variants: {
-      variant: {
-        solid: 'ko-bezel',
-        outline: 'ko-outline',
-        soft: 'ko-soft',
-        ghost: 'ko-ghost',
-        link: 'ko-link'
-      }
-    },
-    // Color-specific adjustments via compoundVariants
-    compoundVariants: [
-      { variant: 'solid', color: 'primary', class: 'ko-bezel--orange' },
-      { variant: 'solid', color: 'neutral', class: 'ko-bezel--dark' },
-      { variant: 'solid', color: 'error', class: 'ko-bezel--red' },
-      { variant: 'solid', color: 'secondary', class: 'ko-bezel--pink' },
-      { variant: 'solid', color: 'info', class: 'ko-bezel--blue' },
-      { variant: 'outline', color: 'primary', class: 'ko-outline--orange' },
-      { variant: 'outline', color: 'neutral', class: 'ko-outline--dark' },
-      { variant: 'outline', color: 'error', class: 'ko-outline--red' },
-      { variant: 'ghost', color: 'primary', class: 'ko-ghost--orange' },
-      { variant: 'ghost', color: 'neutral', class: 'ko-ghost--dark' }
-    ]
-  }
+  button: { defaultVariants: { variant: 'ko' } },
+  input: { defaultVariants: { variant: 'ko' } },
+  card: { defaultVariants: { variant: 'ko' } },
+  badge: { defaultVariants: { variant: 'solid' } },
+  select: { defaultVariants: { variant: 'outline' } },
+  textarea: { defaultVariants: { variant: 'outline' } }
 }
 
-// Minimal Theme - Clean Bauhaus-inspired
+// Minimal — named variants registered by minimal/app.config.ts
 const minimalConfig: ThemeUIConfig = {
   colors: {
     primary: 'zinc',
     neutral: 'zinc'
   },
-  button: {
-    compoundVariants: [
-      // Solid variant overrides
-      { variant: 'solid', color: 'primary', class: 'minimal-solid' },
-      { variant: 'solid', color: 'neutral', class: 'minimal-solid minimal-solid--neutral' },
-      { variant: 'solid', color: 'error', class: 'minimal-solid minimal-solid--error' },
-      // Outline variant overrides
-      { variant: 'outline', color: 'primary', class: 'minimal-outline' },
-      { variant: 'outline', color: 'neutral', class: 'minimal-outline minimal-outline--neutral' },
-      { variant: 'outline', color: 'error', class: 'minimal-outline minimal-outline--error' },
-      // Ghost variant overrides
-      { variant: 'ghost', color: 'primary', class: 'minimal-ghost' },
-      { variant: 'ghost', color: 'neutral', class: 'minimal-ghost minimal-ghost--neutral' },
-      { variant: 'ghost', color: 'error', class: 'minimal-ghost minimal-ghost--error' }
-    ]
-  }
+  button: { defaultVariants: { variant: 'minimal' } },
+  input: { defaultVariants: { variant: 'minimal' } },
+  card: { defaultVariants: { variant: 'minimal' } },
+  badge: { defaultVariants: { variant: 'solid' } },
+  select: { defaultVariants: { variant: 'outline' } },
+  textarea: { defaultVariants: { variant: 'outline' } }
 }
 
-// KR-11 Theme - Friendly drum machine aesthetic
+// KR-11 — named variants registered by kr11/app.config.ts
 const kr11Config: ThemeUIConfig = {
   colors: {
     primary: 'emerald',
     neutral: 'stone'
   },
-  button: {
-    compoundVariants: [
-      // Solid variant overrides
-      { variant: 'solid', color: 'primary', class: 'kr-solid kr-solid--mint' },
-      { variant: 'solid', color: 'neutral', class: 'kr-solid kr-solid--cream' },
-      { variant: 'solid', color: 'warning', class: 'kr-solid kr-solid--gold' },
-      { variant: 'solid', color: 'error', class: 'kr-solid kr-solid--coral' },
-      // Soft variant overrides
-      { variant: 'soft', color: 'primary', class: 'kr-soft kr-soft--mint' },
-      { variant: 'soft', color: 'neutral', class: 'kr-soft kr-soft--cream' },
-      { variant: 'soft', color: 'warning', class: 'kr-soft kr-soft--gold' },
-      { variant: 'soft', color: 'error', class: 'kr-soft kr-soft--coral' },
-      // Ghost variant overrides
-      { variant: 'ghost', color: 'primary', class: 'kr-ghost kr-ghost--mint' },
-      { variant: 'ghost', color: 'neutral', class: 'kr-ghost kr-ghost--cream' }
-    ]
-  }
+  button: { defaultVariants: { variant: 'kr11' } },
+  input: { defaultVariants: { variant: 'kr11' } },
+  card: { defaultVariants: { variant: 'kr11' } },
+  badge: { defaultVariants: { variant: 'kr11' } },
+  select: { defaultVariants: { variant: 'outline' } },
+  textarea: { defaultVariants: { variant: 'outline' } }
+}
+
+// Black & White — named bw-* variants registered by blackandwhite/app.config.ts
+// (the layer also sets defaultVariants itself, so single-theme bw apps need no
+// runtime swap; these values are for switching TO bw in a multi-theme app).
+const blackandwhiteConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'neutral',
+    neutral: 'neutral'
+  },
+  button: { defaultVariants: { variant: 'bw-solid' } },
+  input: { defaultVariants: { variant: 'subtle' } },
+  card: { defaultVariants: { variant: 'outline' } },
+  badge: { defaultVariants: { variant: 'solid' } },
+  select: { defaultVariants: { variant: 'subtle' } },
+  textarea: { defaultVariants: { variant: 'subtle' } }
+}
+
+// Brutalist — named variants registered by brutalist/app.config.ts
+const brutalistConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'yellow',
+    neutral: 'neutral'
+  },
+  button: { defaultVariants: { variant: 'brutalist' } },
+  input: { defaultVariants: { variant: 'brutalist' } },
+  card: { defaultVariants: { variant: 'brutalist' } },
+  badge: { defaultVariants: { variant: 'brutalist' } },
+  select: { defaultVariants: { variant: 'brutalist' } },
+  textarea: { defaultVariants: { variant: 'brutalist' } }
+}
+
+// MTV — named variants registered by mtv/app.config.ts
+const mtvConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'fuchsia',
+    neutral: 'zinc'
+  },
+  button: { defaultVariants: { variant: 'mtv' } },
+  input: { defaultVariants: { variant: 'mtv' } },
+  card: { defaultVariants: { variant: 'mtv' } },
+  badge: { defaultVariants: { variant: 'mtv' } },
+  select: { defaultVariants: { variant: 'mtv' } },
+  textarea: { defaultVariants: { variant: 'mtv' } }
+}
+
+// Terminal — named variants registered by terminal/app.config.ts
+const terminalConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'green',
+    neutral: 'zinc'
+  },
+  button: { defaultVariants: { variant: 'terminal' } },
+  input: { defaultVariants: { variant: 'terminal' } },
+  card: { defaultVariants: { variant: 'terminal' } },
+  badge: { defaultVariants: { variant: 'terminal' } },
+  select: { defaultVariants: { variant: 'terminal' } },
+  textarea: { defaultVariants: { variant: 'terminal' } }
+}
+
+// Braun — named variants registered by braun/app.config.ts
+const braunConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'orange',
+    neutral: 'stone'
+  },
+  button: { defaultVariants: { variant: 'braun' } },
+  input: { defaultVariants: { variant: 'braun' } },
+  card: { defaultVariants: { variant: 'braun' } },
+  badge: { defaultVariants: { variant: 'braun' } },
+  select: { defaultVariants: { variant: 'braun' } },
+  textarea: { defaultVariants: { variant: 'braun' } }
+}
+
+// Game Boy — named variants registered by gameboy/app.config.ts
+const gameboyConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'green',
+    neutral: 'stone'
+  },
+  button: { defaultVariants: { variant: 'gameboy' } },
+  input: { defaultVariants: { variant: 'gameboy' } },
+  card: { defaultVariants: { variant: 'gameboy' } },
+  badge: { defaultVariants: { variant: 'gameboy' } },
+  select: { defaultVariants: { variant: 'gameboy' } },
+  textarea: { defaultVariants: { variant: 'gameboy' } }
+}
+
+// Riso / E-ink / Blueprint — named variants registered by their layers (#1311)
+const risoConfig: ThemeUIConfig = {
+  colors: { primary: 'pink', neutral: 'stone' },
+  button: { defaultVariants: { variant: 'riso' } },
+  input: { defaultVariants: { variant: 'riso' } },
+  card: { defaultVariants: { variant: 'riso' } },
+  badge: { defaultVariants: { variant: 'riso' } },
+  select: { defaultVariants: { variant: 'riso' } },
+  textarea: { defaultVariants: { variant: 'riso' } }
+}
+
+const einkConfig: ThemeUIConfig = {
+  colors: { primary: 'neutral', neutral: 'neutral' },
+  button: { defaultVariants: { variant: 'eink' } },
+  input: { defaultVariants: { variant: 'eink' } },
+  card: { defaultVariants: { variant: 'eink' } },
+  badge: { defaultVariants: { variant: 'eink' } },
+  select: { defaultVariants: { variant: 'eink' } },
+  textarea: { defaultVariants: { variant: 'eink' } }
+}
+
+const blueprintConfig: ThemeUIConfig = {
+  colors: { primary: 'sky', neutral: 'slate' },
+  button: { defaultVariants: { variant: 'blueprint' } },
+  input: { defaultVariants: { variant: 'blueprint' } },
+  card: { defaultVariants: { variant: 'blueprint' } },
+  badge: { defaultVariants: { variant: 'blueprint' } },
+  select: { defaultVariants: { variant: 'blueprint' } },
+  textarea: { defaultVariants: { variant: 'blueprint' } }
 }
 
 // Export all theme configs
@@ -139,5 +209,14 @@ export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   default: defaultConfig,
   ko: koConfig,
   minimal: minimalConfig,
-  kr11: kr11Config
+  kr11: kr11Config,
+  blackandwhite: blackandwhiteConfig,
+  brutalist: brutalistConfig,
+  mtv: mtvConfig,
+  terminal: terminalConfig,
+  braun: braunConfig,
+  gameboy: gameboyConfig,
+  riso: risoConfig,
+  eink: einkConfig,
+  blueprint: blueprintConfig
 }

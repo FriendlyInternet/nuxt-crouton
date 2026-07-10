@@ -129,6 +129,9 @@ importers:
       '@fyit/crouton-sales':
         specifier: workspace:*
         version: link:../../packages/crouton-sales
+      '@fyit/crouton-themes':
+        specifier: workspace:*
+        version: link:../../packages/crouton-themes
       '@libsql/client':
         specifier: 'catalog:'
         version: 0.17.4
@@ -1136,6 +1139,25 @@ importers:
         specifier: ^3.6.1
         version: 3.6.1(typescript@5.9.3)(vue-tsc@3.2.2(typescript@5.9.3))(vue@3.5.38(typescript@5.9.3))
 
+  packages/crouton-devtools/playground:
+    dependencies:
+      '@fyit/crouton-core':
+        specifier: workspace:*
+        version: link:../../crouton-core
+      '@fyit/crouton-devtools':
+        specifier: workspace:*
+        version: link:..
+    devDependencies:
+      '@nuxt/devtools':
+        specifier: ^3.0.0
+        version: 3.1.1(vite@7.3.5(@types/node@22.19.7)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(vue@3.5.38(typescript@5.9.3))
+      '@nuxt/ui':
+        specifier: ^4.9.0
+        version: 4.9.0(e35571ed4d3716fd49479fca477900a2)
+      nuxt:
+        specifier: ^4.4.8
+        version: 4.4.8(acbda501943d3a88c40c15b150712194)
+
   packages/crouton-editor:
     dependencies:
       '@fyit/crouton-core':
@@ -1215,6 +1237,19 @@ importers:
       unbuild:
         specifier: ^3.6.1
         version: 3.6.1(typescript@5.9.3)(vue-tsc@3.2.2(typescript@5.9.3))(vue@3.5.38(typescript@5.9.3))
+
+  packages/crouton-feedback/playground:
+    dependencies:
+      '@fyit/crouton-feedback':
+        specifier: workspace:*
+        version: link:..
+    devDependencies:
+      '@nuxt/ui':
+        specifier: ^4.9.0
+        version: 4.9.0(e35571ed4d3716fd49479fca477900a2)
+      nuxt:
+        specifier: ^4.4.8
+        version: 4.4.8(acbda501943d3a88c40c15b150712194)
 
   packages/crouton-flow:
     dependencies:
@@ -1461,6 +1496,37 @@ importers:
       nuxt:
         specifier: ^4.4.8
         version: 4.4.8(acbda501943d3a88c40c15b150712194)
+
+  packages/crouton-themes/playground:
+    dependencies:
+      '@fyit/crouton-themes':
+        specifier: workspace:*
+        version: link:..
+      '@nuxt/ui':
+        specifier: ^4.9.0
+        version: 4.9.0(e35571ed4d3716fd49479fca477900a2)
+      '@vueuse/nuxt':
+        specifier: ^13.3.0
+        version: 13.9.0(magicast@0.5.2)(nuxt@4.4.8(acbda501943d3a88c40c15b150712194))(vue@3.5.38(typescript@5.9.3))
+      eruda:
+        specifier: ^3.4.3
+        version: 3.4.3
+      nuxt:
+        specifier: ^4.4.8
+        version: 4.4.8(acbda501943d3a88c40c15b150712194)
+      vue:
+        specifier: ^3.5.38
+        version: 3.5.38(typescript@5.9.3)
+      vue-router:
+        specifier: 'catalog:'
+        version: 5.1.0(@vue/compiler-sfc@3.5.38)(vite@7.3.5(@types/node@22.19.7)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(vue@3.5.38(typescript@5.9.3))
+    devDependencies:
+      tailwindcss:
+        specifier: ^4.3.1
+        version: 4.3.1
+      wrangler:
+        specifier: 'catalog:'
+        version: 4.101.0(@cloudflare/workers-types@4.20260118.0)
 
   packages/crouton-three:
     dependencies:
@@ -1972,11 +2038,8 @@ importers:
         specifier: ^4.64.0
         version: 4.101.0(@cloudflare/workers-types@4.20260118.0)
 
-  sandboxes/minimal-theme-demo:
+  sandboxes/unstyled-spike:
     dependencies:
-      '@fyit/crouton-themes':
-        specifier: workspace:*
-        version: link:../../packages/crouton-themes
       '@nuxt/ui':
         specifier: ^4.9.0
         version: 4.9.0(e35571ed4d3716fd49479fca477900a2)
@@ -2686,9 +2749,11 @@ packages:
 
   '@esbuild-kit/core-utils@3.3.2':
     resolution: {integrity: sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==}
+    deprecated: 'Merged into tsx: https://tsx.is'
 
   '@esbuild-kit/esm-loader@2.6.5':
     resolution: {integrity: sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA==}
+    deprecated: 'Merged into tsx: https://tsx.is'
 
   '@esbuild/aix-ppc64@0.19.12':
     resolution: {integrity: sha512-bmoCYyWdEL3wDQIVbcyzRyeKLgk2WtWLTWz1ZIAZF/EGbNOwSA6ew3PftJ1PqMiOOGu0OyFMzG53L0zqIpPeNA==}
@@ -5342,6 +5407,7 @@ packages:
 
   '@oxc-parser/wasm@0.60.0':
     resolution: {integrity: sha512-Dkf9/D87WGBCW3L0+1DtpAfL4SrNsgeRvxwjpKCtbH7Kf6K+pxrT0IridaJfmWKu1Ml+fDvj+7HEyBcfUC/TXQ==}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   '@oxc-project/types@0.103.0':
     resolution: {integrity: sha512-bkiYX5kaXWwUessFRSoXFkGIQTmc6dLGdxuRTrC+h8PSnIdZyuXHHlLAeTmOue5Br/a0/a7dHH0Gca6eXn9MKg==}
@@ -6877,6 +6943,7 @@ packages:
 
   '@types/parse-path@7.1.0':
     resolution: {integrity: sha512-EULJ8LApcVEPbrfND0cRQqutIOdiIgJ1Mgrhpy755r14xMohPTEpkV/k28SJvuOs9bHRFW8x+KeDAEPiGQPB9Q==}
+    deprecated: This is a stub types definition. parse-path provides its own type definitions, so you do not need this installed.
 
   '@types/pbf@3.0.5':
     resolution: {integrity: sha512-j3pOPiEcWZ34R6a6mN07mUkM4o4Lwf6hPNt8eilOeZhTFbxFXmKhvXl9Y28jotFPaI1bpPDJsbCprUoNke6OrA==}
@@ -7017,6 +7084,7 @@ packages:
 
   '@ungap/structured-clone@1.3.0':
     resolution: {integrity: sha512-WmoN8qaIAo7WTYWbAZuG8PYEhn5fkz7dZrqTBZ7dtt//lL2Gwms1IcnQ5yHqjDfX8Ft5j4YzDM23f87zBfDe9g==}
+    deprecated: Potential CWE-502 - Update to 1.3.1 or higher
 
   '@unhead/addons@2.1.2':
     resolution: {integrity: sha512-2Z2zvjdg4gSlDuaY7+UuZ6sdI0Cl2QFc+IEuK+rsFGfoZ66/NgfAU73cv2Pmriacg1FPAzWHb73JWbx3wChGuw==}
@@ -10020,6 +10088,7 @@ packages:
 
   glob@10.5.0:
     resolution: {integrity: sha512-DfXN8DfhJ7NH3Oe7cFmu3NCu1wKbkReJ8TorzSAFbSKrlNaQSKfIzqYqVY8zlbs2NLBbWpRiU52GX2PbaBVNkg==}
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
     hasBin: true
 
   glob@13.0.5:
@@ -10029,6 +10098,7 @@ packages:
   glob@8.1.0:
     resolution: {integrity: sha512-r8hpEjiQEYlF2QU0df3dS+nxxSIreXQS1qRhMJM0Q5NDdR386C7jb7Hwwod8Fgiuex+k0GFjgft18yvxm5XoCQ==}
     engines: {node: '>=12'}
+    deprecated: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   global-directory@4.0.1:
     resolution: {integrity: sha512-wHTUcDUoZ1H5/0iVqEudYW4/kAlN5cZ3j/bXn0Dpbizl9iaUVeWSHqiOjsgk6OW2bkLclbBjzewBz6weQ1zA2Q==}
@@ -10338,6 +10408,7 @@ packages:
 
   inflight@1.0.6:
     resolution: {integrity: sha512-k92I/b08q4wvFscXCLvqfsHCrjrF7yiXsQuIVvVE7N82W3+aqpzuUdBbfhWcy/FZR3/4IgflMgKLOsvPDrGCJA==}
+    deprecated: This module is not supported, and leaks memory. Do not use it. Check out lru-cache if you want a good and tested way to coalesce async requests by a key value, which is much more comprehensive and powerful.
 
   inherits@2.0.4:
     resolution: {integrity: sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==}
@@ -12357,6 +12428,7 @@ packages:
   prebuild-install@7.1.3:
     resolution: {integrity: sha512-8Mf2cbV7x1cXPUILADGI3wuhfqWvtiLA1iclTDbFRZkgRQS0NqsPZphna9V+HyTEadheuPmjaJMsbzKQFOzLug==}
     engines: {node: '>=10'}
+    deprecated: No longer maintained. Please contact the author of the relevant native addon; alternatives are available.
     hasBin: true
 
   prelude-ls@1.2.1:
@@ -13311,6 +13383,7 @@ packages:
   tar@6.2.1:
     resolution: {integrity: sha512-DZ4yORTwrbTj/7MZYq2w+/ZFdI6OZ/f9SFHR+71gIVUZhOQPHzVCLpvRnPgyaMpfWxxk/4ONva3GQSyNIKRv6A==}
     engines: {node: '>=10'}
+    deprecated: Old versions of tar are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
 
   tar@7.5.9:
     resolution: {integrity: sha512-BTLcK0xsDh2+PUe9F6c2TlRp4zOOBMTkoQHQIWSIzI0R7KG46uEwq4OPk2W7bZcprBMsuaeFsqwYr7pjh6CuHg==}
@@ -13794,6 +13867,7 @@ packages:
 
   unplugin-vue-router@0.12.0:
     resolution: {integrity: sha512-xjgheKU0MegvXQcy62GVea0LjyOdMxN0/QH+ijN29W62ZlMhG7o7K+0AYqfpprvPwpWtuRjiyC5jnV2SxWye2w==}
+    deprecated: 'Merged into vuejs/router. Migrate: https://router.vuejs.org/guide/migration/v4-to-v5.html'
     peerDependencies:
       vue-router: ^4.4.0
     peerDependenciesMeta:
@@ -14299,12 +14373,14 @@ packages:
   vue-i18n@10.0.8:
     resolution: {integrity: sha512-mIjy4utxMz9lMMo6G9vYePv7gUFt4ztOMhY9/4czDJxZ26xPeJ49MAGa9wBAE3XuXbYCrtVPmPxNjej7JJJkZQ==}
     engines: {node: '>= 16'}
+    deprecated: v9 and v10 no longer supported. please migrate to v11. about maintenance status, see https://vue-i18n.intlify.dev/guide/maintenance.html
     peerDependencies:
       vue: ^3.5.38
 
   vue-i18n@9.14.5:
     resolution: {integrity: sha512-0jQ9Em3ymWngyiIkj0+c/k7WgaPO+TNzjKSNq9BvBQaKJECqn9cd9fL4tkDhB5G1QBskGl9YxxbDAhgbFtpe2g==}
     engines: {node: '>= 16'}
+    deprecated: v9 and v10 no longer supported. please migrate to v11. about maintenance status, see https://vue-i18n.intlify.dev/guide/maintenance.html
     peerDependencies:
       vue: ^3.5.38
 
@@ -14393,6 +14469,7 @@ packages:
   whatwg-encoding@3.1.1:
     resolution: {integrity: sha512-6qN4hJdMwfYBtE3YBTTHhoeuUrDBPZmbQaxWAqSALV/MeEnR5z1xd8UKud2RAkFoPkmB+hli1TZSnyi84xz1vQ==}
     engines: {node: '>=18'}
+    deprecated: Use @exodus/bytes instead for a more spec-conformant and faster implementation
 
   whatwg-mimetype@3.0.0:
     resolution: {integrity: sha512-nt+N2dzIutVRxARx1nghPKGv1xHikU7HKdfafKkLNLindmPU/ch3U31NOCGGA/dmPcmb1VlofO0vnKAcsm0o/Q==}
@@ -22144,6 +22221,17 @@ snapshots:
     transitivePeerDependencies:
       - magicast
       - typescript
+
+  '@vueuse/nuxt@13.9.0(magicast@0.5.2)(nuxt@4.4.8(acbda501943d3a88c40c15b150712194))(vue@3.5.38(typescript@5.9.3))':
+    dependencies:
+      '@nuxt/kit': 3.20.2(magicast@0.5.2)
+      '@vueuse/core': 13.9.0(vue@3.5.38(typescript@5.9.3))
+      '@vueuse/metadata': 13.9.0
+      local-pkg: 1.1.2
+      nuxt: 4.4.8(acbda501943d3a88c40c15b150712194)
+      vue: 3.5.38(typescript@5.9.3)
+    transitivePeerDependencies:
+      - magicast
 
   '@vueuse/nuxt@13.9.0(magicast@0.5.2)(nuxt@4.4.8(c52926acd337d5a2aa501433def9f0a4))(vue@3.5.38(typescript@5.9.3))':
     dependencies:

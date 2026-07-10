@@ -1,0 +1,333 @@
+/* Terminal / CRT Theme (#1308)
+   Green phosphor on near-black, monospace everything, faint glow,
+   inverse-video states, scanline overlay. Amber is the alert channel.
+   Built on the shared subtractive replacer (../lib/subtractive.ts) per the
+   #1305 spike verdict — no !important, no unstyled:true. */
+
+:root {
+  --term-bg: #0a0f0a;
+  --term-bg-raised: #101710;
+  --term-phosphor: #33ff66;
+  --term-phosphor-dim: #1d9e44;
+  --term-phosphor-soft: #bfe8c9;   /* readable body text on the dark tube */
+  --term-amber: #ffb000;
+  --term-glow: 0 0 6px rgba(51, 255, 102, 0.45);
+  --term-glow-amber: 0 0 6px rgba(255, 176, 0, 0.45);
+  --term-font: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+/* ============================================
+   DATA-THEME AMBIENT — the tube
+   A dark theme must also set readable base text color (this is surface
+   color, not a font takeover — the #1304 rule concerns typography).
+   ============================================ */
+
+[data-theme="terminal"],
+.theme-terminal {
+  background-color: var(--term-bg);
+  color: var(--term-phosphor-soft);
+  /* Drive Nuxt UI's surface token too — app shells (incl. the playground
+     wrapper) paint with var(--ui-bg), which would otherwise stay light. */
+  --ui-bg: var(--term-bg);
+}
+
+/* Scanlines: subtle, pure-CSS, on a non-interactive overlay. */
+[data-theme="terminal"] body::after,
+body.theme-terminal::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.14) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* ============================================
+   BUTTONS — [ LABEL ] energy
+   ============================================ */
+
+.term-btn {
+  font-family: var(--term-font);
+  background-color: var(--term-bg-raised);
+  color: var(--term-phosphor);
+  border: 1px solid var(--term-phosphor);
+  border-radius: 0;
+  text-shadow: var(--term-glow);
+  box-shadow: none;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.term-btn:hover {
+  background-color: var(--term-phosphor);
+  color: var(--term-bg);
+  text-shadow: none;
+  box-shadow: var(--term-glow);
+}
+
+.term-btn--inverse {
+  background-color: var(--term-phosphor);
+  color: var(--term-bg);
+  text-shadow: none;
+  box-shadow: var(--term-glow);
+}
+
+.term-btn--inverse:hover {
+  background-color: var(--term-bg-raised);
+  color: var(--term-phosphor);
+  text-shadow: var(--term-glow);
+}
+
+.term-btn--amber {
+  color: var(--term-amber);
+  border-color: var(--term-amber);
+  text-shadow: var(--term-glow-amber);
+}
+
+.term-btn--amber:hover {
+  background-color: var(--term-amber);
+  color: var(--term-bg);
+  text-shadow: none;
+  box-shadow: var(--term-glow-amber);
+}
+
+/* ============================================
+   OUTLINE — double frame
+   ============================================ */
+
+.term-outline {
+  font-family: var(--term-font);
+  background-color: transparent;
+  color: var(--term-phosphor);
+  border: 1px solid var(--term-phosphor);
+  outline: 1px solid var(--term-phosphor-dim);
+  outline-offset: 2px;
+  border-radius: 0;
+  text-shadow: var(--term-glow);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.term-outline:hover {
+  background-color: rgba(51, 255, 102, 0.12);
+}
+
+.term-outline--amber {
+  color: var(--term-amber);
+  border-color: var(--term-amber);
+  outline-color: rgba(255, 176, 0, 0.5);
+  text-shadow: var(--term-glow-amber);
+}
+
+/* ============================================
+   SOFT — dim field
+   ============================================ */
+
+.term-soft {
+  font-family: var(--term-font);
+  background-color: rgba(51, 255, 102, 0.14);
+  color: var(--term-phosphor);
+  border: none;
+  border-radius: 0;
+  text-shadow: var(--term-glow);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.term-soft:hover {
+  background-color: rgba(51, 255, 102, 0.24);
+}
+
+.term-soft--amber {
+  background-color: rgba(255, 176, 0, 0.14);
+  color: var(--term-amber);
+  text-shadow: var(--term-glow-amber);
+}
+
+/* ============================================
+   GHOST — bare prompt
+   ============================================ */
+
+.term-ghost {
+  font-family: var(--term-font);
+  background-color: transparent;
+  color: var(--term-phosphor-dim);
+  border: none;
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.term-ghost:hover {
+  color: var(--term-phosphor);
+  text-shadow: var(--term-glow);
+}
+
+.term-ghost::before {
+  content: '> ';
+}
+
+.term-ghost--amber:hover {
+  color: var(--term-amber);
+  text-shadow: var(--term-glow-amber);
+}
+
+/* ============================================
+   LINK — underscore cursor
+   ============================================ */
+
+.term-link {
+  font-family: var(--term-font);
+  background-color: transparent;
+  color: var(--term-phosphor);
+  border: none;
+  border-radius: 0;
+  text-shadow: var(--term-glow);
+  text-decoration: underline;
+  text-decoration-style: dashed;
+  text-underline-offset: 4px;
+  transition: none;
+}
+
+.term-link:hover {
+  text-decoration-style: solid;
+  background-color: rgba(51, 255, 102, 0.12);
+}
+
+.term-link--amber {
+  color: var(--term-amber);
+  text-shadow: var(--term-glow-amber);
+}
+
+/* ============================================
+   INPUTS — the prompt line
+   ============================================ */
+
+.term-input {
+  width: 100%;
+}
+
+.term-input-base {
+  font-family: var(--term-font);
+  background-color: var(--term-bg);
+  color: var(--term-phosphor);
+  border: 1px solid var(--term-phosphor-dim);
+  border-radius: 0;
+  caret-color: var(--term-phosphor);
+  text-shadow: var(--term-glow);
+  box-shadow: inset 0 0 12px rgba(51, 255, 102, 0.07);
+  transition: none;
+}
+
+.term-input-base::placeholder {
+  color: var(--term-phosphor-dim);
+  text-shadow: none;
+}
+
+.term-input-base:focus {
+  outline: none;
+  border-color: var(--term-phosphor);
+  box-shadow:
+    inset 0 0 12px rgba(51, 255, 102, 0.12),
+    var(--term-glow);
+}
+
+.term-input-base:disabled {
+  color: var(--term-phosphor-dim);
+  border-style: dashed;
+  text-shadow: none;
+}
+
+/* ============================================
+   CARD — a framed readout
+   ============================================ */
+
+.term-card {
+  font-family: var(--term-font);
+  background-color: var(--term-bg-raised);
+  border: 1px solid var(--term-phosphor-dim);
+  border-radius: 0;
+  box-shadow: inset 0 0 24px rgba(51, 255, 102, 0.05);
+}
+
+.term-card-header {
+  color: var(--term-phosphor);
+  border-bottom: 1px dashed var(--term-phosphor-dim);
+  text-shadow: var(--term-glow);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.75rem 1rem;
+}
+
+.term-card-body {
+  color: var(--term-phosphor-soft);
+  padding: 1rem;
+}
+
+.term-card-footer {
+  border-top: 1px dashed var(--term-phosphor-dim);
+  padding: 0.75rem 1rem;
+}
+
+/* ============================================
+   SEPARATOR — a dashed rule
+   ============================================ */
+
+.term-separator {
+  border-style: dashed;
+  border-color: var(--term-phosphor-dim);
+}
+
+/* ============================================
+   BADGE — a status flag
+   ============================================ */
+
+.term-badge {
+  font-family: var(--term-font);
+  background-color: transparent;
+  color: var(--term-phosphor);
+  border: 1px solid var(--term-phosphor);
+  border-radius: 0;
+  text-shadow: var(--term-glow);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ============================================
+   VARIANT-LESS CHROME — USwitch (#1333 pattern)
+   ============================================ */
+
+[data-theme="terminal"] button[role="switch"],
+.theme-terminal button[role="switch"] {
+  border-radius: 0;
+  border: 1px solid var(--term-phosphor-dim);
+  background-color: var(--term-bg-raised);
+  transition: none;
+}
+
+[data-theme="terminal"] button[role="switch"][data-state="checked"],
+.theme-terminal button[role="switch"][data-state="checked"] {
+  border-color: var(--term-phosphor);
+  background-color: rgba(51, 255, 102, 0.18);
+  box-shadow: var(--term-glow);
+}
+
+[data-theme="terminal"] button[role="switch"] > span,
+.theme-terminal button[role="switch"] > span {
+  border-radius: 0;
+  background-color: var(--term-phosphor-dim);
+  transition: none;
+}
+
+[data-theme="terminal"] button[role="switch"][data-state="checked"] > span,
+.theme-terminal button[role="switch"][data-state="checked"] > span {
+  background-color: var(--term-phosphor);
+}

@@ -1,0 +1,10 @@
+{
+  // Cloudflare WORKERS config for the unstyled-spike SANDBOX.
+  //
+  // Deliberately minimal vs the apps/pocs pattern — see minimal-theme-demo's
+  // wrangler.jsonc for the full rationale. No d1/kv/routes/env, zero-config
+  // *.workers.dev subdomain.
+  "name": "unstyled-spike-sandbox",
+  "compatibility_date": "2025-07-15",
+  "compatibility_flags": ["nodejs_compat"]
+}

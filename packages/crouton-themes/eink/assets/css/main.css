@@ -1,0 +1,241 @@
+/* E-ink Theme (#1311)
+   A reading device: pure greyscale, ZERO motion (state changes flip, they
+   never animate — like a page refresh), newspaper typography for headers,
+   generous hairlines. The calmest theme in the set.
+   No !important: built on the shared subtractive replacer. */
+
+:root {
+  --eink-paper: #f4f2ee;
+  --eink-ink: #1c1c1c;
+  --eink-gray: #6b6b6b;
+  --eink-hairline: #cfccc6;
+  --eink-serif: Georgia, 'Times New Roman', serif;
+}
+
+/* ============================================
+   AMBIENT — the display
+   ============================================ */
+
+[data-theme="eink"],
+.theme-eink {
+  background-color: var(--eink-paper);
+  --ui-bg: var(--eink-paper);
+}
+
+/* ============================================
+   BUTTONS — no motion, states FLIP
+   ============================================ */
+
+.eink-btn {
+  background-color: var(--eink-paper);
+  color: var(--eink-ink);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 600;
+  transition: none;
+}
+
+.eink-btn:hover {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+
+.eink-btn--primary {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+
+.eink-btn--primary:hover {
+  background-color: var(--eink-paper);
+  color: var(--eink-ink);
+}
+
+.eink-btn--alert {
+  border-width: 1px;
+  border-bottom-width: 4px;
+  border-bottom-style: double;
+}
+
+/* ============================================
+   OUTLINE / SOFT / GHOST / LINK
+   ============================================ */
+
+.eink-outline {
+  background-color: transparent;
+  color: var(--eink-ink);
+  border: 1px solid var(--eink-gray);
+  border-radius: 0;
+  font-weight: 600;
+  transition: none;
+}
+
+.eink-outline:hover {
+  border-color: var(--eink-ink);
+}
+
+.eink-outline--alert {
+  border-style: dashed;
+}
+
+.eink-soft {
+  background-color: rgba(28, 28, 28, 0.07);
+  color: var(--eink-ink);
+  border: none;
+  border-radius: 0;
+  font-weight: 600;
+  transition: none;
+}
+
+.eink-soft:hover {
+  background-color: rgba(28, 28, 28, 0.14);
+}
+
+.eink-soft--alert {
+  background-image: repeating-linear-gradient(-45deg, transparent 0 6px, rgba(28, 28, 28, 0.08) 6px 12px);
+}
+
+.eink-ghost {
+  background-color: transparent;
+  color: var(--eink-gray);
+  border: none;
+  font-weight: 600;
+  transition: none;
+}
+
+.eink-ghost:hover {
+  color: var(--eink-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.eink-link {
+  background-color: transparent;
+  color: var(--eink-ink);
+  border: none;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: none;
+}
+
+.eink-link:hover {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+  text-decoration: none;
+}
+
+/* ============================================
+   INPUTS — a form on paper
+   ============================================ */
+
+.eink-input {
+  width: 100%;
+}
+
+.eink-input-base {
+  background-color: transparent;
+  color: var(--eink-ink);
+  border: none;
+  border-bottom: 1px solid var(--eink-ink);
+  border-radius: 0;
+  caret-color: var(--eink-ink);
+  transition: none;
+}
+
+.eink-input-base::placeholder {
+  color: var(--eink-gray);
+  font-style: italic;
+}
+
+.eink-input-base:focus {
+  outline: none;
+  border-bottom-width: 2px;
+}
+
+.eink-input-base:disabled {
+  border-bottom-style: dotted;
+  color: var(--eink-gray);
+}
+
+/* ============================================
+   CARD — a newspaper clipping
+   ============================================ */
+
+.eink-card {
+  background-color: var(--eink-paper);
+  border-top: 3px double var(--eink-ink);
+  border-bottom: 3px double var(--eink-ink);
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.eink-card-header {
+  font-family: var(--eink-serif);
+  color: var(--eink-ink);
+  border-bottom: 1px solid var(--eink-hairline);
+  font-weight: 700;
+  font-size: 1.05rem;
+  padding: 0.75rem 1rem;
+}
+
+.eink-card-body {
+  color: var(--eink-ink);
+  padding: 1rem;
+}
+
+.eink-card-footer {
+  border-top: 1px solid var(--eink-hairline);
+  color: var(--eink-gray);
+  padding: 0.6rem 1rem;
+}
+
+/* ============================================
+   SEPARATOR + BADGE
+   ============================================ */
+
+.eink-separator {
+  border-color: var(--eink-ink);
+  border-top-width: 3px;
+  border-style: double;
+}
+
+.eink-badge {
+  background-color: transparent;
+  color: var(--eink-ink);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  font-weight: 600;
+  font-variant: small-caps;
+}
+
+/* ============================================
+   VARIANT-LESS CHROME — USwitch (flips, no glide)
+   ============================================ */
+
+[data-theme="eink"] button[role="switch"],
+.theme-eink button[role="switch"] {
+  border-radius: 0;
+  border: 1px solid var(--eink-ink);
+  background-color: var(--eink-paper);
+  transition: none;
+}
+
+[data-theme="eink"] button[role="switch"][data-state="checked"],
+.theme-eink button[role="switch"][data-state="checked"] {
+  background-color: var(--eink-ink);
+}
+
+[data-theme="eink"] button[role="switch"] > span,
+.theme-eink button[role="switch"] > span {
+  border-radius: 0;
+  background-color: var(--eink-ink);
+  transition: none;
+}
+
+[data-theme="eink"] button[role="switch"][data-state="checked"] > span,
+.theme-eink button[role="switch"][data-state="checked"] > span {
+  background-color: var(--eink-paper);
+}

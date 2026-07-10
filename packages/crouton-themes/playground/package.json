@@ -1,5 +1,5 @@
 {
-  "name": "minimal-theme-demo",
+  "name": "crouton-themes-playground",
   "type": "module",
   "private": true,
   "version": "0.1.0",
@@ -14,12 +14,14 @@
   "dependencies": {
     "@fyit/crouton-themes": "workspace:*",
     "@nuxt/ui": "catalog:",
+    "@vueuse/nuxt": "^13.3.0",
     "eruda": "^3.4.3",
     "nuxt": "catalog:",
     "vue": "catalog:",
     "vue-router": "catalog:"
   },
   "devDependencies": {
+    "tailwindcss": "^4.3.1",
     "wrangler": "catalog:"
   }
 }

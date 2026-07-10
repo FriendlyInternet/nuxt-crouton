@@ -4,7 +4,7 @@
 
 import { THEME_UI_CONFIGS } from '../configs/themeConfigs'
 
-export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'default'
+export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy' | 'riso' | 'eink' | 'blueprint' | 'default'
 
 type BaseVariant = 'solid' | 'outline' | 'soft' | 'ghost' | 'link'
 
@@ -44,8 +44,71 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     name: 'kr11',
     label: 'KR-11',
     description: 'Friendly drum machine aesthetic',
-    colors: ['#6ee7b7', '#fcd34d', '#fca5a5'], // mint, gold, coral
+    colors: ['#b8e9d2', '#e9d227', '#f7d3ca'], // play-mint, FILL-yellow, pad-1 salmon (#1347)
     defaultVariant: 'soft' // KR-11 uses soft tactile pads
+  },
+  {
+    name: 'blackandwhite',
+    label: 'Black & White',
+    description: 'Compact monochrome dashboard theme',
+    colors: ['#000000', '#525252', '#ffffff'], // black, neutral, white
+    defaultVariant: 'outline' // Black & White favors outline/subtle surfaces
+  },
+  {
+    name: 'brutalist',
+    label: 'Brutalist',
+    description: 'Thick borders, hard shadows, zero subtlety',
+    colors: ['#0a0a0a', '#ffd800', '#fdfbf5'], // ink, shock yellow, paper
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'mtv',
+    label: 'MTV',
+    description: 'Day-glo blocks, clashing neon shadows, Memphis energy',
+    colors: ['#ff2d95', '#00e5ff', '#ffe600'], // pink, cyan, yellow
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'terminal',
+    label: 'Terminal',
+    description: 'Green phosphor on black, scanlines, inverse video',
+    colors: ['#33ff66', '#0a0f0a', '#ffb000'], // phosphor, tube, amber
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'braun',
+    label: 'Braun',
+    description: 'Warm analog hi-fi — cream, hairlines, one orange accent',
+    colors: ['#f2efe9', '#f26c1d', '#2e2c29'], // cream, orange, charcoal
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'gameboy',
+    label: 'Game Boy',
+    description: 'Four shades of olive green, chunky pixels',
+    colors: ['#0f380f', '#8bac0f', '#9bbc0e'], // ink, light, screen
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'riso',
+    label: 'Riso',
+    description: 'Two-color riso print — fluoro pink + teal, misregistered',
+    colors: ['#ff48b0', '#00887a', '#f7f3e8'], // pink, teal, paper
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'eink',
+    label: 'E-ink',
+    description: 'Greyscale reading mode — zero motion, newspaper type',
+    colors: ['#1c1c1c', '#6b6b6b', '#f4f2ee'], // ink, gray, paper
+    defaultVariant: 'outline'
+  },
+  {
+    name: 'blueprint',
+    label: 'Blueprint',
+    description: 'Cyanotype drafting sheet — white line-work on blue',
+    colors: ['#123a63', '#dce9f5', '#ffd66b'], // blue, line, pencil
+    defaultVariant: 'solid'
   }
 ]
 
@@ -60,20 +123,36 @@ export function useThemeSwitcher() {
   // SSR-safe localStorage persistence via VueUse
   const storedTheme = useLocalStorage<ThemeName>(STORAGE_KEY, 'default')
 
-  // Initialize from stored preference on client
-  if (import.meta.client && AVAILABLE_THEMES.some(t => t.name === storedTheme.value)) {
-    currentTheme.value = storedTheme.value
-  }
+  // Restore the stored preference AFTER hydration (onMounted), never during
+  // setup: the server can't know localStorage, so a setup-time restore makes
+  // the client's first render differ from the SSR HTML → hydration class
+  // mismatch on every themed component (#1304). Post-mount it's a normal
+  // reactive update. Idempotent across the many components calling this.
+  // Guarded: plugins (themeProvider.client) call this composable outside any
+  // component instance, where onMounted can't register.
+  if (getCurrentInstance()) onMounted(() => {
+    if (
+      storedTheme.value !== currentTheme.value
+      && AVAILABLE_THEMES.some(t => t.name === storedTheme.value)
+    ) {
+      setTheme(storedTheme.value)
+    }
+  })
 
   // Computed for current theme config
   const currentThemeConfig = computed(() =>
     AVAILABLE_THEMES.find(t => t.name === currentTheme.value) ?? AVAILABLE_THEMES[0]
   )
 
-  // Get the variant name for Nuxt UI components
-  // 'default' returns undefined to use Nuxt UI's default variant
+  // Get the variant name for Nuxt UI components.
+  // 'default' returns undefined to use Nuxt UI's default variant. Every theme
+  // registers NAMED variants under its class prefix (ko, minimal, kr11, bw-*),
+  // and the runtime swap points defaultVariants.variant at the same name — so
+  // binding :variant="variant" and plain variant-less usage render identically.
   const variant = computed(() =>
-    currentTheme.value === 'default' ? undefined : currentTheme.value
+    currentTheme.value === 'default'
+      ? undefined
+      : currentTheme.value === 'blackandwhite' ? 'bw-solid' : currentTheme.value
   )
 
   // Set theme and persist
@@ -109,21 +188,21 @@ export function useThemeSwitcher() {
     }
   })
 
-  // Initialize theme UI config on client
-  if (import.meta.client) {
-    const themeUIConfig = THEME_UI_CONFIGS[currentTheme.value]
-    if (themeUIConfig) {
-      updateAppConfig({
-        ui: themeUIConfig as any
-      })
-    }
-  }
+  // (No setup-time updateAppConfig: the onMounted restore above applies the
+  // stored theme's config post-hydration via setTheme.)
 
   // Get variant with theme prefix for compound variants
-  // e.g., getVariant('ghost') returns 'ko-ghost' when KO theme is active
-  function getVariant(baseVariant: string = 'solid'): string {
+  // e.g., getVariant('ghost') returns 'ko-ghost' when KO theme is active and
+  // 'bw-ghost' under blackandwhite (whose named-variant prefix is 'bw', not
+  // the theme name). 'default' passes the base variant through unchanged.
+  // Returns `any`: the concrete union of registered variant names is generated
+  // per consuming app by Nuxt UI, so this composable can't name it — and a
+  // plain `string` fails assignment against that union in templates.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function getVariant(baseVariant: string = 'solid'): any {
     if (currentTheme.value === 'default') return baseVariant
-    return `${currentTheme.value}-${baseVariant}`
+    const prefix = currentTheme.value === 'blackandwhite' ? 'bw' : currentTheme.value
+    return `${prefix}-${baseVariant}`
   }
 
   return {
