@@ -200,6 +200,58 @@ async function saveSettings() {
 // Let the Shell host the Save button in its header row (hideSaveBar).
 defineExpose({ save: saveSettings, dirty, saving })
 
+// Per-event print flow (#1324): which transport delivers this event's thermal
+// jobs — the venue device's in-process drainer, the router spooler, or nobody.
+// The setting lives in crouton-printing (print_transports); this is its authed
+// UI. Instant-apply like the requeue button — an operational switch, not a
+// form field, so it deliberately doesn't ride the panel's Save.
+interface PrintTransportState {
+  transport: string | null
+  lastSpoolerPollAt: string | null
+  lastDrainerTickAt: string | null
+}
+
+const printTransportEndpoint = computed(() =>
+  `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/print-transport`
+)
+const { data: printTransport, refresh: refreshPrintTransport } = await useFetch<PrintTransportState>(printTransportEndpoint, {
+  default: () => ({ transport: null, lastSpoolerPollAt: null, lastDrainerTickAt: null })
+})
+const printTransportSaving = ref(false)
+
+async function setPrintTransport(transport: 'local-drainer' | 'router-spooler' | 'none') {
+  printTransportSaving.value = true
+  try {
+    await $fetch(printTransportEndpoint.value, { method: 'PUT', body: { transport } })
+    await refreshPrintTransport()
+    notify.success(t('sales.printFlow.updated', 'Print flow updated'))
+  }
+  catch {
+    notify.error(t('sales.printFlow.updateError', 'Could not update the print flow'))
+  }
+  finally {
+    printTransportSaving.value = false
+  }
+}
+
+const printTransportItems = computed(() => [
+  {
+    value: 'local-drainer' as const,
+    label: t('sales.printFlow.localDrainer', 'Local drainer'),
+    description: t('sales.printFlow.localDrainerHelp', 'A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — works fully offline.')
+  },
+  {
+    value: 'router-spooler' as const,
+    label: t('sales.printFlow.routerSpooler', 'Router spooler'),
+    description: t('sales.printFlow.routerSpoolerHelp', 'The on-site router polls the cloud app and prints on the local network.')
+  },
+  {
+    value: 'none' as const,
+    label: t('sales.printFlow.paused', 'Paused'),
+    description: t('sales.printFlow.pausedHelp', 'Nobody prints — jobs queue up as pending until a flow is chosen.')
+  }
+])
+
 // Event-level actions (moved out of the workspace header to declutter it).
 // Same useCollectionQuery cache as the Shell, so refresh() updates its list
 // before navigating to the duplicated event's slug.
@@ -365,9 +417,28 @@ function helperExpiry(value: string): string {
           />
         </template>
 
-        <!-- Receipt text settings, inline (saved via the panel's Save button) -->
+        <!-- Print flow (instant-apply) + receipt text settings (panel Save) -->
         <template #footer>
           <div class="space-y-4">
+            <div class="space-y-1">
+              <p class="text-sm font-medium leading-5">{{ t('sales.printFlow.title', 'Print flow') }}</p>
+              <p class="text-sm text-muted">{{ t('sales.printFlow.description', 'Who delivers the printed tickets for this event.') }}</p>
+            </div>
+            <CroutonPrintingTransportPicker
+              :transport="printTransport.transport"
+              :last-spooler-poll-at="printTransport.lastSpoolerPollAt"
+              :last-drainer-tick-at="printTransport.lastDrainerTickAt"
+              :loading="printTransportSaving"
+              :items="printTransportItems"
+              :unset-title="t('sales.printFlow.unsetTitle', 'No print flow chosen for this event')"
+              :unset-description="t('sales.printFlow.unsetDescription', 'Both flows are currently allowed (legacy behaviour). Pick one to make it exclusive.')"
+              :last-seen-label="t('sales.printFlow.lastSeen', 'last seen')"
+              :never-seen-label="t('sales.printFlow.neverSeen', 'never seen')"
+              @update:transport="setPrintTransport"
+            />
+
+            <USeparator />
+
             <div class="space-y-1">
               <p class="text-sm font-medium leading-5">{{ t('sales.workspace.receiptSettings') }}</p>
               <p class="text-sm text-muted">{{ t('sales.receipt.customize') }}</p>

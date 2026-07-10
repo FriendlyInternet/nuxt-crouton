@@ -583,6 +583,22 @@
         "sendFailed": "Versturen naar printer mislukt",
         "generic": "Printopdracht mislukt"
       }
+    },
+    "printFlow": {
+      "title": "Printflow",
+      "description": "Wie de tickets van dit evenement afdrukt.",
+      "localDrainer": "Lokaal toestel",
+      "localDrainerHelp": "Een toestel op locatie (Pi / mini-pc) draait de app en print rechtstreeks naar de printers — werkt volledig offline.",
+      "routerSpooler": "Router-spooler",
+      "routerSpoolerHelp": "De router op locatie haalt de printopdrachten op uit de cloud en print op het lokale netwerk.",
+      "paused": "Gepauzeerd",
+      "pausedHelp": "Niemand print — opdrachten blijven in de wachtrij tot een flow gekozen is.",
+      "unsetTitle": "Nog geen printflow gekozen voor dit evenement",
+      "unsetDescription": "Beide flows zijn nu toegelaten (oud gedrag). Kies er één om ze exclusief te maken.",
+      "lastSeen": "laatst gezien",
+      "neverSeen": "nooit gezien",
+      "updated": "Printflow aangepast",
+      "updateError": "Kon de printflow niet aanpassen"
     }
   }
 }
