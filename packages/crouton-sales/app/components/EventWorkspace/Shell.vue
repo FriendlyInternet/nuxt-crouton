@@ -10,8 +10,10 @@
  *  - "Bestellingen" toggles the orders list (OrdersTab) as a pane beside
  *    the POS's products/cart columns
  *  - "Klanten" (recurring-clients mode only) toggles the client end-receipts
- *    list (ClientsPanel) as another pane — both can be open at once,
- *    side by side
+ *    list (ClientsPanel) as another pane
+ *  - "Data" (admin sessions only — PIN helpers never see it) toggles the
+ *    event's sales numbers (DataPanel) as a third pane — any combination can
+ *    be open at once, side by side
  *
  * Used in two places:
  *  - the admin page `/admin/[team]/sales/events/[slug]`
@@ -64,6 +66,11 @@ const { t } = useT()
 const { open } = useCrouton()
 const route = useRoute()
 const router = useRouter()
+
+// PIN helpers hold a scoped token, not a session, so `loggedIn` is the
+// workspace's admin discriminator (same signal as the POS `editable` gate and
+// the team-members-only blocks) — it gates the admin-only data pane below.
+const { loggedIn } = useAuth()
 
 const teamParam = computed(() => props.teamParam || (route.params.team as string))
 const eventSlug = computed(() => props.eventSlug)
@@ -120,18 +127,22 @@ const settingsTab = shallowRef<{ save: () => Promise<void>, dirty: Ref<boolean>,
 const settingsDirty = computed(() => settingsTab.value?.dirty.value ?? false)
 const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
 
-// Side panes beside the POS: orders, and clients (end-of-tab receipts —
-// recurring-clients mode only). Independent toggles — both can be open at
-// once; each closed pane keeps a vertical tab hanging in the right gutter.
-// Persisted in localStorage so the arrangement survives reloads, matching
-// the splitter ratios (autoSaveId). initOnMounted keeps SSR markup at the
-// default (closed) and restores after hydration.
+// Side panes beside the POS: orders, clients (end-of-tab receipts —
+// recurring-clients mode only), and data (sales numbers — admins only).
+// Independent toggles — all can be open at once; each closed pane keeps a
+// vertical tab hanging in the right gutter. Persisted in localStorage so the
+// arrangement survives reloads, matching the splitter ratios (autoSaveId).
+// initOnMounted keeps SSR markup at the default (closed) and restores after
+// hydration.
 const ordersOpen = useLocalStorage('sales-workspace-orders-open', false, { initOnMounted: true })
 const clientsOpen = useLocalStorage('sales-workspace-clients-open', false, { initOnMounted: true })
+const dataOpen = useLocalStorage('sales-workspace-data-open', false, { initOnMounted: true })
 
-// The stored flag is global, but the clients pane only exists in
-// recurring-clients mode — gate the persisted value per event.
+// The stored flags are global, but the clients pane only exists in
+// recurring-clients mode and the data pane only for admin sessions — gate
+// the persisted values per event/session.
 const clientsPaneOpen = computed(() => clientsOpen.value && !!event.value?.requiresClient)
+const dataPaneOpen = computed(() => dataOpen.value && loggedIn.value)
 
 // Narrow screens can't host side-by-side panes — the splitter would squeeze
 // the kassa to nothing. Below lg the panes become slideovers instead, toggled
@@ -140,12 +151,17 @@ const clientsPaneOpen = computed(() => clientsOpen.value && !!event.value?.requi
 const isNarrow = useMediaQuery('(max-width: 1023px)')
 const ordersSlideoverOpen = ref(false)
 const clientsSlideoverOpen = ref(false)
+const dataSlideoverOpen = ref(false)
 
 // The gutter is reserved whenever at least one vertical tab is hanging.
 // Narrow mode has no gutter — the toggles live in the button row instead.
 const hasGutter = computed(() =>
   !isNarrow.value
-  && (!ordersOpen.value || (!!event.value?.requiresClient && !clientsPaneOpen.value))
+  && (
+    !ordersOpen.value
+    || (!!event.value?.requiresClient && !clientsPaneOpen.value)
+    || (loggedIn.value && !dataPaneOpen.value)
+  )
 )
 
 // Orders-pane filters: the toggle lives in the pane header (next to ✕), the
@@ -267,6 +283,16 @@ const ordersFilterCount = ref(0)
       >
         {{ t('sales.workspace.clientsPanel.button') }}
       </UButton>
+      <UButton
+        v-if="loggedIn"
+        icon="i-lucide-chart-line"
+        size="sm"
+        color="neutral"
+        variant="outline"
+        @click="dataSlideoverOpen = true"
+      >
+        {{ t('sales.workspace.dataPanel.button') }}
+      </UButton>
     </div>
 
     <!-- Kassa: the main surface, full remaining viewport height. Orders or
@@ -357,6 +383,30 @@ const ordersFilterCount = ref(0)
             </div>
           </SplitterPanel>
         </template>
+        <template v-if="dataPaneOpen && !isNarrow">
+          <SplitterResizeHandle
+            class="w-1 shrink-0 bg-accented hover:bg-primary/60 data-[state=drag]:bg-primary transition-colors"
+          />
+          <SplitterPanel id="data" :order="4" :default-size="30" :min-size="18" class="min-w-0 flex flex-col">
+            <div class="h-14 shrink-0 flex items-center justify-between gap-2 px-3 bg-elevated/60 border-b border-default">
+              <span class="flex items-center gap-1.5 text-sm font-medium">
+                <UIcon name="i-lucide-chart-line" class="size-4 shrink-0 text-muted" />
+                {{ t('sales.workspace.dataPanel.title') }}
+              </span>
+              <UButton
+                icon="i-lucide-x"
+                size="xs"
+                color="neutral"
+                variant="ghost"
+                :aria-label="t('sales.common.close')"
+                @click="dataOpen = false"
+              />
+            </div>
+            <div class="flex-1 overflow-y-auto p-4 pt-2">
+              <SalesEventWorkspaceDataPanel :event="event" :team-param="teamParam" />
+            </div>
+          </SplitterPanel>
+        </template>
       </SplitterGroup>
 
     </div>
@@ -394,6 +444,20 @@ const ordersFilterCount = ref(0)
         <UIcon name="i-lucide-users" class="size-4 shrink-0" />
         <span class="[writing-mode:vertical-rl] text-sm font-medium tracking-wide">
           {{ t('sales.workspace.clientsPanel.button') }}
+        </span>
+      </button>
+      <button
+        v-if="loggedIn && !dataOpen"
+        type="button"
+        class="flex flex-col items-center gap-1.5 px-1.5 py-3 rounded-e-md cursor-pointer
+               border border-l-0 border-default bg-elevated/60 hover:bg-elevated
+               text-muted hover:text-highlighted transition-colors"
+        :aria-label="t('sales.workspace.dataPanel.button')"
+        @click="dataOpen = true"
+      >
+        <UIcon name="i-lucide-chart-line" class="size-4 shrink-0" />
+        <span class="[writing-mode:vertical-rl] text-sm font-medium tracking-wide">
+          {{ t('sales.workspace.dataPanel.button') }}
         </span>
       </button>
     </div>
@@ -468,6 +532,33 @@ const ordersFilterCount = ref(0)
           </div>
           <div class="flex-1 overflow-y-auto p-4 pt-2">
             <SalesEventWorkspaceClientsPanel :event="event" />
+          </div>
+        </div>
+      </template>
+    </USlideover>
+
+    <USlideover
+      v-if="isNarrow && loggedIn"
+      v-model:open="dataSlideoverOpen"
+    >
+      <template #content>
+        <div class="flex flex-col h-full min-h-0">
+          <div class="h-14 shrink-0 flex items-center justify-between gap-2 px-3 bg-elevated/60 border-b border-default">
+            <span class="flex items-center gap-1.5 text-sm font-medium">
+              <UIcon name="i-lucide-chart-line" class="size-4 shrink-0 text-muted" />
+              {{ t('sales.workspace.dataPanel.title') }}
+            </span>
+            <UButton
+              icon="i-lucide-x"
+              size="xs"
+              color="neutral"
+              variant="ghost"
+              :aria-label="t('sales.common.close')"
+              @click="dataSlideoverOpen = false"
+            />
+          </div>
+          <div class="flex-1 overflow-y-auto p-4 pt-2">
+            <SalesEventWorkspaceDataPanel :event="event" :team-param="teamParam" />
           </div>
         </div>
       </template>

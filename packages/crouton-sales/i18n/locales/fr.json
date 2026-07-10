@@ -527,6 +527,12 @@
         "printed": "Addition imprimée pour {client} — compte clôturé",
         "printError": "Impossible d'imprimer l'addition",
         "loadError": "Impossible de charger les clients"
+      },
+      "dataPanel": {
+        "button": "Données",
+        "title": "Données",
+        "revenueChart": "Revenu par jour",
+        "productMatrix": "Ventes par produit × jour"
       }
     },
     "helpers": {

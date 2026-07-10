@@ -528,6 +528,12 @@
         "printed": "Receipt printed for {client} — tab settled",
         "printError": "Could not print the receipt",
         "loadError": "Could not load clients"
+      },
+      "dataPanel": {
+        "button": "Data",
+        "title": "Data",
+        "revenueChart": "Revenue by day",
+        "productMatrix": "Sales per product × day"
       }
     },
     "helpers": {

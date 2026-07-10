@@ -528,6 +528,12 @@
         "printed": "Rekening afgedrukt voor {client} — afgesloten",
         "printError": "Kon de rekening niet afdrukken",
         "loadError": "Kon klanten niet laden"
+      },
+      "dataPanel": {
+        "button": "Data",
+        "title": "Data",
+        "revenueChart": "Omzet per dag",
+        "productMatrix": "Verkoop per product × dag"
       }
     },
     "helpers": {
