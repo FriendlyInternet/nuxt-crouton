@@ -1,6 +1,6 @@
-import { eq, and } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamEvent } from '../../../../../../utils/team-event'
 import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
 import { salesCategories } from '~~/layers/sales/collections/categories/server/database/schema'
 import { salesLocations } from '~~/layers/sales/collections/locations/server/database/schema'
@@ -8,24 +8,7 @@ import { salesProducts } from '~~/layers/sales/collections/products/server/datab
 import { salesPrinters } from '~~/layers/sales/collections/printers/server/database/schema'
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await resolveTeamAndCheckMembership(event)
-  const eventId = getRouterParam(event, 'eventId')
-
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
-
-  const db = useDB()
-
-  const [originalEvent] = await db
-    .select()
-    .from(salesEvents)
-    .where(and(eq(salesEvents.id, eventId), eq(salesEvents.teamId, team.id)))
-    .limit(1)
-
-  if (!originalEvent) {
-    throw createError({ status: 404, statusText: 'Event not found' })
-  }
+  const { team, user, db, eventId, salesEvent: originalEvent } = await requireTeamEvent(event)
 
   const newEventId = nanoid()
   const timestamp = Date.now()

@@ -35,9 +35,11 @@ domain package (sales / bookings)         crouton-printing
 
 | File | Purpose |
 |------|---------|
-| `server/database/schema.ts` | Package-owned `printers` + `print_jobs` tables (generic; opaque payload + `source`/`refType`/`refId`). The crouton-flow infra-table pattern — NOT `crouton config`. |
+| `server/database/schema.ts` | Package-owned `printers` + `print_jobs` + `print_transports` tables (generic; opaque payload + `source`/`refType`/`refId`). The crouton-flow infra-table pattern — NOT `crouton config`. |
 | `server/db/schema.ts` | Re-export so NuxtHub auto-discovers the tables in `db:generate`. |
 | `server/utils/print-job-queue.ts` | The queue API: `enqueuePrintJob` / `enqueuePrintJobs` + `PRINT_STATUS`. Auto-imported into the merged nitro context. `db` is passed in by the caller (decoupled from any one db util). |
+| `server/utils/print-transport.ts` | Per-event transport selection (#1324): `PRINT_TRANSPORT`, `transportAllows`, `getPrintTransport`/`getAllPrintTransports` (missing-table ⇒ legacy, never fail printing), `upsertPrintTransport`, heartbeat throttle. |
+| `app/components/TransportPicker.vue` | `<CroutonPrintingTransportPicker>` — dumb per-event flow picker + liveness readout. The embedding domain owns fetching/auth and may pass translated `items` (this package ships no i18n). |
 | `crouton.manifest.ts` | Registers as the `printing` croutonApp (`hasApp('printing')`). |
 | `app/app.config.ts` | `croutonApps.printing` registration (headless — no admin routes of its own). |
 
@@ -52,6 +54,28 @@ domain package (sales / bookings)         crouton-printing
 1. Render your ticket to an opaque `payload` (the engine helps — #327).
 2. `await enqueuePrintJob(db, { source, printerId, driver, payload, refType, refId, eventId, teamId })`.
 3. React to completion via the job-lifecycle hook (#329), not by polling a domain table.
+
+### Choose the print flow per event (#1324)
+
+Which transport delivers an event's `network-escpos` jobs is a **per-event row**
+in `print_transports`: `'local-drainer'` (the in-process TCP drainer on a venue
+Node box) | `'router-spooler'` (the RUT956 HTTP spooler polling the cloud) |
+`'none'` (parked — jobs stay pending). The choice is **always exclusive**: no
+row = `DEFAULT_PRINT_TRANSPORT` (`router-spooler`, the cloud/production flow),
+so two transports can never serve one event — a Pi rig opts each event in with
+`local-drainer`. Enforced at both drain points: `drainPendingEscposJobs` only
+serves `local-drainer` events (plus event-LESS jobs, which only it can ever
+deliver); the spooler's `jobs.get` returns a soft-empty `[]` for events routed
+elsewhere. Each transport stamps a throttled liveness heartbeat
+(`lastDrainerTickAt` / `lastSpoolerPollAt`) the picker renders. The env gates
+(`CROUTON_PRINTING_DRAINER*`) still decide whether a drainer *process* runs at
+all; the row decides *which events* it may serve.
+
+This package has **no auth**, so the HTTP surface for the setting lives in the
+domain package (e.g. sales: `teams/[id]/events/[eventId]/print-transport`
+GET/PUT calling `getPrintTransport`/`upsertPrintTransport`), which also embeds
+`<CroutonPrintingTransportPicker>` — same seam as `enqueuePrintJob`. This row is
+a **config entity**: when bidirectional config sync (#802) lands, it should sync.
 
 ### Add a new printer driver
 Register it in the driver registry (#327, `print-queue-service`) — `network-escpos`

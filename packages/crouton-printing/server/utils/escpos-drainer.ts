@@ -22,6 +22,7 @@
 import { and, eq, inArray } from 'drizzle-orm'
 import { completePrintJob, failPrintJob } from './print-job-status'
 import { PRINT_STATUS } from './print-job-queue'
+import { PRINT_TRANSPORT, getAllPrintTransports, shouldStampHeartbeat, transportAllows } from './print-transport'
 
 const DEFAULT_PORT = 9100
 
@@ -126,7 +127,30 @@ export interface DrainOptions {
  * must not run two ticks concurrently.
  */
 export async function drainPendingEscposJobs(db: any, opts: DrainOptions = {}): Promise<{ processed: number }> {
-  const { printJobs } = await import('../database/schema')
+  const { printJobs, printTransports } = await import('../database/schema')
+
+  // Per-event transport gate (#1324). The table is one row per event with a
+  // recorded choice — small enough to read whole each tick. An event WITHOUT
+  // a row uses the default (`router-spooler`), so this drainer only serves
+  // events explicitly set to `local-drainer`.
+  const transports = await getAllPrintTransports(db, opts.eventId)
+  const transportByEvent = new Map<string, string>(
+    transports.map(t => [t.eventId, t.transport])
+  )
+
+  // Liveness readout: stamp lastDrainerTickAt on the events this drainer is
+  // responsible for — even when there are no jobs — throttled so a 2s poll
+  // loop writes at most every HEARTBEAT_THROTTLE_MS.
+  const now = new Date()
+  const staleIds = (transports as any[])
+    .filter(t => t.transport === PRINT_TRANSPORT.LOCAL_DRAINER && shouldStampHeartbeat(t.lastDrainerTickAt, now))
+    .map(t => t.eventId)
+  if (staleIds.length > 0) {
+    await db
+      .update(printTransports)
+      .set({ lastDrainerTickAt: now.toISOString() })
+      .where(inArray(printTransports.eventId, staleIds))
+  }
 
   const where = [
     eq(printJobs.status, PRINT_STATUS.PENDING),
@@ -136,16 +160,25 @@ export async function drainPendingEscposJobs(db: any, opts: DrainOptions = {}): 
   if (opts.eventId) where.push(eq(printJobs.eventId, opts.eventId))
 
   // Self-contained job: ip/port live on the row (no printers join).
-  const rows = await db
+  const candidates = await db
     .select({
       id: printJobs.id,
       payload: printJobs.payload,
       printerIp: printJobs.printerIp,
-      printerPort: printJobs.printerPort
+      printerPort: printJobs.printerPort,
+      eventId: printJobs.eventId
     })
     .from(printJobs)
     .where(and(...where))
     .limit(opts.batchSize ?? 25)
+
+  // Drop jobs whose event routes elsewhere ('router-spooler', incl. the no-row
+  // default) or nowhere ('none' — parked, stays pending). Event-LESS jobs stay
+  // drainable: the spooler endpoint is per-event, so only this drainer can
+  // ever deliver them.
+  const rows = (candidates as any[]).filter(r =>
+    !r.eventId || transportAllows(transportByEvent.get(r.eventId), PRINT_TRANSPORT.LOCAL_DRAINER)
+  )
 
   if (rows.length === 0) return { processed: 0 }
 

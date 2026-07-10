@@ -583,6 +583,20 @@
         "sendFailed": "Could not send to printer",
         "generic": "Print job failed"
       }
+    },
+    "printFlow": {
+      "title": "Print flow",
+      "description": "Who delivers the printed tickets for this event.",
+      "localDrainer": "Local device",
+      "localDrainerHelp": "A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — works fully offline.",
+      "routerSpooler": "Via the venue router",
+      "routerSpoolerHelp": "The on-site router fetches print jobs from the cloud app and sends them to the printers.",
+      "paused": "No physical printing",
+      "pausedHelp": "No print jobs are created — orders simply appear on screen.",
+      "lastSeen": "last seen",
+      "neverSeen": "never seen",
+      "updated": "Print flow updated",
+      "updateError": "Could not update the print flow"
     }
   }
 }
