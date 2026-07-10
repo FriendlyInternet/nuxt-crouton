@@ -131,7 +131,17 @@ jobs:
             for cfg in apps/*/deploy.config.json; do
               [ -f "$cfg" ] || continue
               app=$(basename "$(dirname "$cfg")")
-              mapfile -t pats < <(jq -r '.watchPaths[]? // empty' "$cfg")
+              # Rung split (#1297): a pull_request deploys ONLY the app whose OWN paths
+              # (apps/<app>/**) changed. A shared-package change that breaks a consuming
+              # app is caught by the fixture smoke (fast, no deploy) + the rung-2 push
+              # deploy — NOT a per-PR fan-out redeploy of every consuming app, which
+              # saturated the runners and starved the changed app's own deploy (#1297).
+              # push (merge to main) keeps the full watchPaths incl. shared packages.
+              if [ "$EVENT" = "pull_request" ]; then
+                pats=("apps/$app/**")
+              else
+                mapfile -t pats < <(jq -r '.watchPaths[]? // empty' "$cfg")
+              fi
               hit=false
               while IFS= read -r f; do
                 [ -z "$f" ] && continue
@@ -201,11 +211,13 @@ jobs:
           script: |
             const body = [
               '<!-- deploy-bumped -->',
-              '> 🤖 **Claude Code** · agent pipeline (CI) · _preview-deploy queue notice_',
+              '⏳ **Preview deploy bumped, not broken — nothing about this PR failed.**',
               '',
-              '⏳ **Preview deploy bumped, not broken.** This PR\'s staging preview deploy was cancelled because a newer run took the shared per-app staging queue slot (one waiting run per app — usually a sibling PR or a merge to `main` deploying the same app). **Nothing about this PR failed.**',
+              'A newer run took the shared per-app staging queue slot (a sibling PR, or a merge to `main` deploying the same app), so this preview was cancelled.',
               '',
-              'To get the previews: re-run the failed jobs of the **Deploy Apps (Cloudflare Workers)** run for this PR, or push any commit. Context: #1150.'
+              '**To get the preview:** re-run the failed jobs of the **Deploy Apps** run, or push any commit.',
+              '',
+              '<sub>🤖 agent pipeline · preview-deploy queue notice (#1150)</sub>'
             ].join('\n')
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner, repo: context.repo.repo,

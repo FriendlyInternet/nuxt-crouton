@@ -19,8 +19,8 @@ Default tier: **medium**
 | `task-orchestrator` | medium | claude-sonnet-5 | deepseek-v3.2 | $15 | — | reads epic → workstreams; no code written. Moved opus→Sonnet 5 on an N=4 decompose A/B (Sonnet 5 matched/beat Opus 4.8 on 3 of 4 real epics, ~5× cheaper, fewer NEEDS-SPLIT recursion rounds). Refines #824: the strong-but-cheaper model is a peer planner, not the blunt one that decision guarded against. |
 | `task-decomposer` | medium | claude-sonnet-5 | deepseek-v3.2 | $15 | — | LEAF test + split issues; no code written. Moved opus→Sonnet 5 with the orchestrator on the same N=4 A/B evidence. Refines #824. |
 | `red-team` | medium | claude-sonnet-5 | deepseek-v3.2 | $15 | — | security analysis, reports only — opus was overkill; moved to Sonnet 5 (no code written, daily deep sweep is the cost). Free win per #823/#824. |
-| `a11y` | medium | claude-sonnet-5 | deepseek-v3.2 | $15 | small (claude-haiku-4-5) | template review, reports only |
-| `frontend-review` | medium | claude-sonnet-5 | deepseek-v3.2 | $15 | small (claude-haiku-4-5) | convention review, reports only |
+| `a11y` | small | claude-haiku-4-5 | deepseek-v3.2 | $5 | — | template review, reports only — Sonnet→Haiku (#1272/#823); reversible if the #865 scoreboard shows missed axe findings |
+| `frontend-review` | small | claude-haiku-4-5 | deepseek-v3.2 | $5 | — | convention review, reports only — Sonnet→Haiku (#1272/#823); reversible if it stops catching v3 names |
 
 ## Overrides (per-flow exact-model pins)
 - **prototype-example** → `claude-opus-4-8` — exploratory prototype flow — quality over cost (replace with your real flow)

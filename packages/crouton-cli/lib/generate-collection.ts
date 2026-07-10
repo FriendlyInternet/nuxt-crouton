@@ -1339,10 +1339,24 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     ...(noTests ? [] : buildCollectionTestFiles({ base, data, config, cases, layerPascalCase }))
   ]
 
-  // Write all files
+  // Write all files. Per-collection scaffold files are user-editable, so regeneration
+  // must NOT silently clobber hand-edits: skip a file that already exists unless --force
+  // is set (which the generated files' own "regeneration requires --force" note promises).
+  // Files that don't exist yet are always written, so a schema change still scaffolds new
+  // artifacts. Derived machine-owned files (schema index, registries, app.config.ts) are
+  // written by later steps and keep always-rewriting — only these scaffold files are guarded.
+  const preserved: string[] = []
   for (const file of files) {
+    if (!force && existsSync(file.path)) {
+      preserved.push(file.path)
+      continue
+    }
     await fsp.writeFile(file.path, file.content, 'utf8')
     console.log(`  ✓ ${path.relative(base, file.path)}`)
+  }
+  if (preserved.length > 0) {
+    console.log(`  ⏭ preserved ${preserved.length} existing file(s) — use --force to overwrite:`)
+    for (const p of preserved) console.log(`     · ${path.relative(base, p)}`)
   }
 
   // Note: team-auth utility is now provided by @fyit/crouton package
@@ -1415,20 +1429,47 @@ async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer
   console.log(`\nRunning database migration...`)
   console.log(`Command: npx nuxt db generate (30s timeout)`)
 
+  // Snapshot existing migrations so we can VERIFY one is actually produced. A cold run
+  // (no @fyit/* dist → nuxt prepare can't emit .nuxt/hub/db/schema.mjs → drizzle finds no
+  // schema) makes `nuxt db generate` a silent no-op that still exits 0 — which used to print
+  // a false "✓ generated successfully" and send workers chasing a phantom migration. (#1286)
+  const migDir = 'server/db/migrations/sqlite'
+  const countSql = async (): Promise<number> => {
+    try {
+      return (await fsp.readdir(migDir)).filter((f) => f.endsWith('.sql')).length
+    } catch {
+      return 0
+    }
+  }
+  const migrationsBefore = await countSql()
+
   try {
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('Command timed out after 30 seconds')), 30000)
     })
 
-    const { stdout, stderr } = await Promise.race([
+    const { stdout, stderr } = (await Promise.race([
       execAsync('npx nuxt db generate'),
       timeoutPromise
-    ])
+    ])) as { stdout: string; stderr: string }
 
-    if (stderr && !stderr.includes('Warning')) {
-      console.error(`⚠ Warnings:`, stderr)
+    // The cold-state failure `nuxt db generate` swallows behind a 0 exit code (#1286).
+    const combined = `${stdout || ''}\n${stderr || ''}`
+    const coldState = /Could not load @fyit|No schema files found|schema\.mjs/i.test(combined)
+    const migrationsAfter = await countSql()
+
+    if (migrationsAfter > migrationsBefore) {
+      console.log(`\n✓ Database migration generated successfully`)
+    } else {
+      // No migration written despite collections generated — DO NOT report success (#1286).
+      console.error(`\n✗ Database migration was NOT generated — 0 new files in ${migDir}/`)
+      if (coldState) {
+        console.error(`  Cause: the schema bundle isn't built — 'nuxt db generate' silently no-ops when the @fyit/* packages have no dist/.`)
+        console.error(`  Fix:   run 'pnpm build:packages', then re-run: npx nuxt db generate`)
+      } else {
+        console.error(`  'npx nuxt db generate' exited without writing a migration. Check server/db/schema.ts, then re-run: npx nuxt db generate`)
+      }
     }
-    console.log(`\n✓ Database migration generated successfully`)
   } catch (execError: any) {
     if (execError.message.includes('timed out')) {
       console.error(`\n✗ Database migration timed out after 30 seconds`)

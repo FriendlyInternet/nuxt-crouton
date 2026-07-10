@@ -31,11 +31,45 @@ jobs:
         with:
           fetch-depth: 1
 
+      # ── Superseded-close re-check (#1253) ────────────────────────────────────────
+      # The job guard reads labels from the EVENT PAYLOAD snapshot — a close seconds
+      # before the reply still passes it (the #1233 race: PR #1234's stray `Closes`
+      # auto-closed the retest issue 2s before the owner's answer). And the artifact-gate
+      # below counts `closed` as PASS, so a resume against a superseded issue would exit
+      # green having done nothing. Re-fetch live state: if the issue is now CLOSED, tell
+      # the owner plainly and skip the agent run. Fail-OPEN on an API error (proceed as
+      # before) — a transient fetch failure must not eat a legitimate resume. The
+      # merge-on-approval step below stays `if: always()` on purpose: the #572
+      # deterministic-merge fallback must survive this early exit.
+      - name: Re-check the issue is still open
+        id: state
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            let issue
+            try {
+              issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
+            } catch (e) {
+              core.warning(`state re-check failed (${e.message}) — proceeding as open`)
+              core.setOutput('open', 'true'); return
+            }
+            const open = issue.state === 'open'
+            core.setOutput('open', String(open))
+            if (open) return
+            const closer = issue.closed_by ? issue.closed_by.login : 'unknown'
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: `🚫 **Your reply didn't resume anything — this issue was closed (by ${closer}) just before it was picked up.**\n\n`
+                + '**Fix:** reply on the successor issue/PR, or reopen this one and comment again to retry.\n\n'
+                + '<sub>🤖 Claude Code · agent pipeline (CI) · resume skipped, issue already closed (#1253)</sub>' })
+            core.info(`Issue #${issue_number} is closed — skipping the resume agent run.`)
+
       # Acknowledge the trigger comment immediately: 👀 = "picked up, working on it". The
       # final step swaps this for 🚀 (done) / 😕 (failed). The job guard already ensures we
       # only get here for comments we actually act on, so the reaction is never spurious.
       # (GitHub comment reactions have no ✅/❌ — 🚀/😕 are the closest.)
       - name: React 👀 — resume picked up
+        if: steps.state.outputs.open == 'true'
         id: eyes
         uses: actions/github-script@v7
         with:
@@ -49,6 +83,7 @@ jobs:
 
       # Timestamp run start so the artifact-gate (below) can tell "produced during THIS run".
       - id: t0
+        if: steps.state.outputs.open == 'true'
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       # ── Collect the answer payload across media (WS5, #1191) ─────────────────────
@@ -59,6 +94,7 @@ jobs:
       # them into `.resume-answer.md` for the prompt below. Dependency-free (system node +
       # fetch); the `||` fallback guarantees the file exists so the resume never fails on it.
       - name: Collect the answer payload
+        if: steps.state.outputs.open == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           ISSUE: ${{ github.event.issue.number }}
@@ -72,6 +108,7 @@ jobs:
       # subscription CLAUDE_CODE_OAUTH_TOKEN — subscription OAuth is for interactive
       # Claude Code use only, not CI automation (Anthropic Legal & Compliance terms).
       - id: agent
+        if: steps.state.outputs.open == 'true'
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -169,8 +206,12 @@ jobs:
       # run hid it and it took a manual re-/delegate to notice. `decompose-on-issue` already
       # has this gate; the resume path didn't. Now a no-op resume goes RED (visible →
       # re-dispatch). Uses GITHUB_TOKEN (read-only check), never trips the bot-actor guard.
+      # Skipped on the superseded-close path (#1253): with no agent run there's no artifact
+      # to demand, and the state re-check already commented. Exports its facts as outputs
+      # so the success comment below can say WHAT the resume produced.
       - name: Artifact-gate — fail if the resume produced nothing
-        if: always()
+        id: gate
+        if: always() && steps.state.outputs.open == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -207,6 +248,12 @@ jobs:
               }
             } catch (e) { core.warning(`merged-PR check skipped: ${e.message}`) }
 
+            core.setOutput('subIssues', String(createdSubIssues))
+            core.setOutput('mergedPR', String(mergedPR))
+            core.setOutput('closed', String(closed))
+            core.setOutput('stillBlocked', String(stillBlocked))
+            core.setOutput('newComment', String(newComment))
+
             // PASS if the resume did anything observable, OR it's still holding (legit "still
             // iterating" — not a no-op). FAIL only when the block was cleared yet nothing came
             // of it — the silent no-op.
@@ -215,17 +262,16 @@ jobs:
               return
             }
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume artifact-gate (#603)_\n\n'
-                + '⚠️ The resume ran but produced **nothing** (no sub-issues, no merged gate PR, no new '
-                + 'comment, not closed, and the block was cleared) — a silent no-op (the #590 failure mode). '
-                + 'Re-dispatch with `/delegate` to retry.' })
+              body: '🔴 **The resume ran but produced nothing** — no sub-issues, no merged PR, no new comment, and the block was cleared (a silent no-op).\n\n'
+                + '**Fix:** re-dispatch with `/delegate` to retry.\n\n'
+                + '<sub>🤖 Claude Code · agent pipeline (CI) · resume artifact-gate (#603/#590)</sub>' })
             core.setFailed(`Resume on #${issue_number} produced no artifact — likely a no-op; re-dispatch.`)
 
       # Final feedback on the trigger comment: clear the 👀 and stamp the outcome — 🚀 done /
       # 😕 failed (GitHub reactions have no ✅/❌). Comment ONLY on a hard agent error; a no-op
       # is already explained by the artifact-gate above, so we don't duplicate it (#1216).
       - name: React outcome — 🚀 done / 😕 failed
-        if: always()
+        if: always() && steps.state.outputs.open == 'true'
         uses: actions/github-script@v7
         with:
           script: |
@@ -248,6 +294,34 @@ jobs:
                   + '😕 The resume from your comment **errored before finishing** (billing / max-turns / tooling). '
                   + `🔗 [Run log](${runUrl}) — fix the cause, then comment again to retry.` })
             }
+
+      # ── Visible success (#1253, Fix A) ───────────────────────────────────────────
+      # A successful resume used to signal ONLY via the 🚀 reaction — easy to miss,
+      # especially on mobile (the #1233 "felt ignored" incident), and our own conventions
+      # call a reaction the weak signal. Post a top-level comment saying what the run
+      # produced, from the artifact-gate's own facts. ORDERING IS LOAD-BEARING: this step
+      # MUST come after the artifact-gate — a comment posted before it would make the
+      # gate's `newComment` check always-true and permanently disable the #603 no-op
+      # detection. Skipped when the agent already replied in-thread this run (no double
+      # ping — the gate's `newComment` flag knows). Posted with GITHUB_TOKEN on purpose:
+      # a Bot actor whose events never re-trigger this workflow (double loop safety on
+      # top of the job's `user.type != 'Bot'` guard).
+      - name: Comment ✅ — visible success
+        if: success() && steps.state.outputs.open == 'true' && steps.gate.outputs.newComment != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const facts = []
+            if ('${{ steps.gate.outputs.subIssues }}' === 'true') facts.push('created sub-issues')
+            if ('${{ steps.gate.outputs.mergedPR }}' === 'true') facts.push('merged the gate PR')
+            if ('${{ steps.gate.outputs.closed }}' === 'true') facts.push('closed this issue')
+            if ('${{ steps.gate.outputs.stillBlocked }}' === 'true') facts.push('still iterating — the block stays on for your next reply')
+            const did = facts.length ? facts.join(' · ') : 'continued the pipeline'
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n'
+                + `✅ **Resumed from your reply** — ${did}. 🔗 [Run log](${runUrl})` })
 
       # A cancelled resume (the 30-min timeout) must announce itself, not vanish silently (#1220).
       - name: Flag a timeout / cancellation

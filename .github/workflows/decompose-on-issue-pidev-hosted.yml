@@ -1,0 +1,326 @@
+name: Decompose on issue (pi.dev · GitHub-hosted spike)
+
+# #1072 — THROWAWAY EVALUATION VARIANT of decompose-on-issue-pidev.yml.
+# Same flow, different substrate: `ubuntu-latest` (GitHub-hosted, ephemeral) instead of
+# the mac-mini, and the SHA-pinned third-party `shaftoe/pi-coding-agent-action` instead
+# of our hand-rolled "npm i -g pi && pi --print" step. Everything load-bearing that is
+# OURS stays verbatim from the mini variant: the Harness App token push path (#1004
+# piece 1), the t0 timestamp, and the artifact-gate (#461) incl. the child-deliverable
+# check (#1074). The bot-actor guard is intentionally ABSENT — this variant is
+# `workflow_dispatch`-only and must never grow an `issues:` trigger; it exists to
+# produce one side of the #1072 side-by-side (wall time · cost · telemetry · gates)
+# and is deleted (or promoted, replacing the mini variant) once #1072 concludes.
+#
+# WHAT THE ACTION CHANGES vs the mini's raw `pi --print` (verified against the action
+# source at v2.25.1, SHA-pinned below):
+#   • pi runs IN-PROCESS via the pi SDK with the action's own CI system prompt — not
+#     the CLI. Repo skills are NOT loaded via `--skill`; the SDK auto-discovers
+#     `<cwd>/.pi/skills`, so a pre-step symlinks `.claude/skills` there.
+#   • Structured outputs replace log-scraping: `success` / `cost` / `input_tokens` /
+#     `output_tokens` / `duration_seconds`, plus the full session as JSONL
+#     (`export_session_jsonl`) — the #938 telemetry angle this spike evaluates.
+#   • The action ships built-in GitHub tools (create_pull_request etc.) that commit
+#     via the API as the token identity (the Harness App) — API-created commits
+#     cascade like any App push, and pi's bash tool + `gh` (GH_TOKEN below) still
+#     work for everything our /task-decompose skill drives directly.
+#
+# THIRD-PARTY ACTION VETTING (#1072, reviewed at v2.25.1 / 73ccd1a):
+#   • Wraps the same @earendil-works/pi-coding-agent (^0.80.3) the mini runs.
+#   • Network surfaces in source: the LLM provider, the GitHub API, and gist-share
+#     (share_session) which is OFF by default and stays off here. Analytics is
+#     opt-in and defaults to false.
+#   • Residual risk: the compiled dist/ isn't independently reproducible from src
+#     without a bun build — accepted for a SHA-pinned, dispatch-only throwaway.
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Issue number to decompose (e.g. 660)."
+        required: true
+        type: string
+      model:
+        description: "Model for pi. Default claude-sonnet-5 — same default as the mini variant so the side-by-side compares substrates, not models."
+        required: false
+        default: "claude-sonnet-5"
+        type: string
+
+jobs:
+  decompose-pi-hosted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # No `id-token` — pi uses a provider key, not OIDC. The write scopes are for the
+    # Harness App token minted below, which pi uses to push/PR/comment.
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
+      # Same app as decompose-on-issue-pidev.yml / automerge-epic-subpr.yml. A
+      # GITHUB_TOKEN push would NOT re-trigger downstream workflows (#572).
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Timestamp the run start so the artifact-gate distinguishes "produced this run"
+      # from pre-existing comments/PRs.
+      - id: t0
+        run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      # ── Stage repo skills + git identity for the in-process pi run ────────────────
+      # The action has no `--skill` input; the pi SDK auto-discovers `<cwd>/.pi/skills`
+      # (verified in pi-coding-agent 0.80.3, core/skills.js loadSkills). Symlink our
+      # skills dir there so `/task-decompose` resolves exactly as on the mini. The git
+      # identity covers any commits pi makes via its bash tool (the #862 lesson);
+      # API-side commits from the action's built-in tools are attributed to the App
+      # token identity already.
+      - name: Stage skills for pi + git identity
+        run: |
+          mkdir -p .pi
+          ln -sfn "$PWD/.claude/skills" .pi/skills
+          git config user.name  "nuxt-harness[bot]"
+          git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+
+      # ── The agent: pi.dev via the SHA-pinned third-party action ──────────────────
+      # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
+      # the worker PR) act as the Harness App and cascade. `token` = the funded metered
+      # provider key (NOT a subscription — subscription OAuth must not back CI). The
+      # prompt is the SAME non-interactive contract as the mini variant (#1019/#1022),
+      # kept in sync by hand — if you edit one, edit both.
+      - id: pi
+        uses: shaftoe/pi-coding-agent-action@73ccd1aedef7c79a883aa6a81d680e377b66e58e # v2.25.1
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        with:
+          github_token: ${{ steps.app-token.outputs.token }}
+          provider: anthropic
+          model: ${{ inputs.model }}
+          token: ${{ secrets.PI_PROVIDER_KEY }}
+          export_session_jsonl: 'true'
+          prompt: |
+            You are running NON-INTERACTIVELY in CI. No human is attached and there is no terminal to read input from. NEVER pause, ask a question, or wait for confirmation, and do not invoke pi-ask-user. When a choice is ambiguous, pick the most sensible default, record the assumption in an issue or PR comment, and PROCEED. The run only succeeds if it produces a real deliverable: a PR (Closes #N), created sub-issues, or a held sign-off (status:blocked plus a review). Merely listing options or asking what to do is a FAILED run.
+            OPERATING CONTRACT (non-negotiable, #1022): (1) NEVER merge a pull request — not even one you opened. Open it and stop; the automerge workflow merges epic sub-PRs after CI passes. (2) Hold any sign-off as a TOP-LEVEL issue comment plus the status:blocked label — never inside a PR review body. (3) Reuse an existing epic/NNN-* branch idempotently — never create a duplicate epic branch. (4) You CANNOT modify .github/workflows/** (the App token lacks the workflows scope, by deliberate policy #1076): commit everything else, embed the needed workflow patch verbatim in the PR body under a "## Workflow patch (human applies)" heading, mention @pmcp in an issue comment, add status:blocked, and finish — that counts as a successful deliverable.
+            Given that, do the following now:
+            /task-decompose #${{ inputs.issue }}
+
+      # ── #1072 metrics — the structured outputs this spike exists to evaluate ──────
+      # The mini variant scrapes ~/.pi/agent/sessions JSONL on the box (#938); here the
+      # same numbers arrive as action outputs. Surface them in the run summary and as
+      # a JSON artifact shaped for the #883 ledger comparison row.
+      - name: Run metrics (action outputs)
+        if: always()
+        env:
+          PI_SUCCESS: ${{ steps.pi.outputs.success }}
+          PI_COST: ${{ steps.pi.outputs.cost }}
+          PI_IN_TOKENS: ${{ steps.pi.outputs.input_tokens }}
+          PI_OUT_TOKENS: ${{ steps.pi.outputs.output_tokens }}
+          PI_WALL: ${{ steps.pi.outputs.duration_seconds }}
+          PI_MODEL: ${{ inputs.model }}
+          ISSUE: ${{ inputs.issue }}
+          SESSION_JSONL: ${{ steps.pi.outputs.session_jsonl_path }}
+        run: |
+          mkdir -p pi-telemetry-out
+          {
+            echo "## pi.dev run metrics (GitHub-hosted · #1072 spike)"
+            echo ""
+            echo "| metric | value |"
+            echo "|---|---|"
+            echo "| issue | #${ISSUE} |"
+            echo "| model | ${PI_MODEL} |"
+            echo "| success | ${PI_SUCCESS:-n/a} |"
+            echo "| cost (USD) | ${PI_COST:-n/a} |"
+            echo "| input tokens | ${PI_IN_TOKENS:-n/a} |"
+            echo "| output tokens | ${PI_OUT_TOKENS:-n/a} |"
+            echo "| agent wall (s) | ${PI_WALL:-n/a} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          node -e '
+            const fs = require("fs")
+            const row = {
+              substrate: "github-hosted", runner: "ubuntu-latest", issue: process.env.ISSUE,
+              model: process.env.PI_MODEL, success: process.env.PI_SUCCESS === "true",
+              cost_usd: Number(process.env.PI_COST) || null,
+              input_tokens: Number(process.env.PI_IN_TOKENS) || null,
+              output_tokens: Number(process.env.PI_OUT_TOKENS) || null,
+              agent_wall_seconds: Number(process.env.PI_WALL) || null,
+              source: "pi-coding-agent-action outputs",
+            }
+            fs.writeFileSync("pi-telemetry-out/metrics.json", JSON.stringify(row, null, 2) + "\n")
+          '
+          if [ -n "${SESSION_JSONL:-}" ] && [ -f "$SESSION_JSONL" ]; then
+            cp "$SESSION_JSONL" pi-telemetry-out/session.jsonl
+          fi
+
+      # ── Artifact-gate (#461) — PASS/FAIL logic kept in sync with the mini variant ──
+      # Harness-agnostic: PASS/FAIL is GitHub-state via GITHUB_TOKEN (comment / linked
+      # PR / sub-issues / status:blocked), incl. the child-deliverable check (#1074).
+      # Differences from the mini variant: conclusion comes from the action's `success`
+      # output instead of the CLI exit code, and the "why" classifier reads the exported
+      # session JSONL instead of the tee'd CLI log. No result-comment-back — this
+      # variant is dispatch-only (a human is already watching the run).
+      - name: Artifact-gate — fail if the agent produced nothing
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          PI_EXEC_LOG: pi-telemetry-out/session.jsonl
+          PI_CONCLUSION: ${{ steps.pi.outputs.success }}
+          ISSUE_NUMBER: ${{ inputs.issue }}
+        with:
+          script: |
+            const issue_number = Number(process.env.ISSUE_NUMBER)
+            const since = '${{ steps.t0.outputs.ts }}'
+            const sinceMs = new Date(since).getTime()
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo, issue_number, since,
+            })
+            const newComment = comments.length > 0
+
+            const timeline = await github.paginate(github.rest.issues.listEventsForTimeline, {
+              ...context.repo, issue_number,
+            })
+            const prRefs = timeline.filter(e =>
+              e.event === 'cross-referenced' &&
+              e.source && e.source.issue && e.source.issue.pull_request
+            )
+            const linkedPR = prRefs.some(e => new Date(e.created_at).getTime() >= sinceMs)
+            // NOTE (#1019): a pre-existing cross-referenced PR is deliberately NOT a pass —
+            // a fresh-work run must yield a FRESH deliverable (see the mini variant).
+
+            const issue = await github.rest.issues.get({ ...context.repo, issue_number })
+            const blocked = issue.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+            const alreadyClosed = issue.data.state === 'closed'
+
+            let createdSubIssues = false
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+                ...context.repo, issue_number, per_page: 100,
+              })
+              createdSubIssues = subs.some(s => new Date(s.created_at).getTime() >= sinceMs)
+            } catch (e) { core.warning(`sub-issue check skipped: ${e.message}`) }
+
+            const signoffHeld = blocked && newComment
+            if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues) {
+              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues}`)
+              return
+            }
+
+            // ── CHILD deliverables (#1074) — kept in sync with decompose-on-issue.yml ──
+            let childDeliverable = ''
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+                ...context.repo, issue_number, per_page: 100,
+              })
+              for (const s of subs) {
+                if (s.state === 'closed' && s.closed_at && new Date(s.closed_at).getTime() >= sinceMs) {
+                  childDeliverable = `child #${s.number} closed this run`; break
+                }
+                const tl = await github.paginate(github.rest.issues.listEventsForTimeline, {
+                  ...context.repo, issue_number: s.number,
+                })
+                if (tl.some(e => e.event === 'cross-referenced' && e.source && e.source.issue &&
+                    e.source.issue.pull_request && new Date(e.created_at).getTime() >= sinceMs)) {
+                  childDeliverable = `PR linked to child #${s.number} this run`; break
+                }
+                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+                if (childBlocked) {
+                  const cc = await github.paginate(github.rest.issues.listComments, {
+                    ...context.repo, issue_number: s.number, since,
+                  })
+                  if (cc.length > 0) { childDeliverable = `child #${s.number} held for sign-off this run`; break }
+                }
+              }
+            } catch (e) { core.warning(`child-deliverable check skipped: ${e.message}`) }
+            if (childDeliverable) {
+              core.info(`Artifact-gate OK for #${issue_number} via child deliverable: ${childDeliverable}`)
+              return
+            }
+
+            // ── Classify WHY there was no deliverable ──────────────────────────────
+            // The session JSONL (action export) replaces the mini's tee'd CLI log as
+            // the failure-cause source (billing / error / underspecified — #1004 pc 3).
+            const fs = require('fs')
+            let why = '', action = '', detail = ''
+            const failed = process.env.PI_CONCLUSION !== 'true'
+            try {
+              const logFile = process.env.PI_EXEC_LOG
+              if (logFile && fs.existsSync(logFile)) {
+                const log = fs.readFileSync(logFile, 'utf8')
+                const tail = log.length > 600 ? log.slice(-600) : log
+                if (/credit balance is too low|insufficient.*(credit|balance|quota)|billing/i.test(log)) {
+                  why = 'the Anthropic key (`PI_PROVIDER_KEY`) is out of credit'
+                  action = 'top up the account, then re-dispatch' // not "enable auto-reload" — owner declined it (#1327); the pi-key-canary workflow tracks key health
+                } else if (failed) {
+                  why = 'the pi agent step errored before it built anything'
+                  action = 'open the run log, fix the SDK/tooling error, then re-dispatch'
+                  if (tail.trim()) detail = tail.trim()
+                } else {
+                  why = 'pi finished without opening a PR, creating sub-issues, or holding for sign-off'
+                  action = 'the issue is likely underspecified — add a concrete description + acceptance criteria, then re-dispatch'
+                }
+              }
+            } catch (e) { core.warning(`artifact-gate: could not read pi session log: ${e.message}`) }
+
+            if (!why && failed) {
+              why = 'the pi agent step failed before producing anything (likely out of credit, or an API/tooling error)'
+              action = 'open the run log — if it says "credit balance is too low", top up `PI_PROVIDER_KEY`; otherwise fix the logged error, then re-dispatch'
+            }
+
+            // Readable-on-mobile (epic #1336, .github/CI-MESSAGE-STYLE.md): problem + fix lead; mechanism in the footer.
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const foot = `\n\n<sub>🤖 pi.dev harness (CI · GitHub-hosted, #1072 spike) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
+            const det = detail ? `\n\n<details><summary>session tail</summary>\n\n\`\`\`\n${detail}\n\`\`\`\n</details>` : ''
+            const body = why
+              ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${det}${foot}`
+              : `🔴 **@pmcp — this run produced nothing** — no PR, no sub-issues, no sign-off hold.\n\n**Fix:** re-dispatch; if it recurs the issue is underspecified — add a description + acceptance criteria.${foot}`
+
+            await github.rest.issues.createComment({ ...context.repo, issue_number, body })
+            core.setFailed(`Artifact-gate: pi.dev hosted run on #${issue_number} produced no deliverable.`)
+
+      # ── Best-effort on-runner session scrape (#944 parity check) ──────────────────
+      # The mini variant scrapes ~/.pi/agent/sessions for subagent telemetry. On the
+      # ephemeral runner the SDK still writes under ~/.pi/agent — capture whatever
+      # exists so the #1072 comparison can judge whether the action outputs + session
+      # JSONL fully replace box scraping. Non-fatal by design.
+      - name: Capture on-runner pi session telemetry (non-fatal)
+        if: always()
+        env:
+          SINCE: ${{ steps.t0.outputs.ts }}
+        run: |
+          set +e
+          mkdir -p pi-telemetry-out
+          SESS_ROOT="$HOME/.pi/agent/sessions"
+          TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then
+            echo "pi telemetry dir: $TELE_DIR"
+            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR"          > pi-telemetry-out/pi-trace.jsonl  2>/dev/null
+            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
+            echo "── #883 ledger-row slice from THIS pi run ──"
+            cat pi-telemetry-out/ledger-rows.jsonl || true
+          else
+            echo "no on-runner subagent telemetry — expected when the run spawned no subagents. Action outputs in metrics.json are the primary telemetry."
+          fi
+
+      - name: Upload pi telemetry artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-telemetry-hosted-${{ github.run_id }}
+          path: pi-telemetry-out/
+          if-no-files-found: ignore

@@ -71,10 +71,9 @@ jobs:
             const commitUrl = `https://github.com/${owner}/${repo}/commit/${run.head_sha}`
             const title = `🚨 ${run.name} failed on ${run.head_branch} (post-merge)`
             const body = [
-              HEADER,
+              `🔴 **@pmcp — a post-merge deploy failed: \`${run.name}\` broke on \`${run.head_branch}\`.**`,
               '',
-              `**A post-merge deploy failed.** \`${run.name}\` broke on \`${run.head_branch}\` — the change is`,
-              `already merged, so this is surfaced as a fresh ticket so it isn't lost. @pmcp`,
+              `The change is already merged, so this ticket exists so the breakage isn't lost.`,
               '',
               `- **Failing run:** ${run.html_url}`,
               `- **Landed commit:** [\`${sha7}\`](${commitUrl})${run.head_commit?.message ? ' — ' + run.head_commit.message.split('\n')[0] : ''}`,
@@ -85,6 +84,7 @@ jobs:
               `1. Reproduce: re-run \`${run.name}\` or run the app's deploy locally and watch for the same error.`,
               `2. Fix the cause on a branch, open a PR (\`Closes #<this>\`), and confirm the deploy goes green.`,
               '',
+              `<sub>${HEADER.replace(/^> /, '')}</sub>`,
               MARKER,
             ].filter(l => l !== null).join('\n')
 

@@ -22,14 +22,10 @@
  * phone (out of the way — #906). The result rides in a `USlideover`. The palette markup
  * is defined once with VueUse's `createReusableTemplate` and reused in both places.
  */
-import { markRaw, computed, shallowRef, provide } from 'vue'
-import { createReusableTemplate, onKeyStroke } from '@vueuse/core'
-import type { LayoutNode, LayoutTree, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
-import { piecesToTree } from '@fyit/crouton-layout/app/utils/layout-compose-bridge'
-import { closestSnap, type Rect, type SnapTarget } from '@fyit/crouton-layout/app/utils/layout-snap'
-import { detachNode } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { computed, markRaw } from 'vue'
+import { createReusableTemplate } from '@vueuse/core'
 import type { ComposePiece } from '@fyit/crouton-layout/app/composables/useCroutonComposeGestures'
-import type { PageStatus, PageVisibility, PageLayout } from '~/utils/spike-page-meta'
+import type { CanvasMode, FlowNode, SpikeFlowHandle } from '~/utils/spike-board'
 import SpikeBlockNode from '~/components/SpikeBlockNode.vue'
 import SpikePageCard from '~/components/SpikePageCard.vue'
 
@@ -41,530 +37,53 @@ useHead({ title: 'Spike · app on Vue Flow' })
 const blockNode = markRaw(SpikeBlockNode)
 const spikePageCard = markRaw(SpikePageCard)
 
-const { magicArrange, magicArrangeAI } = useSpikeMagic()
-const { checkViability } = useCroutonLayoutBlocks()
-
-// ✨ Magic v2 is an optional add-on: the AI button only shows when the crouton-ai package
-// is installed (same hasApp() stub pattern crouton-pages uses). No AI package → no button.
-const { hasApp } = useCroutonApps()
-const hasAI = hasApp('ai')
-const aiIntent = ref('')
-const aiLoading = ref(false)
-const resultSource = ref<'deterministic' | 'ai' | 'fallback'>('deterministic')
-
 // Free (Vue Flow free placement) ⇄ Snap (magnetic compose canvas). Non-exclusive: you can
 // drop in Free, switch to Snap to bind by hand, and either feeds the same compile/magic.
-type CanvasMode = 'free' | 'snap'
 const mode = ref<CanvasMode>('free')
 const pieces = ref<ComposePiece[]>([])
 
-/** A layout the result slideover can render + let you flip between (magic or positional). */
-interface CanvasProposal { id: string, label: string, icon: string, note: string, tree: LayoutTree, viable: boolean }
-
 // Define the palette markup once; render it in the desktop sidebar AND the mobile drawer.
+// The `drawer` block list + the demo PAGES/pageRows/pageById live in app/utils/spike-demo-data
+// (auto-imported), like spike-page-meta's STATUS_META / VISIBILITY_META / LAYOUT_META.
 const [DefinePalette, ReusePalette] = createReusableTemplate()
 
-// The drawer = the blocks a collection ("Artists") offers. In the real thing this list
-// is derived from the collection; here it's the registered demo blocks.
-const drawer = [
-  // Distinct demo blocks (#956) — each renders a different, recognizable UI.
-  { blockId: 'artists-list', label: 'Artists · List', icon: 'i-lucide-list' },
-  { blockId: 'artists-form', label: 'Artists · New', icon: 'i-lucide-square-pen' },
-  { blockId: 'artists-stats', label: 'Artists · Stats', icon: 'i-lucide-gauge' },
-  { blockId: 'artists-chart', label: 'Bookings · Chart', icon: 'i-lucide-bar-chart-3' },
-  { blockId: 'app-toolbar', label: 'Top bar', icon: 'i-lucide-panel-top' },
-  { blockId: 'app-nav', label: 'Bottom nav', icon: 'i-lucide-panel-bottom' },
-  // Layout primitive (#952): empty space you can add + snap/resize like a block, to push others around.
-  { blockId: 'spacer', label: 'Spacer', icon: 'i-lucide-square-dashed' },
-]
-
-// Pre-built Vue Flow nodes (CroutonFlow ephemeral mode renders these directly). A node's
-// `data.node` is a single leaf when freshly dropped, or a bound SPLIT once blocks snap
-// together (#907) — the merged unit then drags as one node.
-// `bp` = authored responsive breakpoints for this node's layout (#907 layer 2), set in the
-// breakpoint slider you zoom into. Structural edits (snap/detach) create nodes WITHOUT bp, so
-// authored breakpoints reset when the structure they targeted changes — which is the right thing.
-interface FlowNode { id: string, type: string, position: { x: number, y: number }, data: { node: LayoutNode, label?: string, bp?: LayoutBreakpoint[], isPage?: boolean, justAdded?: boolean, region?: SpikeRegion, width?: number, height?: number } }
 const nodes = ref<FlowNode[]>([])
 let seq = 0
-
-// Undo (#940): snapshot the whole board before each mutation; Undo restores the last snapshot.
-// `nodes` is the complete board state, so a deep-cloned snapshot is a full, safe restore point.
-// (`JSONclone` is a hoisted function declaration, so it's callable here.) Cleared on entering a page.
-const UNDO_LIMIT = 50
-const undoStack = ref<FlowNode[][]>([])
-const canUndo = computed(() => undoStack.value.length > 0)
-function pushUndo() {
-  undoStack.value.push(JSONclone(nodes.value))
-  if (undoStack.value.length > UNDO_LIMIT) undoStack.value.shift()
-}
-function undo() {
-  const prev = undoStack.value.pop()
-  if (!prev) return
-  resetSnap()
-  closeEdit()
-  nodes.value = prev
-}
-// ⌘/Ctrl-Z undoes, on the board only (let inputs/textareas keep their native undo).
-onKeyStroke('z', (e) => {
-  if (!(e.metaKey || e.ctrlKey) || e.shiftKey) return
-  if (!selectedPageId.value) return
-  const t = e.target as HTMLElement | null
-  if (t && /^(INPUT|TEXTAREA)$/.test(t.tagName)) return
-  e.preventDefault()
-  undo()
-})
+const nextSeq = () => ++seq
 
 // Camera: re-frame the whole board after adding a block. CroutonFlow only fits-to-view on mount
 // (when the board is empty), so without this a freshly-added block sits at the default zoom —
 // which on a narrow phone fills the screen. The edit view owns the camera, so skip then.
-const flowRef = ref<{
-  fitView?: (o?: Record<string, unknown>) => void
-  fitBounds?: (b: { x: number, y: number, width: number, height: number }, o?: Record<string, unknown>) => void
-  setCenter?: (x: number, y: number, o?: Record<string, unknown>) => void
-} | null>(null)
+const flowRef = ref<SpikeFlowHandle | null>(null)
 
-// Pinch-to-zoom over a layout (#948): SpikeBlockNode catches a 2-finger gesture and calls this so the
-// canvas zooms even when the fingers start on a node (Vue Flow's own pinch never fires there — the
-// node's drag eats it). We read the live viewport transform and re-`setCenter` with the math that
-// keeps the pinched point fixed under the fingers (Vue Flow exposes setCenter but not setViewport).
-function pinchZoom(ratio: number, midX: number, midY: number) {
-  // Pinch zooms the CANVAS — only the full-screen edit view (zoomNodeId) owns the screen and must
-  // not be pinched.
-  if (zoomNodeId.value) return
-  const container = document.querySelector('.crouton-vue-flow') as HTMLElement | null
-  // The zoom transform lives on `.vue-flow__transformationpane` — `.vue-flow__viewport` has NO
-  // transform (it reads `none` → identity → z=1), which made the pinch math read the wrong zoom and
-  // never actually zoom. Read the pane that actually carries `translate()…scale()`. (#948)
-  const vp = container?.querySelector('.vue-flow__transformationpane') as HTMLElement | null
-  if (!container || !vp || !flowRef.value?.setCenter) return
-  const m = new DOMMatrix(getComputedStyle(vp).transform)
-  const z = m.a
-  if (!z || !isFinite(ratio) || ratio <= 0) return
-  const rect = container.getBoundingClientRect()
-  const px = midX - rect.left, py = midY - rect.top // pinch midpoint, container-relative
-  const pfx = (px - m.e) / z, pfy = (py - m.f) / z   // flow point currently under the fingers
-  const nz = Math.min(4, Math.max(0.1, z * ratio))
-  // Centre to pass so that flow point (pfx,pfy) lands back at the fingers (px,py) at the new zoom.
-  const cx = pfx + (rect.width / 2 - px) / nz
-  const cy = pfy + (rect.height / 2 - py) / nz
-  flowRef.value.setCenter(cx, cy, { zoom: nz, duration: 0 })
-}
-provide(SPIKE_PINCH_KEY, pinchZoom)
-
-// Live snap preview (#907): while a block is dragged, the target node it will snap to lights
-// up the joining edge. Provided here; SpikeBlockNode injects it and matches by object identity.
-const snapPreview = shallowRef<SpikeSnapPreview | null>(null)
-provide(SPIKE_SNAP_KEY, snapPreview)
-
-// Pull-the-pane-to-detach (#907) — the inverse of snap-merge, a BOARD gesture. A SpikeBlockNode pops
-// a pane out of a merged group and reports it here (via SPIKE_DETACH_KEY — it can't emit up through
-// CroutonFlow). We split the group's `data.node`, shrink it to the remainder, and place the freed pane
-// WHERE you dropped it (payload.dropOffset, flow coords) — falling back to the pulled side if it's
-// unavailable. (Editing a node is the separate full-screen edit view — double-click; this is detach.)
-const DETACH_GAP = 40
-function onDetach(group: LayoutNode, payload: SpikeDetachPayload) {
-  const idx = nodes.value.findIndex(n => n.data.node === group)
-  if (idx === -1) return
-  const host = nodes.value[idx]!
-  const { root, detached } = detachNode(group, [payload.index])
-  if (!detached || !root) return
-  pushUndo()
-
-  // Primary: land it where the pulled pane was released (WYSIWYG) — the node reports the pane's
-  // flow-space offset from the group's top-left, we add it to the group's known position. Fallback
-  // (no offset): place it on the side the drag pointed, just past the group's old extent.
-  const gSize = sizeOf(group) // group's extent BEFORE it shrinks
-  const dSize = sizeOf(detached)
-  const horizontal = Math.abs(payload.dir.x) >= Math.abs(payload.dir.y)
-  const pos = payload.dropOffset
-    ? { x: host.position.x + payload.dropOffset.x, y: host.position.y + payload.dropOffset.y }
-    : (horizontal
-        ? { x: payload.dir.x >= 0 ? host.position.x + gSize.width + DETACH_GAP : host.position.x - dSize.width - DETACH_GAP, y: host.position.y }
-        : { x: host.position.x, y: payload.dir.y >= 0 ? host.position.y + gSize.height + DETACH_GAP : host.position.y - dSize.height - DETACH_GAP })
-
-  const label = flattenLeaves(detached)[0]?.label
-  const freed: FlowNode = { id: `detached-${++seq}`, type: 'default', position: { x: Math.round(pos.x), y: Math.round(pos.y) }, data: { node: detached, label } }
-  // Shrink the host to the remainder (keeps its position) and add the freed pane beside it.
-  nodes.value = nodes.value.map((n, i) => i === idx ? { ...n, data: { ...n.data, node: root } } : n).concat(freed)
-}
-provide(SPIKE_DETACH_KEY, onDetach)
-
-// Reorder a pane WITHIN its layout (#952): move child `from` → `to` in the split's children, keeping
-// each child's size. The FLIP reflow animates the rearrange. Identifies the group by object identity.
-function onReorder(group: LayoutNode, payload: SpikeReorderPayload) {
-  if (group.type !== 'split') return
-  const { from, to } = payload
-  if (from === to || from < 0 || to < 0 || from >= group.children.length || to >= group.children.length) return
-  const idx = nodes.value.findIndex(n => n.data.node === group)
-  if (idx === -1) return
-  pushUndo()
-  const children = [...group.children]
-  const [moved] = children.splice(from, 1)
-  children.splice(to, 0, moved!)
-  const next: LayoutNode = { ...group, children }
-  nodes.value = nodes.value.map((n, i) => i === idx ? { ...n, data: { ...n.data, node: next } } : n)
-}
-provide(SPIKE_REORDER_KEY, onReorder)
-
-// Focus EDIT (#907 v2) — double-click a node and its layout ZOOMS UP in place: SpikeFocusShell
-// animates the card from the node's real on-screen rect to centre (a shared-element transition, NOT
-// the Vue Flow camera — so no re-measure/framing fight), the board falls away behind a blurred scrim,
-// and a minimal control shell hugs the layout (key-points pop, device + width on a floating pill;
-// collapse motion / variants behind a "⋯"). `zoomNodeId` ≠ null means the shell is open; `originRect`
-// is the node's rect captured at click so the zoom flies from exactly there.
-const zoomNodeId = ref<string | null>(null)
-const originRect = ref<{ x: number, y: number, width: number, height: number } | null>(null)
-const zoomNode = computed(() => zoomNodeId.value ? nodes.value.find(n => n.id === zoomNodeId.value) ?? null : null)
-const zoomLabel = computed(() => zoomNode.value?.data.label ?? 'Layout')
-const editing = computed(() => zoomNode.value !== null)
-
-function onNodeDblClick(id: string) {
-  if (mode.value !== 'free') return
-  if (!nodes.value.some(nd => nd.id === id)) return
-  // Capture the node's current on-screen rect so the shell flies the zoom from exactly there, at the
-  // flow's CURRENT zoom level. Use the visible CARD (`.spike-block-node`), NOT the `.vue-flow__node`
-  // wrapper — the wrapper is sized smaller than the card (the content overflows it), so its rect would
-  // start the morph from the wrong, tiny box instead of the layout you actually see on the canvas.
-  const nodeEl = import.meta.client ? document.querySelector(`.vue-flow__node[data-id="${id}"]`) : null
-  const el = nodeEl?.querySelector('.spike-block-node') ?? nodeEl
-  const r = el?.getBoundingClientRect()
-  originRect.value = r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null
-  // Open the edit view AT the node's RESIZED width (#954) — if you dragged the card's resize handle to
-  // a width, focusing it lands on that same width, not the editor default. (Replaces the old global
-  // survey-slider source.) null when the node hasn't been resized → the edit view picks its default.
-  editInitialWidth.value = nodes.value.find(n => n.id === id)?.data.width ?? null
-  zoomNodeId.value = id
-}
-const editInitialWidth = ref<number | null>(null)
-function closeEdit() {
-  zoomNodeId.value = null
-  originRect.value = null
-}
-
-// The focused node's layout as a v-model'd LayoutTree (root + authored breakpoints). The author
-// edits this directly — collapse/variant/sizes-per-keypoint all flow through `update:modelValue`,
-// so resize→keypoint is the author's own job (no separate SPIKE_RESIZE wiring). Persists back onto
-// the node by id, so the survey then reflects the authored responsiveness.
-const EMPTY_TREE: LayoutTree = { renderer: 'panes', root: { type: 'leaf', blockId: '', config: {} } }
-const zoomTree = computed<LayoutTree>({
-  get: () => {
-    const n = zoomNode.value
-    return n ? { renderer: 'panes' as const, root: n.data.node, breakpoints: n.data.bp } : EMPTY_TREE
-  },
-  set: (t: LayoutTree) => {
-    const id = zoomNodeId.value
-    if (!id) return
-    nodes.value = nodes.value.map(n => n.id === id ? { ...n, data: { ...n.data, node: t.root, bp: t.breakpoints } } : n)
-  },
+// Undo (#940) — ⌘/Ctrl-Z on the board only; snapshots before each mutation; cleared on entering a page.
+const { canUndo, pushUndo, undo, clearUndo } = useSpikeUndo(nodes, {
+  onRestore: () => { resetSnap(); closeEdit() },
+  enabled: () => !!selectedPageId.value,
 })
 
-// Detach is the BOARD pull-pane gesture (onDetach above), not an in-view affordance — so the edit
-// view stays focused purely on responsiveness. To split a merged node, pull a pane out on the board.
+// Live snap guide + dwell-to-arm + the on-release merge/pane-drop (#907/#941/#972).
+const { onNodeDragLive, onRowsUpdate, resetSnap } = useSpikeSnapDrag({ nodes, pushUndo })
 
-// Mobile palette (bottom sheet) + the compiled-layout slideover open state.
-const paletteOpen = ref(false)
-const resultOpen = ref(false)
+// Focus EDIT (#907 v2) — double-click a node and its layout zooms up in place (SpikeFocusShell).
+const { zoomNodeId, originRect, zoomLabel, editing, editInitialWidth, zoomTree, onNodeDblClick, closeEdit } = useSpikeFocusEdit(nodes, mode)
 
-// The global responsive slider was removed (#954): responsiveness is now PER-ELEMENT — drag a card's
-// resize handle to preview its layout at that width. Top-level Fit = zoom the camera to show every
-// node — just frames the board. We frame by the nodes' KNOWN geometry (position + sizeOf), NOT Vue
-// Flow's `fitView` — VF measures the `.vue-flow__node` wrapper, which is smaller than our overflowing
-// card, so its fit zooms into a corner of the oversized content. fitBounds on the real union box (like
-// fitPage does for one node) frames correctly. (#952 follow-up — same wrapper-vs-card mismatch.)
-function boardBounds(): { x: number, y: number, width: number, height: number } | null {
-  const ns = nodes.value
-  if (!ns.length) return null
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-  for (const n of ns) {
-    const s = sizeOf(n.data.node)
-    minX = Math.min(minX, n.position.x); minY = Math.min(minY, n.position.y)
-    maxX = Math.max(maxX, n.position.x + s.width); maxY = Math.max(maxY, n.position.y + s.height)
-  }
-  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY }
-}
-function fitBoard() {
-  nextTick(() => {
-    const b = boardBounds()
-    if (b && flowRef.value?.fitBounds) flowRef.value.fitBounds(b, { duration: 250, padding: 0.18 })
-    else flowRef.value?.fitView?.({ duration: 250, padding: 0.18, maxZoom: 1 })
-  })
-}
+// Pinch-to-zoom passthrough (#948) + the node callbacks SpikeBlockNode injects (detach, reorder,
+// promote-to-page, duplicate, pin-to-region, resize, delete — #907/#942/#952–#955).
+useSpikePinch(flowRef, zoomNodeId)
+useSpikeNodeOps({ nodes, pushUndo, nextSeq })
 
-/** HTML5 drag source: stamp the crouton-item payload CroutonFlow's drop handler reads. */
-function onDragStart(e: DragEvent, item: { blockId: string, label: string }) {
-  e.dataTransfer?.setData('application/json', JSON.stringify({
-    type: 'crouton-item',
-    collection: 'artists',
-    item: { id: `${item.blockId}-${++seq}`, ...item },
-  }))
-  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
-}
+// Adding blocks: HTML5 drag source, drop handler, tap-to-add (mobile), and board framing (#906).
+const { onDragStart, onNodeDrop, addBlock, fitBoard } = useSpikeBoardAdd({ nodes, flowRef, pushUndo, nextSeq })
 
-/** A clear spot to the RIGHT of every existing node (never under one), so a freshly added block
- *  lands in the open, not hidden behind a wide layout. Uses real footprints, not a fixed stride. */
-function clearSpot(): { x: number, y: number } {
-  if (!nodes.value.length) return { x: 60, y: 140 }
-  let maxRight = -Infinity, topY = Infinity
-  for (const n of nodes.value) {
-    const s = sizeOf(n.data.node)
-    maxRight = Math.max(maxRight, n.position.x + s.width)
-    topY = Math.min(topY, n.position.y)
-  }
-  return { x: Math.round(maxRight + 100), y: Math.round(topY) }
-}
-
-let justAddedTimer: number | null = null
-/** CroutonFlow emits this on drop with the flow-space position — add a fresh leaf node. */
-function onNodeDrop(item: Record<string, unknown>, position: { x: number, y: number }) {
-  pushUndo()
-  const label = String(item.label ?? item.blockId)
-  const leaf: LayoutNode = { type: 'leaf', blockId: String(item.blockId), config: { collection: 'artists', heading: label } }
-  const added: FlowNode = { id: String(item.id), type: 'default', position, data: { node: leaf, label, justAdded: true } }
-  // Clear any prior "just added" highlight so only the newest block glows; fade this one after a beat.
-  nodes.value = [...nodes.value.map(n => (n.data.justAdded ? { ...n, data: { ...n.data, justAdded: false } } : n)), added]
-  if (justAddedTimer != null) window.clearTimeout(justAddedTimer)
-  justAddedTimer = window.setTimeout(() => {
-    nodes.value = nodes.value.map(n => (n.id === added.id ? { ...n, data: { ...n.data, justAdded: false } } : n))
-  }, 2600)
-  // Center on the new block at a moderate zoom (frame it with breathing room — not too deep), so it's
-  // always visible after adding rather than hidden behind / off-screen of the existing layouts.
-  const s = sizeOf(leaf)
-  const margin = Math.max(s.width, s.height) * 0.9
-  nextTick(() => flowRef.value?.fitBounds?.(
-    { x: position.x - margin, y: position.y - margin, width: s.width + margin * 2, height: s.height + margin * 2 },
-    { duration: 350, padding: 0.1 },
-  ))
-}
-
-/** Combine two nodes into a split, flattening same-direction nesting so a third block joins
- *  the existing group as a sibling (and so spans the group's full cross-size, not just one). */
-function combineNodes(a: LayoutNode, b: LayoutNode, direction: 'horizontal' | 'vertical', aFirst: boolean): LayoutNode {
-  const ordered = aFirst ? [a, b] : [b, a]
-  const children = ordered.flatMap(n => (n.type === 'split' && n.direction === direction) ? n.children : [n])
-  return { type: 'split', direction, children }
-}
-
-// Snap tuning — shared by the live preview and the on-release merge so the glowing edge
-// you saw is exactly the edge it clicks onto.
-const SNAP_OPTS = { gap: 160, align: 0.2 } as const
-
-/** Geometry-only: which other node (and its edge) a block dragged to `pos` snaps to, or null.
- *  `others` are the candidate nodes; the dragged block's footprint comes from `movedNode`. */
-function snapAt(movedNode: LayoutNode, pos: { x: number, y: number }, others: FlowNode[]) {
-  const md = sizeOf(movedNode)
-  const drag: Rect = { x: pos.x, y: pos.y, width: md.width, height: md.height }
-  const targets: SnapTarget[] = others.map((o, idx) => {
-    const s = sizeOf(o.data.node)
-    return { path: [idx], rect: { x: o.position.x, y: o.position.y, width: s.width, height: s.height } }
-  })
-  const snap = closestSnap(drag, targets, SNAP_OPTS)
-  if (!snap) return null
-  return { target: others[snap.path[0]!]!, edge: snap.edge, tRect: targets[snap.path[0]!]!.rect, md }
-}
-
-// Where a dragged node wants to land (#972): PANEDROP — dropped OVER a layout, add it beside the pane
-// under the cursor on the side you're nearest; or EDGE-merge onto a side of a NEARBY card (the original
-// proximity snap, for building from loose cards).
-type SnapIntent =
-  | { kind: 'panedrop', target: FlowNode, paneDrop: SpikePaneDrop }
-  | { kind: 'edge', target: FlowNode, edge: SnapEdge }
-type FlowRect = { x: number, y: number, w: number, h: number }
-const clamp = (v: number, lo: number, hi: number) => Math.min(Math.max(v, lo), hi)
-// Collect every LEAF pane (and nested app — a single drop target) with its flow-space sub-rect, walking
-// each split's children by their `defaultSize` proportions. The pane under the cursor is the drop
-// target; `[]` means the whole node is one pane (a lone block). Mirrors the renderer's child sizing.
-function collectLeaves(node: LayoutNode, rect: FlowRect, path: number[], out: { path: number[], rect: FlowRect }[]) {
-  if (node.type !== 'split') { out.push({ path, rect }); return } // leaf OR nested app = a drop target
-  const horizontal = node.direction === 'horizontal'
-  const sizes = node.children.map(c => c.defaultSize ?? (100 / node.children.length))
-  const total = sizes.reduce((a, b) => a + b, 0) || node.children.length
-  let acc = 0
-  for (let i = 0; i < node.children.length; i++) {
-    const frac0 = acc / total, len = sizes[i]! / total
-    acc += sizes[i]!
-    const cr: FlowRect = horizontal
-      ? { x: rect.x + frac0 * rect.w, y: rect.y, w: len * rect.w, h: rect.h }
-      : { x: rect.x, y: rect.y + frac0 * rect.h, w: rect.w, h: len * rect.h }
-    collectLeaves(node.children[i]!, cr, [...path, i], out)
-  }
-}
-function snapIntent(movedNode: LayoutNode, pos: { x: number, y: number }, others: FlowNode[]): SnapIntent | null {
-  const md = sizeOf(movedNode)
-  const cx = pos.x + md.width / 2
-  const cy = pos.y + md.height / 2
-  // 1) PANEDROP: the drag OVERLAPS a target (≥35% of the dragged area) → drop beside the PANE under the
-  // cursor. Find the leaf pane the cursor (clamped into the target) sits in, then the side from which
-  // quadrant of that pane the cursor is over — so you can add to ANY edge of ANY pane, incl. the right
-  // of a pane that lives in a vertical stack (no pre-existing seam needed). A lone block is one pane
-  // (path []). (#972 — replaces the seam-only insert.)
-  const dl = pos.x, dr = pos.x + md.width, dt = pos.y, db = pos.y + md.height
-  for (const o of others) {
-    const node = o.data.node
-    const ts = sizeOf(node)
-    const tx = o.position.x, ty = o.position.y
-    const ox = Math.max(0, Math.min(dr, tx + ts.width) - Math.max(dl, tx))
-    const oy = Math.max(0, Math.min(db, ty + ts.height) - Math.max(dt, ty))
-    if ((ox * oy) / (md.width * md.height) < 0.35) continue // not enough over this node → try edge-snap
-    const ccx = clamp(cx, tx, tx + ts.width), ccy = clamp(cy, ty, ty + ts.height)
-    const leaves: { path: number[], rect: FlowRect }[] = []
-    collectLeaves(node, { x: tx, y: ty, w: ts.width, h: ts.height }, [], leaves)
-    // The pane containing the (clamped) cursor; else the nearest by centre.
-    let hit = leaves.find(l => ccx >= l.rect.x && ccx <= l.rect.x + l.rect.w && ccy >= l.rect.y && ccy <= l.rect.y + l.rect.h)
-    if (!hit) {
-      let bestD = Infinity
-      for (const l of leaves) {
-        const d = Math.hypot(ccx - (l.rect.x + l.rect.w / 2), ccy - (l.rect.y + l.rect.h / 2))
-        if (d < bestD) { bestD = d; hit = l }
-      }
-    }
-    if (!hit) continue
-    const lr = hit.rect
-    const relx = (ccx - (lr.x + lr.w / 2)) / lr.w
-    const rely = (ccy - (lr.y + lr.h / 2)) / lr.h
-    const edge: SnapEdge = Math.abs(relx) >= Math.abs(rely) ? (relx >= 0 ? 'right' : 'left') : (rely >= 0 ? 'bottom' : 'top')
-    const rect = { left: ((lr.x - tx) / ts.width) * 100, top: ((lr.y - ty) / ts.height) * 100, width: (lr.w / ts.width) * 100, height: (lr.h / ts.height) * 100 }
-    return { kind: 'panedrop', target: o, paneDrop: { path: hit.path, edge, rect } }
-  }
-  // 2) EDGE: proximity side-snap — merge onto the outer edge of a NEARBY (non-overlapping) card.
-  const s = snapAt(movedNode, pos, others)
-  return s ? { kind: 'edge', target: s.target, edge: s.edge } : null
-}
-
-// Live snap guide (#907): CroutonFlow streams the dragged node's position via `@node-drag`
-// (its collab sync already broadcasts it continuously). On each frame we recompute the snap
-// candidate and light up the target's joining edge — so "the side that's gonna snap lines up"
-// is visible BEFORE you let go, not just after the merge.
-// Dwell-to-snap (#941): a snap takes intent, not a brush-past. The moment you're near a snap
-// point it shows SOFT (blue, "snap point here"); hold there ~0.6s and it ARMS (green, "release to
-// snap"). A timer (not frame-based) so it still arms while the finger holds perfectly still (no
-// drag events fire then). Moving away / to a different edge resets it.
-const SNAP_DWELL_MS = 600
-let snapKey: string | null = null
-let snapTimer: number | null = null
-// The id of the node currently being dragged — the reliable way for onRowsUpdate to know WHICH node
-// moved. (Position-delta detection misses it: Vue Flow mutates node positions in place, so the rows
-// it re-emits on drag-end already equal our stored positions → no delta.) Set live, consumed on release.
-let draggedId: string | null = null
-function clearSnapTimer() { if (snapTimer != null) { window.clearTimeout(snapTimer); snapTimer = null } }
-function resetSnap() { snapPreview.value = null; snapKey = null; clearSnapTimer() }
-
-function onNodeDragLive(id: string, pos: { x: number, y: number }) {
-  draggedId = id
-  const moved = nodes.value.find(n => n.id === id)
-  if (!moved) { resetSnap(); return }
-  const intent = snapIntent(moved.data.node, pos, nodes.value.filter(n => n.id !== id))
-  if (!intent) { resetSnap(); return } // out of range → no candidate, dwell resets
-  // Dwell key is COARSE for pane-drops — keyed on the target + the PANE (path), NOT the side — so small
-  // movements that flip the nearest edge don't reset the arm timer; the side keeps tracking the finger
-  // live (base carries the current edge) and the green arms reliably after the hold.
-  const key = intent.kind === 'panedrop' ? `pane-${intent.target.id}-${intent.paneDrop.path.join('.')}` : `edge-${intent.target.id}-${intent.edge}`
-  const dragLabel = moved.data.label ?? labelFor(moved.data.node)
-  const base: SpikeSnapPreview = intent.kind === 'panedrop'
-    ? { node: intent.target.data.node, targetId: intent.target.id, paneDrop: intent.paneDrop, dragLabel, dragNode: moved.data.node }
-    : { node: intent.target.data.node, targetId: intent.target.id, edge: intent.edge, dragLabel }
-  if (key === snapKey) {
-    // Same candidate as last frame — keep the (possibly already-armed) state; don't restart dwell.
-    snapPreview.value = { ...base, armed: snapPreview.value?.armed === true }
-    return
-  }
-  // New candidate → soft state + (re)start the dwell-to-arm timer.
-  snapKey = key
-  clearSnapTimer()
-  snapPreview.value = { ...base, armed: false }
-  snapTimer = window.setTimeout(() => {
-    if (snapKey === key && snapPreview.value) snapPreview.value = { ...snapPreview.value, armed: true }
-  }, SNAP_DWELL_MS)
-}
-
-// In-flow snap + MERGE (#907) — snapping happens ON the Vue Flow canvas, no separate mode.
-// CroutonFlow re-emits the moved rows on drag stop; we OWN that update (not v-model) so our
-// write is the last one (a plain v-model would clobber it with the drop point). If the dropped
-// node lands near another's edge, the two MERGE into one node whose `data.node` is a bound
-// split — so the unit drags as one piece and the renderer stretches each pane to the group's
-// full size (a block snapped to a 2-high stack spans its full height).
-function onRowsUpdate(rowsRaw: Record<string, unknown>[]) {
-  const armed = snapPreview.value?.armed === true ? snapPreview.value : null // the green candidate at release
-  resetSnap() // drag has ended — clear the live guide + dwell timer
-  const rows = rowsRaw as unknown as FlowNode[]
-  const dragId = draggedId
-  draggedId = null
-  // Which node moved: prefer the live-tracked drag id (robust); fall back to a position delta.
-  const prev = new Map(nodes.value.map(n => [n.id, n.position]))
-  const moved = (dragId ? rows.find(r => r.id === dragId) : undefined)
-    ?? rows.find((r) => { const p = prev.get(r.id); return p && (p.x !== r.position.x || p.y !== r.position.y) })
-  if (!moved) { nodes.value = rows; return }
-  pushUndo() // a real move (reposition / merge / insert) is about to apply — snapshot first
-  // Released while only SOFT (not held long enough) → just place it; snapping requires the dwell.
-  if (!armed) { nodes.value = rows; return }
-
-  // The target FlowNode — matched by STABLE id (CroutonFlow re-emits rows on drag-end that don't keep
-  // `data.node` by reference, so the old identity match missed and the drop silently no-op'd). Fall back
-  // to node identity for safety.
-  const target = rows.find(r => r.id !== moved.id && (r.id === armed.targetId || r.data.node === armed.node))
-  if (!target) { nodes.value = rows; return }
-  const md = sizeOf(moved.data.node)
-  // Page (favorited) ALWAYS consumes (#942): if either side is the page, the result stays the page.
-  const keepPage = (target.data.isPage || moved.data.isPage) ? { isPage: true } : {}
-
-  // PANEDROP — add the dragged node beside the targeted pane (flatten into the row if the side runs
-  // along it, else wrap the pane perpendicular). Works on any pane edge, incl. the right of a pane in
-  // a vertical stack. The targeted pane may be a lone block (path []). (#972)
-  if (armed.paneDrop) {
-    const newNode = applyPaneDrop(target.data.node, armed.paneDrop, moved.data.node)
-    const groupNode: FlowNode = { ...target, data: { node: newNode, ...keepPage } }
-    nodes.value = rows.filter(r => r.id !== moved.id && r.id !== target.id).concat(groupNode)
-    return
-  }
-
-  // EDGE merge onto a side of the target (the original snap).
-  if (armed.edge) {
-    const edge = armed.edge
-    const horizontal = edge === 'left' || edge === 'right'
-    const targetFirst = edge === 'right' || edge === 'bottom'
-    const combined = combineNodes(target.data.node, moved.data.node, horizontal ? 'horizontal' : 'vertical', targetFirst)
-    const gx = edge === 'left' ? target.position.x - md.width : target.position.x
-    const gy = edge === 'top' ? target.position.y - md.height : target.position.y
-    const groupNode: FlowNode = { ...target, position: { x: Math.round(gx), y: Math.round(gy) }, data: { node: combined, ...keepPage } }
-    nodes.value = rows.filter(r => r.id !== moved.id && r.id !== target.id).concat(groupNode)
-    return
-  }
-
-  nodes.value = rows
-}
-
-// Tap-to-add (#906 mobile fix): HTML5 drag doesn't fire on touch, and the bottom-sheet
-// covers the canvas — so on a phone you can't drag a block onto the flow. Tapping a block
-// adds it directly (drag still works on desktop). New nodes stagger left-to-right so the
-// positional "As placed" reads in add order; the drawer stays open so you can add several.
-const toast = useToast()
-function addBlock(item: { blockId: string, label: string }) {
-  onNodeDrop(
-    { id: `${item.blockId}-${++seq}`, blockId: item.blockId, label: item.label },
-    clearSpot(), // open spot to the right of everything — never hidden under an existing layout
-  )
-  toast.add({ title: `Added ${item.label}`, icon: 'i-lucide-plus', duration: 1200 })
-}
-
-/** Collect every placed block (blockId + heading) under a layout node. */
-function flattenLeaves(node: LayoutNode): { blockId: string, label?: string }[] {
-  if (node.type === 'leaf') {
-    const heading = node.config?.heading
-    return [{ blockId: node.blockId, label: typeof heading === 'string' ? heading : undefined }]
-  }
-  if (node.type === 'split') return node.children.flatMap(flattenLeaves)
-  if (node.type === 'nested') return flattenLeaves(node.layout.root)
-  return []
-}
-
-/** The dropped blocks, from whichever surface is active (Free nodes / Snap pieces may
- *  each already be a merged group, so flatten their leaves). */
-function currentBlocks(): { blockId: string, label?: string }[] {
-  return mode.value === 'snap'
-    ? pieces.value.flatMap(p => flattenLeaves(p.node))
-    : nodes.value.flatMap(n => flattenLeaves(n.data.node))
-}
-const blockCount = computed(() => currentBlocks().length)
+// ✨ Magic arrange (+ optional AI tier) and the positional compile, one shared result slideover.
+const {
+  hasAI, aiIntent, aiLoading, resultSource,
+  paletteOpen, resultOpen,
+  blockCount,
+  proposals, selectedId, resultTitle, selected,
+  magic, magicAI, compile, compileLabel, reset,
+} = useSpikeProposals({ mode, pieces, nodes, pushUndo })
 
 /** Enter Snap mode — seed the compose canvas from the free nodes (each node's layout + size). */
 function enterSnap() {
@@ -592,148 +111,23 @@ function enterFree() {
   mode.value = 'free'
 }
 
-// The proposals the result slideover shows; you flip between them by id.
-const proposals = ref<CanvasProposal[]>([])
-const selectedId = ref<string>('')
-const resultTitle = ref('Layout')
-const selected = computed<CanvasProposal | null>(
-  () => proposals.value.find(p => p.id === selectedId.value) ?? proposals.value[0] ?? null,
-)
-
-/** ✨ Magic v1 (#908) — deterministic arrange + viability-gated archetype proposals. */
-function magic() {
-  const { proposals: ps, defaultId } = magicArrange(currentBlocks())
-  proposals.value = ps
-  selectedId.value = defaultId ?? ps[0]?.id ?? ''
-  resultSource.value = 'deterministic'
-  resultTitle.value = '✨ Magic layout'
-  paletteOpen.value = false
-  resultOpen.value = ps.length > 0
-}
-
-/** ✨ Magic v2 (#909) — AI proposes + ranks; deterministic composer is the viability guardrail. */
-async function magicAI() {
-  if (aiLoading.value) return
-  aiLoading.value = true
-  try {
-    const { proposals: ps, defaultId, source } = await magicArrangeAI(currentBlocks(), aiIntent.value)
-    proposals.value = ps
-    selectedId.value = defaultId ?? ps[0]?.id ?? ''
-    resultSource.value = source === 'ai' ? 'ai' : 'fallback'
-    resultTitle.value = source === 'ai' ? '✨ Magic layout · AI' : '✨ Magic layout'
-    paletteOpen.value = false
-    resultOpen.value = ps.length > 0
-  }
-  finally {
-    aiLoading.value = false
-  }
-}
-
-// "As placed" — positional infer over the canvas nodes. Each node carries its own
-// `data.node` (a leaf, or a snapped split): 1 node → its node IS the root; many → a split
-// whose axis is inferred from the spread, ordered along it, each node's layout preserved.
-function inferPositional(ns: FlowNode[]): LayoutTree | null {
-  if (!ns.length) return null
-  if (ns.length === 1) return { renderer: 'panes', root: ns[0]!.data.node }
-  const spread = (a: number[]) => Math.max(...a) - Math.min(...a)
-  const horizontal = spread(ns.map(n => n.position.x)) >= spread(ns.map(n => n.position.y))
-  const ordered = [...ns].sort((a, b) => (horizontal ? a.position.x - b.position.x : a.position.y - b.position.y))
-  return {
-    renderer: 'panes',
-    root: {
-      type: 'split',
-      direction: horizontal ? 'horizontal' : 'vertical',
-      children: ordered.map(n => ({ ...n.data.node, defaultSize: Math.round((100 / ordered.length) * 10) / 10 })),
-    },
-  }
-}
-// Compile the current surface into a LayoutTree. Snap → the bound `piecesToTree` (#899);
-// Free → the positional infer. Both flow into the SAME slideover (one shared model).
-const compileLabel = computed(() => (mode.value === 'snap' ? 'Compile snapped' : 'As placed'))
-function compile() {
-  const snap = mode.value === 'snap'
-  const tree = snap
-    ? (pieces.value.length ? piecesToTree(pieces.value) : null)
-    : inferPositional(nodes.value)
-  if (!tree) { proposals.value = []; return }
-  proposals.value = [{
-    id: 'positional',
-    label: snap ? 'Snapped' : 'As placed',
-    icon: snap ? 'i-lucide-magnet' : 'i-lucide-move',
-    note: snap ? 'Your snapped arrangement' : 'Exactly where you dropped them',
-    tree,
-    viable: checkViability(tree, [1280, 768]).viable,
-  }]
-  selectedId.value = 'positional'
-  resultTitle.value = snap ? 'Snapped layout' : 'Compiled layout'
-  paletteOpen.value = false
-  resultOpen.value = true
-}
-function reset() {
-  if (nodes.value.length) pushUndo()
-  nodes.value = []
-  pieces.value = []
-  proposals.value = []
-  selectedId.value = ''
-  resultOpen.value = false
-}
-
 // ── Site level (#940, approach B) — a page-flow ON TOP of the spike board ──────
-// Pick a page on the flow → its layout seeds the board → arrange/edit (incl. the
-// focus editor) → "← Pages" stores it back. One board (= one layout) per page,
-// persisted in-session so zooming out to Site and back keeps your edits exactly.
-// Mirror @fyit/crouton-pages' real page model (#940): the builder is just another VIEW of the pages
-// collection, so the header reflects the package's actual fields/enums/icons (see
-// packages/crouton-pages/schemas/pages.json + app/components/Editor/Toolbar.vue). Demo values here;
-// the real builder reads the page row — and at graduation should REUSE the package's toolbar/settings
-// rather than mirror them. Class strings are literal (not `bg-${x}`) so Tailwind's JIT keeps them.
-// Page-model enums + display meta (status / visibility / layout) live in app/utils/spike-page-meta
-// (auto-imported) so the board page-shell here AND the Site-flow page card read ONE source of truth.
-interface BuilderPage {
-  id: string, label: string, icon?: string, path?: string
-  status?: PageStatus, visibility?: PageVisibility, layout?: PageLayout, showInNavigation?: boolean
-  tree: LayoutTree
-}
-const pageSplit = (a: string, b: string, dir: 'horizontal' | 'vertical' = 'horizontal'): LayoutTree['root'] => ({
-  type: 'split', direction: dir,
-  children: [{ type: 'leaf', blockId: a, defaultSize: 50 }, { type: 'leaf', blockId: b, defaultSize: 50 }],
-})
-const PAGES: BuilderPage[] = [
-  {
-    id: 'dashboard', label: 'Dashboard', icon: 'i-lucide-layout-dashboard',
-    path: '/dashboard', status: 'published', visibility: 'members', layout: 'default', showInNavigation: true,
-    tree: { renderer: 'panes', root: { type: 'split', direction: 'horizontal', children: [
-      { type: 'leaf', blockId: 'artists-list', defaultSize: 34 },
-      { type: 'leaf', blockId: 'artists-stats', defaultSize: 33 },
-      { type: 'leaf', blockId: 'artists-form', defaultSize: 33 },
-    ] } },
+const { selectedPageId, zoomDir, currentPage, currentPageLabel, enterPage, exitToPages } = useSpikePageNav({
+  nodes,
+  flowRef,
+  nextSeq,
+  closeEdit,
+  isEditing: () => !!zoomNodeId.value,
+  resetTransient: () => {
+    // clean transient board state for a fresh entry
+    mode.value = 'free'
+    proposals.value = []
+    resultOpen.value = false
+    paletteOpen.value = false
+    clearUndo() // fresh board context — don't undo across page boundaries
   },
-  { id: 'reports', label: 'Reports', icon: 'i-lucide-bar-chart-3', path: '/reports', status: 'draft', visibility: 'admin', layout: 'full-height', showInNavigation: true, tree: { renderer: 'panes', root: pageSplit('artists-stats', 'artists-list') } },
-  { id: 'settings', label: 'Settings', icon: 'i-lucide-settings', path: '/settings', status: 'published', visibility: 'public', layout: 'default', showInNavigation: false, tree: { renderer: 'panes', root: { type: 'leaf', blockId: 'artists-form' } } },
-]
-// STATUS_META / VISIBILITY_META / LAYOUT_META are auto-imported from app/utils/spike-page-meta.
-// The same pages as crouton-flow rows (Dashboard is root; others hang off it) — ENRICHED from PAGES
-// so the Site-flow cards carry the settings (status · visibility · layout · nav · icon · path) they
-// now display condensed. Parent wiring (parentId) is the sitemap hierarchy.
-const PAGE_PARENTS: Record<string, string | null> = { dashboard: null, reports: 'dashboard', settings: 'dashboard' }
-const pageRows = PAGES.map(p => ({
-  id: p.id, label: p.label, parentId: PAGE_PARENTS[p.id] ?? null,
-  icon: p.icon, path: p.path, status: p.status, visibility: p.visibility,
-  layout: p.layout, showInNavigation: p.showInNavigation,
-}))
-const pageById = (id: unknown) => PAGES.find(p => p.id === String(id))
+})
 
-// Per-page board state — persist the FlowNode[] verbatim so positions, merges, and
-// per-node breakpoints all survive a round-trip out to Site and back (no lossy recompile).
-const pageBoards = new Map<string, FlowNode[]>()
-const selectedPageId = ref<string | null>(null)
-// Direction of the page⇄site cross-fade: 'in' grows the page in (opening), 'out' settles back to the
-// flow (returning). Set before the swap so the right curve plays. (#940)
-const zoomDir = ref<'in' | 'out'>('in')
-const currentPageLabel = computed(() => (selectedPageId.value ? pageById(selectedPageId.value)?.label ?? 'Page' : ''))
-// The page being edited → drives the page-shell header (icon · name · path · access · status). The
-// header collapses to just icon+name+chips; expanding reveals the path + full access/status labels.
-const currentPage = computed(() => (selectedPageId.value ? pageById(selectedPageId.value) ?? null : null))
 const pageHeaderExpanded = ref(false)
 // The header's pages-package controls (preview / open-public) are display-only in the POC — on
 // graduation they wire to the real crouton-pages actions (this view is just another view of pages).
@@ -741,70 +135,6 @@ function mockPageAction(name: string) {
   useToast().add({ title: name, description: 'Mock — wires to the pages package on graduation', icon: 'i-lucide-info', duration: 1500 })
 }
 
-function labelFor(node: LayoutNode): string {
-  if (node.type === 'leaf') { const h = node.config?.heading; return typeof h === 'string' ? h : node.blockId }
-  if (node.type === 'nested') return node.label || 'App'
-  return 'Group'
-}
-/** Seed an existing page as ONE composed node — the whole layout, badged as THE page (#942), so
- *  zooming in shows what the page actually looks like (WYSIWYG), not loose exploded cards. Drafts
- *  you add later coexist beside it. (An empty page just starts with a blank board.) */
-function treeToBoardNodes(tree: LayoutTree): FlowNode[] {
-  return [{
-    id: `page-${selectedPageId.value}-${++seq}`,
-    type: 'default',
-    position: { x: 80, y: 120 },
-    data: { node: tree.root, label: pageById(selectedPageId.value)?.label ?? 'Page', bp: tree.breakpoints, isPage: true },
-  }]
-}
-
-// ── Page promotion (#942) — the board is a sandbox; one node is "the page" (data.isPage). ──
-function JSONclone<T>(v: T): T { return JSON.parse(JSON.stringify(v)) as T }
-/** Promote a node to BE the page — the badge moves to it; all others become drafts. */
-function setAsPage(node: LayoutNode) {
-  pushUndo()
-  nodes.value = nodes.value.map(n => ({ ...n, data: { ...n.data, isPage: n.data.node === node } }))
-}
-/** Duplicate a node as a free draft (deep-cloned) so you can rearrange the copy, then promote it. */
-function duplicateNode(node: LayoutNode) {
-  const src = nodes.value.find(n => n.data.node === node)
-  if (!src) return
-  pushUndo()
-  nodes.value = [...nodes.value, {
-    id: `copy-${++seq}`,
-    type: 'default',
-    position: { x: src.position.x + 48, y: src.position.y + 48 },
-    data: {
-      node: JSONclone(src.data.node),
-      label: src.data.label ? `${src.data.label} copy` : undefined,
-      bp: src.data.bp ? JSONclone(src.data.bp) : undefined,
-      isPage: false,
-    },
-  }]
-}
-/** Pin a node to the page's top/bottom edge as a sticky region, or clear it (#953). */
-function setRegion(node: LayoutNode, region: SpikeRegion | null) {
-  pushUndo()
-  nodes.value = nodes.value.map(n => n.data.node === node ? { ...n, data: { ...n.data, region: region ?? undefined } } : n)
-}
-/** Per-node resize (#954): set this node's display width/height (null width clears to footprint). The
- *  card then previews responsively at that width. No pushUndo per move (it fires continuously). */
-function setNodeSize(node: LayoutNode, sizeArg: SpikeNodeSize) {
-  nodes.value = nodes.value.map(n => n.data.node === node
-    ? { ...n, data: { ...n.data, width: sizeArg.width ?? undefined, height: (sizeArg.width === null ? undefined : (sizeArg.height ?? n.data.height)) } }
-    : n)
-}
-provide(SPIKE_SET_PAGE_KEY, setAsPage)
-provide(SPIKE_DUPLICATE_KEY, duplicateNode)
-/** Delete a node (block or whole layout) from the canvas (#955). Undoable. */
-function deleteNode(node: LayoutNode) {
-  if (!nodes.value.some(n => n.data.node === node)) return
-  pushUndo()
-  nodes.value = nodes.value.filter(n => n.data.node !== node)
-}
-provide(SPIKE_SET_REGION_KEY, setRegion)
-provide(SPIKE_SET_SIZE_KEY, setNodeSize)
-provide(SPIKE_DELETE_KEY, deleteNode)
 // Assemble the page for Preview (#953): pinned nodes become top/bottom bars, the rest is the main flow.
 const previewOpen = ref(false)
 const topRegionNodes = computed(() => nodes.value.filter(n => n.data.region === 'top'))
@@ -815,58 +145,10 @@ const mainRegionNodes = computed(() => {
   const page = main.filter(n => n.data.isPage)
   return page.length ? page : main
 })
-// Same contract the package's SiteFlow provides — our SpikePageCard injects this to "open the full
-// page" (descend into the board). enterPage is a hoisted function declaration, available here.
-provide('croutonSiteFlowZoom', (id: string) => enterPage(id))
-/** Stash the current board onto the open page so it can be restored on return. */
-function stashCurrentBoard() {
-  if (selectedPageId.value) pageBoards.set(selectedPageId.value, nodes.value)
-}
-/** Centre + fit the page's layout on entry. The flow is freshly mounted (v-if) and Vue Flow
- *  measures node size async, so a single early fit frames a stale (zero/partial) box and the
- *  layout falls off-screen — retry across a few frames until the node is measured. */
-function fitPage() {
-  if (zoomNodeId.value) return
-  const fit = () => {
-    const page = nodes.value.find(n => n.data.isPage)
-    if (page) {
-      // Frame the page node by its KNOWN geometry (position + footprint size), NOT Vue Flow's
-      // measured dimensions — those are stale on a fresh mount. duration:0 = snap to fitted on
-      // arrival (no visible zoom-out animation); the early retries just make sure the snap lands
-      // once flowRef is mounted.
-      const s = sizeOf(page.data.node)
-      flowRef.value?.fitBounds?.({ x: page.position.x, y: page.position.y, width: s.width, height: s.height }, { duration: 0, padding: 0.18 })
-    }
-    else {
-      flowRef.value?.fitView?.({ duration: 0, padding: 0.2, maxZoom: 1 })
-    }
-  }
-  nextTick(fit)
-  for (const d of [40, 120, 300]) window.setTimeout(fit, d)
-}
-/** Site → page: load (or first-seed) that page's board and show the editor. */
-function enterPage(id: string) {
-  const page = pageById(id)
-  if (!page) return
-  stashCurrentBoard()
-  // clean transient board state for a fresh entry
-  mode.value = 'free'; zoomNodeId.value = null; originRect.value = null
-  proposals.value = []; resultOpen.value = false; paletteOpen.value = false
-  undoStack.value = [] // fresh board context — don't undo across page boundaries
-  zoomDir.value = 'in'
-  selectedPageId.value = id
-  nodes.value = pageBoards.get(id) ?? treeToBoardNodes(page.tree)
-  fitPage()
-}
-/** Page → Site: persist the board and go back to the page flow. */
-function exitToPages() {
-  stashCurrentBoard()
-  zoomNodeId.value = null; originRect.value = null
-  zoomDir.value = 'out'
-  selectedPageId.value = null
-}
 </script>
 
+<!-- Template unchanged by the #1240 script split (byte-identical); restructuring it into components is the tracked follow-up tail. -->
+<!-- fallow-ignore-next-line complexity -->
 <template>
   <!-- h-dvh (dynamic viewport height), NOT h-screen/100vh — so the bottom command pill sits above the
        mobile browser toolbar instead of behind it (iOS Safari occludes 100vh's bottom). -->

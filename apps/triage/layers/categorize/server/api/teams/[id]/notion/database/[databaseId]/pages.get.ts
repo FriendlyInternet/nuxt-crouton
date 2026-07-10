@@ -40,41 +40,101 @@ function extractUser(user: any): NotionUser | null {
   return { name: user.name || undefined, id: user.id }
 }
 
+const propertySimplifiers: Record<string, (prop: any) => unknown> = {
+  title: prop => prop.title?.map((t: any) => t.plain_text).join('') || '',
+  rich_text: prop => prop.rich_text?.map((t: any) => t.plain_text).join('') || '',
+  select: prop => prop.select?.name || null,
+  multi_select: prop => prop.multi_select?.map((s: any) => s.name) || [],
+  status: prop => prop.status?.name || null,
+  number: prop => prop.number,
+  checkbox: prop => prop.checkbox,
+  date: prop => prop.date?.start || null,
+  url: prop => prop.url || null,
+  email: prop => prop.email || null,
+  people: prop => prop.people?.map((p: any) => p.name || p.id) || [],
+  created_by: prop => prop.created_by?.name || prop.created_by?.id || null,
+  last_edited_by: prop => prop.last_edited_by?.name || prop.last_edited_by?.id || null,
+  created_time: prop => prop.created_time || null,
+  last_edited_time: prop => prop.last_edited_time || null,
+}
+
 function simplifyProperty(prop: any): unknown {
-  switch (prop.type) {
-    case 'title':
-      return prop.title?.map((t: any) => t.plain_text).join('') || ''
-    case 'rich_text':
-      return prop.rich_text?.map((t: any) => t.plain_text).join('') || ''
-    case 'select':
-      return prop.select?.name || null
-    case 'multi_select':
-      return prop.multi_select?.map((s: any) => s.name) || []
-    case 'status':
-      return prop.status?.name || null
-    case 'number':
-      return prop.number
-    case 'checkbox':
-      return prop.checkbox
-    case 'date':
-      return prop.date?.start || null
-    case 'url':
-      return prop.url || null
-    case 'email':
-      return prop.email || null
-    case 'people':
-      return prop.people?.map((p: any) => p.name || p.id) || []
-    case 'created_by':
-      return prop.created_by?.name || prop.created_by?.id || null
-    case 'last_edited_by':
-      return prop.last_edited_by?.name || prop.last_edited_by?.id || null
-    case 'created_time':
-      return prop.created_time || null
-    case 'last_edited_time':
-      return prop.last_edited_time || null
-    default:
-      return null
+  const simplifier = Object.hasOwn(propertySimplifiers, prop.type)
+    ? propertySimplifiers[prop.type]
+    : undefined
+  return simplifier ? simplifier(prop) : null
+}
+
+async function queryDatabasePage(databaseId: string, token: string, cursor: string | undefined): Promise<any> {
+  const body: Record<string, unknown> = { page_size: 100 }
+  if (cursor) body.start_cursor = cursor
+
+  return await $fetch<any>(`https://api.notion.com/v1/databases/${databaseId}/query`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Notion-Version': NOTION_API_VERSION,
+      'Content-Type': 'application/json',
+    },
+    body,
+  })
+}
+
+function simplifyPage(page: any): NotionPage {
+  const simplifiedProps: Record<string, unknown> = {}
+  let createdByFromProp: NotionUser | null = null
+  let lastEditedByFromProp: NotionUser | null = null
+
+  for (const [name, prop] of Object.entries(page.properties || {}) as [string, any][]) {
+    simplifiedProps[name] = simplifyProperty(prop)
+    // Extract full user objects from property columns (these have names)
+    if (prop.type === 'created_by') createdByFromProp = extractUser(prop.created_by)
+    if (prop.type === 'last_edited_by') lastEditedByFromProp = extractUser(prop.last_edited_by)
   }
+
+  return {
+    id: page.id,
+    title: extractTitle(page.properties || {}),
+    url: page.url,
+    properties: simplifiedProps,
+    createdTime: page.created_time,
+    lastEditedTime: page.last_edited_time,
+    createdBy: createdByFromProp || extractUser(page.created_by),
+    lastEditedBy: lastEditedByFromProp || extractUser(page.last_edited_by),
+  }
+}
+
+async function fetchAllPages(databaseId: string, token: string): Promise<NotionPage[]> {
+  const allPages: NotionPage[] = []
+  let cursor: string | undefined
+
+  // Paginate through all pages
+  do {
+    const response = await queryDatabasePage(databaseId, token, cursor)
+
+    for (const page of response.results || []) {
+      allPages.push(simplifyPage(page))
+    }
+
+    cursor = response.has_more ? response.next_cursor : undefined
+  } while (cursor)
+
+  return allPages
+}
+
+function toPagesError(error: any) {
+  if (error.status === 401 || error.statusCode === 401) {
+    return createError({ status: 401, statusText: 'Invalid Notion token' })
+  }
+  if (error.status === 404 || error.statusCode === 404) {
+    return createError({ status: 404, statusText: 'Database not found. Check ID and integration access.' })
+  }
+  if (error.statusCode) return error
+
+  return createError({
+    status: 500,
+    statusText: error.message || 'Failed to fetch Notion pages',
+  })
 }
 
 export default defineEventHandler(async (event) => {
@@ -98,50 +158,7 @@ export default defineEventHandler(async (event) => {
   })
 
   try {
-    const allPages: NotionPage[] = []
-    let cursor: string | undefined
-
-    // Paginate through all pages
-    do {
-      const body: Record<string, unknown> = { page_size: 100 }
-      if (cursor) body.start_cursor = cursor
-
-      const response = await $fetch<any>(`https://api.notion.com/v1/databases/${databaseId}/query`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Notion-Version': NOTION_API_VERSION,
-          'Content-Type': 'application/json',
-        },
-        body,
-      })
-
-      for (const page of response.results || []) {
-        const simplifiedProps: Record<string, unknown> = {}
-        let createdByFromProp: NotionUser | null = null
-        let lastEditedByFromProp: NotionUser | null = null
-
-        for (const [name, prop] of Object.entries(page.properties || {}) as [string, any][]) {
-          simplifiedProps[name] = simplifyProperty(prop)
-          // Extract full user objects from property columns (these have names)
-          if (prop.type === 'created_by') createdByFromProp = extractUser(prop.created_by)
-          if (prop.type === 'last_edited_by') lastEditedByFromProp = extractUser(prop.last_edited_by)
-        }
-
-        allPages.push({
-          id: page.id,
-          title: extractTitle(page.properties || {}),
-          url: page.url,
-          properties: simplifiedProps,
-          createdTime: page.created_time,
-          lastEditedTime: page.last_edited_time,
-          createdBy: createdByFromProp || extractUser(page.created_by),
-          lastEditedBy: lastEditedByFromProp || extractUser(page.last_edited_by),
-        })
-      }
-
-      cursor = response.has_more ? response.next_cursor : undefined
-    } while (cursor)
+    const allPages = await fetchAllPages(databaseId, token)
 
     return {
       success: true,
@@ -151,17 +168,6 @@ export default defineEventHandler(async (event) => {
     }
   }
   catch (error: any) {
-    if (error.status === 401 || error.statusCode === 401) {
-      throw createError({ status: 401, statusText: 'Invalid Notion token' })
-    }
-    if (error.status === 404 || error.statusCode === 404) {
-      throw createError({ status: 404, statusText: 'Database not found. Check ID and integration access.' })
-    }
-    if (error.statusCode) throw error
-
-    throw createError({
-      status: 500,
-      statusText: error.message || 'Failed to fetch Notion pages',
-    })
+    throw toPagesError(error)
   }
 })
