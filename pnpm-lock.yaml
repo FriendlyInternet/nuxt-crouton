@@ -1939,6 +1939,28 @@ importers:
         specifier: 'catalog:'
         version: 4.101.0(@cloudflare/workers-types@4.20260118.0)
 
+  sandboxes/unstyled-spike:
+    dependencies:
+      '@nuxt/ui':
+        specifier: ^4.9.0
+        version: 4.9.0(e35571ed4d3716fd49479fca477900a2)
+      eruda:
+        specifier: ^3.4.3
+        version: 3.4.3
+      nuxt:
+        specifier: ^4.4.8
+        version: 4.4.8(acbda501943d3a88c40c15b150712194)
+      vue:
+        specifier: ^3.5.38
+        version: 3.5.38(typescript@5.9.3)
+      vue-router:
+        specifier: 'catalog:'
+        version: 5.1.0(@vue/compiler-sfc@3.5.38)(vite@7.3.5(@types/node@22.19.7)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(vue@3.5.38(typescript@5.9.3))
+    devDependencies:
+      wrangler:
+        specifier: 'catalog:'
+        version: 4.101.0(@cloudflare/workers-types@4.20260118.0)
+
   workers/ticket-editor: {}
 
 packages:

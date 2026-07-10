@@ -150,6 +150,10 @@
   color: "d4c5f9"
   description: "Sandbox: sandboxes/minimal-theme-demo"
 
+- name: "sandbox:unstyled-spike"
+  color: "d4c5f9"
+  description: "Sandbox: sandboxes/unstyled-spike"
+
 # ── Workers (workers/*) ──
 - name: "worker:collab-worker"
   color: "5319e7"
