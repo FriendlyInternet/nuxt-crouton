@@ -21,7 +21,9 @@
     "./terminal": "./terminal/nuxt.config.ts",
     "./terminal/*": "./terminal/*",
     "./braun": "./braun/nuxt.config.ts",
-    "./braun/*": "./braun/*"
+    "./braun/*": "./braun/*",
+    "./gameboy": "./gameboy/nuxt.config.ts",
+    "./gameboy/*": "./gameboy/*"
   },
   "files": [
     "themes",
@@ -33,6 +35,7 @@
     "mtv",
     "terminal",
     "braun",
+    "gameboy",
     "lib"
   ],
   "keywords": [

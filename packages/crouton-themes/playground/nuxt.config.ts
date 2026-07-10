@@ -25,6 +25,7 @@ export default defineNuxtConfig({
     '../brutalist',
     '../mtv',
     '../terminal',
-    '../braun'
+    '../braun',
+    '../gameboy'
   ]
 })

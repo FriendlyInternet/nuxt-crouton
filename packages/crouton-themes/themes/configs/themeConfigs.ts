@@ -139,6 +139,18 @@ const braunConfig: ThemeUIConfig = {
   badge: { defaultVariants: { variant: 'braun' } }
 }
 
+// Game Boy — named variants registered by gameboy/app.config.ts
+const gameboyConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'green',
+    neutral: 'stone'
+  },
+  button: { defaultVariants: { variant: 'gameboy' } },
+  input: { defaultVariants: { variant: 'gameboy' } },
+  card: { defaultVariants: { variant: 'gameboy' } },
+  badge: { defaultVariants: { variant: 'gameboy' } }
+}
+
 // Export all theme configs
 export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   default: defaultConfig,
@@ -149,5 +161,6 @@ export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   brutalist: brutalistConfig,
   mtv: mtvConfig,
   terminal: terminalConfig,
-  braun: braunConfig
+  braun: braunConfig,
+  gameboy: gameboyConfig
 }

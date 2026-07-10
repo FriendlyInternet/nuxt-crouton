@@ -123,6 +123,17 @@ const { variant } = useThemeSwitcher()
 
 ## Available Themes
 
+### Game Boy Theme (`./gameboy`)
+
+The original DMG LCD: FOUR shades of olive green (`--gb-0..3`) and nothing else.
+Square corners, chunky 3px "pixel" borders, RPG dialog-box cards (double frame),
+a `▶` cursor on ghost hover. Error/warning map onto the shades via inversion +
+hazard stripes — never hue. Body copy is always gb-0-on-gb-3/gb-2 (the AA pair);
+other shade pairs are decorative-only.
+
+**Nuxt UI Variants:** `gameboy` / `gameboy-{solid,outline,soft,ghost,link}` (UButton);
+`gameboy` for UInput, UCard, UBadge, USeparator. USwitch themed ambiently.
+
 ### Braun Theme (`./braun`)
 
 Warm analog hi-fi (Dieter Rams): cream chassis, 1px hairlines, very soft real

@@ -4,7 +4,7 @@
 
 import { THEME_UI_CONFIGS } from '../configs/themeConfigs'
 
-export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'default'
+export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy' | 'default'
 
 type BaseVariant = 'solid' | 'outline' | 'soft' | 'ghost' | 'link'
 
@@ -80,6 +80,13 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     label: 'Braun',
     description: 'Warm analog hi-fi — cream, hairlines, one orange accent',
     colors: ['#f2efe9', '#f26c1d', '#2e2c29'], // cream, orange, charcoal
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'gameboy',
+    label: 'Game Boy',
+    description: 'Four shades of olive green, chunky pixels',
+    colors: ['#0f380f', '#8bac0f', '#9bbc0e'], // ink, light, screen
     defaultVariant: 'solid'
   }
 ]
