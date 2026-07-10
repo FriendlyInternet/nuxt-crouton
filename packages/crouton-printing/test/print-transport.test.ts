@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  DEFAULT_PRINT_TRANSPORT,
   PRINT_TRANSPORT,
   isPrintTransport,
   transportAllows,
@@ -54,10 +55,11 @@ const transportUpdates = (db: any) => db.updates.filter((u: any) => u.table === 
 // The gate itself
 // ---------------------------------------------------------------------------
 describe('transportAllows', () => {
-  it('no row (legacy event) allows BOTH transports — back-compat for existing rigs', () => {
-    expect(transportAllows(undefined, PRINT_TRANSPORT.LOCAL_DRAINER)).toBe(true)
+  it('no row resolves to the default (router-spooler) — the choice is always exclusive', () => {
+    expect(DEFAULT_PRINT_TRANSPORT).toBe('router-spooler')
     expect(transportAllows(undefined, PRINT_TRANSPORT.ROUTER_SPOOLER)).toBe(true)
-    expect(transportAllows(null, PRINT_TRANSPORT.LOCAL_DRAINER)).toBe(true)
+    expect(transportAllows(undefined, PRINT_TRANSPORT.LOCAL_DRAINER)).toBe(false)
+    expect(transportAllows(null, PRINT_TRANSPORT.LOCAL_DRAINER)).toBe(false)
   })
 
   it('local-drainer row: drainer yes, spooler no', () => {
@@ -119,7 +121,7 @@ describe('drainPendingEscposJobs transport gating', () => {
   // a status-'9' update we can count.
   const job = (id: string, eventId: string | null) => ({ id, payload: 'QQ==', printerIp: null, printerPort: 9100, eventId })
 
-  it('drains local-drainer, unset (legacy) and event-less jobs; skips router-spooler and none', async () => {
+  it('drains local-drainer events and event-less jobs; skips router-spooler, none, and unset (default)', async () => {
     const db = fakeDb({
       jobs: [job('j1', 'e-spooler'), job('j2', 'e-drainer'), job('j3', 'e-unset'), job('j4', 'e-none'), job('j5', null)],
       transports: [
@@ -129,15 +131,17 @@ describe('drainPendingEscposJobs transport gating', () => {
       ]
     })
     const { processed } = await drainPendingEscposJobs(db as any)
-    expect(processed).toBe(3) // j2 + j3 + j5
-    // one claim update (pending→printing) + one fail update per processed job
+    // j2 (explicit local-drainer) + j5 (event-less: only the drainer can ever
+    // deliver those — the spooler endpoint is per-event). j3's unset event
+    // defaults to router-spooler, so it is NOT drained.
+    expect(processed).toBe(2)
     const fails = jobUpdates(db).filter(u => u.set.status === '9')
-    expect(fails).toHaveLength(3)
+    expect(fails).toHaveLength(2)
   })
 
-  it('processes nothing when every event is gated away — and never claims', async () => {
+  it('processes nothing when every event routes elsewhere — and never claims', async () => {
     const db = fakeDb({
-      jobs: [job('j1', 'e1'), job('j2', 'e2')],
+      jobs: [job('j1', 'e1'), job('j2', 'e2'), job('j3', 'e-unset')],
       transports: [
         { eventId: 'e1', transport: 'router-spooler', lastDrainerTickAt: null },
         { eventId: 'e2', transport: 'none', lastDrainerTickAt: null }
@@ -146,31 +150,6 @@ describe('drainPendingEscposJobs transport gating', () => {
     const { processed } = await drainPendingEscposJobs(db as any)
     expect(processed).toBe(0)
     expect(jobUpdates(db)).toHaveLength(0)
-  })
-
-  it('keeps exact legacy behaviour when no transport rows exist at all', async () => {
-    const db = fakeDb({ jobs: [job('j1', 'e1')], transports: [] })
-    const { processed } = await drainPendingEscposJobs(db as any)
-    expect(processed).toBe(1)
-    expect(jobUpdates(db).filter(u => u.set.status === '9')).toHaveLength(1)
-  })
-
-  it('falls back to legacy behaviour when the print_transports table is unreadable (migration not applied)', async () => {
-    // Selecting from print_transports throws ("no such table") — the tick must
-    // keep draining instead of failing: a package update before the migration
-    // runs must never stop the printers.
-    const db = fakeDb({ jobs: [job('j1', 'e1')] })
-    const brokenSelectable: any = {
-      where: () => brokenSelectable,
-      limit: () => brokenSelectable,
-      then: (_res: any, rej: any) => Promise.reject(new Error('no such table: print_transports')).then(_res, rej)
-    }
-    const origSelect = db.select
-    db.select = () => ({
-      from: (t: any) => (t === printTransports ? brokenSelectable : origSelect().from(t))
-    })
-    const { processed } = await drainPendingEscposJobs(db as any)
-    expect(processed).toBe(1)
   })
 
   it('stamps lastDrainerTickAt on stale local-drainer rows, even with zero jobs', async () => {

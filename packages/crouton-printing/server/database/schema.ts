@@ -111,8 +111,9 @@ export const printJobs = sqliteTable('print_jobs', {
  * the RUT956 script), and "run either one, never both" was only a comment.
  * This row makes the choice per-event data, enforced at both drain points.
  *
- * NO ROW = legacy behaviour (both transports allowed) so existing rigs are
- * untouched; a row makes the choice exclusive. `transport = 'none'` parks the
+ * The choice is ALWAYS exclusive: an event without a row uses the default
+ * (`router-spooler`, the cloud/production flow — DEFAULT_PRINT_TRANSPORT), so
+ * two transports can never serve one event. `transport = 'none'` parks the
  * event: jobs stay pending, nobody delivers. `browser-print` jobs are not
  * governed by this — that driver is chosen per printer.
  *

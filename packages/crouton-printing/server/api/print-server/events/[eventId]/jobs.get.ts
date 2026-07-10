@@ -28,8 +28,8 @@ export default defineEventHandler(async (event) => {
   const db = useDB()
 
   // Per-event transport gate (#1324). A row that picks another transport gets
-  // a soft-empty [] — old router scripts loop happily on empty, a 4xx would
-  // spam their logs. No row = legacy behaviour (spooler allowed). While
+  // a soft-empty [] — router scripts loop happily on empty, a 4xx would spam
+  // their logs. No row = the default (router-spooler → allowed). While
   // allowed, stamp the liveness readout (throttled) for the settings UI.
   const transportRow = await getPrintTransport(db, eventId)
   if (!transportAllows(transportRow?.transport, PRINT_TRANSPORT.ROUTER_SPOOLER)) {

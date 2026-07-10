@@ -5,8 +5,9 @@
  * One `print_transports` row per event decides WHO delivers that event's
  * thermal jobs: the in-process TCP drainer (`local-drainer`), the on-site
  * router spooler (`router-spooler`), or nobody (`none` — jobs stay pending).
- * No row = legacy behaviour: both transports allowed, exactly the pre-#1324
- * world, so existing rigs keep working without a settings row.
+ * The choice is ALWAYS exclusive: an event without a row uses
+ * DEFAULT_PRINT_TRANSPORT (`router-spooler`, the cloud/production flow), so
+ * two transports can never serve the same event.
  *
  * The gate is consulted at both drain points — `drainPendingEscposJobs` and
  * the spooler's `jobs.get` endpoint — via `transportAllows`. `db` is passed by
@@ -23,6 +24,9 @@ export const PRINT_TRANSPORT = {
 
 export type PrintTransport = typeof PRINT_TRANSPORT[keyof typeof PRINT_TRANSPORT]
 
+/** What an event without a row uses — the cloud/production flow. */
+export const DEFAULT_PRINT_TRANSPORT: PrintTransport = PRINT_TRANSPORT.ROUTER_SPOOLER
+
 /** How long a heartbeat stays "fresh" — re-stamped only after this. */
 export const HEARTBEAT_THROTTLE_MS = 30_000
 
@@ -34,15 +38,14 @@ export function isPrintTransport(value: unknown): value is PrintTransport {
 
 /**
  * May `consumer` deliver jobs for an event whose transport setting is
- * `transport`? `null`/`undefined` transport means the event has no row —
- * legacy behaviour, both transports allowed.
+ * `transport`? `null`/`undefined` (no row) resolves to
+ * DEFAULT_PRINT_TRANSPORT — the choice is always exclusive.
  */
 export function transportAllows(
   transport: string | null | undefined,
   consumer: typeof PRINT_TRANSPORT.LOCAL_DRAINER | typeof PRINT_TRANSPORT.ROUTER_SPOOLER
 ): boolean {
-  if (transport == null) return true
-  return transport === consumer
+  return (transport ?? DEFAULT_PRINT_TRANSPORT) === consumer
 }
 
 /**
@@ -57,47 +60,24 @@ export function shouldStampHeartbeat(lastIso: string | null | undefined, now: Da
   return now.getTime() - last >= HEARTBEAT_THROTTLE_MS
 }
 
-let warnedMissingTable = false
-function warnMissingTableOnce(err: unknown) {
-  if (warnedMissingTable) return
-  warnedMissingTable = true
-  console.warn('[crouton-printing] print_transports unreadable (migration not applied yet?) — falling back to legacy behaviour (all transports allowed):', err)
-}
-
-/**
- * The transport row for one event, or null (legacy — no choice recorded).
- * A missing/unmigrated table also resolves to null: an app that updates this
- * package before running the migration must keep printing, not 500.
- */
+/** The transport row for one event, or null (no explicit choice — the
+ *  DEFAULT_PRINT_TRANSPORT applies). */
 export async function getPrintTransport(db: any, eventId: string): Promise<any | null> {
   const { printTransports } = await import('../database/schema')
-  try {
-    const rows = await db.select().from(printTransports).where(eq(printTransports.eventId, eventId))
-    return rows[0] ?? null
-  }
-  catch (err) {
-    warnMissingTableOnce(err)
-    return null
-  }
+  const rows = await db.select().from(printTransports).where(eq(printTransports.eventId, eventId))
+  return rows[0] ?? null
 }
 
 /**
  * Every recorded transport row (optionally scoped to one event) — the drainer
- * reads the whole table per tick (one row per event, tiny). Same missing-table
- * tolerance as getPrintTransport: unreadable ⇒ [] ⇒ legacy behaviour.
+ * reads the whole table per tick (one row per event, tiny).
  */
 export async function getAllPrintTransports(db: any, eventId?: string): Promise<any[]> {
   const { printTransports } = await import('../database/schema')
-  try {
-    return await db
-      .select()
-      .from(printTransports)
-      .where(eventId ? eq(printTransports.eventId, eventId) : undefined)
-  }
-  catch (err) {
-    warnMissingTableOnce(err)
-    return []
-  }
+  return await db
+    .select()
+    .from(printTransports)
+    .where(eventId ? eq(printTransports.eventId, eventId) : undefined)
 }
 
 /** Record (or change) an event's transport choice. */

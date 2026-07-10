@@ -134,7 +134,21 @@ test.describe(`fixture "${FIXTURE}" sales/printing`, () => {
     const { token } = await redeemRes.json()
     expect(token, 'scoped token').toBeTruthy()
 
+    // Route the event to the in-process drainer (#1324): an event without a
+    // transport row defaults to 'router-spooler', so the drainer-driven tiers
+    // must opt their event in explicitly. Tier 3 overrides this per-step.
+    await setTransport(page, base, { teamId, eventId: seed.eventId }, 'local-drainer')
+
     return { teamId: teamId as string, eventId: seed.eventId as string, products: seed.products, token: token as string }
+  }
+
+  /** Set the event's per-event print transport (#1324) via the sales endpoint. */
+  async function setTransport(page: import('@playwright/test').Page, base: string, ctx: { teamId: string, eventId: string }, transport: string) {
+    const res = await page.request.put(
+      `${base}/api/crouton-sales/teams/${ctx.teamId}/events/${ctx.eventId}/print-transport`,
+      { headers: authHeaders(base), data: { transport } }
+    )
+    expect(res.ok(), `print-transport PUT failed: ${res.status()} ${await res.text()}`).toBeTruthy()
   }
 
   /** Place a one-product order; returns the order id + the enqueued job ids. */
@@ -275,12 +289,11 @@ test.describe(`fixture "${FIXTURE}" sales/printing`, () => {
   })
 
   // ── TIER 3 (per-event transport gating, #1324) ────────────────────────────
-  // The print_transports row decides WHO delivers the event's thermal jobs.
-  // Set to 'router-spooler': the in-process drainer must NOT print (job stays
-  // pending) while the spooler's /jobs GET serves it. Flip to 'local-drainer':
-  // the spooler GET goes soft-empty [] and the drainer drives the job to done.
-  // Runs LAST in this serial file and always resets to 'local-drainer' so a
-  // leftover row can never gate the drainer-driven tiers on a rerun.
+  // The print_transports row decides WHO delivers the event's thermal jobs
+  // (unset = the 'router-spooler' default). Set to 'router-spooler': the
+  // in-process drainer must NOT print (job stays pending) while the spooler's
+  // /jobs GET serves it. Flip to 'local-drainer': the spooler GET goes
+  // soft-empty [] and the drainer drives the job to done.
   test('tier 3: the per-event transport row routes jobs between drainer and spooler', async ({ page, baseURL }) => {
     test.setTimeout(FIRST_HIT + DRAIN_TIMEOUT + 60000)
     const base = baseURL || 'http://localhost:3000'
@@ -290,13 +303,8 @@ test.describe(`fixture "${FIXTURE}" sales/printing`, () => {
 
     const spoolerHeaders = { 'x-api-key': '1234' } // dev default (print-server-auth)
 
-    async function putTransport(ctx: { teamId: string, eventId: string }, transport: string) {
-      const res = await page.request.put(
-        `${base}/api/crouton-sales/teams/${ctx.teamId}/events/${ctx.eventId}/print-transport`,
-        { headers: authHeaders(base), data: { transport } }
-      )
-      expect(res.ok(), `print-transport PUT failed: ${res.status()} ${await res.text()}`).toBeTruthy()
-    }
+    const putTransport = (ctx: { teamId: string, eventId: string }, transport: string) =>
+      setTransport(page, base, ctx, transport)
 
     async function spoolerJobs(eventId: string) {
       const res = await page.request.get(`${base}/api/print-server/events/${eventId}/jobs`, { headers: spoolerHeaders })

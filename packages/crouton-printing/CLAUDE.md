@@ -60,14 +60,16 @@ domain package (sales / bookings)         crouton-printing
 Which transport delivers an event's `network-escpos` jobs is a **per-event row**
 in `print_transports`: `'local-drainer'` (the in-process TCP drainer on a venue
 Node box) | `'router-spooler'` (the RUT956 HTTP spooler polling the cloud) |
-`'none'` (parked — jobs stay pending). **No row = legacy: both allowed** (the
-pre-#1324 world), so existing rigs need no settings row. Enforced at both drain
-points: `drainPendingEscposJobs` skips gated events; the spooler's `jobs.get`
-returns a soft-empty `[]`. Each transport stamps a throttled liveness heartbeat
-(`lastDrainerTickAt` / `lastSpoolerPollAt`) the picker renders. A missing /
-unmigrated table degrades to legacy behaviour — a package bump must never stop
-the printers. The env gates (`CROUTON_PRINTING_DRAINER*`) still decide whether a
-drainer *process* runs at all; the row decides *which events* it may serve.
+`'none'` (parked — jobs stay pending). The choice is **always exclusive**: no
+row = `DEFAULT_PRINT_TRANSPORT` (`router-spooler`, the cloud/production flow),
+so two transports can never serve one event — a Pi rig opts each event in with
+`local-drainer`. Enforced at both drain points: `drainPendingEscposJobs` only
+serves `local-drainer` events (plus event-LESS jobs, which only it can ever
+deliver); the spooler's `jobs.get` returns a soft-empty `[]` for events routed
+elsewhere. Each transport stamps a throttled liveness heartbeat
+(`lastDrainerTickAt` / `lastSpoolerPollAt`) the picker renders. The env gates
+(`CROUTON_PRINTING_DRAINER*`) still decide whether a drainer *process* runs at
+all; the row decides *which events* it may serve.
 
 This package has **no auth**, so the HTTP surface for the setting lives in the
 domain package (e.g. sales: `teams/[id]/events/[eventId]/print-transport`

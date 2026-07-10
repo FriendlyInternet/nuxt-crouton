@@ -104,7 +104,8 @@ Each event can pick its transport in the app (event settings → Print flow).
 When the event is set to **Local drainer** or **Paused**, the `/jobs` endpoint
 returns an empty `[]` — the spooler idles harmlessly, no error, nothing prints
 from here. If tickets aren't printing, check the event's Print flow setting
-first: it must be **Router spooler** (or unset — legacy, both flows allowed).
+first: it must be **Router spooler** (which is also the default for an event
+that never picked a flow).
 
 ## Finding the printer IP
 

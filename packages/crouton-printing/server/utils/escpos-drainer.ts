@@ -130,9 +130,9 @@ export async function drainPendingEscposJobs(db: any, opts: DrainOptions = {}): 
   const { printJobs, printTransports } = await import('../database/schema')
 
   // Per-event transport gate (#1324). The table is one row per event with a
-  // recorded choice — small enough to read whole each tick. Events WITHOUT a
-  // row stay legacy (drainable), so existing rigs need no settings row; an
-  // unmigrated table resolves to [] (legacy) instead of failing the tick.
+  // recorded choice — small enough to read whole each tick. An event WITHOUT
+  // a row uses the default (`router-spooler`), so this drainer only serves
+  // events explicitly set to `local-drainer`.
   const transports = await getAllPrintTransports(db, opts.eventId)
   const transportByEvent = new Map<string, string>(
     transports.map(t => [t.eventId, t.transport])
@@ -172,8 +172,10 @@ export async function drainPendingEscposJobs(db: any, opts: DrainOptions = {}): 
     .where(and(...where))
     .limit(opts.batchSize ?? 25)
 
-  // Drop jobs whose event chose another transport ('router-spooler') or none
-  // at all ('none' — parked, stays pending). Event-less jobs are ungoverned.
+  // Drop jobs whose event routes elsewhere ('router-spooler', incl. the no-row
+  // default) or nowhere ('none' — parked, stays pending). Event-LESS jobs stay
+  // drainable: the spooler endpoint is per-event, so only this drainer can
+  // ever deliver them.
   const rows = (candidates as any[]).filter(r =>
     !r.eventId || transportAllows(transportByEvent.get(r.eventId), PRINT_TRANSPORT.LOCAL_DRAINER)
   )
