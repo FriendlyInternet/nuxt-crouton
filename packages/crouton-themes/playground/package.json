@@ -21,6 +21,7 @@
     "vue-router": "catalog:"
   },
   "devDependencies": {
+    "tailwindcss": "^4.3.1",
     "wrangler": "catalog:"
   }
 }
