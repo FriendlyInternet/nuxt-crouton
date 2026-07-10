@@ -9,7 +9,7 @@
       variant="soft"
       class="cursor-pointer group/card relative overflow-hidden"
       :class="product.isActive === false ? 'opacity-60' : ''"
-      :ui="{ body: 'px-3 py-1.5' }"
+      :ui="{ body: 'px-3 py-2 sm:px-3 sm:py-2' }"
       @click="handleProductClick(product)"
     >
       <!-- Admin affordances slide in from the card edges on hover (bookings-card
@@ -239,8 +239,9 @@ function emitNewOrder() {
   if (updates.length) emit('reorder', updates)
 }
 
-// Editable is fixed for the life of the POS session (admin vs helper), so a
-// one-time init is fine — no need for a reactive `disabled` option.
+// Editable is fixed for the life of this component instance — OrderInterface
+// remounts the list (:key) when its edit mode flips — so a one-time init is
+// fine, no need for a reactive `disabled` option.
 if (import.meta.client && props.editable) {
   useSortable(containerRef, orderedProducts, {
     animation: 150,

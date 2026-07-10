@@ -84,3 +84,51 @@ export async function collectSeedSql(options: CollectSeedSqlOptions): Promise<st
 
   return statements.join('\n')
 }
+
+/**
+ * Executes one collected seed statement. Callers bind their live db here —
+ * typically `stmt => db.run(sql.raw(stmt))` with drizzle's `sql` — because
+ * shared/seed stays dependency-free (crouton-core does not declare drizzle-orm,
+ * and an internal drizzle import would be an undeclared dependency).
+ */
+export type SeedSqlExecute = (statement: string) => Promise<unknown>
+
+export interface RunSeedSqlOptions extends CollectSeedSqlOptions {}
+
+/**
+ * The dev-only executor half of the runner (#797): collect the providers' SQL
+ * and run it, statement by statement, against the LIVE connection of a booted
+ * app — the NuxtHub db the app actually reads — instead of the wrangler-D1
+ * store the `crouton-seed` CLI writes (a DIFFERENT database in local dev).
+ *
+ * Statements run strictly sequentially in provider dependency order, so a row
+ * always exists before anything that references it. A failing statement rejects
+ * immediately and skips the rest — safe because the collected SQL is idempotent
+ * upserts: re-running after a fix converges instead of duplicating.
+ *
+ * Guarded against production: bundlers define `import.meta.dev` as `false` in a
+ * real build. Contexts where it's undefined (vitest, tsx) pass — they are by
+ * definition not production bundles.
+ */
+export async function runSeedSql(
+  execute: SeedSqlExecute,
+  options: RunSeedSqlOptions
+): Promise<{ statements: number }> {
+  if ((import.meta as { dev?: boolean }).dev === false) {
+    throw new Error('runSeedSql is a dev/test-only helper and must not run in a production build')
+  }
+
+  const seedSql = await collectSeedSql(options)
+  // One upsert per line (JSON payloads are single-line by contract), so
+  // splitting on newlines yields one statement per row.
+  const statements = seedSql
+    .split('\n')
+    .map(s => s.trim())
+    .filter(s => s.length > 0)
+
+  for (const statement of statements) {
+    await execute(statement)
+  }
+
+  return { statements: statements.length }
+}

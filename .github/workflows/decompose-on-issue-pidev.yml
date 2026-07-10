@@ -140,6 +140,12 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Warm @fyit/* dist so the agent's `crouton init`/generate/migrate doesn't cold-build
+      # ~30 packages one-at-a-time mid-run (the #1213/#1247 tax — ~15-20 min). Content-addressed
+      # cache + build-all on miss; a warm cache makes this ~seconds. (#1222)
+      - name: Warm @fyit package builds
+        uses: ./.github/actions/warm-packages
+
       # Timestamp the run start so the artifact-gate distinguishes "produced this run"
       # from pre-existing comments/PRs.
       - id: t0
