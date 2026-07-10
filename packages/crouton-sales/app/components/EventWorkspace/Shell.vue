@@ -27,6 +27,7 @@
 // on) — UDashboardPanel itself needs a top-level UDashboardGroup, which can't
 // be embedded mid-page.
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
+import type { Ref } from 'vue'
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
 
 const props = withDefaults(defineProps<{
@@ -111,9 +112,13 @@ onUnmounted(unhookMutation)
 // block (showHeaderActions=false) never exposes the toggles.
 const settingsOpen = ref(false)
 
-// SettingsTab's exposed save state — the Save button lives in our header row
-// (exposed refs are unwrapped on the component instance).
-const settingsTab = ref<{ save: () => Promise<void>, dirty: boolean, saving: boolean } | null>(null)
+// SettingsTab's save API — the Save button lives in our header row. Handed up
+// via the child's `register` emit: a template ref binds before an async-setup
+// component's defineExpose attaches, so it would stay a bare public proxy and
+// the button would never enable (#1321).
+const settingsTab = shallowRef<{ save: () => Promise<void>, dirty: Ref<boolean>, saving: Ref<boolean> } | null>(null)
+const settingsDirty = computed(() => settingsTab.value?.dirty.value ?? false)
+const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
 
 // Side panes beside the POS: orders, and clients (end-of-tab receipts —
 // recurring-clients mode only). Independent toggles — both can be open at
@@ -208,15 +213,15 @@ const ordersFilterCount = ref(0)
             {{ event.eventType }}
           </p>
           <!-- Panel-wide Save, hosted here so it shares the header line.
-               Drives SettingsTab's exposed { save, dirty, saving }. -->
+               Drives the { save, dirty, saving } API SettingsTab registers. -->
           <div v-if="settingsOpen" class="ms-auto flex items-center gap-3">
-            <span v-if="settingsTab?.dirty" class="text-sm text-muted hidden sm:inline">
+            <span v-if="settingsDirty" class="text-sm text-muted hidden sm:inline">
               {{ t('sales.workspace.unsavedChanges') }}
             </span>
             <UButton
               size="sm"
-              :loading="settingsTab?.saving"
-              :disabled="!settingsTab?.dirty"
+              :loading="settingsSaving"
+              :disabled="!settingsDirty"
               @click="settingsTab?.save()"
             >
               {{ t('sales.common.save') }}
@@ -229,7 +234,7 @@ const ordersFilterCount = ref(0)
           <template #content>
             <div class="p-4 sm:p-6 pt-1">
               <Suspense>
-                <SalesEventWorkspaceSettingsTab ref="settingsTab" :event="event" hide-save-bar />
+                <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar @register="settingsTab = $event" />
                 <template #fallback>
                   <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
                 </template>

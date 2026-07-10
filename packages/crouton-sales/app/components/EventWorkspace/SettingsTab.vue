@@ -1,11 +1,20 @@
 <script setup lang="ts">
+import type { Ref, ComputedRef } from 'vue'
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
 
 const props = defineProps<{
   event: SalesEvent
   /** Hide the internal save row — the host renders its own Save button
-   *  driven by the exposed { save, dirty, saving } (Shell's header row). */
+   *  driven by the API handed up via the `register` emit (Shell's header row). */
   hideSaveBar?: boolean
+}>()
+
+const emit = defineEmits<{
+  /** Hands the panel's save API to the host once async setup has resolved.
+   *  A template ref can't carry this: the ref binds before an async-setup
+   *  component's defineExpose attaches, so the host would read the bare
+   *  public proxy forever (#1321). Emitted with null on unmount. */
+  register: [api: { save: () => Promise<void>, dirty: ComputedRef<boolean>, saving: Ref<boolean> } | null]
 }>()
 
 const { t } = useT()
@@ -198,7 +207,8 @@ async function saveSettings() {
 }
 
 // Let the Shell host the Save button in its header row (hideSaveBar).
-defineExpose({ save: saveSettings, dirty, saving })
+emit('register', { save: saveSettings, dirty, saving })
+onUnmounted(() => emit('register', null))
 
 // Event-level actions (moved out of the workspace header to declutter it).
 // Same useCollectionQuery cache as the Shell, so refresh() updates its list

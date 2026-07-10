@@ -181,8 +181,10 @@ event switcher with a "create event" item in its `#content-top`, same pattern as
 `CroutonFormReferenceSelect`, the **Instellingen** toggle right beside it, and — only while open —
 the panel-wide **Opslaan** button at the row's right) lives **inside the settings container**: one
 bordered panel whose `UCollapsible` slides `SettingsTab` open under the header row. The Save button
-is Shell-hosted: SettingsTab gets `hide-save-bar` and exposes `{ save, dirty, saving }`
-(`defineExpose`), which Shell reads via a template ref; Duplicate/Delete live as explained rows at
+is Shell-hosted: SettingsTab gets `hide-save-bar` and hands `{ save, dirty, saving }` up via a
+`register` emit once its async setup resolves (NOT `defineExpose` + template ref — the ref binds
+before an async-setup component's exposed object attaches, which left Opslaan permanently disabled,
+#1321); Duplicate/Delete live as explained rows at
 the bottom of its Event Details card. The full event form (incl. slug) is not reachable from the workspace.
 Beside the POS, up to two **side panes** open via vertical tabs stacked in a reserved gutter at
 the kassa's right edge (Shell-owned, no prop plumbing). Both panes can be open at once, each
