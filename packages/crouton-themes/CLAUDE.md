@@ -123,6 +123,17 @@ const { variant } = useThemeSwitcher()
 
 ## Available Themes
 
+### Braun Theme (`./braun`)
+
+Warm analog hi-fi (Dieter Rams): cream chassis, 1px hairlines, very soft real
+shadows, machined 3px radii, small letterspaced silkscreen labels, and the ONE
+signature orange. The calm sibling of KO/KR-11.
+
+**Nuxt UI Variants:** `braun` / `braun-{solid,outline,soft,ghost,link}` (UButton);
+`braun` for UInput, UCard, UBadge, USeparator. USwitch = the sliding pill toggle
+(ambient). **Custom components:** `<BraunKnob>` (drag dial with orange index),
+`<BraunLabel>` (silkscreen label). Tokens: `--braun-{cream,cream-raised,charcoal,hairline,orange,red,text,label,radius,shadow,shadow-pressed,ease}`.
+
 ### Terminal Theme (`./terminal`)
 
 Green phosphor on near-black — monospace everything, faint glow, inverse-video
