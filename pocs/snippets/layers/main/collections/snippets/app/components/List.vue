@@ -31,10 +31,16 @@
   >
     <template #header>
       <CroutonTableHeader
-        title="MainSnippets"
+        title="Snippets"
         :collection="'mainSnippets'"
         createButton
       />
+    </template>
+    <template #language-cell="{ row }">
+      <UBadge v-if="row.original.language" color="primary" variant="subtle" size="md">
+        {{ row.original.language }}
+      </UBadge>
+      <span v-else class="text-gray-400">—</span>
     </template>
     <template #tags-cell="{ row }">
       <div v-if="row.original.tags && row.original.tags.length > 0" class="flex flex-wrap gap-1">
