@@ -78,9 +78,11 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="sales-dashboard-summary space-y-4">
-    <!-- Headline numbers -->
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+  <div class="sales-dashboard-summary @container space-y-4">
+    <!-- Headline numbers: columns follow the COMPONENT's width (@container),
+         not the viewport — inside a narrow workspace pane on a wide screen a
+         viewport breakpoint would force three overlapping columns. -->
+    <div class="grid grid-cols-1 gap-3 @sm:grid-cols-3">
       <div
         v-for="s in stats"
         :key="s.key"
