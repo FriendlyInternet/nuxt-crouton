@@ -57,46 +57,33 @@ const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
     </div>
 
     <template v-else>
-      <div class="h-14 shrink-0 flex items-center justify-between gap-2 px-4 bg-elevated/60 border-b border-default">
-        <span class="flex items-center gap-1.5 text-sm font-medium">
-          <UIcon :name="meta.icon" class="size-4 shrink-0 text-muted" />
-          {{ meta.title }}
-        </span>
-        <div class="flex items-center gap-2">
-          <UChip
-            v-if="pane === 'orders'"
-            :show="ordersFilterCount > 0"
-            :text="ordersFilterCount"
-            size="3xl"
-          >
-            <UButton
-              icon="i-lucide-filter"
-              size="xs"
-              color="neutral"
-              :variant="ordersFiltersOpen ? 'soft' : 'ghost'"
-              :aria-label="t('sales.workspace.filters')"
-              @click="ordersFiltersOpen = !ordersFiltersOpen"
-            />
-          </UChip>
+      <SalesEventWorkspacePaneHeader :icon="meta.icon" :title="meta.title" @close="emit('close')">
+        <UChip
+          v-if="pane === 'orders'"
+          :show="ordersFilterCount > 0"
+          :text="ordersFilterCount"
+          size="xl"
+          inset
+        >
           <UButton
-            v-if="pane === 'settings'"
-            size="xs"
-            :loading="settingsSaving"
-            :disabled="!settingsDirty"
-            @click="settingsTab?.save()"
-          >
-            {{ t('sales.common.save') }}
-          </UButton>
-          <UButton
-            icon="i-lucide-x"
+            icon="i-lucide-filter"
             size="xs"
             color="neutral"
-            variant="ghost"
-            :aria-label="t('sales.common.close')"
-            @click="emit('close')"
+            :variant="ordersFiltersOpen ? 'soft' : 'ghost'"
+            :aria-label="t('sales.workspace.filters')"
+            @click="ordersFiltersOpen = !ordersFiltersOpen"
           />
-        </div>
-      </div>
+        </UChip>
+        <UButton
+          v-if="pane === 'settings'"
+          size="xs"
+          :loading="settingsSaving"
+          :disabled="!settingsDirty"
+          @click="settingsTab?.save()"
+        >
+          {{ t('sales.common.save') }}
+        </UButton>
+      </SalesEventWorkspacePaneHeader>
 
       <div class="flex-1 overflow-y-auto p-4 pt-2">
         <Suspense v-if="pane === 'orders'">

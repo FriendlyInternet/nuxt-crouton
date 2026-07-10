@@ -206,6 +206,13 @@ const handleCreate = () => {
 const { create: createItem } = useCollectionMutation(props.collection)
 const inlineCreating = ref(false)
 
+// Select an inline-created/matched id, appending in multiple mode.
+function selectInlineId(id: string) {
+  selected.value = props.multiple
+    ? [...(Array.isArray(localValue.value) ? localValue.value : []), id]
+    : id
+}
+
 async function handleInlineCreate(term: string) {
   const label = term.trim()
   if (!label || inlineCreating.value) return
@@ -213,21 +220,12 @@ async function handleInlineCreate(term: string) {
   // create-item hides on exact matches, but Enter can still race a list
   // refresh — select the existing item instead of creating a duplicate.
   const existing = items.value.find(i => (tContent(i, props.labelKey) || '').trim().toLowerCase() === label.toLowerCase())
-  if (existing) {
-    selected.value = props.multiple
-      ? [...(Array.isArray(localValue.value) ? localValue.value : []), existing.id]
-      : existing.id
-    return
-  }
+  if (existing) return selectInlineId(existing.id)
 
   inlineCreating.value = true
   try {
     const created = await createItem({ [props.labelKey]: label, ...props.createInitialData })
-    if (created?.id) {
-      selected.value = props.multiple
-        ? [...(Array.isArray(localValue.value) ? localValue.value : []), created.id]
-        : created.id
-    }
+    if (created?.id) selectInlineId(created.id)
   } finally {
     inlineCreating.value = false
   }

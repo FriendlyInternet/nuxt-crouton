@@ -41,11 +41,6 @@ const props = withDefaults(defineProps<{
    * (`/admin/[team]/...`) and public CMS (`/[team]/...`) routes.
    */
   teamParam?: string
-  /**
-   * Legacy: used to sync the active tab to a URL query key. The workspace
-   * has no tabs anymore — accepted for consumer compatibility, ignored.
-   */
-  tabParam?: string
   /** Show the event switcher dropdown (hidden in the block — event is fixed). */
   showSwitcher?: boolean
   /** Show the header action buttons (settings / orders toggles). */
@@ -456,34 +451,24 @@ const ordersFilterCount = ref(0)
             class="w-1 shrink-0 bg-accented hover:bg-primary/60 data-[state=drag]:bg-primary transition-colors"
           />
           <SplitterPanel id="orders" :order="2" :default-size="30" :min-size="18" class="min-w-0 flex flex-col">
-            <!-- Pane header mirrors the hanging tab: same bg + icon, with ✕.
-                 h-14 matches the POS header rows so all bottom borders align. -->
-            <div class="h-14 shrink-0 flex items-center justify-between gap-2 px-4 bg-elevated/60 border-b border-default">
-              <span class="flex items-center gap-1.5 text-sm font-medium">
-                <UIcon name="i-lucide-clipboard-list" class="size-4 shrink-0 text-muted" />
-                {{ t('sales.orders.title') }}
-              </span>
-              <div class="flex items-center gap-1">
-                <UChip :show="ordersFilterCount > 0" :text="ordersFilterCount" size="xl" inset>
-                  <UButton
-                    icon="i-lucide-filter"
-                    size="xs"
-                    color="neutral"
-                    :variant="ordersFiltersOpen ? 'soft' : 'ghost'"
-                    :aria-label="t('sales.workspace.filters')"
-                    @click="ordersFiltersOpen = !ordersFiltersOpen"
-                  />
-                </UChip>
+            <!-- Pane header mirrors the hanging tab (shared PaneHeader:
+                 h-14 matches the POS header rows so all bottom borders align). -->
+            <SalesEventWorkspacePaneHeader
+              icon="i-lucide-clipboard-list"
+              :title="t('sales.orders.title')"
+              @close="ordersOpen = false"
+            >
+              <UChip :show="ordersFilterCount > 0" :text="ordersFilterCount" size="xl" inset>
                 <UButton
-                  icon="i-lucide-x"
+                  icon="i-lucide-filter"
                   size="xs"
                   color="neutral"
-                  variant="ghost"
-                  :aria-label="t('sales.common.close')"
-                  @click="ordersOpen = false"
+                  :variant="ordersFiltersOpen ? 'soft' : 'ghost'"
+                  :aria-label="t('sales.workspace.filters')"
+                  @click="ordersFiltersOpen = !ordersFiltersOpen"
                 />
-              </div>
-            </div>
+              </UChip>
+            </SalesEventWorkspacePaneHeader>
             <div class="flex-1 overflow-y-auto p-4 pt-2">
               <Suspense>
                 <SalesEventWorkspaceOrdersTab
@@ -503,20 +488,11 @@ const ordersFilterCount = ref(0)
             class="w-1 shrink-0 bg-accented hover:bg-primary/60 data-[state=drag]:bg-primary transition-colors"
           />
           <SplitterPanel id="clients" :order="3" :default-size="25" :min-size="15" class="min-w-0 flex flex-col">
-            <div class="h-14 shrink-0 flex items-center justify-between gap-2 px-4 bg-elevated/60 border-b border-default">
-              <span class="flex items-center gap-1.5 text-sm font-medium">
-                <UIcon name="i-lucide-users" class="size-4 shrink-0 text-muted" />
-                {{ t('sales.workspace.clientsPanel.title') }}
-              </span>
-              <UButton
-                icon="i-lucide-x"
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                :aria-label="t('sales.common.close')"
-                @click="clientsOpen = false"
-              />
-            </div>
+            <SalesEventWorkspacePaneHeader
+              icon="i-lucide-users"
+              :title="t('sales.workspace.clientsPanel.title')"
+              @close="clientsOpen = false"
+            />
             <div class="flex-1 overflow-y-auto p-4 pt-2">
               <SalesEventWorkspaceClientsPanel :event="event" />
             </div>
@@ -527,20 +503,11 @@ const ordersFilterCount = ref(0)
             class="w-1 shrink-0 bg-accented hover:bg-primary/60 data-[state=drag]:bg-primary transition-colors"
           />
           <SplitterPanel id="data" :order="4" :default-size="30" :min-size="18" class="min-w-0 flex flex-col">
-            <div class="h-14 shrink-0 flex items-center justify-between gap-2 px-4 bg-elevated/60 border-b border-default">
-              <span class="flex items-center gap-1.5 text-sm font-medium">
-                <UIcon name="i-lucide-chart-line" class="size-4 shrink-0 text-muted" />
-                {{ t('sales.workspace.dataPanel.title') }}
-              </span>
-              <UButton
-                icon="i-lucide-x"
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                :aria-label="t('sales.common.close')"
-                @click="dataOpen = false"
-              />
-            </div>
+            <SalesEventWorkspacePaneHeader
+              icon="i-lucide-chart-line"
+              :title="t('sales.workspace.dataPanel.title')"
+              @close="dataOpen = false"
+            />
             <div class="flex-1 overflow-y-auto p-4 pt-2">
               <SalesEventWorkspaceDataPanel :event="event" :team-param="teamParam" />
             </div>
@@ -607,32 +574,22 @@ const ordersFilterCount = ref(0)
     <USlideover v-if="isNarrow" v-model:open="ordersSlideoverOpen">
       <template #content>
         <div class="flex flex-col h-full min-h-0">
-          <div class="h-14 shrink-0 flex items-center justify-between gap-2 px-4 bg-elevated/60 border-b border-default">
-            <span class="flex items-center gap-1.5 text-sm font-medium">
-              <UIcon name="i-lucide-clipboard-list" class="size-4 shrink-0 text-muted" />
-              {{ t('sales.orders.title') }}
-            </span>
-            <div class="flex items-center gap-1">
-              <UChip :show="ordersFilterCount > 0" :text="ordersFilterCount" size="xl" inset>
-                <UButton
-                  icon="i-lucide-filter"
-                  size="xs"
-                  color="neutral"
-                  :variant="ordersFiltersOpen ? 'soft' : 'ghost'"
-                  :aria-label="t('sales.workspace.filters')"
-                  @click="ordersFiltersOpen = !ordersFiltersOpen"
-                />
-              </UChip>
+          <SalesEventWorkspacePaneHeader
+            icon="i-lucide-clipboard-list"
+            :title="t('sales.orders.title')"
+            @close="ordersSlideoverOpen = false"
+          >
+            <UChip :show="ordersFilterCount > 0" :text="ordersFilterCount" size="xl" inset>
               <UButton
-                icon="i-lucide-x"
+                icon="i-lucide-filter"
                 size="xs"
                 color="neutral"
-                variant="ghost"
-                :aria-label="t('sales.common.close')"
-                @click="ordersSlideoverOpen = false"
+                :variant="ordersFiltersOpen ? 'soft' : 'ghost'"
+                :aria-label="t('sales.workspace.filters')"
+                @click="ordersFiltersOpen = !ordersFiltersOpen"
               />
-            </div>
-          </div>
+            </UChip>
+          </SalesEventWorkspacePaneHeader>
           <div class="flex-1 overflow-y-auto p-4 pt-2">
             <Suspense>
               <SalesEventWorkspaceOrdersTab
@@ -655,20 +612,11 @@ const ordersFilterCount = ref(0)
     >
       <template #content>
         <div class="flex flex-col h-full min-h-0">
-          <div class="h-14 shrink-0 flex items-center justify-between gap-2 px-4 bg-elevated/60 border-b border-default">
-            <span class="flex items-center gap-1.5 text-sm font-medium">
-              <UIcon name="i-lucide-users" class="size-4 shrink-0 text-muted" />
-              {{ t('sales.workspace.clientsPanel.title') }}
-            </span>
-            <UButton
-              icon="i-lucide-x"
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              :aria-label="t('sales.common.close')"
-              @click="clientsSlideoverOpen = false"
-            />
-          </div>
+          <SalesEventWorkspacePaneHeader
+            icon="i-lucide-users"
+            :title="t('sales.workspace.clientsPanel.title')"
+            @close="clientsSlideoverOpen = false"
+          />
           <div class="flex-1 overflow-y-auto p-4 pt-2">
             <SalesEventWorkspaceClientsPanel :event="event" />
           </div>
@@ -682,20 +630,11 @@ const ordersFilterCount = ref(0)
     >
       <template #content>
         <div class="flex flex-col h-full min-h-0">
-          <div class="h-14 shrink-0 flex items-center justify-between gap-2 px-4 bg-elevated/60 border-b border-default">
-            <span class="flex items-center gap-1.5 text-sm font-medium">
-              <UIcon name="i-lucide-chart-line" class="size-4 shrink-0 text-muted" />
-              {{ t('sales.workspace.dataPanel.title') }}
-            </span>
-            <UButton
-              icon="i-lucide-x"
-              size="xs"
-              color="neutral"
-              variant="ghost"
-              :aria-label="t('sales.common.close')"
-              @click="dataSlideoverOpen = false"
-            />
-          </div>
+          <SalesEventWorkspacePaneHeader
+            icon="i-lucide-chart-line"
+            :title="t('sales.workspace.dataPanel.title')"
+            @close="dataSlideoverOpen = false"
+          />
           <div class="flex-1 overflow-y-auto p-4 pt-2">
             <SalesEventWorkspaceDataPanel :event="event" :team-param="teamParam" />
           </div>
@@ -710,30 +649,20 @@ const ordersFilterCount = ref(0)
     <USlideover v-if="isNarrow" v-model:open="settingsSlideoverOpen">
       <template #content>
         <div class="flex flex-col h-full min-h-0">
-          <div class="h-14 shrink-0 flex items-center justify-between gap-2 px-4 bg-elevated/60 border-b border-default">
-            <span class="flex items-center gap-1.5 text-sm font-medium">
-              <UIcon name="i-lucide-settings" class="size-4 shrink-0 text-muted" />
-              {{ t('sales.events.settings') }}
-            </span>
-            <div class="flex items-center gap-2">
-              <UButton
-                size="xs"
-                :loading="settingsSaving"
-                :disabled="!settingsDirty"
-                @click="settingsTab?.save()"
-              >
-                {{ t('sales.common.save') }}
-              </UButton>
-              <UButton
-                icon="i-lucide-x"
-                size="xs"
-                color="neutral"
-                variant="ghost"
-                :aria-label="t('sales.common.close')"
-                @click="settingsSlideoverOpen = false"
-              />
-            </div>
-          </div>
+          <SalesEventWorkspacePaneHeader
+            icon="i-lucide-settings"
+            :title="t('sales.events.settings')"
+            @close="settingsSlideoverOpen = false"
+          >
+            <UButton
+              size="xs"
+              :loading="settingsSaving"
+              :disabled="!settingsDirty"
+              @click="settingsTab?.save()"
+            >
+              {{ t('sales.common.save') }}
+            </UButton>
+          </SalesEventWorkspacePaneHeader>
           <div class="flex-1 overflow-y-auto p-4 pt-3">
             <Suspense>
               <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
