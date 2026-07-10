@@ -59,9 +59,9 @@ jobs:
             if (open) return
             const closer = issue.closed_by ? issue.closed_by.login : 'unknown'
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume skipped — issue already closed (#1253)_\n\n'
-                + `⚠️ This issue was **closed** (by ${closer}) just before your reply was picked up, so the resume did **not** run — `
-                + 'it looks superseded. Reply on the successor issue/PR instead, or **reopen this one and comment again** to retry.' })
+              body: `🚫 **Your reply didn't resume anything — this issue was closed (by ${closer}) just before it was picked up.**\n\n`
+                + '**Fix:** reply on the successor issue/PR, or reopen this one and comment again to retry.\n\n'
+                + '<sub>🤖 Claude Code · agent pipeline (CI) · resume skipped, issue already closed (#1253)</sub>' })
             core.info(`Issue #${issue_number} is closed — skipping the resume agent run.`)
 
       # Acknowledge the trigger comment immediately: 👀 = "picked up, working on it". The
@@ -262,10 +262,9 @@ jobs:
               return
             }
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume artifact-gate (#603)_\n\n'
-                + '⚠️ The resume ran but produced **nothing** (no sub-issues, no merged gate PR, no new '
-                + 'comment, not closed, and the block was cleared) — a silent no-op (the #590 failure mode). '
-                + 'Re-dispatch with `/delegate` to retry.' })
+              body: '🔴 **The resume ran but produced nothing** — no sub-issues, no merged PR, no new comment, and the block was cleared (a silent no-op).\n\n'
+                + '**Fix:** re-dispatch with `/delegate` to retry.\n\n'
+                + '<sub>🤖 Claude Code · agent pipeline (CI) · resume artifact-gate (#603/#590)</sub>' })
             core.setFailed(`Resume on #${issue_number} produced no artifact — likely a no-op; re-dispatch.`)
 
       # Final feedback on the trigger comment: clear the 👀 and stamp the outcome — 🚀 done /

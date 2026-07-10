@@ -124,7 +124,7 @@ jobs:
               // 4) Release: apply `delegate` (as the PAT user → human-actor trigger).
               await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: ['delegate'] })
               await github.rest.issues.createComment({ owner, repo, issue_number: it.number,
-                body: `▶️ All blockers closed (#${done} just completed) — auto-dispatching this workstream `
-                  + `(applied \`delegate\`). Wave scheduler (#283).` })
+                body: `🟢 **Unblocked — starting this workstream now.** Its last blocker (#${done}) just closed.\n\n`
+                  + `<sub>🤖 wave scheduler (#283) · applied \`delegate\`</sub>` })
               core.info(`Released #${it.number}`)
             }
