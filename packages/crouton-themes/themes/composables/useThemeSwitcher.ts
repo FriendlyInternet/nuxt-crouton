@@ -4,7 +4,7 @@
 
 import { THEME_UI_CONFIGS } from '../configs/themeConfigs'
 
-export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'default'
+export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'terminal' | 'default'
 
 type BaseVariant = 'solid' | 'outline' | 'soft' | 'ghost' | 'link'
 
@@ -66,6 +66,13 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     label: 'MTV',
     description: 'Day-glo blocks, clashing neon shadows, Memphis energy',
     colors: ['#ff2d95', '#00e5ff', '#ffe600'], // pink, cyan, yellow
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'terminal',
+    label: 'Terminal',
+    description: 'Green phosphor on black, scanlines, inverse video',
+    colors: ['#33ff66', '#0a0f0a', '#ffb000'], // phosphor, tube, amber
     defaultVariant: 'solid'
   }
 ]

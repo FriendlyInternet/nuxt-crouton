@@ -123,6 +123,20 @@ const { variant } = useThemeSwitcher()
 
 ## Available Themes
 
+### Terminal Theme (`./terminal`)
+
+Green phosphor on near-black — monospace everything, faint glow, inverse-video
+states, subtle scanline overlay. Amber is the alert channel.
+
+**Design Language:** `--term-{bg,bg-raised,phosphor,phosphor-dim,phosphor-soft,amber,glow}`;
+primary = inverse video, neutral = framed, error = amber; ghost renders a `> ` prompt;
+links use dashed underscores. The ambient rule sets the tube background, readable light
+text AND `--ui-bg` (so app shells painting with the Nuxt UI surface token go dark too).
+
+**Nuxt UI Variants:** `terminal` / `terminal-{solid,outline,soft,ghost,link}` (UButton);
+`terminal` for UInput, UCard, UBadge, USeparator. USwitch themed ambiently (phosphor LED).
+Built on replacers per the #1305 spike verdict — not `unstyled`.
+
 ### MTV Theme (`./mtv`)
 
 Early-MTV (1981): day-glo color blocking, hard shadows in a CLASHING neon,
