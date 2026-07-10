@@ -1,0 +1,15 @@
+[
+  {
+    "collection": "snippets",
+    "fields": [
+      "title",
+      "code",
+      "language",
+      "tags"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-07-10T13:26:06.015Z",
+    "layer": "main",
+    "gitSha": "c3be0c72"
+  }
+]

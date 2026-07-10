@@ -1,0 +1,6 @@
+{
+  "title": { "type": "string", "meta": { "required": true, "maxLength": 200 } },
+  "code": { "type": "text", "meta": { "required": true, "component": "EditorSimple" } },
+  "language": { "type": "string", "meta": { "required": false, "maxLength": 50 } },
+  "tags": { "type": "array", "meta": { "required": false } }
+}
