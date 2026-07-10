@@ -16,7 +16,7 @@
 // Pure + deterministic — SSR and client must compute the identical class string
 // (hydration-mismatch rule from #364). No Date/random/env reads here, ever.
 
-type ThemeKey = 'minimal' | 'ko' | 'kr11' | 'bw'
+type ThemeKey = 'minimal' | 'ko' | 'kr11' | 'bw' | 'brutalist'
 
 // First matching prefix wins; a resolved string only ever carries one theme's
 // markers because `variant` is single-valued and the bw markers live on the
@@ -25,7 +25,8 @@ const MARKERS: Array<[prefix: string, theme: ThemeKey]> = [
   ['minimal-', 'minimal'],
   ['ko-', 'ko'],
   ['kr-', 'kr11'],
-  ['bw-', 'bw']
+  ['bw-', 'bw'],
+  ['brutalist-', 'brutalist']
 ]
 
 // text-* utilities that are NOT color (sizes, alignment, wrapping) — kept when a
@@ -60,6 +61,12 @@ const STRIP: Record<ThemeKey, (u: string) => boolean> = {
   // and link underlines.
   bw: u => isColor(u) || isMotion(u)
     || /^-?(shadow|ring|ring-offset|inset-ring|outline|border)(-|$)/.test(u)
+    || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u),
+  // Brutalist keeps text sizes + line-height; owns color, decoration, motion,
+  // weight/family/tracking/case, and link underlines.
+  brutalist: u => isColor(u) || isDecor(u) || isMotion(u)
+    || /^(font|tracking)(-|$)/.test(u)
+    || /^(uppercase|lowercase|capitalize|normal-case)$/.test(u)
     || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u)
 }
 

@@ -13,7 +13,9 @@
     "./kr11": "./kr11/nuxt.config.ts",
     "./kr11/*": "./kr11/*",
     "./blackandwhite": "./blackandwhite/nuxt.config.ts",
-    "./blackandwhite/*": "./blackandwhite/*"
+    "./blackandwhite/*": "./blackandwhite/*",
+    "./brutalist": "./brutalist/nuxt.config.ts",
+    "./brutalist/*": "./brutalist/*"
   },
   "files": [
     "themes",
@@ -21,6 +23,7 @@
     "minimal",
     "kr11",
     "blackandwhite",
+    "brutalist",
     "lib"
   ],
   "keywords": [

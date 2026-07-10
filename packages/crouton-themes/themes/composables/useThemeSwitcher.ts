@@ -4,7 +4,7 @@
 
 import { THEME_UI_CONFIGS } from '../configs/themeConfigs'
 
-export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'default'
+export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'default'
 
 type BaseVariant = 'solid' | 'outline' | 'soft' | 'ghost' | 'link'
 
@@ -53,6 +53,13 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     description: 'Compact monochrome dashboard theme',
     colors: ['#000000', '#525252', '#ffffff'], // black, neutral, white
     defaultVariant: 'outline' // Black & White favors outline/subtle surfaces
+  },
+  {
+    name: 'brutalist',
+    label: 'Brutalist',
+    description: 'Thick borders, hard shadows, zero subtlety',
+    colors: ['#0a0a0a', '#ffd800', '#fdfbf5'], // ink, shock yellow, paper
+    defaultVariant: 'solid'
   }
 ]
 

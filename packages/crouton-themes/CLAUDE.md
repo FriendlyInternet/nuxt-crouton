@@ -123,6 +123,26 @@ const { variant } = useThemeSwitcher()
 
 ## Available Themes
 
+### Brutalist Theme (`./brutalist`)
+
+Thick borders, hard shadows, zero subtlety — the anti-"tasteful SaaS" theme.
+
+**Design Language:**
+- 3px black borders, hard offset box-shadows (no blur), square corners
+- Off-white paper, near-black ink, shock-yellow accent, alarm-red error
+- Uppercase 800-weight labels; states snap (75ms steps) instead of gliding
+- Buttons lift on hover (+shadow) and slam flat on press (shadow to 0)
+
+**Nuxt UI Variants:**
+- Named variants `brutalist` / `brutalist-{solid,outline,soft,ghost,link}` for UButton;
+  `brutalist` for UInput, UCard, UBadge, USeparator
+- Color mappings: primary→yellow slab, neutral→ink slab, error→red slab
+
+**Design Tokens:** `--brutalist-{paper,ink,accent,danger,border,shadow,shadow-hover,snap}`
+
+**Coverage note:** interaction chrome only — no custom components; data surfaces
+stay calm by design (see the chrome-vs-data rule, #1333).
+
 ### Minimal Theme (`./minimal`)
 
 Super clean, minimalist design with black lines on white background.
