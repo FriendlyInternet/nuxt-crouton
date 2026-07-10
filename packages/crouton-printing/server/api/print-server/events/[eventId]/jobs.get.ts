@@ -10,8 +10,9 @@
  */
 import { eq, and, inArray } from 'drizzle-orm'
 import { requirePrintServerKey } from '../../../../utils/print-server-auth'
-import { printJobs } from '../../../../database/schema'
+import { printJobs, printTransports } from '../../../../database/schema'
 import { PRINT_STATUS } from '../../../../utils/print-job-queue'
+import { PRINT_TRANSPORT, getPrintTransport, shouldStampHeartbeat, transportAllows } from '../../../../utils/print-transport'
 
 export default defineEventHandler(async (event) => {
   requirePrintServerKey(event)
@@ -25,6 +26,21 @@ export default defineEventHandler(async (event) => {
   const markAsPrinting = String(query.mark_as_printing) === 'true'
 
   const db = useDB()
+
+  // Per-event transport gate (#1324). A row that picks another transport gets
+  // a soft-empty [] — old router scripts loop happily on empty, a 4xx would
+  // spam their logs. No row = legacy behaviour (spooler allowed). While
+  // allowed, stamp the liveness readout (throttled) for the settings UI.
+  const transportRow = await getPrintTransport(db, eventId)
+  if (!transportAllows(transportRow?.transport, PRINT_TRANSPORT.ROUTER_SPOOLER)) {
+    return []
+  }
+  if (transportRow && shouldStampHeartbeat(transportRow.lastSpoolerPollAt)) {
+    await db
+      .update(printTransports)
+      .set({ lastSpoolerPollAt: new Date().toISOString() })
+      .where(eq(printTransports.eventId, eventId))
+  }
 
   // Self-contained job: printer ip/port/title live on the row (no printers join).
   const rows = await db

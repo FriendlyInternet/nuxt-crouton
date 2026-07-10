@@ -33,6 +33,10 @@
     "./server/utils/print-queue-service": {
       "import": "./server/utils/print-queue-service.ts",
       "types": "./server/utils/print-queue-service.ts"
+    },
+    "./server/utils/print-transport": {
+      "import": "./server/utils/print-transport.ts",
+      "types": "./server/utils/print-transport.ts"
     }
   },
   "scripts": {

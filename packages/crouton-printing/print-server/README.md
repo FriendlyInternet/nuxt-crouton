@@ -98,6 +98,14 @@ The spooler polls **one** event. For each new event, update `EVENT_ID` and
 `/etc/init.d/print_server restart`. (A future improvement could poll all active
 events instead.)
 
+### ⚠️ The event's print flow must allow the spooler (#1324)
+
+Each event can pick its transport in the app (event settings → Print flow).
+When the event is set to **Local drainer** or **Paused**, the `/jobs` endpoint
+returns an empty `[]` — the spooler idles harmlessly, no error, nothing prints
+from here. If tickets aren't printing, check the event's Print flow setting
+first: it must be **Router spooler** (or unset — legacy, both flows allowed).
+
 ## Finding the printer IP
 
 The Epson TM-m30 prints its IP on power-on, or set a static IP in its web UI.
