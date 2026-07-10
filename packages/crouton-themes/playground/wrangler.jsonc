@@ -1,0 +1,18 @@
+{
+  // Cloudflare WORKERS config for the crouton-themes PLAYGROUND (#1306).
+  //
+  // Same shape as the (now-retired) minimal-theme-demo sandbox: a gallery has no
+  // auth, no DB, and no custom domain, so there are NO d1/kv bindings, NO routes,
+  // and NO env.staging block. It publishes to the zero-config *.workers.dev
+  // subdomain (workers_dev defaults true) — the deploy token needs only account
+  // Workers-Scripts edit, no zone/DNS scope, and there's nothing to auto-provision
+  // or migrate.
+  //
+  // Nitro's `cloudflare_module` preset (NITRO_PRESET in cf:staging) reads this
+  // file at build time and writes the deployable config to
+  // .output/server/wrangler.json, injecting `main` + the static `assets` binding
+  // automatically.
+  "name": "crouton-themes-playground",
+  "compatibility_date": "2025-07-15",
+  "compatibility_flags": ["nodejs_compat"]
+}

@@ -1136,6 +1136,25 @@ importers:
         specifier: ^3.6.1
         version: 3.6.1(typescript@5.9.3)(vue-tsc@3.2.2(typescript@5.9.3))(vue@3.5.38(typescript@5.9.3))
 
+  packages/crouton-devtools/playground:
+    dependencies:
+      '@fyit/crouton-core':
+        specifier: workspace:*
+        version: link:../../crouton-core
+      '@fyit/crouton-devtools':
+        specifier: workspace:*
+        version: link:..
+    devDependencies:
+      '@nuxt/devtools':
+        specifier: ^3.0.0
+        version: 3.1.1(vite@7.3.5(@types/node@22.19.7)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(vue@3.5.38(typescript@5.9.3))
+      '@nuxt/ui':
+        specifier: ^4.9.0
+        version: 4.9.0(e35571ed4d3716fd49479fca477900a2)
+      nuxt:
+        specifier: ^4.4.8
+        version: 4.4.8(acbda501943d3a88c40c15b150712194)
+
   packages/crouton-editor:
     dependencies:
       '@fyit/crouton-core':
@@ -1215,6 +1234,19 @@ importers:
       unbuild:
         specifier: ^3.6.1
         version: 3.6.1(typescript@5.9.3)(vue-tsc@3.2.2(typescript@5.9.3))(vue@3.5.38(typescript@5.9.3))
+
+  packages/crouton-feedback/playground:
+    dependencies:
+      '@fyit/crouton-feedback':
+        specifier: workspace:*
+        version: link:..
+    devDependencies:
+      '@nuxt/ui':
+        specifier: ^4.9.0
+        version: 4.9.0(e35571ed4d3716fd49479fca477900a2)
+      nuxt:
+        specifier: ^4.4.8
+        version: 4.4.8(acbda501943d3a88c40c15b150712194)
 
   packages/crouton-flow:
     dependencies:
@@ -1449,6 +1481,34 @@ importers:
       nuxt:
         specifier: ^4.4.8
         version: 4.4.8(acbda501943d3a88c40c15b150712194)
+
+  packages/crouton-themes/playground:
+    dependencies:
+      '@fyit/crouton-themes':
+        specifier: workspace:*
+        version: link:..
+      '@nuxt/ui':
+        specifier: ^4.9.0
+        version: 4.9.0(e35571ed4d3716fd49479fca477900a2)
+      '@vueuse/nuxt':
+        specifier: ^13.3.0
+        version: 13.9.0(magicast@0.5.2)(nuxt@4.4.8(acbda501943d3a88c40c15b150712194))(vue@3.5.38(typescript@5.9.3))
+      eruda:
+        specifier: ^3.4.3
+        version: 3.4.3
+      nuxt:
+        specifier: ^4.4.8
+        version: 4.4.8(acbda501943d3a88c40c15b150712194)
+      vue:
+        specifier: ^3.5.38
+        version: 3.5.38(typescript@5.9.3)
+      vue-router:
+        specifier: 'catalog:'
+        version: 5.1.0(@vue/compiler-sfc@3.5.38)(vite@7.3.5(@types/node@22.19.7)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(vue@3.5.38(typescript@5.9.3))
+    devDependencies:
+      wrangler:
+        specifier: 'catalog:'
+        version: 4.101.0(@cloudflare/workers-types@4.20260118.0)
 
   packages/crouton-three:
     dependencies:
@@ -1910,31 +1970,6 @@ importers:
       drizzle-seed:
         specifier: ^0.3.1
         version: 0.3.1(drizzle-orm@0.45.2(@cloudflare/workers-types@4.20260118.0)(@libsql/client@0.17.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.2)(kysely@0.28.11)(pg@8.17.1))
-      wrangler:
-        specifier: 'catalog:'
-        version: 4.101.0(@cloudflare/workers-types@4.20260118.0)
-
-  sandboxes/minimal-theme-demo:
-    dependencies:
-      '@fyit/crouton-themes':
-        specifier: workspace:*
-        version: link:../../packages/crouton-themes
-      '@nuxt/ui':
-        specifier: ^4.9.0
-        version: 4.9.0(e35571ed4d3716fd49479fca477900a2)
-      eruda:
-        specifier: ^3.4.3
-        version: 3.4.3
-      nuxt:
-        specifier: ^4.4.8
-        version: 4.4.8(acbda501943d3a88c40c15b150712194)
-      vue:
-        specifier: ^3.5.38
-        version: 3.5.38(typescript@5.9.3)
-      vue-router:
-        specifier: 'catalog:'
-        version: 5.1.0(@vue/compiler-sfc@3.5.38)(vite@7.3.5(@types/node@22.19.7)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(vue@3.5.38(typescript@5.9.3))
-    devDependencies:
       wrangler:
         specifier: 'catalog:'
         version: 4.101.0(@cloudflare/workers-types@4.20260118.0)
@@ -22091,6 +22126,17 @@ snapshots:
     transitivePeerDependencies:
       - magicast
       - typescript
+
+  '@vueuse/nuxt@13.9.0(magicast@0.5.2)(nuxt@4.4.8(acbda501943d3a88c40c15b150712194))(vue@3.5.38(typescript@5.9.3))':
+    dependencies:
+      '@nuxt/kit': 3.20.2(magicast@0.5.2)
+      '@vueuse/core': 13.9.0(vue@3.5.38(typescript@5.9.3))
+      '@vueuse/metadata': 13.9.0
+      local-pkg: 1.1.2
+      nuxt: 4.4.8(acbda501943d3a88c40c15b150712194)
+      vue: 3.5.38(typescript@5.9.3)
+    transitivePeerDependencies:
+      - magicast
 
   '@vueuse/nuxt@13.9.0(magicast@0.5.2)(nuxt@4.4.8(c52926acd337d5a2aa501433def9f0a4))(vue@3.5.38(typescript@5.9.3))':
     dependencies:

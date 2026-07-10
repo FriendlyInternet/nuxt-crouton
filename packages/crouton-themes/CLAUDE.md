@@ -452,6 +452,36 @@ export default defineAppConfig({
 
 Spike: #364.
 
+## Dev workflow — the playground (#1306)
+
+`packages/crouton-themes/playground/` is a **private, in-package** Nuxt app (never
+published — the package's `files` whitelist in `package.json` never lists it) that
+doubles as:
+
+- **The daily dev surface.** It `extends` every theme layer via **relative paths**
+  (`../themes`, `../ko`, `../minimal`, `../kr11`, `../blackandwhite`) instead of the
+  package's own subpath `exports`, so editing any theme's `main.css` / `app.config.ts`
+  hot-reloads instantly — no build step, no reinstall.
+- **The theme gallery** used as the shared sign-off surface (ui-proposal, #307) for
+  every theme this epic (#1303) touches — one preview URL, every theme side-by-side,
+  instead of one sandbox per theme.
+
+```bash
+pnpm --filter crouton-themes-playground dev   # http://localhost:3031
+```
+
+The showcase page renders one set of themed components (buttons, inputs, card,
+separator, badge, switch, dropdown, modal) plus `<ThemeSwitcher>`; flipping the
+switcher restyles the whole page live via `useThemeSwitcher()`'s `updateAppConfig()`
+swap — nothing is re-implemented per theme.
+
+It **supersedes** the old `sandboxes/minimal-theme-demo` (single-theme, #368/#380),
+retired in the same change that added the playground.
+
+**Workspace glob:** `packages/*` in `pnpm-workspace.yaml` is one level only — the
+playground is registered via an extra `packages/*/playground` entry, or `pnpm install`
+won't pick it up.
+
 ## Dependencies
 
 - **Peer deps**: `@nuxt/ui ^4.0.0`, `nuxt ^4.0.0`
@@ -460,12 +490,15 @@ Spike: #364.
 ## Testing
 
 ```bash
-# Test in ko-ui app
+# Test in the playground (all themes, one page)
+pnpm --filter crouton-themes-playground dev
+
+# Or in ko-ui app
 cd apps/ko-ui
 pnpm dev
 
 # Typecheck
-npx nuxt typecheck
+pnpm --filter crouton-themes-playground typecheck
 ```
 
 ## File Size Considerations

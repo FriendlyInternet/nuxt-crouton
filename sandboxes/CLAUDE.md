@@ -39,7 +39,7 @@ Pick `fixtures/` when you want an automated boot+CRUD check in CI.
 
 ```bash
 mkdir -p sandboxes/<name>/app
-# package.json (guarded postinstall), nuxt.config.ts, app/app.vue — see minimal-theme-demo
+# package.json (guarded postinstall), nuxt.config.ts, app/app.vue — see any existing sandbox
 pnpm install                       # registers the new workspace (sandboxes/* glob)
 pnpm --filter <name> dev           # open the printed localhost URL
 ```
@@ -52,10 +52,9 @@ you can't produce a stable URL from a local/agent run without the token. Trigger
 **manually**, on demand:
 
 > **Actions → "Deploy Sandbox (manual, Cloudflare Workers)" → Run workflow → enter the
-> sandbox dir name** (e.g. `minimal-theme-demo`). The run summary prints the
-> `https://<name>.workers.dev` URL.
+> sandbox dir name**. The run summary prints the `https://<name>.workers.dev` URL.
 
-To make a new sandbox deployable, give it (copy `minimal-theme-demo`):
+To make a new sandbox deployable, give it:
 - a minimal **`wrangler.jsonc`** — `name`, `compatibility_date`, `compatibility_flags: ["nodejs_compat"]`. No bindings, no routes, no `env` block → publishes to the zero-config `*.workers.dev` (no DNS/zone token scope, nothing to provision/migrate).
 - a **`cf:staging`** script — `NITRO_PRESET=cloudflare_module nuxt build && npx wrangler deploy --config .output/server/wrangler.json`.
 - **`wrangler`** in `devDependencies` (`catalog:`).
@@ -71,6 +70,7 @@ Each sandbox gets a `sandbox:<name>` label in `.github/labels.yml` (mirrors
 
 ## What lives here now
 
-- **`minimal-theme-demo`** — verifies the `minimal` theme's flat buttons (Nuxt UI 4.9
-  slot-class replacer, spike #364). Extends only `@fyit/crouton-themes/minimal`;
-  `pnpm --filter minimal-theme-demo dev` → button-check page with an on-page checklist.
+_(none — the `minimal-theme-demo` sandbox that verified the `minimal` theme's flat
+buttons was retired in #1306: its job is now served by the in-package
+`packages/crouton-themes/playground/` theme gallery, which covers every theme, not
+just one.)_
