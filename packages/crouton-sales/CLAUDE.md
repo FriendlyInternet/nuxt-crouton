@@ -20,6 +20,7 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `app/components/Admin/` | Admin sidebar navigation |
 | `app/components/Pos/` | Order management (OrdersList) |
 | `app/components/Settings/` | Print settings modals (opt-in) |
+| `server/utils/team-event.ts` | `requireTeamEvent(event)` — shared guard for `teams/[id]/events/[eventId]/*` endpoints: membership + event-ownership in one call (400/404). Extracted in #1324 to kill the per-endpoint copies; new event-scoped endpoints start here |
 | `server/utils/sync-outbox.ts` | Pi-side capture for the D1 live mirror (#176) — `recordOutboxEvents()` + `isCloudSyncEnabled()`; gated by `CROUTON_SALES_CLOUD_SYNC` |
 | `server/utils/sync-ingest.ts` | Cloud-side apply (#178) — `applyOutboxEvents()` idempotent upsert by nanoid |
 | `server/utils/cloud-sync-auth.ts` | Fail-closed `x-sync-key` auth for the ingest (#178) |

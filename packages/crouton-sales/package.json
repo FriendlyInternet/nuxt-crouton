@@ -59,7 +59,8 @@
   },
   "dependencies": {
     "@fyit/crouton-i18n": "workspace:*",
-    "@fyit/crouton-printing": "workspace:*"
+    "@fyit/crouton-printing": "workspace:*",
+    "nanoid": "^5.0.0"
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",

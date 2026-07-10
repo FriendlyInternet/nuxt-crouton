@@ -1430,6 +1430,9 @@ importers:
       '@nuxtjs/i18n':
         specifier: ^9.0.0 || ^10.0.0
         version: 9.5.6(@vue/compiler-dom@3.5.38)(eslint@9.39.2(jiti@2.7.0))(magicast@0.5.2)(rollup@4.62.0)(vue@3.5.38(typescript@5.9.3))
+      nanoid:
+        specifier: ^5.0.0
+        version: 5.1.6
       nuxt:
         specifier: ^4.4.8
         version: 4.4.8(acbda501943d3a88c40c15b150712194)

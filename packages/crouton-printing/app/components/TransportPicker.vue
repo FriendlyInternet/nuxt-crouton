@@ -71,9 +71,9 @@ const selected = computed<TransportValue | undefined>({
 // anything under ~90s counts as alive. useTimestamp keeps the age + the dot
 // fresh while the tab stays open. The age renders language-neutral (8s / 3m /
 // 2h / 5d) — this package ships no i18n, so no locale-specific words here.
+// Rows are fully precomputed so the template stays branch-free.
 const now = useTimestamp({ interval: 5_000 })
 const ALIVE_MS = 90_000
-const isAlive = (iso?: string | null) => !!iso && now.value - Date.parse(iso) < ALIVE_MS
 
 function shortAge(iso: string): string {
   const s = Math.max(0, Math.round((now.value - Date.parse(iso)) / 1000))
@@ -83,9 +83,23 @@ function shortAge(iso: string): string {
   return `${Math.floor(s / 86400)}d`
 }
 
+const DOT_DEAD = 'bg-neutral-300 dark:bg-neutral-700'
+const DOT_LIVE = 'bg-success'
+const lastSeenText = computed(() => props.lastSeenLabel ?? 'last seen')
+const neverSeenText = computed(() => props.neverSeenLabel ?? 'never seen')
+
+function heartbeatRow(value: TransportValue, iso: string | null | undefined) {
+  const label = itemLabel(value)
+  if (!iso) {
+    return { label, dotClass: DOT_DEAD, text: neverSeenText.value }
+  }
+  const alive = now.value - Date.parse(iso) < ALIVE_MS
+  return { label, dotClass: alive ? DOT_LIVE : DOT_DEAD, text: `${lastSeenText.value} ${shortAge(iso)}` }
+}
+
 const heartbeats = computed(() => [
-  { label: itemLabel('local-drainer'), iso: props.lastDrainerTickAt },
-  { label: itemLabel('router-spooler'), iso: props.lastSpoolerPollAt }
+  heartbeatRow('local-drainer', props.lastDrainerTickAt),
+  heartbeatRow('router-spooler', props.lastSpoolerPollAt)
 ])
 </script>
 
@@ -105,13 +119,9 @@ const heartbeats = computed(() => [
         :key="hb.label"
         class="flex items-center gap-2 text-xs text-muted"
       >
-        <span
-          class="inline-block size-2 rounded-full transition-colors"
-          :class="isAlive(hb.iso) ? 'bg-success' : 'bg-neutral-300 dark:bg-neutral-700'"
-        />
+        <span class="inline-block size-2 rounded-full transition-colors" :class="hb.dotClass" />
         <span class="font-medium">{{ hb.label }}</span>
-        <span v-if="hb.iso">{{ lastSeenLabel ?? 'last seen' }} {{ shortAge(hb.iso) }}</span>
-        <span v-else>{{ neverSeenLabel ?? 'never seen' }}</span>
+        <span>{{ hb.text }}</span>
       </li>
     </ul>
   </div>

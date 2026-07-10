@@ -5,6 +5,7 @@ import {
   isPrintTransport,
   transportAllows,
   shouldStampHeartbeat,
+  spoolerMayServe,
   upsertPrintTransport
 } from '../server/utils/print-transport'
 import { drainPendingEscposJobs } from '../server/utils/escpos-drainer'
@@ -174,6 +175,33 @@ describe('drainPendingEscposJobs transport gating', () => {
     })
     await drainPendingEscposJobs(db as any)
     expect(transportUpdates(db)).toHaveLength(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Spooler-side gate (the jobs.get endpoint delegates here)
+// ---------------------------------------------------------------------------
+describe('spoolerMayServe', () => {
+  it('serves unset (default) and router-spooler events; refuses local-drainer and none', async () => {
+    expect(await spoolerMayServe(fakeDb() as any, 'e-unset')).toBe(true)
+    expect(await spoolerMayServe(fakeDb({ transports: [{ eventId: 'e1', transport: 'router-spooler' }] }) as any, 'e1')).toBe(true)
+    expect(await spoolerMayServe(fakeDb({ transports: [{ eventId: 'e1', transport: 'local-drainer' }] }) as any, 'e1')).toBe(false)
+    expect(await spoolerMayServe(fakeDb({ transports: [{ eventId: 'e1', transport: 'none' }] }) as any, 'e1')).toBe(false)
+  })
+
+  it('stamps lastSpoolerPollAt when the row is stale, skips when fresh or absent', async () => {
+    const stale = fakeDb({ transports: [{ eventId: 'e1', transport: 'router-spooler', lastSpoolerPollAt: null }] })
+    await spoolerMayServe(stale as any, 'e1')
+    expect(transportUpdates(stale)).toHaveLength(1)
+    expect(transportUpdates(stale)[0].set.lastSpoolerPollAt).toBeTruthy()
+
+    const fresh = fakeDb({ transports: [{ eventId: 'e1', transport: 'router-spooler', lastSpoolerPollAt: new Date().toISOString() }] })
+    await spoolerMayServe(fresh as any, 'e1')
+    expect(transportUpdates(fresh)).toHaveLength(0)
+
+    const unset = fakeDb()
+    await spoolerMayServe(unset as any, 'e-unset')
+    expect(transportUpdates(unset)).toHaveLength(0) // no row to stamp
   })
 })
 

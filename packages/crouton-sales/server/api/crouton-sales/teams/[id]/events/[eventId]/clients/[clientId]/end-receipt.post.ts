@@ -13,33 +13,19 @@
  * as auto-imported globals by the crouton-printing layer.
  */
 import { eq, and } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import type { ReceiptData, ReceiptItem, ReceiptSettings } from '@fyit/crouton-printing/server/utils/receipt-formatter'
 import { aggregateClientTab } from '../../../../../../../../utils/client-tab'
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
+import { requireTeamEvent } from '../../../../../../../../utils/team-event'
 import { salesClients } from '~~/layers/sales/collections/clients/server/database/schema'
 import { salesPrinters } from '~~/layers/sales/collections/printers/server/database/schema'
 import { salesEventsettings } from '~~/layers/sales/collections/eventsettings/server/database/schema'
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await resolveTeamAndCheckMembership(event)
-  const eventId = getRouterParam(event, 'eventId')
+  const { team, user, db, eventId, salesEvent } = await requireTeamEvent(event)
   const clientId = getRouterParam(event, 'clientId')
 
-  if (!eventId || !clientId) {
-    throw createError({ status: 400, statusText: 'Event ID and Client ID are required' })
-  }
-
-  const db = useDB()
-
-  const [salesEvent] = await db
-    .select()
-    .from(salesEvents)
-    .where(and(eq(salesEvents.id, eventId), eq(salesEvents.teamId, team.id)))
-    .limit(1)
-
-  if (!salesEvent) {
-    throw createError({ status: 404, statusText: 'Event not found' })
+  if (!clientId) {
+    throw createError({ status: 400, statusText: 'Client ID is required' })
   }
 
   const [client] = await db

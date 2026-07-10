@@ -80,6 +80,26 @@ export async function getAllPrintTransports(db: any, eventId?: string): Promise<
     .where(eventId ? eq(printTransports.eventId, eventId) : undefined)
 }
 
+/**
+ * The spooler endpoint's side of the gate: may the HTTP spooler serve this
+ * event's jobs? While allowed, stamps the `lastSpoolerPollAt` liveness
+ * heartbeat (throttled) for the settings UI.
+ */
+export async function spoolerMayServe(db: any, eventId: string): Promise<boolean> {
+  const row = await getPrintTransport(db, eventId)
+  if (!transportAllows(row?.transport, PRINT_TRANSPORT.ROUTER_SPOOLER)) {
+    return false
+  }
+  if (row && shouldStampHeartbeat(row.lastSpoolerPollAt)) {
+    const { printTransports } = await import('../database/schema')
+    await db
+      .update(printTransports)
+      .set({ lastSpoolerPollAt: new Date().toISOString() })
+      .where(eq(printTransports.eventId, eventId))
+  }
+  return true
+}
+
 /** Record (or change) an event's transport choice. */
 export async function upsertPrintTransport(
   db: any,

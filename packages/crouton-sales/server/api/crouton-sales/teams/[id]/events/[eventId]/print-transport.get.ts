@@ -10,32 +10,19 @@
  * only on crouton-core and has no auth, so the domain package that already
  * has team membership checks owns the route (same seam as enqueuePrintJob).
  */
-import { eq, and } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { DEFAULT_PRINT_TRANSPORT, getPrintTransport } from '@fyit/crouton-printing/server/utils/print-transport'
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
+import { requireTeamEvent } from '../../../../../../utils/team-event'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
-  const eventId = getRouterParam(event, 'eventId')
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
-
-  const db = useDB()
-
-  const [salesEvent] = await db
-    .select({ id: salesEvents.id })
-    .from(salesEvents)
-    .where(and(eq(salesEvents.id, eventId), eq(salesEvents.teamId, team.id)))
-  if (!salesEvent) {
-    throw createError({ status: 404, statusText: 'Event not found' })
-  }
+  const { db, eventId } = await requireTeamEvent(event)
 
   const row = await getPrintTransport(db, eventId)
+  if (!row) {
+    return { transport: DEFAULT_PRINT_TRANSPORT, lastSpoolerPollAt: null, lastDrainerTickAt: null }
+  }
   return {
-    transport: row?.transport ?? DEFAULT_PRINT_TRANSPORT,
-    lastSpoolerPollAt: row?.lastSpoolerPollAt ?? null,
-    lastDrainerTickAt: row?.lastDrainerTickAt ?? null
+    transport: row.transport,
+    lastSpoolerPollAt: row.lastSpoolerPollAt,
+    lastDrainerTickAt: row.lastDrainerTickAt
   }
 })
