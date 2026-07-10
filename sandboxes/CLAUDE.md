@@ -70,7 +70,12 @@ Each sandbox gets a `sandbox:<name>` label in `.github/labels.yml` (mirrors
 
 ## What lives here now
 
-_(none — the `minimal-theme-demo` sandbox that verified the `minimal` theme's flat
+- **`unstyled-spike`** — measures the re-supply cost of `ui: { theme: { unstyled: true } }`
+  (spike #1305, epic #1303) across 6 components (`UButton`, `UInput`, `UCard`,
+  `USeparator`, `UModal`, `UDropdownMenu`). Findings + recommendation live in
+  `packages/crouton-themes/CLAUDE.md` § "Three theming modes".
+
+_(The `minimal-theme-demo` sandbox that verified the `minimal` theme's flat
 buttons was retired in #1306: its job is now served by the in-package
 `packages/crouton-themes/playground/` theme gallery, which covers every theme, not
 just one.)_

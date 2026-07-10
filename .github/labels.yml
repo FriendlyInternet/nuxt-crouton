@@ -149,6 +149,10 @@
 # (none currently — minimal-theme-demo retired in #1306, superseded by
 #  packages/crouton-themes/playground/)
 
+- name: "sandbox:unstyled-spike"
+  color: "d4c5f9"
+  description: "Sandbox: sandboxes/unstyled-spike"
+
 # ── Workers (workers/*) ──
 - name: "worker:collab-worker"
   color: "5319e7"
