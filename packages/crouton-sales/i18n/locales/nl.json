@@ -546,6 +546,7 @@
       "label": "Klant",
       "selectOrCreate": "Selecteer of maak klant aan...",
       "createNew": "Nieuwe klant aanmaken",
+      "createNamed": "\"{name}\" toevoegen",
       "nameLabel": "Klantnaam",
       "namePlaceholder": "Voer klantnaam in"
     },

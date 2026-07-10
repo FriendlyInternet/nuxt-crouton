@@ -546,6 +546,7 @@
       "label": "Client",
       "selectOrCreate": "Select or create client...",
       "createNew": "Create new client",
+      "createNamed": "Add \"{name}\"",
       "nameLabel": "Client name",
       "namePlaceholder": "Enter client name"
     },

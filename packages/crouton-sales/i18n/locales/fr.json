@@ -545,6 +545,7 @@
       "label": "Client",
       "selectOrCreate": "Sélectionner ou créer un client...",
       "createNew": "Créer un nouveau client",
+      "createNamed": "Ajouter « {name} »",
       "nameLabel": "Nom du client",
       "namePlaceholder": "Saisir le nom du client"
     },

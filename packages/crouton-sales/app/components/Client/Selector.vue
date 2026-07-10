@@ -3,7 +3,9 @@
        the row lines up with the category-tabs row beside it. -->
   <div class="p-1 -m-1 rounded-lg" :class="highlight ? 'border border-warning bg-warning/5' : ''">
     <!-- Dropdown with search and create — clients are always the reusable
-         kind; there is no free-text mode. -->
+         kind; there is no free-text mode. Typing an unknown name surfaces a
+         "create" row (create-item): Enter or a click adds the client inline,
+         no modal needed. -->
     <USelectMenu
       v-model="selectedValue"
       :items="allClients"
@@ -14,7 +16,10 @@
       icon="i-lucide-user"
       size="lg"
       class="w-full"
+      :loading="creating"
+      create-item
       searchable
+      @create="createClientFromTerm"
     >
       <template #default="{ modelValue }">
         <span v-if="modelValue" class="truncate">
@@ -23,6 +28,10 @@
         <span v-else class="text-dimmed truncate">
           {{ t('sales.client.selectOrCreate') }}
         </span>
+      </template>
+
+      <template #create-item-label="{ item }">
+        {{ t('sales.client.createNamed', { params: { name: item }, fallback: `Add "${item}"` }) }}
       </template>
 
       <template #content-top>
@@ -151,9 +160,26 @@ const openCreateModal = () => {
   createModalOpen.value = true
 }
 
-// Handle creating a new client
+// Inline create from the select's create-item row (type a new name → Enter/+).
+async function createClientFromTerm(term: string) {
+  const title = term.trim()
+  if (!title || creating.value) return
+  // Exact-match guard: create-item hides on exact matches, but Enter can still
+  // race a slow list refresh — select the existing client instead of duping.
+  const existing = allClients.value.find(c => c.title.trim().toLowerCase() === title.toLowerCase())
+  if (existing) {
+    selectedValue.value = existing.id
+    return
+  }
+  await createClientWithTitle(title)
+}
+
+// Handle creating a new client (modal path)
 async function createClient() {
-  const title = newClientName.value.trim()
+  await createClientWithTitle(newClientName.value.trim())
+}
+
+async function createClientWithTitle(title: string) {
   if (!title) return
 
   creating.value = true
