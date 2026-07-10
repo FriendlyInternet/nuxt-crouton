@@ -123,6 +123,24 @@ const { variant } = useThemeSwitcher()
 
 ## Available Themes
 
+### Riso / E-ink / Blueprint Themes (`./riso`, `./eink`, `./blueprint`) — #1311
+
+The wildcard trio (owner's picks):
+- **Riso** (`riso-`): two-color risograph — fluoro pink + teal on warm paper,
+  misregistration shadows (each "ink layer" slightly off), SVG-turbulence grain,
+  wavy-underline links. Tokens `--riso-*`.
+- **E-ink** (`eink-`): greyscale reading mode — ZERO motion (states flip like a
+  page refresh), underline-only inputs, double-rule newspaper cards with serif
+  headers, small-caps badges. Tokens `--eink-*`.
+- **Blueprint** (`bp-`): cyanotype drafting sheet — white line-work on deep blue,
+  faint 24px grid ambient, double-frame drawn parts, dashed dimension separators,
+  a pencil-yellow accent for alerts/callouts. Dark ambient drives `--ui-bg` +
+  light text. Tokens `--bp-*`.
+
+All three: named variants `<name>` / `<name>-{solid,outline,soft,ghost,link}`
+(button) + `<name>` for input/card/badge/separator; ambient USwitch chrome; zero
+`!important` via the shared replacer.
+
 ### Game Boy Theme (`./gameboy`)
 
 The original DMG LCD: FOUR shades of olive green (`--gb-0..3`) and nothing else.
