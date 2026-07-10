@@ -8,8 +8,11 @@
      --ui-text-highlighted → near-black in light mode,  #fff  in dark mode
      --ui-border-inverted  → near-black in light mode,  #fff  in dark mode
 
-   We still use !important to override Nuxt UI's compound-variant Tailwind
-   utilities (e.g. bg-primary, text-primary) which are not !important.
+   No !important needed (#1304): the shared subtractive replacer
+   (../lib/subtractive.ts) strips the conflicting Nuxt UI defaults
+   (background, text color, shadow, ring, border, transition, underline)
+   whenever a bw- marker class is present, so these rules win by normal
+   cascade.
 */
 
 /* ============================================
@@ -18,19 +21,19 @@
    ============================================ */
 
 .bw-solid {
-  background-color: var(--ui-bg-inverted) !important;
-  color: var(--ui-text-inverted) !important;
-  box-shadow: none !important;
-  border: none !important;
-  transition: opacity 150ms ease !important;
+  background-color: var(--ui-bg-inverted);
+  color: var(--ui-text-inverted);
+  box-shadow: none;
+  border: none;
+  transition: opacity 150ms ease;
 }
 
 .bw-solid:hover {
-  opacity: 0.85 !important;
+  opacity: 0.85;
 }
 
 .bw-solid:active {
-  opacity: 0.7 !important;
+  opacity: 0.7;
 }
 
 /* ============================================
@@ -38,16 +41,16 @@
    ============================================ */
 
 .bw-outline {
-  background-color: transparent !important;
-  color: var(--ui-text-highlighted) !important;
-  box-shadow: inset 0 0 0 1px var(--ui-border-accented) !important;
-  border: none !important;
-  transition: background-color 150ms ease, box-shadow 150ms ease !important;
+  background-color: transparent;
+  color: var(--ui-text-highlighted);
+  box-shadow: inset 0 0 0 1px var(--ui-border-accented);
+  border: none;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
 }
 
 .bw-outline:hover {
-  background-color: var(--ui-bg-elevated) !important;
-  box-shadow: inset 0 0 0 1px var(--ui-border-inverted) !important;
+  background-color: var(--ui-bg-elevated);
+  box-shadow: inset 0 0 0 1px var(--ui-border-inverted);
 }
 
 /* ============================================
@@ -55,15 +58,15 @@
    ============================================ */
 
 .bw-soft {
-  background-color: var(--ui-bg-elevated) !important;
-  color: var(--ui-text-highlighted) !important;
-  box-shadow: none !important;
-  border: none !important;
-  transition: background-color 150ms ease !important;
+  background-color: var(--ui-bg-elevated);
+  color: var(--ui-text-highlighted);
+  box-shadow: none;
+  border: none;
+  transition: background-color 150ms ease;
 }
 
 .bw-soft:hover {
-  background-color: var(--ui-bg-accented) !important;
+  background-color: var(--ui-bg-accented);
 }
 
 /* ============================================
@@ -72,19 +75,19 @@
    ============================================ */
 
 .bw-ghost {
-  background-color: transparent !important;
-  color: var(--ui-text-highlighted) !important;
-  box-shadow: none !important;
-  border: none !important;
-  transition: background-color 150ms ease !important;
+  background-color: transparent;
+  color: var(--ui-text-highlighted);
+  box-shadow: none;
+  border: none;
+  transition: background-color 150ms ease;
 }
 
 .bw-ghost:hover {
-  background-color: var(--ui-bg-elevated) !important;
+  background-color: var(--ui-bg-elevated);
 }
 
 .bw-ghost:active {
-  background-color: var(--ui-bg-accented) !important;
+  background-color: var(--ui-bg-accented);
 }
 
 /* ============================================
@@ -92,15 +95,15 @@
    ============================================ */
 
 .bw-link {
-  background-color: transparent !important;
-  color: var(--ui-text-highlighted) !important;
-  box-shadow: none !important;
-  border: none !important;
-  text-decoration: underline !important;
-  text-underline-offset: 2px !important;
-  transition: opacity 150ms ease !important;
+  background-color: transparent;
+  color: var(--ui-text-highlighted);
+  box-shadow: none;
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: opacity 150ms ease;
 }
 
 .bw-link:hover {
-  opacity: 0.75 !important;
+  opacity: 0.75;
 }

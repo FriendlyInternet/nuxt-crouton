@@ -82,20 +82,20 @@
 
 /* Base tactile button - default gray */
 .ko-tactile {
-  position: relative !important;
-  overflow: visible !important;
-  isolation: isolate !important;
-  font-family: 'ko-tech', sans-serif !important;
-  letter-spacing: 0.075em !important;
-  text-transform: uppercase !important;
-  background-color: var(--ko-surface-light) !important;
-  color: var(--ko-text-dark) !important;
-  border: none !important;
+  position: relative;
+  overflow: visible;
+  isolation: isolate;
+  font-family: 'ko-tech', sans-serif;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  background-color: var(--ko-surface-light);
+  color: var(--ko-text-dark);
+  border: none;
   box-shadow:
     rgba(0, 0, 0, 0.377) 10px 10px 8px,
     #ffffff 1.5px 1.5px 2px 0px inset,
-    #c7c3c0 -3.2px -3.2px 8px 0px inset !important;
-  transition: all 0.1s ease-in-out !important;
+    #c7c3c0 -3.2px -3.2px 8px 0px inset;
+  transition: all 0.1s ease-in-out;
 }
 
 /* Dark bezel/wrapper effect */
@@ -109,125 +109,127 @@
 }
 
 .ko-tactile:hover {
-  background-color: #bfbbb8 !important;
+  background-color: #bfbbb8;
 }
 
 .ko-tactile:active {
   box-shadow:
     rgba(0, 0, 0, 0.377) 0px 0px 0px,
     inset 0.5px 0.5px 4px #000000,
-    #c7c3c0 -3.2px -3.2px 8px 0px inset !important;
+    #c7c3c0 -3.2px -3.2px 8px 0px inset;
   transform: translateY(0.5px);
 }
 
 /* Orange variant */
 .ko-tactile.ko-tactile--orange {
-  background-color: var(--ko-accent-orange) !important;
-  color: var(--ko-text-light) !important;
+  background-color: var(--ko-accent-orange);
+  color: var(--ko-text-light);
   box-shadow:
     rgba(0, 0, 0, 0.377) 10px 10px 8px,
     var(--ko-highlight-orange) 1.5px 1.5px 1px 0px inset,
-    var(--ko-accent-orange) -3.2px -3.2px 8px 0px inset !important;
+    var(--ko-accent-orange) -3.2px -3.2px 8px 0px inset;
 }
 
 .ko-tactile.ko-tactile--orange:hover {
-  background-color: #e85520 !important;
+  background-color: #e85520;
 }
 
 .ko-tactile.ko-tactile--orange:active {
   box-shadow:
     rgba(0, 0, 0, 0.377) 0px 0px 0px,
     inset 0.5px 0.5px 4px #000000,
-    var(--ko-accent-orange-dark) -3.2px -3.2px 8px 0px inset !important;
+    var(--ko-accent-orange-dark) -3.2px -3.2px 8px 0px inset;
 }
 
 /* Dark variant */
 .ko-tactile.ko-tactile--dark {
-  background-color: var(--ko-surface-dark) !important;
-  color: var(--ko-text-light) !important;
+  background-color: var(--ko-surface-dark);
+  color: var(--ko-text-light);
   box-shadow:
     rgba(0, 0, 0, 0.377) 10px 10px 8px,
     var(--ko-highlight-dark) 1.5px 1.5px 1px 0px inset,
-    var(--ko-surface-dark) -3.2px -3.2px 8px 0px inset !important;
+    var(--ko-surface-dark) -3.2px -3.2px 8px 0px inset;
 }
 
 .ko-tactile.ko-tactile--dark:hover {
-  background-color: #4a4948 !important;
+  background-color: #4a4948;
 }
 
 .ko-tactile.ko-tactile--dark:active {
   box-shadow:
     rgba(0, 0, 0, 0.377) 0px 0px 0px,
     inset 0.5px 0.5px 4px #000000,
-    var(--ko-surface-dark) -3.2px -3.2px 8px 0px inset !important;
+    var(--ko-surface-dark) -3.2px -3.2px 8px 0px inset;
 }
 
 /* Red variant */
 .ko-tactile.ko-tactile--red {
-  background-color: var(--ko-accent-red) !important;
-  color: var(--ko-text-light) !important;
+  background-color: var(--ko-accent-red);
+  color: var(--ko-text-light);
   box-shadow:
     rgba(0, 0, 0, 0.377) 10px 10px 8px,
     var(--ko-highlight-red) 1.5px 1.5px 1px 0px inset,
-    var(--ko-accent-red) -3.2px -3.2px 8px 0px inset !important;
+    var(--ko-accent-red) -3.2px -3.2px 8px 0px inset;
 }
 
 .ko-tactile.ko-tactile--red:hover {
-  background-color: #d92015 !important;
+  background-color: #d92015;
 }
 
 .ko-tactile.ko-tactile--red:active {
   box-shadow:
     rgba(0, 0, 0, 0.377) 0px 0px 0px,
     inset 0.5px 0.5px 4px #000000,
-    var(--ko-accent-red) -3.2px -3.2px 8px 0px inset !important;
+    var(--ko-accent-red) -3.2px -3.2px 8px 0px inset;
 }
 
 /* Pink variant */
 .ko-tactile.ko-tactile--pink {
-  background-color: var(--ko-accent-pink) !important;
-  color: var(--ko-text-light) !important;
+  background-color: var(--ko-accent-pink);
+  color: var(--ko-text-light);
   box-shadow:
     rgba(0, 0, 0, 0.377) 10px 10px 8px,
     var(--ko-highlight-pink) 1.5px 1.5px 1px 0px inset,
-    var(--ko-accent-pink) -3.2px -3.2px 8px 0px inset !important;
+    var(--ko-accent-pink) -3.2px -3.2px 8px 0px inset;
 }
 
 .ko-tactile.ko-tactile--pink:hover {
-  background-color: #cc2550 !important;
+  background-color: #cc2550;
 }
 
 .ko-tactile.ko-tactile--pink:active {
   box-shadow:
     rgba(0, 0, 0, 0.377) 0px 0px 0px,
     inset 0.5px 0.5px 4px #000000,
-    var(--ko-accent-pink) -3.2px -3.2px 8px 0px inset !important;
+    var(--ko-accent-pink) -3.2px -3.2px 8px 0px inset;
 }
 
 /* Blue variant */
 .ko-tactile.ko-tactile--blue {
-  background-color: var(--ko-accent-blue) !important;
-  color: var(--ko-text-light) !important;
+  background-color: var(--ko-accent-blue);
+  color: var(--ko-text-light);
   box-shadow:
     rgba(0, 0, 0, 0.377) 10px 10px 8px,
     var(--ko-highlight-blue) 1.5px 1.5px 1px 0px inset,
-    var(--ko-accent-blue) -3.2px -3.2px 8px 0px inset !important;
+    var(--ko-accent-blue) -3.2px -3.2px 8px 0px inset;
 }
 
 .ko-tactile.ko-tactile--blue:hover {
-  background-color: #3a8ab8 !important;
+  background-color: #3a8ab8;
 }
 
 .ko-tactile.ko-tactile--blue:active {
   box-shadow:
     rgba(0, 0, 0, 0.377) 0px 0px 0px,
     inset 0.5px 0.5px 4px #000000,
-    var(--ko-accent-blue) -3.2px -3.2px 8px 0px inset !important;
+    var(--ko-accent-blue) -3.2px -3.2px 8px 0px inset;
 }
 
 /* Square shape modifier */
 .ko-tactile--square {
-  aspect-ratio: 1 !important;
+  aspect-ratio: 1;
+  /* !important stays: spacing utilities (px, py) are deliberately NOT
+     stripped by the subtractive replacer (#1304), so this must outrank them. */
   padding: 1rem !important;
 }
 
@@ -320,23 +322,23 @@
    Uses ::before for dark bezel (sharp corners) and ::after for button face (round corners)
    This creates the signature KO look with different corner radii */
 .ko-bezel {
-  position: relative !important;
-  overflow: visible !important;  /* Required for ::before bezel to extend outside */
-  font-family: 'ko-tech', sans-serif !important;
-  letter-spacing: 0.075em !important;
-  text-transform: uppercase !important;
-  font-size: 0.7em !important;
-  border: none !important;
-  border-radius: var(--ko-button-radius) !important;
-  transition: all 0.1s ease-in-out !important;
+  position: relative;
+  overflow: visible;  /* Required for ::before bezel to extend outside */
+  font-family: 'ko-tech', sans-serif;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  font-size: 0.7em;
+  border: none;
+  border-radius: var(--ko-button-radius);
+  transition: all 0.1s ease-in-out;
   /* Transparent bg - actual color comes from ::after */
-  background-color: transparent !important;
-  color: var(--ko-text-dark) !important;
-  z-index: 0 !important;
+  background-color: transparent;
+  color: var(--ko-text-dark);
+  z-index: 0;
   /* Center content */
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Dark bezel - sharp corners */
@@ -383,7 +385,7 @@
 
 /* Orange variant */
 .ko-bezel.ko-bezel--orange {
-  color: var(--ko-text-light) !important;
+  color: var(--ko-text-light);
 }
 
 .ko-bezel.ko-bezel--orange::after {
@@ -405,7 +407,7 @@
 
 /* Dark variant */
 .ko-bezel.ko-bezel--dark {
-  color: var(--ko-text-light) !important;
+  color: var(--ko-text-light);
 }
 
 .ko-bezel.ko-bezel--dark::after {
@@ -427,7 +429,7 @@
 
 /* Red variant */
 .ko-bezel.ko-bezel--red {
-  color: var(--ko-text-light) !important;
+  color: var(--ko-text-light);
 }
 
 .ko-bezel.ko-bezel--red::after {
@@ -449,7 +451,7 @@
 
 /* Pink variant */
 .ko-bezel.ko-bezel--pink {
-  color: var(--ko-text-light) !important;
+  color: var(--ko-text-light);
 }
 
 .ko-bezel.ko-bezel--pink::after {
@@ -471,7 +473,7 @@
 
 /* Blue variant */
 .ko-bezel.ko-bezel--blue {
-  color: var(--ko-text-light) !important;
+  color: var(--ko-text-light);
 }
 
 .ko-bezel.ko-bezel--blue::after {
@@ -497,8 +499,8 @@
    ============================================ */
 
 .ko-input {
-  position: relative !important;
-  z-index: 0 !important;
+  position: relative;
+  z-index: 0;
 }
 
 /* Dark bezel wrapper - sharp corners */
@@ -514,29 +516,29 @@
 
 /* The actual input styling - applied via slot class */
 .ko-input-base {
-  font-family: 'ko-tech', monospace !important;
-  font-size: 0.85rem !important;
-  letter-spacing: 0.1em !important;
-  text-transform: uppercase !important;
-  background-color: var(--ko-surface-panel) !important;
-  color: var(--ko-accent-orange) !important;
-  border: 1px solid var(--ko-surface-recess) !important;
-  border-radius: var(--ko-button-radius) !important;
-  box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.3) !important;
-  caret-color: var(--ko-accent-orange) !important;
+  font-family: 'ko-tech', monospace;
+  font-size: 0.85rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background-color: var(--ko-surface-panel);
+  color: var(--ko-accent-orange);
+  border: 1px solid var(--ko-surface-recess);
+  border-radius: var(--ko-button-radius);
+  box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.3);
+  caret-color: var(--ko-accent-orange);
 }
 
 .ko-input-base::placeholder {
-  color: var(--ko-surface-dark) !important;
-  opacity: 0.7 !important;
+  color: var(--ko-surface-dark);
+  opacity: 0.7;
 }
 
 .ko-input-base:focus {
-  outline: none !important;
-  border-color: var(--ko-accent-orange) !important;
+  outline: none;
+  border-color: var(--ko-accent-orange);
   box-shadow:
     inset 1px 1px 4px rgba(0, 0, 0, 0.3),
-    0 0 0 1px var(--ko-accent-orange) !important;
+    0 0 0 1px var(--ko-accent-orange);
 }
 
 /* ============================================
@@ -545,17 +547,17 @@
    ============================================ */
 
 .ko-card {
-  position: relative !important;
-  overflow: visible !important;  /* Required for ::before bezel to extend outside */
-  font-family: 'ko-tech', sans-serif !important;
-  background-color: var(--ko-surface-light) !important;
-  border: none !important;
-  border-radius: var(--ko-button-radius) !important;
+  position: relative;
+  overflow: visible;  /* Required for ::before bezel to extend outside */
+  font-family: 'ko-tech', sans-serif;
+  background-color: var(--ko-surface-light);
+  border: none;
+  border-radius: var(--ko-button-radius);
   box-shadow:
     var(--ko-shadow-drop),
     var(--ko-highlight-light) 1.5px 1.5px 2px 0px inset,
-    var(--ko-surface-mid) -2px -2px 4px 0px inset !important;
-  z-index: 0 !important;
+    var(--ko-surface-mid) -2px -2px 4px 0px inset;
+  z-index: 0;
 }
 
 /* Dark bezel wrapper - sharp corners */
@@ -571,20 +573,20 @@
 
 /* Slot-based styling */
 .ko-card-header {
-  font-family: 'ko-tech', sans-serif !important;
-  letter-spacing: 0.1em !important;
-  text-transform: uppercase !important;
-  font-size: 0.75rem !important;
-  color: var(--ko-text-label) !important;
-  border-bottom: 1px solid var(--ko-surface-mid) !important;
+  font-family: 'ko-tech', sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  color: var(--ko-text-label);
+  border-bottom: 1px solid var(--ko-surface-mid);
 }
 
 .ko-card-body {
-  color: var(--ko-text-dark) !important;
+  color: var(--ko-text-dark);
 }
 
 .ko-card-footer {
-  border-top: 1px solid var(--ko-surface-mid) !important;
+  border-top: 1px solid var(--ko-surface-mid);
 }
 
 /* ============================================
@@ -593,20 +595,20 @@
    ============================================ */
 
 .ko-outline {
-  position: relative !important;
-  font-family: 'ko-tech', sans-serif !important;
-  letter-spacing: 0.075em !important;
-  text-transform: uppercase !important;
-  font-size: 0.7em !important;
-  background-color: transparent !important;
-  border: 2px solid var(--ko-surface-dark) !important;
-  border-radius: var(--ko-button-radius) !important;
-  color: var(--ko-text-dark) !important;
-  transition: all 0.1s ease-in-out !important;
+  position: relative;
+  font-family: 'ko-tech', sans-serif;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  font-size: 0.7em;
+  background-color: transparent;
+  border: 2px solid var(--ko-surface-dark);
+  border-radius: var(--ko-button-radius);
+  color: var(--ko-text-dark);
+  transition: all 0.1s ease-in-out;
 }
 
 .ko-outline:hover {
-  background-color: var(--ko-surface-light) !important;
+  background-color: var(--ko-surface-light);
 }
 
 .ko-outline:active {
@@ -614,48 +616,48 @@
 }
 
 .ko-outline.ko-outline--orange {
-  border-color: var(--ko-accent-orange) !important;
-  color: var(--ko-accent-orange) !important;
+  border-color: var(--ko-accent-orange);
+  color: var(--ko-accent-orange);
 }
 
 .ko-outline.ko-outline--orange:hover {
-  background-color: rgba(250, 95, 40, 0.1) !important;
+  background-color: rgba(250, 95, 40, 0.1);
 }
 
 .ko-outline.ko-outline--dark {
-  border-color: var(--ko-surface-dark) !important;
-  color: var(--ko-text-dark) !important;
+  border-color: var(--ko-surface-dark);
+  color: var(--ko-text-dark);
 }
 
 .ko-outline.ko-outline--dark:hover {
-  background-color: rgba(84, 82, 81, 0.1) !important;
+  background-color: rgba(84, 82, 81, 0.1);
 }
 
 .ko-outline.ko-outline--red {
-  border-color: var(--ko-accent-red) !important;
-  color: var(--ko-accent-red) !important;
+  border-color: var(--ko-accent-red);
+  color: var(--ko-accent-red);
 }
 
 .ko-outline.ko-outline--red:hover {
-  background-color: rgba(241, 38, 24, 0.1) !important;
+  background-color: rgba(241, 38, 24, 0.1);
 }
 
 .ko-outline.ko-outline--pink {
-  border-color: var(--ko-accent-pink) !important;
-  color: var(--ko-accent-pink) !important;
+  border-color: var(--ko-accent-pink);
+  color: var(--ko-accent-pink);
 }
 
 .ko-outline.ko-outline--pink:hover {
-  background-color: rgba(230, 44, 94, 0.1) !important;
+  background-color: rgba(230, 44, 94, 0.1);
 }
 
 .ko-outline.ko-outline--blue {
-  border-color: var(--ko-accent-blue) !important;
-  color: var(--ko-accent-blue) !important;
+  border-color: var(--ko-accent-blue);
+  color: var(--ko-accent-blue);
 }
 
 .ko-outline.ko-outline--blue:hover {
-  background-color: rgba(66, 156, 206, 0.1) !important;
+  background-color: rgba(66, 156, 206, 0.1);
 }
 
 /* ============================================
@@ -664,20 +666,20 @@
    ============================================ */
 
 .ko-soft {
-  position: relative !important;
-  font-family: 'ko-tech', sans-serif !important;
-  letter-spacing: 0.075em !important;
-  text-transform: uppercase !important;
-  font-size: 0.7em !important;
-  background-color: var(--ko-surface-light) !important;
-  border: none !important;
-  border-radius: var(--ko-button-radius) !important;
-  color: var(--ko-text-dark) !important;
-  transition: all 0.1s ease-in-out !important;
+  position: relative;
+  font-family: 'ko-tech', sans-serif;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  font-size: 0.7em;
+  background-color: var(--ko-surface-light);
+  border: none;
+  border-radius: var(--ko-button-radius);
+  color: var(--ko-text-dark);
+  transition: all 0.1s ease-in-out;
 }
 
 .ko-soft:hover {
-  background-color: #bfbbb8 !important;
+  background-color: #bfbbb8;
 }
 
 .ko-soft:active {
@@ -685,48 +687,48 @@
 }
 
 .ko-soft.ko-soft--orange {
-  background-color: rgba(250, 95, 40, 0.15) !important;
-  color: var(--ko-accent-orange) !important;
+  background-color: rgba(250, 95, 40, 0.15);
+  color: var(--ko-accent-orange);
 }
 
 .ko-soft.ko-soft--orange:hover {
-  background-color: rgba(250, 95, 40, 0.25) !important;
+  background-color: rgba(250, 95, 40, 0.25);
 }
 
 .ko-soft.ko-soft--dark {
-  background-color: rgba(84, 82, 81, 0.15) !important;
-  color: var(--ko-text-dark) !important;
+  background-color: rgba(84, 82, 81, 0.15);
+  color: var(--ko-text-dark);
 }
 
 .ko-soft.ko-soft--dark:hover {
-  background-color: rgba(84, 82, 81, 0.25) !important;
+  background-color: rgba(84, 82, 81, 0.25);
 }
 
 .ko-soft.ko-soft--red {
-  background-color: rgba(241, 38, 24, 0.15) !important;
-  color: var(--ko-accent-red) !important;
+  background-color: rgba(241, 38, 24, 0.15);
+  color: var(--ko-accent-red);
 }
 
 .ko-soft.ko-soft--red:hover {
-  background-color: rgba(241, 38, 24, 0.25) !important;
+  background-color: rgba(241, 38, 24, 0.25);
 }
 
 .ko-soft.ko-soft--pink {
-  background-color: rgba(230, 44, 94, 0.15) !important;
-  color: var(--ko-accent-pink) !important;
+  background-color: rgba(230, 44, 94, 0.15);
+  color: var(--ko-accent-pink);
 }
 
 .ko-soft.ko-soft--pink:hover {
-  background-color: rgba(230, 44, 94, 0.25) !important;
+  background-color: rgba(230, 44, 94, 0.25);
 }
 
 .ko-soft.ko-soft--blue {
-  background-color: rgba(66, 156, 206, 0.15) !important;
-  color: var(--ko-accent-blue) !important;
+  background-color: rgba(66, 156, 206, 0.15);
+  color: var(--ko-accent-blue);
 }
 
 .ko-soft.ko-soft--blue:hover {
-  background-color: rgba(66, 156, 206, 0.25) !important;
+  background-color: rgba(66, 156, 206, 0.25);
 }
 
 /* ============================================
@@ -735,20 +737,20 @@
    ============================================ */
 
 .ko-ghost {
-  position: relative !important;
-  font-family: 'ko-tech', sans-serif !important;
-  letter-spacing: 0.075em !important;
-  text-transform: uppercase !important;
-  font-size: 0.7em !important;
-  background-color: transparent !important;
-  border: none !important;
-  border-radius: var(--ko-button-radius) !important;
-  color: var(--ko-text-dark) !important;
-  transition: all 0.1s ease-in-out !important;
+  position: relative;
+  font-family: 'ko-tech', sans-serif;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  font-size: 0.7em;
+  background-color: transparent;
+  border: none;
+  border-radius: var(--ko-button-radius);
+  color: var(--ko-text-dark);
+  transition: all 0.1s ease-in-out;
 }
 
 .ko-ghost:hover {
-  background-color: rgba(199, 195, 192, 0.3) !important;
+  background-color: rgba(199, 195, 192, 0.3);
 }
 
 .ko-ghost:active {
@@ -756,43 +758,43 @@
 }
 
 .ko-ghost.ko-ghost--orange {
-  color: var(--ko-accent-orange) !important;
+  color: var(--ko-accent-orange);
 }
 
 .ko-ghost.ko-ghost--orange:hover {
-  background-color: rgba(250, 95, 40, 0.1) !important;
+  background-color: rgba(250, 95, 40, 0.1);
 }
 
 .ko-ghost.ko-ghost--dark {
-  color: var(--ko-text-dark) !important;
+  color: var(--ko-text-dark);
 }
 
 .ko-ghost.ko-ghost--dark:hover {
-  background-color: rgba(84, 82, 81, 0.1) !important;
+  background-color: rgba(84, 82, 81, 0.1);
 }
 
 .ko-ghost.ko-ghost--red {
-  color: var(--ko-accent-red) !important;
+  color: var(--ko-accent-red);
 }
 
 .ko-ghost.ko-ghost--red:hover {
-  background-color: rgba(241, 38, 24, 0.1) !important;
+  background-color: rgba(241, 38, 24, 0.1);
 }
 
 .ko-ghost.ko-ghost--pink {
-  color: var(--ko-accent-pink) !important;
+  color: var(--ko-accent-pink);
 }
 
 .ko-ghost.ko-ghost--pink:hover {
-  background-color: rgba(230, 44, 94, 0.1) !important;
+  background-color: rgba(230, 44, 94, 0.1);
 }
 
 .ko-ghost.ko-ghost--blue {
-  color: var(--ko-accent-blue) !important;
+  color: var(--ko-accent-blue);
 }
 
 .ko-ghost.ko-ghost--blue:hover {
-  background-color: rgba(66, 156, 206, 0.1) !important;
+  background-color: rgba(66, 156, 206, 0.1);
 }
 
 /* ============================================
@@ -801,40 +803,40 @@
    ============================================ */
 
 .ko-link {
-  position: relative !important;
-  font-family: 'ko-tech', sans-serif !important;
-  letter-spacing: 0.075em !important;
-  text-transform: uppercase !important;
-  font-size: 0.7em !important;
-  background-color: transparent !important;
-  border: none !important;
-  border-radius: 0 !important;
-  color: var(--ko-text-dark) !important;
-  text-decoration: underline !important;
-  text-underline-offset: 2px !important;
-  transition: all 0.1s ease-in-out !important;
+  position: relative;
+  font-family: 'ko-tech', sans-serif;
+  letter-spacing: 0.075em;
+  text-transform: uppercase;
+  font-size: 0.7em;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--ko-text-dark);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: all 0.1s ease-in-out;
 }
 
 .ko-link:hover {
-  text-decoration-thickness: 2px !important;
+  text-decoration-thickness: 2px;
 }
 
 .ko-link.ko-link--orange {
-  color: var(--ko-accent-orange) !important;
+  color: var(--ko-accent-orange);
 }
 
 .ko-link.ko-link--dark {
-  color: var(--ko-text-dark) !important;
+  color: var(--ko-text-dark);
 }
 
 .ko-link.ko-link--red {
-  color: var(--ko-accent-red) !important;
+  color: var(--ko-accent-red);
 }
 
 .ko-link.ko-link--pink {
-  color: var(--ko-accent-pink) !important;
+  color: var(--ko-accent-pink);
 }
 
 .ko-link.ko-link--blue {
-  color: var(--ko-accent-blue) !important;
+  color: var(--ko-accent-blue);
 }

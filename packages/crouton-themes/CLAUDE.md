@@ -421,15 +421,27 @@ still merges). It works in `app.config.ui`, the per-instance `:ui` prop, and
 can transform rather than blank it (keep layout, drop only decorative utilities):
 
 ```ts
-// minimal/app.config.ts — strip rounded/shadow/ring, keep layout, no !important
-const stripDecorative = (defaults: string) =>
-  defaults.split(/\s+/).filter(c => !/^-?(rounded|shadow|ring)(-|$)/.test(c.split(':').pop()!))
-    .concat('minimal-flat').join(' ')
+// any theme's app.config.ts — the SHARED marker-gated replacer (#1304)
+import { subtractThemeDefaults } from '../lib/subtractive'
 
 export default defineAppConfig({
-  ui: { button: { slots: { base: stripDecorative } } }
+  ui: { button: { slots: { base: subtractThemeDefaults } } }
 })
 ```
+
+**All four themes use one shared replacer: `lib/subtractive.ts` (#1304).** It is
+**marker-gated**: the resolved string it receives contains the theme's own marker
+classes (`ko-bezel`, `kr-pad`, `bw-solid`, `minimal-btn`, …) injected by that
+theme's variants, so one function detects *which* theme is in play and applies
+that theme's subtraction set — and passes unmarked (default-theme) renders
+through untouched. This is what makes a global replacer safe in a MULTI-theme
+app (the playground): each theme only subtracts under its own markers. Per-theme
+sets: `minimal` drops decorative only (rounded/shadow/ring, the #364 behaviour);
+`ko`/`kr11` also own color, motion and typography; `bw` keeps Nuxt UI's rounding
+and text sizes. **`focus-visible:` classes are never stripped** (no theme ships
+its own button focus styles — a11y guard; minimal predates the guard).
+Result: the theme CSS needs **no `!important`** (three deliberate `padding`
+exceptions remain — spacing utilities are never stripped — each commented).
 
 **Hard constraints (verified against `@nuxt/ui` `dist/runtime/utils/tv.ts`):**
 
@@ -443,14 +455,47 @@ export default defineAppConfig({
 - **Replacers are NOT variant-scoped.** `extractDirectives` only reads top-level
   `base`/`slots` — a function inside `variants.variant.minimal.base` is ignored. So
   subtractive theming is a *global/subtree/per-instance* tool, orthogonal to the
-  variant system; the two modes coexist (the `minimal` button uses both).
+  variant system; the two modes coexist (every theme's button uses both).
 - **Keep replacers pure & deterministic** so SSR and client compute the same string
   (no hydration mismatch) — the original reason this package avoided base overrides.
-- **Multi-theme caveat:** a global `app.config` base replacer applies to *all*
-  buttons, so an app that `extends` several themes + flips them at runtime should
-  prefer `<UTheme>` (subtree) over a global replacer. Single-theme apps are clean.
+- **The defu double-role gotcha (#1304):** Nuxt merges layered app.configs with
+  defu's *fn* variant, which treats a FUNCTION value as a merger and CALLS it with
+  the lower layer's value. Several layers assign the shared replacer to the same
+  slot key, so `subtractThemeDefaults` guards: called with a non-string (merge
+  time) it returns itself, so the merged value stays the replacer. Any new
+  replacer-style function in an app.config needs the same guard.
+- **Multi-theme apps are safe** with the shared replacer because of marker gating
+  (above). A *custom, un-gated* replacer is still global — gate it on a marker
+  class or scope it with `<UTheme>`.
 
-Spike: #364.
+Spike: #364; rollout to all themes: #1304.
+
+### Runtime switching swaps SCALARS only (deepAssign hazard) — #1304
+
+`updateAppConfig()` merges with Nuxt's `deepAssign`, which merges **arrays by
+index** — a runtime write to `compoundVariants` overwrites whatever entries sit
+at those indices in the built config (this silently broke the named variants on
+every switch). Hence the split:
+
+- **Layer app.config (build-time, merge-safe):** ALL classes — named variants
+  (`ko`, `kr11`, `minimal*`, `bw-*`) + their `compoundVariants` + replacers.
+- **`themes/configs/themeConfigs.ts` (runtime):** scalar leaves only —
+  `colors.*` and `<component>.defaultVariants.variant`, pointing plain
+  variant-less usage at the theme's named variant. Every config sets EVERY key
+  the swap owns, so switching A → B never leaves A's value behind.
+
+Consequences: a plain `<UButton>` follows the active theme; an **explicit**
+`variant="outline"` is the author's literal choice and stays default-styled —
+use `useThemeSwitcher().getVariant('outline')` to follow the theme (`ko-outline`,
+`bw-outline`, …). `blackandwhite` registers **named `bw-*` variants** (it no
+longer overrides the standard variant slots, which used to bleed into every
+other theme in a multi-theme app) and sets its own layer
+`defaultVariants.variant: 'bw-solid'` so single-theme bw apps still need no
+runtime. The theme restore from localStorage runs **onMounted** (never during
+setup — the server can't know localStorage, so a setup-time restore is a
+guaranteed hydration mismatch). And in `ThemeSwitcher.vue`, per-item slot names
+are prefixed `theme-<name>` — a slot literally named `default` overrides the
+dropdown's trigger slot (the chip froze on "Default" forever).
 
 ## Dev workflow — the playground (#1306)
 
