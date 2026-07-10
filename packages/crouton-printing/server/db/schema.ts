@@ -4,4 +4,4 @@
 // the generic `printers` + `print_jobs` tables in `db:generate` migrations
 // automatically — no manual schema import needed in the app (same pattern as
 // crouton-flow / crouton-sales).
-export { printers, printJobs } from '../database/schema'
+export { printers, printJobs, printTransports } from '../database/schema'

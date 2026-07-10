@@ -528,6 +528,22 @@
         "printed": "Rekening afgedrukt voor {client} — afgesloten",
         "printError": "Kon de rekening niet afdrukken",
         "loadError": "Kon klanten niet laden"
+      },
+      "dataPanel": {
+        "button": "Data",
+        "title": "Data",
+        "revenueChart": "Omzet per dag",
+        "productMatrix": "Verkoop per product × dag"
+      },
+      "launcher": {
+        "ordersDesc": "Alle bestellingen van dit event — status, tickets, opnieuw printen",
+        "ordersStat": "bestellingen",
+        "clientsDesc": "Openstaande rekeningen per klant bekijken en afrekenen",
+        "clientsStat": "open rekeningen",
+        "dataDesc": "Live verkoopcijfers, grafieken en de verkooptabel",
+        "dataStat": "omzet",
+        "settingsDesc": "Eventgegevens, printers, bontekst en helpers",
+        "settingsStat": "printers"
       }
     },
     "helpers": {
@@ -545,9 +561,7 @@
       "notes": "Notities",
       "label": "Klant",
       "selectOrCreate": "Selecteer of maak klant aan...",
-      "createNew": "Nieuwe klant aanmaken",
-      "nameLabel": "Klantnaam",
-      "namePlaceholder": "Voer klantnaam in"
+      "createNamed": "\"{name}\" toevoegen"
     },
     "offline": {
       "title": "Offline",
@@ -583,6 +597,20 @@
         "sendFailed": "Versturen naar printer mislukt",
         "generic": "Printopdracht mislukt"
       }
+    },
+    "printFlow": {
+      "title": "Printflow",
+      "description": "Wie de tickets van dit evenement afdrukt.",
+      "localDrainer": "Lokaal toestel",
+      "localDrainerHelp": "Een toestel op locatie (Pi / mini-pc) draait de app en print rechtstreeks naar de printers — werkt volledig offline.",
+      "routerSpooler": "Via de router",
+      "routerSpoolerHelp": "De router op locatie haalt de printopdrachten op uit de cloud en stuurt ze naar de printers.",
+      "paused": "Geen fysieke prints",
+      "pausedHelp": "Er worden geen printopdrachten aangemaakt — bestellingen verschijnen gewoon op het scherm.",
+      "lastSeen": "laatst gezien",
+      "neverSeen": "nooit gezien",
+      "updated": "Printflow aangepast",
+      "updateError": "Kon de printflow niet aanpassen"
     }
   }
 }

@@ -68,12 +68,25 @@ function shortDay(d: string) {
   return d.slice(5)
 }
 
+// Numbers right-aligned; the Total column visually separated + emphasized.
 const columns = computed<TableColumn<Record<string, unknown>>[]>(() => {
   if (!matrix.value) return []
+  const numeric = { class: { th: 'text-right', td: 'text-right' } }
   return [
-    { accessorKey: 'product', header: t('sales.block.product') },
-    ...matrix.value.days.map(d => ({ accessorKey: d, header: shortDay(d) })),
-    { accessorKey: '__total', header: t('sales.block.total') }
+    {
+      accessorKey: 'product',
+      header: t('sales.block.product'),
+      meta: { class: { td: 'font-medium text-highlighted' } }
+    },
+    ...matrix.value.days.map(d => ({ accessorKey: d, header: shortDay(d), meta: numeric })),
+    {
+      accessorKey: '__total',
+      header: t('sales.block.total'),
+      meta: { class: {
+        th: 'text-right border-s border-default',
+        td: 'text-right border-s border-default font-semibold'
+      } }
+    }
   ]
 })
 
@@ -139,26 +152,31 @@ function downloadCsv() {
 </script>
 
 <template>
-  <div class="sales-product-matrix space-y-3">
-    <div class="flex items-center justify-between gap-3 flex-wrap">
-      <h3 v-if="attrs.title" class="text-lg font-semibold">{{ attrs.title }}</h3>
-      <div class="flex items-center gap-2 ml-auto">
+  <div class="sales-product-matrix @container space-y-3">
+    <!-- Header sizes to the COMPONENT (@container): in a narrow pane the
+         toggle/CSV drop their labels to icons on one tidy row; wide contexts
+         keep the labeled buttons. -->
+    <div class="flex items-center justify-between gap-2">
+      <h3 v-if="attrs.title" class="min-w-0 truncate text-base @sm:text-lg font-semibold">{{ attrs.title }}</h3>
+      <div class="ms-auto flex shrink-0 items-center gap-3">
         <UButtonGroup size="sm">
           <UButton
             :color="measure === 'units' ? 'primary' : 'neutral'"
             :variant="measure === 'units' ? 'solid' : 'outline'"
             icon="i-lucide-hash"
+            :aria-label="t('sales.block.units')"
             @click="measure = 'units'"
           >
-            {{ t('sales.block.units') }}
+            <span class="hidden @sm:inline">{{ t('sales.block.units') }}</span>
           </UButton>
           <UButton
             :color="measure === 'revenue' ? 'primary' : 'neutral'"
             :variant="measure === 'revenue' ? 'solid' : 'outline'"
             icon="i-lucide-banknote"
+            :aria-label="t('sales.block.revenue')"
             @click="measure = 'revenue'"
           >
-            {{ t('sales.block.revenue') }}
+            <span class="hidden @sm:inline">{{ t('sales.block.revenue') }}</span>
           </UButton>
         </UButtonGroup>
         <UButton
@@ -167,9 +185,10 @@ function downloadCsv() {
           variant="outline"
           icon="i-lucide-download"
           :disabled="!hasData"
+          aria-label="CSV"
           @click="downloadCsv"
         >
-          CSV
+          <span class="hidden @sm:inline">CSV</span>
         </UButton>
       </div>
     </div>
@@ -189,12 +208,16 @@ function downloadCsv() {
       <p class="text-sm">{{ t('sales.block.noSalesData') }}</p>
     </div>
 
-    <div v-else class="overflow-x-auto">
+    <div v-else class="overflow-x-auto rounded-lg border border-default">
       <UTable
         :loading="pending"
         :data="rows"
         :columns="columns"
-        :ui="{ td: 'tabular-nums', tr: 'last:font-semibold last:bg-muted/30' }"
+        :ui="{
+          th: 'px-2.5 py-2 @sm:px-3 whitespace-nowrap',
+          td: 'px-2.5 py-1.5 @sm:px-3 @sm:py-2 tabular-nums whitespace-nowrap',
+          tr: 'last:font-semibold last:bg-muted/30'
+        }"
       />
     </div>
   </div>

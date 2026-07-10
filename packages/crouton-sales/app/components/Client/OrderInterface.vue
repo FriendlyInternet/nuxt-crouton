@@ -37,13 +37,23 @@
             </div>
             <!-- Admin: all catalog editing hides behind this one toggle -->
             <UButton
-              v-if="editable"
+              v-if="editable && !hideEditToggle"
               size="sm"
               :color="editing ? 'primary' : 'neutral'"
               :variant="editing ? 'solid' : 'soft'"
               :icon="editing ? 'i-lucide-check' : 'i-lucide-pencil'"
               :aria-label="editing ? t('sales.workspace.doneEditing') : t('sales.workspace.editCatalog')"
               @click="editMode = !editMode"
+            />
+            <!-- Full-bleed kassa exit (closable) — no header row to host it. -->
+            <UButton
+              v-if="closable"
+              icon="i-lucide-x"
+              size="sm"
+              color="neutral"
+              variant="soft"
+              :aria-label="t('sales.common.close')"
+              @click="emit('close')"
             />
           </div>
           <!-- Admin toolbar: add product + show-inactive, pinned above the list -->
@@ -248,7 +258,21 @@ const props = defineProps<{
    * post to team-scoped CRUD endpoints that helper tokens can't reach.
    */
   editable?: boolean
+  /**
+   * Hide the inline edit-mode pencil (tabs row). Set by hosts that render the
+   * toggle themselves — e.g. the workspace Shell's narrow-mode tab strip —
+   * and drive edit mode via the `editMode` model instead.
+   */
+  hideEditToggle?: boolean
+  /**
+   * Render a close ✕ at the right of the category-tabs row (after the
+   * pencil) and emit `close` — for a full-bleed kassa with no header/strip
+   * of its own (the launcher's "Open kassa" modal).
+   */
+  closable?: boolean
 }>()
+
+const emit = defineEmits<{ close: [] }>()
 
 const isOnline = useOnline()
 const notify = useNotify()
@@ -408,8 +432,10 @@ watch(sortedCategories, (cats) => {
 
 // Admin edit mode: the editable prop only grants the CAPABILITY — the actual
 // editing affordances (add/rename/reorder/inactive toggle) stay hidden until
-// the admin arms them via the pencil toggle, so the kassa reads clean by default.
-const editMode = ref(false)
+// the admin arms them via the pencil toggle, so the kassa reads clean by
+// default. A model so a host can lift the toggle out (Shell's mobile strip);
+// unbound it behaves as local state.
+const editMode = defineModel<boolean>('editMode', { default: false })
 const editing = computed(() => !!props.editable && editMode.value)
 
 // Admin-only: include inactive products (dimmed in the list; clicking one

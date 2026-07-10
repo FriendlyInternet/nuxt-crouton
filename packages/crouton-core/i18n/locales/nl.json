@@ -151,7 +151,8 @@
     "selectPlaceholder": "Selecteer {label}",
     "createNew": "Nieuwe {label} aanmaken",
     "noData": "Nog geen {label}",
-    "noResults": "Geen resultaten voor \"{searchTerm}\""
+    "noResults": "Geen resultaten voor \"{searchTerm}\"",
+    "createNamed": "\"{name}\" toevoegen"
   },
   "options": {
     "selectPlaceholder": "Selecteer {label}",

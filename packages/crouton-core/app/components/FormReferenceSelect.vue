@@ -17,13 +17,15 @@
       value-key="id"
       :label-key="labelKey"
       :placeholder="t('reference.selectPlaceholder', { label: label || collection })"
-      :loading="pending"
+      :loading="pending || inlineCreating"
       :filter-fields="filterFields"
       :disabled="!!error"
       :multiple="multiple"
+      :create-item="inlineCreate"
       size="xl"
       searchable
       class="w-full"
+      @create="handleInlineCreate"
     >
       <!-- Explicitly show the selected value label since value-key returns ID, not object -->
       <template #default="{ modelValue }">
@@ -51,6 +53,10 @@
             @click.stop.prevent="handleEdit((item as Record<string, any>)?.id)"
           />
         </span>
+      </template>
+
+      <template #create-item-label="{ item }">
+        {{ t('reference.createNamed', { params: { name: item } }) }}
       </template>
 
       <template #empty="{ searchTerm }">
@@ -88,6 +94,11 @@ interface Props {
   filterFields?: string[]
   hideCreate?: boolean
   showEdit?: boolean
+  /** Type-to-create: an unmatched search term shows an "Add \"<term>\"" row
+   *  that creates the item inline (labelKey = term, plus createInitialData)
+   *  and selects it — no slideover. Opt-in: only enable for collections where
+   *  a bare label is a valid create payload. */
+  inlineCreate?: boolean
   multiple?: boolean
   query?: ComputedRef<Record<string, any>> | Ref<Record<string, any>>
   // Initial data to seed the nested create form when "Create new" is clicked.
@@ -188,6 +199,36 @@ const isCreating = ref(false)
 const handleCreate = () => {
   isCreating.value = true
   open('create', props.collection, [], 'slideover', props.createInitialData)
+}
+
+// Inline type-to-create (inlineCreate prop): create with the search term as
+// the label and select the result, skipping the slideover form entirely.
+const { create: createItem } = useCollectionMutation(props.collection)
+const inlineCreating = ref(false)
+
+// Select an inline-created/matched id, appending in multiple mode.
+function selectInlineId(id: string) {
+  selected.value = props.multiple
+    ? [...(Array.isArray(localValue.value) ? localValue.value : []), id]
+    : id
+}
+
+async function handleInlineCreate(term: string) {
+  const label = term.trim()
+  if (!label || inlineCreating.value) return
+
+  // create-item hides on exact matches, but Enter can still race a list
+  // refresh — select the existing item instead of creating a duplicate.
+  const existing = items.value.find(i => (tContent(i, props.labelKey) || '').trim().toLowerCase() === label.toLowerCase())
+  if (existing) return selectInlineId(existing.id)
+
+  inlineCreating.value = true
+  try {
+    const created = await createItem({ [props.labelKey]: label, ...props.createInitialData })
+    if (created?.id) selectInlineId(created.id)
+  } finally {
+    inlineCreating.value = false
+  }
 }
 
 // Handle per-item edit button click. Mirrors create: opens the same slideover

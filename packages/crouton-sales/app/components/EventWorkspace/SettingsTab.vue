@@ -1,11 +1,25 @@
 <script setup lang="ts">
+import type { Ref, ComputedRef } from 'vue'
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
 
 const props = defineProps<{
   event: SalesEvent
   /** Hide the internal save row — the host renders its own Save button
-   *  driven by the exposed { save, dirty, saving } (Shell's header row). */
+   *  driven by the API handed up via the `register` emit (Shell's header row). */
   hideSaveBar?: boolean
+  /** Render the three cards as tabbed sections instead of a grid — for the
+   *  narrow-mode slideover, where a single long scroll buries Printers and
+   *  Helpers. All sections stay mounted (v-show), so the one dirty/save API
+   *  keeps covering fields on every tab. */
+  tabbed?: boolean
+}>()
+
+const emit = defineEmits<{
+  /** Hands the panel's save API to the host once async setup has resolved.
+   *  A template ref can't carry this: the ref binds before an async-setup
+   *  component's defineExpose attaches, so the host would read the bare
+   *  public proxy forever (#1321). Emitted with null on unmount. */
+  register: [api: { save: () => Promise<void>, dirty: ComputedRef<boolean>, saving: Ref<boolean> } | null]
 }>()
 
 const { t } = useT()
@@ -198,7 +212,80 @@ async function saveSettings() {
 }
 
 // Let the Shell host the Save button in its header row (hideSaveBar).
-defineExpose({ save: saveSettings, dirty, saving })
+emit('register', { save: saveSettings, dirty, saving })
+onUnmounted(() => emit('register', null))
+
+// Tabbed mode (narrow slideover): which card is showing.
+const sections = computed(() => [
+  { key: 'event', label: t('sales.workspace.eventDetails'), icon: 'i-lucide-ticket' },
+  { key: 'printers', label: t('sales.sidebar.printers'), icon: 'i-lucide-printer' },
+  { key: 'helpers', label: t('sales.workspace.activeHelpers'), icon: 'i-lucide-users' }
+])
+const activeSection = ref('event')
+
+// Per-event print flow (#1324): which transport delivers this event's thermal
+// jobs — the venue device's in-process drainer, the router spooler, or nobody.
+// The setting lives in crouton-printing (print_transports); this is its authed
+// UI. Instant-apply like the requeue button — an operational switch, not a
+// form field, so it deliberately doesn't ride the panel's Save.
+interface PrintTransportState {
+  transport: string
+  lastSpoolerPollAt: string | null
+  lastDrainerTickAt: string | null
+}
+
+const printTransportEndpoint = computed(() =>
+  `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/print-transport`
+)
+// The GET resolves the no-row default ('router-spooler'), so transport is
+// always a concrete value.
+const { data: printTransport, refresh: refreshPrintTransport } = await useFetch<PrintTransportState>(printTransportEndpoint, {
+  default: () => ({ transport: 'router-spooler', lastSpoolerPollAt: null, lastDrainerTickAt: null })
+})
+const printTransportSaving = ref(false)
+
+// Keep the liveness readout honest while the panel is open: heartbeats are
+// stamped at most every 30s, so a light 10s poll is plenty.
+let printTransportPoll: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  printTransportPoll = setInterval(() => { refreshPrintTransport() }, 10000)
+})
+onUnmounted(() => {
+  if (printTransportPoll) clearInterval(printTransportPoll)
+})
+
+async function setPrintTransport(transport: 'local-drainer' | 'router-spooler' | 'none') {
+  printTransportSaving.value = true
+  try {
+    await $fetch(printTransportEndpoint.value, { method: 'PUT', body: { transport } })
+    await refreshPrintTransport()
+    notify.success(t('sales.printFlow.updated', 'Print flow updated'))
+  }
+  catch {
+    notify.error(t('sales.printFlow.updateError', 'Could not update the print flow'))
+  }
+  finally {
+    printTransportSaving.value = false
+  }
+}
+
+const printTransportItems = computed(() => [
+  {
+    value: 'local-drainer' as const,
+    label: t('sales.printFlow.localDrainer', 'Local device'),
+    description: t('sales.printFlow.localDrainerHelp', 'A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — works fully offline.')
+  },
+  {
+    value: 'router-spooler' as const,
+    label: t('sales.printFlow.routerSpooler', 'Via the venue router'),
+    description: t('sales.printFlow.routerSpoolerHelp', 'The on-site router fetches print jobs from the cloud app and sends them to the printers.')
+  },
+  {
+    value: 'none' as const,
+    label: t('sales.printFlow.paused', 'No physical printing'),
+    description: t('sales.printFlow.pausedHelp', 'No print jobs are created — orders simply appear on screen.')
+  }
+])
 
 // Event-level actions (moved out of the workspace header to declutter it).
 // Same useCollectionQuery cache as the Shell, so refresh() updates its list
@@ -277,11 +364,30 @@ function helperExpiry(value: string): string {
       </UButton>
     </div>
 
+    <!-- Tabbed mode: segmented strip picks the visible card (same styling as
+         the Shell's narrow tab strip). -->
+    <div v-if="tabbed" class="flex items-center rounded-lg bg-elevated p-1 gap-1 overflow-x-auto">
+      <UButton
+        v-for="s in sections"
+        :key="s.key"
+        :icon="s.icon"
+        size="sm"
+        color="neutral"
+        :variant="activeSection === s.key ? 'solid' : 'ghost'"
+        class="flex-1 justify-center whitespace-nowrap"
+        @click="activeSection = s.key"
+      >
+        {{ s.label }}
+      </UButton>
+    </div>
+
     <!-- One row, three blocks: event (name + currency + client switch),
-         printers (incl. receipt text), helpers (incl. PIN). -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+         printers (incl. receipt text), helpers (incl. PIN). Tabbed mode shows
+         one at a time but keeps all mounted (v-show) so dirty state and the
+         panel-wide save cover every tab. -->
+    <div class="grid grid-cols-1 gap-4 items-start" :class="tabbed ? '' : 'lg:grid-cols-3'">
       <!-- Event details (inline editable) -->
-      <UCard>
+      <UCard v-show="!tabbed || activeSection === 'event'">
         <template #header>
           <h3 class="font-semibold">{{ t('sales.workspace.eventDetails') }}</h3>
         </template>
@@ -346,6 +452,7 @@ function helperExpiry(value: string): string {
 
       <!-- Printers: LED per row = last-known online state (checked on print). -->
       <SalesEventWorkspaceSettingsListCard
+        v-show="!tabbed || activeSection === 'printers'"
         :title="t('sales.sidebar.printers')"
         collection="salesPrinters"
         :rows="printerRows"
@@ -365,9 +472,26 @@ function helperExpiry(value: string): string {
           />
         </template>
 
-        <!-- Receipt text settings, inline (saved via the panel's Save button) -->
+        <!-- Print flow (instant-apply) + receipt text settings (panel Save) -->
         <template #footer>
           <div class="space-y-4">
+            <div class="space-y-1">
+              <p class="text-sm font-medium leading-5">{{ t('sales.printFlow.title', 'Print flow') }}</p>
+              <p class="text-sm text-muted">{{ t('sales.printFlow.description', 'Who delivers the printed tickets for this event.') }}</p>
+            </div>
+            <CroutonPrintingTransportPicker
+              :transport="printTransport.transport"
+              :last-spooler-poll-at="printTransport.lastSpoolerPollAt"
+              :last-drainer-tick-at="printTransport.lastDrainerTickAt"
+              :loading="printTransportSaving"
+              :items="printTransportItems"
+              :last-seen-label="t('sales.printFlow.lastSeen', 'last seen')"
+              :never-seen-label="t('sales.printFlow.neverSeen', 'never seen')"
+              @update:transport="setPrintTransport"
+            />
+
+            <USeparator />
+
             <div class="space-y-1">
               <p class="text-sm font-medium leading-5">{{ t('sales.workspace.receiptSettings') }}</p>
               <p class="text-sm text-muted">{{ t('sales.receipt.customize') }}</p>
@@ -402,7 +526,7 @@ function helperExpiry(value: string): string {
       </SalesEventWorkspaceSettingsListCard>
 
       <!-- Helpers: shared login PIN + active sessions (scoped tokens, not a collection) -->
-      <UCard>
+      <UCard v-show="!tabbed || activeSection === 'helpers'">
         <template #header>
           <div class="flex items-center justify-between">
             <h3 class="font-semibold">{{ t('sales.workspace.activeHelpers') }}</h3>
@@ -411,6 +535,7 @@ function helperExpiry(value: string): string {
               variant="ghost"
               icon="i-lucide-refresh-cw"
               :loading="activeHelpersPending"
+              :aria-label="t('sales.common.refresh')"
               @click="() => refreshActiveHelpers()"
             />
           </div>
