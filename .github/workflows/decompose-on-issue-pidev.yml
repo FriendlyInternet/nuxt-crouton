@@ -184,9 +184,19 @@ jobs:
           PI_PROMPT
           printf '/task-decompose #%s\n' "$ISSUE" >> "$PROMPT_FILE"
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
+          # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
+          # So the instant `pi | tee` fails (pipefail), -e aborts the script BEFORE
+          # RC/conclusion/exec_log are written — the artifact-gate then has no exec_log to
+          # read and posts the generic "no deliverable" instead of naming the cause (the
+          # #1299 billing case). Disable errexit around JUST this pipeline; PIPESTATUS[0]
+          # still carries pi's real exit code. (NB: a trailing `|| true` does NOT work — it
+          # runs `true` as its own pipeline, clobbering PIPESTATUS[0] to 0 and masking the
+          # failure as success. Verified empirically, #1299.)
+          set +e
           pi --print --provider anthropic --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
+          set -e
           END=$(date +%s)
           echo "wall=$((END-START))" >> "$GITHUB_OUTPUT"
           echo "conclusion=$([ "$RC" -eq 0 ] && echo success || echo failure)" >> "$GITHUB_OUTPUT"
