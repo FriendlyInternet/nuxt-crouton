@@ -151,7 +151,8 @@
     "selectPlaceholder": "Sélectionner {label}",
     "createNew": "Créer un nouveau {label}",
     "noData": "Aucun {label} pour le moment",
-    "noResults": "Aucun résultat pour « {searchTerm} »"
+    "noResults": "Aucun résultat pour « {searchTerm} »",
+    "createNamed": "Ajouter « {name} »"
   },
   "options": {
     "selectPlaceholder": "Sélectionner {label}",
