@@ -56,13 +56,41 @@ const handleMouseUp = () => {
   window.removeEventListener('mousemove', handleMouseMove)
   window.removeEventListener('mouseup', handleMouseUp)
 }
+
+// Keyboard operation (a11y — the drag interaction alone locks out keyboard
+// users): arrows step, Page keys jump, Home/End hit the ends.
+const handleKeydown = (e: KeyboardEvent) => {
+  const range = props.max - props.min
+  const step = Math.max(1, Math.round(range / 100))
+  const page = Math.max(step, Math.round(range / 10))
+  let next: number | null = null
+  switch (e.key) {
+    case 'ArrowUp':
+    case 'ArrowRight': next = props.modelValue + step; break
+    case 'ArrowDown':
+    case 'ArrowLeft': next = props.modelValue - step; break
+    case 'PageUp': next = props.modelValue + page; break
+    case 'PageDown': next = props.modelValue - page; break
+    case 'Home': next = props.min; break
+    case 'End': next = props.max; break
+    default: return
+  }
+  e.preventDefault()
+  emit('update:modelValue', Math.min(props.max, Math.max(props.min, next)))
+}
 </script>
 
 <template>
   <div
     class="braun-knob"
     :class="sizeClasses[props.size]"
+    role="slider"
+    tabindex="0"
+    :aria-valuemin="props.min"
+    :aria-valuemax="props.max"
+    :aria-valuenow="props.modelValue"
     @mousedown="handleMouseDown"
+    @keydown="handleKeydown"
   >
     <div
       class="braun-knob__dial"
@@ -86,6 +114,11 @@ const handleMouseUp = () => {
 
 .braun-knob:active {
   cursor: grabbing;
+}
+
+.braun-knob:focus-visible {
+  outline: 2px solid var(--braun-orange);
+  outline-offset: 2px;
 }
 
 .braun-knob__dial {
