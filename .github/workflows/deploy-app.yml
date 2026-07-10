@@ -273,8 +273,24 @@ jobs:
           else
             URL="${{ inputs['staging-url'] }}"
           fi
-          if [ -z "$URL" ]; then
-            URL=$(grep -oiE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | tail -1 || true)
+          # The workers.dev URL wrangler ACTUALLY published (empty for a real custom-domain deploy).
+          WORKERS_URL=$(grep -oiE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | tail -1 || true)
+          # #1369: a configured custom-domain URL is only REAL if wrangler bound its route. A POC
+          # scaffolded without --domain has NO route in wrangler.jsonc, so <app>.pmcp.dev never
+          # resolves (HTTP 000) even though the Worker serves fine at *.workers.dev. Trusting the
+          # configured URL blindly then advertised a dead link AND pointed the login-seed + smoke at
+          # it (they masked the failure) — a green-but-broken "Potemkin" preview. So: use the
+          # configured URL only if it RESOLVES; otherwise fall back to the workers.dev URL wrangler
+          # published. Every downstream step (comment, seed-login, smoke) reads steps.deploy.outputs.url,
+          # so this one check makes them all point at the reachable deploy.
+          if [ -n "$URL" ]; then
+            code=$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$URL" 2>/dev/null || echo 000)
+            if [ "$code" = "000" ] && [ -n "$WORKERS_URL" ]; then
+              echo "::warning::Configured URL $URL is unreachable (HTTP 000 — no bound route). Using the deployed $WORKERS_URL instead (#1369)."
+              URL="$WORKERS_URL"
+            fi
+          elif [ -n "$WORKERS_URL" ]; then
+            URL="$WORKERS_URL"
           fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "Deployed: ${URL:-<url not parsed>}"
@@ -392,6 +408,23 @@ jobs:
             printf '%s' "$(openssl rand -hex 32)" | npx wrangler secret put BETTER_AUTH_SECRET $ENV_FLAG
           fi
 
+      # Seed the app's COLLECTION fixtures + package demo data into the staging D1 so the
+      # preview isn't an empty shell (#1370): the generated seed.json rows (#298) + the demo
+      # team `test1` (seed:org:test1) the review login below attaches to. Runs BEFORE the
+      # review-login step for exactly that reason — the login lands in a populated team, not a
+      # phantom one. Idempotent (crouton-seed upserts by stable id → a redeploy re-seed is a
+      # no-op); best-effort — warns, never reds the deploy. Skipped cleanly when the app doesn't
+      # depend on @fyit/crouton-cli (crouton-seed unresolvable via pnpm exec). Staging only.
+      - name: Seed collection + demo data (staging only, #1370)
+        if: ${{ inputs.environment != 'production' }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        run: |
+          if pnpm exec crouton-seed --db "${{ inputs.app }}-staging-db" --remote; then
+            echo "✓ seeded ${{ inputs.app }}-staging-db (collection fixtures + demo team)"
+          else
+            echo "::warning::content seed skipped/failed for ${{ inputs.app }} — crouton-seed unresolvable or errored; the preview may be empty (#1370)."
+          fi
+
       # Seed a throwaway, loginable test account on the (isolated, staging-only)
       # preview so a reviewer can open the URL and be inside the app in one step —
       # no register → create-team wall (#608). Drives the app's own HTTP auth on the
@@ -420,18 +453,25 @@ jobs:
           # Attach the review login to the SEEDED demo team (#832) so the advertised
           # login lands in the team the content seed populated (test1 → seed:org:test1),
           # not an empty fresh org. Staging-only step → production is untouched.
-          node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
-            --seed-team test1 --db "${APP}-staging-db" || true
-          # Surface for the PR comment + the run summary (the password is masked in logs).
-          echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
-          echo "password=$PW" >> "$GITHUB_OUTPUT"
-          {
-            echo "### 🔑 Review test login (${APP})"
-            echo "- **URL:** $DEPLOY_URL"
-            echo "- **Email:** \`$EMAIL\`"
-            echo "- **Password:** \`$PW\`"
-            echo "_Disposable account on an isolated, throwaway staging DB._"
-          } >> "$GITHUB_STEP_SUMMARY"
+          # #1369: DON'T mask the seed with `|| true` and then advertise the creds anyway — that
+          # printed a working-looking login for a user that was never created (the seed POSTed to a
+          # dead URL → failed silently → 401 on login). Only surface the creds when the seed actually
+          # succeeded; otherwise emit a loud warning and NO login (a broken preview must look broken).
+          if node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
+               --seed-team test1 --db "${APP}-staging-db"; then
+            echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
+            echo "password=$PW" >> "$GITHUB_OUTPUT"
+            {
+              echo "### 🔑 Review test login (${APP})"
+              echo "- **URL:** $DEPLOY_URL"
+              echo "- **Email:** \`$EMAIL\`"
+              echo "- **Password:** \`$PW\`"
+              echo "_Disposable account on an isolated, throwaway staging DB._"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Review-login seed FAILED for ${APP} at ${DEPLOY_URL} — not advertising a login that doesn't work (#1369)."
+            echo "### ⚠️ Review login unavailable (${APP}) — the seed step failed; no working login for this preview." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # Prove the DEPLOYED preview actually works — log in with the seeded account, run
       # any app-declared CRUD + public read, and screenshot it (#293). This is the
@@ -521,7 +561,7 @@ jobs:
             const login = (email && password)
               ? `\n\n🔑 **Test login** — paste straight in, no registration:\n\`\`\`\nEmail:    ${email}\nPassword: ${password}\n\`\`\`\n_Disposable account on this isolated, throwaway staging DB._`
               : ''
-            const body = `${marker}\n🚀 **${app}** staging deployed: ${url}${login}\n\n_Isolated, auto-provisioned Workers staging env (its own D1 + KV)._`
+            const body = `${marker}\n🚀 **${app}** deployed to staging: ${url}${login}\n\n<sub>🤖 isolated, auto-provisioned Workers staging env (its own D1 + KV)</sub>`
             const { owner, repo } = context.repo
             const issue_number = context.issue.number
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number })

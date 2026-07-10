@@ -277,6 +277,26 @@ ${featuresStr ? featuresStr + '\n' : ''}  },
 `
 }
 
+// deploy.config.json — the opt-in the generic "Deploy Apps/POCs" pipeline reads (#481/#638).
+// #1367/#1371: emit CORRECT URLs so nobody hand-guesses them (the dead-preview bug: an agent
+// wrote `stagingUrl: <name>.pmcp.dev` with no matching route → HTTP 000). stagingUrl/productionUrl
+// are set ONLY when `--domain` was passed — which is exactly when tmplWranglerJsonc also writes the
+// matching custom-domain ROUTES (`<name>-staging.<zone>` / `<name>.<zone>`). Without `--domain`
+// there is no route, so the Worker serves at *.workers.dev: we leave stagingUrl EMPTY and the
+// deploy resolves the real published URL (#1369) instead of advertising an alias that was never
+// bound. Note the staging subdomain is `<name>-staging.<zone>` (matches the route), NOT `<name>`.
+export function tmplDeployConfig(vars: ScaffoldVars): string {
+  const config: Record<string, string> = {}
+  if (vars.domain) {
+    config.stagingUrl = `https://${vars.name}-staging.${vars.domain}`
+    config.productionUrl = `https://${vars.name}.${vars.domain}`
+  } else {
+    config.stagingUrl = ''
+  }
+  config.layerPackages = vars.extends.join(' ')
+  return JSON.stringify(config, null, 2) + '\n'
+}
+
 function tmplWranglerJsonc(vars: ScaffoldVars): string {
   // Workers (static-assets), id-LESS so the first `pnpm cf:deploy` auto-provisions D1+KV;
   // `sync-wrangler-ids.mjs` writes the ids back (bootstrap → committed). With `--domain`,
@@ -637,6 +657,7 @@ async function buildScaffoldFiles(ctx: ScaffoldContext, outDir: string | undefin
   ])
   files.push(
     { path: 'wrangler.jsonc', content: tmplWranglerJsonc(vars) },
+    { path: 'deploy.config.json', content: tmplDeployConfig(vars) },
     { path: 'drizzle.config.ts', content: tmplDrizzleConfig() },
     { path: 'scripts/inject-wrangler-env.mjs', content: injectScript },
     { path: 'scripts/sync-wrangler-ids.mjs', content: syncScript },

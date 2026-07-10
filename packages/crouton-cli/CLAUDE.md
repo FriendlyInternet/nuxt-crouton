@@ -206,6 +206,7 @@ NOT Cloudflare Pages. Generated artifacts:
 | File | Purpose |
 |------|---------|
 | `wrangler.jsonc` | Workers config, **id-less** D1+KV (top-level + `env.staging`) so the first deploy auto-provisions them; `name`/`assets`/`main` injected by the `cloudflare_module` preset at build |
+| `deploy.config.json` | The opt-in the generic **Deploy Apps/POCs** pipeline reads (#481/#638) — `layerPackages` + the deploy URLs. #1367/#1371: `stagingUrl`/`productionUrl` are emitted **only with `--domain`** (= exactly when the matching custom-domain routes are written), so staging is `https://<name>-staging.<zone>` (NOT the prod pattern). **Without `--domain` → `stagingUrl: ""`**, and the deploy resolves the real `*.workers.dev` URL (#1369) rather than advertising an alias that was never bound (the dead-preview bug). `tmplDeployConfig` in `lib/scaffold-app.ts` |
 | `scripts/sync-wrangler-ids.mjs` | After provisioning, queries `wrangler d1 list`/`kv namespace list` and writes the ids back into `wrangler.jsonc` (D1 by `database_name`, KV by the deterministic `<worker>-<binding>` title). Idempotent, comment-preserving |
 | `scripts/inject-wrangler-env.mjs` | Re-injects the `env` block Nitro strips from `.output/server/wrangler.json` (nitro#3429) + drops the redirect so `--env staging` deploys work |
 | `drizzle.config.ts` | Resolves the bundled schema path (`.nuxt/` or the cache buildDir) so `db:generate` works unedited |
@@ -280,6 +281,18 @@ crouton db-pull --config ./custom-wrangler.jsonc
 | `--no-translations` | Skip i18n fields |
 | `--no-tests` | Skip the per-collection tests — schema-smoke (#785) + API route handler test (#791); both emitted by default |
 | `--dry-run` | Preview without writing |
+
+### Regeneration is non-destructive (#1260)
+
+Re-running the generator over an existing collection **preserves files that already exist**
+by default — it never silently clobbers hand-edits — and reports what it skipped
+(`⏭ preserved N existing file(s) — use --force to overwrite`). Files that don't exist yet are
+always written, so a schema change still scaffolds new artifacts. Pass **`--force`** to overwrite
+existing scaffold files (this is what the generated files' *"regeneration requires --force flag"*
+note refers to). Only the per-collection scaffold files are guarded this way; derived
+machine-owned files (the schema index, type/query registries, `app.config.ts` entries) are
+rewritten every run regardless. Guarded by the write loop in `writeScaffold`
+(`lib/generate-collection.ts`); contract test: `tests/integration/regenerate-preserve.test.ts`.
 
 ## Key Files
 

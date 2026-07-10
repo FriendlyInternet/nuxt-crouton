@@ -126,11 +126,10 @@ jobs:
                 const list = sharedCode.slice(0, 10).map(f => `- \`${f.filename}\``).join('\n')
                 const more = sharedCode.length > 10 ? `\n…and ${sharedCode.length - 10} more.` : ''
                 await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                  body: '> 🤖 **Claude Code** · agent pipeline (CI) · _auto-merge shared-code guard (#339)_\n\n'
-                    + '⏸️ **Held — this build PR changes shared code under `packages/`.** Per the `packages/` '
-                    + 'HARD GATE (#350) a change here ripples across every consuming app, so it is **not** '
-                    + 'auto-merged. A human must review and merge it (and confirm `pnpm typecheck` across apps).\n\n'
-                    + `Shared-code files in this PR:\n${list}${more}` })
+                  body: '⏸️ **Held for a human — this build PR changes shared code under `packages/`.**\n\n'
+                    + '**Fix:** a change here ripples across every consuming app (the `packages/` HARD GATE, #350), so it is not auto-merged — review it, confirm `pnpm typecheck` across apps, then merge.\n\n'
+                    + `<details><summary>shared-code files (${sharedCode.length})</summary>\n\n${list}${more}\n</details>\n\n`
+                    + '<sub>🤖 agent pipeline (CI) · auto-merge shared-code guard (#339)</sub>' })
                 continue
               }
 

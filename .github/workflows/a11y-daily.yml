@@ -111,11 +111,10 @@ jobs:
           BODY_FILE=$(mktemp)
           {
             echo "$MARKER"
-            echo "> 🤖 **Claude Code** · agent pipeline (CI) · _daily a11y deep sweep, updated ${DATE}_"
-            echo ""
-            echo "_Last run: [$DATE]($RUN_URL) · this issue is updated in place each day._"
-            echo ""
             head -c 60000 "$REPORT"
+            echo ""
+            echo ""
+            echo "<sub>🤖 agent pipeline (CI) · daily a11y deep sweep · last run [$DATE]($RUN_URL) · updated in place each day</sub>"
           } > "$BODY_FILE"
 
           # Find-or-create the rolling standing issue. Key off the EXACT title among open
