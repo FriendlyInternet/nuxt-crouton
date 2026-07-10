@@ -66,6 +66,16 @@
 
 [data-theme="ko"] {
   background-color: var(--ko-surface-light);
+}
+
+/* The display font is CHROME, not body copy (#1304 readability feedback):
+   putting ko-tech on the root made every form label and paragraph read like
+   a spec sheet. Scope it to headings + explicit .ko-font opt-ins; tactile
+   components (.ko-bezel, .ko-input-base, ...) already set their own font. */
+[data-theme="ko"] h1,
+[data-theme="ko"] h2,
+[data-theme="ko"] h3,
+[data-theme="ko"] .ko-font {
   font-family: 'ko-tech', sans-serif;
 }
 
@@ -529,8 +539,11 @@
 }
 
 .ko-input-base::placeholder {
-  color: var(--ko-surface-dark);
-  opacity: 0.7;
+  /* Was --ko-surface-dark at 0.7 — dark-on-dark, unreadable on the LCD
+     panel (#1304 readability feedback). Mid gray keeps the dimmed-segment
+     look while staying legible. */
+  color: var(--ko-surface-mid);
+  opacity: 1;
 }
 
 .ko-input-base:focus {
