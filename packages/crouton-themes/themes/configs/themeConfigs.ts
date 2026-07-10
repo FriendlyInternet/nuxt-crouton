@@ -115,6 +115,18 @@ const mtvConfig: ThemeUIConfig = {
   badge: { defaultVariants: { variant: 'mtv' } }
 }
 
+// Terminal — named variants registered by terminal/app.config.ts
+const terminalConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'green',
+    neutral: 'zinc'
+  },
+  button: { defaultVariants: { variant: 'terminal' } },
+  input: { defaultVariants: { variant: 'terminal' } },
+  card: { defaultVariants: { variant: 'terminal' } },
+  badge: { defaultVariants: { variant: 'terminal' } }
+}
+
 // Export all theme configs
 export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   default: defaultConfig,
@@ -123,5 +135,6 @@ export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   kr11: kr11Config,
   blackandwhite: blackandwhiteConfig,
   brutalist: brutalistConfig,
-  mtv: mtvConfig
+  mtv: mtvConfig,
+  terminal: terminalConfig
 }

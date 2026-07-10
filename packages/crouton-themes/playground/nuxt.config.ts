@@ -23,6 +23,7 @@ export default defineNuxtConfig({
     '../kr11',
     '../blackandwhite',
     '../brutalist',
-    '../mtv'
+    '../mtv',
+    '../terminal'
   ]
 })

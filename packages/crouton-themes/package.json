@@ -17,7 +17,9 @@
     "./brutalist": "./brutalist/nuxt.config.ts",
     "./brutalist/*": "./brutalist/*",
     "./mtv": "./mtv/nuxt.config.ts",
-    "./mtv/*": "./mtv/*"
+    "./mtv/*": "./mtv/*",
+    "./terminal": "./terminal/nuxt.config.ts",
+    "./terminal/*": "./terminal/*"
   },
   "files": [
     "themes",
@@ -27,6 +29,7 @@
     "blackandwhite",
     "brutalist",
     "mtv",
+    "terminal",
     "lib"
   ],
   "keywords": [
