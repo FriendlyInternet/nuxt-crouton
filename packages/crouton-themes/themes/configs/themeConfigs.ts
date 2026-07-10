@@ -91,11 +91,24 @@ const blackandwhiteConfig: ThemeUIConfig = {
   badge: { defaultVariants: { variant: 'solid' } }
 }
 
+// Brutalist — named variants registered by brutalist/app.config.ts
+const brutalistConfig: ThemeUIConfig = {
+  colors: {
+    primary: 'yellow',
+    neutral: 'neutral'
+  },
+  button: { defaultVariants: { variant: 'brutalist' } },
+  input: { defaultVariants: { variant: 'brutalist' } },
+  card: { defaultVariants: { variant: 'brutalist' } },
+  badge: { defaultVariants: { variant: 'brutalist' } }
+}
+
 // Export all theme configs
 export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   default: defaultConfig,
   ko: koConfig,
   minimal: minimalConfig,
   kr11: kr11Config,
-  blackandwhite: blackandwhiteConfig
+  blackandwhite: blackandwhiteConfig,
+  brutalist: brutalistConfig
 }
