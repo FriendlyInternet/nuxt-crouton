@@ -101,11 +101,11 @@ events instead.)
 ### ⚠️ The event's print flow must allow the spooler (#1324)
 
 Each event can pick its transport in the app (event settings → Print flow).
-When the event is set to **Local drainer** or **Paused**, the `/jobs` endpoint
-returns an empty `[]` — the spooler idles harmlessly, no error, nothing prints
-from here. If tickets aren't printing, check the event's Print flow setting
-first: it must be **Router spooler** (which is also the default for an event
-that never picked a flow).
+When the event is set to **Local device** or **No physical printing**, the
+`/jobs` endpoint returns an empty `[]` — the spooler idles harmlessly, no
+error, nothing prints from here. If tickets aren't printing, check the event's
+Print flow setting first: it must be **Via the venue router** (which is also
+the default for an event that never picked a flow).
 
 ## Finding the printer IP
 

@@ -249,18 +249,18 @@ async function setPrintTransport(transport: 'local-drainer' | 'router-spooler' |
 const printTransportItems = computed(() => [
   {
     value: 'local-drainer' as const,
-    label: t('sales.printFlow.localDrainer', 'Local drainer'),
+    label: t('sales.printFlow.localDrainer', 'Local device'),
     description: t('sales.printFlow.localDrainerHelp', 'A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — works fully offline.')
   },
   {
     value: 'router-spooler' as const,
-    label: t('sales.printFlow.routerSpooler', 'Router spooler'),
-    description: t('sales.printFlow.routerSpoolerHelp', 'The on-site router polls the cloud app and prints on the local network.')
+    label: t('sales.printFlow.routerSpooler', 'Via the venue router'),
+    description: t('sales.printFlow.routerSpoolerHelp', 'The on-site router fetches print jobs from the cloud app and sends them to the printers.')
   },
   {
     value: 'none' as const,
-    label: t('sales.printFlow.paused', 'Paused'),
-    description: t('sales.printFlow.pausedHelp', 'Nobody prints — jobs queue up as pending until a flow is chosen.')
+    label: t('sales.printFlow.paused', 'No physical printing'),
+    description: t('sales.printFlow.pausedHelp', 'Nothing is printed — print jobs simply queue up.')
   }
 ])
 

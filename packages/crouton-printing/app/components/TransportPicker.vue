@@ -37,18 +37,18 @@ const emit = defineEmits<{
 const defaultItems: TransportPickerItem[] = [
   {
     value: 'local-drainer',
-    label: 'Local drainer',
+    label: 'Local device',
     description: 'A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — works fully offline.'
   },
   {
     value: 'router-spooler',
-    label: 'Router spooler',
-    description: 'The on-site router polls the cloud app over HTTPS and prints on the local network.'
+    label: 'Via the venue router',
+    description: 'The on-site router fetches print jobs from the cloud app and sends them to the printers.'
   },
   {
     value: 'none',
-    label: 'Paused',
-    description: 'Nobody prints — jobs queue up as pending until a flow is chosen.'
+    label: 'No physical printing',
+    description: 'Nothing is printed — print jobs simply queue up.'
   }
 ]
 
