@@ -72,6 +72,32 @@ export default defineAppConfig({
       }
     },
 
+    select: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          riso: 'riso-input-base'
+        }
+      }
+    },
+
+    textarea: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          riso: {
+            root: 'riso-input',
+            base: 'riso-input-base'
+          }
+        }
+      }
+    },
+
     card: {
       slots: {
         root: subtractThemeDefaults,

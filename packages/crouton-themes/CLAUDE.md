@@ -465,6 +465,24 @@ Use theme-prefixed CSS custom properties:
 }
 ```
 
+## Chrome vs data (#1333)
+
+Themes style the **interaction chrome** — buttons, inputs, selects, textareas,
+switches, badges, cards, separators — and deliberately leave **dense data
+surfaces** (table rows, long forms' layout) calm and readable. Skeuomorphic
+chrome on five hundred table cells is bad ergonomics and bad paint performance;
+the hardware/print/CRT character belongs on the controls around the data. The
+playground's `/crouton` page is the check: a generated-CRUD-shaped composition
+(tabs, table, pagination, form with select/textarea/switch, edit modal) where
+every theme must look intentional — themed chrome, calm table.
+
+Coverage status: all 8 post-#1304 themes (brutalist, mtv, terminal, braun,
+gameboy, riso, eink, blueprint) register `select` + `textarea` variants reusing
+their input classes. The 4 originals (ko, kr11, minimal, blackandwhite) pass on
+select/textarea for now (their runtime configs reset those to Nuxt UI defaults);
+UTabs/UPagination/UTable are a deliberate pass everywhere — they read as data
+surfaces.
+
 ## Nuxt UI Theming Pattern
 
 The key insight for Nuxt UI 4 theming:
