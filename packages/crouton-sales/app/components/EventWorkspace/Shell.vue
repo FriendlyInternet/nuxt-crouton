@@ -62,10 +62,18 @@ const props = withDefaults(defineProps<{
    * modal (EventWorkspaceRender), so they don't need their own header row.
    */
   closable?: boolean
+  /**
+   * Show the narrow-mode control strip above the kassa. Hosts whose launcher
+   * is the navigation hub (the block's launcher cards) turn it off — the
+   * kassa then runs full-bleed, with the edit pencil back in the category
+   * tabs row and the ✕ beside it (closable pass-down).
+   */
+  showStrip?: boolean
 }>(), {
   showSwitcher: true,
   showHeaderActions: true,
-  showHeader: true
+  showHeader: true,
+  showStrip: true
 })
 
 const emit = defineEmits<{ close: [] }>()
@@ -163,11 +171,12 @@ const dataPaneOpen = computed(() => dataOpen.value && loggedIn.value)
 // error page). Cost: one desktop-layout frame on phones before the flip.
 const isNarrowQuery = useMediaQuery('(max-width: 1023px)')
 const hydrated = ref(false)
-onMounted(() => { hydrated.value = true })
 const isNarrow = computed(() => hydrated.value && isNarrowQuery.value)
 const ordersSlideoverOpen = ref(false)
 const clientsSlideoverOpen = ref(false)
 const dataSlideoverOpen = ref(false)
+
+onMounted(() => { hydrated.value = true })
 
 // Settings follow the same split: inline collapsible under the header on
 // desktop, but a slideover on narrow screens — the inline panel's nested
@@ -315,7 +324,7 @@ const ordersFilterCount = ref(0)
          open as slideovers from this row. Styled as a segmented tab strip
          (matching the kassa's category tabs) rather than loose buttons —
          they're the phone's stand-in for the pane/gutter tabs. -->
-    <div v-if="isNarrow" class="flex items-center rounded-lg bg-elevated p-1 gap-1 overflow-x-auto">
+    <div v-if="isNarrow && showStrip" class="flex items-center rounded-lg bg-elevated p-1 gap-1 overflow-x-auto">
       <!-- Compact event switcher (icon-only): the header row is hidden on
            narrow, so switching events lives here. -->
       <USelectMenu
@@ -436,8 +445,10 @@ const ordersFilterCount = ref(0)
             :event-slug="event.slug"
             :team-param="teamParam"
             :show-header="false"
-            :hide-edit-toggle="isNarrow"
+            :hide-edit-toggle="isNarrow && showStrip"
+            :closable="closable && isNarrow && !showStrip"
             v-model:edit-mode="kassaEditMode"
+            @close="emit('close')"
           />
         </SplitterPanel>
         <template v-if="ordersOpen && !isNarrow">

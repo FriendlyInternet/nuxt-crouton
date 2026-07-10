@@ -534,6 +534,16 @@
         "title": "Data",
         "revenueChart": "Omzet per dag",
         "productMatrix": "Verkoop per product × dag"
+      },
+      "launcher": {
+        "ordersDesc": "Alle bestellingen van dit event — status, tickets, opnieuw printen",
+        "ordersStat": "bestellingen",
+        "clientsDesc": "Openstaande rekeningen per klant bekijken en afrekenen",
+        "clientsStat": "open rekeningen",
+        "dataDesc": "Live verkoopcijfers, grafieken en de verkooptabel",
+        "dataStat": "omzet",
+        "settingsDesc": "Eventgegevens, printers, bontekst en helpers",
+        "settingsStat": "printers"
       }
     },
     "helpers": {

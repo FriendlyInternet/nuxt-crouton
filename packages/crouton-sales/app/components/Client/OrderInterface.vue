@@ -45,6 +45,16 @@
               :aria-label="editing ? t('sales.workspace.doneEditing') : t('sales.workspace.editCatalog')"
               @click="editMode = !editMode"
             />
+            <!-- Full-bleed kassa exit (closable) — no header row to host it. -->
+            <UButton
+              v-if="closable"
+              icon="i-lucide-x"
+              size="sm"
+              color="neutral"
+              variant="soft"
+              :aria-label="t('sales.common.close')"
+              @click="emit('close')"
+            />
           </div>
           <!-- Admin toolbar: add product + show-inactive, pinned above the list -->
           <div
@@ -254,7 +264,15 @@ const props = defineProps<{
    * and drive edit mode via the `editMode` model instead.
    */
   hideEditToggle?: boolean
+  /**
+   * Render a close ✕ at the right of the category-tabs row (after the
+   * pencil) and emit `close` — for a full-bleed kassa with no header/strip
+   * of its own (the launcher's "Open kassa" modal).
+   */
+  closable?: boolean
 }>()
+
+const emit = defineEmits<{ close: [] }>()
 
 const isOnline = useOnline()
 const notify = useNotify()

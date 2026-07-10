@@ -247,7 +247,9 @@ onUnmounted(unhookMutation)
           :currency="orderData.event.currency"
           :editable="editable"
           :hide-edit-toggle="hideEditToggle"
+          :closable="closable && !showHeader"
           v-model:edit-mode="editMode"
+          @close="emit('close')"
         />
       </div>
     </template>

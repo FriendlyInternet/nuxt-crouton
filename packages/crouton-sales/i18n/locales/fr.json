@@ -533,6 +533,16 @@
         "title": "Données",
         "revenueChart": "Revenu par jour",
         "productMatrix": "Ventes par produit × jour"
+      },
+      "launcher": {
+        "ordersDesc": "Toutes les commandes de cet événement — statut, tickets, réimpressions",
+        "ordersStat": "commandes",
+        "clientsDesc": "Voir et régler les additions ouvertes",
+        "clientsStat": "additions ouvertes",
+        "dataDesc": "Chiffres de vente en direct, graphiques et tableau produits",
+        "dataStat": "chiffre d'affaires",
+        "settingsDesc": "Détails de l'événement, imprimantes, texte des tickets et aides",
+        "settingsStat": "imprimantes"
       }
     },
     "helpers": {

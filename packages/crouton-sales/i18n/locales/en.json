@@ -534,6 +534,16 @@
         "title": "Data",
         "revenueChart": "Revenue by day",
         "productMatrix": "Sales per product × day"
+      },
+      "launcher": {
+        "ordersDesc": "All orders for this event — status, tickets, reprints",
+        "ordersStat": "orders",
+        "clientsDesc": "View and settle open client tabs",
+        "clientsStat": "open tabs",
+        "dataDesc": "Live sales numbers, charts and the product table",
+        "dataStat": "revenue",
+        "settingsDesc": "Event details, printers, receipt text and helpers",
+        "settingsStat": "printers"
       }
     },
     "helpers": {
