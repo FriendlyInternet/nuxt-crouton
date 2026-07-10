@@ -492,6 +492,7 @@ function helperExpiry(value: string): string {
               variant="ghost"
               icon="i-lucide-refresh-cw"
               :loading="activeHelpersPending"
+              :aria-label="t('sales.common.refresh')"
               @click="() => refreshActiveHelpers()"
             />
           </div>
