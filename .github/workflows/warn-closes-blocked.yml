@@ -63,9 +63,7 @@ jobs:
             const list = blocked.map(n => `#${n}`).join(', ')
             const plural = blocked.length > 1
             await github.rest.issues.createComment({ ...context.repo, issue_number: pr.number,
-              body: `${marker}\n> 🤖 **Claude Code** · agent pipeline (CI) · _Closes-a-blocked-issue check (#1253)_\n\n`
-                + `⚠️ This PR's body \`Closes\` **${list}**, which ${plural ? 'are' : 'is'} \`status:blocked\` — `
-                + `merging will auto-close ${plural ? 'them' : 'it'} out from under a pending owner reply `
-                + '(the #1233 race). If this PR is a **root-cause fix** rather than the blocked work itself, '
-                + `use \`Refs ${list}\` instead of \`Closes\`. Warning only — not a required check.` })
+              body: `${marker}\n🚫 **On merge this PR auto-closes ${list} — but ${plural ? 'they are' : 'it is'} \`status:blocked\` (awaiting an owner reply).**\n\n`
+                + `**Fix:** if this is a root-cause fix rather than the blocked work itself, use \`Refs ${list}\` instead of \`Closes\` — so merging doesn't close ${plural ? 'them' : 'it'} out from under the pending reply (the #1233 race).\n\n`
+                + `<sub>🤖 agent pipeline (CI) · closes-a-blocked-issue check (#1253) · warning only, not a required check</sub>` })
             core.warning(`PR #${pr.number} Closes blocked issue(s): ${list}`)
