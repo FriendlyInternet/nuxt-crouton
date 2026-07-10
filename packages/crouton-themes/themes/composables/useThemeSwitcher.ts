@@ -44,7 +44,7 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     name: 'kr11',
     label: 'KR-11',
     description: 'Friendly drum machine aesthetic',
-    colors: ['#6ee7b7', '#fcd34d', '#fca5a5'], // mint, gold, coral
+    colors: ['#b8e9d2', '#e9d227', '#f7d3ca'], // play-mint, FILL-yellow, pad-1 salmon (#1347)
     defaultVariant: 'soft' // KR-11 uses soft tactile pads
   },
   {

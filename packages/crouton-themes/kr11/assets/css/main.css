@@ -8,11 +8,13 @@
    ============================================ */
 
 :root {
-  /* === Chassis Colors === */
-  --kr-chassis: #e5e2dd;          /* Main light gray body */
-  --kr-chassis-light: #f0eeea;    /* Lighter areas */
-  --kr-chassis-shadow: #d1cec9;   /* Shadow/depth areas */
-  --kr-chassis-dark: #c8c5c0;     /* Recessed areas */
+  /* === Chassis Colors ===
+     Matched to the real KORG KR-11 (#1347): the device is clean neutral
+     WHITE with soft gray seams — not warm beige. */
+  --kr-chassis: #f2f2f0;          /* Main white body */
+  --kr-chassis-light: #fafaf9;    /* Highlight areas */
+  --kr-chassis-shadow: #e0e0dd;   /* Shadow/depth areas */
+  --kr-chassis-dark: #d3d3d0;     /* Recessed areas / seams */
 
   /* === Display Colors === */
   --kr-display-bg: #1a1a1a;       /* Black display background */
@@ -20,15 +22,20 @@
   --kr-display-red-dim: #4a1515;  /* LED red (dimmed/off) */
   --kr-display-red-glow: rgba(255, 43, 43, 0.4);
 
-  /* === Pad Colors === */
-  --kr-pad-cream: #f5f3ef;        /* Standard cream pads */
-  --kr-pad-cream-pressed: #e8e6e2;
-  --kr-pad-coral: #ff9a8b;        /* Coral pink accent (pad 1) */
-  --kr-pad-coral-pressed: #e88a7c;
-  --kr-pad-gold: #d4a853;         /* Golden yellow (fill buttons) */
-  --kr-pad-gold-pressed: #c09545;
-  --kr-pad-mint: #7ee8c7;         /* Mint green (play button) */
-  --kr-pad-mint-pressed: #6ad4b5;
+  /* === Pad Colors ===
+     Matched to the hardware (#1347): cream faces with a visible gray
+     KEYLINE ring; FILL keys are a clean saturated yellow (not brown-gold);
+     the play key is pale mint; pad 1 is a pale salmon face with a coral rim. */
+  --kr-pad-cream: #f1eee6;        /* Standard cream pads */
+  --kr-pad-cream-pressed: #e4e1d8;
+  --kr-pad-keyline: #aaa8a3;      /* The thin gray outline every pad has */
+  --kr-pad-coral: #f7d3ca;        /* Pad-1 pale salmon face */
+  --kr-pad-coral-pressed: #eec2b8;
+  --kr-pad-coral-rim: #f08a7a;    /* Pad-1 coral keyline */
+  --kr-pad-gold: #e9d227;         /* FILL-key yellow */
+  --kr-pad-gold-pressed: #d6c01d;
+  --kr-pad-mint: #b8e9d2;         /* Play-key pale mint */
+  --kr-pad-mint-pressed: #a3dcc1;
 
   /* === LED Indicator Colors === */
   --kr-led-yellow: #e8d84c;       /* Yellow indicator */
@@ -93,12 +100,13 @@
   font-size: 0.875rem;
   background-color: var(--kr-pad-cream);
   color: var(--kr-text-dark);
-  border: none;
+  /* The hardware's signature: every pad wears a thin gray keyline (#1347). */
+  border: 1px solid var(--kr-pad-keyline);
   border-radius: var(--kr-pad-radius);
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.1),
-    0 4px 8px rgba(0, 0, 0, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 3px 6px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
   transition: all var(--kr-transition-fast);
 }
 
@@ -121,6 +129,8 @@
 .kr-pad.kr-pad--coral {
   background-color: var(--kr-pad-coral);
   color: var(--kr-text-dark);
+  /* Pad 1 on the device: pale salmon face, CORAL keyline. */
+  border-color: var(--kr-pad-coral-rim);
 }
 
 .kr-pad.kr-pad--coral:hover {
@@ -620,4 +630,50 @@
 
 .kr-link.kr-link--coral {
   color: #d4614f;
+}
+
+/* ============================================
+   DATA-THEME AMBIENT + VARIANT-LESS CHROME (#1347)
+   Background only — no root typography (the #1304 KO readability rule).
+   Both activation paths: [data-theme] from app presets, .theme-kr11 body
+   class from useThemeSwitcher.
+   ============================================ */
+
+[data-theme="kr11"],
+.theme-kr11 {
+  background-color: var(--kr-chassis);
+}
+
+/* USwitch as hardware: a cream pad track with an LED thumb — USwitch has
+   no `variant` dimension, so the replacer can't reach it (same pattern as
+   the Brutalist switch, template for #1333). */
+[data-theme="kr11"] button[role="switch"],
+.theme-kr11 button[role="switch"] {
+  border-radius: var(--kr-button-radius);
+  border: 1px solid var(--kr-pad-keyline);
+  background-color: var(--kr-pad-cream);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: background-color var(--kr-transition-fast);
+}
+
+[data-theme="kr11"] button[role="switch"][data-state="checked"],
+.theme-kr11 button[role="switch"][data-state="checked"] {
+  background-color: var(--kr-pad-mint);
+}
+
+[data-theme="kr11"] button[role="switch"] > span,
+.theme-kr11 button[role="switch"] > span {
+  background-color: var(--kr-led-off);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.25);
+  transition: background-color var(--kr-transition-fast), box-shadow var(--kr-transition-fast);
+}
+
+[data-theme="kr11"] button[role="switch"][data-state="checked"] > span,
+.theme-kr11 button[role="switch"][data-state="checked"] > span {
+  background-color: var(--kr-led-green);
+  box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.15),
+    0 0 6px rgba(76, 217, 100, 0.7);
 }
