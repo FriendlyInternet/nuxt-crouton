@@ -264,59 +264,82 @@ export async function seedApp(options: SeedAppOptions): Promise<string> {
   const core: any = await tsImport(jiti, '@fyit/crouton-core/shared/seed')
   const teamId = core.seedOrgId(teamSlug)
 
-  // 1) Package providers — auth org + demo content shipped by extended packages.
-  const providerSql: string = providers.length > 0
-    ? await core.collectSeedSql({
-        providers,
-        teamSlug,
-        teamId,
-        locale,
-        withStaff: options.withStaff,
-        createPageWithBlocks
-      })
-    : ''
-
-  // 2) App-local generated collections' editable seed.json fixtures (#298).
+  // Build the seed as INDEPENDENT chunks — one per provider, plus the app's collection
+  // fixtures and default layout — instead of one atomic batch. Why (#1370, the snippets
+  // dogfood): `@fyit/crouton` pulls in `@fyit/crouton-bookings` transitively, so the BFS
+  // discovers a bookings provider even for an app that never extends bookings as a layer
+  // (its migrations never created `bookings_settings`). As one `--command` batch, that single
+  // missing table aborted EVERYTHING — no auth team, no collection rows → an empty preview.
+  // Per-chunk, a failing provider warns + is skipped and the auth team + the app's own rows
+  // + layout still seed.
+  const chunks: Array<{ label: string; sql: string }> = []
+  for (const provider of providers) {
+    const psql: string = await core.collectSeedSql({
+      providers: [provider], teamSlug, teamId, locale, withStaff: options.withStaff, createPageWithBlocks,
+    })
+    if (psql.trim()) chunks.push({ label: `provider:${provider.id}`, sql: psql })
+  }
   const fixtureSql = collectCollectionFixtureSql(appDir, core, teamId)
-
-  // 3) Deterministic default layout (#709) → a `layout_configs` row the POC boots with.
+  if (fixtureSql.trim()) chunks.push({ label: 'collection-fixtures', sql: fixtureSql })
   const layoutSql = collectDefaultLayoutSql(appDir, core, teamId)
+  if (layoutSql.trim()) chunks.push({ label: 'default-layout', sql: layoutSql })
 
-  const sql = [providerSql, fixtureSql, layoutSql].filter(s => s.trim()).join('\n')
-
-  if (!sql.trim()) {
+  const sql = chunks.map(c => c.sql).join('\n')
+  if (!chunks.length) {
     consola.warn('No seed providers, collection fixtures, or layout found — nothing to seed.')
     return sql
   }
-
   if (options.dryRun) {
     consola.info('Dry run — generated SQL:')
     process.stdout.write(`${sql}\n`)
     return sql
   }
 
-  // Pass the SQL via --command (the D1 query API), NOT --file. `--file` against
-  // a remote D1 uses the bulk *import* API, which does a user-details lookup
-  // that a Pages/D1-query-scoped CLOUDFLARE_API_TOKEN can't perform (fails with
-  // "Authentication error [code: 10000] … missing User->User Details->Read").
-  // --command needs only the regular D1 query permission the deploy token
-  // already has, and wrangler runs all `;`-separated statements in one call.
-  // execFileSync passes the SQL as a single argv entry (no shell), so quotes/
-  // JSON in the fixture data need no escaping. Curated seeds are small, so the
-  // OS arg-length limit is not a concern.
-  const wranglerArgs = [
-    'wrangler',
-    'd1',
-    'execute',
-    options.db,
-    options.remote ? '--remote' : '--local',
-    `--command=${sql}`,
-    '--yes'
-  ]
-
-  consola.info(`Running: npx ${wranglerArgs.join(' ')}`)
-  execFileSync('npx', wranglerArgs, { cwd: appDir, stdio: 'inherit', env: process.env })
-
-  consola.success(`Seeded ${providers.length} provider(s) into ${options.db} (${options.remote ? 'remote' : 'local'}).`)
+  // Run each chunk as its own `wrangler d1 execute --command`. --command (not --file) uses the
+  // D1 query API — the only D1 permission a deploy token needs (a --file bulk import needs
+  // User-Details:Read the token lacks). execFileSync passes SQL as one argv entry (no shell),
+  // so JSON/quotes in fixture data need no escaping. Curated seeds are small (arg-length is fine).
+  const runChunk = (chunkSql: string) => {
+    execFileSync(
+      'npx',
+      ['wrangler', 'd1', 'execute', options.db, options.remote ? '--remote' : '--local', `--command=${chunkSql}`, '--yes'],
+      { cwd: appDir, stdio: 'inherit', env: process.env },
+    )
+  }
+  const { ok, skipped } = runSeedChunks(chunks, runChunk)
+  if (ok === 0 && skipped.length > 0) {
+    // Nothing seeded at all → a real problem (bad DB / token / all tables missing), not a
+    // tolerable partial skip. Surface it so the deploy's seed step can warn loudly.
+    throw new Error(`All ${skipped.length} seed chunk(s) failed: ${skipped.join(', ')}`)
+  }
+  if (skipped.length > 0) {
+    consola.warn(`Seeded ${ok} chunk(s) into ${options.db}; skipped ${skipped.length} (${skipped.join(', ')}) — see warnings above.`)
+  } else {
+    consola.success(`Seeded ${ok} chunk(s) into ${options.db} (${options.remote ? 'remote' : 'local'}).`)
+  }
   return sql
+}
+
+/**
+ * Run seed SQL chunks resiliently (#1370): execute each via `run`; if one throws, WARN and skip
+ * it rather than aborting the rest — so a provider whose table isn't in this app (e.g. bookings,
+ * pulled in transitively but never extended) doesn't sink the auth team + the app's own rows.
+ * `run` is injected so the resilience is unit-testable without wrangler.
+ */
+export function runSeedChunks(
+  chunks: Array<{ label: string; sql: string }>,
+  run: (sql: string) => void,
+): { ok: number; skipped: string[] } {
+  let ok = 0
+  const skipped: string[] = []
+  for (const { label, sql } of chunks) {
+    try {
+      run(sql)
+      ok++
+    } catch (e) {
+      skipped.push(label)
+      consola.warn(`Seed chunk "${label}" failed — skipping (the rest still seed): ${(e as Error).message.split('\n')[0]}`)
+    }
+  }
+  return { ok, skipped }
 }
