@@ -23,7 +23,13 @@
     "./braun": "./braun/nuxt.config.ts",
     "./braun/*": "./braun/*",
     "./gameboy": "./gameboy/nuxt.config.ts",
-    "./gameboy/*": "./gameboy/*"
+    "./gameboy/*": "./gameboy/*",
+    "./riso": "./riso/nuxt.config.ts",
+    "./riso/*": "./riso/*",
+    "./eink": "./eink/nuxt.config.ts",
+    "./eink/*": "./eink/*",
+    "./blueprint": "./blueprint/nuxt.config.ts",
+    "./blueprint/*": "./blueprint/*"
   },
   "files": [
     "themes",
@@ -36,6 +42,9 @@
     "terminal",
     "braun",
     "gameboy",
+    "riso",
+    "eink",
+    "blueprint",
     "lib"
   ],
   "keywords": [

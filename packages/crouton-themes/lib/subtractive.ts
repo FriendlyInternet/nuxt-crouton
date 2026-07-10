@@ -16,7 +16,7 @@
 // Pure + deterministic — SSR and client must compute the identical class string
 // (hydration-mismatch rule from #364). No Date/random/env reads here, ever.
 
-type ThemeKey = 'minimal' | 'ko' | 'kr11' | 'bw' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy'
+type ThemeKey = 'minimal' | 'ko' | 'kr11' | 'bw' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy' | 'riso' | 'eink' | 'blueprint'
 
 // First matching prefix wins; a resolved string only ever carries one theme's
 // markers because `variant` is single-valued and the bw markers live on the
@@ -30,7 +30,10 @@ const MARKERS: Array<[prefix: string, theme: ThemeKey]> = [
   ['mtv-', 'mtv'],
   ['term-', 'terminal'],
   ['braun-', 'braun'],
-  ['gb-', 'gameboy']
+  ['gb-', 'gameboy'],
+  ['riso-', 'riso'],
+  ['eink-', 'eink'],
+  ['bp-', 'blueprint']
 ]
 
 // text-* utilities that are NOT color (sizes, alignment, wrapping) — kept when a
@@ -90,6 +93,17 @@ const STRIP: Record<ThemeKey, (u: string) => boolean> = {
   gameboy: u => isColor(u) || isDecor(u) || isMotion(u)
     || /^(font|tracking)(-|$)/.test(u)
     || /^(uppercase|lowercase|capitalize|normal-case)$/.test(u)
+    || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u),
+  // Riso: slab formula (like brutalist/mtv) — color, decoration, motion, weight.
+  riso: u => isColor(u) || isDecor(u) || isMotion(u)
+    || /^(font|tracking)(-|$)/.test(u)
+    || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u),
+  // E-ink: greyscale reading mode — color, decoration, motion, weight, underlines.
+  eink: u => isColor(u) || isDecor(u) || isMotion(u)
+    || /^(font|tracking)(-|$)/.test(u)
+    || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u),
+  // Blueprint: technical mono — owns typography wholesale plus the rest.
+  blueprint: u => isColor(u) || /^text-/.test(u) || isDecor(u) || isMotion(u) || isType(u)
     || /^(no-)?underline(-|$)/.test(u) || /^underline-offset(-|$)/.test(u)
 }
 

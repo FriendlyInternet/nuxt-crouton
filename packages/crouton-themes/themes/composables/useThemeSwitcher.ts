@@ -4,7 +4,7 @@
 
 import { THEME_UI_CONFIGS } from '../configs/themeConfigs'
 
-export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy' | 'default'
+export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'brutalist' | 'mtv' | 'terminal' | 'braun' | 'gameboy' | 'riso' | 'eink' | 'blueprint' | 'default'
 
 type BaseVariant = 'solid' | 'outline' | 'soft' | 'ghost' | 'link'
 
@@ -87,6 +87,27 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     label: 'Game Boy',
     description: 'Four shades of olive green, chunky pixels',
     colors: ['#0f380f', '#8bac0f', '#9bbc0e'], // ink, light, screen
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'riso',
+    label: 'Riso',
+    description: 'Two-color riso print — fluoro pink + teal, misregistered',
+    colors: ['#ff48b0', '#00887a', '#f7f3e8'], // pink, teal, paper
+    defaultVariant: 'solid'
+  },
+  {
+    name: 'eink',
+    label: 'E-ink',
+    description: 'Greyscale reading mode — zero motion, newspaper type',
+    colors: ['#1c1c1c', '#6b6b6b', '#f4f2ee'], // ink, gray, paper
+    defaultVariant: 'outline'
+  },
+  {
+    name: 'blueprint',
+    label: 'Blueprint',
+    description: 'Cyanotype drafting sheet — white line-work on blue',
+    colors: ['#123a63', '#dce9f5', '#ffd66b'], // blue, line, pencil
     defaultVariant: 'solid'
   }
 ]

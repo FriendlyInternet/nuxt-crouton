@@ -151,6 +151,31 @@ const gameboyConfig: ThemeUIConfig = {
   badge: { defaultVariants: { variant: 'gameboy' } }
 }
 
+// Riso / E-ink / Blueprint — named variants registered by their layers (#1311)
+const risoConfig: ThemeUIConfig = {
+  colors: { primary: 'pink', neutral: 'stone' },
+  button: { defaultVariants: { variant: 'riso' } },
+  input: { defaultVariants: { variant: 'riso' } },
+  card: { defaultVariants: { variant: 'riso' } },
+  badge: { defaultVariants: { variant: 'riso' } }
+}
+
+const einkConfig: ThemeUIConfig = {
+  colors: { primary: 'neutral', neutral: 'neutral' },
+  button: { defaultVariants: { variant: 'eink' } },
+  input: { defaultVariants: { variant: 'eink' } },
+  card: { defaultVariants: { variant: 'eink' } },
+  badge: { defaultVariants: { variant: 'eink' } }
+}
+
+const blueprintConfig: ThemeUIConfig = {
+  colors: { primary: 'sky', neutral: 'slate' },
+  button: { defaultVariants: { variant: 'blueprint' } },
+  input: { defaultVariants: { variant: 'blueprint' } },
+  card: { defaultVariants: { variant: 'blueprint' } },
+  badge: { defaultVariants: { variant: 'blueprint' } }
+}
+
 // Export all theme configs
 export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   default: defaultConfig,
@@ -162,5 +187,8 @@ export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {
   mtv: mtvConfig,
   terminal: terminalConfig,
   braun: braunConfig,
-  gameboy: gameboyConfig
+  gameboy: gameboyConfig,
+  riso: risoConfig,
+  eink: einkConfig,
+  blueprint: blueprintConfig
 }
