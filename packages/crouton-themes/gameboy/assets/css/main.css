@@ -1,0 +1,287 @@
+/* Game Boy LCD Theme (#1310)
+   The original DMG screen: FOUR shades of olive green — #0f380f, #306230,
+   #8bac0f, #9bbc0e — and nothing else. Square corners, chunky pixel steps,
+   error/warning map to shades via inversion, never hue.
+   No !important: built on the shared subtractive replacer.
+
+   A11y note (#1310): text always uses gb-0 (darkest) on gb-3/gb-2 (lightest)
+   or inverted — the darkest-on-lightest pair is the only body-copy combo;
+   gb-1-on-gb-2 style pairs are decorative-only. */
+
+:root {
+  --gb-0: #0f380f;   /* darkest — ink */
+  --gb-1: #306230;   /* dark — shadows, secondary */
+  --gb-2: #8bac0f;   /* light — active fills */
+  --gb-3: #9bbc0e;   /* lightest — the screen */
+  --gb-step: 3px;    /* the pixel */
+}
+
+/* ============================================
+   DATA-THEME AMBIENT — the LCD
+   ============================================ */
+
+[data-theme="gameboy"],
+.theme-gameboy {
+  background-color: var(--gb-3);
+  color: var(--gb-0);
+  --ui-bg: var(--gb-3);
+}
+
+/* ============================================
+   BUTTONS — chunky sprites
+   Pixel-step "corners" via layered box-shadows (cheap, no images).
+   ============================================ */
+
+.gb-btn {
+  background-color: var(--gb-2);
+  color: var(--gb-0);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: var(--gb-step) var(--gb-step) 0 var(--gb-1);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.gb-btn:hover {
+  background-color: var(--gb-3);
+}
+
+.gb-btn:active {
+  transform: translate(var(--gb-step), var(--gb-step));
+  box-shadow: none;
+}
+
+.gb-btn--dark {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
+
+.gb-btn--dark:hover {
+  background-color: var(--gb-1);
+}
+
+/* "Error" in a 4-shade world: inverted + hazard underline, not red. */
+.gb-btn--alert {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    var(--gb-1) 6px 12px
+  );
+}
+
+/* ============================================
+   OUTLINE
+   ============================================ */
+
+.gb-outline {
+  background-color: transparent;
+  color: var(--gb-0);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.gb-outline:hover {
+  background-color: var(--gb-2);
+}
+
+.gb-outline--alert {
+  border-style: dashed;
+}
+
+/* ============================================
+   SOFT — mid-shade fill
+   ============================================ */
+
+.gb-soft {
+  background-color: var(--gb-2);
+  color: var(--gb-0);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.gb-soft:hover {
+  background-color: var(--gb-1);
+  color: var(--gb-3);
+}
+
+.gb-soft--alert {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    rgba(15, 56, 15, 0.25) 6px 12px
+  );
+}
+
+/* ============================================
+   GHOST — the menu cursor
+   ============================================ */
+
+.gb-ghost {
+  background-color: transparent;
+  color: var(--gb-0);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.gb-ghost::before {
+  content: '▶ ';
+  visibility: hidden;
+}
+
+.gb-ghost:hover::before {
+  visibility: visible;
+}
+
+/* ============================================
+   LINK — selected menu row
+   ============================================ */
+
+.gb-link {
+  background-color: transparent;
+  color: var(--gb-0);
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  font-weight: 700;
+  text-decoration: none;
+  transition: none;
+}
+
+.gb-link:hover {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
+
+/* ============================================
+   INPUTS — a dialog box field
+   ============================================ */
+
+.gb-input {
+  width: 100%;
+}
+
+.gb-input-base {
+  background-color: var(--gb-3);
+  color: var(--gb-0);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: inset var(--gb-step) var(--gb-step) 0 rgba(15, 56, 15, 0.15);
+  caret-color: var(--gb-0);
+  font-weight: 600;
+  transition: none;
+}
+
+.gb-input-base::placeholder {
+  color: var(--gb-1);
+}
+
+.gb-input-base:focus {
+  outline: none;
+  background-color: #a6c514;
+}
+
+.gb-input-base:disabled {
+  border-style: dashed;
+  box-shadow: none;
+  color: var(--gb-1);
+}
+
+/* ============================================
+   CARD — an RPG dialog box
+   ============================================ */
+
+.gb-card {
+  background-color: var(--gb-3);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  /* double frame, like every dialog box since 1989 */
+  outline: 1px solid var(--gb-0);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+
+.gb-card-header {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.6rem 1rem;
+}
+
+.gb-card-body {
+  color: var(--gb-0);
+  padding: 1rem;
+}
+
+.gb-card-footer {
+  border-top: var(--gb-step) solid var(--gb-0);
+  padding: 0.6rem 1rem;
+}
+
+/* ============================================
+   SEPARATOR — a sprite rule
+   ============================================ */
+
+.gb-separator {
+  border-style: dotted;
+  border-color: var(--gb-0);
+  border-top-width: var(--gb-step);
+}
+
+/* ============================================
+   BADGE — an item tag
+   ============================================ */
+
+.gb-badge {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+  border: none;
+  border-radius: 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ============================================
+   VARIANT-LESS CHROME — USwitch (#1333 pattern)
+   ============================================ */
+
+[data-theme="gameboy"] button[role="switch"],
+.theme-gameboy button[role="switch"] {
+  border-radius: 0;
+  border: 2px solid var(--gb-0);
+  background-color: var(--gb-3);
+  transition: none;
+}
+
+[data-theme="gameboy"] button[role="switch"][data-state="checked"],
+.theme-gameboy button[role="switch"][data-state="checked"] {
+  background-color: var(--gb-2);
+}
+
+[data-theme="gameboy"] button[role="switch"] > span,
+.theme-gameboy button[role="switch"] > span {
+  border-radius: 0;
+  background-color: var(--gb-0);
+  transition: none;
+}

@@ -1,0 +1,290 @@
+/* Brutalist Theme (#1307)
+   Thick black borders, hard offset shadows (no blur), flat shock fills,
+   uppercase labels, states that SNAP. The anti-"tasteful SaaS" theme.
+
+   No !important anywhere: the shared subtractive replacer
+   (../lib/subtractive.ts) strips the conflicting Nuxt UI defaults
+   (color, decoration, motion, weight) whenever a brutalist- marker class
+   is present, so these rules win by normal cascade. */
+
+:root {
+  --brutalist-paper: #fdfbf5;   /* off-white paper */
+  --brutalist-ink: #0a0a0a;     /* near-black ink */
+  --brutalist-accent: #ffd800;  /* shock yellow */
+  --brutalist-danger: #ff3b30;  /* alarm red */
+  --brutalist-border: 3px;
+  --brutalist-shadow: 4px 4px 0 var(--brutalist-ink);
+  --brutalist-shadow-hover: 6px 6px 0 var(--brutalist-ink);
+  --brutalist-snap: 75ms;       /* states snap, they don't glide */
+}
+
+/* ============================================
+   DATA-THEME AMBIENT
+   Chrome only — no font takeover (the #1304 KO readability lesson:
+   body copy stays in the app's readable font).
+   ============================================ */
+
+[data-theme="brutalist"] {
+  background-color: var(--brutalist-paper);
+}
+
+/* Chrome without a variant hook (owner feedback on #1307: "the switcher could
+   be more in style"). USwitch has no `variant` dimension, so the marker-gated
+   replacer can never fire for it — theme it ambiently, scoped to the active
+   theme (body class from useThemeSwitcher, data-theme from the app presets).
+   Pattern doubles as the template for the other themes (#1333). */
+[data-theme="brutalist"] button[role="switch"],
+.theme-brutalist button[role="switch"] {
+  border-radius: 0;
+  border: 2px solid var(--brutalist-ink);
+  background-color: var(--brutalist-paper);
+  box-shadow: 2px 2px 0 var(--brutalist-ink);
+  transition: none;
+}
+
+[data-theme="brutalist"] button[role="switch"][data-state="checked"],
+.theme-brutalist button[role="switch"][data-state="checked"] {
+  background-color: var(--brutalist-accent);
+}
+
+[data-theme="brutalist"] button[role="switch"] > span,
+.theme-brutalist button[role="switch"] > span {
+  border-radius: 0;
+  background-color: var(--brutalist-ink);
+  transition: none;
+}
+
+/* ============================================
+   SOLID BUTTONS — flat block + hard shadow
+   ============================================ */
+
+.brutalist-btn {
+  background-color: var(--brutalist-paper);
+  color: var(--brutalist-ink);
+  border: var(--brutalist-border) solid var(--brutalist-ink);
+  box-shadow: var(--brutalist-shadow);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: box-shadow var(--brutalist-snap) steps(2, end), transform var(--brutalist-snap) steps(2, end);
+}
+
+.brutalist-btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: var(--brutalist-shadow-hover);
+}
+
+.brutalist-btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: 0 0 0 var(--brutalist-ink);
+}
+
+.brutalist-btn--primary {
+  background-color: var(--brutalist-accent);
+}
+
+.brutalist-btn--neutral {
+  background-color: var(--brutalist-ink);
+  color: var(--brutalist-paper);
+}
+
+.brutalist-btn--error {
+  background-color: var(--brutalist-danger);
+  color: var(--brutalist-paper);
+}
+
+/* ============================================
+   OUTLINE — the frame without the shadow drama
+   ============================================ */
+
+.brutalist-outline {
+  background-color: var(--brutalist-paper);
+  color: var(--brutalist-ink);
+  border: var(--brutalist-border) solid var(--brutalist-ink);
+  box-shadow: none;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: background-color var(--brutalist-snap) steps(2, end);
+}
+
+.brutalist-outline:hover {
+  background-color: var(--brutalist-accent);
+}
+
+.brutalist-outline--error:hover {
+  background-color: var(--brutalist-danger);
+  color: var(--brutalist-paper);
+}
+
+/* ============================================
+   SOFT — accent slab, no border theatrics
+   ============================================ */
+
+.brutalist-soft {
+  background-color: var(--brutalist-accent);
+  color: var(--brutalist-ink);
+  border: none;
+  box-shadow: none;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: filter var(--brutalist-snap) steps(2, end);
+}
+
+.brutalist-soft:hover {
+  filter: brightness(0.92);
+}
+
+.brutalist-soft--error {
+  background-color: var(--brutalist-danger);
+  color: var(--brutalist-paper);
+}
+
+/* ============================================
+   GHOST — invisible until it isn't
+   ============================================ */
+
+.brutalist-ghost {
+  background-color: transparent;
+  color: var(--brutalist-ink);
+  border: var(--brutalist-border) solid transparent;
+  box-shadow: none;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: border-color var(--brutalist-snap) steps(2, end);
+}
+
+.brutalist-ghost:hover {
+  border-color: var(--brutalist-ink);
+}
+
+.brutalist-ghost--error {
+  color: var(--brutalist-danger);
+}
+
+.brutalist-ghost--error:hover {
+  border-color: var(--brutalist-danger);
+}
+
+/* ============================================
+   LINK — marker-pen underline
+   ============================================ */
+
+.brutalist-link {
+  background-color: transparent;
+  color: var(--brutalist-ink);
+  border: none;
+  box-shadow: none;
+  font-weight: 800;
+  text-decoration: none;
+  background-image: linear-gradient(var(--brutalist-accent), var(--brutalist-accent));
+  background-repeat: no-repeat;
+  background-size: 100% 0.45em;
+  background-position: 0 85%;
+  transition: background-size var(--brutalist-snap) steps(2, end);
+}
+
+.brutalist-link:hover {
+  background-size: 100% 100%;
+}
+
+.brutalist-link--error {
+  background-image: linear-gradient(var(--brutalist-danger), var(--brutalist-danger));
+}
+
+.brutalist-link--error:hover {
+  color: var(--brutalist-paper);
+}
+
+/* ============================================
+   INPUTS — a slab you type into
+   ============================================ */
+
+.brutalist-input {
+  width: 100%;
+}
+
+.brutalist-input-base {
+  background-color: var(--brutalist-paper);
+  color: var(--brutalist-ink);
+  border: var(--brutalist-border) solid var(--brutalist-ink);
+  border-radius: 0;
+  box-shadow: var(--brutalist-shadow);
+  font-weight: 600;
+  caret-color: var(--brutalist-ink);
+  transition: box-shadow var(--brutalist-snap) steps(2, end), transform var(--brutalist-snap) steps(2, end);
+}
+
+.brutalist-input-base::placeholder {
+  color: var(--brutalist-ink);
+  opacity: 0.45;
+}
+
+.brutalist-input-base:focus {
+  outline: none;
+  transform: translate(-2px, -2px);
+  box-shadow: var(--brutalist-shadow-hover);
+  background-color: #fff;
+}
+
+.brutalist-input-base:disabled {
+  background-color: transparent;
+  box-shadow: none;
+  border-style: dashed;
+}
+
+/* ============================================
+   CARD — a poster taped to the wall
+   ============================================ */
+
+.brutalist-card {
+  background-color: var(--brutalist-paper);
+  border: var(--brutalist-border) solid var(--brutalist-ink);
+  border-radius: 0;
+  box-shadow: 8px 8px 0 var(--brutalist-ink);
+  overflow: hidden;
+}
+
+.brutalist-card-header {
+  background-color: var(--brutalist-accent);
+  border-bottom: var(--brutalist-border) solid var(--brutalist-ink);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.75rem 1rem;
+}
+
+.brutalist-card-body {
+  padding: 1rem;
+}
+
+.brutalist-card-footer {
+  border-top: var(--brutalist-border) solid var(--brutalist-ink);
+  padding: 0.75rem 1rem;
+}
+
+/* ============================================
+   SEPARATOR — a fat rule
+   ============================================ */
+
+.brutalist-separator {
+  border-color: var(--brutalist-ink);
+  border-top-width: var(--brutalist-border);
+}
+
+/* ============================================
+   BADGE — a sticker
+   ============================================ */
+
+.brutalist-badge {
+  background-color: var(--brutalist-accent);
+  color: var(--brutalist-ink);
+  border: 2px solid var(--brutalist-ink);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 var(--brutalist-ink);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

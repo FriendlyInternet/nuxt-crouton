@@ -1,0 +1,324 @@
+/* Braun / Rams Hi-Fi Theme (#1309)
+   Warm analog hardware — cream chassis, 1px hairlines, very soft REAL
+   shadows (unlike brutalist's hard ones), machined 3px radii, small
+   letterspaced silkscreen labels, the ONE signature orange.
+   No !important: built on the shared subtractive replacer. */
+
+:root {
+  --braun-cream: #f2efe9;        /* chassis */
+  --braun-cream-raised: #faf8f4; /* key faces */
+  --braun-charcoal: #2e2c29;     /* ink + dark keys */
+  --braun-hairline: #d5d0c7;     /* 1px machine lines */
+  --braun-orange: #f26c1d;       /* THE accent */
+  --braun-red: #b8452f;          /* muted alert */
+  --braun-text: #3a3835;
+  --braun-label: #8a857d;        /* silkscreen gray */
+  --braun-radius: 3px;
+  --braun-shadow: 0 1px 2px rgba(46, 44, 41, 0.12), 0 2px 6px rgba(46, 44, 41, 0.06);
+  --braun-shadow-pressed: inset 0 1px 3px rgba(46, 44, 41, 0.18);
+  --braun-ease: 120ms ease;
+}
+
+/* ============================================
+   DATA-THEME AMBIENT — the chassis
+   ============================================ */
+
+[data-theme="braun"],
+.theme-braun {
+  background-color: var(--braun-cream);
+  --ui-bg: var(--braun-cream);
+}
+
+/* ============================================
+   BUTTONS — machined keys
+   ============================================ */
+
+.braun-btn {
+  background-color: var(--braun-cream-raised);
+  color: var(--braun-text);
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+  box-shadow: var(--braun-shadow);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: box-shadow var(--braun-ease), background-color var(--braun-ease);
+}
+
+.braun-btn:hover {
+  background-color: #fff;
+}
+
+.braun-btn:active {
+  box-shadow: var(--braun-shadow-pressed);
+}
+
+.braun-btn--orange {
+  background-color: var(--braun-orange);
+  color: #fff;
+  border-color: transparent;
+}
+
+.braun-btn--orange:hover {
+  background-color: #e2600f;
+}
+
+.braun-btn--charcoal {
+  background-color: var(--braun-charcoal);
+  color: var(--braun-cream);
+  border-color: transparent;
+}
+
+.braun-btn--charcoal:hover {
+  background-color: #3c3a36;
+}
+
+.braun-btn--red {
+  background-color: var(--braun-red);
+  color: #fff;
+  border-color: transparent;
+}
+
+.braun-btn--red:hover {
+  background-color: #a63c28;
+}
+
+/* ============================================
+   OUTLINE — hairline key
+   ============================================ */
+
+.braun-outline {
+  background-color: transparent;
+  color: var(--braun-text);
+  border: 1px solid var(--braun-charcoal);
+  border-radius: var(--braun-radius);
+  box-shadow: none;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background-color var(--braun-ease);
+}
+
+.braun-outline:hover {
+  background-color: var(--braun-cream-raised);
+}
+
+.braun-outline--orange {
+  color: var(--braun-orange);
+  border-color: var(--braun-orange);
+}
+
+.braun-outline--red {
+  color: var(--braun-red);
+  border-color: var(--braun-red);
+}
+
+/* ============================================
+   SOFT — recessed key
+   ============================================ */
+
+.braun-soft {
+  background-color: rgba(46, 44, 41, 0.06);
+  color: var(--braun-text);
+  border: none;
+  border-radius: var(--braun-radius);
+  box-shadow: var(--braun-shadow-pressed);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: background-color var(--braun-ease);
+}
+
+.braun-soft:hover {
+  background-color: rgba(46, 44, 41, 0.1);
+}
+
+.braun-soft--orange {
+  background-color: rgba(242, 108, 29, 0.14);
+  color: var(--braun-orange);
+}
+
+.braun-soft--red {
+  background-color: rgba(184, 69, 47, 0.12);
+  color: var(--braun-red);
+}
+
+/* ============================================
+   GHOST — silkscreen label
+   ============================================ */
+
+.braun-ghost {
+  background-color: transparent;
+  color: var(--braun-label);
+  border: none;
+  border-radius: var(--braun-radius);
+  box-shadow: none;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: color var(--braun-ease);
+}
+
+.braun-ghost:hover {
+  color: var(--braun-text);
+}
+
+.braun-ghost--orange:hover {
+  color: var(--braun-orange);
+}
+
+.braun-ghost--red:hover {
+  color: var(--braun-red);
+}
+
+/* ============================================
+   LINK — index line
+   ============================================ */
+
+.braun-link {
+  background-color: transparent;
+  color: var(--braun-text);
+  border: none;
+  box-shadow: none;
+  font-weight: 600;
+  text-decoration: none;
+  border-bottom: 1px solid var(--braun-hairline);
+  border-radius: 0;
+  transition: border-color var(--braun-ease), color var(--braun-ease);
+}
+
+.braun-link:hover {
+  color: var(--braun-orange);
+  border-bottom-color: var(--braun-orange);
+}
+
+.braun-link--orange {
+  color: var(--braun-orange);
+  border-bottom-color: var(--braun-orange);
+}
+
+.braun-link--red {
+  color: var(--braun-red);
+  border-bottom-color: var(--braun-red);
+}
+
+/* ============================================
+   INPUTS — a calibrated field
+   ============================================ */
+
+.braun-input {
+  width: 100%;
+}
+
+.braun-input-base {
+  background-color: var(--braun-cream-raised);
+  color: var(--braun-text);
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+  box-shadow: var(--braun-shadow-pressed);
+  caret-color: var(--braun-orange);
+  transition: border-color var(--braun-ease);
+}
+
+.braun-input-base::placeholder {
+  color: var(--braun-label);
+}
+
+.braun-input-base:focus {
+  outline: none;
+  border-color: var(--braun-orange);
+}
+
+.braun-input-base:disabled {
+  background-color: transparent;
+  box-shadow: none;
+  border-style: dashed;
+}
+
+/* ============================================
+   CARD — a faceplate
+   ============================================ */
+
+.braun-card {
+  background-color: var(--braun-cream-raised);
+  border: 1px solid var(--braun-hairline);
+  border-radius: calc(var(--braun-radius) * 2);
+  box-shadow: var(--braun-shadow);
+}
+
+.braun-card-header {
+  color: var(--braun-label);
+  border-bottom: 1px solid var(--braun-hairline);
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.75rem 1rem;
+}
+
+.braun-card-body {
+  color: var(--braun-text);
+  padding: 1rem;
+}
+
+.braun-card-footer {
+  border-top: 1px solid var(--braun-hairline);
+  padding: 0.75rem 1rem;
+}
+
+/* ============================================
+   SEPARATOR — a machine line
+   ============================================ */
+
+.braun-separator {
+  border-color: var(--braun-hairline);
+}
+
+/* ============================================
+   BADGE — an engraved chip
+   ============================================ */
+
+.braun-badge {
+  background-color: transparent;
+  color: var(--braun-label);
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+  font-weight: 600;
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ============================================
+   VARIANT-LESS CHROME — USwitch as the sliding toggle
+   (rounded stays — the Braun toggle is a pill, not a slab)
+   ============================================ */
+
+[data-theme="braun"] button[role="switch"],
+.theme-braun button[role="switch"] {
+  border: 1px solid var(--braun-hairline);
+  background-color: var(--braun-cream-raised);
+  box-shadow: var(--braun-shadow-pressed);
+  transition: background-color var(--braun-ease);
+}
+
+[data-theme="braun"] button[role="switch"][data-state="checked"],
+.theme-braun button[role="switch"][data-state="checked"] {
+  background-color: var(--braun-orange);
+  border-color: transparent;
+}
+
+[data-theme="braun"] button[role="switch"] > span,
+.theme-braun button[role="switch"] > span {
+  background-color: var(--braun-charcoal);
+  transition: background-color var(--braun-ease);
+}
+
+[data-theme="braun"] button[role="switch"][data-state="checked"] > span,
+.theme-braun button[role="switch"][data-state="checked"] > span {
+  background-color: #fff;
+}

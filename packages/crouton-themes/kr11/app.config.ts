@@ -1,6 +1,8 @@
 // KR-11 Theme Configuration
 // Korg KR-11 Compact Rhythm Box inspired styling
 
+import { subtractThemeDefaults } from '../lib/subtractive'
+
 export default defineAppConfig({
   ui: {
     colors: {
@@ -9,7 +11,12 @@ export default defineAppConfig({
     },
 
     button: {
-      // Note: No slots.base override - let Nuxt UI handle base classes to avoid hydration mismatches
+      // Subtractive base via the shared marker-gated replacer (#1304): fires only
+      // when a kr-* marker is in the resolved classes; strips the defaults the
+      // KR-11 CSS re-supplies so it needs no !important.
+      slots: {
+        base: subtractThemeDefaults
+      },
       variants: {
         variant: {
           kr11: '',
@@ -68,6 +75,10 @@ export default defineAppConfig({
     },
 
     input: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
       variants: {
         variant: {
           kr11: {
@@ -79,6 +90,12 @@ export default defineAppConfig({
     },
 
     card: {
+      slots: {
+        root: subtractThemeDefaults,
+        header: subtractThemeDefaults,
+        body: subtractThemeDefaults,
+        footer: subtractThemeDefaults
+      },
       variants: {
         variant: {
           kr11: {
@@ -92,6 +109,9 @@ export default defineAppConfig({
     },
 
     badge: {
+      slots: {
+        base: subtractThemeDefaults
+      },
       variants: {
         variant: {
           kr11: 'kr-badge'

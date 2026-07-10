@@ -8,11 +8,13 @@
    ============================================ */
 
 :root {
-  /* === Chassis Colors === */
-  --kr-chassis: #e5e2dd;          /* Main light gray body */
-  --kr-chassis-light: #f0eeea;    /* Lighter areas */
-  --kr-chassis-shadow: #d1cec9;   /* Shadow/depth areas */
-  --kr-chassis-dark: #c8c5c0;     /* Recessed areas */
+  /* === Chassis Colors ===
+     Matched to the real KORG KR-11 (#1347): the device is clean neutral
+     WHITE with soft gray seams — not warm beige. */
+  --kr-chassis: #f2f2f0;          /* Main white body */
+  --kr-chassis-light: #fafaf9;    /* Highlight areas */
+  --kr-chassis-shadow: #e0e0dd;   /* Shadow/depth areas */
+  --kr-chassis-dark: #d3d3d0;     /* Recessed areas / seams */
 
   /* === Display Colors === */
   --kr-display-bg: #1a1a1a;       /* Black display background */
@@ -20,15 +22,20 @@
   --kr-display-red-dim: #4a1515;  /* LED red (dimmed/off) */
   --kr-display-red-glow: rgba(255, 43, 43, 0.4);
 
-  /* === Pad Colors === */
-  --kr-pad-cream: #f5f3ef;        /* Standard cream pads */
-  --kr-pad-cream-pressed: #e8e6e2;
-  --kr-pad-coral: #ff9a8b;        /* Coral pink accent (pad 1) */
-  --kr-pad-coral-pressed: #e88a7c;
-  --kr-pad-gold: #d4a853;         /* Golden yellow (fill buttons) */
-  --kr-pad-gold-pressed: #c09545;
-  --kr-pad-mint: #7ee8c7;         /* Mint green (play button) */
-  --kr-pad-mint-pressed: #6ad4b5;
+  /* === Pad Colors ===
+     Matched to the hardware (#1347): cream faces with a visible gray
+     KEYLINE ring; FILL keys are a clean saturated yellow (not brown-gold);
+     the play key is pale mint; pad 1 is a pale salmon face with a coral rim. */
+  --kr-pad-cream: #f1eee6;        /* Standard cream pads */
+  --kr-pad-cream-pressed: #e4e1d8;
+  --kr-pad-keyline: #aaa8a3;      /* The thin gray outline every pad has */
+  --kr-pad-coral: #f7d3ca;        /* Pad-1 pale salmon face */
+  --kr-pad-coral-pressed: #eec2b8;
+  --kr-pad-coral-rim: #f08a7a;    /* Pad-1 coral keyline */
+  --kr-pad-gold: #e9d227;         /* FILL-key yellow */
+  --kr-pad-gold-pressed: #d6c01d;
+  --kr-pad-mint: #b8e9d2;         /* Play-key pale mint */
+  --kr-pad-mint-pressed: #a3dcc1;
 
   /* === LED Indicator Colors === */
   --kr-led-yellow: #e8d84c;       /* Yellow indicator */
@@ -88,63 +95,66 @@
    ============================================ */
 
 .kr-pad {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: var(--kr-pad-cream) !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-pad-radius) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  /* The hardware's signature: every pad wears a thin gray keyline (#1347). */
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: var(--kr-pad-radius);
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.1),
-    0 4px 8px rgba(0, 0, 0, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
-  transition: all var(--kr-transition-fast) !important;
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 3px 6px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-pad:hover {
-  background-color: var(--kr-pad-cream-pressed) !important;
+  background-color: var(--kr-pad-cream-pressed);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.1),
     0 2px 4px rgba(0, 0, 0, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .kr-pad:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
   box-shadow:
     0 0 1px rgba(0, 0, 0, 0.1),
-    inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* Coral Pink Pad (Pad 1 style) */
 .kr-pad.kr-pad--coral {
-  background-color: var(--kr-pad-coral) !important;
-  color: var(--kr-text-dark) !important;
+  background-color: var(--kr-pad-coral);
+  color: var(--kr-text-dark);
+  /* Pad 1 on the device: pale salmon face, CORAL keyline. */
+  border-color: var(--kr-pad-coral-rim);
 }
 
 .kr-pad.kr-pad--coral:hover {
-  background-color: var(--kr-pad-coral-pressed) !important;
+  background-color: var(--kr-pad-coral-pressed);
 }
 
 /* Golden Yellow Pad (Fill buttons) */
 .kr-pad.kr-pad--gold {
-  background-color: var(--kr-pad-gold) !important;
-  color: var(--kr-text-dark) !important;
+  background-color: var(--kr-pad-gold);
+  color: var(--kr-text-dark);
 }
 
 .kr-pad.kr-pad--gold:hover {
-  background-color: var(--kr-pad-gold-pressed) !important;
+  background-color: var(--kr-pad-gold-pressed);
 }
 
 /* Mint Green Pad (Play button) */
 .kr-pad.kr-pad--mint {
-  background-color: var(--kr-pad-mint) !important;
-  color: var(--kr-text-dark) !important;
+  background-color: var(--kr-pad-mint);
+  color: var(--kr-text-dark);
 }
 
 .kr-pad.kr-pad--mint:hover {
-  background-color: var(--kr-pad-mint-pressed) !important;
+  background-color: var(--kr-pad-mint-pressed);
 }
 
 /* ============================================
@@ -153,31 +163,33 @@
    ============================================ */
 
 .kr-mode-btn {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.75rem !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.02em !important;
-  background-color: var(--kr-pad-cream) !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-button-radius) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: none;
+  border-radius: var(--kr-button-radius);
+  /* !important stays: spacing utilities (px, py) are deliberately NOT stripped
+     by the subtractive replacer (#1304), so this must outrank them. */
   padding: 0.5rem 1rem !important;
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
-  transition: all var(--kr-transition-fast) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-mode-btn:hover {
-  background-color: var(--kr-pad-cream-pressed) !important;
+  background-color: var(--kr-pad-cream-pressed);
 }
 
 .kr-mode-btn:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
   box-shadow:
     0 0 1px rgba(0, 0, 0, 0.1),
-    inset 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+    inset 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* ============================================
@@ -189,26 +201,26 @@
 }
 
 .kr-input-base {
-  font-family: var(--kr-font) !important;
-  font-size: 0.875rem !important;
-  background-color: var(--kr-pad-cream) !important;
-  color: var(--kr-text-dark) !important;
-  border: 1px solid var(--kr-chassis-dark) !important;
-  border-radius: var(--kr-button-radius) !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05) !important;
-  transition: all var(--kr-transition) !important;
+  font-family: var(--kr-font);
+  font-size: 0.875rem;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: 1px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-button-radius);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all var(--kr-transition);
 }
 
 .kr-input-base::placeholder {
-  color: var(--kr-text-light) !important;
+  color: var(--kr-text-light);
 }
 
 .kr-input-base:focus {
-  outline: none !important;
-  border-color: var(--kr-pad-mint) !important;
+  outline: none;
+  border-color: var(--kr-pad-mint);
   box-shadow:
     inset 0 1px 2px rgba(0, 0, 0, 0.05),
-    0 0 0 2px rgba(126, 232, 199, 0.3) !important;
+    0 0 0 2px rgba(126, 232, 199, 0.3);
 }
 
 /* ============================================
@@ -217,31 +229,31 @@
    ============================================ */
 
 .kr-card {
-  font-family: var(--kr-font) !important;
-  background-color: var(--kr-chassis-light) !important;
-  border: none !important;
-  border-radius: var(--kr-card-radius) !important;
+  font-family: var(--kr-font);
+  background-color: var(--kr-chassis-light);
+  border: none;
+  border-radius: var(--kr-card-radius);
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.08),
     0 4px 16px rgba(0, 0, 0, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .kr-card-header {
-  font-weight: 600 !important;
-  font-size: 0.75rem !important;
-  letter-spacing: 0.05em !important;
-  text-transform: uppercase !important;
-  color: var(--kr-text-medium) !important;
-  border-bottom: 1px solid var(--kr-chassis-dark) !important;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kr-text-medium);
+  border-bottom: 1px solid var(--kr-chassis-dark);
 }
 
 .kr-card-body {
-  color: var(--kr-text-dark) !important;
+  color: var(--kr-text-dark);
 }
 
 .kr-card-footer {
-  border-top: 1px solid var(--kr-chassis-dark) !important;
+  border-top: 1px solid var(--kr-chassis-dark);
 }
 
 /* ============================================
@@ -249,14 +261,16 @@
    ============================================ */
 
 .kr-badge {
-  font-family: var(--kr-font) !important;
-  font-size: 0.625rem !important;
-  font-weight: 600 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-  background-color: var(--kr-display-bg) !important;
-  color: var(--kr-display-red) !important;
-  border-radius: 2px !important;
+  font-family: var(--kr-font);
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background-color: var(--kr-display-bg);
+  color: var(--kr-display-red);
+  border-radius: 2px;
+  /* !important stays: spacing utilities (px, py) are deliberately NOT stripped
+     by the subtractive replacer (#1304), so this must outrank them. */
   padding: 0.25rem 0.5rem !important;
 }
 
@@ -441,49 +455,49 @@
    ============================================ */
 
 .kr-outline {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: transparent !important;
-  color: var(--kr-text-dark) !important;
-  border: 2px solid var(--kr-chassis-dark) !important;
-  border-radius: var(--kr-pad-radius) !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--kr-text-dark);
+  border: 2px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-outline:hover {
-  background-color: var(--kr-chassis-light) !important;
+  background-color: var(--kr-chassis-light);
 }
 
 .kr-outline:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
 }
 
 .kr-outline.kr-outline--mint {
-  border-color: var(--kr-pad-mint) !important;
-  color: #2a9d6d !important;
+  border-color: var(--kr-pad-mint);
+  color: #2a9d6d;
 }
 
 .kr-outline.kr-outline--mint:hover {
-  background-color: rgba(126, 232, 199, 0.15) !important;
+  background-color: rgba(126, 232, 199, 0.15);
 }
 
 .kr-outline.kr-outline--gold {
-  border-color: var(--kr-pad-gold) !important;
-  color: #9a7832 !important;
+  border-color: var(--kr-pad-gold);
+  color: #9a7832;
 }
 
 .kr-outline.kr-outline--gold:hover {
-  background-color: rgba(212, 168, 83, 0.15) !important;
+  background-color: rgba(212, 168, 83, 0.15);
 }
 
 .kr-outline.kr-outline--coral {
-  border-color: var(--kr-pad-coral) !important;
-  color: #d4614f !important;
+  border-color: var(--kr-pad-coral);
+  color: #d4614f;
 }
 
 .kr-outline.kr-outline--coral:hover {
-  background-color: rgba(255, 154, 139, 0.15) !important;
+  background-color: rgba(255, 154, 139, 0.15);
 }
 
 /* ============================================
@@ -492,49 +506,49 @@
    ============================================ */
 
 .kr-soft {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: var(--kr-chassis-light) !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-pad-radius) !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: var(--kr-chassis-light);
+  color: var(--kr-text-dark);
+  border: none;
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-soft:hover {
-  background-color: var(--kr-chassis-dark) !important;
+  background-color: var(--kr-chassis-dark);
 }
 
 .kr-soft:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
 }
 
 .kr-soft.kr-soft--mint {
-  background-color: rgba(126, 232, 199, 0.2) !important;
-  color: #2a9d6d !important;
+  background-color: rgba(126, 232, 199, 0.2);
+  color: #2a9d6d;
 }
 
 .kr-soft.kr-soft--mint:hover {
-  background-color: rgba(126, 232, 199, 0.35) !important;
+  background-color: rgba(126, 232, 199, 0.35);
 }
 
 .kr-soft.kr-soft--gold {
-  background-color: rgba(212, 168, 83, 0.2) !important;
-  color: #9a7832 !important;
+  background-color: rgba(212, 168, 83, 0.2);
+  color: #9a7832;
 }
 
 .kr-soft.kr-soft--gold:hover {
-  background-color: rgba(212, 168, 83, 0.35) !important;
+  background-color: rgba(212, 168, 83, 0.35);
 }
 
 .kr-soft.kr-soft--coral {
-  background-color: rgba(255, 154, 139, 0.2) !important;
-  color: #d4614f !important;
+  background-color: rgba(255, 154, 139, 0.2);
+  color: #d4614f;
 }
 
 .kr-soft.kr-soft--coral:hover {
-  background-color: rgba(255, 154, 139, 0.35) !important;
+  background-color: rgba(255, 154, 139, 0.35);
 }
 
 /* ============================================
@@ -543,46 +557,46 @@
    ============================================ */
 
 .kr-ghost {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: transparent !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-pad-radius) !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--kr-text-dark);
+  border: none;
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-ghost:hover {
-  background-color: var(--kr-chassis-light) !important;
+  background-color: var(--kr-chassis-light);
 }
 
 .kr-ghost:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
 }
 
 .kr-ghost.kr-ghost--mint {
-  color: #2a9d6d !important;
+  color: #2a9d6d;
 }
 
 .kr-ghost.kr-ghost--mint:hover {
-  background-color: rgba(126, 232, 199, 0.15) !important;
+  background-color: rgba(126, 232, 199, 0.15);
 }
 
 .kr-ghost.kr-ghost--gold {
-  color: #9a7832 !important;
+  color: #9a7832;
 }
 
 .kr-ghost.kr-ghost--gold:hover {
-  background-color: rgba(212, 168, 83, 0.15) !important;
+  background-color: rgba(212, 168, 83, 0.15);
 }
 
 .kr-ghost.kr-ghost--coral {
-  color: #d4614f !important;
+  color: #d4614f;
 }
 
 .kr-ghost.kr-ghost--coral:hover {
-  background-color: rgba(255, 154, 139, 0.15) !important;
+  background-color: rgba(255, 154, 139, 0.15);
 }
 
 /* ============================================
@@ -591,29 +605,75 @@
    ============================================ */
 
 .kr-link {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: transparent !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  text-decoration: underline !important;
-  text-underline-offset: 3px !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--kr-text-dark);
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-link:hover {
-  text-decoration-thickness: 2px !important;
+  text-decoration-thickness: 2px;
 }
 
 .kr-link.kr-link--mint {
-  color: #2a9d6d !important;
+  color: #2a9d6d;
 }
 
 .kr-link.kr-link--gold {
-  color: #9a7832 !important;
+  color: #9a7832;
 }
 
 .kr-link.kr-link--coral {
-  color: #d4614f !important;
+  color: #d4614f;
+}
+
+/* ============================================
+   DATA-THEME AMBIENT + VARIANT-LESS CHROME (#1347)
+   Background only — no root typography (the #1304 KO readability rule).
+   Both activation paths: [data-theme] from app presets, .theme-kr11 body
+   class from useThemeSwitcher.
+   ============================================ */
+
+[data-theme="kr11"],
+.theme-kr11 {
+  background-color: var(--kr-chassis);
+}
+
+/* USwitch as hardware: a cream pad track with an LED thumb — USwitch has
+   no `variant` dimension, so the replacer can't reach it (same pattern as
+   the Brutalist switch, template for #1333). */
+[data-theme="kr11"] button[role="switch"],
+.theme-kr11 button[role="switch"] {
+  border-radius: var(--kr-button-radius);
+  border: 1px solid var(--kr-pad-keyline);
+  background-color: var(--kr-pad-cream);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: background-color var(--kr-transition-fast);
+}
+
+[data-theme="kr11"] button[role="switch"][data-state="checked"],
+.theme-kr11 button[role="switch"][data-state="checked"] {
+  background-color: var(--kr-pad-mint);
+}
+
+[data-theme="kr11"] button[role="switch"] > span,
+.theme-kr11 button[role="switch"] > span {
+  background-color: var(--kr-led-off);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.25);
+  transition: background-color var(--kr-transition-fast), box-shadow var(--kr-transition-fast);
+}
+
+[data-theme="kr11"] button[role="switch"][data-state="checked"] > span,
+.theme-kr11 button[role="switch"][data-state="checked"] > span {
+  background-color: var(--kr-led-green);
+  box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.15),
+    0 0 6px rgba(76, 217, 100, 0.7);
 }

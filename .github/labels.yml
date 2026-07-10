@@ -146,9 +146,12 @@
   description: "POC: pocs/notes"
 
 # ── Sandboxes (sandboxes/*) — throwaway, human-eyeball test apps (delete-after) ──
-- name: "sandbox:minimal-theme-demo"
+# (none currently — minimal-theme-demo retired in #1306, superseded by
+#  packages/crouton-themes/playground/)
+
+- name: "sandbox:unstyled-spike"
   color: "d4c5f9"
-  description: "Sandbox: sandboxes/minimal-theme-demo"
+  description: "Sandbox: sandboxes/unstyled-spike"
 
 # ── Workers (workers/*) ──
 - name: "worker:collab-worker"

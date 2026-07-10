@@ -123,6 +123,96 @@ const { variant } = useThemeSwitcher()
 
 ## Available Themes
 
+### Riso / E-ink / Blueprint Themes (`./riso`, `./eink`, `./blueprint`) — #1311
+
+The wildcard trio (owner's picks):
+- **Riso** (`riso-`): two-color risograph — fluoro pink + teal on warm paper,
+  misregistration shadows (each "ink layer" slightly off), SVG-turbulence grain,
+  wavy-underline links. Tokens `--riso-*`.
+- **E-ink** (`eink-`): greyscale reading mode — ZERO motion (states flip like a
+  page refresh), underline-only inputs, double-rule newspaper cards with serif
+  headers, small-caps badges. Tokens `--eink-*`.
+- **Blueprint** (`bp-`): cyanotype drafting sheet — white line-work on deep blue,
+  faint 24px grid ambient, double-frame drawn parts, dashed dimension separators,
+  a pencil-yellow accent for alerts/callouts. Dark ambient drives `--ui-bg` +
+  light text. Tokens `--bp-*`.
+
+All three: named variants `<name>` / `<name>-{solid,outline,soft,ghost,link}`
+(button) + `<name>` for input/card/badge/separator; ambient USwitch chrome; zero
+`!important` via the shared replacer.
+
+### Game Boy Theme (`./gameboy`)
+
+The original DMG LCD: FOUR shades of olive green (`--gb-0..3`) and nothing else.
+Square corners, chunky 3px "pixel" borders, RPG dialog-box cards (double frame),
+a `▶` cursor on ghost hover. Error/warning map onto the shades via inversion +
+hazard stripes — never hue. Body copy is always gb-0-on-gb-3/gb-2 (the AA pair);
+other shade pairs are decorative-only.
+
+**Nuxt UI Variants:** `gameboy` / `gameboy-{solid,outline,soft,ghost,link}` (UButton);
+`gameboy` for UInput, UCard, UBadge, USeparator. USwitch themed ambiently.
+
+### Braun Theme (`./braun`)
+
+Warm analog hi-fi (Dieter Rams): cream chassis, 1px hairlines, very soft real
+shadows, machined 3px radii, small letterspaced silkscreen labels, and the ONE
+signature orange. The calm sibling of KO/KR-11.
+
+**Nuxt UI Variants:** `braun` / `braun-{solid,outline,soft,ghost,link}` (UButton);
+`braun` for UInput, UCard, UBadge, USeparator. USwitch = the sliding pill toggle
+(ambient). **Custom components:** `<BraunKnob>` (drag dial with orange index),
+`<BraunLabel>` (silkscreen label). Tokens: `--braun-{cream,cream-raised,charcoal,hairline,orange,red,text,label,radius,shadow,shadow-pressed,ease}`.
+
+### Terminal Theme (`./terminal`)
+
+Green phosphor on near-black — monospace everything, faint glow, inverse-video
+states, subtle scanline overlay. Amber is the alert channel.
+
+**Design Language:** `--term-{bg,bg-raised,phosphor,phosphor-dim,phosphor-soft,amber,glow}`;
+primary = inverse video, neutral = framed, error = amber; ghost renders a `> ` prompt;
+links use dashed underscores. The ambient rule sets the tube background, readable light
+text AND `--ui-bg` (so app shells painting with the Nuxt UI surface token go dark too).
+
+**Nuxt UI Variants:** `terminal` / `terminal-{solid,outline,soft,ghost,link}` (UButton);
+`terminal` for UInput, UCard, UBadge, USeparator. USwitch themed ambiently (phosphor LED).
+Built on replacers per the #1305 spike verdict — not `unstyled`.
+
+### MTV Theme (`./mtv`)
+
+Early-MTV (1981): day-glo color blocking, hard shadows in a CLASHING neon,
+a degree of tilt, stickers everywhere. Text stays ink-on-light — neon is for
+fills/shadows/accents only.
+
+**Design Language:**
+- Slabs with 2px ink borders and offset shadows in a *different* neon
+  (pink slab → cyan shadow, ink → pink, cyan → pink)
+- Shock palette: `--mtv-{ink,paper,pink,cyan,yellow,purple}`
+- Hover tilts ~1deg (disabled under `prefers-reduced-motion`); stickers pre-tilted
+- Card = taped-up promo (cyan header band, hazard-stripe footer); link = highlighter swipe
+
+**Nuxt UI Variants:** `mtv` / `mtv-{solid,outline,soft,ghost,link}` (UButton);
+`mtv` for UInput, UCard, UBadge, USeparator. USwitch themed ambiently.
+
+### Brutalist Theme (`./brutalist`)
+
+Thick borders, hard shadows, zero subtlety — the anti-"tasteful SaaS" theme.
+
+**Design Language:**
+- 3px black borders, hard offset box-shadows (no blur), square corners
+- Off-white paper, near-black ink, shock-yellow accent, alarm-red error
+- Uppercase 800-weight labels; states snap (75ms steps) instead of gliding
+- Buttons lift on hover (+shadow) and slam flat on press (shadow to 0)
+
+**Nuxt UI Variants:**
+- Named variants `brutalist` / `brutalist-{solid,outline,soft,ghost,link}` for UButton;
+  `brutalist` for UInput, UCard, UBadge, USeparator
+- Color mappings: primary→yellow slab, neutral→ink slab, error→red slab
+
+**Design Tokens:** `--brutalist-{paper,ink,accent,danger,border,shadow,shadow-hover,snap}`
+
+**Coverage note:** interaction chrome only — no custom components; data surfaces
+stay calm by design (see the chrome-vs-data rule, #1333).
+
 ### Minimal Theme (`./minimal`)
 
 Super clean, minimalist design with black lines on white background.
@@ -375,6 +465,24 @@ Use theme-prefixed CSS custom properties:
 }
 ```
 
+## Chrome vs data (#1333)
+
+Themes style the **interaction chrome** — buttons, inputs, selects, textareas,
+switches, badges, cards, separators — and deliberately leave **dense data
+surfaces** (table rows, long forms' layout) calm and readable. Skeuomorphic
+chrome on five hundred table cells is bad ergonomics and bad paint performance;
+the hardware/print/CRT character belongs on the controls around the data. The
+playground's `/crouton` page is the check: a generated-CRUD-shaped composition
+(tabs, table, pagination, form with select/textarea/switch, edit modal) where
+every theme must look intentional — themed chrome, calm table.
+
+Coverage status: all 8 post-#1304 themes (brutalist, mtv, terminal, braun,
+gameboy, riso, eink, blueprint) register `select` + `textarea` variants reusing
+their input classes. The 4 originals (ko, kr11, minimal, blackandwhite) pass on
+select/textarea for now (their runtime configs reset those to Nuxt UI defaults);
+UTabs/UPagination/UTable are a deliberate pass everywhere — they read as data
+surfaces.
+
 ## Nuxt UI Theming Pattern
 
 The key insight for Nuxt UI 4 theming:
@@ -405,7 +513,7 @@ export default defineAppConfig({
 })
 ```
 
-### Two theming modes: additive (variants) vs subtractive (replacers)
+### Three theming modes: additive (variants), subtractive (replacers), unstyled
 
 The pattern above is **additive** — a named `variant` + `compoundVariants` *add*
 CSS classes on top of Nuxt UI's defaults, which still get merged in via
@@ -421,36 +529,167 @@ still merges). It works in `app.config.ui`, the per-instance `:ui` prop, and
 can transform rather than blank it (keep layout, drop only decorative utilities):
 
 ```ts
-// minimal/app.config.ts — strip rounded/shadow/ring, keep layout, no !important
-const stripDecorative = (defaults: string) =>
-  defaults.split(/\s+/).filter(c => !/^-?(rounded|shadow|ring)(-|$)/.test(c.split(':').pop()!))
-    .concat('minimal-flat').join(' ')
+// any theme's app.config.ts — the SHARED marker-gated replacer (#1304)
+import { subtractThemeDefaults } from '../lib/subtractive'
 
 export default defineAppConfig({
-  ui: { button: { slots: { base: stripDecorative } } }
+  ui: { button: { slots: { base: subtractThemeDefaults } } }
 })
 ```
 
-**Hard constraints (verified against `@nuxt/ui` `dist/runtime/utils/tv.ts`):**
+**All the themes use one shared replacer: `lib/subtractive.ts` (#1304).** It is
+**marker-gated**: the resolved string it receives contains the theme's own marker
+classes (`ko-bezel`, `kr-pad`, `bw-solid`, `minimal-btn`, …) injected by that
+theme's variants, so one function detects *which* theme is in play and applies
+that theme's subtraction set — and passes unmarked (default-theme) renders
+through untouched. This is what makes a global replacer safe in a MULTI-theme
+app (the playground): each theme only subtracts under its own markers. Per-theme
+sets: `minimal` drops decorative only (rounded/shadow/ring, the #364 behaviour);
+`ko`/`kr11` also own color, motion and typography; `bw` keeps Nuxt UI's rounding
+and text sizes. **`focus-visible:` classes are never stripped** (no theme ships
+its own button focus styles — a11y guard; minimal predates the guard).
+Result: the theme CSS needs **no `!important`** (three deliberate `padding`
+exceptions remain — spacing utilities are never stripped — each commented).
 
-| | Additive (variant) | Subtractive (replacer) |
-|---|---|---|
-| Where read | `variants` / `compoundVariants` | top-level `base`/`slots`, per-instance `:ui`, `<UTheme>` |
-| Scope | per **named variant** (opt-in: `variant="minimal"`) | **global** to every instance / a `<UTheme>` subtree / one component |
-| Can subtract defaults | ❌ merge-only | ✅ replaces |
-| Runtime theme switching (`ThemeSwitcher`) | ✅ per-component `:variant` | ⚠️ a global `app.config` replacer can't be switched off per-component; use `<UTheme>` for a switchable subtree |
+There is also a **third, nuclear lever**: the module-level `ui: { theme: { unstyled:
+true } }` (`nuxt.config.ts`). Where a replacer subtracts *some* classes on the slots
+you name, `unstyled` blanks **every** slot/variant/compoundVariant class of **every**
+component, app-global, at theme-template generation time — before any
+`app.config`/`:ui` override runs. Only `class=`, the `:ui` prop, and `app.config.ui`
+survive (verified against `@nuxt/ui@4.9.0` dist — `module.d.mts` +
+`applyUnstyled()`).
+
+**Hard constraints (verified against `@nuxt/ui` `dist/runtime/utils/tv.ts` and
+`dist/module.d.mts`):**
+
+| | Additive (variant) | Subtractive (replacer) | Unstyled (`theme.unstyled`) |
+|---|---|---|---|
+| Where read | `variants` / `compoundVariants` | top-level `base`/`slots`, per-instance `:ui`, `<UTheme>` | `nuxt.config.ts` module option (app-global) |
+| Scope | per **named variant** (opt-in: `variant="minimal"`) | **global** to every instance / a `<UTheme>` subtree / one component | **global** — every component, every slot, no opt-out per-component |
+| Can subtract defaults | ❌ merge-only | ✅ replaces named slots | ✅ blanks everything, incl. **structural/layout** classes (overlay positioning, floating placement) |
+| Runtime theme switching (`ThemeSwitcher`) | ✅ per-component `:variant` | ⚠️ a global `app.config` replacer can't be switched off per-component; use `<UTheme>` for a switchable subtree | ❌ build-time, app-global — no runtime toggle |
+| Re-supply burden | none (opt-in) | low — only the slots you target | **high** — every component you use needs its base look **and** any structural CSS (positioning, z-index, centering) re-supplied by hand |
 
 - **Replacers are NOT variant-scoped.** `extractDirectives` only reads top-level
   `base`/`slots` — a function inside `variants.variant.minimal.base` is ignored. So
   subtractive theming is a *global/subtree/per-instance* tool, orthogonal to the
-  variant system; the two modes coexist (the `minimal` button uses both).
+  variant system; the two modes coexist (every theme's button uses both).
 - **Keep replacers pure & deterministic** so SSR and client compute the same string
   (no hydration mismatch) — the original reason this package avoided base overrides.
-- **Multi-theme caveat:** a global `app.config` base replacer applies to *all*
-  buttons, so an app that `extends` several themes + flips them at runtime should
-  prefer `<UTheme>` (subtree) over a global replacer. Single-theme apps are clean.
+- **The defu double-role gotcha (#1304):** Nuxt merges layered app.configs with
+  defu's *fn* variant, which treats a FUNCTION value as a merger and CALLS it with
+  the lower layer's value. Several layers assign the shared replacer to the same
+  slot key, so `subtractThemeDefaults` guards: called with a non-string (merge
+  time) it returns itself, so the merged value stays the replacer. Any new
+  replacer-style function in an app.config needs the same guard.
+- **Multi-theme apps are safe** with the shared replacer because of marker gating
+  (above). A *custom, un-gated* replacer is still global — gate it on a marker
+  class or scope it with `<UTheme>`.
 
-Spike: #364.
+#### `unstyled: true` — measured re-supply cost (spike #1305)
+
+Spiked in `sandboxes/unstyled-spike` (throwaway, human-eyeball — see
+`sandboxes/CLAUDE.md`) against `UButton`, `UInput`, `UCard`, `USeparator`, `UModal`,
+`UDropdownMenu`. Findings:
+
+- **Decorative components** (`UButton`, `UInput`, `UCard`, `USeparator`) lose *only*
+  look — padding/border/color/focus-ring. Bounded, one-time cost: write a `:ui.base`
+  (or a shared CSS class) per component the theme actually uses.
+- **Structural components** (`UModal`, `UDropdownMenu`) lose **layout mechanics**,
+  not just look — `UModal`'s overlay loses `fixed inset-0` + centering (it won't
+  even visually cover the page without both re-supplied); `UDropdownMenu`'s content
+  loses `position`/`z-index`/floating placement (it renders in-flow, pushing page
+  content down, instead of floating). This is a **materially higher, easy-to-miss**
+  cost than the decorative case — a theme author restyling only colors/spacing will
+  ship a broken modal/dropdown unless they know to check every overlay/floating
+  component specifically.
+- **Re-supply checklist** (what you must bring back, per component class):
+  - Decorative (`Button`/`Input`/`Card`/`Separator`): base look — padding, border,
+    color, hover/focus state.
+  - Structural (`Modal`/`Drawer`/`Popover`/`DropdownMenu`/`Tooltip`/anything
+    portal'd or floating): the above **plus** overlay positioning (`fixed inset-0` +
+    backdrop), content centering/placement, and `z-index` stacking. Budget real time
+    for these, not a quick pass.
+
+**Recommendation:** `unstyled: true` is **not** a good default for a new theme. Its
+re-supply burden is unbounded (every component the app touches, forever, as new
+ones are used) and it silently breaks structural components in ways a
+look-focused pass won't catch. Prefer the **subtractive replacer** pattern (this
+section, above) for new "own the whole look" themes — it targets only the slots
+a theme actually cares about and leaves structural/layout classes alone by default.
+Reserve `unstyled: true` for a narrow, deliberate case: a theme that is *itself* a
+full design system re-implementation (e.g. a headless-UI wrapper) with the budget
+to own every structural class up front — not a routine crouton theme.
+
+Spikes: #364 (replacer), #1305 (unstyled); rollout to all themes: #1304.
+
+### Presets for apps (`themes/configs/presets.ts`) — #1332
+
+`THEME_PRESET_REGISTRY` derives an admin-facing preset per theme (label,
+description, preview swatches, scalars-only `ui` payload, and a `checkVariant`
+whose presence in the built app config proves the theme's layer is extended).
+crouton-admin's team Look-and-Feel picker consumes it via
+`useAvailableThemePresets()` — add a theme here, and every app that extends its
+layer gets it in the picker automatically. Never add arrays to the payload
+(next section).
+
+### Runtime switching swaps SCALARS only (deepAssign hazard) — #1304
+
+`updateAppConfig()` merges with Nuxt's `deepAssign`, which merges **arrays by
+index** — a runtime write to `compoundVariants` overwrites whatever entries sit
+at those indices in the built config (this silently broke the named variants on
+every switch). Hence the split:
+
+- **Layer app.config (build-time, merge-safe):** ALL classes — named variants
+  (`ko`, `kr11`, `minimal*`, `bw-*`) + their `compoundVariants` + replacers.
+- **`themes/configs/themeConfigs.ts` (runtime):** scalar leaves only —
+  `colors.*` and `<component>.defaultVariants.variant`, pointing plain
+  variant-less usage at the theme's named variant. Every config sets EVERY key
+  the swap owns, so switching A → B never leaves A's value behind.
+
+Consequences: a plain `<UButton>` follows the active theme; an **explicit**
+`variant="outline"` is the author's literal choice and stays default-styled —
+use `useThemeSwitcher().getVariant('outline')` to follow the theme (`ko-outline`,
+`bw-outline`, …). `blackandwhite` registers **named `bw-*` variants** (it no
+longer overrides the standard variant slots, which used to bleed into every
+other theme in a multi-theme app) and sets its own layer
+`defaultVariants.variant: 'bw-solid'` so single-theme bw apps still need no
+runtime. The theme restore from localStorage runs **onMounted** (never during
+setup — the server can't know localStorage, so a setup-time restore is a
+guaranteed hydration mismatch). And in `ThemeSwitcher.vue`, per-item slot names
+are prefixed `theme-<name>` — a slot literally named `default` overrides the
+dropdown's trigger slot (the chip froze on "Default" forever).
+
+## Dev workflow — the playground (#1306)
+
+`packages/crouton-themes/playground/` is a **private, in-package** Nuxt app (never
+published — the package's `files` whitelist in `package.json` never lists it) that
+doubles as:
+
+- **The daily dev surface.** It `extends` every theme layer via **relative paths**
+  (`../themes`, `../ko`, `../minimal`, `../kr11`, `../blackandwhite`) instead of the
+  package's own subpath `exports`, so editing any theme's `main.css` / `app.config.ts`
+  hot-reloads instantly — no build step, no reinstall.
+- **The theme gallery** used as the shared sign-off surface (ui-proposal, #307) for
+  every theme this epic (#1303) touches — one preview URL, every theme side-by-side,
+  instead of one sandbox per theme.
+
+```bash
+pnpm --filter crouton-themes-playground dev   # http://localhost:3031
+```
+
+The showcase page renders one set of themed components (buttons, inputs, card,
+separator, badge, switch, dropdown, modal) plus `<ThemeSwitcher>`; flipping the
+switcher restyles the whole page live via `useThemeSwitcher()`'s `updateAppConfig()`
+swap — nothing is re-implemented per theme.
+
+It **supersedes** the old `sandboxes/minimal-theme-demo` (single-theme, #368/#380),
+retired in the same change that added the playground.
+
+**Workspace glob:** `packages/*` in `pnpm-workspace.yaml` is one level only — the
+playground is registered via an extra `packages/*/playground` entry, or `pnpm install`
+won't pick it up.
+>>>>>>> origin/epic/1303-crouton-themes-2
 
 ## Dependencies
 
@@ -460,12 +699,15 @@ Spike: #364.
 ## Testing
 
 ```bash
-# Test in ko-ui app
+# Test in the playground (all themes, one page)
+pnpm --filter crouton-themes-playground dev
+
+# Or in ko-ui app
 cd apps/ko-ui
 pnpm dev
 
 # Typecheck
-npx nuxt typecheck
+pnpm --filter crouton-themes-playground typecheck
 ```
 
 ## File Size Considerations
