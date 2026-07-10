@@ -318,7 +318,7 @@ jobs:
             // billing/error/underspecified buckets). The most likely first-run cause is an
             // out-of-credit PI_PROVIDER_KEY, so detect that explicitly.
             const fs = require('fs')
-            let why = '', action = ''
+            let why = '', action = '', detail = ''
             const failed = process.env.CLAUDE_CONCLUSION === 'failure'
             try {
               const logFile = process.env.PI_EXEC_LOG
@@ -326,35 +326,33 @@ jobs:
                 const log = fs.readFileSync(logFile, 'utf8')
                 const tail = log.length > 600 ? log.slice(-600) : log
                 if (/credit balance is too low|insufficient.*(credit|balance|quota)|billing/i.test(log)) {
-                  why = 'the pi provider call failed — **the Anthropic account behind `PI_PROVIDER_KEY` is out of credit**'
-                  action = 'Top up that account (Console → Billing; enable auto-reload), then re-dispatch.'
+                  why = 'the Anthropic key (`PI_PROVIDER_KEY`) is out of credit'
+                  action = 'top up the account, then re-dispatch' // NB: not "enable auto-reload" — owner declined it (#1327); the pi-key-canary workflow tracks key health
                 } else if (failed) {
-                  why = 'the pi agent step **errored** before producing a deliverable'
-                  action = 'Open the run log and fix the logged SDK/tooling error, then re-dispatch.'
-                  if (tail.trim()) why += `. Log tail:\n\n> ${tail.trim().replace(/\n/g, '\n> ')}`
+                  why = 'the pi agent step errored before it built anything'
+                  action = 'open the run log, fix the SDK/tooling error, then re-dispatch'
+                  if (tail.trim()) detail = tail.trim()
                 } else {
-                  why = 'pi finished its turn without opening a PR, creating sub-issues, or holding for sign-off'
-                  action = 'This usually means the issue is underspecified — add a concrete description + '
-                    + 'acceptance criteria so there is something to build, then re-dispatch.'
+                  why = 'pi finished without opening a PR, creating sub-issues, or holding for sign-off'
+                  action = 'the issue is likely underspecified — add a concrete description + acceptance criteria, then re-dispatch'
                 }
               }
             } catch (e) { core.warning(`artifact-gate: could not read pi run log: ${e.message}`) }
 
             // Fallback when the log is unreadable but the step itself failed.
             if (!why && failed) {
-              why = 'the pi agent step **failed before producing anything** (often a billing/credit, API, or tooling error)'
-              action = 'Open the run log. If it says "Credit balance is too low", top up the Anthropic account '
-                + 'behind `PI_PROVIDER_KEY`. Otherwise fix the logged error, then re-dispatch.'
+              why = 'the pi agent step failed before producing anything (likely out of credit, or an API/tooling error)'
+              action = 'open the run log — if it says "credit balance is too low", top up `PI_PROVIDER_KEY`; otherwise fix the logged error, then re-dispatch'
             }
 
+            // Readable-on-mobile (epic #1336, .github/CI-MESSAGE-STYLE.md): lead with the problem
+            // + the one fix; the gate name / #461 / run link live in the footer; depth collapses.
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const foot = `\n\n<sub>🤖 pi.dev harness (CI · mac-mini) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
+            const det = detail ? `\n\n<details><summary>log tail</summary>\n\n\`\`\`\n${detail}\n\`\`\`\n</details>` : ''
             const body = why
-              ? `⚠️ **Artifact-gate failed (#461).** @pmcp — this pi.dev run produced no deliverable: ${why}\n\n`
-                + `**What to do:** ${action}\n\n🔗 **Run log:** ${runUrl}`
-              : '⚠️ **Artifact-gate failed (#461).** @pmcp — this pi.dev run produced no real deliverable on '
-                + 'this issue: no PR was opened, no sub-issues were created, and it is not held for sign-off '
-                + '(`status:blocked` + a review). The run is marked **failed** so it is not mistaken for done.\n\n'
-                + `🔗 **Run log:** ${runUrl}\n↻ Re-dispatch to retry.`
+              ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${det}${foot}`
+              : `🔴 **@pmcp — this run produced nothing** — no PR, no sub-issues, no sign-off hold.\n\n**Fix:** re-dispatch; if it recurs the issue is underspecified — add a description + acceptance criteria.${foot}`
 
             await github.rest.issues.createComment({ ...context.repo, issue_number, body })
             core.setFailed(`Artifact-gate: pi.dev run on #${issue_number} produced no deliverable.`)
