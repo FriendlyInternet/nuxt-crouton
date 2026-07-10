@@ -151,9 +151,9 @@ jobs:
             const issueNums = (process.env.ISSUES || '')
               .split(',').map(s => s.trim().replace(/^#/, '')).filter(Boolean)
             lines.push('', `### Issues / PRs (${issueNums.length})`)
-            const note = `> 🤖 **Claude Code** · teardown-app (CI), posted from the Harness App · _#618 /remove-app_\n\n`
-              + `🧹 **\`${app}\` torn down.** This issue/PR was closed as part of removing the app `
-              + `(code + Cloudflare resources + branches). See the teardown-app workflow run for details.`
+            const note = `🧹 **\`${app}\` was torn down** — this issue/PR is closed as part of removing the app `
+              + `(code + Cloudflare resources + branches).\n\n`
+              + `<sub>🤖 Claude Code · teardown-app (CI), posted from the Harness App · #618 /remove-app · see the workflow run for details</sub>`
             for (const n of issueNums) {
               if (dry) { lines.push(`- would close #${n} (with note)`); continue }
               try {

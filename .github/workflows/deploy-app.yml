@@ -521,7 +521,7 @@ jobs:
             const login = (email && password)
               ? `\n\n🔑 **Test login** — paste straight in, no registration:\n\`\`\`\nEmail:    ${email}\nPassword: ${password}\n\`\`\`\n_Disposable account on this isolated, throwaway staging DB._`
               : ''
-            const body = `${marker}\n🚀 **${app}** staging deployed: ${url}${login}\n\n_Isolated, auto-provisioned Workers staging env (its own D1 + KV)._`
+            const body = `${marker}\n🚀 **${app}** deployed to staging: ${url}${login}\n\n<sub>🤖 isolated, auto-provisioned Workers staging env (its own D1 + KV)</sub>`
             const { owner, repo } = context.repo
             const issue_number = context.issue.number
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number })
