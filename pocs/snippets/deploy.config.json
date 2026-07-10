@@ -1,4 +1,4 @@
 {
-  "stagingUrl": "https://snippets.pmcp.dev",
+  "stagingUrl": "",
   "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton"
 }
