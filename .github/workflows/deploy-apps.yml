@@ -131,7 +131,17 @@ jobs:
             for cfg in apps/*/deploy.config.json; do
               [ -f "$cfg" ] || continue
               app=$(basename "$(dirname "$cfg")")
-              mapfile -t pats < <(jq -r '.watchPaths[]? // empty' "$cfg")
+              # Rung split (#1297): a pull_request deploys ONLY the app whose OWN paths
+              # (apps/<app>/**) changed. A shared-package change that breaks a consuming
+              # app is caught by the fixture smoke (fast, no deploy) + the rung-2 push
+              # deploy — NOT a per-PR fan-out redeploy of every consuming app, which
+              # saturated the runners and starved the changed app's own deploy (#1297).
+              # push (merge to main) keeps the full watchPaths incl. shared packages.
+              if [ "$EVENT" = "pull_request" ]; then
+                pats=("apps/$app/**")
+              else
+                mapfile -t pats < <(jq -r '.watchPaths[]? // empty' "$cfg")
+              fi
               hit=false
               while IFS= read -r f; do
                 [ -z "$f" ] && continue
