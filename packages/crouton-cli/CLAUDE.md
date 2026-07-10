@@ -49,8 +49,17 @@ loads each package's `./seed` export via **jiti** (no build step), topo-sorts th
 providers by `dependsOn` (`auth → sales → pages`), then calls
 `collectSeedSql()` from `@fyit/crouton-core/shared/seed` to turn their declarative
 `ctx.upsert(...)` calls into idempotent `INSERT … ON CONFLICT(id) DO UPDATE` SQL,
-which it pipes to `wrangler d1 execute --file`. Stable, namespace-derived ids
+which it runs via `wrangler d1 execute --command`. Stable, namespace-derived ids
 (`seed:org:test1`, `seed:event:test1:vlaamsekermis`) make re-runs upsert in place.
+
+**Resilient per-chunk execution (#1370):** the seed runs as INDEPENDENT chunks — one
+`--command` per provider, plus the collection fixtures and the default layout — not one
+atomic batch. Why: `@fyit/crouton` (the kitchen-sink meta package) bundles *every* crouton
+package as a dep, so the BFS discovers a provider even for a package the app **doesn't
+extend** (e.g. `crouton-bookings` in a minimal app that never migrated `bookings_settings`).
+As one batch, that single missing table aborted the WHOLE seed → an empty preview. Now a
+failing chunk **warns + is skipped** (`runSeedChunks`, unit-tested) and the auth team + the
+app's own rows + layout still seed. `crouton-seed` throws only if **every** chunk fails.
 
 The contract (`SeedProvider`, `SeedContext`, `createPageWithBlocks`) lives in
 `@fyit/crouton-core/shared/seed`; each package ships its provider at `<pkg>/seed`.
