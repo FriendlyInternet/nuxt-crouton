@@ -103,22 +103,18 @@ const kassaOpen = ref(false)
                header off the notch and the cart bar above Safari's bottom bar
                (env() needs viewport-fit=cover — set by the viewport-meta plugin). -->
           <div class="flex flex-col h-full pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-            <!-- Member (narrow) → the full workspace shell. The shell has no
-                 exit affordance of its own, so add a close button above it. -->
+            <!-- Member (narrow) → the full workspace shell. Its top row (the
+                 strip on narrow, the header on wide) carries the exit ✕
+                 (closable) — no separate close row wasting a line. -->
             <template v-if="loggedIn">
-              <div class="flex items-center justify-end px-2 py-1 shrink-0 border-b border-default">
-                <UButton
-                  icon="i-lucide-x"
-                  variant="ghost"
-                  color="neutral"
-                  size="sm"
-                  :aria-label="t('sales.common.close')"
-                  @click="kassaOpen = false"
-                />
-              </div>
               <div class="flex-1 min-h-0 overflow-y-auto p-4">
                 <Suspense>
-                  <SalesEventWorkspaceShell :event-slug="eventSlug" :show-switcher="false" />
+                  <SalesEventWorkspaceShell
+                    :event-slug="eventSlug"
+                    :show-switcher="false"
+                    closable
+                    @close="kassaOpen = false"
+                  />
                   <template #fallback>
                     <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
                   </template>

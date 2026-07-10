@@ -196,10 +196,21 @@ clients flag is gated per event by `requiresClient` (`clientsPaneOpen`) and the 
 session by `useAuth().loggedIn` (`dataPaneOpen`). **Narrow screens
 (`useMediaQuery('(max-width: 1023px)')`) drop the splitter entirely** — side-by-side panes would
 squeeze the kassa to nothing — and render the same pane headers + bodies as full-height
-`USlideover`s instead, toggled from a button row above the kassa (no gutter/vertical tabs in
-narrow mode). The slideover open state is ephemeral (`ref`s, not the persisted localStorage
-flags): an overlay auto-opening on page load would trap a phone user. An open pane's tab
-hides — the pane header (icon + title, mirroring the tab) carries the close ✕:
+`USlideover`s instead, toggled from a **segmented tab strip** above the kassa (no gutter/vertical
+tabs in narrow mode). **The whole header row is desktop-only** — on narrow the strip is the
+header: it opens with a compact **icon-only event switcher** (same items + create-event
+`#content-top` as the header's USelectMenu) and also hosts the **Instellingen gear** and the
+**kassa edit-mode pencil** — lifted out of the kassa's category-tabs row via
+the `editMode` defineModel that OrderInterface and PosPanel expose (`hide-edit-toggle` hides the
+inline pencil so there's never two). **Settings join the same pattern on narrow**: Instellingen
+opens a `USlideover` (Opslaan in its header, driven by the same registered save API) instead of
+the inline collapsible — the double container ate too much phone viewport; the collapsible is
+desktop-only (`settingsOpen && !isNarrow`, so only one SettingsTab instance ever registers). In
+the slideover SettingsTab gets its `tabbed` prop: the three cards (Eventgegevens / Printers /
+Actieve helpers) render behind a segmented section strip, one at a time via `v-show` (all stay
+mounted so the panel-wide dirty/save covers fields on every tab). The slideover open state is ephemeral (`ref`s, not the
+persisted localStorage flags): an overlay auto-opening on page load would trap a phone user. An
+open pane's tab hides — the pane header (icon + title, mirroring the tab) carries the close ✕:
 - **"Bestellingen"** opens `OrdersTab`; its pane header also carries the orders filter toggle
   (chip = active-filter count; state lifted into Shell, selects live in OrdersTab). The POS
   itself is `@container`-responsive: squeezed below `@2xl` it flips to mobile mode (cart drawer
