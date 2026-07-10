@@ -90,7 +90,7 @@ jobs:
             }
             await github.rest.issues.createComment({
               ...context.repo, issue_number,
-              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _close-epic on comment (#856)_\n\n'
-                + `✅ Epic closed via \`/close-epic\` by @${actor} (was \`status:ready-to-close\`).`,
+              body: `✅ **Epic closed** via \`/close-epic\` by @${actor}.\n\n`
+                + '<sub>🤖 agent pipeline (CI) · close-epic on comment (#856) · was status:ready-to-close</sub>',
             })
             core.info(`Closed epic #${issue_number} (requested by @${actor}).`)
