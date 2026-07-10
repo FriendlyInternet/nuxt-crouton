@@ -1,6 +1,8 @@
 // KO-UI Theme Configuration
 // Hardware-inspired styling based on Teenage Engineering KO II
 
+import { subtractThemeDefaults } from '../lib/subtractive'
+
 export default defineAppConfig({
   ui: {
     colors: {
@@ -9,8 +11,13 @@ export default defineAppConfig({
     },
 
     button: {
-      // Add KO variants - base and compound (ko-ghost, ko-outline, etc)
-      // Note: No slots.base override - let Nuxt UI handle base classes to avoid hydration mismatches
+      // Subtractive base via the shared marker-gated replacer (#1304): when the
+      // resolved classes carry a ko-* marker, the defaults KO's CSS re-supplies
+      // (color/decoration/motion/typography) are stripped, so the CSS below
+      // needs no !important. Unmarked (non-ko) renders pass through untouched.
+      slots: {
+        base: subtractThemeDefaults
+      },
       variants: {
         variant: {
           ko: '',
@@ -104,6 +111,10 @@ export default defineAppConfig({
 
     // INPUT OVERRIDES
     input: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
       // Add 'ko' to the variant options
       variants: {
         variant: {
@@ -117,6 +128,12 @@ export default defineAppConfig({
 
     // CARD OVERRIDES
     card: {
+      slots: {
+        root: subtractThemeDefaults,
+        header: subtractThemeDefaults,
+        body: subtractThemeDefaults,
+        footer: subtractThemeDefaults
+      },
       // Add 'ko' to the variant options
       variants: {
         variant: {

@@ -1,3 +1,5 @@
+import { subtractThemeDefaults } from '../lib/subtractive'
+
 export default defineAppConfig({
   ui: {
     theme: {
@@ -21,16 +23,29 @@ export default defineAppConfig({
       }
     },
     button: {
-      // Register bw-* as valid variants and override solid/outline/soft/ghost/link
-      // to inject our CSS class names. The CSS file handles actual styling with
-      // !important to override Nuxt UI's CSS-variable-based defaults.
+      // NAMED bw-* variants + a defaultVariants pointer (#1304, was an override
+      // of the standard solid/outline/... slots). Same single-theme contract —
+      // a plain <UButton> in an app extending this layer resolves to bw-solid —
+      // but the standard variants stay untouched, so in a multi-theme app (the
+      // playground) this layer no longer restyles the other themes' buttons,
+      // and an explicit variant="outline" is the author's literal choice.
+      // The shared marker-gated replacer (#1304) strips the conflicting
+      // defaults (color/elevation/motion/underline) when a bw-* marker is
+      // present, so the CSS needs no !important; Nuxt UI's rounding, sizing
+      // and focus ring are kept.
+      slots: {
+        base: subtractThemeDefaults
+      },
+      defaultVariants: {
+        variant: 'bw-solid'
+      },
       variants: {
         variant: {
-          solid: 'bw-solid',
-          outline: 'bw-outline',
-          soft: 'bw-soft',
-          ghost: 'bw-ghost',
-          link: 'bw-link'
+          'bw-solid': 'bw-solid',
+          'bw-outline': 'bw-outline',
+          'bw-soft': 'bw-soft',
+          'bw-ghost': 'bw-ghost',
+          'bw-link': 'bw-link'
         }
       }
     },

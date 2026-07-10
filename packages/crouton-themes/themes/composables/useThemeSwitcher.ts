@@ -4,7 +4,7 @@
 
 import { THEME_UI_CONFIGS } from '../configs/themeConfigs'
 
-export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'default'
+export type ThemeName = 'ko' | 'minimal' | 'kr11' | 'blackandwhite' | 'default'
 
 type BaseVariant = 'solid' | 'outline' | 'soft' | 'ghost' | 'link'
 
@@ -46,6 +46,13 @@ export const AVAILABLE_THEMES: ThemeConfig[] = [
     description: 'Friendly drum machine aesthetic',
     colors: ['#6ee7b7', '#fcd34d', '#fca5a5'], // mint, gold, coral
     defaultVariant: 'soft' // KR-11 uses soft tactile pads
+  },
+  {
+    name: 'blackandwhite',
+    label: 'Black & White',
+    description: 'Compact monochrome dashboard theme',
+    colors: ['#000000', '#525252', '#ffffff'], // black, neutral, white
+    defaultVariant: 'outline' // Black & White favors outline/subtle surfaces
   }
 ]
 
@@ -60,20 +67,36 @@ export function useThemeSwitcher() {
   // SSR-safe localStorage persistence via VueUse
   const storedTheme = useLocalStorage<ThemeName>(STORAGE_KEY, 'default')
 
-  // Initialize from stored preference on client
-  if (import.meta.client && AVAILABLE_THEMES.some(t => t.name === storedTheme.value)) {
-    currentTheme.value = storedTheme.value
-  }
+  // Restore the stored preference AFTER hydration (onMounted), never during
+  // setup: the server can't know localStorage, so a setup-time restore makes
+  // the client's first render differ from the SSR HTML → hydration class
+  // mismatch on every themed component (#1304). Post-mount it's a normal
+  // reactive update. Idempotent across the many components calling this.
+  // Guarded: plugins (themeProvider.client) call this composable outside any
+  // component instance, where onMounted can't register.
+  if (getCurrentInstance()) onMounted(() => {
+    if (
+      storedTheme.value !== currentTheme.value
+      && AVAILABLE_THEMES.some(t => t.name === storedTheme.value)
+    ) {
+      setTheme(storedTheme.value)
+    }
+  })
 
   // Computed for current theme config
   const currentThemeConfig = computed(() =>
     AVAILABLE_THEMES.find(t => t.name === currentTheme.value) ?? AVAILABLE_THEMES[0]
   )
 
-  // Get the variant name for Nuxt UI components
-  // 'default' returns undefined to use Nuxt UI's default variant
+  // Get the variant name for Nuxt UI components.
+  // 'default' returns undefined to use Nuxt UI's default variant. Every theme
+  // registers NAMED variants under its class prefix (ko, minimal, kr11, bw-*),
+  // and the runtime swap points defaultVariants.variant at the same name — so
+  // binding :variant="variant" and plain variant-less usage render identically.
   const variant = computed(() =>
-    currentTheme.value === 'default' ? undefined : currentTheme.value
+    currentTheme.value === 'default'
+      ? undefined
+      : currentTheme.value === 'blackandwhite' ? 'bw-solid' : currentTheme.value
   )
 
   // Set theme and persist
@@ -109,21 +132,21 @@ export function useThemeSwitcher() {
     }
   })
 
-  // Initialize theme UI config on client
-  if (import.meta.client) {
-    const themeUIConfig = THEME_UI_CONFIGS[currentTheme.value]
-    if (themeUIConfig) {
-      updateAppConfig({
-        ui: themeUIConfig as any
-      })
-    }
-  }
+  // (No setup-time updateAppConfig: the onMounted restore above applies the
+  // stored theme's config post-hydration via setTheme.)
 
   // Get variant with theme prefix for compound variants
-  // e.g., getVariant('ghost') returns 'ko-ghost' when KO theme is active
-  function getVariant(baseVariant: string = 'solid'): string {
+  // e.g., getVariant('ghost') returns 'ko-ghost' when KO theme is active and
+  // 'bw-ghost' under blackandwhite (whose named-variant prefix is 'bw', not
+  // the theme name). 'default' passes the base variant through unchanged.
+  // Returns `any`: the concrete union of registered variant names is generated
+  // per consuming app by Nuxt UI, so this composable can't name it — and a
+  // plain `string` fails assignment against that union in templates.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function getVariant(baseVariant: string = 'solid'): any {
     if (currentTheme.value === 'default') return baseVariant
-    return `${currentTheme.value}-${baseVariant}`
+    const prefix = currentTheme.value === 'blackandwhite' ? 'bw' : currentTheme.value
+    return `${prefix}-${baseVariant}`
   }
 
   return {
