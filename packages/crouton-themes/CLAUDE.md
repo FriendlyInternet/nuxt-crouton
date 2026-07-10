@@ -405,7 +405,7 @@ export default defineAppConfig({
 })
 ```
 
-### Two theming modes: additive (variants) vs subtractive (replacers)
+### Three theming modes: additive (variants), subtractive (replacers), unstyled
 
 The pattern above is **additive** — a named `variant` + `compoundVariants` *add*
 CSS classes on top of Nuxt UI's defaults, which still get merged in via
@@ -431,14 +431,24 @@ export default defineAppConfig({
 })
 ```
 
-**Hard constraints (verified against `@nuxt/ui` `dist/runtime/utils/tv.ts`):**
+There is also a **third, nuclear lever**: the module-level `ui: { theme: { unstyled:
+true } }` (`nuxt.config.ts`). Where a replacer subtracts *some* classes on the slots
+you name, `unstyled` blanks **every** slot/variant/compoundVariant class of **every**
+component, app-global, at theme-template generation time — before any
+`app.config`/`:ui` override runs. Only `class=`, the `:ui` prop, and `app.config.ui`
+survive (verified against `@nuxt/ui@4.9.0` dist — `module.d.mts` +
+`applyUnstyled()`).
 
-| | Additive (variant) | Subtractive (replacer) |
-|---|---|---|
-| Where read | `variants` / `compoundVariants` | top-level `base`/`slots`, per-instance `:ui`, `<UTheme>` |
-| Scope | per **named variant** (opt-in: `variant="minimal"`) | **global** to every instance / a `<UTheme>` subtree / one component |
-| Can subtract defaults | ❌ merge-only | ✅ replaces |
-| Runtime theme switching (`ThemeSwitcher`) | ✅ per-component `:variant` | ⚠️ a global `app.config` replacer can't be switched off per-component; use `<UTheme>` for a switchable subtree |
+**Hard constraints (verified against `@nuxt/ui` `dist/runtime/utils/tv.ts` and
+`dist/module.d.mts`):**
+
+| | Additive (variant) | Subtractive (replacer) | Unstyled (`theme.unstyled`) |
+|---|---|---|---|
+| Where read | `variants` / `compoundVariants` | top-level `base`/`slots`, per-instance `:ui`, `<UTheme>` | `nuxt.config.ts` module option (app-global) |
+| Scope | per **named variant** (opt-in: `variant="minimal"`) | **global** to every instance / a `<UTheme>` subtree / one component | **global** — every component, every slot, no opt-out per-component |
+| Can subtract defaults | ❌ merge-only | ✅ replaces named slots | ✅ blanks everything, incl. **structural/layout** classes (overlay positioning, floating placement) |
+| Runtime theme switching (`ThemeSwitcher`) | ✅ per-component `:variant` | ⚠️ a global `app.config` replacer can't be switched off per-component; use `<UTheme>` for a switchable subtree | ❌ build-time, app-global — no runtime toggle |
+| Re-supply burden | none (opt-in) | low — only the slots you target | **high** — every component you use needs its base look **and** any structural CSS (positioning, z-index, centering) re-supplied by hand |
 
 - **Replacers are NOT variant-scoped.** `extractDirectives` only reads top-level
   `base`/`slots` — a function inside `variants.variant.minimal.base` is ignored. So
@@ -450,7 +460,42 @@ export default defineAppConfig({
   buttons, so an app that `extends` several themes + flips them at runtime should
   prefer `<UTheme>` (subtree) over a global replacer. Single-theme apps are clean.
 
-Spike: #364.
+#### `unstyled: true` — measured re-supply cost (spike #1305)
+
+Spiked in `sandboxes/unstyled-spike` (throwaway, human-eyeball — see
+`sandboxes/CLAUDE.md`) against `UButton`, `UInput`, `UCard`, `USeparator`, `UModal`,
+`UDropdownMenu`. Findings:
+
+- **Decorative components** (`UButton`, `UInput`, `UCard`, `USeparator`) lose *only*
+  look — padding/border/color/focus-ring. Bounded, one-time cost: write a `:ui.base`
+  (or a shared CSS class) per component the theme actually uses.
+- **Structural components** (`UModal`, `UDropdownMenu`) lose **layout mechanics**,
+  not just look — `UModal`'s overlay loses `fixed inset-0` + centering (it won't
+  even visually cover the page without both re-supplied); `UDropdownMenu`'s content
+  loses `position`/`z-index`/floating placement (it renders in-flow, pushing page
+  content down, instead of floating). This is a **materially higher, easy-to-miss**
+  cost than the decorative case — a theme author restyling only colors/spacing will
+  ship a broken modal/dropdown unless they know to check every overlay/floating
+  component specifically.
+- **Re-supply checklist** (what you must bring back, per component class):
+  - Decorative (`Button`/`Input`/`Card`/`Separator`): base look — padding, border,
+    color, hover/focus state.
+  - Structural (`Modal`/`Drawer`/`Popover`/`DropdownMenu`/`Tooltip`/anything
+    portal'd or floating): the above **plus** overlay positioning (`fixed inset-0` +
+    backdrop), content centering/placement, and `z-index` stacking. Budget real time
+    for these, not a quick pass.
+
+**Recommendation:** `unstyled: true` is **not** a good default for a new theme. Its
+re-supply burden is unbounded (every component the app touches, forever, as new
+ones are used) and it silently breaks structural components in ways a
+look-focused pass won't catch. Prefer the **subtractive replacer** pattern (this
+section, above) for new "own the whole look" themes — it targets only the slots
+a theme actually cares about and leaves structural/layout classes alone by default.
+Reserve `unstyled: true` for a narrow, deliberate case: a theme that is *itself* a
+full design system re-implementation (e.g. a headless-UI wrapper) with the budget
+to own every structural class up front — not a routine crouton theme.
+
+Spikes: #364 (replacer), #1305 (unstyled).
 
 ## Dependencies
 

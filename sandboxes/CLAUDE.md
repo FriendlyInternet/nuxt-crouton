@@ -74,3 +74,7 @@ Each sandbox gets a `sandbox:<name>` label in `.github/labels.yml` (mirrors
 - **`minimal-theme-demo`** — verifies the `minimal` theme's flat buttons (Nuxt UI 4.9
   slot-class replacer, spike #364). Extends only `@fyit/crouton-themes/minimal`;
   `pnpm --filter minimal-theme-demo dev` → button-check page with an on-page checklist.
+- **`unstyled-spike`** — measures the re-supply cost of `ui: { theme: { unstyled: true } }`
+  (spike #1305, epic #1303) across 6 components (`UButton`, `UInput`, `UCard`,
+  `USeparator`, `UModal`, `UDropdownMenu`). Findings + recommendation live in
+  `packages/crouton-themes/CLAUDE.md` § "Three theming modes".
