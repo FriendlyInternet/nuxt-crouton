@@ -79,6 +79,32 @@ export default defineAppConfig({
       }
     },
 
+    select: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          braun: 'braun-input-base'
+        }
+      }
+    },
+
+    textarea: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          braun: {
+            root: 'braun-input',
+            base: 'braun-input-base'
+          }
+        }
+      }
+    },
+
     card: {
       slots: {
         root: subtractThemeDefaults,

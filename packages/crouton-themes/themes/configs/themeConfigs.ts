@@ -24,6 +24,8 @@ export interface ThemeUIConfig {
   input?: { defaultVariants?: { variant?: string } }
   card?: { defaultVariants?: { variant?: string } }
   badge?: { defaultVariants?: { variant?: string } }
+  select?: { defaultVariants?: { variant?: string } }
+  textarea?: { defaultVariants?: { variant?: string } }
 }
 
 // Every config sets EVERY key the swap owns, so switching A → B never leaves
@@ -38,7 +40,9 @@ const defaultConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'solid' } },
   input: { defaultVariants: { variant: 'outline' } },
   card: { defaultVariants: { variant: 'outline' } },
-  badge: { defaultVariants: { variant: 'solid' } }
+  badge: { defaultVariants: { variant: 'solid' } },
+  select: { defaultVariants: { variant: 'outline' } },
+  textarea: { defaultVariants: { variant: 'outline' } }
 }
 
 // KO — named variants registered by ko/app.config.ts (variant="ko" etc.)
@@ -50,7 +54,9 @@ const koConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'ko' } },
   input: { defaultVariants: { variant: 'ko' } },
   card: { defaultVariants: { variant: 'ko' } },
-  badge: { defaultVariants: { variant: 'solid' } }
+  badge: { defaultVariants: { variant: 'solid' } },
+  select: { defaultVariants: { variant: 'outline' } },
+  textarea: { defaultVariants: { variant: 'outline' } }
 }
 
 // Minimal — named variants registered by minimal/app.config.ts
@@ -62,7 +68,9 @@ const minimalConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'minimal' } },
   input: { defaultVariants: { variant: 'minimal' } },
   card: { defaultVariants: { variant: 'minimal' } },
-  badge: { defaultVariants: { variant: 'solid' } }
+  badge: { defaultVariants: { variant: 'solid' } },
+  select: { defaultVariants: { variant: 'outline' } },
+  textarea: { defaultVariants: { variant: 'outline' } }
 }
 
 // KR-11 — named variants registered by kr11/app.config.ts
@@ -74,7 +82,9 @@ const kr11Config: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'kr11' } },
   input: { defaultVariants: { variant: 'kr11' } },
   card: { defaultVariants: { variant: 'kr11' } },
-  badge: { defaultVariants: { variant: 'kr11' } }
+  badge: { defaultVariants: { variant: 'kr11' } },
+  select: { defaultVariants: { variant: 'outline' } },
+  textarea: { defaultVariants: { variant: 'outline' } }
 }
 
 // Black & White — named bw-* variants registered by blackandwhite/app.config.ts
@@ -88,7 +98,9 @@ const blackandwhiteConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'bw-solid' } },
   input: { defaultVariants: { variant: 'subtle' } },
   card: { defaultVariants: { variant: 'outline' } },
-  badge: { defaultVariants: { variant: 'solid' } }
+  badge: { defaultVariants: { variant: 'solid' } },
+  select: { defaultVariants: { variant: 'subtle' } },
+  textarea: { defaultVariants: { variant: 'subtle' } }
 }
 
 // Brutalist — named variants registered by brutalist/app.config.ts
@@ -100,7 +112,9 @@ const brutalistConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'brutalist' } },
   input: { defaultVariants: { variant: 'brutalist' } },
   card: { defaultVariants: { variant: 'brutalist' } },
-  badge: { defaultVariants: { variant: 'brutalist' } }
+  badge: { defaultVariants: { variant: 'brutalist' } },
+  select: { defaultVariants: { variant: 'brutalist' } },
+  textarea: { defaultVariants: { variant: 'brutalist' } }
 }
 
 // MTV — named variants registered by mtv/app.config.ts
@@ -112,7 +126,9 @@ const mtvConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'mtv' } },
   input: { defaultVariants: { variant: 'mtv' } },
   card: { defaultVariants: { variant: 'mtv' } },
-  badge: { defaultVariants: { variant: 'mtv' } }
+  badge: { defaultVariants: { variant: 'mtv' } },
+  select: { defaultVariants: { variant: 'mtv' } },
+  textarea: { defaultVariants: { variant: 'mtv' } }
 }
 
 // Terminal — named variants registered by terminal/app.config.ts
@@ -124,7 +140,9 @@ const terminalConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'terminal' } },
   input: { defaultVariants: { variant: 'terminal' } },
   card: { defaultVariants: { variant: 'terminal' } },
-  badge: { defaultVariants: { variant: 'terminal' } }
+  badge: { defaultVariants: { variant: 'terminal' } },
+  select: { defaultVariants: { variant: 'terminal' } },
+  textarea: { defaultVariants: { variant: 'terminal' } }
 }
 
 // Braun — named variants registered by braun/app.config.ts
@@ -136,7 +154,9 @@ const braunConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'braun' } },
   input: { defaultVariants: { variant: 'braun' } },
   card: { defaultVariants: { variant: 'braun' } },
-  badge: { defaultVariants: { variant: 'braun' } }
+  badge: { defaultVariants: { variant: 'braun' } },
+  select: { defaultVariants: { variant: 'braun' } },
+  textarea: { defaultVariants: { variant: 'braun' } }
 }
 
 // Game Boy — named variants registered by gameboy/app.config.ts
@@ -148,7 +168,9 @@ const gameboyConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'gameboy' } },
   input: { defaultVariants: { variant: 'gameboy' } },
   card: { defaultVariants: { variant: 'gameboy' } },
-  badge: { defaultVariants: { variant: 'gameboy' } }
+  badge: { defaultVariants: { variant: 'gameboy' } },
+  select: { defaultVariants: { variant: 'gameboy' } },
+  textarea: { defaultVariants: { variant: 'gameboy' } }
 }
 
 // Riso / E-ink / Blueprint — named variants registered by their layers (#1311)
@@ -157,7 +179,9 @@ const risoConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'riso' } },
   input: { defaultVariants: { variant: 'riso' } },
   card: { defaultVariants: { variant: 'riso' } },
-  badge: { defaultVariants: { variant: 'riso' } }
+  badge: { defaultVariants: { variant: 'riso' } },
+  select: { defaultVariants: { variant: 'riso' } },
+  textarea: { defaultVariants: { variant: 'riso' } }
 }
 
 const einkConfig: ThemeUIConfig = {
@@ -165,7 +189,9 @@ const einkConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'eink' } },
   input: { defaultVariants: { variant: 'eink' } },
   card: { defaultVariants: { variant: 'eink' } },
-  badge: { defaultVariants: { variant: 'eink' } }
+  badge: { defaultVariants: { variant: 'eink' } },
+  select: { defaultVariants: { variant: 'eink' } },
+  textarea: { defaultVariants: { variant: 'eink' } }
 }
 
 const blueprintConfig: ThemeUIConfig = {
@@ -173,7 +199,9 @@ const blueprintConfig: ThemeUIConfig = {
   button: { defaultVariants: { variant: 'blueprint' } },
   input: { defaultVariants: { variant: 'blueprint' } },
   card: { defaultVariants: { variant: 'blueprint' } },
-  badge: { defaultVariants: { variant: 'blueprint' } }
+  badge: { defaultVariants: { variant: 'blueprint' } },
+  select: { defaultVariants: { variant: 'blueprint' } },
+  textarea: { defaultVariants: { variant: 'blueprint' } }
 }
 
 // Export all theme configs

@@ -80,6 +80,32 @@ export default defineAppConfig({
       }
     },
 
+    select: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          mtv: 'mtv-input-base'
+        }
+      }
+    },
+
+    textarea: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          mtv: {
+            root: 'mtv-input',
+            base: 'mtv-input-base'
+          }
+        }
+      }
+    },
+
     card: {
       slots: {
         root: subtractThemeDefaults,

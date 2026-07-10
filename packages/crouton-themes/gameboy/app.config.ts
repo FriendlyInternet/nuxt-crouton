@@ -80,6 +80,32 @@ export default defineAppConfig({
       }
     },
 
+    select: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          gameboy: 'gb-input-base'
+        }
+      }
+    },
+
+    textarea: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          gameboy: {
+            root: 'gb-input',
+            base: 'gb-input-base'
+          }
+        }
+      }
+    },
+
     card: {
       slots: {
         root: subtractThemeDefaults,

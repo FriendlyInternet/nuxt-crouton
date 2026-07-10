@@ -72,6 +72,32 @@ export default defineAppConfig({
       }
     },
 
+    select: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          eink: 'eink-input-base'
+        }
+      }
+    },
+
+    textarea: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          eink: {
+            root: 'eink-input',
+            base: 'eink-input-base'
+          }
+        }
+      }
+    },
+
     card: {
       slots: {
         root: subtractThemeDefaults,
