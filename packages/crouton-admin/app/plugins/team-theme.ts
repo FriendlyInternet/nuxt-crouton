@@ -33,7 +33,7 @@ export default defineNuxtPlugin({
       themeFetched.value = true
     }
 
-    applyThemeSettings(themeState.value)
+    applyThemeSettings(themeState.value, useColorMode())
 
     // Expose the allowUserThemes flag so crouton-auth components can read it
     // without importing from crouton-admin. Defaults to true when not set.

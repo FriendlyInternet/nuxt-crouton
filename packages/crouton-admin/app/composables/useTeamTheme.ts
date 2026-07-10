@@ -158,7 +158,9 @@ export function useAvailableThemePresets() {
  * Apply theme settings to Nuxt UI via updateAppConfig.
  * Exported as a standalone function so the plugin can use it too.
  */
-export function applyThemeSettings(settings: TeamThemeSettings) {
+// `colorMode` is passed in by callers that captured it in setup scope
+// (watch/refresh callbacks lose the Nuxt context, #1387).
+export function applyThemeSettings(settings: TeamThemeSettings, colorMode?: { preference: string }) {
   const preset = settings.preset ?? 'custom'
   const radius = settings.radius ?? DEFAULT_THEME.radius
 
@@ -171,6 +173,11 @@ export function applyThemeSettings(settings: TeamThemeSettings) {
     }
     else {
       updateAppConfig({ ui: entry.ui as any })
+      // Pin the scheme the theme was designed for (#1387).
+      const scheme = THEME_PRESET_REGISTRY[preset as ThemePresetName]?.colorMode
+      if (scheme && colorMode) {
+        colorMode.preference = scheme
+      }
     }
   }
   else {
@@ -200,6 +207,7 @@ export function applyThemeSettings(settings: TeamThemeSettings) {
 
 export function useTeamTheme() {
   const { teamId } = useTeamContext()
+  const colorMode = useColorMode()
 
   // Shared state with the plugin (populated during SSR)
   const themeData = useState<TeamThemeSettings>('team-theme-data', () => ({}))
@@ -219,7 +227,7 @@ export function useTeamTheme() {
 
   // Watch for live theme changes (e.g. admin editing theme settings)
   watch(theme, (newTheme) => {
-    applyThemeSettings(newTheme)
+    applyThemeSettings(newTheme, colorMode)
   })
 
   // Refresh theme from API
@@ -231,7 +239,7 @@ export function useTeamTheme() {
       )
       themeData.value = data ?? {}
       themeFetched.value = true
-      applyThemeSettings(theme.value)
+      applyThemeSettings(theme.value, colorMode)
     }
     catch {
       themeFetched.value = true
@@ -274,6 +282,6 @@ export function useTeamTheme() {
     resetTheme,
     refresh,
     /** Apply theme settings immediately (for live preview) */
-    applyTheme: applyThemeSettings
+    applyTheme: (settings: TeamThemeSettings) => applyThemeSettings(settings, colorMode)
   }
 }

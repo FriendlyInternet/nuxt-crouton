@@ -29,6 +29,8 @@ export interface ThemePresetEntry {
   checkVariant: string
   /** Scalars-only payload for updateAppConfig({ ui }) */
   ui: ThemeUIConfig
+  /** The scheme the theme is designed for (pin on apply, #1387) */
+  colorMode?: 'light' | 'dark'
 }
 
 export type ThemePresetName = Exclude<ThemeName, 'default'>
@@ -45,7 +47,8 @@ export const THEME_PRESET_REGISTRY: Record<ThemePresetName, ThemePresetEntry>
           previewPrimary: t.colors[0] ?? '#000000',
           previewNeutral: t.colors[1] ?? '#666666',
           checkVariant: ui?.button?.defaultVariants?.variant ?? t.name,
-          ui: ui ?? {}
+          ui: ui ?? {},
+          colorMode: t.colorMode
         } satisfies ThemePresetEntry]
       })
   ) as Record<ThemePresetName, ThemePresetEntry>

@@ -591,7 +591,9 @@ export type ThemeNeutralColor = 'slate' | 'gray' | 'zinc' | 'neutral' | 'stone'
 export type ThemeRadius = 0 | 0.125 | 0.25 | 0.375 | 0.5
 
 /** Named theme presets */
-export type ThemePreset = 'custom' | 'blackandwhite' | 'ko'
+// Any theme slug — 'custom' plus whatever crouton-themes ships. Kept loose
+// so adding a theme never needs a schema change (#1387).
+export type ThemePreset = 'custom' | (string & {})
 
 /**
  * Site settings for public site configuration
