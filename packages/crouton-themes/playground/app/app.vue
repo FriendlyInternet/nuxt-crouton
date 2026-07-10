@@ -3,7 +3,7 @@
 // gallery this epic (#1303) uses for ui-proposal sign-off. Every themed
 // component below is rendered once; flipping <ThemeSwitcher> restyles the
 // whole page live via useThemeSwitcher()'s updateAppConfig() swap.
-const { variant } = useThemeSwitcher()
+const { variant, getVariant } = useThemeSwitcher()
 
 const colors = ['primary', 'neutral', 'error'] as const
 
@@ -47,10 +47,13 @@ const switchValue = ref(true)
         </UButton>
       </div>
       <div class="flex flex-wrap items-center gap-3">
-        <UButton color="primary" variant="outline">Outline</UButton>
-        <UButton color="primary" variant="soft">Soft</UButton>
-        <UButton color="primary" variant="ghost">Ghost</UButton>
-        <UButton color="primary" variant="link">Link</UButton>
+        <!-- getVariant follows the active theme's named variants (ko-outline,
+             minimal-outline, ...) — an explicit variant string would stay
+             default-styled by design (the runtime swap only remaps defaults). -->
+        <UButton color="primary" :variant="getVariant('outline')">Outline</UButton>
+        <UButton color="primary" :variant="getVariant('soft')">Soft</UButton>
+        <UButton color="primary" :variant="getVariant('ghost')">Ghost</UButton>
+        <UButton color="primary" :variant="getVariant('link')">Link</UButton>
       </div>
     </section>
 
