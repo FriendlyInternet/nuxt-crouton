@@ -30,6 +30,16 @@ export default defineNuxtConfig({
     // behind those classes never ships — presets were palette-only before.
     '@fyit/crouton-themes/ko',
     '@fyit/crouton-themes/blackandwhite',
+    '@fyit/crouton-themes/minimal',
+    '@fyit/crouton-themes/kr11',
+    '@fyit/crouton-themes/brutalist',
+    '@fyit/crouton-themes/mtv',
+    '@fyit/crouton-themes/terminal',
+    '@fyit/crouton-themes/braun',
+    '@fyit/crouton-themes/gameboy',
+    '@fyit/crouton-themes/riso',
+    '@fyit/crouton-themes/eink',
+    '@fyit/crouton-themes/blueprint',
     './layers/sales',
     './layers/pages'
   ],
