@@ -285,10 +285,19 @@ jobs:
           # so this one check makes them all point at the reachable deploy.
           if [ -n "$URL" ]; then
             code=$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$URL" 2>/dev/null || echo 000)
-            if [ "$code" = "000" ] && [ -n "$WORKERS_URL" ]; then
-              echo "::warning::Configured URL $URL is unreachable (HTTP 000 — no bound route). Using the deployed $WORKERS_URL instead (#1369)."
-              URL="$WORKERS_URL"
-            fi
+            # "Reachable" = the deployed app ANSWERS: 2xx/3xx, or 401 (its auth wall). Anything
+            # else means the configured URL isn't actually serving — 000 (no DNS) OR a Cloudflare
+            # error for a domain with no bound route (404/522/530/1xxx). The earlier ==000-only
+            # check missed those CF codes, so a dead <name>.pmcp.dev alias survived (#1369, the
+            # snippets dogfood). Fall back to the workers.dev URL wrangler actually published.
+            case "$code" in
+              2??|3??|401) : ;;  # serving → keep the configured URL
+              *)
+                if [ -n "$WORKERS_URL" ]; then
+                  echo "::warning::Configured URL $URL returned HTTP $code (not serving — likely no bound route). Using the deployed $WORKERS_URL instead (#1369)."
+                  URL="$WORKERS_URL"
+                fi ;;
+            esac
           elif [ -n "$WORKERS_URL" ]; then
             URL="$WORKERS_URL"
           fi
