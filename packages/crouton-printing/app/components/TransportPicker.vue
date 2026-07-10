@@ -11,7 +11,7 @@
  */
 import { useTimestamp } from '@vueuse/core'
 
-export interface TransportPickerItem {
+interface TransportPickerItem {
   value: 'local-drainer' | 'router-spooler' | 'none'
   label: string
   description: string

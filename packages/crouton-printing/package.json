@@ -73,6 +73,7 @@
     "@fyit/crouton-core": "workspace:*"
   },
   "dependencies": {
+    "@vueuse/core": "^13.3.0",
     "nanoid": "^5.0.0"
   },
   "devDependencies": {

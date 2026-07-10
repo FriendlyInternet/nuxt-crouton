@@ -1396,6 +1396,9 @@ importers:
       '@fyit/crouton-core':
         specifier: workspace:*
         version: link:../crouton-core
+      '@vueuse/core':
+        specifier: ^13.3.0
+        version: 13.9.0(vue@3.5.38(typescript@5.9.3))
       nanoid:
         specifier: ^5.0.0
         version: 5.1.6
