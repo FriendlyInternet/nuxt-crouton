@@ -461,51 +461,53 @@ function helperExpiry(value: string): string {
 
           <USeparator />
 
-          <!-- Client selection: switch row, trailing edge aligned with the label line. -->
-          <div class="flex items-start justify-between gap-3">
-            <div class="space-y-1">
+          <!-- Explained rows: label + action share the top line, the
+               description gets the full card width underneath — a side
+               column squeezes into one-word lines in the narrow settings
+               pane. -->
+          <div class="space-y-1">
+            <div class="flex items-center justify-between gap-3">
               <p class="text-sm font-medium leading-5">{{ t('sales.workspace.requiresClient') }}</p>
-              <p class="text-sm text-muted">{{ t('sales.workspace.requiresClientDesc') }}</p>
+              <USwitch
+                v-model="eventForm.requiresClient"
+                :aria-label="t('sales.workspace.requiresClient')"
+              />
             </div>
-            <USwitch
-              v-model="eventForm.requiresClient"
-              :aria-label="t('sales.workspace.requiresClient')"
-              class="mt-0.5"
-            />
+            <p class="text-sm text-muted">{{ t('sales.workspace.requiresClientDesc') }}</p>
           </div>
 
           <USeparator />
 
           <!-- Event-level actions as explained rows (moved out of the header). -->
-          <div class="flex items-start justify-between gap-3">
-            <div class="space-y-1">
+          <div class="space-y-1">
+            <div class="flex items-center justify-between gap-3">
               <p class="text-sm font-medium leading-5">{{ t('sales.workspace.duplicateEvent') }}</p>
-              <p class="text-sm text-muted">{{ t('sales.workspace.duplicateEventDesc') }}</p>
+              <UButton
+                size="xs"
+                variant="outline"
+                color="neutral"
+                icon="i-lucide-copy"
+                :loading="duplicating"
+                class="shrink-0"
+                @click="duplicateEvent"
+              >
+                {{ t('sales.events.duplicate') }}
+              </UButton>
             </div>
-            <UButton
-              size="xs"
-              variant="outline"
-              color="neutral"
-              icon="i-lucide-copy"
-              :loading="duplicating"
-              class="shrink-0 mt-0.5"
-              @click="duplicateEvent"
-            >
-              {{ t('sales.events.duplicate') }}
-            </UButton>
+            <p class="text-sm text-muted">{{ t('sales.workspace.duplicateEventDesc') }}</p>
           </div>
 
-          <div class="flex items-start justify-between gap-3">
-            <div class="space-y-1">
+          <div class="space-y-1">
+            <div class="flex items-center justify-between gap-3">
               <p class="text-sm font-medium leading-5">{{ t('sales.workspace.deleteEvent') }}</p>
-              <p class="text-sm text-muted">{{ t('sales.workspace.deleteEventDesc') }}</p>
+              <CroutonDeleteButton
+                expanded
+                class="shrink-0"
+                :loading="deletingEvent"
+                @confirm="deleteEvent"
+              />
             </div>
-            <CroutonDeleteButton
-              expanded
-              class="shrink-0 mt-0.5"
-              :loading="deletingEvent"
-              @confirm="deleteEvent"
-            />
+            <p class="text-sm text-muted">{{ t('sales.workspace.deleteEventDesc') }}</p>
           </div>
         </div>
       </UCard>
