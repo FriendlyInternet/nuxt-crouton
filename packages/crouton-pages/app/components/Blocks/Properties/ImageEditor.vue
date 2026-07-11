@@ -202,10 +202,10 @@ async function handleAssetSelected(asset: Record<string, any>) {
 
     <!-- No Image State — Browse tab shown first if available -->
     <div v-if="!hasImage && mode === 'preview'" class="flex flex-col gap-2">
-      <div class="flex items-center justify-center h-32 rounded-lg border-2 border-dashed border-default bg-neutral-50 dark:bg-neutral-900">
+      <div class="flex items-center justify-center h-32 rounded-lg border-2 border-dashed border-default bg-muted">
         <div class="text-center">
-          <UIcon name="i-lucide-image" class="size-8 text-neutral-400 mb-2" />
-          <p class="text-sm text-neutral-500">
+          <UIcon name="i-lucide-image" class="size-8 text-dimmed mb-2" />
+          <p class="text-sm text-muted">
             {{ t('pages.blocks.image.noImage') }}
           </p>
         </div>

@@ -41,7 +41,10 @@
           </div>
         </UCard>
 
-        <!-- Receipt Preview -->
+        <!-- Receipt Preview — deliberately NOT themed (#1394): this mocks the
+             physical thermal paper the printer spits out, so it keeps literal
+             paper white / ink gray regardless of app theme (chrome-vs-data
+             rule: the modal chrome themes, the paper mock doesn't). -->
         <UCard class="bg-gray-50 dark:bg-gray-900">
           <div class="flex justify-center">
             <div
