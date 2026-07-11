@@ -24,6 +24,7 @@
             <NuxtLink to="/" class="underline underline-offset-2">Gallery</NuxtLink>
             <NuxtLink to="/ko" class="underline underline-offset-2">KO hardware showcase</NuxtLink>
             <NuxtLink to="/crouton" class="underline underline-offset-2">Crouton surfaces</NuxtLink>
+            <NuxtLink to="/matrix" class="underline underline-offset-2">Nuxt UI matrix</NuxtLink>
           </nav>
         </div>
         <ThemeSwitcher />
