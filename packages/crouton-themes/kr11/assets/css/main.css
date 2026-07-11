@@ -886,6 +886,127 @@ body.theme-kr11 {
 }
 
 /* ============================================
+   CALENDAR (#1458) — a month of pads on the chassis.
+   Named variant (kr-cal-*); selected/today state is ours to supply —
+   the named variant never fires Nuxt UI's color compounds.
+   ============================================ */
+
+.kr-cal-heading {
+  font-family: var(--kr-font);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--kr-text-dark);
+}
+
+.kr-cal-head {
+  font-family: var(--kr-font);
+  font-size: 0.625rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--kr-text-medium);
+  border-radius: var(--kr-button-radius);
+}
+
+.kr-cal-cell {
+  font-family: var(--kr-font);
+  color: var(--kr-text-dark);
+  border: 1px solid transparent;
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
+}
+
+/* Hover / keyboard focus: the day rises as a cream pad. */
+.kr-cal-cell:hover:not([data-selected]):not([data-disabled]) {
+  background-color: var(--kr-pad-cream);
+  border-color: var(--kr-pad-keyline);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.kr-cal-cell[data-highlighted] {
+  background-color: var(--kr-pad-cream);
+  border-color: var(--kr-pad-keyline);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Selected: the pressed mint play-key. Mint stays mint in both schemes,
+   so the legend uses the constant pad ink (#1395). */
+.kr-cal-cell[data-selected] {
+  background-color: var(--kr-pad-mint-pressed);
+  color: var(--kr-on-pad);
+  border-color: var(--kr-pad-keyline);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+}
+
+/* Today: the red LED is lit on that pad. */
+.kr-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--kr-display-red);
+  box-shadow: 0 0 5px var(--kr-display-red-glow);
+  font-weight: 600;
+}
+
+.kr-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker have no variant
+   dimension; scoped to both activation paths like the switch above.
+   Slider anchors on [data-slider-impl] (unique to USlider — the color
+   picker has a "track" slot too), picker on its own slot names.
+   ============================================ */
+
+/* Slider: a volume fader — recessed groove, mint level, cream cap. */
+[data-theme="kr11"] [data-slider-impl] [data-slot="track"],
+.theme-kr11 [data-slider-impl] [data-slot="track"] {
+  background-color: var(--kr-chassis-dark);
+  border-radius: var(--kr-display-radius);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="kr11"] [data-slider-impl] [data-slot="range"],
+.theme-kr11 [data-slider-impl] [data-slot="range"] {
+  background-color: var(--kr-pad-mint);
+  border-radius: var(--kr-display-radius);
+}
+
+[data-theme="kr11"] [data-slider-impl] [data-slot="thumb"],
+.theme-kr11 [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--kr-pad-cream);
+  border-radius: var(--kr-button-radius);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --tw-ring-color: var(--kr-pad-keyline);
+}
+
+/* Color picker: chrome only — keyline frames, knob-round thumbs;
+   never tint the color surfaces themselves. */
+[data-theme="kr11"] [data-slot="picker"] [data-slot="selector"],
+.theme-kr11 [data-slot="picker"] [data-slot="selector"],
+[data-theme="kr11"] [data-color-picker-track],
+.theme-kr11 [data-color-picker-track] {
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: var(--kr-button-radius);
+}
+
+[data-theme="kr11"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-kr11 [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: var(--kr-button-radius);
+}
+
+[data-theme="kr11"] [data-slot="selectorThumb"],
+.theme-kr11 [data-slot="selectorThumb"],
+[data-theme="kr11"] [data-slot="trackThumb"],
+.theme-kr11 [data-slot="trackThumb"] {
+  border-radius: 9999px;
+  --tw-ring-color: var(--kr-text-dark);
+}
+
+/* ============================================
    DUAL SCHEME (#1395) — the dark-unit counterpart (a Volca on a night
    stage), DESIGNED not inverted: graphite chassis, dark pads with light
    legends, the red LED display and the colored pads stay themselves.

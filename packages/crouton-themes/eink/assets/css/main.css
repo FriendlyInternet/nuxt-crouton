@@ -439,6 +439,101 @@ body.theme-eink {
 }
 
 /* ============================================
+   CALENDAR (#1458) — an almanac page: small-caps heads, a double-rule
+   frame for today, solid ink for the selected day. Named variant
+   (eink-cal-*); selected/today state is ours to supply. Zero motion.
+   ============================================ */
+
+.eink-cal-heading {
+  font-family: var(--eink-serif);
+  color: var(--eink-ink);
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
+}
+
+.eink-cal-head {
+  color: var(--eink-gray);
+  font-variant: small-caps;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+
+.eink-cal-cell {
+  color: var(--eink-ink);
+  border: 1px solid transparent;
+  border-radius: 0;
+  transition: none;
+}
+
+.eink-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.eink-cal-cell[data-highlighted] {
+  background-color: var(--eink-hairline);
+}
+
+.eink-cal-cell[data-selected] {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+
+.eink-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--eink-ink);
+  outline: 1px solid var(--eink-ink);
+  outline-offset: 2px;
+}
+
+.eink-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker. No variant hook;
+   scoped to both activation paths. Slider anchors on [data-slider-impl]
+   (unique to USlider). Ink line-work, zero motion.
+   ============================================ */
+
+[data-theme="eink"] [data-slider-impl] [data-slot="track"],
+.theme-eink [data-slider-impl] [data-slot="track"] {
+  background-color: var(--eink-paper);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+}
+
+[data-theme="eink"] [data-slider-impl] [data-slot="range"],
+.theme-eink [data-slider-impl] [data-slot="range"] {
+  background-color: var(--eink-ink);
+  border-radius: 0;
+}
+
+[data-theme="eink"] [data-slider-impl] [data-slot="thumb"],
+.theme-eink [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--eink-ink);
+  border-radius: 0;
+  transition: none;
+  --tw-ring-color: var(--eink-paper);
+}
+
+[data-theme="eink"] [data-slot="picker"] [data-slot="selector"],
+.theme-eink [data-slot="picker"] [data-slot="selector"],
+[data-theme="eink"] [data-color-picker-track],
+.theme-eink [data-color-picker-track] {
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+}
+
+[data-theme="eink"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-eink [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="eink"] [data-slot="selectorThumb"],
+.theme-eink [data-slot="selectorThumb"],
+[data-theme="eink"] [data-slot="trackThumb"],
+.theme-eink [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--eink-ink);
+}
+
+/* ============================================
    DUAL SCHEME (#1395) — night reading mode, DESIGNED not inverted:
    soft light ink on matte near-black (an e-reader at night; still
    zero motion, hairlines stay hairlines). Activated by the colorMode

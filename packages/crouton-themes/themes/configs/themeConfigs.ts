@@ -14,9 +14,10 @@
 // useThemeSwitcher().getVariant('outline') to follow the active theme.
 //
 // Components WITHOUT a `variant` dimension (USwitch, UModal, USlideover,
-// UToast, UPagination) are themed AMBIENTLY instead — theme-scoped CSS in each
-// theme's main.css covering both activation paths ([data-theme="x"] from app
-// presets, .theme-x body class from useThemeSwitcher). See #1307/#1393.
+// UToast, UPagination, USlider, UColorPicker) are themed AMBIENTLY instead —
+// theme-scoped CSS in each theme's main.css covering both activation paths
+// ([data-theme="x"] from app presets, .theme-x body class from
+// useThemeSwitcher). See #1307/#1393/#1458.
 
 import type { ThemeName } from '../composables/useThemeSwitcher'
 
@@ -36,6 +37,7 @@ export interface ThemeUIConfig {
   checkbox?: { defaultVariants?: { variant?: string } }
   radioGroup?: { defaultVariants?: { variant?: string } }
   alert?: { defaultVariants?: { variant?: string } }
+  calendar?: { defaultVariants?: { variant?: string } }
 }
 
 // Every config sets EVERY key the swap owns, so switching A → B never leaves
@@ -60,6 +62,7 @@ const namedVariantConfig = (
   checkbox: { defaultVariants: { variant } },
   radioGroup: { defaultVariants: { variant } },
   alert: { defaultVariants: { variant } },
+  calendar: { defaultVariants: { variant } },
   ...overrides
 })
 
@@ -79,7 +82,8 @@ const defaultConfig: ThemeUIConfig = {
   tabs: { defaultVariants: { variant: 'pill' } },
   checkbox: { defaultVariants: { variant: 'list' } },
   radioGroup: { defaultVariants: { variant: 'list' } },
-  alert: { defaultVariants: { variant: 'solid' } }
+  alert: { defaultVariants: { variant: 'solid' } },
+  calendar: { defaultVariants: { variant: 'solid' } }
 }
 
 // KO — named variants registered by ko/app.config.ts (variant="ko" etc.)
@@ -114,7 +118,8 @@ const blackandwhiteConfig: ThemeUIConfig = {
   tabs: { defaultVariants: { variant: 'pill' } },
   checkbox: { defaultVariants: { variant: 'list' } },
   radioGroup: { defaultVariants: { variant: 'list' } },
-  alert: { defaultVariants: { variant: 'subtle' } }
+  alert: { defaultVariants: { variant: 'subtle' } },
+  calendar: { defaultVariants: { variant: 'solid' } }
 }
 
 // Brutalist — named variants registered by brutalist/app.config.ts

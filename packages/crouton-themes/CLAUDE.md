@@ -525,6 +525,46 @@ Two mechanisms, chosen by whether the component has a `variant` dimension:
    Toasts require the app to be wrapped in `<UApp>` (hosts the Toaster) — the
    playground got this in #1393.
 
+## Second-tier coverage (#1458)
+
+The rarer components, themed **only where a real app consumes them** — a
+grep-confirmed consumer or a documented skip, never CSS on a component nothing
+uses. The split (verified 2026-07-11):
+
+- **Themed** — the three with real consumers, via the same two mechanics above:
+  - **UCalendar** (crouton-core `Calendar.vue`, crouton-bookings `Calendar.vue`)
+    — a **named variant** (`<p>-cal-{heading,head,cell}`) on the
+    `headingLabel`/`headCell`/`cellTrigger` slots (all three carry markers +
+    the replacer, because the `color` dimension fires on `headCell`/`cellTrigger`
+    regardless of variant, exactly like checkbox). The named variant suppresses
+    **all** of Nuxt UI's `data-selected`/`data-today` color compounds (they're
+    keyed to the STANDARD variants), so each theme supplies its own state CSS on
+    `.cal-cell[data-selected]`, `[data-today]:not([data-selected])`,
+    `[data-highlighted]` (keyboard), and `[data-outside-view]` (dimmed) — skip a
+    state and it renders invisible. Runtime scalar: `calendar.defaultVariants.variant`
+    in `themeConfigs.ts` (set in **every** config entry, incl. default + bw, so a
+    theme-switch never leaves a stale variant behind — the deepAssign rule).
+  - **USlider** (crouton-layout `LayoutBreakpointAuthor.vue`) and **UColorPicker**
+    (crouton-core `FormColorPicker.vue`) — **ambient CSS** (no `variant`
+    dimension). DOM hooks: slider anchors on **`[data-slider-impl]`** (unique to
+    USlider — the color picker also has a `track` slot, so an unqualified
+    `[data-slot="track"]` would hit both), slots `track`/`range`/`thumb`; recolor
+    the thumb ring via `--tw-ring-color`. Color picker is **chrome-only** (never
+    tint the color surfaces): frame `[data-slot="selector"]` +
+    `[data-color-picker-track]`, round-off `selectorThumb`/`trackThumb` (camelCase
+    in the DOM). Both scoped to BOTH activation paths like the #1393 ambient set.
+- **Documented skips** — no consumer anywhere in the repo, so stock (they still
+  adapt to the theme via the `#1390` semantic `--ui-*` tokens — verified not
+  broken, e.g. terminal's PIN boxes render as phosphor-bordered squares):
+  - **UPinInput** — the issue's real-use map guessed 2FA, but `TwoFactorForm.vue`
+    (and the POS helper-login) use a plain **`UInput`** for the code, not
+    `UPinInput`. No consumer → skip.
+  - **UInputTags**, **UCommandPalette** — zero consumers outside the playground
+    `/matrix` zoo.
+
+blackandwhite stays the deliberate stock pass here too (its calendar runtime is
+`solid`, no `bw-cal-*` variant).
+
 ## Dual scheme (#1395) — every theme works in light AND dark
 
 Every theme ships a **designed counterpart palette** for the scheme it wasn't

@@ -552,6 +552,111 @@ body.theme-terminal {
 }
 
 /* ============================================
+   CALENDAR (#1458) — cal(1) on the tube.
+   Named variant (term-cal-*); selected/today state is ours to supply —
+   the named variant never fires Nuxt UI's color compounds.
+   ============================================ */
+
+.term-cal-heading {
+  font-family: var(--term-font);
+  color: var(--term-phosphor);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-shadow: var(--term-glow);
+}
+
+.term-cal-head {
+  font-family: var(--term-font);
+  color: var(--term-phosphor-dim);
+  text-transform: uppercase;
+  border-radius: 0;
+}
+
+.term-cal-cell {
+  font-family: var(--term-font);
+  color: var(--term-phosphor-soft);
+  border: 1px solid transparent;
+  border-radius: 0;
+  transition: none;
+}
+
+.term-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.term-cal-cell[data-highlighted] {
+  color: var(--term-phosphor);
+  background-color: rgba(51, 255, 102, 0.12);
+  text-shadow: var(--term-glow);
+}
+
+.term-cal-cell[data-selected] {
+  background-color: var(--term-phosphor);
+  color: var(--term-bg);
+  box-shadow: var(--term-glow);
+  text-shadow: none;
+}
+
+.term-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--term-phosphor);
+  color: var(--term-phosphor);
+  text-shadow: var(--term-glow);
+}
+
+.term-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker have no variant
+   dimension; scoped to both activation paths like the switch above.
+   Slider anchors on [data-slider-impl] (unique to USlider — the color
+   picker has a "track" slot too), picker on its own slot names.
+   ============================================ */
+
+/* Slider: a signal level fader. */
+[data-theme="terminal"] [data-slider-impl] [data-slot="track"],
+.theme-terminal [data-slider-impl] [data-slot="track"] {
+  background-color: var(--term-bg-raised);
+  border: 1px solid var(--term-phosphor-dim);
+  border-radius: 0;
+}
+
+[data-theme="terminal"] [data-slider-impl] [data-slot="range"],
+.theme-terminal [data-slider-impl] [data-slot="range"] {
+  background-color: var(--term-phosphor);
+  box-shadow: var(--term-glow);
+  border-radius: 0;
+}
+
+[data-theme="terminal"] [data-slider-impl] [data-slot="thumb"],
+.theme-terminal [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--term-bg);
+  border-radius: 0;
+  box-shadow: var(--term-glow);
+  --tw-ring-color: var(--term-phosphor);
+}
+
+/* Color picker: a framed scope readout. */
+[data-theme="terminal"] [data-slot="picker"] [data-slot="selector"],
+.theme-terminal [data-slot="picker"] [data-slot="selector"],
+[data-theme="terminal"] [data-color-picker-track],
+.theme-terminal [data-color-picker-track] {
+  border: 1px solid var(--term-phosphor-dim);
+  border-radius: 0;
+}
+
+[data-theme="terminal"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-terminal [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="terminal"] [data-slot="selectorThumb"],
+.theme-terminal [data-slot="selectorThumb"],
+[data-theme="terminal"] [data-slot="trackThumb"],
+.theme-terminal [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--term-phosphor);
+}
+
+/* ============================================
    DUAL SCHEME (#1395) — paper mode, DESIGNED not inverted: dark green ink
    on warm terminal-paper (a DEC printout), glow off, scanlines off.
    Activated by the colorMode class on <html>.

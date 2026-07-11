@@ -228,6 +228,27 @@ export default defineAppConfig({
         { color: 'error', variant: 'mtv', class: { root: 'mtv-alert--error' } },
         { color: 'neutral', variant: 'mtv', class: { root: 'mtv-alert--neutral' } }
       ]
+    },
+
+    // #1458 second-tier coverage. Calendar: the color dimension fires on
+    // headCell/cellTrigger regardless of variant (like checkbox), so both
+    // carry markers + the replacer; selected/today state lives entirely in
+    // the theme CSS via [data-selected]/[data-today].
+    calendar: {
+      slots: {
+        headCell: subtractThemeDefaults,
+        cellTrigger: subtractThemeDefaults,
+        headingLabel: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          mtv: {
+            headingLabel: 'mtv-cal-heading',
+            headCell: 'mtv-cal-head',
+            cellTrigger: 'mtv-cal-cell'
+          }
+        }
+      }
     }
   }
 })

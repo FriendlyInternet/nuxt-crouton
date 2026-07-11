@@ -526,6 +526,111 @@ body.theme-braun {
 }
 
 /* ============================================
+   CALENDAR (#1458) — a desk-calendar page: hairlined, calm, the one
+   orange spent only on the selected day. Named variant (braun-cal-*);
+   selected/today state is ours to supply.
+   ============================================ */
+
+.braun-cal-heading {
+  font-family: inherit;
+  color: var(--braun-text);
+  letter-spacing: 0.02em;
+}
+
+.braun-cal-head {
+  color: var(--braun-label);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: var(--braun-radius);
+}
+
+.braun-cal-cell {
+  color: var(--braun-text);
+  border: 1px solid transparent;
+  border-radius: var(--braun-radius);
+  transition: background-color var(--braun-ease), box-shadow var(--braun-ease);
+}
+
+.braun-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.braun-cal-cell[data-highlighted] {
+  background-color: var(--braun-cream-raised);
+  box-shadow: var(--braun-shadow);
+}
+
+.braun-cal-cell[data-selected] {
+  background-color: var(--braun-orange);
+  color: #fff;
+  box-shadow: var(--braun-shadow);
+}
+
+.braun-cal-cell[data-today]:not([data-selected]) {
+  position: relative;
+}
+
+.braun-cal-cell[data-today]:not([data-selected])::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: var(--braun-orange);
+}
+
+.braun-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider (the hi-fi fader Braun is made for) +
+   color picker. No variant hook; scoped to both activation paths.
+   Slider anchors on [data-slider-impl] (unique to USlider).
+   ============================================ */
+
+[data-theme="braun"] [data-slider-impl] [data-slot="track"],
+.theme-braun [data-slider-impl] [data-slot="track"] {
+  background-color: var(--braun-cream-raised);
+  border: 1px solid var(--braun-hairline);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+  border-radius: 999px;
+}
+
+[data-theme="braun"] [data-slider-impl] [data-slot="range"],
+.theme-braun [data-slider-impl] [data-slot="range"] {
+  background-color: var(--braun-orange);
+}
+
+[data-theme="braun"] [data-slider-impl] [data-slot="thumb"],
+.theme-braun [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--braun-cream-raised);
+  box-shadow: var(--braun-shadow);
+  --tw-ring-color: var(--braun-hairline);
+}
+
+[data-theme="braun"] [data-slot="picker"] [data-slot="selector"],
+.theme-braun [data-slot="picker"] [data-slot="selector"],
+[data-theme="braun"] [data-color-picker-track],
+.theme-braun [data-color-picker-track] {
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+}
+
+[data-theme="braun"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-braun [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: var(--braun-radius);
+}
+
+[data-theme="braun"] [data-slot="selectorThumb"],
+.theme-braun [data-slot="selectorThumb"],
+[data-theme="braun"] [data-slot="trackThumb"],
+.theme-braun [data-slot="trackThumb"] {
+  --tw-ring-color: var(--braun-hairline);
+}
+
+/* ============================================
    DUAL SCHEME (#1395) — the black-unit counterpart, DESIGNED not inverted:
    charcoal chassis, backlit light legends, the one orange unchanged.
    Activated by the colorMode class on <html>.

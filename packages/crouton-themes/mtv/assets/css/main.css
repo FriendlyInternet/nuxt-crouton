@@ -570,6 +570,118 @@ body.theme-mtv {
 }
 
 /* ============================================
+   CALENDAR (#1458) — the program grid; today is circled in ink,
+   the selected day is a day-glo sticker slammed on the page.
+   Named variant (mtv-cal-*); selected/today state is ours to supply —
+   the named variant never fires Nuxt UI's color compounds. A grid is
+   dense, so per-cell effects stay restrained (no tilt): the loud move
+   is reserved for [data-selected].
+   ============================================ */
+
+.mtv-cal-heading {
+  color: var(--mtv-ink);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.mtv-cal-head {
+  color: var(--mtv-ink);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 0;
+}
+
+.mtv-cal-cell {
+  color: var(--mtv-ink);
+  border: var(--mtv-border) solid transparent;
+  border-radius: 0;
+  font-weight: 600;
+  transition: background-color var(--mtv-snap) ease-out, box-shadow var(--mtv-snap) ease-out;
+}
+
+.mtv-cal-cell:hover:not([data-selected]):not([data-disabled]) {
+  background-color: var(--mtv-yellow);
+  color: var(--mtv-on-neon);
+}
+
+.mtv-cal-cell[data-highlighted] {
+  background-color: var(--mtv-yellow);
+  color: var(--mtv-on-neon);
+}
+
+.mtv-cal-cell[data-selected] {
+  background-color: var(--mtv-pink);
+  color: var(--mtv-on-pink);
+  border-color: var(--mtv-ink);
+  box-shadow: 2px 2px 0 var(--mtv-cyan);
+  font-weight: 800;
+}
+
+.mtv-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--mtv-ink);
+  font-weight: 800;
+}
+
+.mtv-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker have no variant
+   dimension; scoped to both activation paths like the switch above.
+   Slider anchors on [data-slider-impl] (unique to USlider — the color
+   picker has a "track" slot too), picker on its own slot names.
+   Picker: chrome only — never tint the color surfaces themselves.
+   ============================================ */
+
+/* Slider: a fader on the video desk — cyan signal, pink cap. */
+[data-theme="mtv"] [data-slider-impl] [data-slot="track"],
+.theme-mtv [data-slider-impl] [data-slot="track"] {
+  background-color: var(--mtv-surface);
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+}
+
+[data-theme="mtv"] [data-slider-impl] [data-slot="range"],
+.theme-mtv [data-slider-impl] [data-slot="range"] {
+  background-color: var(--mtv-cyan);
+  border-radius: 0;
+}
+
+[data-theme="mtv"] [data-slider-impl] [data-slot="thumb"],
+.theme-mtv [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--mtv-pink);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 var(--mtv-cyan);
+  --tw-ring-color: var(--mtv-ink);
+}
+
+/* Color picker: an ink frame with a pink drop shadow — a taped-up swatch. */
+[data-theme="mtv"] [data-slot="picker"] [data-slot="selector"],
+.theme-mtv [data-slot="picker"] [data-slot="selector"],
+[data-theme="mtv"] [data-color-picker-track],
+.theme-mtv [data-color-picker-track] {
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 var(--mtv-pink);
+}
+
+[data-theme="mtv"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-mtv [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="mtv"] [data-slot="selectorThumb"],
+.theme-mtv [data-slot="selectorThumb"],
+[data-theme="mtv"] [data-slot="trackThumb"],
+.theme-mtv [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--mtv-ink);
+}
+
+/* ============================================
    DUAL SCHEME (#1395) — neon on black, DESIGNED not inverted: the day-glo
    fills stay, the paper goes club-dark. Activated by the colorMode class
    on <html>; the scheme pin relaxed to a default in useThemeSwitcher.
