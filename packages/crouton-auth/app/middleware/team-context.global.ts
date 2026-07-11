@@ -13,7 +13,7 @@
  * - Server: event.context.team (via server middleware)
  */
 import { useAuthClientSafe } from '../../types/auth-client'
-import { mapOrganizationToTeam } from '../../shared/utils/auth'
+import { mapOrganizationToTeam, type RawOrganization } from '../../shared/utils/auth'
 
 export default defineNuxtRouteMiddleware(async (to) => {
   const config = useAuthConfig()
@@ -125,8 +125,7 @@ async function resolveTeamContext(
       // Server-side: $authClient is not available (client-only plugin), use $fetch directly
       const requestHeaders = useRequestHeaders(['cookie'])
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const orgs = await ($fetch as any)('/api/auth/organization/list', {
+        const orgs = await $fetch<RawOrganization[]>('/api/auth/organization/list', {
           headers: requestHeaders
         }).catch(() => null)
         if (orgs && orgs.length > 0) {

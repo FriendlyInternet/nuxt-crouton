@@ -12,7 +12,7 @@
  * ```
  */
 import { h, resolveComponent } from 'vue'
-import type { TableColumn } from '@nuxt/ui'
+import type { TableColumn, DropdownMenuItem } from '@nuxt/ui'
 import type { MemberRole, Member, MemberWithUser } from '../../../types'
 
 interface Props {
@@ -220,8 +220,7 @@ function getMemberActions(member: Member | MemberWithUser) {
   const isSelf = member.userId === user.value?.id
   const isOwnerRole = member.role === 'owner'
   const memberUser = 'user' in member ? (member as MemberWithUser).user : undefined
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const items: any[][] = []
+  const items: DropdownMenuItem[][] = []
 
   if (isSelf || (isOwnerRole && !isOwner.value)) return items
 
@@ -243,8 +242,8 @@ function getMemberActions(member: Member | MemberWithUser) {
   adminActions.push({ label: t('admin.forceLogout'), icon: 'i-lucide-log-out', onSelect: () => revokeUserSessions(member.userId) })
 
   // Ban/unban
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const isBanned = (memberUser as any)?.banned
+  // `banned` comes from the admin plugin's user fields, absent from the org member's user shape
+  const isBanned = (memberUser as { banned?: boolean } | undefined)?.banned
   if (isBanned) {
     adminActions.push({ label: t('admin.unbanUser'), icon: 'i-lucide-shield-check', onSelect: () => unbanUser(member.userId) })
   } else {
