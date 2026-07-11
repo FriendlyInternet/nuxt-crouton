@@ -7,7 +7,7 @@
  * segments are never silently dropped.
  */
 import { describe, it, expect } from 'vitest'
-import { parseVoiceOrder, type VoiceOrderProduct } from '../app/utils/voice-order'
+import { parseVoiceOrder, classifyVoiceError, type VoiceOrderProduct } from '../app/utils/voice-order'
 
 const p = (id: string, title: string, isActive = true): VoiceOrderProduct =>
   ({ id, title, isActive })
@@ -56,6 +56,18 @@ describe('parseVoiceOrder — segmenting an order', () => {
 
   it('merges repeated mentions of the same product into one line', () => {
     expect(linesOf('twee pils en drie pils')).toEqual([['pils', 5]])
+  })
+
+  it('splits on a new quantity even without "en" between items (STT drops it)', () => {
+    // The reported bug: "100 frisdrank 100 koffie" ran together as one segment.
+    expect(linesOf('honderd frisdrank honderd koffie')).toEqual([['frisdrank', 100], ['koffie', 100]])
+    expect(linesOf('twee pils drie koffie')).toEqual([['pils', 2], ['koffie', 3]])
+    expect(linesOf('2 frisdrank 2 koffie')).toEqual([['frisdrank', 2], ['koffie', 2]])
+  })
+
+  it('still keeps a multi-word title together (no number inside it)', () => {
+    const products = [...KERMIS, p('cola-zero', 'Cola Zero')]
+    expect(linesOf('twee cola zero drie pils', products)).toEqual([['cola-zero', 2], ['pils', 3]])
   })
 
   it('returns an empty result for an empty or whitespace utterance', () => {
@@ -122,5 +134,29 @@ describe('parseVoiceOrder — never guess, never drop', () => {
     const result = parseVoiceOrder('twee pils en een koffie', products)
     expect(result.lines.map(l => l.product.id)).toEqual(['koffie'])
     expect(result.unmatched).toHaveLength(1)
+  })
+})
+
+describe('classifyVoiceError — report real failures, swallow benign pauses', () => {
+  it('returns null when there is no error', () => {
+    expect(classifyVoiceError(undefined)).toBeNull()
+    expect(classifyVoiceError({})).toBeNull()
+  })
+
+  it('swallows benign codes (pause / mic-off / no-match) — report=false', () => {
+    for (const code of ['no-speech', 'aborted', 'no-match']) {
+      expect(classifyVoiceError({ error: code })).toMatchObject({ code, report: false })
+    }
+  })
+
+  it('reports real failures the helper must act on — report=true', () => {
+    for (const code of ['not-allowed', 'service-not-allowed', 'audio-capture', 'network', 'language-not-supported']) {
+      expect(classifyVoiceError({ error: code })).toMatchObject({ code, report: true })
+    }
+  })
+
+  it('carries the engine message through for diagnostics', () => {
+    expect(classifyVoiceError({ error: 'network', message: 'down' }))
+      .toEqual({ code: 'network', message: 'down', report: true })
   })
 })

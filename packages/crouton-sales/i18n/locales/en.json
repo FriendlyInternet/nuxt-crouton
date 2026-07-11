@@ -649,7 +649,11 @@
       "stop": "Stop listening",
       "listening": "Listening…",
       "notUnderstood": "Not understood",
-      "error": "Speech recognition failed"
+      "error": "Speech recognition failed",
+      "errorDenied": "Allow microphone access to order by voice",
+      "errorMic": "No microphone found",
+      "errorNetwork": "Speech recognition unreachable — check the connection",
+      "errorLang": "This browser does not support the recognition language"
     }
   }
 }

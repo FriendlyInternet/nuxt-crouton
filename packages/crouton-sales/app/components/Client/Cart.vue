@@ -182,6 +182,28 @@
         {{ voiceTranscript?.trim() || t('sales.voice.listening') }}
       </p>
 
+      <!-- Short-lived confirmation once listening ends: what the mic understood
+           and the lines it created, so the helper can trust the connection.
+           Fades out on its own (parent auto-clears after a few seconds). -->
+      <Transition
+        enter-active-class="transition duration-200 ease-out"
+        enter-from-class="opacity-0 -translate-y-1"
+        leave-active-class="transition duration-300 ease-in"
+        leave-to-class="opacity-0"
+      >
+        <div
+          v-if="voiceHeard && !voiceListening"
+          class="flex items-start gap-1.5 rounded-md bg-primary/10 px-2 py-1.5 text-xs text-primary"
+        >
+          <UIcon name="i-lucide-ear" class="mt-0.5 shrink-0" />
+          <span class="min-w-0">
+            <span class="text-muted">"{{ voiceHeard.transcript }}"</span>
+            <span aria-hidden="true"> → </span>
+            <span class="font-medium">{{ voiceHeard.summary }}</span>
+          </span>
+        </div>
+      </Transition>
+
       <!-- The order button is the print feedback: it spins while the kitchen
            tickets print and confirms green when every ticket is done. A new
            order always wins — items in the cart yield the button back to
@@ -253,6 +275,9 @@ const props = defineProps<{
   voiceTranscript?: string
   /** Utterance segments that matched no product — dismissible warning rows. */
   voiceUnmatched?: string[]
+  /** Short-lived "heard → created" confirmation after a spoken order; the
+   * parent auto-clears it after a few seconds. */
+  voiceHeard?: { transcript: string, summary: string } | null
 }>()
 
 // Locations represented by at least one cart item — a remark only prints if its

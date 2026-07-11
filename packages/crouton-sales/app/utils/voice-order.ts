@@ -33,6 +33,45 @@ export interface VoiceOrderParseResult<T extends VoiceOrderProduct = VoiceOrderP
   unmatched: string[]
 }
 
+/** Web Speech API `SpeechRecognitionErrorEvent.error` code. Wide union so
+ * callers can branch on the actionable ones. */
+export type VoiceOrderErrorCode =
+  | 'no-speech' | 'aborted' | 'no-match'
+  | 'not-allowed' | 'service-not-allowed'
+  | 'audio-capture' | 'network' | 'language-not-supported'
+  | 'bad-grammar' | (string & {})
+
+/** Recognition-error codes we treat as normal, not failures: the helper paused
+ * (no-speech), tapped the mic off (aborted), or the engine matched nothing
+ * (no-match). A pause during a rush is expected, not an error — these must NOT
+ * raise a "failed" message. (#1429) */
+const BENIGN_VOICE_ERRORS = new Set(['no-speech', 'aborted', 'no-match'])
+
+export interface VoiceErrorClassification {
+  code: VoiceOrderErrorCode
+  message: string
+  /** True for a real failure the helper should be told about (permission /
+   * mic / network / unsupported language); false for a benign pause. */
+  report: boolean
+}
+
+/**
+ * Classify a `SpeechRecognitionErrorEvent` into "log it, and maybe tell the
+ * helper". Pure so the decision is unit-testable; the composable only wires it
+ * to the toast. Returns null when there's no error code to act on.
+ */
+export function classifyVoiceError(
+  event: { error?: string, message?: string } | undefined
+): VoiceErrorClassification | null {
+  const code = event?.error
+  if (!code) return null
+  return {
+    code: code as VoiceOrderErrorCode,
+    message: event?.message || '',
+    report: !BENIGN_VOICE_ERRORS.has(code)
+  }
+}
+
 // Dutch number words. Covers the kassa reality (1–20 + round tens); anything
 // larger arrives as digits from the STT anyway.
 const NUMBER_WORDS: Record<string, number> = {
@@ -129,34 +168,44 @@ function tokenize(raw: string): string[] {
     .filter(t => t && !FILLER_WORDS.has(t))
 }
 
-/** The first numeric token (digit or nl number word) becomes the quantity;
- * every other token stays in the product phrase. */
-function extractQuantity(tokens: string[]): { quantity: number | null, phraseTokens: string[] } {
-  let quantity: number | null = null
-  const phraseTokens: string[] = []
-  for (const token of tokens) {
-    const value = /^\d+$/.test(token) ? Number(token) : NUMBER_WORDS[token]
-    if (quantity === null && value !== undefined && value > 0) {
-      quantity = value
-    }
-    else {
-      phraseTokens.push(token)
-    }
-  }
-  return { quantity, phraseTokens }
+/** Numeric value of a quantity token (digit or nl number word), or null. */
+function quantityValue(token: string): number | null {
+  const value = /^\d+$/.test(token) ? Number(token) : NUMBER_WORDS[token]
+  return value !== undefined && value > 0 ? value : null
 }
 
-/** Split the utterance on "en"/commas, then pull the quantity + product
- * phrase out of each part. Pure-filler parts are dropped. */
+/**
+ * Break the utterance into per-item segments. Boundaries are "en"/commas AND a
+ * new quantity token: helpers often list items with no "en" between them
+ * ("100 frisdrank 100 koffie"), so a quantity appearing after a product phrase
+ * has begun starts the next item. A multi-word title with no number inside it
+ * ("cola zero") stays whole.
+ */
 function segment(utterance: string): Segment[] {
   const segments: Segment[] = []
-  for (const part of utterance.split(/,|\ben\b/)) {
-    const raw = part.trim()
-    if (!raw) continue
-    const { quantity, phraseTokens } = extractQuantity(tokenize(raw))
-    if (!phraseTokens.length && quantity === null) continue // pure filler
-    segments.push({ raw, quantity: quantity ?? 1, phrase: phraseTokens.join(' ') })
+  // Commas act like "en"; tokenize keeps "en" (not a filler word) as a marker.
+  const tokens = tokenize(utterance.replace(/,/g, ' en '))
+
+  let quantity: number | null = null
+  let words: string[] = []
+  const flush = () => {
+    const phraseTokens = words.filter(w => quantityValue(w) === null)
+    if (!words.length && quantity === null) return // pure filler
+    segments.push({ raw: words.join(' '), quantity: quantity ?? 1, phrase: phraseTokens.join(' ') })
+    quantity = null
+    words = []
   }
+
+  for (const token of tokens) {
+    if (token === 'en') { flush(); continue }
+    const value = quantityValue(token)
+    // A quantity that opens a NEW item (we already have one, or a phrase started)
+    // closes the current segment first.
+    if (value !== null && (quantity !== null || words.length)) flush()
+    if (value !== null) quantity = value
+    words.push(token)
+  }
+  flush()
   return segments
 }
 

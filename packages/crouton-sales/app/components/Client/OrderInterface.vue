@@ -141,6 +141,7 @@
               :voice-listening="voiceListening"
               :voice-transcript="voiceTranscript ?? undefined"
               :voice-unmatched="voiceUnmatched"
+              :voice-heard="voiceHeard"
               @update-quantity="updateQuantity"
               @checkout="handleCheckout"
               @update-location-remark="setLocationRemark"
@@ -234,6 +235,7 @@
                   :voice-listening="voiceListening"
                   :voice-transcript="voiceTranscript ?? undefined"
                   :voice-unmatched="voiceUnmatched"
+                  :voice-heard="voiceHeard"
                   @update-quantity="updateQuantity"
                   @checkout="handleCheckout"
                   @update-location-remark="setLocationRemark"
@@ -339,11 +341,14 @@ const {
 // parser couldn't match confidently surface as a dismissible warning in the
 // cart — misheard speech is shown, not guessed.
 const voiceUnmatched = ref<string[]>([])
+// A short-lived "heard → created" confirmation so the helper can see the link
+// between what the mic understood and the lines it added. Auto-clears after a
+// few seconds (refAutoReset), or immediately when the mic starts again.
+const voiceHeard = refAutoReset<{ transcript: string, summary: string } | null>(null, 6000)
 const {
   isSupported: voiceSupported,
   isListening: voiceListening,
   transcript: voiceTranscript,
-  error: voiceError,
   toggle: toggleVoice
 } = useVoiceOrder({
   products: () => (products.value ?? []) as SalesProduct[],
@@ -352,13 +357,28 @@ const {
       for (let i = 0; i < line.quantity; i++) addToCart(line.product)
     }
     voiceUnmatched.value = unmatched
+    // Only show the confirmation when something actually landed in the cart —
+    // a fully-unmatched utterance is covered by the "Niet begrepen" banner.
+    if (lines.length) {
+      voiceHeard.value = {
+        transcript: voiceTranscript.value?.trim() ?? '',
+        summary: lines.map(l => `${l.quantity}× ${l.product.title}`).join(', ')
+      }
+    }
+  },
+  // Reason-specific failure messages — a blanket "mislukt" hides whether the
+  // helper needs to grant the mic, is on an unsupported browser, or the engine
+  // is unreachable. Benign pauses never reach here (composable swallows them).
+  onError(code) {
+    const key = ({
+      'not-allowed': 'sales.voice.errorDenied',
+      'service-not-allowed': 'sales.voice.errorDenied',
+      'audio-capture': 'sales.voice.errorMic',
+      'network': 'sales.voice.errorNetwork',
+      'language-not-supported': 'sales.voice.errorLang'
+    } as Record<string, string>)[code] ?? 'sales.voice.error'
+    notify.error(t(key))
   }
-})
-
-// A recognition error (mic permission, no network for the engine) would
-// otherwise fail silently — the helper just sees the mic stop.
-watch(voiceError, (err) => {
-  if (err) notify.error(t('sales.voice.error'))
 })
 
 // Set the event ID
