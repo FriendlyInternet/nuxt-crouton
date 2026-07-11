@@ -136,6 +136,90 @@ export default defineAppConfig({
           riso: 'riso-badge'
         }
       }
+    },
+
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          riso: "riso-input-base"
+        }
+      }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (the pill/link positioning compounds never fire for a named
+    // variant, and instant state changes fit the theme anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          riso: {
+            list: "riso-tabs-list",
+            trigger: "riso-tabs-trigger",
+            indicator: "riso-tabs-indicator"
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          riso: {
+            base: "riso-check-box",
+            indicator: "riso-check-indicator"
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          riso: {
+            base: "riso-radio-box",
+            indicator: "riso-radio-indicator"
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          riso: {
+            root: "riso-alert",
+            title: "riso-alert-title"
+          }
+        }
+      },
+      compoundVariants: [
+        { color: "primary", variant: "riso", class: { root: "riso-alert--primary" } },
+        { color: "warning", variant: "riso", class: { root: "riso-alert--warning" } },
+        { color: "error", variant: "riso", class: { root: "riso-alert--error" } },
+        { color: "neutral", variant: "riso", class: { root: "riso-alert--neutral" } }
+      ]
     }
   }
 })

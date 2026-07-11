@@ -350,3 +350,203 @@ body.theme-terminal {
   --ui-border-muted: #14522b;
   --ui-border-accented: #33ff66;
 }
+
+/* ============================================
+   TABS (#1393) — screen tabs; active is inverse video
+   ============================================ */
+
+.term-tabs-list {
+  background-color: transparent;
+  border-bottom: 1px solid var(--term-phosphor-dim);
+  gap: 0.25rem;
+  padding: 0;
+}
+
+.term-tabs-trigger {
+  font-family: var(--term-font);
+  font-size: 0.8rem;
+  background-color: transparent;
+  color: var(--term-phosphor-dim);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.5rem 0.7rem;
+  transition: none;
+}
+
+.term-tabs-trigger:hover {
+  color: var(--term-phosphor);
+  text-shadow: var(--term-glow);
+}
+
+.term-tabs-trigger[data-state="active"] {
+  background-color: var(--term-phosphor);
+  color: var(--term-bg);
+  border-color: var(--term-phosphor);
+  box-shadow: var(--term-glow);
+  text-shadow: none;
+}
+
+.term-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — toggle bits on the tube
+   ============================================ */
+
+.term-check-box,
+.term-radio-box {
+  background-color: var(--term-bg-raised);
+  border: 1px solid var(--term-phosphor-dim);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.term-check-indicator {
+  background-color: var(--term-phosphor);
+  color: var(--term-bg);
+  box-shadow: var(--term-glow);
+}
+
+.term-radio-indicator {
+  background-color: var(--term-phosphor);
+  box-shadow: var(--term-glow);
+}
+
+.term-radio-indicator::after {
+  background-color: var(--term-bg);
+  border-radius: 0;
+  width: 40%;
+  height: 40%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a system message
+   ============================================ */
+
+.term-alert {
+  font-family: var(--term-font);
+  background-color: var(--term-bg-raised);
+  color: var(--term-phosphor-soft);
+  border: 1px solid var(--term-phosphor-dim);
+  border-left: 4px solid var(--term-phosphor);
+  border-radius: 0;
+  box-shadow: inset 0 0 24px rgba(51, 255, 102, 0.05);
+}
+
+.term-alert-title {
+  font-family: var(--term-font);
+  color: var(--term-phosphor);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-shadow: var(--term-glow);
+}
+
+.term-alert--primary {
+  border-left-color: var(--term-phosphor);
+}
+
+.term-alert--warning {
+  border-left-color: var(--term-amber);
+}
+
+.term-alert--warning .term-alert-title {
+  color: var(--term-amber);
+  text-shadow: var(--term-glow-amber);
+}
+
+.term-alert--error {
+  border-left-color: var(--term-amber);
+  border-color: var(--term-amber);
+}
+
+.term-alert--error .term-alert-title {
+  color: var(--term-amber);
+  text-shadow: var(--term-glow-amber);
+}
+
+.term-alert--neutral {
+  border-left-color: var(--term-phosphor-dim);
+}
+
+.term-alert--neutral .term-alert-title {
+  color: var(--term-phosphor-soft);
+  text-shadow: none;
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths like the switch)
+   ============================================ */
+
+[data-theme="terminal"] [role="dialog"][data-slot="content"],
+.theme-terminal [role="dialog"][data-slot="content"] {
+  background-color: var(--term-bg);
+  border: 1px solid var(--term-phosphor);
+  border-radius: 0;
+  box-shadow: var(--term-glow), inset 0 0 24px rgba(51, 255, 102, 0.05);
+}
+
+[data-theme="terminal"] [role="dialog"] [data-slot="title"],
+.theme-terminal [role="dialog"] [data-slot="title"] {
+  font-family: var(--term-font);
+  color: var(--term-phosphor);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  text-shadow: var(--term-glow);
+}
+
+[data-theme="terminal"] [data-slot="overlay"],
+.theme-terminal [data-slot="overlay"] {
+  background-color: rgb(4 8 4 / 0.8);
+  backdrop-filter: none;
+}
+
+[data-theme="terminal"] li[data-slot="base"],
+.theme-terminal li[data-slot="base"] {
+  font-family: var(--term-font);
+  background-color: var(--term-bg-raised);
+  border: 1px solid var(--term-phosphor);
+  border-radius: 0;
+  box-shadow: var(--term-glow);
+}
+
+[data-theme="terminal"] li[data-slot="base"] [data-slot="title"],
+.theme-terminal li[data-slot="base"] [data-slot="title"] {
+  font-family: var(--term-font);
+  color: var(--term-phosphor);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+[data-theme="terminal"] nav[data-slot="root"] button,
+.theme-terminal nav[data-slot="root"] button {
+  font-family: var(--term-font);
+  background-color: transparent;
+  color: var(--term-phosphor-dim);
+  border: 1px solid var(--term-phosphor-dim);
+  border-radius: 0;
+  box-shadow: none;
+  transition: none;
+}
+
+[data-theme="terminal"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-terminal nav[data-slot="root"] button:hover:not(:disabled) {
+  color: var(--term-phosphor);
+  border-color: var(--term-phosphor);
+  text-shadow: var(--term-glow);
+}
+
+[data-theme="terminal"] nav[data-slot="root"] button[data-selected],
+.theme-terminal nav[data-slot="root"] button[data-selected] {
+  background-color: var(--term-phosphor);
+  color: var(--term-bg);
+  border-color: var(--term-phosphor);
+  box-shadow: var(--term-glow);
+}

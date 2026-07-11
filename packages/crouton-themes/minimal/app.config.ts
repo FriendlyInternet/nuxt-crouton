@@ -102,6 +102,118 @@ export default defineAppConfig({
           }
         }
       }
+    },
+
+    // #1333-deferred coverage, landed with #1393: selects + textarea reuse the
+    // minimal-input chrome.
+    select: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: "minimal-input-base"
+        }
+      }
+    },
+
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: "minimal-input-base"
+        }
+      }
+    },
+
+    textarea: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            root: "minimal-input",
+            base: "minimal-input-base"
+          }
+        }
+      }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (the pill/link positioning compounds never fire for a named
+    // variant, and instant state changes fit the theme anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            list: "minimal-tabs-list",
+            trigger: "minimal-tabs-trigger",
+            indicator: "minimal-tabs-indicator"
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            base: "minimal-check-box",
+            indicator: "minimal-check-indicator"
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            base: "minimal-radio-box",
+            indicator: "minimal-radio-indicator"
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            root: "minimal-alert",
+            title: "minimal-alert-title"
+          }
+        }
+      },
+      compoundVariants: [
+        { color: "primary", variant: "minimal", class: { root: "minimal-alert--primary" } },
+        { color: "warning", variant: "minimal", class: { root: "minimal-alert--warning" } },
+        { color: "error", variant: "minimal", class: { root: "minimal-alert--error" } },
+        { color: "neutral", variant: "minimal", class: { root: "minimal-alert--neutral" } }
+      ]
     }
   }
 })

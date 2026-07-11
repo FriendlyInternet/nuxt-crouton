@@ -290,3 +290,169 @@ body.theme-riso {
   --ui-border-muted: #e2dbcc;
   --ui-border-accented: #b5ab96;
 }
+
+/* ============================================
+   TABS (#1393) — an overprinted index; active gets the pink pass
+   ============================================ */
+
+.riso-tabs-list {
+  background-color: transparent;
+  border-bottom: 2px solid var(--riso-ink);
+  gap: 0.375rem;
+  padding: 0;
+}
+
+.riso-tabs-trigger {
+  background-color: transparent;
+  color: var(--riso-ink);
+  border: 2px solid transparent;
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
+  font-weight: 700;
+  padding: 0.5rem 1rem;
+  transition: background-color 100ms ease;
+}
+
+.riso-tabs-trigger:hover {
+  background-color: var(--riso-teal-soft);
+}
+
+.riso-tabs-trigger[data-state="active"] {
+  background-color: var(--riso-pink-soft);
+  background-image: var(--riso-grain);
+  color: var(--riso-ink);
+  border-color: var(--riso-ink);
+}
+
+.riso-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — registration marks
+   ============================================ */
+
+.riso-check-box,
+.riso-radio-box {
+  background-color: #fffdf6;
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: 2px 2px 0 var(--riso-pink-soft);
+}
+
+.riso-check-indicator {
+  background-color: var(--riso-pink);
+  color: var(--riso-paper);
+}
+
+.riso-radio-indicator {
+  background-color: #fffdf6;
+}
+
+.riso-radio-indicator::after {
+  background-color: var(--riso-teal);
+  border-radius: 9999px;
+  width: 55%;
+  height: 55%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a misregistered notice card
+   ============================================ */
+
+.riso-alert {
+  background-color: #fffdf6;
+  background-image: var(--riso-grain);
+  color: var(--riso-ink);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: 5px 5px 0 var(--riso-pink-soft), -3px -3px 0 var(--riso-teal-soft);
+}
+
+.riso-alert-title {
+  font-weight: 800;
+}
+
+.riso-alert--primary {
+  background-image: var(--riso-grain), linear-gradient(var(--riso-pink-soft), var(--riso-pink-soft));
+}
+
+.riso-alert--warning {
+  background-image: var(--riso-grain), linear-gradient(var(--riso-pink-soft), var(--riso-pink-soft));
+}
+
+.riso-alert--error {
+  background-color: var(--riso-pink);
+  color: var(--riso-paper);
+  box-shadow: 5px 5px 0 var(--riso-teal-soft);
+}
+
+.riso-alert--neutral {
+  background-image: var(--riso-grain), linear-gradient(var(--riso-teal-soft), var(--riso-teal-soft));
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths like the switch)
+   ============================================ */
+
+[data-theme="riso"] [role="dialog"][data-slot="content"],
+.theme-riso [role="dialog"][data-slot="content"] {
+  background-color: #fffdf6;
+  background-image: var(--riso-grain);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: 8px 8px 0 var(--riso-pink-soft), -4px -4px 0 var(--riso-teal-soft);
+}
+
+[data-theme="riso"] [role="dialog"] [data-slot="title"],
+.theme-riso [role="dialog"] [data-slot="title"] {
+  color: var(--riso-ink);
+  font-weight: 800;
+}
+
+[data-theme="riso"] [data-slot="overlay"],
+.theme-riso [data-slot="overlay"] {
+  background-color: rgb(47 43 39 / 0.45);
+}
+
+[data-theme="riso"] li[data-slot="base"],
+.theme-riso li[data-slot="base"] {
+  background-color: #fffdf6;
+  background-image: var(--riso-grain);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: 4px 4px 0 var(--riso-pink-soft);
+}
+
+[data-theme="riso"] li[data-slot="base"] [data-slot="title"],
+.theme-riso li[data-slot="base"] [data-slot="title"] {
+  color: var(--riso-ink);
+  font-weight: 800;
+}
+
+[data-theme="riso"] nav[data-slot="root"] button,
+.theme-riso nav[data-slot="root"] button {
+  background-color: #fffdf6;
+  color: var(--riso-ink);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: none;
+  font-weight: 700;
+  transition: background-color 100ms ease;
+}
+
+[data-theme="riso"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-riso nav[data-slot="root"] button:hover:not(:disabled) {
+  background-color: var(--riso-teal-soft);
+}
+
+[data-theme="riso"] nav[data-slot="root"] button[data-selected],
+.theme-riso nav[data-slot="root"] button[data-selected] {
+  background-color: var(--riso-pink);
+  color: var(--riso-paper);
+  box-shadow: 2px 2px 0 var(--riso-teal-soft);
+}

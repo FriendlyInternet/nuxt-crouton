@@ -143,6 +143,90 @@ export default defineAppConfig({
           terminal: 'term-badge'
         }
       }
+    },
+
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          terminal: "term-input-base"
+        }
+      }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (the pill/link positioning compounds never fire for a named
+    // variant, and instant state changes fit the theme anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          terminal: {
+            list: "term-tabs-list",
+            trigger: "term-tabs-trigger",
+            indicator: "term-tabs-indicator"
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          terminal: {
+            base: "term-check-box",
+            indicator: "term-check-indicator"
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          terminal: {
+            base: "term-radio-box",
+            indicator: "term-radio-indicator"
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          terminal: {
+            root: "term-alert",
+            title: "term-alert-title"
+          }
+        }
+      },
+      compoundVariants: [
+        { color: "primary", variant: "terminal", class: { root: "term-alert--primary" } },
+        { color: "warning", variant: "terminal", class: { root: "term-alert--warning" } },
+        { color: "error", variant: "terminal", class: { root: "term-alert--error" } },
+        { color: "neutral", variant: "terminal", class: { root: "term-alert--neutral" } }
+      ]
     }
   }
 })

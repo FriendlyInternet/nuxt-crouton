@@ -696,3 +696,185 @@ body.theme-kr11 {
   --ui-border-muted: #e0e0dd;
   --ui-border-accented: #aaa8a3;
 }
+
+/* ============================================
+   TABS (#1393) — a pad row; the active pad reads out on the display
+   ============================================ */
+
+.kr-tabs-list {
+  background-color: var(--kr-chassis);
+  border: 1px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-button-radius);
+  gap: 0.25rem;
+  padding: 0.25rem;
+}
+
+.kr-tabs-trigger {
+  font-family: var(--kr-font);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: calc(var(--kr-button-radius) - 2px);
+  padding: 0.45rem 0.9rem;
+  transition: all var(--kr-transition, 120ms ease);
+}
+
+.kr-tabs-trigger:hover {
+  background-color: var(--kr-pad-cream-pressed);
+}
+
+.kr-tabs-trigger[data-state="active"] {
+  background-color: var(--kr-display-bg);
+  color: var(--kr-display-red);
+  border-color: var(--kr-display-bg);
+  text-shadow: 0 0 6px var(--kr-display-red-glow);
+}
+
+.kr-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — pads with LED confirmation
+   ============================================ */
+
+.kr-check-box,
+.kr-radio-box {
+  background-color: var(--kr-pad-cream);
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 var(--kr-chassis-shadow);
+}
+
+.kr-radio-box {
+  border-radius: 9999px;
+}
+
+.kr-check-indicator {
+  background-color: var(--kr-pad-mint-pressed);
+  color: var(--kr-text-dark);
+  border-radius: 3px;
+}
+
+.kr-radio-indicator {
+  background-color: var(--kr-pad-cream);
+  border-radius: 9999px;
+}
+
+.kr-radio-indicator::after {
+  background-color: var(--kr-display-red);
+  box-shadow: 0 0 5px var(--kr-display-red-glow);
+  border-radius: 9999px;
+  width: 50%;
+  height: 50%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — chassis card, pad-colored by mood
+   ============================================ */
+
+.kr-alert {
+  font-family: var(--kr-font);
+  background-color: var(--kr-chassis-light);
+  color: var(--kr-text-dark);
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: var(--kr-button-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.kr-alert-title {
+  font-weight: 700;
+}
+
+.kr-alert--primary {
+  background-color: var(--kr-pad-mint);
+}
+
+.kr-alert--warning {
+  background-color: var(--kr-led-yellow);
+}
+
+.kr-alert--error {
+  background-color: var(--kr-pad-coral);
+  border-color: var(--kr-pad-coral-rim);
+}
+
+.kr-alert--neutral {
+  background-color: var(--kr-pad-cream);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (switch already themed above; scoped to both activation paths)
+   ============================================ */
+
+[data-theme="kr11"] [role="dialog"][data-slot="content"],
+.theme-kr11 [role="dialog"][data-slot="content"] {
+  background-color: var(--kr-chassis-light);
+  border: 1px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-card-radius, 12px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+[data-theme="kr11"] [role="dialog"] [data-slot="title"],
+.theme-kr11 [role="dialog"] [data-slot="title"] {
+  font-family: var(--kr-font);
+  color: var(--kr-text-dark);
+  font-weight: 700;
+}
+
+[data-theme="kr11"] [data-slot="overlay"],
+.theme-kr11 [data-slot="overlay"] {
+  background-color: rgb(61 61 61 / 0.4);
+}
+
+/* Toast: the LED display speaks. */
+[data-theme="kr11"] li[data-slot="base"],
+.theme-kr11 li[data-slot="base"] {
+  background-color: var(--kr-display-bg);
+  border: 2px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-display-radius, 4px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="kr11"] li[data-slot="base"] [data-slot="title"],
+.theme-kr11 li[data-slot="base"] [data-slot="title"] {
+  color: var(--kr-display-red);
+  text-shadow: 0 0 6px var(--kr-display-red-glow);
+  font-weight: 700;
+}
+
+[data-theme="kr11"] li[data-slot="base"] [data-slot="description"],
+.theme-kr11 li[data-slot="base"] [data-slot="description"] {
+  color: #cfcfcf;
+}
+
+[data-theme="kr11"] nav[data-slot="root"] button,
+.theme-kr11 nav[data-slot="root"] button {
+  font-family: var(--kr-font);
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 var(--kr-chassis-shadow);
+  font-weight: 600;
+  transition: background-color 100ms ease;
+}
+
+[data-theme="kr11"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-kr11 nav[data-slot="root"] button:hover:not(:disabled) {
+  background-color: var(--kr-pad-cream-pressed);
+}
+
+[data-theme="kr11"] nav[data-slot="root"] button[data-selected],
+.theme-kr11 nav[data-slot="root"] button[data-selected] {
+  background-color: var(--kr-display-bg);
+  color: var(--kr-display-red);
+  border-color: var(--kr-display-bg);
+  text-shadow: 0 0 6px var(--kr-display-red-glow);
+}

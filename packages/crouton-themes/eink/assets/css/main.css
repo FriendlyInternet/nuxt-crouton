@@ -258,3 +258,182 @@ body.theme-eink {
   --ui-border-muted: #dedbd4;
   --ui-border-accented: #1c1c1c;
 }
+
+/* ============================================
+   TABS (#1393) — chapter heads; the open one is underlined in ink
+   ============================================ */
+
+.eink-tabs-list {
+  background-color: transparent;
+  border-bottom: 1px solid var(--eink-hairline);
+  gap: 1rem;
+  padding: 0;
+}
+
+.eink-tabs-trigger {
+  font-family: var(--eink-serif);
+  background-color: transparent;
+  color: var(--eink-gray);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.5rem 0.25rem;
+  transition: none;
+}
+
+.eink-tabs-trigger:hover {
+  color: var(--eink-ink);
+}
+
+.eink-tabs-trigger[data-state="active"] {
+  color: var(--eink-ink);
+  border-bottom-color: var(--eink-ink);
+  font-weight: 700;
+}
+
+.eink-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — ballot boxes
+   ============================================ */
+
+.eink-check-box,
+.eink-radio-box {
+  background-color: var(--eink-paper);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.eink-radio-box {
+  border-radius: 9999px;
+}
+
+.eink-check-indicator {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+
+.eink-radio-indicator {
+  background-color: var(--eink-paper);
+  border-radius: 9999px;
+}
+
+.eink-radio-indicator::after {
+  background-color: var(--eink-ink);
+  border-radius: 9999px;
+  width: 55%;
+  height: 55%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a printed notice; errors are inverse
+   ============================================ */
+
+.eink-alert {
+  background-color: var(--eink-paper);
+  color: var(--eink-ink);
+  border-top: 3px double var(--eink-ink);
+  border-bottom: 3px double var(--eink-ink);
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.eink-alert-title {
+  font-family: var(--eink-serif);
+  font-weight: 700;
+}
+
+.eink-alert--primary {
+  background-color: var(--eink-paper);
+}
+
+.eink-alert--warning {
+  border-top-style: solid;
+  border-bottom-style: solid;
+  border-top-width: 1px;
+  border-bottom-width: 4px;
+  border-bottom-style: double;
+}
+
+.eink-alert--error {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+
+.eink-alert--neutral {
+  border-top: 1px solid var(--eink-hairline);
+  border-bottom: 1px solid var(--eink-hairline);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths like the switch)
+   ============================================ */
+
+[data-theme="eink"] [role="dialog"][data-slot="content"],
+.theme-eink [role="dialog"][data-slot="content"] {
+  background-color: var(--eink-paper);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  box-shadow: none;
+  outline: 1px solid var(--eink-hairline);
+  outline-offset: 4px;
+}
+
+[data-theme="eink"] [role="dialog"] [data-slot="title"],
+.theme-eink [role="dialog"] [data-slot="title"] {
+  font-family: var(--eink-serif);
+  color: var(--eink-ink);
+  font-weight: 700;
+}
+
+[data-theme="eink"] [data-slot="overlay"],
+.theme-eink [data-slot="overlay"] {
+  background-color: rgb(28 28 28 / 0.3);
+  backdrop-filter: none;
+}
+
+[data-theme="eink"] li[data-slot="base"],
+.theme-eink li[data-slot="base"] {
+  background-color: var(--eink-paper);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-theme="eink"] li[data-slot="base"] [data-slot="title"],
+.theme-eink li[data-slot="base"] [data-slot="title"] {
+  font-family: var(--eink-serif);
+  color: var(--eink-ink);
+  font-weight: 700;
+}
+
+[data-theme="eink"] nav[data-slot="root"] button,
+.theme-eink nav[data-slot="root"] button {
+  background-color: var(--eink-paper);
+  color: var(--eink-ink);
+  border: 1px solid var(--eink-hairline);
+  border-radius: 0;
+  box-shadow: none;
+  transition: none;
+}
+
+[data-theme="eink"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-eink nav[data-slot="root"] button:hover:not(:disabled) {
+  border-color: var(--eink-ink);
+}
+
+[data-theme="eink"] nav[data-slot="root"] button[data-selected],
+.theme-eink nav[data-slot="root"] button[data-selected] {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+  border-color: var(--eink-ink);
+}

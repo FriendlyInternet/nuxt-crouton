@@ -476,12 +476,54 @@ playground's `/crouton` page is the check: a generated-CRUD-shaped composition
 (tabs, table, pagination, form with select/textarea/switch, edit modal) where
 every theme must look intentional — themed chrome, calm table.
 
-Coverage status: all 8 post-#1304 themes (brutalist, mtv, terminal, braun,
-gameboy, riso, eink, blueprint) register `select` + `textarea` variants reusing
-their input classes. The 4 originals (ko, kr11, minimal, blackandwhite) pass on
-select/textarea for now (their runtime configs reset those to Nuxt UI defaults);
-UTabs/UPagination/UTable are a deliberate pass everywhere — they read as data
-surfaces.
+Coverage status (#1393, Themes 2.1): **11 of 12 themes cover the full
+interaction-chrome set** — button, input, select, selectMenu, textarea, card,
+badge, tabs, checkbox, radioGroup, alert (named variants) plus switch,
+modal/slideover, toast, pagination (ambient). The exception is
+**blackandwhite: a documented deliberate pass** — bw's design IS Nuxt UI's
+standard variants under a strict neutral palette, so only buttons carry named
+bw-* variants and everything else stays stock. UTable stays a deliberate pass
+everywhere — it reads as a data surface.
+
+## Component coverage mechanics (#1393)
+
+Two mechanisms, chosen by whether the component has a `variant` dimension:
+
+1. **Named variants** (tabs, checkbox, radioGroup, alert, select, selectMenu,
+   textarea — plus the original button/input/card/badge set): register the
+   theme-named variant in the layer app.config with marker classes per slot,
+   wire the shared subtractive replacer on those slots, add the scalar
+   `defaultVariants.variant` entry in `themes/configs/themeConfigs.ts`.
+   Class naming is uniform across themes: `<p>-tabs-{list,trigger,indicator}`,
+   `<p>-check-{box,indicator}`, `<p>-radio-{box,indicator}`,
+   `<p>-alert(-title)` + `<p>-alert--{primary,warning,error,neutral}`.
+   - **Tabs**: the sliding indicator is hidden (`display:none`) and active
+     state lives on `[data-state="active"]` triggers — the pill/link
+     positioning compoundVariants never fire for a named variant, and instant
+     snaps fit the themes anyway.
+   - **Alert**: color styling lives in compoundVariants keyed to the STANDARD
+     variants, so a named variant starts blank — each theme supplies its own
+     `{ color, variant }` compounds.
+   - **Checkbox/radio**: the `color` dimension fires regardless of variant
+     (`indicator: bg-primary` etc.) — that's why the indicator slot carries a
+     marker class too, so the replacer can strip it.
+
+2. **Ambient theme-scoped CSS** (USwitch, UModal/USlideover, UToast,
+   UPagination — no `variant` dimension, so the marker-gated replacer can
+   never fire): selectors scoped to BOTH activation paths —
+   `[data-theme="x"] …` (app presets) and `.theme-x …` (useThemeSwitcher body
+   class). Verified DOM hooks:
+   - Switch: `button[role="switch"]` (+ `[data-state="checked"]`, thumb `> span`)
+   - Dialogs (modal + slideover share chrome): `[role="dialog"][data-slot="content"]`,
+     title `[role="dialog"] [data-slot="title"]`, plus `[data-slot="overlay"]`
+   - Toast: `li[data-slot="base"]` — NOT `data-slot="root"`; the root slot's
+     classes land on an `li` whose data-slot attr is `base`
+   - Pagination: `nav[data-slot="root"] button`, current page
+     `button[data-selected]` (buttons get explicit outline/solid variants from
+     Pagination props, so named variants can't reach them)
+
+   Toasts require the app to be wrapped in `<UApp>` (hosts the Toaster) — the
+   playground got this in #1393.
 
 ## Nuxt UI Theming Pattern
 

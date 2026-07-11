@@ -92,6 +92,17 @@ export default defineAppConfig({
       }
     },
 
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          brutalist: 'brutalist-input-base'
+        }
+      }
+    },
+
     textarea: {
       slots: {
         root: subtractThemeDefaults,
@@ -145,6 +156,80 @@ export default defineAppConfig({
           brutalist: 'brutalist-badge'
         }
       }
+    },
+
+    // #1393 component coverage. Tabs: the sliding indicator is hidden (CSS)
+    // and active state lives on the trigger — brutalist states snap, they
+    // don't glide. The positioning compoundVariants only fire for pill/link,
+    // so a named variant must own indicator geometry anyway.
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          brutalist: {
+            list: 'brutalist-tabs-list',
+            trigger: 'brutalist-tabs-trigger',
+            indicator: 'brutalist-tabs-indicator'
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          brutalist: {
+            base: 'brutalist-check-box',
+            indicator: 'brutalist-check-indicator'
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          brutalist: {
+            base: 'brutalist-radio-box',
+            indicator: 'brutalist-radio-indicator'
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          brutalist: {
+            root: 'brutalist-alert',
+            title: 'brutalist-alert-title'
+          }
+        }
+      },
+      compoundVariants: [
+        { color: 'primary', variant: 'brutalist', class: { root: 'brutalist-alert--primary' } },
+        { color: 'warning', variant: 'brutalist', class: { root: 'brutalist-alert--primary' } },
+        { color: 'error', variant: 'brutalist', class: { root: 'brutalist-alert--error' } },
+        { color: 'neutral', variant: 'brutalist', class: { root: 'brutalist-alert--neutral' } }
+      ]
     }
   }
 })

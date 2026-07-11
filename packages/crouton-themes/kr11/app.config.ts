@@ -117,6 +117,118 @@ export default defineAppConfig({
           kr11: 'kr-badge'
         }
       }
+    },
+
+    // #1333-deferred coverage, landed with #1393: selects + textarea reuse the
+    // kr-input chrome.
+    select: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          kr11: "kr-input-base"
+        }
+      }
+    },
+
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          kr11: "kr-input-base"
+        }
+      }
+    },
+
+    textarea: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          kr11: {
+            root: "kr-input",
+            base: "kr-input-base"
+          }
+        }
+      }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (the pill/link positioning compounds never fire for a named
+    // variant, and instant state changes fit the theme anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          kr11: {
+            list: "kr-tabs-list",
+            trigger: "kr-tabs-trigger",
+            indicator: "kr-tabs-indicator"
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          kr11: {
+            base: "kr-check-box",
+            indicator: "kr-check-indicator"
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          kr11: {
+            base: "kr-radio-box",
+            indicator: "kr-radio-indicator"
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          kr11: {
+            root: "kr-alert",
+            title: "kr-alert-title"
+          }
+        }
+      },
+      compoundVariants: [
+        { color: "primary", variant: "kr11", class: { root: "kr-alert--primary" } },
+        { color: "warning", variant: "kr11", class: { root: "kr-alert--warning" } },
+        { color: "error", variant: "kr11", class: { root: "kr-alert--error" } },
+        { color: "neutral", variant: "kr11", class: { root: "kr-alert--neutral" } }
+      ]
     }
   }
 })
