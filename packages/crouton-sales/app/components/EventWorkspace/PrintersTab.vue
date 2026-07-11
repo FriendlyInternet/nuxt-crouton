@@ -90,31 +90,8 @@ function openPrinterPreview(printer: any) {
   selectedPrinter.value = printer
   showPrinterPreview.value = true
 }
-
-// Load receipt settings for preview modal
-interface ReceiptSettings {
-  special_instructions_title: string
-  staff_order_header: string
-  footer_text: string
-}
-
-const receiptSettings = ref<ReceiptSettings>({
-  special_instructions_title: 'SPECIAL INSTRUCTIONS:',
-  staff_order_header: '*** STAFF ORDER ***',
-  footer_text: 'Thank you for your order!'
-})
-
-onMounted(async () => {
-  try {
-    const data = await $fetch<ReceiptSettings>(
-      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/receipt-settings`
-    )
-    receiptSettings.value = data
-  }
-  catch (err) {
-    console.error('Error loading receipt settings:', err)
-  }
-})
+// Receipt text now resolves server-side inside the preview endpoint (#1504) —
+// the modal fetches its own data, so this tab no longer loads receipt settings.
 </script>
 
 <template>
@@ -193,10 +170,11 @@ onMounted(async () => {
     </div>
 
     <SalesSettingsPrintPreviewModal
-      v-model="showPrinterPreview"
-      :printer="selectedPrinter"
-      :test-print-api-base="`/api/teams/${teamParam}/sales-printers`"
-      :receipt-settings="receiptSettings"
+      v-if="selectedPrinter"
+      v-model:open="showPrinterPreview"
+      :printer-id="selectedPrinter.id"
+      :event-id="props.event.id"
+      :team-param="teamParam"
     />
   </div>
 </template>
