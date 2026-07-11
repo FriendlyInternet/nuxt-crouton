@@ -59,6 +59,7 @@ export default defineNuxtConfig({
 | `app/components/Collection.vue` | Multi-layout display (table, list, grid, tree, kanban) |
 | `app/components/CollectionSkeleton.vue` | `CroutonCollectionSkeleton` — layout-aware shimmer (table/list/grid) used as the `<Suspense>` fallback in `CollectionViewer` so the viewer reveals the populated result at once instead of flashing a loader + filling in row-by-row |
 | `app/components/Form.vue` | Main CRUD form handler with nested modal support |
+| `app/utils/init-form-state.ts` | `initFormState(defaultValue, activeItem)` — builds an edit form's initial state, coercing a nullable column's loaded `null` back to the form default so it never reaches the narrow client schema and silently blocks submit (#1498; the hand-written form analog of the generator's #1415 coercion). Used by `RedirectsForm` + `crouton-sales`'s `useSalesCollectionForm`. |
 | `app/components/Detail.vue` | `CroutonDetail` — Generic detail view using display config and runtime field metadata |
 | `app/components/DefaultCard.vue` | `CroutonDefaultCard` — Display-aware card (title/image/badge from display config) |
 | `app/components/ItemCardMini.vue` | `CroutonItemCardMini` — Display-aware mini card for references and lists |
