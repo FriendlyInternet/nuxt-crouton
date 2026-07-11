@@ -228,17 +228,20 @@ watch(open, (isOpen) => {
             v-else-if="icons.length"
             class="grid grid-cols-8 gap-1 max-h-[200px] overflow-y-auto"
           >
-            <button
+            <!-- UButton cells (not raw buttons) so themes reach them (#1410) -->
+            <UButton
               v-for="icon in icons"
               :key="icon"
-              type="button"
-              class="flex items-center justify-center size-8 rounded-md hover:bg-elevated transition-colors"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              square
+              :icon="toIconClass(icon)"
+              class="justify-center size-8 p-0"
               :class="{ 'bg-primary/10 ring-1 ring-primary': toIconClass(icon) === modelValue }"
               :title="icon"
               @click="selectIcon(icon)"
-            >
-              <UIcon :name="toIconClass(icon)" class="size-4" />
-            </button>
+            />
           </div>
 
           <!-- Empty state -->

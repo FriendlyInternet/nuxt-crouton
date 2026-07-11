@@ -94,7 +94,9 @@ const hasValue = computed(() => !!props.modelValue && props.modelValue !== '')
 
     <template #content>
       <div class="p-3 w-64">
-        <!-- Preset swatches -->
+        <!-- Preset swatches: deliberately a custom widget — a color-swatch
+             grid has no Nuxt UI equivalent; selection uses semantic primary
+             tokens so themes still reach it (#1410) -->
         <div class="grid grid-cols-8 gap-1.5">
           <button
             v-for="hex in presetColors"
@@ -109,15 +111,17 @@ const hasValue = computed(() => !!props.modelValue && props.modelValue !== '')
 
         <USeparator class="my-3" />
 
-        <!-- Custom toggle -->
-        <button
-          type="button"
-          class="flex items-center gap-2 text-sm text-muted hover:text-highlighted transition-colors w-full mb-2"
+        <!-- Custom toggle — UButton so themes reach it (#1410) -->
+        <UButton
+          color="neutral"
+          variant="ghost"
+          size="sm"
+          :icon="showCustom ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'"
+          class="w-full justify-start mb-2 text-sm text-muted hover:text-highlighted"
           @click="showCustom = !showCustom"
         >
-          <UIcon :name="showCustom ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="size-4" />
           Custom color
-        </button>
+        </UButton>
 
         <!-- Custom picker -->
         <div v-if="showCustom" class="mb-3">
