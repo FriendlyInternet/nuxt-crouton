@@ -60,6 +60,16 @@ async function load() {
 onMounted(load)
 watch(() => props.attrs.eventScope, load)
 
+// Live beside the kassa (Data pane): checkout emits the salesOrders mutation
+// hook, so a fresh order re-pivots the table — otherwise it only loaded on
+// mount while the summary tiles above it poll. Harmless on public CMS pages
+// (no admin mutations fire there).
+const unhookMutation = useNuxtApp().hook('crouton:mutation', (payload: any) => {
+  if (payload.collection !== 'salesOrders') return
+  load()
+})
+onUnmounted(unhookMutation)
+
 function fmt(n: number) {
   return measure.value === 'revenue' ? n.toFixed(2) : String(Math.round(n))
 }

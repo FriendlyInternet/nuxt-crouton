@@ -32,6 +32,15 @@ const hasCharts = computed(() => hasApp('charts'))
 // {teamId} in the apiPath itself; per-event scope goes as a query param.
 const revenueKind = SALES_CHART_KINDS['revenue-by-day']!
 const chartQuery = computed(() => ({ eventId: props.event.id }))
+
+// Checkout (right beside this pane) emits the salesOrders mutation hook —
+// remount the chart widget so it refetches; it has no refresh API of its own.
+// The matrix below handles the same hook internally.
+const chartRefreshKey = ref(0)
+const unhookMutation = useNuxtApp().hook('crouton:mutation', (payload: any) => {
+  if (payload.collection === 'salesOrders') chartRefreshKey.value++
+})
+onUnmounted(unhookMutation)
 </script>
 
 <template>
@@ -46,6 +55,7 @@ const chartQuery = computed(() => ({ eventId: props.event.id }))
     <!-- Revenue over time — only with the charts package installed -->
     <div v-if="hasCharts" class="rounded-2xl border border-default bg-elevated/40 p-4">
       <LazyCroutonChartsWidget
+        :key="chartRefreshKey"
         :api-path="revenueKind.apiPath"
         :type="revenueKind.type"
         :x-field="revenueKind.xField"
