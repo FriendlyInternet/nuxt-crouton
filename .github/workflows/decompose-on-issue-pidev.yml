@@ -88,6 +88,7 @@ jobs:
     if: |
       (github.event_name == 'workflow_dispatch' && (inputs.harness == 'pi' || vars.AGENT_HARNESS == 'pi')) ||
       (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-pi') ||
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate-hard') ||
       (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
       (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate'))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
@@ -166,8 +167,11 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.PI_PROVIDER_KEY }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          PI_MODEL: ${{ inputs.model || 'glm-5.2' }}
-          PI_PROVIDER: ${{ inputs.provider || 'zai' }}
+          # delegate-hard escalates this one leaf to the metered Claude lane (#1496); the
+          # label check is falsy on dispatch/other-label runs so they keep the zai/glm-5.2
+          # default. Opus stays a deliberate manual dispatch — never wired to a label.
+          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-sonnet-5') || 'glm-5.2' }}
+          PI_PROVIDER: ${{ inputs.provider || (github.event.label.name == 'delegate-hard' && 'anthropic') || 'zai' }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
         run: |
           set -uo pipefail
@@ -279,7 +283,7 @@ jobs:
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`delegate-pi\` label_\n\n${what}`,
+                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
                 })
               }
               return
@@ -322,7 +326,7 @@ jobs:
               if (process.env.TRIGGER === 'issues') {
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`delegate-pi\` label_\n\nresumed the existing tree → ${childDeliverable}`,
+                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
                 })
               }
               return
