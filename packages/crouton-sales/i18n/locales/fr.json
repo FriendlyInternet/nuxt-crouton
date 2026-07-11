@@ -624,7 +624,7 @@
         "routerLegacy": "Routeur plus ancien sans ticket de couplage ? Suivez les étapes EVENT_ID dans print-server/README.md.",
         "routerVerify": "Terminé quand ce point devient vert — le routeur interroge sous ~30 secondes.",
         "drainerIntro": "Un appareil sur place (Pi / mini-PC) exécute lui-même l'application et imprime directement vers les imprimantes — aucune configuration du routeur.",
-        "drainerEnv": "Démarrez l'application sur l'appareil avec le drainer d'impression activé :",
+        "drainerEnv": "Une seule fois sur l'appareil, dans le service qui démarre l'app (systemd ou .env — pas par événement), activez le drainer :",
         "drainerPrinters": "Ajoutez chaque imprimante sous Imprimantes avec son IP LAN et le port 9100 — l'appareil doit atteindre les imprimantes sur son réseau.",
         "drainerFlip": "Laissez ce flux d'impression sur « Appareil local » — le flux routeur est le défaut, et l'appareil ne sert que les événements réglés sur Appareil local.",
         "drainerVerify": "Terminé quand ce point devient vert — l'appareil se manifeste sous ~30 secondes."

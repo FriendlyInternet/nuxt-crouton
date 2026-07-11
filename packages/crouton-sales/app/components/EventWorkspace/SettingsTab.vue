@@ -323,7 +323,7 @@ const printTransportSetup = computed(() => [
     intro: t('sales.printFlow.setup.drainerIntro', 'A device at the venue (Pi / mini-PC) runs the app itself and prints straight to the printers — no router config involved.'),
     steps: [
       {
-        text: t('sales.printFlow.setup.drainerEnv', 'Start the app on the venue device with the print drainer enabled:'),
+        text: t('sales.printFlow.setup.drainerEnv', 'One-time on the venue device, in the service that starts the app (systemd or .env — not per event), enable the drainer:'),
         value: 'CROUTON_PRINTING_DRAINER=1'
       },
       {
