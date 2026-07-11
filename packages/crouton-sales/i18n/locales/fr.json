@@ -217,6 +217,8 @@
       "none": "Aucun",
       "active": "Actif",
       "inactive": "Inactif",
+      "on": "Activé",
+      "off": "Désactivé",
       "confirmDelete": "Confirmer la suppression"
     },
     "block": {
@@ -389,7 +391,8 @@
       "driverBrowserHelp": "Imprimer via la boîte de dialogue d’impression de l’appareil, depuis un écran passerelle.",
       "testPrint": "Impression test",
       "testPrintQueued": "Ticket de test en file — regardez l'imprimante",
-      "testPrintError": "Échec de l'impression test"
+      "testPrintError": "Échec de l'impression test",
+      "preview": "Aperçu"
     },
     "helperLogin": {
       "title": "Connexion bénévole",
@@ -440,6 +443,8 @@
       "location": "Lieu",
       "status": "Statut",
       "previewTitle": "Aperçu d'impression",
+      "previewFailed": "Impossible de charger l'aperçu",
+      "previewNote": "Comme l'imprimante l'imprime · avec vos réglages enregistrés",
       "printerInformation": "Informations sur l'imprimante",
       "name": "Nom",
       "ipAddress": "Adresse IP",

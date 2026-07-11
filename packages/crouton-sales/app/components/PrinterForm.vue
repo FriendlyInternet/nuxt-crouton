@@ -121,6 +121,32 @@
               </div>
             </UFormField>
           </div>
+
+          <!-- Preview + Testprint (#1504/#1391) — their own roomy row right under
+               the toggles block. Both act on the SAVED printer, so update-only:
+               Voorbeeld renders what this station prints; Testprint pushes a real
+               ticket through the flow. -->
+          <div v-if="action === 'update' && state.id" class="grid grid-cols-2 gap-2">
+            <UButton
+              block
+              variant="outline"
+              color="primary"
+              icon="i-lucide-eye"
+              @click="previewOpen = true"
+            >
+              {{ t('sales.form.preview', 'Voorbeeld') }}
+            </UButton>
+            <UButton
+              block
+              variant="outline"
+              color="neutral"
+              icon="i-lucide-printer-check"
+              :loading="testPrinting"
+              @click="handleTestPrint"
+            >
+              {{ t('sales.form.testPrint', 'Testprint') }}
+            </UButton>
+          </div>
         </div>
       </template>
 
@@ -145,7 +171,8 @@
         </UAlert>
 
         <!-- Delete pill left, save stretches over the rest (items-stretch keeps
-             the pill the same height as the save button). -->
+             the pill the same height as the save button). Testprint + Voorbeeld
+             moved up under the toggles block (#1504). -->
         <div class="flex items-stretch gap-2">
           <CroutonDeleteButton
             v-if="action === 'update' && state.id"
@@ -153,19 +180,6 @@
             :loading="deleting"
             @confirm="handleDelete"
           />
-          <!-- Testprint (#1391): a tiny ticket through the REAL print flow
-               (queue → the event's transport → paper) — proves the whole
-               chain, not just this form's values. Saved printers only. -->
-          <UButton
-            v-if="action === 'update' && state.id"
-            variant="outline"
-            color="neutral"
-            icon="i-lucide-printer-check"
-            :loading="testPrinting"
-            @click="handleTestPrint"
-          >
-            {{ t('sales.form.testPrint', 'Testprint') }}
-          </UButton>
           <CroutonFormActionButton
             class="flex-1"
             :action="action"
@@ -178,6 +192,15 @@
       </template>
     </CroutonFormLayout>
   </UForm>
+
+  <!-- Receipt preview (#1504): renders what this station actually prints. -->
+  <SalesSettingsPrintPreviewModal
+    v-if="action === 'update' && state.id && state.eventId"
+    v-model:open="previewOpen"
+    :printer-id="state.id"
+    :event-id="state.eventId"
+    :team-param="String(route.params.team)"
+  />
 </template>
 
 <script setup lang="ts">
@@ -303,6 +326,9 @@ const handleSubmit = async () => {
 const notify = useNotify()
 const route = useRoute()
 const testPrinting = ref(false)
+
+// Receipt preview modal (#1504) — renders what this saved printer prints.
+const previewOpen = ref(false)
 
 async function handleTestPrint() {
   if (!state.value.id || !state.value.eventId) return

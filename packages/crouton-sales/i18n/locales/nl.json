@@ -218,6 +218,8 @@
       "none": "Geen",
       "active": "Actief",
       "inactive": "Inactief",
+      "on": "Aan",
+      "off": "Uit",
       "confirmDelete": "Bevestig verwijderen"
     },
     "block": {
@@ -390,7 +392,8 @@
       "driverBrowserHelp": "Afdrukken via het printvenster van het toestel, vanaf een print-bridge-scherm.",
       "testPrint": "Testprint",
       "testPrintQueued": "Testticket in de wachtrij — kijk naar de printer",
-      "testPrintError": "Testprint mislukt"
+      "testPrintError": "Testprint mislukt",
+      "preview": "Voorbeeld"
     },
     "helperLogin": {
       "title": "Helper-login",
@@ -441,6 +444,8 @@
       "location": "Locatie",
       "status": "Status",
       "previewTitle": "Printvoorbeeld",
+      "previewFailed": "Kon voorbeeld niet laden",
+      "previewNote": "Zoals de printer hem afdrukt · met je opgeslagen instellingen",
       "printerInformation": "Printerinformatie",
       "name": "Naam",
       "ipAddress": "IP-adres",

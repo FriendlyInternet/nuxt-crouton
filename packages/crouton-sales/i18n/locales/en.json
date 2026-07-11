@@ -218,6 +218,8 @@
       "none": "None",
       "active": "Active",
       "inactive": "Inactive",
+      "on": "On",
+      "off": "Off",
       "confirmDelete": "Confirm delete"
     },
     "block": {
@@ -390,7 +392,8 @@
       "driverBrowserHelp": "Print via the device print dialog from a print-bridge screen.",
       "testPrint": "Test print",
       "testPrintQueued": "Test ticket queued — watch the printer",
-      "testPrintError": "Test print failed"
+      "testPrintError": "Test print failed",
+      "preview": "Preview"
     },
     "helperLogin": {
       "title": "Helper Login",
@@ -441,6 +444,8 @@
       "location": "Location",
       "status": "Status",
       "previewTitle": "Print Preview",
+      "previewFailed": "Couldn't load preview",
+      "previewNote": "As the printer prints it · with your saved settings",
       "printerInformation": "Printer Information",
       "name": "Name",
       "ipAddress": "IP Address",
