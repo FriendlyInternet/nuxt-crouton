@@ -57,12 +57,26 @@
       <span v-else class="text-gray-400">—</span>
     </template>
     <template #code-cell="{ row }">
-      <CroutonEditorPreview :content="row.original.code" mode="thumbnail" />
+      <div class="flex items-center justify-between gap-2">
+        <CroutonEditorPreview :content="row.original.code" mode="thumbnail" />
+        <UTooltip :text="copied && copiedIndex === row.index ? 'Copied!' : 'Copy snippet code'">
+          <UButton
+            :icon="copied && copiedIndex === row.index ? 'i-lucide-check' : 'i-lucide-copy'"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            class="shrink-0"
+            :aria-label="copied && copiedIndex === row.index ? 'Copied' : 'Copy snippet code'"
+            @click="onCopy(row)"
+          />
+        </UTooltip>
+      </div>
     </template>
   </CroutonCollection>
 </template>
 
 <script setup lang="ts">
+import { useClipboard } from '@vueuse/core'
 import useMainSnippets from '../composables/useMainSnippets'
 
 const props = withDefaults(defineProps<{
@@ -77,4 +91,15 @@ const { items: snippets, pending } = await useCollectionQuery(
   'mainSnippets'
 )
 
+// Copy-to-clipboard for a snippet's raw code. `useClipboard` exposes a single
+// shared `copied` ref, so we track which row triggered it to scope the feedback.
+const { copy, copied } = useClipboard({ copiedDuring: 2000 })
+const copiedIndex = ref<number | null>(null)
+
+function onCopy(row: { index: number, original: { code?: string | null } }) {
+  const code = row.original?.code
+  if (!code) return
+  copiedIndex.value = row.index
+  void copy(code)
+}
 </script>
