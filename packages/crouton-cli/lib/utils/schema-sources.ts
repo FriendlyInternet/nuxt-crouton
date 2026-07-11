@@ -22,6 +22,13 @@ export interface ResolveSchemaSourcesOptions {
   dialect?: string
 }
 
+export interface SchemaGraph {
+  /** Ordered, deduped, absolute schema-source paths (the NuxtHub glob set). */
+  paths: string[]
+  /** Declared `extends` specs that could not be resolved to a layer dir. */
+  unresolved: string[]
+}
+
 const NUXT_CONFIG_NAMES = ['nuxt.config.ts', 'nuxt.config.js', 'nuxt.config.mjs']
 
 /** Walk up from `startDir` to the nearest dir holding a nuxt.config.* (the layer root). */
@@ -89,24 +96,28 @@ function resolveLayerDir(spec: string, fromDir: string): string | null {
 }
 
 /**
- * Resolve the ordered, deduped, absolute list of schema-source files an app's
- * layer graph contributes — the same set NuxtHub globs, assembled without Nuxt.
+ * Resolve the app's schema graph SYNCHRONOUSLY — the ordered, deduped, absolute
+ * schema-source paths NuxtHub would glob, plus any declared `extends` specs that
+ * could not be resolved. The body is sync (fs + magicast, no I/O await) so the
+ * generated drizzle.config.ts can call it without top-level await (drizzle-kit's
+ * esbuild config loader is CJS and rejects TLA).
  */
-export async function resolveSchemaSources(
+export function resolveSchemaGraph(
   appDir: string,
-  options: ResolveSchemaSourcesOptions = {},
-): Promise<string[]> {
+  options: ResolveSchemaSourcesOptions = {}
+): SchemaGraph {
   const dialect = options.dialect ?? 'sqlite'
   const visitedDirs = new Set<string>() // realpath'd layer roots — first-wins
   const seenFiles = new Set<string>() // realpath'd file paths — dedup
   const ordered: string[] = []
+  const unresolved: string[] = []
 
   const collectGlobs = (layerDir: string): void => {
     const dbDir = join(layerDir, 'server', 'db')
     if (!existsSync(dbDir)) return
     const candidates: string[] = [
       join(dbDir, 'schema.ts'),
-      join(dbDir, `schema.${dialect}.ts`),
+      join(dbDir, `schema.${dialect}.ts`)
     ]
     const schemaSubdir = join(dbDir, 'schema')
     if (existsSync(schemaSubdir)) {
@@ -159,10 +170,30 @@ export async function resolveSchemaSources(
       for (const spec of readExtends(cfg)) {
         const target = resolveLayerDir(spec, real)
         if (target) visitLayer(target)
+        else if (!unresolved.includes(spec)) unresolved.push(spec)
       }
     }
   }
 
   visitLayer(appDir)
-  return ordered
+  return { paths: ordered, unresolved }
+}
+
+/**
+ * Resolve the ordered, deduped, absolute list of schema-source files an app's
+ * layer graph contributes — the same set NuxtHub globs, assembled without Nuxt.
+ */
+export async function resolveSchemaSources(
+  appDir: string,
+  options: ResolveSchemaSourcesOptions = {}
+): Promise<string[]> {
+  return resolveSchemaGraph(appDir, options).paths
+}
+
+/** Synchronous variant of {@link resolveSchemaSources} — for the CJS drizzle config. */
+export function resolveSchemaSourcesSync(
+  appDir: string,
+  options: ResolveSchemaSourcesOptions = {}
+): string[] {
+  return resolveSchemaGraph(appDir, options).paths
 }

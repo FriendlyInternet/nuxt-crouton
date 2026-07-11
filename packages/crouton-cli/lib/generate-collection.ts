@@ -3,9 +3,8 @@
 
 import fsp from 'node:fs/promises'
 import path from 'node:path'
-import { exec, execSync } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { promisify } from 'node:util'
 import { loadConfig } from 'c12'
 
 // Import utilities
@@ -16,6 +15,7 @@ import { detectRequiredDependencies, displayMissingDependencies, ensureLayersExt
 import { setupCroutonCssSource, displayManualCssSetupInstructions } from './utils/css-setup.ts'
 import { syncFrameworkPackages, addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-config.ts'
 import { addNamedSchemaExport } from './utils/update-schema-index.ts'
+import { generateMigrations, DuplicateTableError } from './utils/generate-migrations.ts'
 import { addToAppConfig, resolveAppConfigPath } from './utils/update-app-config.ts'
 import { loadFields } from './utils/load-fields.ts'
 import { validateConfig } from './utils/validate-config.ts'
@@ -47,8 +47,6 @@ import { generateSeedFile } from './generators/seed-data.ts'
 import { generateSeedFixture } from './generators/collection-seed-fixture.ts'
 import { generateCollectionTypesRegistry } from './generators/collection-types-registry.ts'
 import { generateQueryRegistryFile } from './generators/query-registry.ts'
-
-const execAsync = promisify(exec)
 
 // ---------------------------------------------------------------------------
 // Generation History
@@ -396,45 +394,15 @@ async function createDatabaseTable(config: { name: string; layer: string; fields
       console.log(`✓ Schema index already contains ${exportName} export`)
     }
 
-    // Run db:generate to sync with database (with timeout)
+    // Generate the migration — drizzle-kit against the resolved sources, no Nuxt (#1445 WS2).
     console.log(`↻ Creating database migration...`)
-    console.log(`! Running: npx nuxt db generate (30s timeout)`)
-
-    try {
-      // Create a promise that rejects after timeout
-      const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Command timed out after 30 seconds')), 30000)
-      })
-
-      // Race between the command and timeout
-      const { stdout, stderr } = await Promise.race([
-        execAsync('npx nuxt db generate'),
-        timeoutPromise
-      ])
-
-      if (stderr && !stderr.includes('Warning')) {
-        console.error(`! Drizzle warnings:`, stderr)
-      }
-      console.log(`✓ Database migration generated`)
-
-      // Note: The migration has been generated but needs to be applied
-      console.log(`! Migration generated. The table will be created when you restart the dev server.`)
-
-      return true
-    } catch (execError: any) {
-      if (execError.message.includes('timed out')) {
-        console.error(`✗ Database migration timed out after 30 seconds`)
-        console.error(`  This usually means there's a conflict or error in the schema`)
-        console.error(`  Check server/db/schema.ts for duplicate exports`)
-      } else {
-        console.error(`✗ Failed to run database migration:`, execError.message)
-      }
-      console.log(`! You can manually run: npx nuxt db generate`)
-      return false
-    }
+    await runMigrationStep()
+    console.log(`! Migration generated. The table will be created when you restart the dev server.`)
+    return true
   } catch (error: any) {
+    if (error instanceof DuplicateTableError) throw error // hard fail → non-zero exit
     console.error(`✗ Failed to create database table:`, error.message)
-    console.log(`! You may need to create the table manually with: npx nuxt db generate`)
+    console.log(`! You may need to create the table manually with: pnpm db:generate`)
     return false
   }
 }
@@ -1443,6 +1411,37 @@ interface PostGenerationOptions {
 
 // Batch database setup: update the schema index for every generated collection,
 // ensure the i18n schema, and run the database migration once.
+// Generate the migration for the just-updated schema: drizzle-kit against the
+// resolved sources (WS1a) with the duplicate gate (WS1b), no Nuxt process (#1445
+// WS2). Throws on a HARD failure (duplicate table / drizzle error) so the bin
+// exits non-zero + prints a recipe; a SOFT deferral (unresolvable extends) prints
+// its recipe and returns (exit 0).
+async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
+  let result
+  try {
+    result = await generateMigrations(appDir)
+  } catch (err) {
+    if (err instanceof DuplicateTableError) {
+      console.error(`\n✗ ${err.message}`)
+      console.error(`  Two different tables share the name "${err.table}". Rename one, then re-run.`)
+    }
+    throw err
+  }
+  if (result.generated) {
+    console.log(`\n✓ Database migration generated`)
+    return
+  }
+  if (result.reason === 'deferred') {
+    console.log(`\n↻ Migration deferred — resolve the app's layers first, then re-run:`)
+    for (const step of result.recipe) console.log(`     ${step}`)
+    return
+  }
+  console.error(`\n✗ Database migration was NOT generated`)
+  if (result.detail) console.error(`  ${result.detail}`)
+  console.error(`  Fix, then re-run: pnpm db:generate`)
+  throw new Error('migration generation failed')
+}
+
 async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer: string; fields: Field[] }>, force: boolean): Promise<void> {
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  DATABASE SETUP`)
@@ -1463,60 +1462,9 @@ async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer
   console.log(`\n↻ Ensuring translations_ui table...`)
   await exportI18nSchema(force)
 
-  // Run database migration once for all collections
+  // Generate the migration once for all collections — no Nuxt process (#1445 WS2).
   console.log(`\nRunning database migration...`)
-  console.log(`Command: npx nuxt db generate (30s timeout)`)
-
-  // Snapshot existing migrations so we can VERIFY one is actually produced. A cold run
-  // (no @fyit/* dist → nuxt prepare can't emit .nuxt/hub/db/schema.mjs → drizzle finds no
-  // schema) makes `nuxt db generate` a silent no-op that still exits 0 — which used to print
-  // a false "✓ generated successfully" and send workers chasing a phantom migration. (#1286)
-  const migDir = 'server/db/migrations/sqlite'
-  const countSql = async (): Promise<number> => {
-    try {
-      return (await fsp.readdir(migDir)).filter((f) => f.endsWith('.sql')).length
-    } catch {
-      return 0
-    }
-  }
-  const migrationsBefore = await countSql()
-
-  try {
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Command timed out after 30 seconds')), 30000)
-    })
-
-    const { stdout, stderr } = (await Promise.race([
-      execAsync('npx nuxt db generate'),
-      timeoutPromise
-    ])) as { stdout: string; stderr: string }
-
-    // The cold-state failure `nuxt db generate` swallows behind a 0 exit code (#1286).
-    const combined = `${stdout || ''}\n${stderr || ''}`
-    const coldState = /Could not load @fyit|No schema files found|schema\.mjs/i.test(combined)
-    const migrationsAfter = await countSql()
-
-    if (migrationsAfter > migrationsBefore) {
-      console.log(`\n✓ Database migration generated successfully`)
-    } else {
-      // No migration written despite collections generated — DO NOT report success (#1286).
-      console.error(`\n✗ Database migration was NOT generated — 0 new files in ${migDir}/`)
-      if (coldState) {
-        console.error(`  Cause: the schema bundle isn't built — 'nuxt db generate' silently no-ops when the @fyit/* packages have no dist/.`)
-        console.error(`  Fix:   run 'pnpm build:packages', then re-run: npx nuxt db generate`)
-      } else {
-        console.error(`  'npx nuxt db generate' exited without writing a migration. Check server/db/schema.ts, then re-run: npx nuxt db generate`)
-      }
-    }
-  } catch (execError: any) {
-    if (execError.message.includes('timed out')) {
-      console.error(`\n✗ Database migration timed out after 30 seconds`)
-      console.error(`  Check server/db/schema.ts for conflicts`)
-    } else {
-      console.error(`\n✗ Failed to run database migration:`, execError.message)
-    }
-    console.log(`\nManual command: npx nuxt db generate\n`)
-  }
+  await runMigrationStep()
 }
 
 // Setup the CSS @source directive for Tailwind.
