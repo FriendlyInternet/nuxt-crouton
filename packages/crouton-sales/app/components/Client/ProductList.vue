@@ -7,7 +7,7 @@
       v-for="product in orderedProducts"
       :key="product.id"
       variant="soft"
-      class="cursor-pointer group/card relative overflow-hidden"
+      class="cursor-pointer group/card relative overflow-hidden transition-colors duration-150 hover:bg-elevated"
       :class="product.isActive === false ? 'opacity-60' : ''"
       :ui="{ body: 'px-3 py-2 sm:px-3 sm:py-2' }"
       @click="handleProductClick(product)"
@@ -71,6 +71,7 @@
             size="md"
             square
             :icon="activeProductId === product.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+            class="group-hover/card:bg-accented/50 hover:bg-accented"
             @click.stop="toggleProduct(product)"
           />
           <UButton
@@ -79,7 +80,7 @@
             color="primary"
             size="md"
             square
-            class="active:scale-90 transition-transform"
+            class="active:scale-90 transition-[transform,background-color] group-hover/card:bg-primary/10 hover:bg-primary/20"
             @click.stop="addProduct(product)"
           >
             <UIcon

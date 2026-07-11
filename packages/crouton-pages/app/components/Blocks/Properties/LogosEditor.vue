@@ -248,7 +248,7 @@ function getImageMode(index: number): string {
               class="drag-handle size-4 text-muted cursor-grab active:cursor-grabbing"
             />
             <!-- Type toggle buttons -->
-            <UButtonGroup size="xs">
+            <UFieldGroup size="xs">
               <UButton
                 :color="isIcon(item) ? 'primary' : 'neutral'"
                 :variant="isIcon(item) ? 'solid' : 'ghost'"
@@ -263,7 +263,7 @@ function getImageMode(index: number): string {
                 :label="t('pages.blocks.logos.typeImage')"
                 @click="!isIcon(item) ? undefined : switchItemType(index, 'image')"
               />
-            </UButtonGroup>
+            </UFieldGroup>
           </div>
 
           <!-- Delete -->
