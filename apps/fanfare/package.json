@@ -35,9 +35,11 @@
     "@fyit/crouton-themes": "workspace:*",
     "@libsql/client": "catalog:",
     "drizzle-orm": "catalog:",
+    "nanoid": "^5.0.0",
     "nuxt": "catalog:",
     "vue": "catalog:",
-    "vue-router": "catalog:"
+    "vue-router": "catalog:",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@fyit/crouton-cli": "workspace:*",

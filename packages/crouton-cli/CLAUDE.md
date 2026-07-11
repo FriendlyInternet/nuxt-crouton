@@ -374,7 +374,7 @@ lib/generators/
 | `optionsCollection` | string | Collection name for database-driven options |
 | `optionsField` | string | Field in options collection containing values |
 | `creatable` | boolean | Allow creating new options (default: true) |
-| `nullable` | boolean | Allow null values (generates `.nullish()` instead of `.optional()`) |
+| `nullable` | boolean | Legacy no-op since #1403: every non-required field already validates `.nullish()` (nullable columns round-trip `null`, and `null` is how a client clears a field) and types as `T \| null` |
 | `component` | string | Custom component name override |
 | `translatableProperties` | string[] | (Repeater) Properties to support per-item translations |
 | `properties` | object | (Repeater) Typed property definitions for repeater items |

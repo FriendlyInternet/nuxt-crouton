@@ -138,6 +138,9 @@ importers:
       drizzle-orm:
         specifier: 'catalog:'
         version: 0.45.2(@cloudflare/workers-types@4.20260118.0)(@libsql/client@0.17.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.2)(kysely@0.28.11)(pg@8.17.1)
+      nanoid:
+        specifier: ^5.0.0
+        version: 5.1.6
       nuxt:
         specifier: ^4.4.8
         version: 4.4.8(acbda501943d3a88c40c15b150712194)
@@ -147,6 +150,9 @@ importers:
       vue-router:
         specifier: 'catalog:'
         version: 5.1.0(@vue/compiler-sfc@3.5.38)(vite@7.3.5(@types/node@22.19.7)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.46.0)(tsx@4.21.0)(yaml@2.9.0))(vue@3.5.38(typescript@5.9.3))
+      zod:
+        specifier: 4.2.1
+        version: 4.2.1
     devDependencies:
       '@fyit/crouton-cli':
         specifier: workspace:*
@@ -947,6 +953,9 @@ importers:
       scule:
         specifier: ^1.3.0
         version: 1.3.0
+      zod:
+        specifier: 4.2.1
+        version: 4.2.1
     devDependencies:
       '@types/node':
         specifier: ^22.0.0
@@ -1422,6 +1431,9 @@ importers:
       '@tiptap/extension-highlight':
         specifier: ^3.20.0
         version: 3.20.0(@tiptap/core@3.27.0(@tiptap/pm@3.27.0))
+      '@vueuse/core':
+        specifier: ^13.3.0
+        version: 13.9.0(vue@3.5.38(typescript@5.9.3))
       nuxt:
         specifier: ^4.4.8
         version: 4.4.8(acbda501943d3a88c40c15b150712194)

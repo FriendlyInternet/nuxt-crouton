@@ -1,5 +1,12 @@
 // API endpoint generators using @crouton/auth for team authentication
 
+// Wire-facing body schema for the generated endpoints (#1403): accepts null on
+// non-required fields. Falls back to the client fieldsSchema for older callers
+// and test fixtures that don't build the server variant.
+function bodyFieldsSchemaOf(data: Record<string, any>): string {
+  return data.serverFieldsSchema ?? data.fieldsSchema
+}
+
 export function generateGetEndpoint(data: Record<string, any>, config: Record<string, any> | null = null): string {
   const { pascalCase, pascalCasePlural, layerPascalCase, plural, singular, layer } = data
   const prefixedPascalCase = `${layerPascalCase}${pascalCase}`
@@ -152,7 +159,7 @@ import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/t
 import { z } from 'zod'
 
 ${itemSchemasPrefix}const bodySchema = z.object({
-  ${data.fieldsSchema}
+  ${bodyFieldsSchemaOf(data)}
 }).strip()
 
 export default defineEventHandler(async (event) => {
@@ -216,7 +223,7 @@ import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/t
 import { z } from 'zod'
 
 ${itemSchemasPrefix}const bodySchema = z.object({
-  ${data.fieldsSchema}${hasTranslations ? ',\n  // Transient hint: which locale the translation patch targets (not a column)\n  locale: z.string().optional()' : ''}
+  ${bodyFieldsSchemaOf(data)}${hasTranslations ? ',\n  // Transient hint: which locale the translation patch targets (not a column)\n  locale: z.string().optional()' : ''}
 }).partial().strip()
 
 export default defineEventHandler(async (event) => {

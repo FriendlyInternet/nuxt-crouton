@@ -442,14 +442,21 @@ async function createDatabaseTable(config: { name: string; layer: string; fields
 // Build the Zod fields-schema body shared by the composable and the server
 // endpoints — regular + translatable fields, the hierarchy parentId, and the
 // translations record with its default-locale required-fields refinement.
-function buildFieldsSchema(params: {
+// mode 'client' (default): the form-facing schema the composable exports —
+// form state binds these fields to inputs, so non-required fields stay
+// `.optional()` (null only for json/date/meta.nullable, as before).
+// mode 'server': the wire-facing body schema the generated endpoints validate —
+// nullable columns round-trip null and `null` is how a client clears a field,
+// so every non-required field is `.nullish()` (#1403).
+export function buildFieldsSchema(params: {
   fields: Field[]
   config: Record<string, any> | null
   hierarchy: HierarchyConfig
   cases: any
   layerCamelCase: string
+  mode?: 'client' | 'server'
 }): string {
-  const { fields, config, hierarchy, cases, layerCamelCase } = params
+  const { fields, config, hierarchy, cases, layerCamelCase, mode = 'client' } = params
   const translatableFieldNames = config?.translations?.collections?.[cases.plural] || []
   const hierarchyFieldNames = hierarchy?.enabled ? ['parentId', 'path', 'depth', 'order'] : []
   const regularFieldsSchema = fields
@@ -484,15 +491,23 @@ function buildFieldsSchema(params: {
         } else {
           return `${f.name}: ${baseZod}`
         }
+      } else if (mode === 'server') {
+        // Wire schema: non-required columns are nullable in the DB and
+        // round-trip as null (a loaded record PATCHed back, or an explicit
+        // null to clear the field) — so every non-required field must accept
+        // null (#1403; bug class first hit in 5e9dc3ce5).
+        return `${f.name}: ${baseZod}.nullish()`
       } else {
-        // json commonly arrives as null (empty config/metadata) — allow it.
+        // Client/form schema: json commonly arrives as null (empty
+        // config/metadata) — allow it; other fields stay .optional() so
+        // FormData never widens to null (form inputs bind string|undefined).
         const suffix = (f.meta?.nullable || f.type === 'json' || f.type === 'date') ? '.nullish()' : '.optional()'
         return `${f.name}: ${baseZod}${suffix}`
       }
     })
   const translatableFieldsSchema = fields
     .filter(f => translatableFieldNames.includes(f.name))
-    .map(f => `${f.name}: ${f.zod}.optional()`)
+    .map(f => `${f.name}: ${f.zod}${mode === 'server' ? '.nullish()' : '.optional()'}`)
   let allFieldsSchema = [...regularFieldsSchema, ...translatableFieldsSchema].join(',\n  ')
   if (hierarchy?.enabled) {
     const hierarchySchemaField = `parentId: z.string().nullable().optional()`
@@ -564,7 +579,7 @@ function buildFieldsColumns(fields: Field[], config: Record<string, any> | null,
 
 // Build the TypeScript interface body for the generated types.ts, keeping the
 // optional/null-ness of each property in sync with the Zod schema.
-function buildFieldsTypes(params: {
+export function buildFieldsTypes(params: {
   fields: Field[]
   config: Record<string, any> | null
   hierarchy: HierarchyConfig
@@ -583,6 +598,10 @@ function buildFieldsTypes(params: {
     } else if ((f.meta?.nullable || f.type === 'json') && !tsType.includes('null')) {
       // Non-required json/nullable fields are `.nullish()` in the zod schema
       // (the body may be null) — the interface must allow null to match.
+      // NOTE: the SERVER body schema accepts null on every non-required field
+      // (#1403); that wire tolerance lives on New<Type> via NullableOptionals
+      // in the generated types.ts, NOT here — widening the read interface
+      // would ripple null into every form binding and package consumer.
       tsType += ' | null'
     }
     // Translatable fields are validated as optional in the zod schema (the real
@@ -627,6 +646,10 @@ function buildGeneratorData(params: {
     .join('')
 
   const fieldsSchema = buildFieldsSchema({ fields, config, hierarchy, cases, layerCamelCase })
+  // Wire-facing variant for the generated endpoints: accepts null on every
+  // non-required field (#1403). Kept separate from the client/form schema so
+  // FormData never widens to null.
+  const serverFieldsSchema = buildFieldsSchema({ fields, config, hierarchy, cases, layerCamelCase, mode: 'server' })
 
   const fieldsDefault = buildFieldsDefault({ fields, config, hierarchy, cases })
 
@@ -652,6 +675,7 @@ function buildGeneratorData(params: {
     layerCamelCase,
     fields,
     fieldsSchema,
+    serverFieldsSchema,
     repeaterItemSchemasCode,
     fieldsDefault,
     fieldsColumns,
