@@ -1,5 +1,5 @@
 <!doctype html><html lang="nl"><head><meta charset="utf-8"><title>Receipt preview in printer settings</title><style>
-  :root{--bg:#0a0a0a;--panel:#111113;--elevated:#18181b;--border:#27272a;--muted:#a1a1aa;--text:#fafafa;--primary:#34d399;--primary-ink:#052e1a;--warning:#fbbf24}
+  :root{--bg:#0a0a0a;--panel:#111113;--elevated:#18181b;--border:#27272a;--muted:#a1a1aa;--text:#fafafa;--primary:#34d399;--primary-ink:#052e1a}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:40px}
   h1{font-size:20px;margin:0 0 4px}
@@ -8,18 +8,26 @@
   .col{display:flex;flex-direction:column;gap:10px}
   .tag{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
   .tag.new{color:var(--primary)}
-  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;width:360px}
-  .card h3{font-size:13px;margin:0 0 12px;color:var(--muted);font-weight:600}
-  .prow{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:9px;background:var(--elevated);margin-bottom:6px}
-  .dot{width:8px;height:8px;border-radius:50%;background:var(--primary);flex:none}
-  .prow .t{font-size:13px}
-  .prow .s{font-size:11px;color:var(--muted);margin-left:auto}
-  .footer{display:flex;gap:8px;align-items:stretch;margin-top:14px}
-  .btn{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;border-radius:9px;padding:8px 12px;border:1px solid var(--border);background:transparent;color:var(--text);white-space:nowrap}
-  .btn svg{width:15px;height:15px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:14px;padding:16px;width:400px}
+  .toggles{background:var(--elevated);border-radius:11px;overflow:hidden}
+  .trow{display:flex;align-items:center;gap:12px;padding:12px 14px}
+  .trow+.trow{border-top:1px solid var(--border)}
+  .trow .tt{font-size:13px;font-weight:600}
+  .trow .ts{font-size:11px;color:var(--muted);margin-top:2px}
+  .trow .txt{flex:1}
+  .sw{width:34px;height:19px;border-radius:20px;background:var(--primary);position:relative;flex:none}
+  .sw.off{background:#3f3f46}
+  .sw::after{content:'';position:absolute;top:2px;right:2px;width:15px;height:15px;border-radius:50%;background:#fff}
+  .sw.off::after{right:auto;left:2px}
+  .actions{display:flex;gap:10px;margin-top:10px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;font-size:13px;font-weight:600;border-radius:10px;padding:11px 14px;border:1px solid var(--border);background:transparent;color:var(--text);white-space:nowrap}
+  .btn svg{width:16px;height:16px}
+  .btn.wide{flex:1}
+  .btn.hot{border-color:var(--primary);color:var(--primary);box-shadow:0 0 0 3px rgba(52,211,153,.15)}
+  .footer{display:flex;gap:8px;align-items:stretch;margin-top:14px;padding-top:14px;border-top:1px dashed var(--border)}
   .btn.del{color:#f87171;border-color:#3f2224}
   .btn.save{flex:1;justify-content:center;background:var(--primary);color:var(--primary-ink);border-color:var(--primary)}
-  .btn.hot{border-color:var(--primary);color:var(--primary);box-shadow:0 0 0 3px rgba(52,211,153,.15)}
+  .caption{font-size:11px;color:var(--muted);margin:8px 2px 0}
   .modal{width:440px;background:var(--panel);border:1px solid var(--border);border-radius:16px;overflow:hidden}
   .modal .mh{display:flex;align-items:center;gap:8px;padding:14px 16px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px}
   .modal .mh svg{width:18px;height:18px;color:var(--primary)}
@@ -27,44 +35,52 @@
   .info{background:var(--elevated);border-radius:11px;padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-size:12px}
   .info .k{color:var(--muted)}
   .info .badge{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:20px;background:rgba(52,211,153,.14);color:var(--primary)}
-  .toggle{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
-  .sw{width:32px;height:18px;border-radius:20px;background:var(--primary);position:relative;flex:none}
-  .sw::after{content:'';position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#fff}
   .paperwrap{background:#e7e7ea;border-radius:11px;padding:16px;display:flex;justify-content:center}
   .paper{width:312px;background:#fff;box-shadow:0 6px 20px rgba(0,0,0,.35)}
   iframe{width:312px;height:372px;border:0;display:block;background:#fff}
   .note{font-size:11px;color:var(--muted);text-align:center}
-  ul.changes{margin:26px 0 0;padding-left:18px;max-width:640px;line-height:1.7;font-size:13.5px;color:#d4d4d8}
+  ul.changes{margin:26px 0 0;padding-left:18px;max-width:660px;line-height:1.7;font-size:13.5px;color:#d4d4d8}
   ul.changes b{color:var(--text)}
+  .toggles-hdr{font-size:11px;color:var(--muted);margin:0 0 8px 2px}
 </style></head><body>
   <h1>Live receipt preview in printer settings</h1>
-  <p class="sub">#1504 · adds a <b>Voorbeeld</b> button to the printer edit form that opens the <b>real</b> rendered ticket (renderTicketHtml) in a sandboxed iframe — not a hand-mock.</p>
+  <p class="sub">#1504 · <b>Voorbeeld</b> + <b>Testprint</b> get their own roomy row right under the toggles block; the footer keeps just Verwijderen + Update.</p>
   <div class="stage">
     <div class="col">
-      <span class="tag">Before — printer form footer</span>
+      <span class="tag">Before — Testprint cramped in the footer</span>
       <div class="card">
-        <h3>Printer · Bar (Epson TM-m30)</h3>
+        <div class="toggles">
+          <div class="trow"><div class="txt"><div class="tt">Prijzen op bonnen tonen</div><div class="ts">Print de prijs per item en het totaal op de tickets</div></div><span class="sw"></span></div>
+          <div class="trow"><div class="txt"><div class="tt">Actief</div><div class="ts">Zet uit om deze printer tijdelijk buiten gebruik te stellen</div></div><span class="sw"></span></div>
+        </div>
         <div class="footer">
           <button class="btn del">Verwijderen</button>
           <button class="btn"><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M6 9V2h12v7M6 18h12v4H6zM6 14h12'/></svg>Testprint</button>
-          <button class="btn save">Opslaan</button>
+          <button class="btn save">Update printer</button>
         </div>
       </div>
+      <div class="caption">Three buttons squeezed into one footer row.</div>
     </div>
     <div class="col">
-      <span class="tag new">After — one new button</span>
+      <span class="tag new">After — roomy actions row under the block</span>
       <div class="card">
-        <h3>Printer · Bar (Epson TM-m30)</h3>
+        <div class="toggles">
+          <div class="trow"><div class="txt"><div class="tt">Prijzen op bonnen tonen</div><div class="ts">Print de prijs per item en het totaal op de tickets</div></div><span class="sw"></span></div>
+          <div class="trow"><div class="txt"><div class="tt">Actief</div><div class="ts">Zet uit om deze printer tijdelijk buiten gebruik te stellen</div></div><span class="sw"></span></div>
+        </div>
+        <div class="actions">
+          <button class="btn wide hot"><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></svg>Voorbeeld</button>
+          <button class="btn wide"><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M6 9V2h12v7M6 18h12v4H6zM6 14h12'/></svg>Testprint</button>
+        </div>
         <div class="footer">
           <button class="btn del">Verwijderen</button>
-          <button class="btn hot"><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></svg>Voorbeeld</button>
-          <button class="btn"><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M6 9V2h12v7M6 18h12v4H6zM6 14h12'/></svg>Testprint</button>
-          <button class="btn save">Opslaan</button>
+          <button class="btn save">Update printer</button>
         </div>
       </div>
+      <div class="caption">Preview + Testprint sit together, full-width, right under the toggles — the footer is just save + delete.</div>
     </div>
     <div class="col">
-      <span class="tag new">After — the preview modal</span>
+      <span class="tag new">The preview modal (approved)</span>
       <div class="modal">
         <div class="mh"><svg viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2'><path d='M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'/><circle cx='12' cy='12' r='3'/></svg>Voorbeeld — Bar</div>
         <div class="mb">
@@ -74,7 +90,6 @@
             <div><span class="k">Locatie:</span> Bar</div>
             <div><span class="k">Status:</span> <span class="badge">Actief</span></div>
           </div>
-          <div class="toggle"><span class="sw"></span> Toon prijzen <span style="margin-left:auto;font-size:11px">weerspiegelt de printerinstelling</span></div>
           <div class="paperwrap"><div class="paper"><iframe title="ticket" srcdoc="<style>
 @page { size: 80mm auto; margin: 0; }
 * { box-sizing: border-box; }
@@ -102,10 +117,10 @@ body { width: 80mm; margin: 0 auto; padding: 4mm; font: 13px/1.35 'Menlo','Conso
     </div>
   </div>
   <ul class="changes">
-    <li><b>One new button</b> — <b>Voorbeeld</b> (eye icon) sits left of <b>Testprint</b> in the printer form footer; saved printers only, same as Testprint.</li>
-    <li><b>Real ticket, not a mock</b> — the modal renders <b>renderTicketHtml</b> (the exact browser-print engine) in a <b>sandboxed iframe</b>, so it can't drift from what prints and needs no themed re-implementation.</li>
-    <li><b>Reflects this station</b> — sample built from the printer's <b>Toon prijzen</b> + type and the event's receipt-settings/currency; the toggle flips prices live.</li>
-    <li><b>Unthemed paper</b> — literal white/ink regardless of app theme (#1394 chrome-vs-paper rule); the modal chrome stays Nuxt UI.</li>
-    <li><b>Replaces</b> the unmounted hand-drawn <b>PrintPreviewModal.vue</b> "PRINTER TEST" card.</li>
+    <li><b>Roomy actions row</b> — <b>Voorbeeld</b> (eye) + <b>Testprint</b> share a full-width row directly under the <b>Prijzen op bonnen tonen / Actief</b> block, each half-width with real padding (no longer squeezed beside Verwijderen/Update).</li>
+    <li><b>Footer slims to two</b> — only <b>Verwijderen</b> + <b>Update printer</b> remain in the footer.</li>
+    <li><b>Real ticket, not a mock</b> — the modal renders <b>renderTicketHtml</b> in a <b>sandboxed iframe</b>; can't drift from what prints.</li>
+    <li><b>Reflects this station</b> — sample from the printer's <b>Prijzen tonen</b> + type and the event's receipt-settings/currency.</li>
+    <li><b>Unthemed paper</b> (#1394); replaces the unmounted hand-drawn <b>PrintPreviewModal.vue</b>.</li>
   </ul>
 </body></html>
