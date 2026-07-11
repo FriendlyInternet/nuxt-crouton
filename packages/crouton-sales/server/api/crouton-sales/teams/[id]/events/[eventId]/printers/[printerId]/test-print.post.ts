@@ -9,31 +9,18 @@
  * `refType: 'test'` keeps it out of the order auto-complete reactions (they
  * act on refType 'order' only).
  *
- * The engine pieces (`encodeTicket`, `enqueuePrintJob`) are crouton-printing
- * nitro globals, same as the order path.
+ * Thin shell by design: the lookups live in requireTeamEvent /
+ * requireEventPrinter, the job assembly in buildTestPrintJob (pure, tested).
+ * `encodeTicket` / `enqueuePrintJob` are crouton-printing nitro globals.
  */
-import { eq, and } from 'drizzle-orm'
 import { PRINT_TRANSPORT, getPrintTransport } from '@fyit/crouton-printing/server/utils/print-transport'
 import { requireTeamEvent } from '../../../../../../../../utils/team-event'
-import { buildTestReceipt } from '../../../../../../../../utils/test-print'
-import { salesPrinters } from '~~/layers/sales/collections/printers/server/database/schema'
+import { requireEventPrinter } from '../../../../../../../../utils/event-printer'
+import { buildTestPrintJob } from '../../../../../../../../utils/test-print'
 
 export default defineEventHandler(async (event) => {
   const { team, user, db, eventId, salesEvent } = await requireTeamEvent(event)
-
-  const printerId = getRouterParam(event, 'printerId')
-  if (!printerId) {
-    throw createError({ status: 400, statusText: 'Printer ID is required' })
-  }
-
-  const [printer] = await db
-    .select()
-    .from(salesPrinters)
-    .where(and(eq(salesPrinters.id, printerId), eq(salesPrinters.eventId, eventId)))
-    .limit(1)
-  if (!printer) {
-    throw createError({ status: 404, statusText: 'Printer not found for this event' })
-  }
+  const printer = await requireEventPrinter(db, event, eventId)
 
   // 'none' = no physical printing: refuse loudly instead of queueing a job
   // nothing will ever deliver.
@@ -45,29 +32,13 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const driver = printer.driver ?? 'network-escpos'
-  const receipt = buildTestReceipt({
-    printerTitle: printer.title ?? 'Printer',
-    eventName: salesEvent.title ?? '',
-    teamName: team.name ?? 'POS',
-    requestedBy: user.name || user.email || undefined
-  })
-
-  const queueId = await enqueuePrintJob(db, {
-    source: 'sales',
-    printerId: printer.id,
-    printerIp: printer.ipAddress ?? null,
-    printerPort: printer.port != null ? Number(printer.port) : null,
-    printerTitle: printer.title ?? null,
-    driver,
-    payload: encodeTicket(receipt, driver),
-    printMode: 'normal',
-    locationId: null,
-    refType: 'test',
-    refId: printer.id,
+  const { receipt, job } = buildTestPrintJob(printer, {
     eventId,
-    teamId: team.id
+    teamId: team.id,
+    teamName: team.name,
+    eventName: salesEvent.title,
+    user
   })
-
+  const queueId = await enqueuePrintJob(db, { ...job, payload: encodeTicket(receipt, job.driver) })
   return { queueId }
 })
