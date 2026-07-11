@@ -281,10 +281,12 @@ defineExpose({
         size="sm"
         class="flex-1"
       />
+      <!-- Toggle pills (#1407): the ACTIVE state is variant-less so the
+           theme's defaultVariants reach it; inactive stays quiet ghost. -->
       <UButton
         size="xs"
-        :color="showDrafts ? 'primary' : 'neutral'"
-        :variant="showDrafts ? 'subtle' : 'ghost'"
+        :color="showDrafts ? undefined : 'neutral'"
+        :variant="showDrafts ? undefined : 'ghost'"
         icon="i-lucide-file-pen-line"
         @click="showDrafts = !showDrafts"
       >
@@ -292,8 +294,8 @@ defineExpose({
       </UButton>
       <UButton
         size="xs"
-        :color="reorderMode.isActive.value ? 'primary' : 'neutral'"
-        :variant="reorderMode.isActive.value ? 'subtle' : 'ghost'"
+        :color="reorderMode.isActive.value ? undefined : 'neutral'"
+        :variant="reorderMode.isActive.value ? undefined : 'ghost'"
         icon="i-lucide-arrow-up-down"
         :disabled="pending"
         aria-label="Reorder pages"
