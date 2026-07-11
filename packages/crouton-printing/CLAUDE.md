@@ -39,6 +39,7 @@ domain package (sales / bookings)         crouton-printing
 | `server/db/schema.ts` | Re-export so NuxtHub auto-discovers the tables in `db:generate`. |
 | `server/utils/print-job-queue.ts` | The queue API: `enqueuePrintJob` / `enqueuePrintJobs` + `PRINT_STATUS`. Auto-imported into the merged nitro context. `db` is passed in by the caller (decoupled from any one db util). |
 | `server/utils/print-transport.ts` | Per-event transport selection (#1324): `PRINT_TRANSPORT`, `transportAllows`, `getPrintTransport`/`getAllPrintTransports` (missing-table ⇒ legacy, never fail printing), `upsertPrintTransport`, heartbeat throttle. |
+| `server/utils/drainer-gate.ts` | The in-process drainer's start decision (#1471): `parseDrainerFlag` (env → on/off/unset) + pure `shouldRunDrainer({envFlag, canUseRawSockets})` (override wins; unset ⇒ auto) + `canUseRawSockets()` (`std-env` `isNode && !isWorkerd`). Auto-on on a Node/venue box, never workerd; `CROUTON_PRINTING_DRAINER` is an override. Consumed by `server/plugins/escpos-drainer.ts`; tested in `test/drainer-gate.test.ts`. |
 | `server/utils/receipt-formatter.ts` | The ticket engine: `EscPosBuilder` (CP858, ESC/POS subset) + the canonical `ReceiptData` template rendered by `formatReceipt` (thermal bytes) and `renderTicketHtml` (browser-print mirror). Bold-hierarchy layout (#1427): heavy `═` call-out block, one-line meta, right-aligned price column (`amountLines`/`wrapText`), double-height total. Rule glyphs are CP858-table-safe but changes here need a paper test on the TM-m30. Byte-stability + column tests in `test/receipt-formatter.test.ts`. |
 | `server/utils/spooler-device.ts` | Device-scoped spooler (#1366): `getDeviceCredentials` (`x-device-id`/`x-device-code` headers), `resolveDeviceAuth` (asks the credential-owning domain over the `crouton:printing:device-auth` Nitro hook — this package has no auth), `listTeamSpoolerJobs` (all pending `network-escpos` jobs for the claimed team's router-spooler events, #1324-gated, heartbeat-stamped, legacy row shape), `getPrintJobTeamId`. Backs `GET /api/print-server/jobs` (200 bare array claimed · 428 `{status:'unclaimed', ticket}` with a server-rendered `formatPairingTicket` · 401/429 denied · 501 hook unanswered) and the device-header path in the `complete`/`fail` callbacks (`requireSpoolerCallbackAuth`, own-team jobs only). |
 | `app/components/TransportPicker.vue` | `<CroutonPrintingTransportPicker>` — dumb per-event flow picker + liveness readout. The embedding domain owns fetching/auth and may pass translated `items` (this package ships no i18n). Optional `setupGuides` (#1364): per-flow setup checklists behind a collapsed "Setup" toggle; the `setup-extra` slot lets the embedder mount extras under the checklist (sales mounts its #1366 router-pairing claim form there). |
@@ -70,9 +71,13 @@ so two transports can never serve one event — a Pi rig opts each event in with
 serves `local-drainer` events (plus event-LESS jobs, which only it can ever
 deliver); the spooler's `jobs.get` returns a soft-empty `[]` for events routed
 elsewhere. Each transport stamps a throttled liveness heartbeat
-(`lastDrainerTickAt` / `lastSpoolerPollAt`) the picker renders. The env gates
-(`CROUTON_PRINTING_DRAINER*`) still decide whether a drainer *process* runs at
-all; the row decides *which events* it may serve.
+(`lastDrainerTickAt` / `lastSpoolerPollAt`) the picker renders. Whether the
+drainer *process* runs is now **auto** (#1471, `server/utils/drainer-gate.ts`):
+it starts on any raw-socket-capable runtime (`std-env` `isNode && !isWorkerd` —
+a venue Node box), never on Workers, so a Pi needs no flag. `CROUTON_PRINTING_DRAINER`
+survives only as an override (`1`/`true` force on, `0`/`false` force off). The
+row still decides *which events* it may serve — so the Print flow picker is the
+only switch on a venue device.
 
 This package has **no auth**, so the HTTP surface for the setting lives in the
 domain package (e.g. sales: `teams/[id]/events/[eventId]/print-transport`

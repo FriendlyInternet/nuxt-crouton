@@ -320,21 +320,21 @@ const printTransportSetup = computed(() => [
   },
   {
     value: 'local-drainer' as const,
-    intro: t('sales.printFlow.setup.drainerIntro', 'A device at the venue (Pi / mini-PC) runs the app itself and prints straight to the printers — no router config involved.'),
+    intro: t('sales.printFlow.setup.drainerIntro', 'A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — automatically, no router config and nothing to enable.'),
     steps: [
-      {
-        text: t('sales.printFlow.setup.drainerEnv', 'One-time on the venue device, in the service that starts the app (systemd or .env — not per event), enable the drainer:'),
-        value: 'CROUTON_PRINTING_DRAINER=1'
-      },
       {
         text: t('sales.printFlow.setup.drainerPrinters', 'Add each printer under Printers with its LAN IP and port 9100 — the device must reach the printers on its network.')
       },
       {
-        text: t('sales.printFlow.setup.drainerFlip', 'Keep this Print flow on "Local device" — the router flow is the default, and the device only serves events set to Local device.')
+        text: t('sales.printFlow.setup.drainerFlip', 'Keep this Print flow on "Local device" — the router flow is the default, and the device prints for itself only for events set to Local device.')
       },
       {
         text: t('sales.printFlow.setup.drainerVerify', 'Done when this dot turns green — the device ticks within ~30 seconds.'),
         verify: true
+      },
+      {
+        text: t('sales.printFlow.setup.drainerOverride', 'Advanced: the app prints locally by default on a venue device. Force it on anywhere, or disable it on a device that must not print, with the env override:'),
+        value: 'CROUTON_PRINTING_DRAINER=1'
       }
     ]
   }
