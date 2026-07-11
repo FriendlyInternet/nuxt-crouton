@@ -12,6 +12,11 @@
   --brutalist-ink: #0a0a0a;     /* near-black ink */
   --brutalist-accent: #ffd800;  /* shock yellow */
   --brutalist-danger: #ff3b30;  /* alarm red */
+  /* Text-on-fill constants (#1395): the accent/danger fills stay the same in
+     both schemes, so the text on them must NOT flip with ink/paper. */
+  --brutalist-accent-ink: #0a0a0a;
+  --brutalist-danger-ink: #fdfbf5;
+  --brutalist-paper-raised: #ffffff;
   --brutalist-border: 3px;
   --brutalist-shadow: 4px 4px 0 var(--brutalist-ink);
   --brutalist-shadow-hover: 6px 6px 0 var(--brutalist-ink);
@@ -54,6 +59,11 @@
   transition: none;
 }
 
+[data-theme="brutalist"] button[role="switch"][data-state="checked"] > span,
+.theme-brutalist button[role="switch"][data-state="checked"] > span {
+  background-color: var(--brutalist-accent-ink);
+}
+
 /* ============================================
    SOLID BUTTONS — flat block + hard shadow
    ============================================ */
@@ -81,6 +91,7 @@
 
 .brutalist-btn--primary {
   background-color: var(--brutalist-accent);
+  color: var(--brutalist-accent-ink);
 }
 
 .brutalist-btn--neutral {
@@ -90,7 +101,7 @@
 
 .brutalist-btn--error {
   background-color: var(--brutalist-danger);
-  color: var(--brutalist-paper);
+  color: var(--brutalist-danger-ink);
 }
 
 /* ============================================
@@ -110,11 +121,12 @@
 
 .brutalist-outline:hover {
   background-color: var(--brutalist-accent);
+  color: var(--brutalist-accent-ink);
 }
 
 .brutalist-outline--error:hover {
   background-color: var(--brutalist-danger);
-  color: var(--brutalist-paper);
+  color: var(--brutalist-danger-ink);
 }
 
 /* ============================================
@@ -123,7 +135,7 @@
 
 .brutalist-soft {
   background-color: var(--brutalist-accent);
-  color: var(--brutalist-ink);
+  color: var(--brutalist-accent-ink);
   border: none;
   box-shadow: none;
   font-weight: 800;
@@ -138,7 +150,7 @@
 
 .brutalist-soft--error {
   background-color: var(--brutalist-danger);
-  color: var(--brutalist-paper);
+  color: var(--brutalist-danger-ink);
 }
 
 /* ============================================
@@ -188,6 +200,7 @@
 
 .brutalist-link:hover {
   background-size: 100% 100%;
+  color: var(--brutalist-accent-ink);
 }
 
 .brutalist-link--error {
@@ -195,7 +208,7 @@
 }
 
 .brutalist-link--error:hover {
-  color: var(--brutalist-paper);
+  color: var(--brutalist-danger-ink);
 }
 
 /* ============================================
@@ -226,7 +239,7 @@
   outline: none;
   transform: translate(-2px, -2px);
   box-shadow: var(--brutalist-shadow-hover);
-  background-color: #fff;
+  background-color: var(--brutalist-paper-raised);
 }
 
 .brutalist-input-base:disabled {
@@ -249,6 +262,7 @@
 
 .brutalist-card-header {
   background-color: var(--brutalist-accent);
+  color: var(--brutalist-accent-ink);
   border-bottom: var(--brutalist-border) solid var(--brutalist-ink);
   font-weight: 800;
   text-transform: uppercase;
@@ -280,7 +294,7 @@
 
 .brutalist-badge {
   background-color: var(--brutalist-accent);
-  color: var(--brutalist-ink);
+  color: var(--brutalist-accent-ink);
   border: 2px solid var(--brutalist-ink);
   border-radius: 0;
   box-shadow: 2px 2px 0 var(--brutalist-ink);
@@ -320,6 +334,7 @@
 .brutalist-tabs-trigger[data-state="active"] {
   background-color: var(--brutalist-accent);
   border-color: var(--brutalist-ink);
+  color: var(--brutalist-accent-ink);
 }
 
 .brutalist-tabs-indicator {
@@ -341,7 +356,7 @@
 
 .brutalist-check-indicator {
   background-color: var(--brutalist-accent);
-  color: var(--brutalist-ink);
+  color: var(--brutalist-accent-ink);
 }
 
 .brutalist-radio-indicator {
@@ -349,7 +364,7 @@
 }
 
 .brutalist-radio-indicator::after {
-  background-color: var(--brutalist-ink);
+  background-color: var(--brutalist-accent-ink);
   border-radius: 0;
   width: 50%;
   height: 50%;
@@ -378,11 +393,12 @@
 
 .brutalist-alert--primary {
   background-color: var(--brutalist-accent);
+  color: var(--brutalist-accent-ink);
 }
 
 .brutalist-alert--error {
   background-color: var(--brutalist-danger);
-  color: var(--brutalist-paper);
+  color: var(--brutalist-danger-ink);
 }
 
 .brutalist-alert--neutral {
@@ -475,4 +491,34 @@ body.theme-brutalist {
   --ui-border: #0a0a0a;
   --ui-border-muted: #d9d5c9;
   --ui-border-accented: #0a0a0a;
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — the dark counterpart, DESIGNED not inverted:
+   white ink on near-black paper, the shock yellow stays, shadows go
+   white (a dark brutalist poster). Activated by the colorMode class
+   on <html>; the scheme pin relaxed to a default in useThemeSwitcher.
+   ============================================ */
+
+.dark {
+  --brutalist-paper: #161514;
+  --brutalist-ink: #f4f1e8;
+  --brutalist-danger: #ff5247;
+  --brutalist-paper-raised: #201f1d;
+}
+
+/* Semantic tokens for the dark paper (counterpart of the #1390 block). */
+[data-theme="brutalist"].dark body,
+.dark body.theme-brutalist {
+  --ui-text-dimmed: #8f8a7f;
+  --ui-text-muted: #a8a296;
+  --ui-text-toned: #d8d2c5;
+  --ui-text: #f4f1e8;
+  --ui-text-highlighted: #ffffff;
+  --ui-bg-muted: #1d1c1a;
+  --ui-bg-elevated: #21201d;
+  --ui-bg-accented: #2b2926;
+  --ui-border: #f4f1e8;
+  --ui-border-muted: #3c3a36;
+  --ui-border-accented: #f4f1e8;
 }

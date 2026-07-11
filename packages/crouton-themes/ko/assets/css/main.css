@@ -1075,3 +1075,37 @@ body.theme-ko {
   color: var(--ko-accent-orange);
   box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.4);
 }
+
+/* ============================================
+   DUAL SCHEME (#1395) — the black-unit counterpart (the dark TE
+   hardware), DESIGNED not inverted: charcoal chassis, light silkscreen,
+   the displays were already dark and stay identical. Activated by the
+   colorMode class on <html>.
+   ============================================ */
+
+.dark {
+  --ko-surface-light: #2c2b29;      /* chassis goes charcoal */
+  --ko-surface-mid: #232221;
+  --ko-surface-dark: #3c3a38;
+  --ko-surface-recess: #121212;
+  --ko-text-dark: #d9d6d2;          /* silkscreen legends go light */
+  --ko-text-label: #8f8d8a;
+  --ko-highlight-light: #45433f;    /* the chassis edge highlight, dimmed */
+  --ko-highlight-dark: #1d1c1b;
+}
+
+/* Semantic tokens for the charcoal chassis (counterpart of the base block). */
+[data-theme="ko"].dark body,
+.dark body.theme-ko {
+  --ui-text-dimmed: #78756f;
+  --ui-text-muted: #8f8d8a;
+  --ui-text-toned: #b8b5b0;
+  --ui-text: #d9d6d2;
+  --ui-text-highlighted: #f2f2f2;
+  --ui-bg-muted: #262523;
+  --ui-bg-elevated: #2c2b29;
+  --ui-bg-accented: #363431;
+  --ui-border: #45433f;
+  --ui-border-muted: #383633;
+  --ui-border-accented: #5a5751;
+}

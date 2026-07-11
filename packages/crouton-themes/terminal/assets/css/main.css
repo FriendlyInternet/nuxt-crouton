@@ -550,3 +550,43 @@ body.theme-terminal {
   border-color: var(--term-phosphor);
   box-shadow: var(--term-glow);
 }
+
+/* ============================================
+   DUAL SCHEME (#1395) — paper mode, DESIGNED not inverted: dark green ink
+   on warm terminal-paper (a DEC printout), glow off, scanlines off.
+   Activated by the colorMode class on <html>.
+   ============================================ */
+
+.light {
+  --term-bg: #f2f2ea;
+  --term-bg-raised: #e8e8de;
+  --term-phosphor: #157a36;
+  --term-phosphor-dim: #56795f;
+  --term-phosphor-soft: #2e4a38;
+  --term-amber: #96690a;
+  --term-glow: 0 0 0 rgba(0, 0, 0, 0);
+  --term-glow-amber: 0 0 0 rgba(0, 0, 0, 0);
+}
+
+/* No CRT texture on paper. */
+.light body.theme-terminal::after,
+[data-theme="terminal"].light body::after {
+  display: none;
+}
+
+/* Semantic tokens for the paper (counterpart of the #1390 block). */
+[data-theme="terminal"].light body,
+.light body.theme-terminal {
+  --ui-text-dimmed: #6d7d6f;
+  --ui-text-muted: #56695a;
+  --ui-text-toned: #3a4f40;
+  --ui-text: #24352a;
+  --ui-text-highlighted: #14231a;
+  --ui-bg: #f2f2ea;
+  --ui-bg-muted: #eaeae0;
+  --ui-bg-elevated: #e8e8de;
+  --ui-bg-accented: #dededf;
+  --ui-border: #b9c4ba;
+  --ui-border-muted: #ccd4cc;
+  --ui-border-accented: #157a36;
+}

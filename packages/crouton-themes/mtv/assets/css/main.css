@@ -17,6 +17,11 @@
   --mtv-purple: #7b2ff7;
   --mtv-border: 2px;
   --mtv-snap: 90ms;
+  /* Raised surface + text-on-fill constants (#1395): the neon fills stay the
+     same in both schemes, so text on them must NOT flip with ink/paper. */
+  --mtv-surface: #ffffff;
+  --mtv-on-neon: #17131f;   /* on yellow / cyan */
+  --mtv-on-pink: #f6f2ea;   /* on pink / purple */
 }
 
 /* ============================================
@@ -34,7 +39,7 @@
 
 .mtv-btn {
   background-color: var(--mtv-yellow);
-  color: var(--mtv-ink);
+  color: var(--mtv-on-neon);
   border: var(--mtv-border) solid var(--mtv-ink);
   box-shadow: 4px 4px 0 var(--mtv-purple);
   font-weight: 800;
@@ -55,7 +60,7 @@
 
 .mtv-btn--pink {
   background-color: var(--mtv-pink);
-  color: var(--mtv-paper);
+  color: var(--mtv-on-pink);
   box-shadow: 4px 4px 0 var(--mtv-cyan);
 }
 
@@ -83,7 +88,7 @@
 
 .mtv-btn--cyan {
   background-color: var(--mtv-cyan);
-  color: var(--mtv-ink);
+  color: var(--mtv-on-neon);
   box-shadow: 4px 4px 0 var(--mtv-pink);
 }
 
@@ -113,15 +118,17 @@
 .mtv-outline:hover {
   transform: rotate(-1deg);
   background-color: var(--mtv-yellow);
+  color: var(--mtv-on-neon);
 }
 
 .mtv-outline--pink:hover {
   background-color: var(--mtv-pink);
-  color: var(--mtv-paper);
+  color: var(--mtv-on-pink);
 }
 
 .mtv-outline--cyan:hover {
   background-color: var(--mtv-cyan);
+  color: var(--mtv-on-neon);
 }
 
 /* ============================================
@@ -130,7 +137,7 @@
 
 .mtv-soft {
   background-color: var(--mtv-yellow);
-  color: var(--mtv-ink);
+  color: var(--mtv-on-neon);
   border: none;
   box-shadow: none;
   font-weight: 800;
@@ -146,7 +153,7 @@
 
 .mtv-soft--purple {
   background-color: var(--mtv-purple);
-  color: var(--mtv-paper);
+  color: var(--mtv-on-pink);
 }
 
 .mtv-soft--cyan {
@@ -170,7 +177,7 @@
 
 .mtv-ghost:hover {
   background-color: var(--mtv-ink);
-  color: var(--mtv-yellow);
+  color: var(--mtv-paper);
 }
 
 .mtv-ghost--cyan:hover {
@@ -197,7 +204,7 @@
 
 .mtv-link:hover {
   background-size: 100% 100%;
-  color: var(--mtv-paper);
+  color: var(--mtv-on-pink);
 }
 
 .mtv-link--cyan {
@@ -205,7 +212,7 @@
 }
 
 .mtv-link--cyan:hover {
-  color: var(--mtv-ink);
+  color: var(--mtv-on-neon);
 }
 
 .mtv-link--yellow {
@@ -213,7 +220,7 @@
 }
 
 .mtv-link--yellow:hover {
-  color: var(--mtv-ink);
+  color: var(--mtv-on-neon);
 }
 
 /* ============================================
@@ -225,7 +232,7 @@
 }
 
 .mtv-input-base {
-  background-color: #fff;
+  background-color: var(--mtv-surface);
   color: var(--mtv-ink);
   border: var(--mtv-border) solid var(--mtv-ink);
   border-radius: 0;
@@ -256,7 +263,7 @@
    ============================================ */
 
 .mtv-card {
-  background-color: #fff;
+  background-color: var(--mtv-surface);
   border: var(--mtv-border) solid var(--mtv-ink);
   border-radius: 0;
   box-shadow: 8px 8px 0 var(--mtv-pink);
@@ -265,6 +272,7 @@
 
 .mtv-card-header {
   background-color: var(--mtv-cyan);
+  color: var(--mtv-on-neon);
   border-bottom: var(--mtv-border) solid var(--mtv-ink);
   font-weight: 800;
   text-transform: uppercase;
@@ -305,7 +313,7 @@
 
 .mtv-badge {
   background-color: var(--mtv-yellow);
-  color: var(--mtv-ink);
+  color: var(--mtv-on-neon);
   border: 2px solid var(--mtv-ink);
   border-radius: 0;
   box-shadow: 2px 2px 0 var(--mtv-purple);
@@ -323,7 +331,7 @@
 .theme-mtv button[role="switch"] {
   border-radius: 0;
   border: var(--mtv-border) solid var(--mtv-ink);
-  background-color: #fff;
+  background-color: var(--mtv-surface);
   box-shadow: 2px 2px 0 var(--mtv-purple);
   transition: background-color var(--mtv-snap) ease-out;
 }
@@ -368,11 +376,12 @@
 .mtv-tabs-trigger:hover {
   border-color: var(--mtv-ink);
   background-color: var(--mtv-yellow);
+  color: var(--mtv-on-neon);
 }
 
 .mtv-tabs-trigger[data-state="active"] {
   background-color: var(--mtv-pink);
-  color: var(--mtv-paper);
+  color: var(--mtv-on-pink);
   border-color: var(--mtv-ink);
   box-shadow: 3px -3px 0 var(--mtv-cyan);
 }
@@ -387,7 +396,7 @@
 
 .mtv-check-box,
 .mtv-radio-box {
-  background-color: #fff;
+  background-color: var(--mtv-surface);
   border: 2px solid var(--mtv-ink);
   border-radius: 0;
   box-shadow: 2px 2px 0 var(--mtv-purple);
@@ -395,7 +404,7 @@
 
 .mtv-check-indicator {
   background-color: var(--mtv-pink);
-  color: var(--mtv-paper);
+  color: var(--mtv-on-pink);
 }
 
 .mtv-radio-indicator {
@@ -403,7 +412,7 @@
 }
 
 .mtv-radio-indicator::after {
-  background-color: var(--mtv-paper);
+  background-color: var(--mtv-on-pink);
   border-radius: 0;
   width: 50%;
   height: 50%;
@@ -432,17 +441,19 @@
 
 .mtv-alert--primary {
   background-color: var(--mtv-pink);
-  color: var(--mtv-paper);
+  color: var(--mtv-on-pink);
   box-shadow: 4px 4px 0 var(--mtv-cyan);
 }
 
 .mtv-alert--warning {
   background-color: var(--mtv-yellow);
+  color: var(--mtv-on-neon);
   box-shadow: 4px 4px 0 var(--mtv-pink);
 }
 
 .mtv-alert--error {
   background-color: var(--mtv-cyan);
+  color: var(--mtv-on-neon);
   box-shadow: 4px 4px 0 var(--mtv-pink);
 }
 
@@ -498,7 +509,7 @@
 /* Pagination: track numbers; the current one is on air. */
 [data-theme="mtv"] nav[data-slot="root"] button,
 .theme-mtv nav[data-slot="root"] button {
-  background-color: #fff;
+  background-color: var(--mtv-surface);
   color: var(--mtv-ink);
   border: 2px solid var(--mtv-ink);
   border-radius: 0;
@@ -515,7 +526,7 @@
 [data-theme="mtv"] nav[data-slot="root"] button[data-selected],
 .theme-mtv nav[data-slot="root"] button[data-selected] {
   background-color: var(--mtv-pink);
-  color: var(--mtv-paper);
+  color: var(--mtv-on-pink);
   box-shadow: 2px 2px 0 var(--mtv-cyan);
 }
 
@@ -556,4 +567,32 @@ body.theme-mtv {
   --ui-border: #d9d2c8;
   --ui-border-muted: #e4ded4;
   --ui-border-accented: #17131f;
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — neon on black, DESIGNED not inverted: the day-glo
+   fills stay, the paper goes club-dark. Activated by the colorMode class
+   on <html>; the scheme pin relaxed to a default in useThemeSwitcher.
+   ============================================ */
+
+.dark {
+  --mtv-paper: #17131f;
+  --mtv-ink: #f6f2ea;
+  --mtv-surface: #221c2e;
+}
+
+/* Semantic tokens for the dark paper (counterpart of the #1390 block). */
+[data-theme="mtv"].dark body,
+.dark body.theme-mtv {
+  --ui-text-dimmed: #857c8f;
+  --ui-text-muted: #9d94a8;
+  --ui-text-toned: #cfc7d8;
+  --ui-text: #f6f2ea;
+  --ui-text-highlighted: #ffffff;
+  --ui-bg-muted: #1d1826;
+  --ui-bg-elevated: #221c2e;
+  --ui-bg-accented: #2c2439;
+  --ui-border: #453a54;
+  --ui-border-muted: #322a3e;
+  --ui-border-accented: #f6f2ea;
 }

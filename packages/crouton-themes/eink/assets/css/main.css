@@ -437,3 +437,33 @@ body.theme-eink {
   color: var(--eink-paper);
   border-color: var(--eink-ink);
 }
+
+/* ============================================
+   DUAL SCHEME (#1395) — night reading mode, DESIGNED not inverted:
+   soft light ink on matte near-black (an e-reader at night; still
+   zero motion, hairlines stay hairlines). Activated by the colorMode
+   class on <html>.
+   ============================================ */
+
+.dark {
+  --eink-paper: #161616;
+  --eink-ink: #d8d8d2;
+  --eink-gray: #8a8a85;
+  --eink-hairline: #383836;
+}
+
+/* Semantic tokens for the night page (counterpart of the #1390 block). */
+[data-theme="eink"].dark body,
+.dark body.theme-eink {
+  --ui-text-dimmed: #6e6e69;
+  --ui-text-muted: #8a8a85;
+  --ui-text-toned: #b4b4ae;
+  --ui-text: #d8d8d2;
+  --ui-text-highlighted: #efefe9;
+  --ui-bg-muted: #1c1c1b;
+  --ui-bg-elevated: #202020;
+  --ui-bg-accented: #292928;
+  --ui-border: #383836;
+  --ui-border-muted: #2a2a29;
+  --ui-border-accented: #d8d8d2;
+}

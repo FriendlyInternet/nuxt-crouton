@@ -525,6 +525,37 @@ Two mechanisms, chosen by whether the component has a `variant` dimension:
    Toasts require the app to be wrapped in `<UApp>` (hosts the Toaster) — the
    playground got this in #1393.
 
+## Dual scheme (#1395) — every theme works in light AND dark
+
+Every theme ships a **designed counterpart palette** for the scheme it wasn't
+drawn in (never an auto-inversion): brutalist/mtv/riso go ink-flipped with
+their accents intact, braun/ko/kr11 become their real-world black-unit
+hardware, gameboy gets the backlit mod, eink a night-reading page, terminal
+paper-mode, blueprint pencil-on-white. minimal is the negative; blackandwhite
+was adaptive already.
+
+Mechanics (uniform across themes):
+
+1. **Palette flip**: theme custom properties are re-declared under the
+   colorMode class on `<html>` — `.dark { --<p>-…: … }` for light-default
+   themes, `.light { … }` for terminal/blueprint. Vars are theme-namespaced,
+   so the blocks don't need `[data-theme]` scoping.
+2. **Text-on-fill constants**: fills that stay the same in both schemes
+   (shock yellow, neon pink, the orange dot, colored pads) get their own
+   `--<p>-on-*` / `--<p>-accent-ink` constants so the text on them does NOT
+   flip with ink/paper. This is the one audit that matters when adding a
+   scheme: every `color:` that sits on a constant fill must use a constant.
+3. **Semantic counterpart block**: each theme's #1390 `--ui-*` block gets a
+   scheme-scoped sibling (`[data-theme="x"].dark body, .dark body.theme-x`)
+   tuned to the counterpart paper.
+4. **No literal surface colors**: `#fff`-style literals were replaced by
+   `--<p>-surface` vars so raised surfaces flip too.
+
+**The scheme pin is a DEFAULT now (#1395, was a lock in #1387):**
+`ThemeConfig.colorMode` is applied only while the user's preference is
+`'system'` — an explicit light/dark choice (the nav toggle) always wins, in
+both `useThemeSwitcher.setTheme` and crouton-admin's `applyThemeSettings`.
+
 ## Nuxt UI Theming Pattern
 
 The key insight for Nuxt UI 4 theming:

@@ -59,6 +59,9 @@
   /* === Spacing & Sizing === */
   --kr-pad-radius: 8px;
   --kr-button-radius: 6px;
+  /* Text on the colored pads (mint/yellow/coral stay light in both schemes,
+     so the label on them must not flip) — #1395. */
+  --kr-on-pad: #3d3d3d;
   --kr-display-radius: 4px;
   --kr-card-radius: 12px;
 
@@ -128,7 +131,7 @@
 /* Coral Pink Pad (Pad 1 style) */
 .kr-pad.kr-pad--coral {
   background-color: var(--kr-pad-coral);
-  color: var(--kr-text-dark);
+  color: var(--kr-on-pad);
   /* Pad 1 on the device: pale salmon face, CORAL keyline. */
   border-color: var(--kr-pad-coral-rim);
 }
@@ -140,7 +143,7 @@
 /* Golden Yellow Pad (Fill buttons) */
 .kr-pad.kr-pad--gold {
   background-color: var(--kr-pad-gold);
-  color: var(--kr-text-dark);
+  color: var(--kr-on-pad);
 }
 
 .kr-pad.kr-pad--gold:hover {
@@ -150,7 +153,7 @@
 /* Mint Green Pad (Play button) */
 .kr-pad.kr-pad--mint {
   background-color: var(--kr-pad-mint);
-  color: var(--kr-text-dark);
+  color: var(--kr-on-pad);
 }
 
 .kr-pad.kr-pad--mint:hover {
@@ -754,7 +757,7 @@ body.theme-kr11 {
 
 .kr-check-indicator {
   background-color: var(--kr-pad-mint-pressed);
-  color: var(--kr-text-dark);
+  color: var(--kr-on-pad);
   border-radius: 3px;
 }
 
@@ -793,15 +796,18 @@ body.theme-kr11 {
 
 .kr-alert--primary {
   background-color: var(--kr-pad-mint);
+  color: var(--kr-on-pad);
 }
 
 .kr-alert--warning {
   background-color: var(--kr-led-yellow);
+  color: var(--kr-on-pad);
 }
 
 .kr-alert--error {
   background-color: var(--kr-pad-coral);
   border-color: var(--kr-pad-coral-rim);
+  color: var(--kr-on-pad);
 }
 
 .kr-alert--neutral {
@@ -877,4 +883,38 @@ body.theme-kr11 {
   color: var(--kr-display-red);
   border-color: var(--kr-display-bg);
   text-shadow: 0 0 6px var(--kr-display-red-glow);
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — the dark-unit counterpart (a Volca on a night
+   stage), DESIGNED not inverted: graphite chassis, dark pads with light
+   legends, the red LED display and the colored pads stay themselves.
+   Activated by the colorMode class on <html>.
+   ============================================ */
+
+.dark {
+  --kr-chassis: #26262a;
+  --kr-chassis-light: #2d2d31;
+  --kr-chassis-shadow: #1c1c1f;
+  --kr-chassis-dark: #3a3a3f;
+  --kr-pad-cream: #35353b;
+  --kr-pad-cream-pressed: #2c2c31;
+  --kr-pad-keyline: #55555c;
+  --kr-text-dark: #e2e2e6;
+}
+
+/* Semantic tokens for the graphite chassis (counterpart of the #1390 block). */
+[data-theme="kr11"].dark body,
+.dark body.theme-kr11 {
+  --ui-text-dimmed: #77777d;
+  --ui-text-muted: #8f8f95;
+  --ui-text-toned: #bcbcc2;
+  --ui-text: #e2e2e6;
+  --ui-text-highlighted: #f5f5f8;
+  --ui-bg-muted: #232327;
+  --ui-bg-elevated: #2d2d31;
+  --ui-bg-accented: #37373c;
+  --ui-border: #3a3a3f;
+  --ui-border-muted: #303034;
+  --ui-border-accented: #55555c;
 }
