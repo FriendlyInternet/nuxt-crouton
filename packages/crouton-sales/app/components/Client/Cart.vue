@@ -119,36 +119,32 @@
         </UCollapsible>
       </div>
 
-      <div v-if="clientRequired && !hasClient && items.length > 0" class="flex items-center gap-2 p-3 rounded-lg bg-warning/10 border border-warning">
-        <UIcon name="i-lucide-alert-triangle" class="text-warning shrink-0" />
-        <span class="text-sm text-warning font-medium">{{ clientWarning || t('sales.cart.selectClient') }}</span>
-      </div>
+      <!-- UAlert (not a raw warning div) so themes reach this chrome (#1392):
+           variant-less usage follows the active theme's alert variant. -->
+      <UAlert
+        v-if="clientRequired && !hasClient && items.length > 0"
+        color="warning"
+        icon="i-lucide-alert-triangle"
+        :title="clientWarning || t('sales.cart.selectClient')"
+      />
 
       <!-- Print failures persist as rows (one per order) so a busy event keeps
            ordering while a previous order's printer problem stays visible. -->
-      <div
+      <UAlert
         v-for="warning in printWarnings || []"
         :key="warning.orderId"
-        class="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning"
+        color="warning"
+        icon="i-lucide-printer"
+        :title="`#${warning.orderNumber} — ${warning.timedOut ? t('sales.cart.printTimeout') : t('sales.cart.printFailed')}`"
+        close
+        @update:open="$emit('dismissPrintWarning', warning.orderId)"
       >
-        <UIcon name="i-lucide-printer" class="text-warning shrink-0 mt-0.5" />
-        <div class="flex-1 min-w-0 text-sm text-warning">
-          <p class="font-medium">
-            #{{ warning.orderNumber }} — {{ warning.timedOut ? t('sales.cart.printTimeout') : t('sales.cart.printFailed') }}
-          </p>
-          <p v-for="failure in warning.failures" :key="failure.printerTitle" class="text-xs">
+        <template #description>
+          <span v-for="failure in warning.failures" :key="failure.printerTitle" class="block text-xs">
             {{ failure.printerTitle }}<template v-if="failure.errorMessage">: {{ failure.errorMessage }}</template>
-          </p>
-        </div>
-        <UButton
-          icon="i-lucide-x"
-          size="xs"
-          color="warning"
-          variant="ghost"
-          square
-          @click="$emit('dismissPrintWarning', warning.orderId)"
-        />
-      </div>
+          </span>
+        </template>
+      </UAlert>
 
       <!-- The order button is the print feedback: it spins while the kitchen
            tickets print and confirms green when every ticket is done. A new
