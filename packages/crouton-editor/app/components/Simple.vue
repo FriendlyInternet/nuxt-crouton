@@ -205,9 +205,12 @@ async function handleImageUpload() {
 // UEditor declares no `create` event (only update:modelValue) and its internal
 // useEditor options clobber a consumer-passed onCreate — @create below never
 // fires. Capture the instance from UEditor's exposed `editor` ref instead.
-const ueditorRef = ref<{ editor?: Editor | null } | null>(null)
+const ueditorRef = ref<{ editor?: unknown } | null>(null)
 watch(() => ueditorRef.value?.editor, (ed) => {
-  if (ed && ed !== editorInstance.value) handleEditorCreate({ editor: ed })
+  // Same runtime object as our @tiptap/vue-3 Editor — cast across @nuxt/ui's
+  // duplicate tiptap type identity (vue-tsc sees them as different types).
+  const editor = ed as Editor | undefined
+  if (editor && editor !== editorInstance.value) handleEditorCreate({ editor })
 })
 
 // Handle paste/drop image upload
