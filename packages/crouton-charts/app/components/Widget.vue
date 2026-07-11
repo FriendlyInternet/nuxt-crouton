@@ -93,12 +93,15 @@ const donutData = computed(() => {
   return chartData.value.map((row: Record<string, unknown>) => Number(row[yField] ?? 0))
 })
 
+// DonutChart segment colors are theme-derived too (per segment, not per series).
+const { colorAt: donutColorAt } = useChartPalette()
+
 // DonutChart: categories keyed by X-field value (the segment labels), not Y-field name
 const donutCategories = computed(() =>
   Object.fromEntries(
     chartData.value.map((row: Record<string, unknown>, i: number) => {
       const label = String(row[xAxisKey.value] ?? `Item ${i}`)
-      return [label, { name: label, color: getChartColor(i, chartData.value.length) }]
+      return [label, { name: label, color: donutColorAt(i, chartData.value.length) }]
     })
   )
 )

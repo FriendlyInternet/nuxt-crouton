@@ -16,14 +16,15 @@ export interface UseCollectionChartOptions {
   query?: Record<string, string | number>
 }
 
-import { getChartColor } from '../utils/chart-constants'
-
 export function useCollectionChart(
   collectionKey: MaybeRef<string>,
   options?: MaybeRef<UseCollectionChartOptions>
 ) {
   const { getConfig } = useCollections()
   const { teamId } = useTeamContext()
+  // Theme-derived series colors (reactive to theme + dark mode); reads the
+  // categories computed below so a theme change recolors the chart live.
+  const { colorAt } = useChartPalette()
 
   const chartData = ref<Record<string, unknown>[]>([])
   const pending = ref(false)
@@ -127,7 +128,7 @@ export function useCollectionChart(
 
     return fields.map((field, index) => ({
       name: field,
-      color: getChartColor(index, fields.length)
+      color: colorAt(index, fields.length)
     }))
   })
 
