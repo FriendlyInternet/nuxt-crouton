@@ -39,7 +39,8 @@ domain package (sales / bookings)         crouton-printing
 | `server/db/schema.ts` | Re-export so NuxtHub auto-discovers the tables in `db:generate`. |
 | `server/utils/print-job-queue.ts` | The queue API: `enqueuePrintJob` / `enqueuePrintJobs` + `PRINT_STATUS`. Auto-imported into the merged nitro context. `db` is passed in by the caller (decoupled from any one db util). |
 | `server/utils/print-transport.ts` | Per-event transport selection (#1324): `PRINT_TRANSPORT`, `transportAllows`, `getPrintTransport`/`getAllPrintTransports` (missing-table ⇒ legacy, never fail printing), `upsertPrintTransport`, heartbeat throttle. |
-| `app/components/TransportPicker.vue` | `<CroutonPrintingTransportPicker>` — dumb per-event flow picker + liveness readout. The embedding domain owns fetching/auth and may pass translated `items` (this package ships no i18n). |
+| `app/components/TransportPicker.vue` | `<CroutonPrintingTransportPicker>` — dumb per-event flow picker + liveness readout. The embedding domain owns fetching/auth and may pass translated `items` (this package ships no i18n). Optional `setupGuides` (#1364): per-flow setup checklists behind a collapsed "Setup" toggle. |
+| `app/components/TransportSetupPanel.vue` + `TransportSetupCopyChip.vue` | The setup-guide body (#1364): numbered checklist, copyable value chips (event id / app URL / env-var names), and a verify step carrying the flow's live heartbeat dot. Guide shape in `app/types/transport-setup.ts`; content comes translated from the embedder and **must mirror `print-server/README.md`** (sync note there). |
 | `crouton.manifest.ts` | Registers as the `printing` croutonApp (`hasApp('printing')`). |
 | `app/app.config.ts` | `croutonApps.printing` registration (headless — no admin routes of its own). |
 

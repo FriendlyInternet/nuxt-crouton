@@ -287,6 +287,66 @@ const printTransportItems = computed(() => [
   }
 ])
 
+// Per-flow setup guide (#1364) — the in-app answer to "how do I set up at a
+// new venue?". The checklists MIRROR crouton-printing/print-server/README.md
+// (Install/Configuration): when either changes, update the other. The copyable
+// values are the app-known ones (this event's id for the router's EVENT_ID,
+// the app origin for API_URL, the secret's env var NAME — never its value).
+const appOrigin = useRequestURL().origin
+const printTransportSetup = computed(() => [
+  {
+    value: 'router-spooler' as const,
+    intro: t('sales.printFlow.setup.routerIntro', 'One-time router config lives in /etc/init.d/print_server — set the values below, restart the service, and only EVENT_ID changes per event.'),
+    steps: [
+      {
+        text: t('sales.printFlow.setup.routerPrinters', 'Put the printers on the router\'s own network with a static IP, and add each one under Printers with that IP and port 9100.')
+      },
+      {
+        text: t('sales.printFlow.setup.routerEventId', 'Set EVENT_ID to this event\'s id — this is the per-event value: update it and restart for every new event.'),
+        value: props.event.id,
+        valueLabel: 'EVENT_ID'
+      },
+      {
+        text: t('sales.printFlow.setup.routerApiUrl', 'Set API_URL to this app:'),
+        value: appOrigin,
+        valueLabel: 'API_URL'
+      },
+      {
+        text: t('sales.printFlow.setup.routerApiKey', 'Set API_KEY to the same value as this app secret (the secret itself is never shown here):'),
+        value: 'NUXT_CROUTON_SALES_PRINT_API_KEY'
+      },
+      {
+        text: t('sales.printFlow.setup.routerRestart', 'Apply the config on the router:'),
+        value: '/etc/init.d/print_server restart'
+      },
+      {
+        text: t('sales.printFlow.setup.routerVerify', 'Done when this dot turns green — the router polls within ~30 seconds.'),
+        verify: true
+      }
+    ]
+  },
+  {
+    value: 'local-drainer' as const,
+    intro: t('sales.printFlow.setup.drainerIntro', 'A device at the venue (Pi / mini-PC) runs the app itself and prints straight to the printers — no router config involved.'),
+    steps: [
+      {
+        text: t('sales.printFlow.setup.drainerEnv', 'Start the app on the venue device with the print drainer enabled:'),
+        value: 'CROUTON_PRINTING_DRAINER=1'
+      },
+      {
+        text: t('sales.printFlow.setup.drainerPrinters', 'Add each printer under Printers with its LAN IP and port 9100 — the device must reach the printers on its network.')
+      },
+      {
+        text: t('sales.printFlow.setup.drainerFlip', 'Keep this Print flow on "Local device" — the router flow is the default, and the device only serves events set to Local device.')
+      },
+      {
+        text: t('sales.printFlow.setup.drainerVerify', 'Done when this dot turns green — the device ticks within ~30 seconds.'),
+        verify: true
+      }
+    ]
+  }
+])
+
 // Event-level actions (moved out of the workspace header to declutter it).
 // Same useCollectionQuery cache as the Shell, so refresh() updates its list
 // before navigating to the duplicated event's slug.
@@ -487,6 +547,10 @@ function helperExpiry(value: string): string {
               :items="printTransportItems"
               :last-seen-label="t('sales.printFlow.lastSeen', 'last seen')"
               :never-seen-label="t('sales.printFlow.neverSeen', 'never seen')"
+              :setup-guides="printTransportSetup"
+              :setup-label="t('sales.printFlow.setup.toggle', 'Setup')"
+              :copy-label="t('sales.printFlow.setup.copy', 'Copy')"
+              :copied-label="t('sales.printFlow.setup.copied', 'Copied')"
               @update:transport="setPrintTransport"
             />
 

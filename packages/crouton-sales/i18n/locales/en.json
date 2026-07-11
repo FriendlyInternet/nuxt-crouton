@@ -613,7 +613,24 @@
       "lastSeen": "last seen",
       "neverSeen": "never seen",
       "updated": "Print flow updated",
-      "updateError": "Could not update the print flow"
+      "updateError": "Could not update the print flow",
+      "setup": {
+        "toggle": "Setup",
+        "copy": "Copy",
+        "copied": "Copied",
+        "routerIntro": "One-time router config lives in /etc/init.d/print_server — set the values below, restart the service, and only EVENT_ID changes per event.",
+        "routerPrinters": "Put the printers on the router's own network with a static IP, and add each one under Printers with that IP and port 9100.",
+        "routerEventId": "Set EVENT_ID to this event's id — this is the per-event value: update it and restart for every new event.",
+        "routerApiUrl": "Set API_URL to this app:",
+        "routerApiKey": "Set API_KEY to the same value as this app secret (the secret itself is never shown here):",
+        "routerRestart": "Apply the config on the router:",
+        "routerVerify": "Done when this dot turns green — the router polls within ~30 seconds.",
+        "drainerIntro": "A device at the venue (Pi / mini-PC) runs the app itself and prints straight to the printers — no router config involved.",
+        "drainerEnv": "Start the app on the venue device with the print drainer enabled:",
+        "drainerPrinters": "Add each printer under Printers with its LAN IP and port 9100 — the device must reach the printers on its network.",
+        "drainerFlip": "Keep this Print flow on \"Local device\" — the router flow is the default, and the device only serves events set to Local device.",
+        "drainerVerify": "Done when this dot turns green — the device ticks within ~30 seconds."
+      }
     }
   }
 }
