@@ -127,23 +127,37 @@ can be embedded inline (step 4).
 `writeups/ui-proposals/<slug>.md` — the "what changes" list, one item per line. Committed,
 it lands in "Files changed" so the reviewer can inline-comment a specific change.
 
-- **Commit** the `.html` + `.md` + **`.png`** (via `/commit`, scope `docs`) and **push the
-  branch** — the PNG must be on the branch before you can reference its raw URL.
-- **Post the PNG inline** in a sticky `<!-- ui-proposal:<slug> -->` PR comment using a
-  Markdown image (NOT a link to the `.html` — that "opens as code" on mobile, the #569/#613
-  papercut). Reference it by its raw URL **on the PR's head branch**:
-  ```markdown
-  <!-- ui-proposal:<slug> -->
-  ### 🎨 UI proposal — <slug>
-  ![<slug> mockup](https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/<branch>/writeups/ui-proposals/<slug>.png)
+> **HARD RULE — the PNG MUST render *inside* the comment.** The reviewer sees the design by
+> looking at the comment, not by opening a file. A path reference (`writeups/…/<slug>.png`) or
+> a link to the `.html` is a **failed** hand-off — it "opens as code" on mobile (#569/#613) and
+> makes the reviewer go hunting. Always embed a Markdown **image** by its raw URL, and only
+> after you've confirmed that URL serves the image.
 
-  Review the **"what changes"** list in _Files changed_ (`writeups/ui-proposals/<slug>.md`) and
-  inline-comment any change. Reply `lgtm` / `approve` when satisfied.
-  ```
-  Use the actual PR **head branch** in the URL (e.g. `claude/issue-<NN>-<slug>`); the image
-  re-renders whenever the committed file changes, so editing in place (step 5) just works.
-- **Steer feedback to the `.md`** — inline comments in the diff, not the image.
-- Apply `status:blocked`, @mention `@pmcp`, and **stop**.
+1. **Commit** the `.html` + `.md` + **`.png`** (via `/commit`, scope `docs`).
+2. **Push the branch so GitHub can serve the PNG.** The raw URL 404s until the commit is on
+   the remote — pushing is **not optional**, it's what makes the image appear. Push the current
+   branch (set upstream if new: `git push -u origin <branch>`). In an interactive session with
+   no PR, this is still required — the issue comment needs the same hosted file.
+3. **Verify the raw URL resolves** before you post — a 404 means a silent path-link fallback,
+   the exact failure this rule exists to prevent:
+   ```bash
+   url="https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/<branch>/writeups/ui-proposals/<slug>.png"
+   curl -s -o /dev/null -w '%{http_code}' "$url"   # must be 200
+   ```
+4. **Post the sticky comment with the PNG embedded inline** — on the **PR** if one exists,
+   otherwise **on the tracking issue** (interactive / no-PR runs). Same body either way:
+   ```markdown
+   <!-- ui-proposal:<slug> -->
+   ### 🎨 UI proposal — <slug>
+   ![<slug> mockup](https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/<branch>/writeups/ui-proposals/<slug>.png)
+
+   Review the **"what changes"** list (`writeups/ui-proposals/<slug>.md`) and comment any change.
+   Reply `lgtm` / `approve` when satisfied.
+   ```
+   Use the actual **head branch** in the URL (e.g. `receiptDesign`, `claude/issue-<NN>-<slug>`);
+   the image re-renders whenever the committed file changes, so editing in place (step 5) works.
+5. **Steer feedback to the `.md`** — inline comments in the diff (PR) or on the committed file.
+6. Apply `status:blocked`, @mention `@pmcp`, and **stop**.
 
 ### Step 5 — Revision loop (both paths share this)
 On each change request: revise the proposal (mockup files for `--static`, source file for
