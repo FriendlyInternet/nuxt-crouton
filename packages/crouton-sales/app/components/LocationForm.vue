@@ -6,58 +6,19 @@
 -->
 
 <template>
-  <CroutonFormActionButton
-    v-if="action === 'delete'"
+  <SalesFormShell
     :action="action"
     :collection="collection"
     :items="items"
     :loading="loading"
-    @click="handleSubmit"
-  />
-
-  <UForm
-    v-else
     :schema="schema"
     :state="state"
+    :deleting="deleting"
     @submit="handleSubmit"
+    @delete="handleDelete"
   >
-    <CroutonFormLayout>
-      <template #main>
-        <div class="flex flex-col gap-4 p-1">
-          <UFormField v-if="!hideEvent" :label="t('sales.form.event')" name="eventId" class="not-last:pb-4">
-            <CroutonFormReferenceSelect
-              v-model="state.eventId"
-              collection="salesEvents"
-              :label="t('sales.form.event')"
-            />
-          </UFormField>
-          <UFormField :label="t('sales.form.title')" name="title" class="not-last:pb-4">
-            <UInput v-model="state.title" class="w-full" size="xl" />
-          </UFormField>
-        </div>
-      </template>
-
-      <template #footer>
-        <!-- Delete pill left, save stretches over the rest (items-stretch keeps
-             the pill the same height as the save button). -->
-        <div class="flex items-stretch gap-2">
-          <CroutonDeleteButton
-            v-if="action === 'update' && state.id"
-            expanded
-            :loading="deleting"
-            @confirm="handleDelete"
-          />
-          <CroutonFormActionButton
-            class="flex-1"
-            :action="action"
-            :collection="collection"
-            :items="items"
-            :loading="loading"
-          />
-        </div>
-      </template>
-    </CroutonFormLayout>
-  </UForm>
+          <SalesFormEventTitleFields v-model:event-id="state.eventId" v-model:title="state.title" :hide-event="hideEvent" />
+  </SalesFormShell>
 </template>
 
 <script setup lang="ts">
@@ -78,47 +39,7 @@ const props = defineProps<LocationFormProps>()
 const { t } = useT()
 const { defaultValue, schema, collection } = useSalesLocations()
 
-const { create, update, deleteItems } = useCollectionMutation(collection)
-const { close, loading } = useCrouton()
-
-// Merge activeItem for both create (preset eventId from the event workspace) and
-// update (the full record being edited).
-const initialValues = { ...defaultValue, ...(props.activeItem || {}) }
-
-const state = ref<Record<string, any> & { id?: string | null }>(initialValues)
-
-// Event is implied by the workspace — hide the selector when it's preset.
-const hideEvent = computed(() => !!state.value.eventId)
-
-const handleSubmit = async () => {
-  try {
-    if (props.action === 'create') {
-      await create(state.value)
-    } else if (props.action === 'update' && state.value.id) {
-      await update(state.value.id, state.value)
-    } else if (props.action === 'delete') {
-      await deleteItems(props.items as any)
-    }
-    close()
-  } catch (error) {
-    console.error('Form submission failed:', error)
-  }
-}
-
-// Delete stays in-form (a nested overlay would leave this slideover open on a
-// deleted record); the arm→confirm step lives in CroutonDeleteButton.
-const deleting = ref(false)
-
-const handleDelete = async () => {
-  if (!state.value.id) return
-  deleting.value = true
-  try {
-    await deleteItems([state.value.id])
-    close()
-  } catch (error) {
-    console.error('Delete failed:', error)
-  } finally {
-    deleting.value = false
-  }
-}
+// Shared scaffold: state (activeItem-merged), submit switch, in-form delete.
+const { state, hideEvent, loading, handleSubmit, deleting, handleDelete }
+  = useSalesCollectionForm(props, { collection, defaultValue })
 </script>

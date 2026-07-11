@@ -25,17 +25,7 @@
     <CroutonFormLayout :navigation-items="navigationItems" v-model="activeSection">
       <template #main>
         <div class="flex flex-col gap-4 p-1">
-          <UFormField v-if="!hideEvent" :label="t('sales.form.event')" name="eventId" class="not-last:pb-4">
-            <CroutonFormReferenceSelect
-              v-model="state.eventId"
-              collection="salesEvents"
-              :label="t('sales.form.event')"
-            />
-          </UFormField>
-
-          <UFormField :label="t('sales.form.title')" name="title" class="not-last:pb-4">
-            <UInput v-model="state.title" class="w-full" size="xl" />
-          </UFormField>
+          <SalesFormEventTitleFields v-model:event-id="state.eventId" v-model:title="state.title" :hide-event="hideEvent" />
 
           <!-- Output driver: how this station prints. Thermal (network ESC/POS)
                is the default; browser-print fulfils via the OS / AirPrint dialog
@@ -163,6 +153,19 @@
             :loading="deleting"
             @confirm="handleDelete"
           />
+          <!-- Testprint (#1391): a tiny ticket through the REAL print flow
+               (queue → the event's transport → paper) — proves the whole
+               chain, not just this form's values. Saved printers only. -->
+          <UButton
+            v-if="action === 'update' && state.id"
+            variant="outline"
+            color="neutral"
+            icon="i-lucide-printer-check"
+            :loading="testPrinting"
+            @click="handleTestPrint"
+          >
+            {{ t('sales.form.testPrint', 'Testprint') }}
+          </UButton>
           <CroutonFormActionButton
             class="flex-1"
             :action="action"
@@ -253,14 +256,9 @@ const fieldLabels: Record<string, string> = {
 }
 const fieldLabel = (name: string) => fieldLabels[name] || name
 
-const { create, update, deleteItems } = useCollectionMutation(collection)
-const { close, loading } = useCrouton()
-
-// Merge activeItem for both create (preset eventId from the event workspace) and
-// update (the full record being edited).
-const initialValues = { ...defaultValue, ...(props.activeItem || {}) }
-
-const state = ref<Record<string, any> & { id?: string | null }>(initialValues)
+// Shared scaffold: state (activeItem-merged), submit switch, in-form delete.
+const { state, hideEvent, loading, close, submitAction, deleting, handleDelete }
+  = useSalesCollectionForm(props, { collection, defaultValue })
 
 // Pre-existing printers have no type column value — they are kitchen printers.
 if (!state.value.type) state.value.type = 'kitchen'
@@ -280,9 +278,6 @@ watch(() => state.value.type, (type) => {
   if (type === 'receipt') state.value.locationId = null
 })
 
-// Event is implied by the workspace — hide the selector when it's preset.
-const hideEvent = computed(() => !!state.value.eventId)
-
 const handleSubmit = async () => {
   // Pre-existing receipt printers may still carry a location from before the
   // field was hidden — drop it on save so routing data stays clean.
@@ -294,13 +289,7 @@ const handleSubmit = async () => {
     state.value.ipAddress = 'browser-print'
   }
   try {
-    if (props.action === 'create') {
-      await create(state.value)
-    } else if (props.action === 'update' && state.value.id) {
-      await update(state.value.id, state.value)
-    } else if (props.action === 'delete') {
-      await deleteItems(props.items as any)
-    }
+    await submitAction()
     validationErrors.value = []
     close()
   } catch (error) {
@@ -308,20 +297,30 @@ const handleSubmit = async () => {
   }
 }
 
-// Delete stays in-form (a nested overlay would leave this slideover open on a
-// deleted record); the arm→confirm step lives in CroutonDeleteButton.
-const deleting = ref(false)
+// Testprint (#1391): POST the team-authed probe endpoint; the job then rides
+// the event's Print flow like any order ticket. Outcome shows on the printer
+// LEDs / job list — the toast only confirms "queued".
+const notify = useNotify()
+const route = useRoute()
+const testPrinting = ref(false)
 
-const handleDelete = async () => {
-  if (!state.value.id) return
-  deleting.value = true
+async function handleTestPrint() {
+  if (!state.value.id || !state.value.eventId) return
+  testPrinting.value = true
   try {
-    await deleteItems([state.value.id])
-    close()
-  } catch (error) {
-    console.error('Delete failed:', error)
-  } finally {
-    deleting.value = false
+    await $fetch(
+      `/api/crouton-sales/teams/${route.params.team}/events/${state.value.eventId}/printers/${state.value.id}/test-print`,
+      { method: 'POST' }
+    )
+    notify.success(t('sales.form.testPrintQueued', 'Test ticket queued — watch the printer'))
+  }
+  catch (e: unknown) {
+    const description = (e as { data?: { statusText?: string } })?.data?.statusText
+    notify.error(t('sales.form.testPrintError', 'Test print failed'), description ? { description } : undefined)
+  }
+  finally {
+    testPrinting.value = false
   }
 }
+
 </script>

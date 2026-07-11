@@ -387,7 +387,10 @@
       "driverNetwork": "Netwerkprinter",
       "driverNetworkHelp": "Thermische printer op het venuenetwerk (ESC/POS).",
       "driverBrowser": "Browser / AirPrint",
-      "driverBrowserHelp": "Afdrukken via het printvenster van het toestel, vanaf een print-bridge-scherm."
+      "driverBrowserHelp": "Afdrukken via het printvenster van het toestel, vanaf een print-bridge-scherm.",
+      "testPrint": "Testprint",
+      "testPrintQueued": "Testticket in de wachtrij — kijk naar de printer",
+      "testPrintError": "Testprint mislukt"
     },
     "helperLogin": {
       "title": "Helper-login",
