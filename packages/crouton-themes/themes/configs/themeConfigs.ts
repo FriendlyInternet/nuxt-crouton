@@ -38,6 +38,7 @@ export interface ThemeUIConfig {
   radioGroup?: { defaultVariants?: { variant?: string } }
   alert?: { defaultVariants?: { variant?: string } }
   calendar?: { defaultVariants?: { variant?: string } }
+  pinInput?: { defaultVariants?: { variant?: string } }
 }
 
 // Every config sets EVERY key the swap owns, so switching A → B never leaves
@@ -63,6 +64,7 @@ const namedVariantConfig = (
   radioGroup: { defaultVariants: { variant } },
   alert: { defaultVariants: { variant } },
   calendar: { defaultVariants: { variant } },
+  pinInput: { defaultVariants: { variant } },
   ...overrides
 })
 
@@ -83,7 +85,8 @@ const defaultConfig: ThemeUIConfig = {
   checkbox: { defaultVariants: { variant: 'list' } },
   radioGroup: { defaultVariants: { variant: 'list' } },
   alert: { defaultVariants: { variant: 'solid' } },
-  calendar: { defaultVariants: { variant: 'solid' } }
+  calendar: { defaultVariants: { variant: 'solid' } },
+  pinInput: { defaultVariants: { variant: 'outline' } }
 }
 
 // KO — named variants registered by ko/app.config.ts (variant="ko" etc.)
@@ -119,7 +122,8 @@ const blackandwhiteConfig: ThemeUIConfig = {
   checkbox: { defaultVariants: { variant: 'list' } },
   radioGroup: { defaultVariants: { variant: 'list' } },
   alert: { defaultVariants: { variant: 'subtle' } },
-  calendar: { defaultVariants: { variant: 'solid' } }
+  calendar: { defaultVariants: { variant: 'solid' } },
+  pinInput: { defaultVariants: { variant: 'subtle' } }
 }
 
 // Brutalist — named variants registered by brutalist/app.config.ts

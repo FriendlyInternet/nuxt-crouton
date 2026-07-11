@@ -251,6 +251,13 @@ export default defineAppConfig({
           }
         }
       }
+    },
+
+    // #1482: UPinInput reuses this theme's input treatment on each cell
+    // (border/bg/focus); the size variant keeps the square geometry.
+    pinInput: {
+      slots: { base: subtractThemeDefaults },
+      variants: { variant: { brutalist: { base: "brutalist-input-base" } } }
     }
   }
 })
