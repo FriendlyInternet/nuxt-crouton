@@ -26,18 +26,21 @@
           @click.stop
         />
       </div>
-      <button
+      <!-- UButton, not a raw button, so themes reach it (#1410); the class
+           list keeps the slide-out positioning + reveal behavior. -->
+      <UButton
         v-if="editable"
-        type="button"
-        class="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-2.5
-               bg-elevated/95 hover:bg-elevated text-muted hover:text-highlighted cursor-pointer
+        color="neutral"
+        variant="ghost"
+        icon="i-lucide-pencil"
+        square
+        class="absolute right-0 top-0 bottom-0 z-10 justify-center rounded-none px-2.5
+               bg-elevated/95 hover:bg-elevated text-muted hover:text-highlighted
                transition-all duration-200 ease-out translate-x-full group-hover/card:translate-x-0
                pointer-coarse:translate-x-0"
         :aria-label="t('common.edit')"
         @click.stop="emit('edit', product.id)"
-      >
-        <UIcon name="i-lucide-pencil" class="size-4" />
-      </button>
+      />
 
       <!-- Hover pushes the content inward so the slide-out panels never cover
            the title or price. -->

@@ -519,17 +519,20 @@ const ordersFilterCount = ref(0)
 
     <!-- Vertical pane tabs: hang just outside the kassa's right edge while
          their pane is closed (the open pane has its own close button).
-         top-14 drops them under the POS header line (client-selector row). -->
+         top-14 drops them under the POS header line (client-selector row).
+         UButtons (not raw buttons) so themes reach them (#1410); the class
+         list keeps the gutter geometry + vertical writing mode. -->
     <div
       v-if="hasGutter"
       class="absolute top-14 left-[calc(100%-2.75rem)] -ml-px flex flex-col gap-2"
     >
-      <button
+      <UButton
         v-if="!ordersOpen"
-        type="button"
-        class="flex flex-col items-center gap-1.5 px-1.5 py-3 rounded-e-md cursor-pointer
+        color="neutral"
+        variant="soft"
+        class="flex-col items-center gap-1.5 px-1.5 py-3 rounded-none rounded-e-md
                border border-l-0 border-default bg-elevated/60 hover:bg-elevated
-               text-muted hover:text-highlighted transition-colors"
+               text-muted hover:text-highlighted"
         :aria-label="t('sales.orders.title')"
         @click="ordersOpen = true"
       >
@@ -537,13 +540,14 @@ const ordersFilterCount = ref(0)
         <span class="[writing-mode:vertical-rl] text-sm font-medium tracking-wide">
           {{ t('sales.orders.title') }}
         </span>
-      </button>
-      <button
+      </UButton>
+      <UButton
         v-if="event.requiresClient && !clientsOpen"
-        type="button"
-        class="flex flex-col items-center gap-1.5 px-1.5 py-3 rounded-e-md cursor-pointer
+        color="neutral"
+        variant="soft"
+        class="flex-col items-center gap-1.5 px-1.5 py-3 rounded-none rounded-e-md
                border border-l-0 border-default bg-elevated/60 hover:bg-elevated
-               text-muted hover:text-highlighted transition-colors"
+               text-muted hover:text-highlighted"
         :aria-label="t('sales.workspace.clientsPanel.button')"
         @click="clientsOpen = true"
       >
@@ -551,13 +555,14 @@ const ordersFilterCount = ref(0)
         <span class="[writing-mode:vertical-rl] text-sm font-medium tracking-wide">
           {{ t('sales.workspace.clientsPanel.button') }}
         </span>
-      </button>
-      <button
+      </UButton>
+      <UButton
         v-if="loggedIn && !dataOpen"
-        type="button"
-        class="flex flex-col items-center gap-1.5 px-1.5 py-3 rounded-e-md cursor-pointer
+        color="neutral"
+        variant="soft"
+        class="flex-col items-center gap-1.5 px-1.5 py-3 rounded-none rounded-e-md
                border border-l-0 border-default bg-elevated/60 hover:bg-elevated
-               text-muted hover:text-highlighted transition-colors"
+               text-muted hover:text-highlighted"
         :aria-label="t('sales.workspace.dataPanel.button')"
         @click="dataOpen = true"
       >
@@ -565,7 +570,7 @@ const ordersFilterCount = ref(0)
         <span class="[writing-mode:vertical-rl] text-sm font-medium tracking-wide">
           {{ t('sales.workspace.dataPanel.button') }}
         </span>
-      </button>
+      </UButton>
     </div>
     </div>
 
