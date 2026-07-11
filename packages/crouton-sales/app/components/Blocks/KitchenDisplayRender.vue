@@ -130,25 +130,25 @@ function ago(iso: string) {
 <template>
   <div class="kitchen-display-block">
     <!-- Editor didn't pick an event -->
-    <div
+    <UAlert
       v-if="!eventSlug"
-      class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-    >
-      <UIcon name="i-lucide-monitor" class="w-6 h-6 mx-auto mb-2 text-muted" />
-      {{ t('sales.block.noEventPicked') }}
-    </div>
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-monitor"
+      :title="t('sales.block.noEventPicked')"
+    />
 
     <!-- Picked event no longer resolves (deleted / stale slug) -->
-    <div
+    <UAlert
       v-else-if="eventNotFound"
-      class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-    >
-      <UIcon name="i-lucide-monitor-x" class="w-6 h-6 mx-auto mb-2 text-muted" />
-      {{ t('sales.blocks.kitchenDisplay.ui.eventNotFound') }}
-    </div>
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-monitor-x"
+      :title="t('sales.blocks.kitchenDisplay.ui.eventNotFound')"
+    />
 
     <!-- The board — theme-driven via Nuxt UI semantic tokens (follows dark mode) -->
-    <div v-else class="rounded-3xl overflow-hidden bg-default ring ring-default p-5">
+    <UCard>
       <header class="flex items-center justify-between mb-5">
         <div class="flex items-center gap-3">
           <UIcon name="i-lucide-chef-hat" class="size-6 text-primary" />
@@ -211,7 +211,7 @@ function ago(iso: string) {
           />
         </div>
       </TransitionGroup>
-    </div>
+    </UCard>
   </div>
 </template>
 

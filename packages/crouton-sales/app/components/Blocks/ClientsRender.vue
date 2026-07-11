@@ -28,25 +28,25 @@ const eventSlug = computed(() => props.attrs.eventSlug || '')
 <template>
   <div class="sales-clients-block">
     <!-- Editor didn't pick an event -->
-    <div
+    <UAlert
       v-if="!eventSlug"
-      class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-    >
-      <UIcon name="i-lucide-users" class="w-6 h-6 mx-auto mb-2 text-muted" />
-      {{ t('sales.block.noEventPicked') }}
-    </div>
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-users"
+      :title="t('sales.block.noEventPicked')"
+    />
 
     <!-- Team-members-only tool. -->
-    <div
+    <UAlert
       v-else-if="!loggedIn"
-      class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-    >
-      <UIcon name="i-lucide-lock" class="w-6 h-6 mx-auto mb-2 text-muted" />
-      {{ t('sales.blocks.salesClients.ui.teamOnly') }}
-    </div>
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-lock"
+      :title="t('sales.blocks.salesClients.ui.teamOnly')"
+    />
 
     <!-- Signed-in team member → the open client tabs (recurring-client events). -->
-    <div v-else class="rounded-3xl bg-default p-6">
+    <UCard>
       <Suspense>
         <SalesBlocksEventResolver
           v-slot="{ event }"
@@ -54,18 +54,18 @@ const eventSlug = computed(() => props.attrs.eventSlug || '')
           :not-found-label="t('sales.blocks.salesClients.ui.eventNotFound')"
         >
           <SalesEventWorkspaceClientsPanel v-if="event.requiresClient" :event="event" />
-          <div
+          <UAlert
             v-else
-            class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-          >
-            <UIcon name="i-lucide-user-x" class="w-6 h-6 mx-auto mb-2 text-muted" />
-            {{ t('sales.blocks.salesClients.ui.notRecurring') }}
-          </div>
+            color="neutral"
+            variant="soft"
+            icon="i-lucide-user-x"
+            :title="t('sales.blocks.salesClients.ui.notRecurring')"
+          />
         </SalesBlocksEventResolver>
         <template #fallback>
           <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
         </template>
       </Suspense>
-    </div>
+    </UCard>
   </div>
 </template>

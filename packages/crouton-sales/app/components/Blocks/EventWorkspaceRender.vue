@@ -76,32 +76,32 @@ function openPane(pane: 'orders' | 'clients' | 'data' | 'settings') {
 <template>
   <div class="event-workspace-block">
     <!-- Editor didn't pick an event -->
-    <div
+    <UAlert
       v-if="!eventSlug"
-      class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-    >
-      <UIcon name="i-lucide-store" class="w-6 h-6 mx-auto mb-2 text-muted" />
-      {{ t('sales.block.noEventPicked') }}
-    </div>
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-store"
+      :title="t('sales.block.noEventPicked')"
+    />
 
     <!-- Wide-screen team member → the full workspace inline (event fixed, no
-         switcher). No border: the shell frames its own kassa; p-6 stays so the
-         block keeps the exact same width as the previously bordered version. -->
-    <div v-else-if="showInlineShell" class="rounded-3xl bg-default p-6">
+         switcher). Variant-less UCard (#1407): the theme's card chrome frames
+         the block instead of a hardcoded rounded-3xl shell. -->
+    <UCard v-else-if="showInlineShell">
       <Suspense>
         <SalesEventWorkspaceShell :event-slug="eventSlug" :show-switcher="false" />
         <template #fallback>
           <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
         </template>
       </Suspense>
-    </div>
+    </UCard>
 
     <!-- Otherwise → "Open kassa" launcher + fullscreen modal. Two cases: a
          member on a narrow screen (modal hosts the full workspace shell), or an
          anonymous volunteer (modal hosts the POS panel). The session indicator
          + logout live in the page nav's auth pill, not here. -->
     <template v-else>
-      <div class="rounded-3xl border border-default bg-default p-8 flex flex-col items-center gap-5 text-center">
+      <UCard :ui="{ body: 'flex flex-col items-center gap-5 text-center' }">
         <p class="text-sm text-muted">{{ t('sales.block.openKassaHint') }}</p>
         <UButton size="xl" block class="max-w-md" @click="kassaOpen = true">
           {{ loggedIn ? t('sales.block.openKassa') : t('sales.block.makeOrder') }}
@@ -116,7 +116,7 @@ function openPane(pane: 'orders' | 'clients' | 'data' | 'settings') {
           class="max-w-md"
           @open="openPane($event)"
         />
-      </div>
+      </UCard>
 
       <!-- Pane deep-entry: just the pane, in its own fullscreen surface —
            the kassa is never mounted behind it. -->

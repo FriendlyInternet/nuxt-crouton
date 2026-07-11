@@ -1206,14 +1206,17 @@ defineExpose({ state })
 
           <!-- SEO & social — one quiet disclosure (root og/robots + per-locale seo text) -->
           <div v-if="!isCollectionPage" class="mt-3 shrink-0 border-t border-default pt-2">
-            <button
-              type="button"
-              class="flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted hover:text-default transition-colors"
+            <!-- UButton (not raw) so themes reach it (#1410) -->
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              class="gap-1 px-0 font-semibold uppercase tracking-wide text-muted hover:text-default"
               @click="showSeoMeta = !showSeoMeta"
             >
               <UIcon :name="showSeoMeta ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="size-3.5" />
               {{ t('pages.editor.seoSocial', 'SEO & social') }}
-            </button>
+            </UButton>
             <div v-if="showSeoMeta" class="mt-2 flex flex-col gap-2">
               <UFormField :label="t('pages.fields.seoTitle', 'SEO title')" name="seoTitle">
                 <UInput v-model="seoTitle" size="sm" class="w-full" :placeholder="t('pages.editor.seoTitlePlaceholder', 'Defaults to the page title')" />
