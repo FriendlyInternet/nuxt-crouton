@@ -331,3 +331,22 @@ body.theme-terminal::after {
 .theme-terminal button[role="switch"][data-state="checked"] > span {
   background-color: var(--term-phosphor);
 }
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the tube.
+   ============================================ */
+
+[data-theme="terminal"] body,
+body.theme-terminal {
+  --ui-text-dimmed: #3a8a53;
+  --ui-text-muted: #4fae6a;
+  --ui-text-toned: #8fd4a4;
+  --ui-text: #bfe8c9;
+  --ui-text-highlighted: #33ff66;
+  --ui-bg-muted: #0e140e;
+  --ui-bg-elevated: #101710;
+  --ui-bg-accented: #16241a;
+  --ui-border: #1d9e44;
+  --ui-border-muted: #14522b;
+  --ui-border-accented: #33ff66;
+}

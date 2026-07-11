@@ -853,3 +853,21 @@
 .ko-link.ko-link--blue {
   color: var(--ko-accent-blue);
 }
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the chassis gray.
+   ============================================ */
+
+[data-theme="ko"] body,
+body.theme-ko {
+  --ui-text-dimmed: #6b6763;
+  --ui-text-muted: #57534f;
+  --ui-text-toned: #4a4744;
+  --ui-text: #403e3d;
+  --ui-text-highlighted: #2b2927;
+  --ui-bg-muted: #cdc9c6;
+  --ui-bg-elevated: #d3cfcc;
+  --ui-bg-accented: #bdb9b6;
+  --ui-border: #908e8d;
+  --ui-border-muted: #aeaba9;
+  --ui-border-accented: #545251;
+}

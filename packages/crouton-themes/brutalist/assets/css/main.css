@@ -288,3 +288,22 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the paper.
+   ============================================ */
+
+[data-theme="brutalist"] body,
+body.theme-brutalist {
+  --ui-text-dimmed: #75716a;
+  --ui-text-muted: #5c5952;
+  --ui-text-toned: #33312c;
+  --ui-text: #0a0a0a;
+  --ui-text-highlighted: #0a0a0a;
+  --ui-bg-muted: #f5f2e9;
+  --ui-bg-elevated: #f3f0e6;
+  --ui-bg-accented: #ebe7da;
+  --ui-border: #0a0a0a;
+  --ui-border-muted: #d9d5c9;
+  --ui-border-accented: #0a0a0a;
+}
