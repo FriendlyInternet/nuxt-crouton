@@ -175,16 +175,19 @@ const presetEntries = computed(() =>
           <!-- Preset Picker (vertical) -->
           <div class="space-y-2">
             <label class="text-sm font-medium text-default">{{ $t('themeSettings.preset') }}</label>
+            <!-- Preset cards — UButton (not raw buttons) so themes reach the
+                 theme picker itself (#1410); selection ring wins via class merge -->
             <div class="flex flex-col gap-2">
-              <button
+              <UButton
                 v-for="[key, preset] in presetEntries"
                 :key="key"
-                type="button"
+                color="neutral"
+                variant="outline"
                 :disabled="!isAdmin || isSaving"
-                class="relative flex items-center gap-3 p-3 rounded-lg border text-left transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                class="relative w-full justify-start gap-3 p-3 text-left transition-colors"
                 :class="(localTheme.preset === key) || (key === 'custom' && !localTheme.preset)
-                  ? 'border-primary bg-primary/5'
-                  : 'border-muted hover:border-default hover:bg-elevated/50'"
+                  ? 'ring-primary bg-primary/5'
+                  : 'hover:bg-elevated/50'"
                 @click="selectPreset(key)"
               >
                 <div class="flex shrink-0 gap-1">
@@ -210,7 +213,7 @@ const presetEntries = computed(() =>
                   name="i-lucide-check-circle"
                   class="size-4 text-primary shrink-0"
                 />
-              </button>
+              </UButton>
             </div>
           </div>
 

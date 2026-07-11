@@ -4,6 +4,10 @@
  *
  * A button group for selecting border radius values with visual preview.
  *
+ * Deliberately a custom widget (#1410): each option previews its own literal
+ * radius — a themed UButton would repaint the previews with the theme's
+ * radius and destroy the comparison. Chrome uses semantic tokens.
+ *
  * @example
  * ```vue
  * <TeamRadiusPicker v-model="radius" />
