@@ -257,6 +257,27 @@ export default defineAppConfig({
         { color: "error", variant: "ko", class: { root: "ko-alert--error" } },
         { color: "neutral", variant: "ko", class: { root: "ko-alert--neutral" } }
       ]
+    },
+
+    // #1458 second-tier coverage. Calendar: the color dimension fires on
+    // headCell/cellTrigger regardless of variant (like checkbox), so both
+    // carry markers + the replacer; selected/today state lives entirely in
+    // the theme CSS via [data-selected]/[data-today].
+    calendar: {
+      slots: {
+        headCell: subtractThemeDefaults,
+        cellTrigger: subtractThemeDefaults,
+        headingLabel: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            headingLabel: "ko-cal-heading",
+            headCell: "ko-cal-head",
+            cellTrigger: "ko-cal-cell"
+          }
+        }
+      }
     }
   }
 })

@@ -475,6 +475,108 @@
 }
 
 /* ============================================
+   CALENDAR (#1458) — a wall calendar, stamped.
+   Named variant (brutalist-cal-*); selected/today state is ours to
+   supply — the named variant never fires Nuxt UI's color compounds.
+   ============================================ */
+
+.brutalist-cal-heading {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.brutalist-cal-head {
+  color: var(--brutalist-ink);
+  font-weight: 800;
+  text-transform: uppercase;
+  border-radius: 0;
+}
+
+.brutalist-cal-cell {
+  color: var(--brutalist-ink);
+  border: 2px solid transparent;
+  border-radius: 0;
+  transition: none;
+}
+
+.brutalist-cal-cell:hover:not([data-selected]):not([data-disabled]) {
+  background-color: var(--brutalist-accent);
+  color: var(--brutalist-accent-ink);
+}
+
+.brutalist-cal-cell[data-highlighted] {
+  background-color: var(--brutalist-accent);
+  color: var(--brutalist-accent-ink);
+}
+
+.brutalist-cal-cell[data-selected] {
+  background-color: var(--brutalist-ink);
+  color: var(--brutalist-paper);
+  box-shadow: 2px 2px 0 var(--brutalist-accent);
+}
+
+.brutalist-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--brutalist-ink);
+  font-weight: 800;
+}
+
+.brutalist-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker have no variant
+   dimension; scoped to both activation paths like the switch above.
+   Slider anchors on [data-slider-impl] (unique to USlider — the color
+   picker has a "track" slot too), picker on its own slot names.
+   ============================================ */
+
+/* Slider: a fader on the mixing desk. */
+[data-theme="brutalist"] [data-slider-impl] [data-slot="track"],
+.theme-brutalist [data-slider-impl] [data-slot="track"] {
+  background-color: var(--brutalist-paper);
+  border: 2px solid var(--brutalist-ink);
+  border-radius: 0;
+}
+
+[data-theme="brutalist"] [data-slider-impl] [data-slot="range"],
+.theme-brutalist [data-slider-impl] [data-slot="range"] {
+  background-color: var(--brutalist-accent);
+  border-radius: 0;
+}
+
+[data-theme="brutalist"] [data-slider-impl] [data-slot="thumb"],
+.theme-brutalist [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--brutalist-ink);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 var(--brutalist-accent);
+  --tw-ring-color: var(--brutalist-ink);
+}
+
+/* Color picker: swatches are stamps too. */
+[data-theme="brutalist"] [data-slot="picker"] [data-slot="selector"],
+.theme-brutalist [data-slot="picker"] [data-slot="selector"],
+[data-theme="brutalist"] [data-color-picker-track],
+.theme-brutalist [data-color-picker-track] {
+  border: 2px solid var(--brutalist-ink);
+  border-radius: 0;
+}
+
+[data-theme="brutalist"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-brutalist [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="brutalist"] [data-slot="selectorThumb"],
+.theme-brutalist [data-slot="selectorThumb"],
+[data-theme="brutalist"] [data-slot="trackThumb"],
+.theme-brutalist [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--brutalist-ink);
+}
+
+/* ============================================
    SEMANTIC TOKENS (#1390) — tuned to the paper.
    ============================================ */
 
