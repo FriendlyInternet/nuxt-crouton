@@ -28,7 +28,6 @@
 // on) — UDashboardPanel itself needs a top-level UDashboardGroup, which can't
 // be embedded mid-page.
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
-import type { Ref } from 'vue'
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
 
 const props = withDefaults(defineProps<{
@@ -124,14 +123,6 @@ const unhookMutation = useNuxtApp().hook('crouton:mutation', (payload: any) => {
   }
 })
 onUnmounted(unhookMutation)
-
-// SettingsTab's save API — the Save button lives in the pane header. Handed up
-// via the child's `register` emit: a template ref binds before an async-setup
-// component's defineExpose attaches, so it would stay a bare public proxy and
-// the button would never enable (#1321).
-const settingsTab = shallowRef<{ save: () => Promise<void>, dirty: Ref<boolean>, saving: Ref<boolean> } | null>(null)
-const settingsDirty = computed(() => settingsTab.value?.dirty.value ?? false)
-const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
 
 // Side panes beside the POS: orders, clients (end-of-tab receipts —
 // recurring-clients mode only), and data (sales numbers — admins only).
@@ -441,27 +432,18 @@ const kassaHeightStyle = computed(() =>
           />
           <!-- Settings pane hosts the tabbed (sectioned) SettingsTab — the
                pane is never wide enough for the old 3-column layout, so the
-               narrow-mode design is the design. Opslaan lives in the pane
-               header, driven by the registered save API; the narrow slideover
-               is gated on isNarrow so only one instance ever registers. -->
+               narrow-mode design is the design. SettingsTab owns its own Save
+               (a sticky bar at the bottom of the section); the narrow slideover
+               is gated on isNarrow so only one instance ever mounts. -->
           <SplitterPanel id="settings" :order="5" :default-size="30" :min-size="20" class="min-w-0 flex flex-col">
             <SalesEventWorkspacePaneHeader
               icon="i-lucide-settings"
               :title="t('sales.events.settings')"
               @close="settingsOpen = false"
-            >
-              <UButton
-                size="xs"
-                :loading="settingsSaving"
-                :disabled="!settingsDirty"
-                @click="settingsTab?.save()"
-              >
-                {{ t('sales.common.save') }}
-              </UButton>
-            </SalesEventWorkspacePaneHeader>
+            />
             <div class="flex-1 overflow-y-auto p-4 pt-3">
               <Suspense>
-                <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
+                <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed />
                 <template #fallback>
                   <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
                 </template>
@@ -653,10 +635,9 @@ const kassaHeightStyle = computed(() =>
       </template>
     </USlideover>
 
-    <!-- Narrow-mode settings: same surface as the panes. Opslaan lives in the
-         slideover header (the inline header Save is desktop-only), driven by
-         the same registered save API — only one SettingsTab instance ever
-         mounts (the collapsible is gated on !isNarrow). -->
+    <!-- Narrow-mode settings: same surface as the panes. SettingsTab owns its
+         own Save (sticky bar at the section bottom) — only one SettingsTab
+         instance ever mounts (the collapsible is gated on !isNarrow). -->
     <USlideover v-if="isNarrow" v-model:open="settingsSlideoverOpen">
       <template #content>
         <div class="flex flex-col h-full min-h-0">
@@ -664,19 +645,10 @@ const kassaHeightStyle = computed(() =>
             icon="i-lucide-settings"
             :title="t('sales.events.settings')"
             @close="settingsSlideoverOpen = false"
-          >
-            <UButton
-              size="xs"
-              :loading="settingsSaving"
-              :disabled="!settingsDirty"
-              @click="settingsTab?.save()"
-            >
-              {{ t('sales.common.save') }}
-            </UButton>
-          </SalesEventWorkspacePaneHeader>
+          />
           <div class="flex-1 overflow-y-auto p-4 pt-3">
             <Suspense>
-              <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
+              <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed />
               <template #fallback>
                 <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
               </template>

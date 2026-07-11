@@ -11,7 +11,6 @@
  *
  * Async setup (event lookup) — hosts wrap it in <Suspense>.
  */
-import type { Ref } from 'vue'
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
 
 const props = defineProps<{
@@ -44,10 +43,6 @@ const meta = computed(() => ({
 const ordersFiltersOpen = ref(false)
 const ordersFilterCount = ref(0)
 
-// Settings save API — same register handshake as the Shell (#1321).
-const settingsTab = shallowRef<{ save: () => Promise<void>, dirty: Ref<boolean>, saving: Ref<boolean> } | null>(null)
-const settingsDirty = computed(() => settingsTab.value?.dirty.value ?? false)
-const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
 </script>
 
 <template>
@@ -74,15 +69,6 @@ const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
             @click="ordersFiltersOpen = !ordersFiltersOpen"
           />
         </UChip>
-        <UButton
-          v-if="pane === 'settings'"
-          size="xs"
-          :loading="settingsSaving"
-          :disabled="!settingsDirty"
-          @click="settingsTab?.save()"
-        >
-          {{ t('sales.common.save') }}
-        </UButton>
       </SalesEventWorkspacePaneHeader>
 
       <div class="flex-1 overflow-y-auto p-4 pt-2">
@@ -102,7 +88,7 @@ const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
         <SalesEventWorkspaceDataPanel v-else-if="pane === 'data'" :event="event" :team-param="teamParam" />
 
         <Suspense v-else-if="pane === 'settings'">
-          <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
+          <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed />
           <template #fallback>
             <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
           </template>
