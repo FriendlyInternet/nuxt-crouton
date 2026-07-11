@@ -215,10 +215,16 @@ const sizeClasses = computed(() => {
 
     <!-- Days Grid -->
     <div class="grid grid-cols-7 gap-2">
+      <!-- Wrapper keeps the add-booking tab a SIBLING of the clickable day
+           cell — a role="button" cell containing a real <button> is a nested
+           interactive control (axe serious). -->
       <div
         v-for="day in weekDays"
         :key="day.date.toString()"
-        class="group relative flex flex-col items-center cursor-pointer rounded-lg transition-all duration-150 px-1"
+        class="group relative"
+      >
+      <div
+        class="flex flex-col items-center cursor-pointer rounded-lg transition-all duration-150 px-1"
         :class="[
           sizeClasses.cell,
           isDayDisabled(day)
@@ -256,6 +262,7 @@ const sizeClasses = computed(() => {
         <slot name="day" :day="day.date" :js-date="day.jsDate">
           <div class="mt-1 min-h-[8px]" />
         </slot>
+      </div>
 
         <!-- Add booking tab (slides down from under the date block on hover) -->
         <!-- Deliberately a raw button (#1410): a calendar hover cell whose

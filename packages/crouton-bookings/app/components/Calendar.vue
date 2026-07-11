@@ -563,6 +563,11 @@ const monthCellHeight = computed(() => {
         class="[&_table]:w-full [&_table]:table-fixed"
       >
         <template #day="{ day }">
+          <!-- No role/tabindex on purpose: this slot renders INSIDE UCalendar's
+               cellTrigger <button> (keyboard selection belongs to the trigger);
+               a widget role here nests interactive controls (axe serious).
+               The @click is a pointer affordance layered over the trigger. -->
+          <!-- eslint-disable-next-line vuejs-accessibility/click-events-have-key-events, vuejs-accessibility/no-static-element-interactions -->
           <div
             class="group relative w-full flex flex-col items-center justify-start pt-1 pb-1 rounded-md transition-all duration-200"
             :style="{ minHeight: `${monthCellHeight}px` }"
@@ -579,11 +584,7 @@ const monthCellHeight = computed(() => {
                 : '',
             ]"
             :title="getDayBlockedReason(day.toDate(getLocalTimeZone())) || undefined"
-            :role="hasBookings(day.toDate(getLocalTimeZone())) ? 'button' : undefined"
-            :tabindex="hasBookings(day.toDate(getLocalTimeZone())) && !isDayUnavailable(day.toDate(getLocalTimeZone())) ? 0 : undefined"
             @click="hasBookings(day.toDate(getLocalTimeZone())) && emit('select', day.toDate(getLocalTimeZone()))"
-            @keydown.enter.prevent="hasBookings(day.toDate(getLocalTimeZone())) && emit('select', day.toDate(getLocalTimeZone()))"
-            @keydown.space.prevent="hasBookings(day.toDate(getLocalTimeZone())) && emit('select', day.toDate(getLocalTimeZone()))"
           >
             <!-- Day number -->
             <span
