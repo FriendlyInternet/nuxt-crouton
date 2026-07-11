@@ -13,7 +13,7 @@ import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
-import { deleteOrderCascade } from '../../../../../../utils/delete-order'
+import { deleteOrderCascade } from '../../../../../../../utils/delete-order'
 
 export default defineEventHandler(async (event) => {
   const { team } = await requireTeamAdmin(event)
