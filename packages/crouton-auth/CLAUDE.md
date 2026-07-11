@@ -375,6 +375,10 @@ The canonical header for scoped tokens is **`x-scoped-token`** (exported as `SCO
 import {
   upsertScopedGrant,          // create/update the grant for a resource
   verifyAndRedeemGrant,       // verify secret + lockout + maxUses, mint token
+  verifyScopedGrantByResource, // verify WITHOUT knowing the org (#1366): the grant's
+                               // organizationId IS the answer ("whose device is this?").
+                               // No token mint, no usedCount, write-free on clean success
+                               // (built for ~2s device polls); shares the lockout.
   revokeScopedGrantsForResource,
   listScopedGrantsForResource // never returns secrets
 } from '@crouton/auth/server'
