@@ -58,6 +58,18 @@ describe('parseVoiceOrder — segmenting an order', () => {
     expect(linesOf('twee pils en drie pils')).toEqual([['pils', 5]])
   })
 
+  it('splits on a new quantity even without "en" between items (STT drops it)', () => {
+    // The reported bug: "100 frisdrank 100 koffie" ran together as one segment.
+    expect(linesOf('honderd frisdrank honderd koffie')).toEqual([['frisdrank', 100], ['koffie', 100]])
+    expect(linesOf('twee pils drie koffie')).toEqual([['pils', 2], ['koffie', 3]])
+    expect(linesOf('2 frisdrank 2 koffie')).toEqual([['frisdrank', 2], ['koffie', 2]])
+  })
+
+  it('still keeps a multi-word title together (no number inside it)', () => {
+    const products = [...KERMIS, p('cola-zero', 'Cola Zero')]
+    expect(linesOf('twee cola zero drie pils', products)).toEqual([['cola-zero', 2], ['pils', 3]])
+  })
+
   it('returns an empty result for an empty or whitespace utterance', () => {
     expect(parseVoiceOrder('', KERMIS)).toEqual({ lines: [], unmatched: [] })
     expect(parseVoiceOrder('   ', KERMIS)).toEqual({ lines: [], unmatched: [] })

@@ -168,34 +168,44 @@ function tokenize(raw: string): string[] {
     .filter(t => t && !FILLER_WORDS.has(t))
 }
 
-/** The first numeric token (digit or nl number word) becomes the quantity;
- * every other token stays in the product phrase. */
-function extractQuantity(tokens: string[]): { quantity: number | null, phraseTokens: string[] } {
-  let quantity: number | null = null
-  const phraseTokens: string[] = []
-  for (const token of tokens) {
-    const value = /^\d+$/.test(token) ? Number(token) : NUMBER_WORDS[token]
-    if (quantity === null && value !== undefined && value > 0) {
-      quantity = value
-    }
-    else {
-      phraseTokens.push(token)
-    }
-  }
-  return { quantity, phraseTokens }
+/** Numeric value of a quantity token (digit or nl number word), or null. */
+function quantityValue(token: string): number | null {
+  const value = /^\d+$/.test(token) ? Number(token) : NUMBER_WORDS[token]
+  return value !== undefined && value > 0 ? value : null
 }
 
-/** Split the utterance on "en"/commas, then pull the quantity + product
- * phrase out of each part. Pure-filler parts are dropped. */
+/**
+ * Break the utterance into per-item segments. Boundaries are "en"/commas AND a
+ * new quantity token: helpers often list items with no "en" between them
+ * ("100 frisdrank 100 koffie"), so a quantity appearing after a product phrase
+ * has begun starts the next item. A multi-word title with no number inside it
+ * ("cola zero") stays whole.
+ */
 function segment(utterance: string): Segment[] {
   const segments: Segment[] = []
-  for (const part of utterance.split(/,|\ben\b/)) {
-    const raw = part.trim()
-    if (!raw) continue
-    const { quantity, phraseTokens } = extractQuantity(tokenize(raw))
-    if (!phraseTokens.length && quantity === null) continue // pure filler
-    segments.push({ raw, quantity: quantity ?? 1, phrase: phraseTokens.join(' ') })
+  // Commas act like "en"; tokenize keeps "en" (not a filler word) as a marker.
+  const tokens = tokenize(utterance.replace(/,/g, ' en '))
+
+  let quantity: number | null = null
+  let words: string[] = []
+  const flush = () => {
+    const phraseTokens = words.filter(w => quantityValue(w) === null)
+    if (!words.length && quantity === null) return // pure filler
+    segments.push({ raw: words.join(' '), quantity: quantity ?? 1, phrase: phraseTokens.join(' ') })
+    quantity = null
+    words = []
   }
+
+  for (const token of tokens) {
+    if (token === 'en') { flush(); continue }
+    const value = quantityValue(token)
+    // A quantity that opens a NEW item (we already have one, or a phrase started)
+    // closes the current segment first.
+    if (value !== null && (quantity !== null || words.length)) flush()
+    if (value !== null) quantity = value
+    words.push(token)
+  }
+  flush()
   return segments
 }
 
