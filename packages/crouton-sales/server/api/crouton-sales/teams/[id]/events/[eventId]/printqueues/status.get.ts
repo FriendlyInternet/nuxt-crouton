@@ -27,6 +27,10 @@ export default defineEventHandler(async (event) => {
       // The job's domain back-reference IS the orderId (refType='order').
       orderId: printJobs.refId,
       printerId: printJobs.printerId,
+      // Denormalized printer label — the drift-proof fallback key the LED uses
+      // when a job's printerId no longer matches a current salesPrinters row
+      // (deleted+recreated / regenerated collection). See app/utils/printer-led.ts (#1507).
+      printerTitle: printJobs.printerTitle,
       status: printJobs.status,
       // locationId + printMode let OrderItems list what each ticket printed
       // (kitchen jobs = that location's items, receipt jobs = whole order).
