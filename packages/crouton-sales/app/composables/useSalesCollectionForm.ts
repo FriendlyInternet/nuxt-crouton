@@ -24,8 +24,10 @@ export function useSalesCollectionForm(
   const { close, loading } = useCrouton()
 
   // Merge activeItem for both create (preset eventId from the event workspace)
-  // and update (the full record being edited).
-  const initialValues = { ...options.defaultValue, ...(props.activeItem || {}) }
+  // and update (the full record being edited). initFormState coerces a nullable
+  // column's loaded null back to the form default, so it never reaches the
+  // narrow client schema and silently blocks submit (#1498).
+  const initialValues = initFormState(options.defaultValue, props.activeItem)
   const state = ref<Record<string, any> & { id?: string | null }>(initialValues)
 
   // Event is implied by the workspace — hide the selector when it's preset.
