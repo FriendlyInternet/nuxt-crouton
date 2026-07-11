@@ -27,20 +27,20 @@ export interface PagesPage {
   id: string
   teamId: string
   owner: string
-  title?: string
-  slug?: string
+  title?: string | null
+  slug?: string | null
   pageType: string
-  content?: string
+  content?: string | null
   config?: Record<string, any> | null
   status: string
   visibility: string
   publishedAt?: Date | null
-  showInNavigation?: boolean
-  layout?: string
-  seoTitle?: string
-  seoDescription?: string
-  ogImage?: string
-  robots?: string
+  showInNavigation?: boolean | null
+  layout?: string | null
+  seoTitle?: string | null
+  seoDescription?: string | null
+  ogImage?: string | null
+  robots?: string | null
   parentId?: string | null
   path?: string
   depth?: number
