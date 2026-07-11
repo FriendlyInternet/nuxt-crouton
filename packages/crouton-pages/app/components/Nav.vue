@@ -170,6 +170,12 @@ const adminDropdownItems = computed<DropdownMenuItem[][]>(() => {
 
 // Shared pill styles
 const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-full border border-default shadow-lg shadow-neutral-950/5'
+
+// Full-screen pages (kassa and friends) own the whole viewport top — the
+// pills dock to the bottom-left corner there instead of reserving a top
+// strip. Same 'pageLayout' state the route publishes and the layout reads.
+const pageLayout = useState<'default' | 'full-height' | 'full-screen'>('pageLayout', () => 'default')
+const dockBottom = computed(() => pageLayout.value === 'full-screen')
 </script>
 
 <template>
@@ -177,7 +183,12 @@ const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-
        line right under it (in portrait Safari the webview already starts
        below the status bar — env(safe-area-inset-top) is 0 there; the max()
        keeps it clear of the notch in standalone/PWA mode). -->
-  <div class="fixed top-[max(0.25rem,env(safe-area-inset-top))] sm:top-6 inset-x-0 z-50 px-4 sm:px-6 pointer-events-none [&>*]:pointer-events-auto">
+  <div
+    class="fixed z-50 pointer-events-none [&>*]:pointer-events-auto"
+    :class="dockBottom
+      ? 'bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 sm:left-6'
+      : 'top-[max(0.25rem,env(safe-area-inset-top))] sm:top-6 inset-x-0 px-4 sm:px-6'"
+  >
     <!-- Loading state -->
     <template v-if="isLoading">
       <div class="relative flex items-center justify-center">
@@ -195,7 +206,7 @@ const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-
     </template>
 
     <!-- Desktop layout -->
-    <div v-else-if="isDesktop" class="relative flex items-center" :class="showPageNav ? 'justify-center' : 'justify-end'">
+    <div v-else-if="isDesktop" class="relative flex items-center" :class="dockBottom ? 'gap-2' : (showPageNav ? 'justify-center' : 'justify-end')">
       <!-- Center pill: Page navigation (hidden when ≤1 page) -->
       <div v-if="showPageNav" :class="[pillClass, 'px-4']">
         <UNavigationMenu
@@ -211,7 +222,7 @@ const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-
       </div>
 
       <!-- Right pill: User menu + language + dark mode (pinned right) -->
-      <div :class="[pillClass, 'px-2 py-1', showPageNav && 'absolute right-0']">
+      <div :class="[pillClass, 'px-2 py-1', showPageNav && !dockBottom && 'absolute right-0']">
         <ClientOnly>
           <template v-if="showAuthControls">
             <!-- Authenticated: Avatar dropdown -->
@@ -354,7 +365,7 @@ const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-
       </div>
 
       <!-- Right pill: auth controls (unless the page hides them) + language + dark mode -->
-      <div :class="[pillClass, 'px-2 py-1', showPageNav && 'absolute right-0']">
+      <div :class="[pillClass, 'px-2 py-1', showPageNav && !dockBottom && 'absolute right-0']">
         <ClientOnly>
           <template v-if="showAuthControls">
             <!-- Authenticated: Avatar dropdown -->

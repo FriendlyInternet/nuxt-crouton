@@ -125,7 +125,7 @@ function applyLayoutClasses() {
       break
     case 'full-screen':
       container.className = 'bg-background min-h-screen'
-      main.className = 'pt-16'
+      main.className = 'pt-0'
       break
     default:
       container.className = 'bg-background min-h-screen'
@@ -161,7 +161,7 @@ const mainClasses = computed(() => {
     case 'full-height':
       return `flex-1 overflow-hidden ${pt} px-4 sm:px-6 lg:px-8 max-w-3xl mx-auto w-full`
     case 'full-screen':
-      return 'pt-16'
+      return 'pt-0'
     default:
       return `max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 ${pt} pb-8`
   }
