@@ -150,20 +150,63 @@
         </template>
       </UAlert>
 
+      <!-- Talk-to-order (#1429): segments the mic heard but couldn't match to
+           a product. Never silently dropped — the helper reads what was
+           misheard and taps it in manually. -->
+      <UAlert
+        v-if="(voiceUnmatched?.length ?? 0) > 0"
+        color="warning"
+        icon="i-lucide-mic-off"
+        :title="t('sales.voice.notUnderstood')"
+        close
+        @update:open="$emit('dismissVoiceUnmatched')"
+      >
+        <template #description>
+          <span v-for="(segment, i) in voiceUnmatched" :key="i" class="block text-xs">
+            "{{ segment }}"
+          </span>
+        </template>
+      </UAlert>
+
+      <!-- Live transcript while the mic listens — the helper sees what the
+           mic hears before it lands in the cart. -->
+      <p
+        v-if="voiceListening"
+        class="flex items-center gap-1.5 text-xs text-muted truncate"
+      >
+        <UIcon name="i-lucide-mic" class="shrink-0 text-error animate-pulse" />
+        {{ voiceTranscript?.trim() || t('sales.voice.listening') }}
+      </p>
+
       <!-- The order button is the print feedback: it spins while the kitchen
            tickets print and confirms green when every ticket is done. A new
            order always wins — items in the cart yield the button back to
-           "Bestel" while the watcher continues in the background. -->
-      <UButton
-        :label="orderButton.label"
-        size="lg"
-        block
-        :color="orderButton.color"
-        :icon="orderButton.icon"
-        :loading="orderButton.loading"
-        :disabled="orderButton.disabled"
-        @click="handleOrderClick"
-      />
+           "Bestel" while the watcher continues in the background. The mic sits
+           beside it (not in the items-gated controls row above) so a spoken
+           order can START an empty cart. -->
+      <div class="flex items-stretch gap-2">
+        <UButton
+          :label="orderButton.label"
+          size="lg"
+          class="flex-1"
+          :color="orderButton.color"
+          :icon="orderButton.icon"
+          :loading="orderButton.loading"
+          :disabled="orderButton.disabled"
+          @click="handleOrderClick"
+        />
+        <UButton
+          v-if="voiceSupported"
+          size="lg"
+          square
+          icon="i-lucide-mic"
+          :color="voiceListening ? 'error' : 'neutral'"
+          :variant="voiceListening ? 'solid' : 'soft'"
+          :class="voiceListening ? 'animate-pulse' : undefined"
+          :aria-label="voiceListening ? t('sales.voice.stop') : t('sales.voice.start')"
+          @click="$emit('toggleVoice')"
+        />
+      </div>
     </template>
   </UCard>
 </template>
@@ -198,6 +241,14 @@ const props = defineProps<{
   printState?: PrintButtonState
   /** Orders with failed/stuck tickets — rendered as dismissible warning rows. */
   printWarnings?: WatchedOrder[]
+  /** Talk-to-order (#1429): browser has speech recognition — shows the mic. */
+  voiceSupported?: boolean
+  /** The mic is live (pulses the button, shows the transcript line). */
+  voiceListening?: boolean
+  /** Interim transcript while listening. */
+  voiceTranscript?: string
+  /** Utterance segments that matched no product — dismissible warning rows. */
+  voiceUnmatched?: string[]
 }>()
 
 // Locations represented by at least one cart item — a remark only prints if its
@@ -276,12 +327,12 @@ const groupedItems = computed<CartGroup[]>(() => {
 
 const emit = defineEmits<{
   updateQuantity: [index: number, quantity: number]
-  remove: [index: number]
   checkout: []
-  clear: []
   updateLocationRemark: [locationId: string, value: string]
   'update:isPersonnel': [value: boolean]
   dismissPrintWarning: [orderId: string]
+  toggleVoice: []
+  dismissVoiceUnmatched: []
 }>()
 
 // Button state machine. Items in the cart always win (the volunteer is

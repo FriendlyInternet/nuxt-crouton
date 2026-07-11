@@ -631,6 +631,13 @@
         "drainerFlip": "Laat deze printflow op \"Lokaal toestel\" staan — de routerflow is de standaard, en het toestel bedient enkel events die op Lokaal toestel staan.",
         "drainerVerify": "Klaar wanneer dit bolletje groen wordt — het toestel meldt zich binnen ~30 seconden."
       }
+    },
+    "voice": {
+      "start": "Bestelling inspreken",
+      "stop": "Stop met luisteren",
+      "listening": "Aan het luisteren…",
+      "notUnderstood": "Niet begrepen",
+      "error": "Spraakherkenning mislukt"
     }
   }
 }

@@ -135,13 +135,17 @@
               :submitting="isCheckingOut"
               :print-state="printButtonState"
               :print-warnings="printWarnings"
+              :voice-supported="voiceSupported"
+              :voice-listening="voiceListening"
+              :voice-transcript="voiceTranscript ?? undefined"
+              :voice-unmatched="voiceUnmatched"
               @update-quantity="updateQuantity"
-              @remove="removeFromCart"
               @checkout="handleCheckout"
-              @clear="clearCart"
               @update-location-remark="setLocationRemark"
               @update:is-personnel="isPersonnel = $event"
               @dismiss-print-warning="dismissPrintWarning"
+              @toggle-voice="toggleVoice"
+              @dismiss-voice-unmatched="voiceUnmatched = []"
             />
           </div>
         </div>
@@ -151,11 +155,26 @@
            :portal="false" keeps the drawer in the DOM under the [contain:layout]
            root, so the fixed drawer + overlay resolve against the module instead
            of the viewport. Heights are % of the module. -->
-      <div class="@2xl:hidden border-t border-default p-2">
+      <div class="@2xl:hidden border-t border-default p-2 flex items-stretch gap-2">
+        <!-- Talk-to-order (#1429): the mic must be reachable without opening
+             the drawer — a spoken order starts from the collapsed bar. Parsed
+             lines land in the cart, the bar's count/total confirms them. -->
+        <UButton
+          v-if="voiceSupported"
+          size="lg"
+          square
+          icon="i-lucide-mic"
+          :color="voiceListening ? 'error' : 'neutral'"
+          :variant="voiceListening ? 'solid' : 'soft'"
+          :class="voiceListening ? 'animate-pulse' : undefined"
+          :aria-label="voiceListening ? t('sales.voice.stop') : t('sales.voice.start')"
+          @click="toggleVoice"
+        />
         <UDrawer
           v-model:open="mobileCartOpen"
           direction="bottom"
           :portal="false"
+          class="flex-1 min-w-0"
           :ui="{ content: 'h-[95%]' }"
         >
           <!-- The drawer auto-closes on checkout, so this collapsed bar must
@@ -209,13 +228,17 @@
                   :submitting="isCheckingOut"
                   :print-state="printButtonState"
                   :print-warnings="printWarnings"
+                  :voice-supported="voiceSupported"
+                  :voice-listening="voiceListening"
+                  :voice-transcript="voiceTranscript ?? undefined"
+                  :voice-unmatched="voiceUnmatched"
                   @update-quantity="updateQuantity"
-                  @remove="removeFromCart"
                   @checkout="handleCheckout"
-                  @clear="clearCart"
                   @update-location-remark="setLocationRemark"
                   @update:is-personnel="isPersonnel = $event"
                   @dismiss-print-warning="dismissPrintWarning"
+                  @toggle-voice="toggleVoice"
+                  @dismiss-voice-unmatched="voiceUnmatched = []"
                 />
               </div>
             </div>
@@ -293,10 +316,8 @@ const {
   isPersonnel,
   isCheckingOut,
   addToCart,
-  removeFromCart,
   updateQuantity,
   syncCartProducts,
-  clearCart,
   checkout,
 } = usePosOrder()
 
@@ -309,6 +330,34 @@ const {
   watchOrder,
   dismiss: dismissPrintWarning
 } = usePrintWatcher()
+
+// Talk-to-order (#1429): one utterance per mic press, parsed against the
+// event's products; lines land in the cart like taps (addToCart merges), the
+// helper reviews and checks out normally. Never auto-submits. Segments the
+// parser couldn't match confidently surface as a dismissible warning in the
+// cart — misheard speech is shown, not guessed.
+const voiceUnmatched = ref<string[]>([])
+const {
+  isSupported: voiceSupported,
+  isListening: voiceListening,
+  transcript: voiceTranscript,
+  error: voiceError,
+  toggle: toggleVoice
+} = useVoiceOrder({
+  products: () => (products.value ?? []) as SalesProduct[],
+  onOrder({ lines, unmatched }) {
+    for (const line of lines) {
+      for (let i = 0; i < line.quantity; i++) addToCart(line.product)
+    }
+    voiceUnmatched.value = unmatched
+  }
+})
+
+// A recognition error (mic permission, no network for the engine) would
+// otherwise fail silently — the helper just sees the mic stop.
+watch(voiceError, (err) => {
+  if (err) notify.error(t('sales.voice.error'))
+})
 
 // Set the event ID
 selectedEventId.value = props.eventId

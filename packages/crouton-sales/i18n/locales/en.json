@@ -631,6 +631,13 @@
         "drainerFlip": "Keep this Print flow on \"Local device\" — the router flow is the default, and the device only serves events set to Local device.",
         "drainerVerify": "Done when this dot turns green — the device ticks within ~30 seconds."
       }
+    },
+    "voice": {
+      "start": "Speak an order",
+      "stop": "Stop listening",
+      "listening": "Listening…",
+      "notUnderstood": "Not understood",
+      "error": "Speech recognition failed"
     }
   }
 }

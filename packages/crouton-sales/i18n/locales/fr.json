@@ -630,6 +630,13 @@
         "drainerFlip": "Laissez ce flux d'impression sur « Appareil local » — le flux routeur est le défaut, et l'appareil ne sert que les événements réglés sur Appareil local.",
         "drainerVerify": "Terminé quand ce point devient vert — l'appareil se manifeste sous ~30 secondes."
       }
+    },
+    "voice": {
+      "start": "Dicter une commande",
+      "stop": "Arrêter l'écoute",
+      "listening": "À l'écoute…",
+      "notUnderstood": "Non compris",
+      "error": "La reconnaissance vocale a échoué"
     }
   }
 }
