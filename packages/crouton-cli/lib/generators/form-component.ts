@@ -818,6 +818,17 @@ const initialValues = props.action === 'update' && props.activeItem?.id
   ? { ...defaultValue, ...props.activeItem }
   : { ...defaultValue${hasHierarchy ? ', ...hierarchyDefaults' : ''} }${dateInitCode}
 
+// DB nulls are wire/storage values, not form values (#1415): fall back to the
+// field default so the strict form schema never sees null on an untouched
+// field. No-op when the default itself is null (dates, dependent fields).
+const initialRecord = initialValues as Record<string, unknown>
+const defaultRecord = defaultValue as Record<string, unknown>
+for (const key of Object.keys(defaultRecord)) {
+  if (initialRecord[key] === null && defaultRecord[key] !== null) {
+    initialRecord[key] = defaultRecord[key]
+  }
+}
+
 // Draft state: seeded from defaults (required fields may start null/empty until
 // the user fills them; the zod schema validates on submit), so cast the initial
 // values to the validated shape.

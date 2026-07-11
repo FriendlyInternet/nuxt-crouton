@@ -52,6 +52,19 @@ describe('generateFormComponent', () => {
     expect(result).toContain('import useShopProducts from')
   })
 
+  it('normalizes DB nulls to field defaults on init (#1415)', () => {
+    // Nullable columns round-trip null (#1403); a raw { ...defaultValue,
+    // ...activeItem } spread would let null overwrite the form default,
+    // making FormData a runtime lie and tripping the strict client schema
+    // on submit for fields the user never touched. The emitted form must
+    // fall back to the field default for null values — generically, so
+    // fields whose default IS null (dates, dependent fields) are a no-op.
+    const result = generateFormComponent(formComponentData, minimalConfig)
+    expect(result).toContain('...defaultValue, ...props.activeItem')
+    expect(result).toContain('if (initialRecord[key] === null && defaultRecord[key] !== null)')
+    expect(result).toContain('initialRecord[key] = defaultRecord[key]')
+  })
+
   describe('field type rendering', () => {
     it('renders string fields with UInput', () => {
       const result = generateFormComponent(formComponentData, minimalConfig)
