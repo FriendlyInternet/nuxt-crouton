@@ -8,7 +8,7 @@ Inline-comment any line below to request a change. Reply `lgtm` / `approve` to u
 ## What changes
 
 - **Text label → icon.** The visible `{{ t('sales.cart.staffOrder') }}` text ("Personeelsbestelling" / "Staff order" / "Commande du personnel") is replaced by a person/badge glyph so the one-line controls row never overflows on narrow phone panes.
-- **Suggested icon:** `i-lucide-user-cog` (person + settings cog reads as "staff/personnel"). Alternative considered: `i-lucide-hard-hat`. **Open question for the reviewer:** which glyph reads clearest for "staff order"?
+- **Icon (final, approved):** `i-lucide-chef-hat` — the reviewer picked chef-hat (over the mocked `user-cog` and `hard-hat`) as the clearest "staff order" glyph. Verified to resolve in the app's bundled lucide collection (`@iconify-json/lucide@1.2.86`).
 - **Meaning stays reachable.** The translated string is preserved as the control's `aria-label` **and** a hover/long-press tooltip, so screen-reader users still hear "Personeelsbestelling" and sighted users can discover it.
 - **Active state.** When staff order is on, the icon takes the `warning` tint (mirrors today's `text-warning font-medium` emphasis on the active text label) so the toggled state stays visible at a glance.
 
