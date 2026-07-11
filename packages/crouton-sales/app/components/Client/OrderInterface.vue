@@ -139,6 +139,7 @@
               :voice-listening="voiceListening"
               :voice-transcript="voiceTranscript ?? undefined"
               :voice-unmatched="voiceUnmatched"
+              :voice-heard="voiceHeard"
               @update-quantity="updateQuantity"
               @checkout="handleCheckout"
               @update-location-remark="setLocationRemark"
@@ -232,6 +233,7 @@
                   :voice-listening="voiceListening"
                   :voice-transcript="voiceTranscript ?? undefined"
                   :voice-unmatched="voiceUnmatched"
+                  :voice-heard="voiceHeard"
                   @update-quantity="updateQuantity"
                   @checkout="handleCheckout"
                   @update-location-remark="setLocationRemark"
@@ -337,6 +339,10 @@ const {
 // parser couldn't match confidently surface as a dismissible warning in the
 // cart — misheard speech is shown, not guessed.
 const voiceUnmatched = ref<string[]>([])
+// A short-lived "heard → created" confirmation so the helper can see the link
+// between what the mic understood and the lines it added. Auto-clears after a
+// few seconds (refAutoReset), or immediately when the mic starts again.
+const voiceHeard = refAutoReset<{ transcript: string, summary: string } | null>(null, 6000)
 const {
   isSupported: voiceSupported,
   isListening: voiceListening,
@@ -349,6 +355,14 @@ const {
       for (let i = 0; i < line.quantity; i++) addToCart(line.product)
     }
     voiceUnmatched.value = unmatched
+    // Only show the confirmation when something actually landed in the cart —
+    // a fully-unmatched utterance is covered by the "Niet begrepen" banner.
+    if (lines.length) {
+      voiceHeard.value = {
+        transcript: voiceTranscript.value?.trim() ?? '',
+        summary: lines.map(l => `${l.quantity}× ${l.product.title}`).join(', ')
+      }
+    }
   },
   // Reason-specific failure messages — a blanket "mislukt" hides whether the
   // helper needs to grant the mic, is on an unsupported browser, or the engine
