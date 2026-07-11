@@ -15,6 +15,7 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `server/plugins/printing-subscriber.ts` | Nitro plugin wiring the reactions to `printing:job:{created,completed,failed}` hooks (filtered to `source === 'sales'`, best-effort log+swallow) |
 | `app/composables/useHelperAuth.ts` | Helper authentication (wraps nuxt-crouton-auth; PIN login via generic redeem, gate-session adoption) |
 | `app/utils/voice-order.ts` | Talk-to-order pure logic (#1429): `parseVoiceOrder` maps a spoken nl utterance ("twee pils en een koffie") onto the event's products as `{ lines, unmatched }` draft cart lines (Dutch number words 1–20 + tens, plural/diminutive stemming, 1-edit STT fuzz; below-confidence segments → `unmatched`, never guessed). Also `classifyVoiceError(event)` → `{ code, message, report }` — decides which `SpeechRecognitionErrorEvent` codes are real failures vs benign pauses (`no-speech`/`aborted`/`no-match` → `report:false`). Behaviour contract: `test/voice-order.test.ts` |
+| `app/utils/printer-led.ts` | Printer online-LED attribution pure logic (#1507): `attributePrinterStates(printers, jobs)` → per-printer `LedState` (`online`/`offline`/`printing`/`unknown`). Matches a job to a printer row by `printerId` first, else by an **unambiguous** `printerTitle` (drift-proof so a re-created printer's failures still show red, not a false grey); latest job wins by `completedAt ?? createdAt`. Behaviour contract: `test/printer-led.test.ts` |
 | `app/composables/useVoiceOrder.ts` | Talk-to-order speech capture (#1429) — wraps VueUse `useSpeechRecognition` (on-device Web Speech API, `nl-BE`, one utterance per press) and feeds each final utterance through `parseVoiceOrder`. The ONLY module touching the STT engine — swap point for a server transcriber later. Errors route through `classifyVoiceError`: the raw code is always `console.warn`'d for diagnosis, and real failures reach `onError(code)` so the caller shows a reason-specific message (permission/mic/network/language) instead of a blanket "failed"; benign pauses are swallowed. Exposes `errorCode` (raw, for diagnostics) |
 | `server/plugins/scoped-access.ts` | Nitro hook handlers: before-redeem helperPin→grant sync + pages derive-scope (one PIN from page gate to POS) |
 | `app/plugins/viewport-meta.ts` | Replaces the default viewport meta via useHead: `viewport-fit=cover` (safe-area env() for the phone kassa) + `maximum-scale=1` (kills iOS input-focus auto-zoom; pinch still works) |
@@ -367,7 +368,13 @@ the printer subtitles. Each printer row carries an **online LED** derived from i
 print job** (slim `printqueues/status` endpoint, latest by `completedAt ?? createdAt`): green =
 last job completed (the spooler's DLE EOT pre-flight confirmed the printer online), red = last
 job failed, pulsing orange = job in flight, grey = never printed. There is no separate ping —
-"online" means online as of the last print attempt. `SettingsListCard` props: `title`, `collection`, `rows`
+"online" means online as of the last print attempt. Attribution is the pure
+`app/utils/printer-led.ts` (`attributePrinterStates`): a job is matched to a printer row by
+`printerId` **first, else by an unambiguous `printerTitle`** (the denormalized label every enqueue
+site writes) — so a printer whose id drifted from its jobs (deleted+recreated / regenerated
+collection) still lights red instead of a false grey (#1507); a title shared by two current rows
+is ambiguous and stays grey rather than guess. The `status` endpoint therefore also returns
+`printerTitle`. `SettingsListCard` props: `title`, `collection`, `rows`
 (`{ id, title, subtitle?, led? }` — `led: { class, label? }` renders a status dot with tooltip
 before the title), `pending?`, `emptyLabel?`, `createData?`, `orderField?`; slots
 `header-actions` and `footer` (UCard footer passthrough — the printers card uses it for the

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Ref, ComputedRef } from 'vue'
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import { attributePrinterStates, type LedJob, type LedState } from '../../utils/printer-led'
 
 const props = defineProps<{
   event: SalesEvent
@@ -38,43 +39,39 @@ const locationRows = computed(() => ((locations.value as any[] | null) || []))
 // Printer online LEDs. The spooler pre-flight-checks the printer (DLE EOT) on
 // every print job, so the most recent job's outcome is the last-known online
 // state — there is no separate ping.
-interface PrintJobRow {
-  id: string
-  printerId: string
-  status?: string | number
-  createdAt?: string | number
-  completedAt?: string | number
-}
-
-const { data: printJobs, refresh: refreshPrintJobs } = await useFetch<PrintJobRow[]>(
+const { data: printJobs, refresh: refreshPrintJobs } = await useFetch<LedJob[]>(
   () => `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/printqueues/status`,
   { default: () => [] }
 )
 
-function jobTime(job: PrintJobRow) {
-  const v = job.completedAt ?? job.createdAt
-  return v ? new Date(v).getTime() : 0
+// Attribute each job to a printer row by id, else by an unambiguous title —
+// so a printer whose failing jobs' printerId has drifted from its current row
+// (deleted+recreated / regenerated collection) still lights red, not grey (#1507).
+const printerLedStates = computed(() =>
+  attributePrinterStates(
+    (((printers.value as any[] | null) || [])).map(p => ({ id: p.id, title: p.title })),
+    printJobs.value || []
+  )
+)
+
+// class is static; label goes through t() at call time so it stays reactive to
+// a mid-session locale switch (printerRows recomputes on printers/jobs change).
+const LED_CLASS: Record<LedState, string> = {
+  online: 'bg-success',
+  offline: 'bg-error',
+  printing: 'bg-warning animate-pulse',
+  unknown: 'bg-accented'
+}
+const LED_LABEL: Record<LedState, () => string> = {
+  online: () => t('sales.workspace.printerOnline', 'Online at last print'),
+  offline: () => t('sales.workspace.printerOffline', 'Offline — last print failed'),
+  printing: () => t('sales.printQueue.statusPrinting', 'Printing'),
+  unknown: () => t('sales.workspace.printerUnknown', 'Not checked yet — no prints')
 }
 
-const lastJobByPrinter = computed(() => {
-  const map = new Map<string, PrintJobRow>()
-  for (const job of (printJobs.value || [])) {
-    const prev = map.get(job.printerId)
-    if (!prev || jobTime(job) >= jobTime(prev)) map.set(job.printerId, job)
-  }
-  return map
-})
-
 function printerLed(printerId: string) {
-  const job = lastJobByPrinter.value.get(printerId)
-  if (!job) {
-    return { class: 'bg-accented', label: t('sales.workspace.printerUnknown', 'Not checked yet — no prints') }
-  }
-  switch (String(job.status ?? '0')) {
-    case '2': return { class: 'bg-success', label: t('sales.workspace.printerOnline', 'Online at last print') }
-    case '9': return { class: 'bg-error', label: t('sales.workspace.printerOffline', 'Offline — last print failed') }
-    default: return { class: 'bg-warning animate-pulse', label: t('sales.printQueue.statusPrinting', 'Printing') }
-  }
+  const state = printerLedStates.value.get(printerId) ?? 'unknown'
+  return { class: LED_CLASS[state], label: LED_LABEL[state]() }
 }
 
 const printerRows = computed(() =>
