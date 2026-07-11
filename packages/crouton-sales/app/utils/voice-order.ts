@@ -33,6 +33,45 @@ export interface VoiceOrderParseResult<T extends VoiceOrderProduct = VoiceOrderP
   unmatched: string[]
 }
 
+/** Web Speech API `SpeechRecognitionErrorEvent.error` code. Wide union so
+ * callers can branch on the actionable ones. */
+export type VoiceOrderErrorCode =
+  | 'no-speech' | 'aborted' | 'no-match'
+  | 'not-allowed' | 'service-not-allowed'
+  | 'audio-capture' | 'network' | 'language-not-supported'
+  | 'bad-grammar' | (string & {})
+
+/** Recognition-error codes we treat as normal, not failures: the helper paused
+ * (no-speech), tapped the mic off (aborted), or the engine matched nothing
+ * (no-match). A pause during a rush is expected, not an error — these must NOT
+ * raise a "failed" message. (#1429) */
+const BENIGN_VOICE_ERRORS = new Set(['no-speech', 'aborted', 'no-match'])
+
+export interface VoiceErrorClassification {
+  code: VoiceOrderErrorCode
+  message: string
+  /** True for a real failure the helper should be told about (permission /
+   * mic / network / unsupported language); false for a benign pause. */
+  report: boolean
+}
+
+/**
+ * Classify a `SpeechRecognitionErrorEvent` into "log it, and maybe tell the
+ * helper". Pure so the decision is unit-testable; the composable only wires it
+ * to the toast. Returns null when there's no error code to act on.
+ */
+export function classifyVoiceError(
+  event: { error?: string, message?: string } | undefined
+): VoiceErrorClassification | null {
+  const code = event?.error
+  if (!code) return null
+  return {
+    code: code as VoiceOrderErrorCode,
+    message: event?.message || '',
+    report: !BENIGN_VOICE_ERRORS.has(code)
+  }
+}
+
 // Dutch number words. Covers the kassa reality (1–20 + round tens); anything
 // larger arrives as digits from the STT anyway.
 const NUMBER_WORDS: Record<string, number> = {

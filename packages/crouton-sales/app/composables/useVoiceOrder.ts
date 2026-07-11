@@ -7,7 +7,13 @@
  * transcriber later means replacing this file, not the parser or the UI.
  */
 import type { MaybeRefOrGetter } from 'vue'
-import { parseVoiceOrder, type VoiceOrderProduct, type VoiceOrderParseResult } from '../utils/voice-order'
+import {
+  parseVoiceOrder,
+  classifyVoiceError,
+  type VoiceOrderProduct,
+  type VoiceOrderParseResult,
+  type VoiceOrderErrorCode
+} from '../utils/voice-order'
 
 export interface UseVoiceOrderOptions<T extends VoiceOrderProduct> {
   /** The event's products to match utterances against (reactive). */
@@ -17,6 +23,10 @@ export interface UseVoiceOrderOptions<T extends VoiceOrderProduct> {
   /** Called once per final utterance with the parsed draft lines. The caller
    * decides what to do (add to cart, surface unmatched) — never auto-submit. */
   onOrder: (result: VoiceOrderParseResult<T>) => void
+  /** Called on a REAL recognition failure (permission/mic/network/language) —
+   * benign pauses (no-speech/aborted/no-match) are swallowed and never reach
+   * here. The caller shows a reason-specific message. */
+  onError?: (code: VoiceOrderErrorCode) => void
 }
 
 /**
@@ -44,6 +54,11 @@ export function useVoiceOrder<T extends VoiceOrderProduct>(options: UseVoiceOrde
   })
 
   const lastResult = ref<VoiceOrderParseResult<T> | null>(null)
+  /** The last recognition error code (raw), for diagnostics/console — stays
+   * set until the next start(). */
+  const errorCode = computed<VoiceOrderErrorCode | undefined>(
+    () => speech.error.value?.error as VoiceOrderErrorCode | undefined
+  )
 
   watch(speech.isFinal, (final) => {
     if (!final) return
@@ -54,9 +69,22 @@ export function useVoiceOrder<T extends VoiceOrderProduct>(options: UseVoiceOrde
     options.onOrder(parsed)
   })
 
+  // Route recognition errors via the pure classifier: always log the raw code
+  // (the single most useful diagnostic when a helper reports "it just failed"),
+  // but only surface real failures — benign pauses (no-speech/aborted/no-match)
+  // are swallowed so a mid-rush pause never reads as an error.
+  watch(speech.error, (event) => {
+    const outcome = classifyVoiceError(event)
+    if (!outcome) return
+    console.warn(`[voice-order] recognition error: ${outcome.code}`, outcome.message)
+    if (outcome.report) options.onError?.(outcome.code)
+  })
+
   function start() {
-    // Reset the previous utterance so the transcript line starts clean.
+    // Reset the previous utterance + error so the transcript line and any
+    // stale failure state start clean.
     speech.result.value = ''
+    speech.error.value = undefined
     speech.start()
   }
 
@@ -73,6 +101,8 @@ export function useVoiceOrder<T extends VoiceOrderProduct>(options: UseVoiceOrde
     transcript: speech.result,
     /** The recognition error event, if any (e.g. mic permission denied). */
     error: speech.error,
+    /** The last recognition error code (raw string), for diagnostics. */
+    errorCode,
     lastResult,
     start,
     stop: speech.stop,

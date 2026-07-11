@@ -341,7 +341,6 @@ const {
   isSupported: voiceSupported,
   isListening: voiceListening,
   transcript: voiceTranscript,
-  error: voiceError,
   toggle: toggleVoice
 } = useVoiceOrder({
   products: () => (products.value ?? []) as SalesProduct[],
@@ -350,13 +349,20 @@ const {
       for (let i = 0; i < line.quantity; i++) addToCart(line.product)
     }
     voiceUnmatched.value = unmatched
+  },
+  // Reason-specific failure messages — a blanket "mislukt" hides whether the
+  // helper needs to grant the mic, is on an unsupported browser, or the engine
+  // is unreachable. Benign pauses never reach here (composable swallows them).
+  onError(code) {
+    const key = ({
+      'not-allowed': 'sales.voice.errorDenied',
+      'service-not-allowed': 'sales.voice.errorDenied',
+      'audio-capture': 'sales.voice.errorMic',
+      'network': 'sales.voice.errorNetwork',
+      'language-not-supported': 'sales.voice.errorLang'
+    } as Record<string, string>)[code] ?? 'sales.voice.error'
+    notify.error(t(key))
   }
-})
-
-// A recognition error (mic permission, no network for the engine) would
-// otherwise fail silently — the helper just sees the mic stop.
-watch(voiceError, (err) => {
-  if (err) notify.error(t('sales.voice.error'))
 })
 
 // Set the event ID

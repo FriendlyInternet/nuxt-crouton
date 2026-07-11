@@ -637,7 +637,11 @@
       "stop": "Stop met luisteren",
       "listening": "Aan het luisteren…",
       "notUnderstood": "Niet begrepen",
-      "error": "Spraakherkenning mislukt"
+      "error": "Spraakherkenning mislukt",
+      "errorDenied": "Geef toegang tot de microfoon om te bestellen met je stem",
+      "errorMic": "Geen microfoon gevonden",
+      "errorNetwork": "Spraakherkenning niet bereikbaar — controleer de verbinding",
+      "errorLang": "Nederlands wordt niet ondersteund door deze browser"
     }
   }
 }

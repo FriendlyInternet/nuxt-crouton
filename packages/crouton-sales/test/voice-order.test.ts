@@ -7,7 +7,7 @@
  * segments are never silently dropped.
  */
 import { describe, it, expect } from 'vitest'
-import { parseVoiceOrder, type VoiceOrderProduct } from '../app/utils/voice-order'
+import { parseVoiceOrder, classifyVoiceError, type VoiceOrderProduct } from '../app/utils/voice-order'
 
 const p = (id: string, title: string, isActive = true): VoiceOrderProduct =>
   ({ id, title, isActive })
@@ -122,5 +122,29 @@ describe('parseVoiceOrder — never guess, never drop', () => {
     const result = parseVoiceOrder('twee pils en een koffie', products)
     expect(result.lines.map(l => l.product.id)).toEqual(['koffie'])
     expect(result.unmatched).toHaveLength(1)
+  })
+})
+
+describe('classifyVoiceError — report real failures, swallow benign pauses', () => {
+  it('returns null when there is no error', () => {
+    expect(classifyVoiceError(undefined)).toBeNull()
+    expect(classifyVoiceError({})).toBeNull()
+  })
+
+  it('swallows benign codes (pause / mic-off / no-match) — report=false', () => {
+    for (const code of ['no-speech', 'aborted', 'no-match']) {
+      expect(classifyVoiceError({ error: code })).toMatchObject({ code, report: false })
+    }
+  })
+
+  it('reports real failures the helper must act on — report=true', () => {
+    for (const code of ['not-allowed', 'service-not-allowed', 'audio-capture', 'network', 'language-not-supported']) {
+      expect(classifyVoiceError({ error: code })).toMatchObject({ code, report: true })
+    }
+  })
+
+  it('carries the engine message through for diagnostics', () => {
+    expect(classifyVoiceError({ error: 'network', message: 'down' }))
+      .toEqual({ code: 'network', message: 'down', report: true })
   })
 })
