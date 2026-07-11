@@ -202,6 +202,14 @@ async function handleImageUpload() {
   input.click()
 }
 
+// UEditor declares no `create` event (only update:modelValue) and its internal
+// useEditor options clobber a consumer-passed onCreate — @create below never
+// fires. Capture the instance from UEditor's exposed `editor` ref instead.
+const ueditorRef = ref<{ editor?: Editor | null } | null>(null)
+watch(() => ueditorRef.value?.editor, (ed) => {
+  if (ed && ed !== editorInstance.value) handleEditorCreate({ editor: ed })
+})
+
 // Handle paste/drop image upload
 function handleEditorCreate(event: { editor: Editor }) {
   editorInstance.value = event.editor
@@ -288,6 +296,7 @@ const bubbleToolbarItems: EditorToolbarItem[][] = [
 
 <template>
   <UEditor
+    ref="ueditorRef"
     v-slot="{ editor }"
     v-model="model"
     :content-type="contentType"
