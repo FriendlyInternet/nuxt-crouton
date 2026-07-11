@@ -57,66 +57,83 @@ function stateForStatus(status: string | number | null | undefined): LedState {
   }
 }
 
-/** The latest job in a set, or undefined for an empty set. */
-function latest(jobs: LedJob[]): LedJob | undefined {
+/** The latest job in a set (by `jobTime`), or undefined for an empty/absent set. */
+function latest(jobs: LedJob[] | undefined): LedJob | undefined {
   let best: LedJob | undefined
-  for (const job of jobs) {
+  for (const job of (jobs ?? [])) {
     if (!best || jobTime(job) >= jobTime(best)) best = job
   }
   return best
 }
 
+/** Append `job` to the bucket at `key` (skips null keys). */
+function bucket(map: Map<string, LedJob[]>, key: string | null | undefined, job: LedJob): void {
+  if (key == null) return
+  const arr = map.get(key)
+  if (arr) arr.push(job)
+  else map.set(key, [job])
+}
+
+/** Bucket every job once by `printerId` and by `printerTitle`. */
+function indexJobs(jobs: LedJob[]): { byId: Map<string, LedJob[]>, byTitle: Map<string, LedJob[]> } {
+  const byId = new Map<string, LedJob[]>()
+  const byTitle = new Map<string, LedJob[]>()
+  for (const job of jobs) {
+    bucket(byId, job.printerId, job)
+    bucket(byTitle, job.printerTitle, job)
+  }
+  return { byId, byTitle }
+}
+
+/** Titles held by exactly one current printer row — the only safe fallback keys. */
+function unambiguousTitles(printers: LedPrinter[]): Set<string> {
+  const counts = new Map<string, number>()
+  for (const p of printers) {
+    if (p.title != null) counts.set(p.title, (counts.get(p.title) ?? 0) + 1)
+  }
+  const unique = new Set<string>()
+  for (const [title, n] of counts) {
+    if (n === 1) unique.add(title)
+  }
+  return unique
+}
+
 /**
- * Resolve every printer's LED state in one pass.
- *
- * Attribution per printer row:
- *   1. jobs whose `printerId` equals the row id — if any exist, the latest wins;
- *   2. otherwise, jobs whose `printerTitle` equals the row title, but ONLY when
- *      that title is unique among the current rows (unambiguous) — the latest
- *      wins;
- *   3. otherwise `unknown` (grey — genuinely never printed, or ambiguous).
- *
- * `id` always takes precedence: a row with any id-matched job ignores
- * title-only jobs entirely.
+ * The latest job attributable to one printer row: jobs matching by `printerId`
+ * win outright; only when there are none does an unambiguous `printerTitle`
+ * match apply. Undefined ⇒ nothing attributable (grey).
+ */
+function attributedJob(
+  printer: LedPrinter,
+  byId: Map<string, LedJob[]>,
+  byTitle: Map<string, LedJob[]>,
+  uniqueTitles: Set<string>
+): LedJob | undefined {
+  const idJob = latest(byId.get(printer.id))
+  if (idJob) return idJob
+  if (printer.title != null && uniqueTitles.has(printer.title)) {
+    return latest(byTitle.get(printer.title))
+  }
+  return undefined
+}
+
+/**
+ * Resolve every printer's LED state. Composes the pieces above:
+ *   1. jobs matching by `printerId` win (latest by `completedAt ?? createdAt`);
+ *   2. else an *unambiguous* `printerTitle` match (drift-proof fallback);
+ *   3. else `unknown` (grey — never printed, or an ambiguous title).
  */
 export function attributePrinterStates(
   printers: LedPrinter[],
   jobs: LedJob[]
 ): Map<string, LedState> {
-  // Titles shared by >1 current row are ambiguous — never a fallback key.
-  const titleCounts = new Map<string, number>()
-  for (const p of printers) {
-    if (p.title == null) continue
-    titleCounts.set(p.title, (titleCounts.get(p.title) ?? 0) + 1)
-  }
-
-  // Bucket jobs once: by printerId, and by printerTitle.
-  const byId = new Map<string, LedJob[]>()
-  const byTitle = new Map<string, LedJob[]>()
-  for (const job of jobs) {
-    if (job.printerId != null) {
-      const arr = byId.get(job.printerId)
-      if (arr) arr.push(job); else byId.set(job.printerId, [job])
-    }
-    if (job.printerTitle != null) {
-      const arr = byTitle.get(job.printerTitle)
-      if (arr) arr.push(job); else byTitle.set(job.printerTitle, [job])
-    }
-  }
+  const { byId, byTitle } = indexJobs(jobs)
+  const uniqueTitles = unambiguousTitles(printers)
 
   const states = new Map<string, LedState>()
   for (const p of printers) {
-    const idJobs = byId.get(p.id)
-    let job = idJobs && idJobs.length > 0 ? latest(idJobs) : undefined
-
-    // Fall back to an unambiguous title match only when no id-matched job.
-    if (!job && p.title != null && titleCounts.get(p.title) === 1) {
-      const titleJobs = byTitle.get(p.title)
-      if (titleJobs && titleJobs.length > 0) job = latest(titleJobs)
-    }
-
+    const job = attributedJob(p, byId, byTitle, uniqueTitles)
     states.set(p.id, job ? stateForStatus(job.status) : 'unknown')
   }
-
   return states
 }
