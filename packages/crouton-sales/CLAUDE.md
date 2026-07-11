@@ -418,6 +418,7 @@ All package endpoints live under `/api/crouton-sales/` with an explicit split:
 | Path | Auth | Purpose |
 |------|------|---------|
 | `teams/[id]/events/[eventId]/duplicate` POST | team admin | Clone an event + its categories/locations/products/printers |
+| `teams/[id]/events/[eventId]/orders` DELETE | team admin | **Delete all orders** (#1519): bulk-wipe one event's orders, cascading `salesOrders` → `salesOrderitems` → this event's sales-domain `print_jobs` (`source: 'sales'`), scoped strictly to `eventId` — never team-wide. Leaves `salesClients` intact (reusable; open-tab totals reset naturally). Returns `{ deleted: { orders, items, jobs } }`. Cascade sequencing is the pure `deleteAllEventOrders` (`server/utils/delete-event-orders.ts`, unit-tested); backs the typed-confirm danger-zone action in SettingsTab (admin-only, type the event name to enable) |
 | `teams/[id]/events/[eventId]/admin-helper-token` POST | team member | Issue a helper scoped-access token without PIN (displayName = user name) — lets logged-in admins open the POS directly |
 | `teams/[id]/events/[eventId]/active-helpers` GET | team admin | List currently-logged-in helpers for one event |
 | `teams/[id]/active-helpers` GET | team admin | List active helpers across all team events |
