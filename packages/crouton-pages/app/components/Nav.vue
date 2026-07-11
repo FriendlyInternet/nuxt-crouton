@@ -110,6 +110,11 @@ const themeQuickItems = computed<DropdownMenuItem[][]>(() => {
   return canSwitchTheme.value && children?.length ? [children] : []
 })
 
+// Pill action slot — other layers push icon buttons here (e.g. pages' own
+// "edit this page" pencil); rendered in the pill next to the appearance
+// controls. See useCroutonNavPill.
+const { visibleActions: navPillActions } = useCroutonNavPill()
+
 // Admin dropdown menu items — mirrors AdminSidebar logic dynamically
 const adminPrefix = computed(() => {
   const teamParam = teamSlugRef.value || teamIdRef.value || currentTeam.value?.slug || ''
@@ -315,6 +320,21 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
           </template>
         </ClientOnly>
 
+        <!-- Package-contributed pill actions (e.g. the edit-page pencil).
+             Client-only: actions are registered on mount. -->
+        <ClientOnly>
+          <UButton
+            v-for="action in navPillActions"
+            :key="action.id"
+            :icon="action.icon"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :aria-label="action.label"
+            @click="action.onSelect"
+          />
+        </ClientOnly>
+
         <!-- Language Switcher -->
         <CroutonI18nLanguageSwitcher class="w-auto" />
 
@@ -467,6 +487,20 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
             />
             <USeparator orientation="vertical" class="h-5" />
           </template>
+        </ClientOnly>
+
+        <!-- Package-contributed pill actions (e.g. the edit-page pencil). -->
+        <ClientOnly>
+          <UButton
+            v-for="action in navPillActions"
+            :key="action.id"
+            :icon="action.icon"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :aria-label="action.label"
+            @click="action.onSelect"
+          />
         </ClientOnly>
 
         <!-- Language + theme + dark mode — always reachable, even on chrome-less pages -->
