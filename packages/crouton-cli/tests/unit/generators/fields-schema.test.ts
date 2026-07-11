@@ -2,11 +2,20 @@ import { describe, it, expect } from 'vitest'
 import { z } from 'zod'
 import { buildFieldsSchema, buildFieldsTypes } from '../../../lib/generate-collection.ts'
 
-// Contract for #1403: nullable DB columns round-trip `null`, so the generated
-// body schemas must accept `null` for every non-required field (`.nullish()`),
-// while required fields stay omittable-but-never-null (PATCH uses `.partial()`).
-// Bug class first hit as commit 5e9dc3ce5 (config), then again as the pages
-// save 400 (layout/ogImage/robots).
+// Contract for #1403 — the read/write split:
+//
+// WRITE path (mode: 'server' — the endpoint body schemas): nullable DB columns
+// round-trip `null`, and `null` is how a client clears an optional field, so
+// every non-required field must accept null (`.nullish()`). Required fields
+// stay omittable-but-never-null (PATCH uses `.partial()`). Bug class first hit
+// as commit 5e9dc3ce5 (config), then again as the pages save 400
+// (layout/ogImage/robots).
+//
+// READ path (mode: 'client' — the composable/FormData schema, and the
+// generated interfaces): form state binds fields to inputs typed
+// `string | undefined`, so null must NOT leak in (regenerating the e2e
+// fixtures proved widening these breaks every generated _Form.vue and the
+// package components consuming collection types).
 
 const cases = { plural: 'products', pascalCasePlural: 'Products' }
 
@@ -14,13 +23,14 @@ function field(name: string, type: string, meta: Record<string, any> = {}, zod =
   return { name, type, meta, zod, default: "''", tsType: 'string' }
 }
 
-function build(fields: any[], config: Record<string, any> | null = null) {
+function build(fields: any[], config: Record<string, any> | null = null, mode?: 'client' | 'server') {
   return buildFieldsSchema({
     fields,
     config,
     hierarchy: { enabled: false } as any,
     cases,
-    layerCamelCase: 'shop'
+    layerCamelCase: 'shop',
+    mode
   })
 }
 
@@ -31,13 +41,13 @@ function compilePatchSchema(fieldsSchema: string) {
   return new Function('z', `return z.object({ ${fieldsSchema} }).partial().strip()`)(z) as z.ZodType
 }
 
-describe('buildFieldsSchema — null handling (#1403)', () => {
+describe('buildFieldsSchema server mode — wire schema accepts null (#1403)', () => {
   it('emits .nullish() for non-required string fields', () => {
     const out = build([
       field('layout', 'string'),
       field('ogImage', 'string'),
       field('robots', 'string')
-    ])
+    ], null, 'server')
     expect(out).toContain('layout: z.string().nullish()')
     expect(out).toContain('ogImage: z.string().nullish()')
     expect(out).toContain('robots: z.string().nullish()')
@@ -48,7 +58,7 @@ describe('buildFieldsSchema — null handling (#1403)', () => {
     const out = build([
       field('config', 'json', {}, 'z.record(z.string(), z.any())'),
       field('publishedAt', 'date', {}, 'z.date()')
-    ])
+    ], null, 'server')
     expect(out).toContain('config: z.record(z.string(), z.any()).nullish()')
     expect(out).toContain('publishedAt: z.coerce.date().nullish()')
   })
@@ -57,7 +67,7 @@ describe('buildFieldsSchema — null handling (#1403)', () => {
     const schema = compilePatchSchema(build([
       field('name', 'string', { required: true }),
       field('layout', 'string')
-    ]))
+    ], null, 'server'))
     expect(() => schema.parse({ name: null })).toThrow()
     expect(schema.parse({})).toEqual({})
     expect(schema.parse({ name: 'ok' })).toEqual({ name: 'ok' })
@@ -69,7 +79,7 @@ describe('buildFieldsSchema — null handling (#1403)', () => {
       field('title', 'string'),
       field('seoTitle', 'string'),
       field('layout', 'string')
-    ], config)
+    ], config, 'server')
     expect(out).toContain('title: z.string().nullish()')
     expect(out).toContain('seoTitle: z.string().nullish()')
   })
@@ -86,7 +96,7 @@ describe('buildFieldsSchema — null handling (#1403)', () => {
       field('robots', 'string'),
       field('config', 'json', {}, 'z.record(z.string(), z.any())'),
       field('publishedAt', 'date', {}, 'z.date()')
-    ], config))
+    ], config, 'server'))
 
     // The exact shape that 400'd: nullable columns echoed back as null,
     // plus unknown record keys the server must strip, not reject.
@@ -114,21 +124,46 @@ describe('buildFieldsSchema — null handling (#1403)', () => {
   })
 })
 
-describe('buildFieldsTypes — interfaces mirror the nullish schema (#1403)', () => {
+describe('buildFieldsSchema client mode (default) — FormData never widens to null', () => {
+  it('non-required string fields stay .optional()', () => {
+    const out = build([field('layout', 'string'), field('ogImage', 'string')])
+    expect(out).toContain('layout: z.string().optional()')
+    expect(out).toContain('ogImage: z.string().optional()')
+    expect(out).not.toContain('layout: z.string().nullish()')
+  })
+
+  it('json/date/meta.nullable keep accepting null (pre-existing behavior)', () => {
+    const out = build([
+      field('config', 'json', {}, 'z.record(z.string(), z.any())'),
+      field('publishedAt', 'date', {}, 'z.date()'),
+      field('legacy', 'string', { nullable: true })
+    ])
+    expect(out).toContain('config: z.record(z.string(), z.any()).nullish()')
+    expect(out).toContain('publishedAt: z.coerce.date().nullish()')
+    expect(out).toContain('legacy: z.string().nullish()')
+  })
+
+  it('translatable root fields stay .optional()', () => {
+    const config = { translations: { collections: { products: ['title'] } } }
+    const out = build([field('title', 'string')], config)
+    expect(out).toContain('title: z.string().optional()')
+  })
+})
+
+describe('buildFieldsTypes — read interface stays narrow (#1403)', () => {
   function buildTypes(fields: any[], config: Record<string, any> | null = null) {
     return buildFieldsTypes({ fields, config, hierarchy: { enabled: false } as any, cases })
   }
 
-  it('non-required fields are optional AND nullable', () => {
+  it('non-required string fields do NOT widen to null (forms/packages bind these)', () => {
     const out = buildTypes([field('layout', 'string'), field('name', 'string', { required: true })])
-    expect(out).toContain('layout?: string | null')
+    expect(out).toContain('layout?: string')
+    expect(out).not.toContain('layout?: string | null')
     expect(out).toContain('name: string')
-    expect(out).not.toContain('name: string | null')
   })
 
-  it('translatable root fields are optional and nullable even when required per-locale', () => {
-    const config = { translations: { collections: { products: ['title'] } } }
-    const out = buildTypes([field('title', 'string', { required: true })], config)
-    expect(out).toContain('title?: string | null')
+  it('json fields keep | null (their schema is nullish in both modes)', () => {
+    const out = buildTypes([field('config', 'json', {}, 'z.record(z.string(), z.any())')])
+    expect(out).toContain('config?: string | null')
   })
 })

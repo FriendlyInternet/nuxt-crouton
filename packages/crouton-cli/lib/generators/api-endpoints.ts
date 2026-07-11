@@ -152,7 +152,7 @@ import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/t
 import { z } from 'zod'
 
 ${itemSchemasPrefix}const bodySchema = z.object({
-  ${data.fieldsSchema}
+  ${data.serverFieldsSchema ?? data.fieldsSchema}
 }).strip()
 
 export default defineEventHandler(async (event) => {
@@ -216,7 +216,7 @@ import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/t
 import { z } from 'zod'
 
 ${itemSchemasPrefix}const bodySchema = z.object({
-  ${data.fieldsSchema}${hasTranslations ? ',\n  // Transient hint: which locale the translation patch targets (not a column)\n  locale: z.string().optional()' : ''}
+  ${data.serverFieldsSchema ?? data.fieldsSchema}${hasTranslations ? ',\n  // Transient hint: which locale the translation patch targets (not a column)\n  locale: z.string().optional()' : ''}
 }).partial().strip()
 
 export default defineEventHandler(async (event) => {
