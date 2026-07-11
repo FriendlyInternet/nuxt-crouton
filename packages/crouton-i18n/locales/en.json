@@ -355,6 +355,8 @@
     "switchTeam": "Switch Team",
     "selectTeam": "Select team",
     "teamMembers": "Team Members",
+    "gridLayout": "Grid layout",
+    "tableLayout": "Table layout",
     "addMember": "Add Member",
     "removeMember": "Remove Member",
     "memberCount": "{count} member(s)",

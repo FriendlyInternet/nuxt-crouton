@@ -16,6 +16,29 @@
  */
 import { defineNuxtRouteMiddleware, navigateTo, createError, useSession, useTeam, useNuxtApp, useRequestHeaders, watch } from '#imports'
 
+/** Minimal shape of a team as this middleware consumes it */
+interface TeamRef {
+  id: string
+  slug: string
+}
+
+/** Minimal member shape returned by better-auth's full-organization payload */
+interface OrgMember {
+  userId: string
+  role: string
+}
+
+/**
+ * Locally-derived slice of the better-auth client this middleware uses.
+ * The full client type lives in crouton-auth (client-only plugin).
+ */
+interface AuthOrgClient {
+  organization?: {
+    list?: () => Promise<{ data?: TeamRef[] | null }>
+    getFullOrganization?: (opts: { query: { organizationId: string } }) => Promise<{ data?: { members?: OrgMember[] } | null }>
+  }
+}
+
 export default defineNuxtRouteMiddleware(async (to) => {
   const { data: sessionData, isPending, isAuthenticated } = useSession()
   const { teams, switchTeamBySlug } = useTeam()
@@ -64,7 +87,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   // Find the team and check role from teams list (includes role)
-  let userTeams = teams.value
+  let userTeams: TeamRef[] = teams.value
 
   // If teams not loaded, fetch from API
   if (userTeams.length === 0) {
@@ -72,8 +95,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
       // Server-side: $authClient is not available (client-only plugin), use $fetch directly
       const requestHeaders = useRequestHeaders(['cookie'])
       try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const orgs = await ($fetch as any)('/api/auth/organization/list', {
+        const orgs = await $fetch<TeamRef[]>('/api/auth/organization/list', {
           headers: requestHeaders
         }).catch(() => null)
         if (orgs) {
@@ -83,8 +105,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
         console.error('[@crouton/admin] Failed to fetch teams server-side:', e)
       }
     } else {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const authClient = nuxtApp.$authClient as any
+      const authClient = nuxtApp.$authClient as AuthOrgClient | undefined
       if (authClient?.organization?.list) {
         try {
           const result = await authClient.organization.list()
@@ -99,7 +120,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   // Find the target team
-  const targetTeam = userTeams.find((t: any) => t.slug === teamSlug || t.id === teamSlug)
+  const targetTeam = userTeams.find(t => t.slug === teamSlug || t.id === teamSlug)
 
   if (!targetTeam) {
     throw createError({
@@ -130,8 +151,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     // Server-side: use $fetch with request headers
     const requestHeaders = useRequestHeaders(['cookie'])
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fullOrg = await ($fetch as any)('/api/auth/organization/get-full-organization', {
+      const fullOrg = await $fetch<{ members?: OrgMember[] }>('/api/auth/organization/get-full-organization', {
         query: { organizationId: targetTeam.id },
         headers: requestHeaders
       }).catch(() => null)
@@ -139,7 +159,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
       if (fullOrg?.members) {
         const { user } = useSession()
         const userId = user.value?.id
-        const membership = fullOrg.members.find((m: any) => m.userId === userId)
+        const membership = fullOrg.members.find(m => m.userId === userId)
 
         if (!membership || (membership.role !== 'owner' && membership.role !== 'admin')) {
           throw createError({
@@ -158,8 +178,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
     }
   } else {
     // Client-side: use the auth client
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const authClient = nuxtApp.$authClient as any
+    const authClient = nuxtApp.$authClient as AuthOrgClient | undefined
     if (authClient?.organization?.getFullOrganization) {
       try {
         const result = await authClient.organization.getFullOrganization({
@@ -169,7 +188,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
         if (result.data?.members) {
           const { user } = useSession()
           const userId = user.value?.id
-          const membership = result.data.members.find((m: any) => m.userId === userId)
+          const membership = result.data.members.find(m => m.userId === userId)
 
           if (!membership || (membership.role !== 'owner' && membership.role !== 'admin')) {
             throw createError({

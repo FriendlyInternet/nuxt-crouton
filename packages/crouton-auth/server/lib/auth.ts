@@ -690,7 +690,7 @@ function buildPlugins(
   debug?: boolean,
   db?: DrizzleD1Database<Record<string, unknown>>
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- typing as BetterAuthPlugin[] widens the tuple betterAuth infers auth.api's plugin endpoints from
   const plugins: any[] = [
     // Organization plugin is always enabled (teams support)
     // Cast to any to work around strict typing - config is validated at runtime

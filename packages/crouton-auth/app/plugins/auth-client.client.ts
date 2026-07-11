@@ -5,6 +5,7 @@
  * Configures organization, passkey, and 2FA client plugins based on @crouton/auth config.
  */
 import { createAuthClient } from 'better-auth/client'
+import type { BetterAuthClientPlugin } from 'better-auth/client'
 import { organizationClient, twoFactorClient, adminClient } from 'better-auth/client/plugins'
 import { passkeyClient } from '@better-auth/passkey/client'
 import type { CroutonAuthConfig } from '../../types/config'
@@ -50,8 +51,7 @@ export default defineNuxtPlugin(() => {
  * Build array of Better Auth client plugins based on configuration
  */
 function buildClientPlugins(config?: CroutonAuthConfig) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const plugins: any[] = [
+  const plugins: BetterAuthClientPlugin[] = [
     // Organization client is always enabled
     organizationClient(),
     // Admin client for user management (ban, impersonate, etc.)

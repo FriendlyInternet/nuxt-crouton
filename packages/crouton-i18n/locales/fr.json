@@ -354,6 +354,8 @@
     "switchTeam": "Changer d'équipe",
     "selectTeam": "Sélectionner une équipe",
     "teamMembers": "Membres de l'équipe",
+    "gridLayout": "Vue en grille",
+    "tableLayout": "Vue en tableau",
     "addMember": "Ajouter un membre",
     "removeMember": "Supprimer un membre",
     "memberCount": "{count} membre(s)",

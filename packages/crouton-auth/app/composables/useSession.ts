@@ -27,8 +27,8 @@ export interface SessionData {
   user: User
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyRef = Ref<any>
+// Raw better-auth payloads — normalized into typed shapes by the computeds below
+type RawStateRef = Ref<unknown>
 
 /**
  * Everything the session helpers need: the auth client, request context,
@@ -39,10 +39,10 @@ interface SessionContext {
   authClient: ReturnType<typeof useAuthClientSafe>
   debug: boolean
   headers: ReturnType<typeof useRequestHeaders> | undefined
-  sessionState: AnyRef
-  userState: AnyRef
-  activeOrgState: AnyRef
-  userProfileState: AnyRef
+  sessionState: RawStateRef
+  userState: RawStateRef
+  activeOrgState: RawStateRef
+  userProfileState: RawStateRef
   isPendingState: Ref<boolean>
   errorState: Ref<Error | null>
   isListening: Ref<boolean>
@@ -50,14 +50,10 @@ interface SessionContext {
 
 // Shared state using useState (works in components, middleware, plugins)
 function createSessionState() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const sessionState = useState<any>('crouton-auth-session', () => null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userState = useState<any>('crouton-auth-user', () => null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const activeOrgState = useState<any>('crouton-auth-active-org', () => null)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const userProfileState = useState<any>('crouton-auth-user-profile', () => null)
+  const sessionState = useState<unknown>('crouton-auth-session', () => null)
+  const userState = useState<unknown>('crouton-auth-user', () => null)
+  const activeOrgState = useState<unknown>('crouton-auth-active-org', () => null)
+  const userProfileState = useState<unknown>('crouton-auth-user-profile', () => null)
   const isPendingState = useState('crouton-auth-pending', () => true)
   const errorState = useState<Error | null>('crouton-auth-error', () => null)
 
