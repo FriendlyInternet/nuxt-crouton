@@ -91,7 +91,7 @@ jobs:
       (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
       (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate'))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     # No `id-token` — pi uses a provider key, not OIDC. The write scopes are for the
     # Harness App token minted below, which pi uses to push/PR/comment.
     permissions:

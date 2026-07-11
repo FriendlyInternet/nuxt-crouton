@@ -144,6 +144,12 @@
 - name: "poc:notes"
   color: "fef2c0"
   description: "POC: pocs/notes"
+- name: "poc:snippets"
+  color: "fef2c0"
+  description: "POC: pocs/snippets"
+- name: "poc:pins"
+  color: "fef2c0"
+  description: "POC: pocs/pins"
 
 # ── Sandboxes (sandboxes/*) — throwaway, human-eyeball test apps (delete-after) ──
 # (none currently — minimal-theme-demo retired in #1306, superseded by
