@@ -179,6 +179,23 @@ async function retryPrintJob(jobId: string) {
   }
 }
 
+// Whole-order Reprint (OrderItems emits the orderId). Same team-authed endpoint,
+// keyed by { orderId }: it resets the order's existing done/failed jobs back to
+// pending so the transport re-drains them. Refresh flips the LEDs to Printing.
+async function reprintOrder(orderId: string) {
+  try {
+    await $fetch(
+      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/printqueues/retry-failed`,
+      { method: 'POST', body: { orderId } }
+    )
+    await refreshPrintJobs()
+    retryNotify.success(t('sales.orders.reprintQueued', 'Reprint queued'))
+  }
+  catch {
+    retryNotify.error(t('sales.orders.reprintError', 'Could not reprint this order'))
+  }
+}
+
 // Combined worst status across a set of jobs (status enum: 0=pending,
 // 1=printing, 2=done, 9=error). Red wins, then orange (busy), then green;
 // no jobs at all ⇒ grey.
@@ -509,6 +526,7 @@ function toggleExpand(id: string) {
           :print-jobs="jobsByOrder.get(order.id) || []"
           :has-printers="printerList.length > 0"
           @retry-job="retryPrintJob"
+          @reprint-order="reprintOrder"
         />
       </li>
     </ul>
