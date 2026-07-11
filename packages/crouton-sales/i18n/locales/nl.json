@@ -613,7 +613,24 @@
       "lastSeen": "laatst gezien",
       "neverSeen": "nooit gezien",
       "updated": "Printflow aangepast",
-      "updateError": "Kon de printflow niet aanpassen"
+      "updateError": "Kon de printflow niet aanpassen",
+      "setup": {
+        "toggle": "Setup",
+        "copy": "Kopieer",
+        "copied": "Gekopieerd",
+        "routerIntro": "De routerconfiguratie staat eenmalig in /etc/init.d/print_server — stel de waarden hieronder in, herstart de service, en per event verandert alleen EVENT_ID.",
+        "routerPrinters": "Zet de printers op het eigen netwerk van de router met een vast IP, en voeg elke printer toe onder Printers met dat IP en poort 9100.",
+        "routerEventId": "Zet EVENT_ID op het id van dit event — dit is de waarde per event: pas aan en herstart bij elk nieuw event.",
+        "routerApiUrl": "Zet API_URL op deze app:",
+        "routerApiKey": "Zet API_KEY op dezelfde waarde als deze app-secret (de secret zelf wordt hier nooit getoond):",
+        "routerRestart": "Activeer de configuratie op de router:",
+        "routerVerify": "Klaar wanneer dit bolletje groen wordt — de router pollt binnen ~30 seconden.",
+        "drainerIntro": "Een toestel op locatie (Pi / mini-pc) draait zelf de app en print rechtstreeks naar de printers — geen routerconfiguratie nodig.",
+        "drainerEnv": "Start de app op het toestel op locatie met de print-drainer ingeschakeld:",
+        "drainerPrinters": "Voeg elke printer toe onder Printers met zijn LAN-IP en poort 9100 — het toestel moet de printers op zijn netwerk kunnen bereiken.",
+        "drainerFlip": "Laat deze printflow op \"Lokaal toestel\" staan — de routerflow is de standaard, en het toestel bedient enkel events die op Lokaal toestel staan.",
+        "drainerVerify": "Klaar wanneer dit bolletje groen wordt — het toestel meldt zich binnen ~30 seconden."
+      }
     }
   }
 }
