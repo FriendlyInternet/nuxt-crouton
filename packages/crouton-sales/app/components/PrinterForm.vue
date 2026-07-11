@@ -382,9 +382,14 @@ const { pause: pausePoll, resume: resumePoll } = useIntervalFn(async () => {
   }
   let job: { status: string | null, errorMessage?: string | null } | null = null
   try {
-    job = await $fetch(
-      `/api/crouton-sales/teams/${route.params.team}/events/${state.value.eventId}/printqueues/${pollQueueId.value}`
-    )
+    // Annotate the path as `string` (erases literal narrowing) and give $fetch
+    // an explicit response generic, so the typed client can't try to resolve
+    // this dynamically-built URL against the full Nitro route union — that
+    // route-literal inference blows the TS "Excessive stack depth" limit in the
+    // with-sales fixture's typecheck (#1506). Same shape as usePrintWatcher's
+    // typed $fetch<PrintWatchJob[]>(...).
+    const url: string = `/api/crouton-sales/teams/${route.params.team}/events/${state.value.eventId}/printqueues/${pollQueueId.value}`
+    job = await $fetch<{ status: string | null, errorMessage?: string | null }>(url)
   }
   catch {
     // Not visible yet / transient blip — keep waiting until the timeout fires.
