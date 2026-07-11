@@ -41,10 +41,16 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi (cheap by default — first quality/cost read)."
+        description: "Model for pi (cheap by default — first quality/cost read). For provider=zai use e.g. glm-5.2."
         required: false
         default: "claude-haiku-4-5-20251001"
         type: string
+      provider:
+        description: "pi provider. anthropic = funded PI_PROVIDER_KEY; zai = GLM Coding Plan via the runner box's pi auth store (#1409, self-hosted runner only)."
+        required: false
+        default: "anthropic"
+        type: choice
+        options: ["anthropic", "zai"]
 
 concurrency:
   group: a11y-daily-pidev
@@ -84,10 +90,12 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # ── The agent: pi.dev, REPORTS-ONLY, scoped to the model key only ──────────────
-      # env carries ONLY the provider key — no GH_TOKEN/GITHUB_TOKEN. CI pins
-      # `--provider anthropic` with a FUNDED API key (PI_PROVIDER_KEY) — NOT a Claude
+      # env carries ONLY the provider key — no GH_TOKEN/GITHUB_TOKEN. Two provider lanes:
+      # `anthropic` (default) uses a FUNDED API key (PI_PROVIDER_KEY) — NOT a Claude
       # subscription (subscription OAuth must never back unattended CI — Anthropic terms;
       # the box's interactive `pi-claude-cli`/subscription path stays interactive-only).
+      # `zai` (#1409) uses the GLM Coding Plan via pi's auth store on the runner box —
+      # z.ai's plan officially whitelists pi, and the flat-rate key is model-scoped.
       # Invocation + skills confirmed on the mac-mini (#888): the `.pi/skills` symlink
       # bridge does NOT load — pi's discovery ignores it — so skills are passed via the
       # explicit `--skill .claude/skills` flag (our SKILL.md format is drop-in portable).
@@ -95,6 +103,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.PI_PROVIDER_KEY }}
           PI_MODEL: ${{ inputs.model }}
+          PI_PROVIDER: ${{ inputs.provider || 'anthropic' }}
         run: |
           set -uo pipefail
           command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
@@ -122,7 +131,7 @@ jobs:
           echo "exec=$LOG" >> "$GITHUB_OUTPUT"
           START=$(date +%s)
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
-          pi --print --provider anthropic --model "$PI_MODEL" --skill .claude/skills "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
+          pi --print --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           END=$(date +%s)
           echo "wall=$((END-START))" >> "$GITHUB_OUTPUT"
