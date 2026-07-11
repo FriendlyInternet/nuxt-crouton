@@ -95,6 +95,7 @@
     },
     "nav": {
       "menu": "Menu",
+      "theme": "Thème",
       "signOut": "Déconnexion"
     },
     "collection": {

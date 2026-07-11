@@ -95,6 +95,7 @@
     },
     "nav": {
       "menu": "Menu",
+      "theme": "Thema",
       "signOut": "Uitloggen"
     },
     "collection": {

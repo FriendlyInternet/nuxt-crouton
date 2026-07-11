@@ -22,7 +22,7 @@ onMounted(() => {
   // Try to detect if themes package is installed
   try {
     // Check if useThemeSwitcher composable exists and works
-    // @ts-expect-error - composable may not exist when themes not installed
+    // @ts-ignore - composable only exists when the crouton-themes layer is extended
     const themeSwitcher = useThemeSwitcher?.()
     if (themeSwitcher?.currentTheme) {
       // Themes package is installed, resolve the component
