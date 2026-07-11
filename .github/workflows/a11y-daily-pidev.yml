@@ -41,16 +41,16 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi (cheap by default — first quality/cost read). For provider=zai use e.g. glm-5.2."
+        description: "Model for pi. Default glm-5.2 (flat-rate GLM Coding Plan — beat the Haiku baseline on fidelity at $0 marginal, #1409). For provider=anthropic use e.g. claude-haiku-4-5-20251001."
         required: false
-        default: "claude-haiku-4-5-20251001"
+        default: "glm-5.2"
         type: string
       provider:
-        description: "pi provider. anthropic = funded PI_PROVIDER_KEY; zai = GLM Coding Plan via the runner box's pi auth store (#1409, self-hosted runner only)."
+        description: "pi provider. Default zai = GLM Coding Plan via the runner box's pi auth store (#1409, self-hosted runner only); anthropic = funded PI_PROVIDER_KEY (metered baseline lane)."
         required: false
-        default: "anthropic"
+        default: "zai"
         type: choice
-        options: ["anthropic", "zai"]
+        options: ["zai", "anthropic"]
 
 concurrency:
   group: a11y-daily-pidev
@@ -103,7 +103,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.PI_PROVIDER_KEY }}
           PI_MODEL: ${{ inputs.model }}
-          PI_PROVIDER: ${{ inputs.provider || 'anthropic' }}
+          PI_PROVIDER: ${{ inputs.provider || 'zai' }}
         run: |
           set -uo pipefail
           command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
