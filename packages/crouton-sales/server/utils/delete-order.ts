@@ -41,9 +41,37 @@ export interface DeleteOrderCascadeResult {
 }
 
 export async function deleteOrderCascade(
-  _orderId: string,
-  _deps: DeleteOrderCascadeDeps
+  orderId: string,
+  deps: DeleteOrderCascadeDeps
 ): Promise<DeleteOrderCascadeResult> {
-  // Implemented after test sign-off (#1518) — red first.
-  throw new Error('deleteOrderCascade not implemented')
+  const { db, tables } = deps
+  const { salesOrders, salesOrderitems, printJobs } = tables
+  const { eq, and } = deps.ops ?? { eq: defaultEq, and: defaultAnd }
+
+  // Line items — keyed by the order.
+  const deletedItems = await db
+    .delete(salesOrderitems)
+    .where(eq(salesOrderitems.orderId, orderId))
+    .returning({ id: salesOrderitems.id })
+
+  // Print jobs — SCOPED to this order's sales tickets in the shared queue.
+  // Never a bare orderId match: print_jobs is cross-domain and keyed by the
+  // opaque source/refType/refId triple, so a looser filter would reach into
+  // other orders' (or other packages') jobs.
+  const deletedJobs = await db
+    .delete(printJobs)
+    .where(and(
+      eq(printJobs.source, 'sales'),
+      eq(printJobs.refType, 'order'),
+      eq(printJobs.refId, orderId)
+    ))
+    .returning({ id: printJobs.id })
+
+  // The order row itself — last, so a mid-cascade failure leaves the order
+  // visible (and re-deletable) rather than orphaning its children.
+  await db
+    .delete(salesOrders)
+    .where(eq(salesOrders.id, orderId))
+
+  return { deletedItems: deletedItems.length, deletedJobs: deletedJobs.length }
 }

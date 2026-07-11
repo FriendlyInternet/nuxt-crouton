@@ -330,7 +330,8 @@
       "createNewClient": "Créer un nouveau client",
       "clientHelp": "Sélectionnez un client existant ou créez-en un nouveau",
       "clientRequired": "Client requis",
-      "clientRequiredDescription": "Cet événement nécessite un client. Veuillez en sélectionner ou en créer un."
+      "clientRequiredDescription": "Cet événement nécessite un client. Veuillez en sélectionner ou en créer un.",
+      "deleteError": "Impossible de supprimer la commande"
     },
     "events": {
       "title": "Événements",

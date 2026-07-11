@@ -179,6 +179,35 @@ async function retryPrintJob(jobId: string) {
   }
 }
 
+// Hard-delete one order (team-admin endpoint cascades to its items + print
+// jobs). Fire the salesOrders crouton:mutation so every listener refreshes —
+// notably the POS client picker's tab totals — then refresh this list + the
+// print-queue poll and drop the (now-gone) row from the expanded set.
+const nuxtApp = useNuxtApp()
+async function deleteOrder(orderId: string) {
+  try {
+    await $fetch(
+      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/orders/${orderId}`,
+      { method: 'DELETE' }
+    )
+    await nuxtApp.hooks.callHook('crouton:mutation', {
+      operation: 'delete',
+      collection: 'salesOrders',
+      itemIds: [orderId],
+      timestamp: Date.now()
+    })
+    if (expandedIds.value.has(orderId)) {
+      const next = new Set(expandedIds.value)
+      next.delete(orderId)
+      expandedIds.value = next
+    }
+    await Promise.all([refreshOrders(), refreshPrintJobs()])
+  }
+  catch {
+    retryNotify.error(t('sales.orders.deleteError', 'Could not delete order'))
+  }
+}
+
 // Combined worst status across a set of jobs (status enum: 0=pending,
 // 1=printing, 2=done, 9=error). Red wins, then orange (busy), then green;
 // no jobs at all ⇒ grey.
@@ -509,6 +538,7 @@ function toggleExpand(id: string) {
           :print-jobs="jobsByOrder.get(order.id) || []"
           :has-printers="printerList.length > 0"
           @retry-job="retryPrintJob"
+          @delete-order="deleteOrder"
         />
       </li>
     </ul>

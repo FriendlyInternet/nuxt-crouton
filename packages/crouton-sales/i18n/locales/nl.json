@@ -331,7 +331,8 @@
       "createNewClient": "Nieuwe klant aanmaken",
       "clientHelp": "Selecteer een bestaande klant of maak een nieuwe aan",
       "clientRequired": "Klant vereist",
-      "clientRequiredDescription": "Dit evenement vereist een klant. Selecteer of maak er een aan."
+      "clientRequiredDescription": "Dit evenement vereist een klant. Selecteer of maak er een aan.",
+      "deleteError": "Kon bestelling niet verwijderen"
     },
     "events": {
       "title": "Evenementen",
