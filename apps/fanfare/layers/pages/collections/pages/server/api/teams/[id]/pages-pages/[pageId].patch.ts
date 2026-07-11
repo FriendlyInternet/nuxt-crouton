@@ -23,15 +23,12 @@ const bodySchema = z.object({
   translations: z.record(
     z.string(),
     z.object({
-      title: z.string().min(1, 'Title is required'),
-      slug: z.string().min(1, 'Slug is required'),
-      content: z.string().optional(),
-      seoTitle: z.string().optional(),
-      seoDescription: z.string().optional()
-    })
-  ).refine(
-    (translations) => translations.nl && translations.nl.title && translations.nl.slug,
-    { message: 'Translations for title, slug (nl) are required' }
+      title: z.string().min(1, 'Title is required').optional(),
+      slug: z.string().min(1, 'Slug is required').optional(),
+      content: z.string().nullish(),
+      seoTitle: z.string().nullish(),
+      seoDescription: z.string().nullish()
+    }).nullable()
   ),
   // Transient hint: which locale the translation patch targets (not a column)
   locale: z.string().optional()
@@ -51,18 +48,27 @@ export default defineEventHandler(async (event) => {
 
   const body = await readValidatedBody(event, bodySchema.parse)
 
-  // Handle translation updates properly
-  if (body.translations && body.locale) {
+  // Merge translations into the existing record (partial-locale PATCH, #1414):
+  // each sent locale patches per-field; a null locale entry deletes that
+  // locale; omitted locales and fields stay untouched. The default-locale
+  // invariant is enforced on the merged result, not the wire payload.
+  if (body.translations) {
     const [existing] = await getPagesPagesByIds(team.id, [pageId]) as any[]
-    if (existing) {
-      body.translations = {
-        ...existing.translations,
-        [body.locale]: {
-          ...existing.translations?.[body.locale],
-          ...body.translations[body.locale]
-        }
+    const merged: Record<string, any> = { ...(existing?.translations ?? {}) }
+    for (const [loc, patch] of Object.entries(body.translations)) {
+      if (patch === null) {
+        delete merged[loc]
+      } else {
+        merged[loc] = { ...merged[loc], ...patch }
       }
     }
+    if (!(merged.nl && merged.nl.title && merged.nl.slug)) {
+      throw createError({
+        status: 400,
+        statusText: 'Translations for title, slug (nl) are required'
+      })
+    }
+    body.translations = merged
   }
 
   // Only include fields that were actually sent in the request
