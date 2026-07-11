@@ -2,7 +2,11 @@
   <!-- Footer stays compact (space-y-3, py-3) — in the mobile drawer every
        saved pixel goes to the scrollable line-item area above it. The total
        rides the order button; remark + staff share one row. -->
-  <UCard class="flex flex-col h-full" :ui="{ root: 'rounded-none', body: 'flex-1 overflow-y-auto px-3 sm:px-3', footer: 'space-y-3 px-3 sm:px-3 py-3 sm:py-3' }">
+  <!-- ring-0 + bg-transparent: the cart is a filled pane, not a floating
+       card — its container owns the edges and the background tint. The
+       default ring doubled every border it touched (input row above, pane
+       edge, module bottom). -->
+  <UCard class="flex flex-col h-full" :ui="{ root: 'rounded-none ring-0 bg-transparent', body: 'flex-1 overflow-y-auto px-3 sm:px-3', footer: 'space-y-3 px-3 sm:px-3 py-3 sm:py-3' }">
     <!-- Cart items -->
     <div v-if="items.length === 0" class="h-full flex flex-col items-center justify-center gap-3 text-muted">
       <UIcon name="i-lucide-shopping-cart" class="size-10 opacity-40" />
