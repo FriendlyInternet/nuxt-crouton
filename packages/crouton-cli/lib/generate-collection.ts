@@ -1761,6 +1761,15 @@ async function autoMergeFeatureCollections(config: Record<string, any>, options:
   }
 }
 
+// Resolve the database dialect for a loaded config. An explicit 'sqlite'/'pg'
+// wins, but an absent / null / empty `dialect` falls back to **sqlite** — never
+// pg. pg is unexercised in the D1-only stack, and c12's `defaults.dialect` only
+// covers an *absent* key: an explicit `dialect: null`/`''` survives defu, so this
+// is the one source of truth for the fallback (#1450).
+export function resolveDialect(config: Record<string, any> | null | undefined): 'sqlite' | 'pg' {
+  return (config?.dialect as 'sqlite' | 'pg' | null | undefined) || 'sqlite'
+}
+
 // Generate one collection entry from the enhanced config format. Returns the
 // entry to track for the batch db:generate, or null when the collection has no
 // fields file.
@@ -1805,7 +1814,7 @@ async function generateConfigEntry(params: {
     layer,
     collection: collectionName,
     fields,
-    dialect: config.dialect || 'pg',
+    dialect: resolveDialect(config),
     autoRelations: config.flags?.autoRelations || false,
     dryRun: config.flags?.dryRun || false,
     noDb: true, // Skip individual db:generate
@@ -1888,7 +1897,7 @@ async function runSimpleConfigFormat(config: Record<string, any>, typeMapping: a
         layer: target.layer,
         collection,
         fields,
-        dialect: config.dialect || 'pg',
+        dialect: resolveDialect(config),
         autoRelations: config.flags?.autoRelations || false,
         dryRun: config.flags?.dryRun || false,
         noDb: true, // Skip individual db:generate
