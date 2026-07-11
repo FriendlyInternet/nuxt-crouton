@@ -326,6 +326,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/utils/update-nuxt-config.ts` | Update nuxt.config.ts extends |
 | `lib/utils/update-schema-index.ts` | Update schema exports |
 | `lib/utils/schema-sources.ts` | `resolveSchemaSources(appDir, {dialect})` — reproduces NuxtHub's per-layer `server/db/schema*` glob over the recursive `extends` graph (app root + auto-scanned `layers/*` + `@fyit/*`/subpath extends, realpath-deduped, magicast static parse), WITHOUT a Nuxt process. Feeds drizzle-kit directly; parity-verified vs NuxtHub (epic #1445 WS1a). Duplicate-table gate over its output is WS1b |
+| `lib/utils/duplicate-tables.ts` | `findDuplicateTables(resolvedPaths)` — identity-aware gate over the resolver's output: jiti-imports each file through ONE instance, and fails only when a table name maps to ≥2 DISTINCT drizzle objects (benign same-object re-exports pass; catches distinct dups arriving via `export * from` that a regex misses). drizzle-kit otherwise silently last-wins. Epic #1445 WS1b |
 
 ## Generators Structure
 
