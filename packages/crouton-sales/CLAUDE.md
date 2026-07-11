@@ -153,10 +153,14 @@ clears it; inactive clients are excluded from `order-data`'s client list (POS pi
 clients panel. `salesPrintqueues.orderId` is **nullable** — end-of-tab receipts belong to the whole
 tab, not one order (the complete/fail callbacks skip order auto-complete when null).
 
-**Ticket layout**: kitchen tickets print the **client name** as the big centered header (double
-width/height) — the location name is deliberately NOT printed (each kitchen printer sits at its
-location). Customer receipts keep the small `Client:` line; end-of-tab receipts (`ReceiptData.clientTab`)
-reuse the big client header and print `Orders: N` instead of `Order #x`.
+**Ticket layout** (bold hierarchy, #1427): kitchen tickets open with a heavy-ruled **call-out
+block** — the client name double-size with the order number double-height under it (a loose order
+promotes its `#N` to the big slot) — then one compact `HH:MM · helper` meta line. The location
+name is deliberately NOT printed (each kitchen printer sits at its location). Customer receipts
+keep the small `Client:` line, print amounts in one **right-aligned price column** (long names
+wrap within their column) and a double-height `TOTAL`; end-of-tab receipts (`ReceiptData.clientTab`)
+reuse the call-out block with `Orders: N` instead of `Order #x`. Layout lives in crouton-printing's
+`receipt-formatter.ts` (`formatReceipt` ESC/POS + `renderTicketHtml` mirror).
 
 ### Admin Pages (shipped by this package)
 
@@ -409,7 +413,7 @@ All package endpoints live under `/api/crouton-sales/` with an explicit split:
 | `teams/[id]/active-helpers` GET | team admin | List active helpers across all team events |
 | `sync/ingest` POST | `x-sync-key` secret (fail-closed) | Cloud D1 ingest (#178): idempotent upsert of batched outbox events from the Pi pusher. See "Cloud ingest" above. Also stamps the freshness heartbeat (#179) on every call (real batch or idle ping) |
 | `teams/[id]/sync-status` GET | team member | Mirror freshness for the live dashboard (#179): `{ lastContactAt, lastEventAt, lastBatchApplied, serverNow }` (epoch ms; `serverNow` lets the client compute age skew-free). Single global heartbeat row; backs `SalesSyncStatus` |
-| `teams/[id]/events/[eventId]/print-transport` GET/PUT | team member | Per-event **print flow** (#1324): which transport delivers this event's `network-escpos` jobs — `local-drainer` \| `router-spooler` \| `none` (no row resolves to the `router-spooler` default — always exclusive). Thin authed surface over crouton-printing's `getPrintTransport`/`upsertPrintTransport` (`print_transports` table; printing has no auth, so the domain owns the route — same seam as `enqueuePrintJob`). GET also returns the `lastSpoolerPollAt`/`lastDrainerTickAt` liveness heartbeats. Backs the **Print flow** picker (`<CroutonPrintingTransportPicker>`) in SettingsTab's printers-card footer — instant-apply, deliberately not part of the panel Save |
+| `teams/[id]/events/[eventId]/print-transport` GET/PUT | team member | Per-event **print flow** (#1324): which transport delivers this event's `network-escpos` jobs — `local-drainer` \| `router-spooler` \| `none` (no row resolves to the `router-spooler` default — always exclusive). Thin authed surface over crouton-printing's `getPrintTransport`/`upsertPrintTransport` (`print_transports` table; printing has no auth, so the domain owns the route — same seam as `enqueuePrintJob`). GET also returns the `lastSpoolerPollAt`/`lastDrainerTickAt` liveness heartbeats. Backs the **Print flow** picker (`<CroutonPrintingTransportPicker>`) in SettingsTab's printers-card footer — instant-apply, deliberately not part of the panel Save. SettingsTab also feeds the picker's per-flow **setup guides** (#1364): translated nl/en/fr checklists (keys `sales.printFlow.setup.*`) with the app-known values pre-filled — this event's id for the router's `EVENT_ID`, the app origin for `API_URL`, the `NUXT_CROUTON_SALES_PRINT_API_KEY` env-var *name* (never the secret). Content mirrors crouton-printing's `print-server/README.md` (sync note there) |
 | `teams/[id]/events/[eventId]/receipt-settings` GET/PUT | team admin | Per-event receipt text customization. Reachability: `staff_order_header` prints only on `isPersonnel` orders (Cart's Staff order switch); `special_instructions_title` heads the remark blocks on kitchen tickets — the per-location remarks from the POS and legacy whole-order notes; `footer_text` only on `type: 'receipt'` printer jobs |
 | `teams/[id]/events/[eventId]/printers/[printerId]/test-print` POST | team member | **Testprint** (#1391): enqueue a tiny test ticket for one printer through the REAL flow (`refType:'test'`, skipped by order auto-complete) — proves routing + transport + paper in one tap. 409 when the event's Print flow is `none`. Backs the Testprint button in `PrinterForm.vue` (update mode) |
 | `teams/[id]/events/[eventId]/printqueues/retry-failed` POST | team admin | Requeue missed print jobs (status 9, plus jobs stuck at status 1 "printing" for >2 min — fetched by the spooler but never confirmed) back to 0; optional body `{ printerId }` and/or `{ jobId }` (single-line retry). Backs the "Resend failed jobs" button in SettingsTab's printers card and the per-job re-print button in the expanded order |

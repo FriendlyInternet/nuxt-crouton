@@ -612,7 +612,24 @@
       "lastSeen": "vu pour la dernière fois",
       "neverSeen": "jamais vu",
       "updated": "Flux d'impression mis à jour",
-      "updateError": "Impossible de mettre à jour le flux d'impression"
+      "updateError": "Impossible de mettre à jour le flux d'impression",
+      "setup": {
+        "toggle": "Configuration",
+        "copy": "Copier",
+        "copied": "Copié",
+        "routerIntro": "La configuration du routeur se fait une seule fois dans /etc/init.d/print_server — définissez les valeurs ci-dessous, redémarrez le service ; seul EVENT_ID change par événement.",
+        "routerPrinters": "Placez les imprimantes sur le réseau propre du routeur avec une IP fixe, et ajoutez chacune sous Imprimantes avec cette IP et le port 9100.",
+        "routerEventId": "Définissez EVENT_ID sur l'id de cet événement — c'est la valeur par événement : modifiez-la et redémarrez à chaque nouvel événement.",
+        "routerApiUrl": "Définissez API_URL sur cette application :",
+        "routerApiKey": "Définissez API_KEY sur la même valeur que ce secret de l'application (le secret lui-même n'est jamais affiché ici) :",
+        "routerRestart": "Appliquez la configuration sur le routeur :",
+        "routerVerify": "Terminé quand ce point devient vert — le routeur interroge sous ~30 secondes.",
+        "drainerIntro": "Un appareil sur place (Pi / mini-PC) exécute lui-même l'application et imprime directement vers les imprimantes — aucune configuration du routeur.",
+        "drainerEnv": "Démarrez l'application sur l'appareil avec le drainer d'impression activé :",
+        "drainerPrinters": "Ajoutez chaque imprimante sous Imprimantes avec son IP LAN et le port 9100 — l'appareil doit atteindre les imprimantes sur son réseau.",
+        "drainerFlip": "Laissez ce flux d'impression sur « Appareil local » — le flux routeur est le défaut, et l'appareil ne sert que les événements réglés sur Appareil local.",
+        "drainerVerify": "Terminé quand ce point devient vert — l'appareil se manifeste sous ~30 secondes."
+      }
     },
     "voice": {
       "start": "Dicter une commande",

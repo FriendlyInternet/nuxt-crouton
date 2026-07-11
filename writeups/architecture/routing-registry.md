@@ -6,8 +6,8 @@ The single view of **what runs on what model**. Source of truth: `.claude/routin
 demotion. `$out/Mtok` is the Claude baseline output price — the cost lever.
 
 ## Tiers
-- **small** — Claude `claude-haiku-4-5` · pi `deepseek-v3.2` · ~$5/Mtok out — reports / triage / decompose — no code written
-- **medium** — Claude `claude-sonnet-5` · pi `deepseek-v3.2` · ~$15/Mtok out — most work
+- **small** — Claude `claude-haiku-4-5` · pi `zai/glm-5.2` · ~$5/Mtok out — reports / triage / decompose — no code written. pi tier MEASURED (#1409: beat the Haiku baseline on report fidelity at $0 marginal, flat GLM Coding Plan)
+- **medium** — Claude `claude-sonnet-5` · pi `zai/glm-5.2` · ~$15/Mtok out — most work. pi tier MEASURED (#1421: autonomous code-writing eval — correct house-style PR, artifact-gate PASS, no #1019 stall, $0 marginal)
 - **large** — Claude `claude-opus-4-8` · pi `claude-opus-4-8` · ~$75/Mtok out — hard build / synthesis — quality-sensitive
 
 Default tier: **medium**
@@ -16,14 +16,15 @@ Default tier: **medium**
 | Agent / flow | Current tier | Claude model | pi / local | $out/Mtok | Proposed | Why |
 |---|---|---|---|---|---|---|
 | `task-worker` | large | claude-opus-4-8 | claude-opus-4-8 | $75 | — | writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model |
-| `task-orchestrator` | medium | claude-sonnet-5 | deepseek-v3.2 | $15 | — | reads epic → workstreams; no code written. Moved opus→Sonnet 5 on an N=4 decompose A/B (Sonnet 5 matched/beat Opus 4.8 on 3 of 4 real epics, ~5× cheaper, fewer NEEDS-SPLIT recursion rounds). Refines #824: the strong-but-cheaper model is a peer planner, not the blunt one that decision guarded against. |
-| `task-decomposer` | medium | claude-sonnet-5 | deepseek-v3.2 | $15 | — | LEAF test + split issues; no code written. Moved opus→Sonnet 5 with the orchestrator on the same N=4 A/B evidence. Refines #824. |
-| `red-team` | medium | claude-sonnet-5 | deepseek-v3.2 | $15 | — | security analysis, reports only — opus was overkill; moved to Sonnet 5 (no code written, daily deep sweep is the cost). Free win per #823/#824. |
-| `a11y` | small | claude-haiku-4-5 | deepseek-v3.2 | $5 | — | template review, reports only — Sonnet→Haiku (#1272/#823); reversible if the #865 scoreboard shows missed axe findings |
-| `frontend-review` | small | claude-haiku-4-5 | deepseek-v3.2 | $5 | — | convention review, reports only — Sonnet→Haiku (#1272/#823); reversible if it stops catching v3 names |
+| `task-orchestrator` | medium | claude-sonnet-5 | zai/glm-5.2 | $15 | — | reads epic → workstreams; no code written. Moved opus→Sonnet 5 on an N=4 decompose A/B (Sonnet 5 matched/beat Opus 4.8 on 3 of 4 real epics, ~5× cheaper, fewer NEEDS-SPLIT recursion rounds). Refines #824: the strong-but-cheaper model is a peer planner, not the blunt one that decision guarded against. |
+| `task-decomposer` | medium | claude-sonnet-5 | zai/glm-5.2 | $15 | — | LEAF test + split issues; no code written. Moved opus→Sonnet 5 with the orchestrator on the same N=4 A/B evidence. Refines #824. |
+| `red-team` | medium | claude-sonnet-5 | zai/glm-5.2 | $15 | — | security analysis, reports only — opus was overkill; moved to Sonnet 5 (no code written, daily deep sweep is the cost). Free win per #823/#824. |
+| `a11y` | small | claude-haiku-4-5 | zai/glm-5.2 | $5 | — | template review, reports only — Sonnet→Haiku (#1272/#823); reversible if the #865 scoreboard shows missed axe findings |
+| `frontend-review` | small | claude-haiku-4-5 | zai/glm-5.2 | $5 | — | convention review, reports only — Sonnet→Haiku (#1272/#823); reversible if it stops catching v3 names |
 
 ## Overrides (per-flow exact-model pins)
-- **prototype-example** → `claude-opus-4-8` — exploratory prototype flow — quality over cost (replace with your real flow)
+- **a11y-daily-pidev** → `zai/glm-5.2` — #1409 eval: matched engine ground truth (153/152), beat the metered Haiku baseline (+28% overcount, $0.347/run) at $0 marginal on the flat GLM Coding Plan. Workflow default since #1413.
+- **decompose-on-issue-pidev** → `zai/glm-5.2` — #1421 eval: autonomous code-writing run produced a correct house-style PR (#1434), artifact-gate PASS, no #1019 stall, $0 marginal. Owner-approved flip 2026-07-11; metered anthropic/sonnet lane stays selectable as baseline. Subscription auth never backs unattended CI — the zai flat plan is vendor-permitted for pi (officially whitelisted).
 
 ## Known gaps
 The top-level workflow loop (claude.yml, decompose-on-issue.yml, fix-ci, daily sweeps)

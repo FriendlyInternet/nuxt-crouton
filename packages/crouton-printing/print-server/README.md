@@ -78,6 +78,12 @@ sed -i 's#API_URL=old#API_URL=https://your-app.pages.dev#; s#EVENT_ID=old#EVENT_
 
 ## Configuration
 
+> **Sync note (#1364):** the app renders an inline version of the Install +
+> Configuration checklists — the "Setup" panel under the Print flow picker
+> (`TransportPicker.vue`, content passed in by `crouton-sales`'s
+> `SettingsTab.vue`, with the event id / app URL pre-filled). When a step or
+> variable here changes, update those checklists too, and vice versa.
+
 Set in `/etc/init.d/print_server` under `procd_set_param env`:
 
 | Var | Value |

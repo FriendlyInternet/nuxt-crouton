@@ -258,6 +258,8 @@ const timelineItems = computed<TimelineItem[]>(() => {
     }"
     @mouseenter="isHovered = true"
     @mouseleave="isHovered = false"
+    @focusin="isHovered = true"
+    @focusout="isHovered = false"
   >
     <!-- Main layout: responsive flex with space-between on desktop -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-3 relative overflow-hidden">
@@ -278,7 +280,9 @@ const timelineItems = computed<TimelineItem[]>(() => {
 
       <!-- Left side: Date badge + Info + Mobile actions -->
       <div class="p-1.5 md:p-2 flex gap-2 md:gap-3 flex-1 min-w-0">
-        <!-- Date badge (clickable to navigate calendar) -->
+        <!-- Date badge (clickable to navigate calendar). Deliberately a raw
+             button (#1410): an invisible hit-area around a data-display badge —
+             a themed UButton surface would fight the badge's own chrome. -->
         <button
           type="button"
           class="shrink-0 cursor-pointer hover:scale-105 transition-transform focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 rounded-lg self-start"
@@ -349,38 +353,48 @@ const timelineItems = computed<TimelineItem[]>(() => {
                   </div>
                 </template>
               </UPopover>
-              <button
+              <!-- UButton (not raw) so themes reach it (#1410) -->
+              <UButton
                 v-if="createdDateText && showAdminFeatures"
-                type="button"
-                class="inline-flex items-center gap-1 whitespace-nowrap hover:text-default transition-colors cursor-pointer"
+                color="neutral"
+                variant="link"
+                size="xs"
+                class="p-0 gap-1 whitespace-nowrap font-normal text-inherit hover:text-default"
                 @click.stop="isTimelineOpen = !isTimelineOpen"
               >
                 <span>{{ t('bookings.card.on', { params: { date: createdDateText } }) }}</span>
                 <UIcon name="i-lucide-history" class="size-3" />
-              </button>
+              </UButton>
               <span v-else-if="createdDateText" class="whitespace-nowrap">{{ t('bookings.card.on', { params: { date: createdDateText } }) }}</span>
             </template>
           </div>
         </div>
 
         <!-- Mobile action sidebar (right edge, full card height) -->
+        <!-- UButtons (not raw) so themes reach them (#1410) -->
         <div v-if="showAdminFeatures" class="md:hidden shrink-0 flex flex-col justify-between items-center py-0.5 border-l border-muted/20 pl-2">
-          <button
-            type="button"
-            class="p-1 rounded transition-colors cursor-pointer text-muted hover:text-default"
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            square
+            class="p-1 text-muted hover:text-default"
             @click.stop="emit('edit', booking)"
           >
             <UIcon name="i-lucide-pencil" class="size-3.5" />
-          </button>
-          <button
+          </UButton>
+          <UButton
             v-if="isEmailEnabled && timelineItems.length > 0"
-            type="button"
-            class="p-1 rounded transition-colors cursor-pointer"
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            square
+            class="p-1"
             :class="isEmailPanelOpen ? 'text-default' : 'text-muted hover:text-default'"
             @click.stop="isEmailPanelOpen = !isEmailPanelOpen"
           >
             <UIcon name="i-lucide-mail" class="size-3.5" />
-          </button>
+          </UButton>
         </div>
       </div>
 
@@ -399,9 +413,11 @@ const timelineItems = computed<TimelineItem[]>(() => {
           :close-delay="150"
           :content="{ side: 'top', align: 'center' }"
         >
-          <button
-            type="button"
-            class="flex flex-col items-center gap-1 transition-all cursor-pointer hover:scale-105"
+          <!-- UButton (not raw) so themes reach it (#1410); flex-col stack kept -->
+          <UButton
+            color="neutral"
+            variant="ghost"
+            class="flex-col items-center gap-1 p-1 transition-all hover:scale-105"
             :class="[
               getTimelineOpacity(item.status),
               sendingEmailType === item.type ? 'animate-pulse' : ''
@@ -412,7 +428,7 @@ const timelineItems = computed<TimelineItem[]>(() => {
             <UIcon :name="item.icon" class="size-5" />
             <span class="text-xs font-medium whitespace-nowrap">{{ item.label }}</span>
             <span class="text-[11px] text-muted whitespace-nowrap">{{ item.date || '—' }}</span>
-          </button>
+          </UButton>
 
           <template #content>
             <div class="px-3 py-2 space-y-1.5 min-w-36">
@@ -434,11 +450,13 @@ const timelineItems = computed<TimelineItem[]>(() => {
       :class="isEmailPanelOpen ? 'max-h-28 opacity-100' : 'max-h-0 opacity-0'"
     >
       <div class="flex items-center gap-4 px-2 pb-2 pt-1 border-t border-muted/20">
-        <button
+        <!-- UButton (not raw) so themes reach it (#1410); flex-col stack kept -->
+        <UButton
           v-for="item in timelineItems"
           :key="item.type"
-          type="button"
-          class="flex flex-col items-center gap-1 transition-all cursor-pointer active:scale-95"
+          color="neutral"
+          variant="ghost"
+          class="flex-col items-center gap-1 p-1 transition-all active:scale-95"
           :class="[
             getTimelineOpacity(item.status),
             sendingEmailType === item.type ? 'animate-pulse' : ''
@@ -452,7 +470,7 @@ const timelineItems = computed<TimelineItem[]>(() => {
             <UIcon :name="getStatusInfo(item).icon" class="size-2.5" />
             <span class="text-[10px] whitespace-nowrap">{{ getStatusInfo(item).label }}</span>
           </div>
-        </button>
+        </UButton>
       </div>
     </div>
 

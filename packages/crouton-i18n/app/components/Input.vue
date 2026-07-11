@@ -221,17 +221,20 @@ function previewText(field: string, locale: string): string {
           <div class="flex-1 flex flex-col min-h-0">
             <template v-for="group in computedFieldGroups" :key="`narrow-group-${group.name}`">
               <div v-if="groupHasBlockEditor(group.fields)" class="flex-1 flex flex-col min-h-[200px] mt-3 first:mt-0">
-                <button
-                  class="flex items-center justify-between w-full py-1.5 text-xs font-medium text-muted uppercase tracking-wide hover:text-foreground transition-colors shrink-0"
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  class="w-full justify-between rounded-none px-0 py-1.5 text-xs font-medium text-muted uppercase tracking-wide hover:text-default transition-colors shrink-0"
                   @click="openGroupsState[group.name] = !openGroupsState[group.name]"
                 >
                   {{ group.name }}
                   <UIcon :name="openGroupsState[group.name] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3" />
-                </button>
+                </UButton>
                 <div v-if="openGroupsState[group.name]" class="flex-1 flex flex-col gap-1 min-h-0 pt-2">
                   <div v-for="field in group.fields" :key="`narrow-g-${field}`" class="flex-1 flex flex-col gap-1 min-h-0">
                     <div v-if="group.fields.length > 1 || showAiTranslate" class="flex items-center justify-between h-5 shrink-0">
-                      <label v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                      <span v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                       <CroutonI18nBlockTranslateTrigger
                         v-if="showAiTranslate && isBlockEditorField(field) && hasSourceContent(field, narrowLocaleTab)"
                         :loading="isFieldTranslating(field, narrowLocaleTab)"
@@ -266,17 +269,20 @@ function previewText(field: string, locale: string): string {
                 </div>
               </div>
               <div v-else class="shrink-0 mt-3 first:mt-0">
-                <button
-                  class="flex items-center justify-between w-full py-1.5 text-xs font-medium text-muted uppercase tracking-wide hover:text-foreground transition-colors"
+                <UButton
+                  color="neutral"
+                  variant="ghost"
+                  size="xs"
+                  class="w-full justify-between rounded-none px-0 py-1.5 text-xs font-medium text-muted uppercase tracking-wide hover:text-default transition-colors"
                   @click="openGroupsState[group.name] = !openGroupsState[group.name]"
                 >
                   {{ group.name }}
                   <UIcon :name="openGroupsState[group.name] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3" />
-                </button>
+                </UButton>
                 <div v-if="openGroupsState[group.name]" class="flex flex-col gap-2 pb-2">
                   <div v-for="field in group.fields" :key="`narrow-g-${field}`" class="flex flex-col gap-1">
                     <div class="flex items-center justify-between h-5">
-                      <label class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                      <span class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                       <AITranslateButton
                         v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, narrowLocaleTab)"
                         :source-text="getBestSourceText(field, narrowLocaleTab)"
@@ -335,9 +341,9 @@ function previewText(field: string, locale: string): string {
             ]"
           >
             <div v-if="!bareFields?.includes(field)" class="flex items-center justify-between h-5">
-              <label class="text-xs font-medium text-muted uppercase tracking-wide">
+              <span class="text-xs font-medium text-muted uppercase tracking-wide">
                 {{ field }}
-              </label>
+              </span>
               <!-- AI Translate button - uses stub (renders nothing) if crouton-ai not extended -->
               <AITranslateButton
                 v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, narrowLocaleTab)"
@@ -501,18 +507,20 @@ function previewText(field: string, locale: string): string {
               <template v-for="group in computedFieldGroups" :key="`primary-group-${group.name}`">
                 <!-- Block editor group: fills remaining height -->
                 <div v-if="groupHasBlockEditor(group.fields)" class="flex-1 flex flex-col min-h-[200px] mt-3 first:mt-0">
-                  <button
-                    type="button"
-                  class="flex items-center justify-between w-full py-1.5 text-xs font-semibold text-muted/70 uppercase tracking-widest hover:text-muted transition-colors shrink-0 border-b border-default/50"
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    class="w-full justify-between rounded-none px-0 py-1.5 text-xs font-semibold text-muted/70 uppercase tracking-widest hover:text-muted transition-colors shrink-0 border-b border-default/50"
                     @click="openGroupsState[group.name] = !openGroupsState[group.name]"
                   >
                     {{ group.name }}
                     <UIcon :name="openGroupsState[group.name] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3" />
-                  </button>
+                  </UButton>
                   <div v-if="openGroupsState[group.name]" class="flex-1 flex flex-col gap-1 min-h-0 pt-2">
                     <div v-for="field in group.fields" :key="`primary-g-${field}`" class="flex-1 flex flex-col gap-1 min-h-0">
                       <div v-if="group.fields.length > 1 || showAiTranslate" class="flex items-center justify-between h-5 shrink-0">
-                        <label v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                        <span v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                         <CroutonI18nBlockTranslateTrigger
                           v-if="showAiTranslate && isBlockEditorField(field) && hasSourceContent(field, primaryEditingLocale)"
                           :loading="isFieldTranslating(field, primaryEditingLocale)"
@@ -548,18 +556,20 @@ function previewText(field: string, locale: string): string {
                 </div>
                 <!-- Regular fields group: collapsible, shrink-0 -->
                 <div v-else class="shrink-0 mt-3 first:mt-0">
-                  <button
-                    type="button"
-                  class="flex items-center justify-between w-full py-1.5 text-xs font-semibold text-muted/70 uppercase tracking-widest hover:text-muted transition-colors border-b border-default/50"
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    class="w-full justify-between rounded-none px-0 py-1.5 text-xs font-semibold text-muted/70 uppercase tracking-widest hover:text-muted transition-colors border-b border-default/50"
                     @click="openGroupsState[group.name] = !openGroupsState[group.name]"
                   >
                     {{ group.name }}
                     <UIcon :name="openGroupsState[group.name] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3" />
-                  </button>
+                  </UButton>
                   <div v-if="openGroupsState[group.name]" class="flex flex-col gap-2 pt-2 pb-1">
                     <div v-for="field in group.fields" :key="`primary-g-${field}`" class="flex flex-col gap-1">
                       <div class="flex items-center justify-between h-5">
-                        <label class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                        <span class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                         <AITranslateButton
                           v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, primaryEditingLocale)"
                           :source-text="getBestSourceText(field, primaryEditingLocale)"
@@ -618,9 +628,9 @@ function previewText(field: string, locale: string): string {
               ]"
             >
               <div class="flex items-center justify-between h-5">
-                <label class="text-xs font-medium text-muted uppercase tracking-wide">
+                <span class="text-xs font-medium text-muted uppercase tracking-wide">
                   {{ field }}
-                </label>
+                </span>
                 <!-- AI Translate button for primary locale -->
                 <AITranslateButton
                   v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, primaryEditingLocale)"
@@ -756,18 +766,20 @@ function previewText(field: string, locale: string): string {
               <template v-for="group in computedFieldGroups" :key="`secondary-group-${group.name}`">
                 <!-- Block editor group: fills remaining height -->
                 <div v-if="groupHasBlockEditor(group.fields)" class="flex-1 flex flex-col min-h-[200px] mt-3 first:mt-0">
-                  <button
-                    type="button"
-                  class="flex items-center justify-between w-full py-1.5 text-xs font-semibold text-muted/70 uppercase tracking-widest hover:text-muted transition-colors shrink-0 border-b border-default/50"
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    class="w-full justify-between rounded-none px-0 py-1.5 text-xs font-semibold text-muted/70 uppercase tracking-widest hover:text-muted transition-colors shrink-0 border-b border-default/50"
                     @click="openGroupsState[group.name] = !openGroupsState[group.name]"
                   >
                     {{ group.name }}
                     <UIcon :name="openGroupsState[group.name] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3" />
-                  </button>
+                  </UButton>
                   <div v-if="openGroupsState[group.name]" class="flex-1 flex flex-col gap-1 min-h-0 pt-2">
                     <div v-for="field in group.fields" :key="`secondary-g-${field}`" class="flex-1 flex flex-col gap-1 min-h-0">
                       <div v-if="group.fields.length > 1 || showAiTranslate" class="flex items-center justify-between h-5 shrink-0">
-                        <label v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                        <span v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                         <CroutonI18nBlockTranslateTrigger
                           v-if="showAiTranslate && isBlockEditorField(field) && hasSourceContent(field, secondaryEditingLocale)"
                           :loading="isFieldTranslating(field, secondaryEditingLocale)"
@@ -806,18 +818,20 @@ function previewText(field: string, locale: string): string {
                 </div>
                 <!-- Regular fields group: collapsible, shrink-0 -->
                 <div v-else class="shrink-0 mt-3 first:mt-0">
-                  <button
-                    type="button"
-                  class="flex items-center justify-between w-full py-1.5 text-xs font-semibold text-muted/70 uppercase tracking-widest hover:text-muted transition-colors border-b border-default/50"
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    class="w-full justify-between rounded-none px-0 py-1.5 text-xs font-semibold text-muted/70 uppercase tracking-widest hover:text-muted transition-colors border-b border-default/50"
                     @click="openGroupsState[group.name] = !openGroupsState[group.name]"
                   >
                     {{ group.name }}
                     <UIcon :name="openGroupsState[group.name] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3" />
-                  </button>
+                  </UButton>
                   <div v-if="openGroupsState[group.name]" class="flex flex-col gap-2 pt-2 pb-1">
                     <div v-for="field in group.fields" :key="`secondary-g-${field}`" class="flex flex-col gap-1">
                       <div class="flex items-center justify-between h-5">
-                        <label class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                        <span class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                         <AITranslateButton
                           v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, secondaryEditingLocale)"
                           :source-text="getBestSourceText(field, secondaryEditingLocale)"
@@ -872,9 +886,9 @@ function previewText(field: string, locale: string): string {
               ]"
             >
               <div class="flex items-center justify-between h-5">
-                <label class="text-xs font-medium text-muted uppercase tracking-wide">
+                <span class="text-xs font-medium text-muted uppercase tracking-wide">
                   {{ field }}
-                </label>
+                </span>
                 <!-- AI Translate button - uses stub (renders nothing) if crouton-ai not extended -->
                 <AITranslateButton
                   v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, secondaryEditingLocale)"

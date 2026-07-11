@@ -141,19 +141,19 @@ function clearSchedule() {
                   &#10003;
                 </span>
               </div>
-              <button
+              <!-- UButton cell (not raw) so themes reach it (#1410) -->
+              <UButton
                 v-else
-                type="button"
-                class="w-6 h-6 rounded transition-colors"
-                :class="isActive(slot.id, day.value)
-                  ? 'bg-primary/20 hover:bg-primary/30'
-                  : 'bg-muted/20 hover:bg-muted/30'"
+                :color="isActive(slot.id, day.value) ? 'primary' : 'neutral'"
+                variant="soft"
+                square
+                class="w-6 h-6 p-0 justify-center rounded"
                 @click="toggle(slot.id, day.value)"
               >
                 <span v-if="isActive(slot.id, day.value)" class="text-primary text-xs">
                   &#10003;
                 </span>
-              </button>
+              </UButton>
             </td>
           </tr>
           </template>
@@ -178,19 +178,19 @@ function clearSchedule() {
                   &#10003;
                 </span>
               </div>
-              <button
+              <!-- UButton cell (not raw) so themes reach it (#1410) -->
+              <UButton
                 v-else
-                type="button"
-                class="w-6 h-6 rounded transition-colors"
-                :class="isActive(ALL_DAY_KEY, day.value)
-                  ? 'bg-primary/20 hover:bg-primary/30'
-                  : 'bg-muted/20 hover:bg-muted/30'"
+                :color="isActive(ALL_DAY_KEY, day.value) ? 'primary' : 'neutral'"
+                variant="soft"
+                square
+                class="w-6 h-6 p-0 justify-center rounded"
                 @click="toggle(ALL_DAY_KEY, day.value)"
               >
                 <span v-if="isActive(ALL_DAY_KEY, day.value)" class="text-primary text-xs">
                   &#10003;
                 </span>
-              </button>
+              </UButton>
             </td>
           </tr>
         </tbody>
@@ -206,9 +206,9 @@ function clearSchedule() {
           ? t('bookings.schedule.slotScheduleActive', { count: Object.keys(schedule).length })
           : t('bookings.schedule.daysBlocked', { count: days.length - (schedule[ALL_DAY_KEY]?.length ?? days.length) })
         }}
-        <button type="button" class="text-primary hover:underline" @click="clearSchedule">
+        <UButton variant="link" size="xs" class="p-0" @click="clearSchedule">
           {{ t('bookings.schedule.resetSchedule') }}
-        </button>
+        </UButton>
       </p>
     </template>
   </div>

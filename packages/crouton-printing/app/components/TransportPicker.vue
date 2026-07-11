@@ -8,8 +8,14 @@
  *
  * The heartbeat props render the liveness readout ("spooler last seen 4s ago")
  * from print_transports.lastSpoolerPollAt / lastDrainerTickAt.
+ *
+ * The optional setup guide (#1364) renders a collapsible per-flow checklist
+ * under the picker, with app-known values (event id, app URL) ready to copy.
+ * Content comes fully translated from the embedding domain; its steps must
+ * mirror print-server/README.md (see the sync note there).
  */
 import { useTimestamp } from '@vueuse/core'
+import type { TransportSetupGuide } from '../types/transport-setup'
 
 interface TransportPickerItem {
   value: 'local-drainer' | 'router-spooler' | 'none'
@@ -28,6 +34,12 @@ const props = defineProps<{
   items?: TransportPickerItem[]
   lastSeenLabel?: string
   neverSeenLabel?: string
+  /** Per-flow setup checklists (#1364) — no guide for a flow means no Setup
+   *  toggle while that flow is selected. Fully translated by the embedder. */
+  setupGuides?: TransportSetupGuide[]
+  setupLabel?: string
+  copyLabel?: string
+  copiedLabel?: string
 }>()
 
 const emit = defineEmits<{
@@ -101,6 +113,22 @@ const heartbeats = computed(() => [
   heartbeatRow('local-drainer', props.lastDrainerTickAt),
   heartbeatRow('router-spooler', props.lastSpoolerPollAt)
 ])
+
+// Setup guide (#1364): the checklist for the currently selected flow. The
+// toggle only exists when that flow has a guide; open state survives flow
+// switches so comparing two flows' checklists doesn't re-collapse each time.
+const setupOpen = ref(false)
+const activeGuide = computed(() =>
+  props.setupGuides?.find(g => g.value === selected.value)
+)
+
+// The verify step carries the selected flow's live heartbeat dot — setup is
+// confirmed by the same signal the readout below renders.
+const verifyDotClass = computed(() => {
+  const iso = selected.value === 'local-drainer' ? props.lastDrainerTickAt : props.lastSpoolerPollAt
+  if (!iso) return DOT_DEAD
+  return now.value - Date.parse(iso) < ALIVE_MS ? DOT_LIVE : DOT_DEAD
+})
 </script>
 
 <template>
@@ -112,6 +140,30 @@ const heartbeats = computed(() => [
       value-key="value"
       variant="card"
     />
+
+    <UCollapsible v-if="activeGuide" v-model:open="setupOpen">
+      <UButton
+        variant="ghost"
+        color="neutral"
+        size="xs"
+        icon="i-lucide-wrench"
+        trailing-icon="i-lucide-chevron-down"
+        :label="setupLabel ?? 'Setup'"
+        :ui="{ trailingIcon: `transition-transform ${setupOpen ? 'rotate-180' : ''}` }"
+        block
+        class="justify-start"
+      />
+
+      <template #content>
+        <CroutonPrintingTransportSetupPanel
+          class="mt-2"
+          :guide="activeGuide"
+          :verify-dot-class="verifyDotClass"
+          :copy-label="copyLabel"
+          :copied-label="copiedLabel"
+        />
+      </template>
+    </UCollapsible>
 
     <ul class="space-y-1">
       <li
