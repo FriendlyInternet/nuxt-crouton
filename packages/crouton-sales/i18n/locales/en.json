@@ -614,6 +614,13 @@
       "neverSeen": "never seen",
       "updated": "Print flow updated",
       "updateError": "Could not update the print flow"
+    },
+    "voice": {
+      "start": "Speak an order",
+      "stop": "Stop listening",
+      "listening": "Listening…",
+      "notUnderstood": "Not understood",
+      "error": "Speech recognition failed"
     }
   }
 }

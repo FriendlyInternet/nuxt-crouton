@@ -614,6 +614,13 @@
       "neverSeen": "nooit gezien",
       "updated": "Printflow aangepast",
       "updateError": "Kon de printflow niet aanpassen"
+    },
+    "voice": {
+      "start": "Bestelling inspreken",
+      "stop": "Stop met luisteren",
+      "listening": "Aan het luisteren…",
+      "notUnderstood": "Niet begrepen",
+      "error": "Spraakherkenning mislukt"
     }
   }
 }

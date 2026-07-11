@@ -613,6 +613,13 @@
       "neverSeen": "jamais vu",
       "updated": "Flux d'impression mis à jour",
       "updateError": "Impossible de mettre à jour le flux d'impression"
+    },
+    "voice": {
+      "start": "Dicter une commande",
+      "stop": "Arrêter l'écoute",
+      "listening": "À l'écoute…",
+      "notUnderstood": "Non compris",
+      "error": "La reconnaissance vocale a échoué"
     }
   }
 }
