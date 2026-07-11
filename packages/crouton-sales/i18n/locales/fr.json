@@ -392,6 +392,10 @@
       "testPrint": "Impression test",
       "testPrintQueued": "Ticket de test en file — regardez l'imprimante",
       "testPrintError": "Échec de l'impression test",
+      "testPrintWaiting": "Envoi du ticket de test à l'imprimante…",
+      "testPrintPrinted": "Imprimé — le ticket de test est passé",
+      "testPrintFailed": "Échec de l'impression test",
+      "testPrintTimeout": "Aucune réponse — spooler hors ligne ou imprimante injoignable ?",
       "preview": "Aperçu"
     },
     "helperLogin": {

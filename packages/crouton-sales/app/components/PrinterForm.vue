@@ -189,6 +189,31 @@
             :has-validation-errors="validationErrors.length > 0"
           />
         </div>
+
+        <!-- Testprint outcome (#1506): the button proves nothing unless it
+             reports the REAL result — spinner while the job drains, then
+             printed ✓ / failed ✗ + the spooler's reason. -->
+        <div v-if="testPrinting || testPrintResult" class="mt-2">
+          <div v-if="testPrinting" class="flex items-center gap-2 text-sm text-muted">
+            <UIcon name="i-lucide-loader-circle" class="size-4 animate-spin shrink-0" />
+            {{ t('sales.form.testPrintWaiting', 'Sending test ticket to the printer…') }}
+          </div>
+          <UAlert
+            v-else-if="testPrintResult?.phase === 'printed'"
+            color="success"
+            variant="soft"
+            icon="i-lucide-printer-check"
+            :title="testPrintResult.message"
+          />
+          <UAlert
+            v-else-if="testPrintResult?.phase === 'failed'"
+            color="error"
+            variant="soft"
+            icon="i-lucide-printer-x"
+            :title="t('sales.form.testPrintFailed', 'Test print failed')"
+            :description="testPrintResult.message"
+          />
+        </div>
       </template>
     </CroutonFormLayout>
   </UForm>
@@ -321,11 +346,68 @@ const handleSubmit = async () => {
 }
 
 // Testprint (#1391): POST the team-authed probe endpoint; the job then rides
-// the event's Print flow like any order ticket. Outcome shows on the printer
-// LEDs / job list — the toast only confirms "queued".
-const notify = useNotify()
+// the event's Print flow like any order ticket. #1506: don't stop at "queued" —
+// poll the enqueued job and report its REAL outcome inline (printed ✓ / failed
+// ✗ + the spooler's reason), so a mistyped printer IP is a 5-second catch, not
+// an hour reading spooler logs.
 const route = useRoute()
 const testPrinting = ref(false)
+const testPrintResult = ref<{ phase: 'printed' | 'failed', message: string } | null>(null)
+
+const pollQueueId = ref<string | null>(null)
+const pollStartedAt = ref(0)
+// Same cadence as usePrintWatcher: the spooler polls every ~2s, faster buys
+// nothing; a job stuck at pending past the timeout means nobody is draining.
+const POLL_INTERVAL_MS = 2000
+const WATCH_TIMEOUT_MS = 60000
+
+function settleTestPrint(phase: 'printed' | 'failed', message: string) {
+  testPrintResult.value = { phase, message }
+  testPrinting.value = false
+}
+
+// Prefer the spooler's mapped reason; fall back to the timeout copy or the raw
+// message. Mirrors how PrintqueuesCard / OrdersTab translate job errors.
+function failureMessage(result: { reason?: 'error' | 'timeout', errorMessage?: string | null }): string {
+  if (result.reason === 'timeout') return t('sales.form.testPrintTimeout', 'No response from the printer')
+  const key = printErrorKey(result.errorMessage)
+  if (key) return t(key)
+  return result.errorMessage || t('sales.form.testPrintFailed', 'Test print failed')
+}
+
+const { pause: pausePoll, resume: resumePoll } = useIntervalFn(async () => {
+  if (!pollQueueId.value || !state.value.eventId) {
+    pausePoll()
+    return
+  }
+  let job: { status: string | null, errorMessage?: string | null } | null = null
+  try {
+    // Annotate the path as `string` (erases literal narrowing) and give $fetch
+    // an explicit response generic, so the typed client can't try to resolve
+    // this dynamically-built URL against the full Nitro route union — that
+    // route-literal inference blows the TS "Excessive stack depth" limit in the
+    // with-sales fixture's typecheck (#1506). Same shape as usePrintWatcher's
+    // typed $fetch<PrintWatchJob[]>(...).
+    const url: string = `/api/crouton-sales/teams/${route.params.team}/events/${state.value.eventId}/printqueues/${pollQueueId.value}`
+    job = await $fetch<{ status: string | null, errorMessage?: string | null }>(url)
+  }
+  catch {
+    // Not visible yet / transient blip — keep waiting until the timeout fires.
+    job = null
+  }
+
+  const result = evaluateTestPrint({ job, elapsedMs: Date.now() - pollStartedAt.value, timeoutMs: WATCH_TIMEOUT_MS })
+  if (!result.settled) return
+
+  pausePoll()
+  pollQueueId.value = null
+  if (result.phase === 'printed') {
+    settleTestPrint('printed', t('sales.form.testPrintPrinted', 'Printed'))
+  }
+  else {
+    settleTestPrint('failed', failureMessage(result))
+  }
+}, POLL_INTERVAL_MS, { immediate: false })
 
 // Receipt preview modal (#1504) — renders what this saved printer prints.
 const previewOpen = ref(false)
@@ -333,19 +415,22 @@ const previewOpen = ref(false)
 async function handleTestPrint() {
   if (!state.value.id || !state.value.eventId) return
   testPrinting.value = true
+  testPrintResult.value = null
+  pausePoll()
   try {
-    await $fetch(
+    const res = await $fetch<{ queueId: string }>(
       `/api/crouton-sales/teams/${route.params.team}/events/${state.value.eventId}/printers/${state.value.id}/test-print`,
       { method: 'POST' }
     )
-    notify.success(t('sales.form.testPrintQueued', 'Test ticket queued — watch the printer'))
+    // First read at 2s — jobs start at pending, an immediate fetch buys nothing.
+    pollQueueId.value = res.queueId
+    pollStartedAt.value = Date.now()
+    resumePoll()
   }
   catch (e: unknown) {
+    // POST itself rejected (e.g. 409 'flow is none') — that IS the outcome.
     const description = (e as { data?: { statusText?: string } })?.data?.statusText
-    notify.error(t('sales.form.testPrintError', 'Test print failed'), description ? { description } : undefined)
-  }
-  finally {
-    testPrinting.value = false
+    settleTestPrint('failed', description || t('sales.form.testPrintFailed', 'Test print failed'))
   }
 }
 

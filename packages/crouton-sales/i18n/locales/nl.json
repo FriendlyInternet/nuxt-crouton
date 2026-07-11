@@ -393,6 +393,10 @@
       "testPrint": "Testprint",
       "testPrintQueued": "Testticket in de wachtrij — kijk naar de printer",
       "testPrintError": "Testprint mislukt",
+      "testPrintWaiting": "Testticket wordt naar de printer gestuurd…",
+      "testPrintPrinted": "Afgedrukt — het testticket is doorgekomen",
+      "testPrintFailed": "Testprint mislukt",
+      "testPrintTimeout": "Geen antwoord — spooler offline of printer onbereikbaar?",
       "preview": "Voorbeeld"
     },
     "helperLogin": {

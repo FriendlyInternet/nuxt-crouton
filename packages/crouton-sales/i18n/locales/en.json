@@ -393,6 +393,10 @@
       "testPrint": "Test print",
       "testPrintQueued": "Test ticket queued — watch the printer",
       "testPrintError": "Test print failed",
+      "testPrintWaiting": "Sending test ticket to the printer…",
+      "testPrintPrinted": "Printed — the test ticket went through",
+      "testPrintFailed": "Test print failed",
+      "testPrintTimeout": "No response — spooler down or printer unreachable?",
       "preview": "Preview"
     },
     "helperLogin": {
