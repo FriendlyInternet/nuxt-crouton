@@ -144,11 +144,14 @@ interface ReceiptSettings {
 const receiptEndpoint = computed(() =>
   `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/receipt-settings`
 )
+// Pre-resolve fallback only — the endpoint returns crouton-printing's canonical
+// DEFAULT_RECEIPT_SETTINGS. Kept in sync with it (Dutch) so an unsaved event's
+// form matches what actually prints (#1514); client can't import the server util.
 const { data: receiptSaved } = await useFetch<ReceiptSettings>(receiptEndpoint, {
   default: () => ({
-    special_instructions_title: 'SPECIAL INSTRUCTIONS:',
-    staff_order_header: '*** STAFF ORDER ***',
-    footer_text: 'Thank you for your order!'
+    special_instructions_title: 'OPMERKING:',
+    staff_order_header: '*** PERSONEEL ***',
+    footer_text: 'Bedankt voor je bestelling!'
   })
 })
 const receiptForm = ref<ReceiptSettings>({ ...receiptSaved.value })
@@ -577,7 +580,7 @@ function helperExpiry(value: string): string {
                 v-model="receiptForm.special_instructions_title"
                 class="w-full"
                 size="sm"
-                placeholder="SPECIAL INSTRUCTIONS:"
+                placeholder="OPMERKING:"
               />
             </UFormField>
             <UFormField :label="t('sales.receipt.staffOrderHeader')" :help="t('sales.receipt.staffOrderHeaderHelp')">
@@ -585,7 +588,7 @@ function helperExpiry(value: string): string {
                 v-model="receiptForm.staff_order_header"
                 class="w-full"
                 size="sm"
-                placeholder="*** STAFF ORDER ***"
+                placeholder="*** PERSONEEL ***"
               />
             </UFormField>
             <UFormField :label="t('sales.receipt.footerText')" :help="t('sales.receipt.footerTextHelp')">
@@ -594,7 +597,7 @@ function helperExpiry(value: string): string {
                 class="w-full"
                 size="sm"
                 :rows="2"
-                placeholder="Thank you for your order!"
+                placeholder="Bedankt voor je bestelling!"
               />
             </UFormField>
           </div>
