@@ -195,6 +195,8 @@ class EscPosBuilder {
   invert(on: boolean): this { return this.raw(GS, 0x42, on ? 1 : 0) }
   /** GS ! n — double width + height when on, normal size when off. */
   doubleSize(on: boolean): this { return this.raw(GS, 0x21, on ? 0x11 : 0x00) }
+  /** GS ! n — double height only: twice as tall, still 48 columns wide. */
+  doubleHeight(on: boolean): this { return this.raw(GS, 0x21, on ? 0x01 : 0x00) }
 
   print(text: string): this {
     for (const byte of encodeText(text)) this.bytes.push(byte)
@@ -217,6 +219,74 @@ class EscPosBuilder {
   }
 }
 
+// ── Ticket design helpers (#1427) ────────────────────────────────────────────
+// The "bold hierarchy" layout: heavy ═ rules frame the call-out block, light ─
+// rules separate sections, and every amount sits flush right in one column.
+// Rule glyphs and × / · are CP858-safe (see the table above) but box-drawing
+// output must be paper-verified on the TM-m30 before relying on a change here.
+
+/** Heavy section rule (call-out frame + ticket end). */
+const RULE_HEAVY = '═'
+/** Light section rule (inner separators). */
+const RULE_LIGHT = '─'
+/** Left gutter applied to body lines (rules stay full width). */
+const GUTTER = ' '
+
+/** Split into words, hard-slicing any word longer than the field. */
+function splitWords(text: string, width: number): string[] {
+  const out: string[] = []
+  for (const word of text.split(' ')) {
+    let rest = word
+    while (rest.length > width) {
+      out.push(rest.slice(0, width))
+      rest = rest.slice(width)
+    }
+    if (rest) out.push(rest)
+  }
+  return out
+}
+
+/** Greedy word wrap into lines of at most `width` chars. @internal exported for tests */
+export function wrapText(text: string, width: number): string[] {
+  const lines: string[] = []
+  let line = ''
+  for (const word of splitWords(text, width)) {
+    if (!line) line = word
+    else if (line.length + 1 + word.length <= width) line += ` ${word}`
+    else {
+      lines.push(line)
+      line = word
+    }
+  }
+  lines.push(line)
+  return lines
+}
+
+/**
+ * Lay out label + right-aligned amount across the 48-col field: the label
+ * wraps inside its own column (hanging indent) so a long product name never
+ * displaces its price — the amount prints on the first line, flush right.
+ * @internal exported for tests
+ */
+export function amountLines(label: string, amount: string, indent = 1): string[] {
+  const labelWidth = Math.max(8, RECEIPT_WIDTH - indent - amount.length - 2)
+  const pad = ' '.repeat(indent)
+  return wrapText(label, labelWidth).map((line, i) => i === 0
+    ? pad + line + ' '.repeat(Math.max(2, RECEIPT_WIDTH - indent - line.length - amount.length)) + amount
+    : pad + line)
+}
+
+/** Wrap body text under the left gutter (plus an optional extra indent). */
+function bodyLines(text: string, indent = 1): string[] {
+  const pad = ' '.repeat(indent)
+  return wrapText(text, RECEIPT_WIDTH - indent).map(line => pad + line)
+}
+
+/** HH:MM in the ticket's timezone — the kitchen only ever needs the clock. */
+function timeHM(d: Date, timeZone: string): string {
+  return d.toLocaleTimeString(TIME_LOCALE, { timeZone, hour: '2-digit', minute: '2-digit' })
+}
+
 /**
  * Generate ESC/POS formatted receipt data for thermal printers
  * Returns both Base64 encoded string and raw buffer
@@ -225,204 +295,172 @@ export function formatReceipt(data: ReceiptData): FormattedReceipt {
   const printer = new EscPosBuilder()
   const currencySymbol = data.currencySymbol || DEFAULT_CURRENCY_SYMBOL
   const L = RECEIPT_LABELS[data.locale || DEFAULT_RECEIPT_LOCALE]
+  const settings = data.receiptSettings || DEFAULT_RECEIPT_SETTINGS
+  const isKitchen = data.printMode === 'kitchen'
+  const money = (n: number): string => `${currencySymbol}${n.toFixed(2)}`
 
   try {
-    // Header with team and event
-    printer.alignCenter()
-    printer.bold(true)
-    printer.println(data.teamName)
-    printer.bold(false)
-    printer.println(data.eventName)
-
-    // Client name header — the runner's call-out, so it prints big. On
-    // kitchen tickets the location name is deliberately not printed: each
-    // kitchen printer sits at its location, so naming it on the ticket is
-    // noise. End-of-tab receipts get the same header (settled per client).
-    if (data.clientName && (data.printMode === 'kitchen' || data.clientTab)) {
-      printer.drawLine()
-      printer.bold(true)
-      printer.doubleSize(true)
-      printer.println(data.clientName.toUpperCase())
-      printer.doubleSize(false)
-      printer.bold(false)
-    }
-
-    printer.drawLine()
-
-    // Order information. An end-of-tab receipt covers several orders, so it
-    // shows the count instead of a single order number.
-    printer.alignLeft()
-    printer.bold(true)
-    if (data.clientTab) {
-      printer.println(`${L.orders}: ${data.clientTab.orderCount}`)
-    }
-    else {
-      printer.println(`${L.order} #${data.orderNumber}`)
-    }
-    printer.bold(false)
-
     const orderDate = typeof data.createdAt === 'string'
       ? new Date(data.createdAt)
       : data.createdAt
-    printer.println(`${L.time}: ${orderDate.toLocaleString(TIME_LOCALE, { timeZone: data.timeZone || DEFAULT_TIME_ZONE })}`)
+    const timeZone = data.timeZone || DEFAULT_TIME_ZONE
 
-    if (data.helperName) {
-      printer.println(`${L.helper}: ${data.helperName}`)
+    // ── Header ──
+    // Kitchen: one quiet line — the ticket's stars are below. Receipt: the
+    // team is the "brand" line, so it keeps its bold two-line header.
+    printer.alignCenter()
+    if (isKitchen) {
+      printer.println(`${data.teamName} · ${data.eventName}`)
     }
-
-    // On kitchen tickets and end-of-tab receipts the client is already the
-    // big header above
-    if (data.clientName && data.printMode === 'receipt' && !data.clientTab) {
-      printer.println(`${L.client}: ${data.clientName}`)
+    else {
+      printer.bold(true)
+      printer.println(data.teamName)
+      printer.bold(false)
+      printer.println(data.eventName)
     }
+    printer.drawLine(RULE_HEAVY)
 
-    // Staff order indicator
-    if (data.isPersonnel) {
-      const settings = data.receiptSettings || DEFAULT_RECEIPT_SETTINGS
+    // ── Call-out block — the runner's glance target, framed by heavy rules ──
+    // Kitchen + end-of-tab: client name double-size with the order number (or
+    // tab order count) double-height under it. A loose kitchen order (no
+    // client) promotes its order number to the double-size slot instead. The
+    // location name is deliberately not printed: each kitchen printer sits at
+    // its location, so naming it on the ticket is noise.
+    if (isKitchen || data.clientTab) {
+      printer.alignLeft()
       printer.println('')
-      printer.alignCenter()
+      printer.bold(true)
+      printer.doubleSize(true)
+      printer.println(GUTTER + (data.clientName ? data.clientName.toUpperCase() : `#${data.orderNumber}`))
+      printer.doubleSize(false)
+      if (data.clientName) {
+        printer.doubleHeight(true)
+        printer.println(GUTTER.repeat(2) + (data.clientTab ? `${L.orders}: ${data.clientTab.orderCount}` : `#${data.orderNumber}`))
+        printer.doubleHeight(false)
+      }
+      printer.bold(false)
+      printer.println('')
+      printer.drawLine(RULE_HEAVY)
+    }
+
+    // Staff order banner — full-width inverted bar, right under the call-out.
+    if (data.isPersonnel) {
+      const label = settings.staff_order_header.slice(0, RECEIPT_WIDTH)
+      const pad = RECEIPT_WIDTH - label.length
+      const left = Math.floor(pad / 2)
       printer.bold(true)
       printer.invert(true)
-      printer.println(settings.staff_order_header)
+      printer.println(' '.repeat(left) + label + ' '.repeat(pad - left))
       printer.invert(false)
       printer.bold(false)
-      printer.alignLeft()
     }
 
-    // Special instructions at the top for kitchen
-    if (data.orderNotes && data.printMode === 'kitchen') {
-      const settings = data.receiptSettings || DEFAULT_RECEIPT_SETTINGS
-      printer.drawLine()
-      printer.bold(true)
-      printer.println(settings.special_instructions_title)
-      printer.bold(false)
-      printer.println(data.orderNotes)
+    // ── Meta — one compact line instead of a label per line ──
+    printer.alignLeft()
+    if (isKitchen) {
+      printer.println(GUTTER + [timeHM(orderDate, timeZone), data.helperName].filter(Boolean).join(' · '))
     }
-
-    // Per-location remark for kitchen tickets (prints only on this location's
-    // ticket). Headed by the same customizable special-instructions title as
-    // the order notes above — since the POS dropped the whole-order remark,
-    // this is where that setting actually reaches paper.
-    if (data.locationNote && data.printMode === 'kitchen') {
-      const settings = data.receiptSettings || DEFAULT_RECEIPT_SETTINGS
-      printer.drawLine()
-      printer.bold(true)
-      printer.println(settings.special_instructions_title)
-      printer.bold(false)
-      printer.println(data.locationNote)
-    }
-
-    printer.drawLine()
-
-    // Items section
-    if (data.items && data.items.length > 0) {
-      const isKitchenTicket = data.printMode === 'kitchen'
-
-      for (const item of data.items) {
-        if (isKitchenTicket) {
-          // Kitchen format - bold text
-          printer.bold(true)
-          if (data.showPrices && item.price !== undefined) {
-            const itemTotal = item.price * item.quantity
-            const itemText = `${item.quantity}x ${item.name}`
-            const priceText = `${currencySymbol}${itemTotal.toFixed(2)}`
-            const padding = RECEIPT_WIDTH - itemText.length - priceText.length
-            printer.println(itemText + ' '.repeat(Math.max(1, padding)) + priceText)
-          }
-          else {
-            printer.println(`${item.quantity}x ${item.name}`)
-          }
-          printer.bold(false)
-        }
-        else if (data.showPrices && item.price !== undefined) {
-          // Receipt format with prices
-          printer.bold(true)
-          const itemTotal = item.price * item.quantity
-          const itemText = `${item.quantity}x ${item.name}`
-          const priceText = `${currencySymbol}${itemTotal.toFixed(2)}`
-          const padding = RECEIPT_WIDTH - itemText.length - priceText.length
-          printer.println(itemText + ' '.repeat(Math.max(1, padding)) + priceText)
-          printer.bold(false)
-        }
-        else {
-          // Receipt format without prices
-          printer.bold(true)
-          printer.println(`${item.quantity}x ${item.name}`)
-          printer.bold(false)
-        }
-
-        // Item options (selected product options)
-        if (item.options && Object.keys(item.options).length > 0) {
-          for (const [optionName, optionValue] of Object.entries(item.options)) {
-            if (optionValue) {
-              // Format option value - could be string, boolean, or object with label/price
-              let displayValue = ''
-              if (typeof optionValue === 'object' && optionValue !== null && 'label' in optionValue) {
-                const optionObj = optionValue as { label: string, price?: number }
-                displayValue = optionObj.label
-                if (optionObj.price) {
-                  displayValue += ` (+${currencySymbol}${Number(optionObj.price).toFixed(2)})`
-                }
-              }
-              else if (typeof optionValue === 'boolean') {
-                displayValue = optionValue ? L.yes : L.no
-              }
-              else {
-                displayValue = String(optionValue)
-              }
-              if (optionName === displayValue) {
-                printer.println(`  + ${displayValue}`)
-              }
-              else {
-                printer.println(`  + ${optionName}: ${displayValue}`)
-              }
-            }
-          }
-        }
-
-        // Item notes/modifications
-        if (item.notes) {
-          printer.println(`  → ${item.notes}`)
-        }
-
-        printer.println('')
+    else {
+      if (!data.clientTab) {
+        printer.bold(true)
+        printer.println(`${GUTTER}${L.order} #${data.orderNumber}`)
+        printer.bold(false)
+      }
+      const date = orderDate.toLocaleDateString(TIME_LOCALE, { timeZone })
+      printer.println(GUTTER + [date, timeHM(orderDate, timeZone), data.helperName].filter(Boolean).join(' · '))
+      if (data.clientName && !data.clientTab) {
+        printer.println(`${GUTTER}${L.client}: ${data.clientName}`)
       }
     }
 
-    // Special instructions at bottom for receipts
-    if (data.orderNotes && data.printMode === 'receipt') {
-      printer.drawLine()
-      printer.bold(true)
-      printer.println(L.notes)
-      printer.bold(false)
-      printer.println(data.orderNotes)
+    // Special instructions / per-location remark — kitchen, above the items.
+    // Headed by the customizable special-instructions title; since the POS
+    // dropped the whole-order remark, the location note is where that setting
+    // actually reaches paper.
+    for (const note of [data.orderNotes, data.locationNote]) {
+      if (note && isKitchen) {
+        printer.drawLine(RULE_LIGHT)
+        printer.bold(true)
+        printer.println(GUTTER + settings.special_instructions_title)
+        printer.bold(false)
+        for (const line of bodyLines(note)) printer.println(line)
+      }
     }
 
-    // Total for receipts with prices
-    if (data.printMode === 'receipt' && data.showPrices && data.total !== undefined) {
-      printer.drawLine()
-      printer.alignLeft()
+    printer.drawLine(RULE_LIGHT)
 
-      const totalLabel = L.total
-      const totalAmount = `${currencySymbol}${data.total.toFixed(2)}`
-      const totalPadding = RECEIPT_WIDTH - totalLabel.length - totalAmount.length
+    // ── Items — amounts flush right in one column, names wrap within theirs ──
+    for (const [index, item] of (data.items || []).entries()) {
+      if (index > 0) printer.println('')
 
+      const qtyName = `${item.quantity}× ${item.name}`
       printer.bold(true)
-      printer.println(totalLabel + ' '.repeat(Math.max(1, totalPadding)) + totalAmount)
+      if (data.showPrices && item.price !== undefined) {
+        for (const line of amountLines(qtyName, money(item.price * item.quantity))) printer.println(line)
+      }
+      else {
+        for (const line of bodyLines(qtyName)) printer.println(line)
+      }
+      printer.bold(false)
+
+      // Selected options — priced modifiers right-align to the same column.
+      for (const [optionName, optionValue] of Object.entries(item.options || {})) {
+        if (!optionValue) continue
+        let displayValue = ''
+        let optionPrice: number | undefined
+        if (typeof optionValue === 'object' && optionValue !== null && 'label' in optionValue) {
+          const optionObj = optionValue as { label: string, price?: number }
+          displayValue = optionObj.label
+          if (optionObj.price) optionPrice = Number(optionObj.price)
+        }
+        else if (typeof optionValue === 'boolean') {
+          displayValue = optionValue ? L.yes : L.no
+        }
+        else {
+          displayValue = String(optionValue)
+        }
+        const label = `· ${optionName === displayValue ? displayValue : `${optionName}: ${displayValue}`}`
+        if (data.showPrices && optionPrice) {
+          for (const line of amountLines(label, `+${money(optionPrice)}`, 4)) printer.println(line)
+        }
+        else {
+          const suffix = optionPrice ? ` (+${money(optionPrice)})` : ''
+          for (const line of bodyLines(label + suffix, 4)) printer.println(line)
+        }
+      }
+
+      // Item notes/modifications
+      if (item.notes) {
+        for (const line of bodyLines(`→ ${item.notes}`, 4)) printer.println(line)
+      }
+    }
+
+    // Order notes at the bottom for receipts
+    if (data.orderNotes && !isKitchen) {
+      printer.drawLine(RULE_LIGHT)
+      printer.bold(true)
+      printer.println(GUTTER + L.notes)
+      printer.bold(false)
+      for (const line of bodyLines(data.orderNotes)) printer.println(line)
+    }
+
+    // ── Total — double height, same right-aligned amount column ──
+    if (!isKitchen && data.showPrices && data.total !== undefined) {
+      printer.drawLine(RULE_LIGHT)
+      printer.bold(true)
+      printer.doubleHeight(true)
+      for (const line of amountLines(L.total, money(data.total))) printer.println(line)
+      printer.doubleHeight(false)
       printer.bold(false)
     }
 
-    // Footer
-    printer.drawLine()
-
-    if (data.printMode === 'receipt') {
-      const settings = data.receiptSettings || DEFAULT_RECEIPT_SETTINGS
+    // ── Footer ──
+    printer.drawLine(RULE_HEAVY)
+    if (!isKitchen) {
       printer.alignCenter()
       printer.println(settings.footer_text)
     }
 
-    // Extra spacing and cut
-    printer.println('')
     printer.println('')
     printer.cut()
 
@@ -461,29 +499,41 @@ export function renderTicketHtml(data: ReceiptData): string {
   const money = (n: number): string => `${currencySymbol}${n.toFixed(2)}`
 
   const orderDate = typeof data.createdAt === 'string' ? new Date(data.createdAt) : data.createdAt
-  const timeStr = orderDate.toLocaleString(TIME_LOCALE, { timeZone: data.timeZone || DEFAULT_TIME_ZONE })
+  const ticketTimeZone = data.timeZone || DEFAULT_TIME_ZONE
+  const timeStr = `${orderDate.toLocaleDateString(TIME_LOCALE, { timeZone: ticketTimeZone })} · ${timeHM(orderDate, ticketTimeZone)}`
 
   const rows: string[] = []
-  rows.push(`<header class="c"><strong class="team">${esc(data.teamName)}</strong><div>${esc(data.eventName)}</div></header>`)
 
-  // Big client call-out — kitchen tickets + end-of-tab receipts only (mirrors formatReceipt).
-  if (data.clientName && (isKitchen || data.clientTab)) {
-    rows.push(`<div class="hr"></div><div class="client">${esc(data.clientName.toUpperCase())}</div>`)
-  }
+  // Header — kitchen gets one quiet line, receipts keep the bold brand line
+  // (mirrors formatReceipt's bold-hierarchy layout, #1427).
+  rows.push(isKitchen
+    ? `<header class="c">${esc(data.teamName)} &middot; ${esc(data.eventName)}</header>`
+    : `<header class="c"><strong class="team">${esc(data.teamName)}</strong><div>${esc(data.eventName)}</div></header>`)
+  rows.push('<div class="hrx"></div>')
 
-  rows.push('<div class="hr"></div>')
-  rows.push(data.clientTab
-    ? `<div><strong>${esc(L.orders)}: ${esc(data.clientTab.orderCount)}</strong></div>`
-    : `<div><strong>${esc(L.order)} #${esc(data.orderNumber)}</strong></div>`)
-  rows.push(`<div>${esc(L.time)}: ${esc(timeStr)}</div>`)
-  if (data.helperName) rows.push(`<div>${esc(L.helper)}: ${esc(data.helperName)}</div>`)
-  if (data.clientName && data.printMode === 'receipt' && !data.clientTab) {
-    rows.push(`<div>${esc(L.client)}: ${esc(data.clientName)}</div>`)
+  // Call-out block — client double-size with the order number under it; a
+  // loose kitchen order promotes its number to the big slot.
+  if (isKitchen || data.clientTab) {
+    rows.push(`<div class="client">${esc((data.clientName || `#${data.orderNumber}`).toUpperCase())}</div>`)
+    if (data.clientName) {
+      rows.push(`<div class="ordernum">${data.clientTab ? `${esc(L.orders)}: ${esc(data.clientTab.orderCount)}` : `#${esc(data.orderNumber)}`}</div>`)
+    }
+    rows.push('<div class="hrx"></div>')
   }
 
   if (data.isPersonnel) rows.push(`<div class="staff">${esc(settings.staff_order_header)}</div>`)
 
-  // Special instructions / per-location remark — kitchen, at the top.
+  // Meta — one compact line.
+  if (isKitchen) {
+    rows.push(`<div>${[timeHM(orderDate, ticketTimeZone), data.helperName].filter(Boolean).map(esc).join(' &middot; ')}</div>`)
+  }
+  else {
+    if (!data.clientTab) rows.push(`<div><strong>${esc(L.order)} #${esc(data.orderNumber)}</strong></div>`)
+    rows.push(`<div>${esc(timeStr)}${data.helperName ? ` &middot; ${esc(data.helperName)}` : ''}</div>`)
+    if (data.clientName && !data.clientTab) rows.push(`<div>${esc(L.client)}: ${esc(data.clientName)}</div>`)
+  }
+
+  // Special instructions / per-location remark — kitchen, above the items.
   if (data.orderNotes && isKitchen) {
     rows.push(`<div class="hr"></div><div><strong>${esc(settings.special_instructions_title)}</strong></div><div>${esc(data.orderNotes)}</div>`)
   }
@@ -494,21 +544,30 @@ export function renderTicketHtml(data: ReceiptData): string {
   rows.push('<div class="hr"></div><ul class="items">')
   for (const item of data.items || []) {
     const showPrice = data.showPrices && item.price !== undefined
+    // The name and amount must be DIRECT children of the flex row — wrapped in
+    // one <strong> they collapse into a single flex item and the price jams
+    // against the name (the pre-#1427 misalignment).
     const line = showPrice
-      ? `<span>${esc(item.quantity)}x ${esc(item.name)}</span><span class="amt">${esc(money(item.price! * item.quantity))}</span>`
-      : `<span>${esc(item.quantity)}x ${esc(item.name)}</span>`
-    rows.push(`<li><div class="line"><strong>${line}</strong></div>`)
+      ? `<span>${esc(item.quantity)}&times; ${esc(item.name)}</span><span class="amt">${esc(money(item.price! * item.quantity))}</span>`
+      : `<span>${esc(item.quantity)}&times; ${esc(item.name)}</span>`
+    rows.push(`<li><div class="line item">${line}</div>`)
     if (item.options) {
       for (const [optionName, optionValue] of Object.entries(item.options)) {
         if (!optionValue) continue
         let display = ''
+        let optionPrice: number | undefined
         if (typeof optionValue === 'object' && optionValue !== null && 'label' in optionValue) {
           const o = optionValue as { label: string, price?: number }
-          display = o.label + (o.price ? ` (+${money(Number(o.price))})` : '')
+          display = o.label
+          if (o.price) optionPrice = Number(o.price)
         }
         else if (typeof optionValue === 'boolean') display = optionValue ? L.yes : L.no
         else display = String(optionValue)
-        rows.push(`<div class="opt">+ ${optionName === display ? esc(display) : `${esc(optionName)}: ${esc(display)}`}</div>`)
+        const label = optionName === display ? esc(display) : `${esc(optionName)}: ${esc(display)}`
+        // Priced modifiers share the right-aligned amount column.
+        rows.push(data.showPrices && optionPrice
+          ? `<div class="line opt"><span>&middot; ${label}</span><span class="amt">+${esc(money(optionPrice))}</span></div>`
+          : `<div class="opt">&middot; ${label}${optionPrice ? ` (+${esc(money(optionPrice))})` : ''}</div>`)
       }
     }
     if (item.notes) rows.push(`<div class="opt">&rarr; ${esc(item.notes)}</div>`)
@@ -520,10 +579,11 @@ export function renderTicketHtml(data: ReceiptData): string {
     rows.push(`<div class="hr"></div><div><strong>${esc(L.notes)}</strong></div><div>${esc(data.orderNotes)}</div>`)
   }
   if (data.printMode === 'receipt' && data.showPrices && data.total !== undefined) {
-    rows.push(`<div class="hr"></div><div class="line total"><strong><span>${esc(L.total)}</span><span class="amt">${esc(money(data.total))}</span></strong></div>`)
+    rows.push(`<div class="hr"></div><div class="line total"><span>${esc(L.total)}</span><span class="amt">${esc(money(data.total))}</span></div>`)
   }
+  rows.push('<div class="hrx"></div>')
   if (data.printMode === 'receipt') {
-    rows.push(`<div class="hr"></div><div class="c">${esc(settings.footer_text)}</div>`)
+    rows.push(`<div class="c">${esc(settings.footer_text)}</div>`)
   }
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(L.order)} #${esc(data.orderNumber)}</title><style>
@@ -532,14 +592,17 @@ export function renderTicketHtml(data: ReceiptData): string {
 body { width: 80mm; margin: 0 auto; padding: 4mm; font: 13px/1.35 'Menlo','Consolas',monospace; color: #000; }
 .c { text-align: center; }
 .team { font-size: 15px; }
-.client { text-align: center; font-weight: 700; font-size: 22px; text-transform: uppercase; }
+.client { font-weight: 700; font-size: 24px; text-transform: uppercase; margin: 4px 0 0; }
+.ordernum { font-weight: 700; font-size: 17px; margin: 0 0 4px; }
 .staff { text-align: center; font-weight: 700; margin: 4px 0; padding: 2px 0; background: #000; color: #fff; }
-.hr { border-top: 1px dashed #000; margin: 6px 0; }
+.hr { border-top: 1px solid #000; margin: 6px 0; }
+.hrx { border-top: 3px double #000; margin: 6px 0; }
 .items { list-style: none; margin: 0; padding: 0; }
 .items li { margin-bottom: 6px; }
 .line { display: flex; justify-content: space-between; gap: 8px; }
 .line .amt { white-space: nowrap; }
-.total { font-size: 15px; }
+.item { font-weight: 700; }
+.total { font-weight: 700; font-size: 17px; }
 .opt { padding-left: 12px; }
 @media print { body { padding: 0; } }
 </style></head><body>${rows.join('')}</body></html>`
@@ -559,13 +622,13 @@ export function formatTestReceipt(
   printer.bold(true)
   printer.println('PRINTER TEST')
   printer.bold(false)
-  printer.drawLine()
+  printer.drawLine(RULE_HEAVY)
 
   printer.alignLeft()
   printer.println(`Printer: ${printerName}`)
   printer.println(`IP: ${ipAddress}`)
   printer.println(`Time: ${new Date().toLocaleString(TIME_LOCALE, { timeZone })}`)
-  printer.drawLine()
+  printer.drawLine(RULE_LIGHT)
 
   printer.alignCenter()
   printer.println('Test completed successfully!')

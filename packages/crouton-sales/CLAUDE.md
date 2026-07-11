@@ -151,10 +151,14 @@ clears it; inactive clients are excluded from `order-data`'s client list (POS pi
 clients panel. `salesPrintqueues.orderId` is **nullable** — end-of-tab receipts belong to the whole
 tab, not one order (the complete/fail callbacks skip order auto-complete when null).
 
-**Ticket layout**: kitchen tickets print the **client name** as the big centered header (double
-width/height) — the location name is deliberately NOT printed (each kitchen printer sits at its
-location). Customer receipts keep the small `Client:` line; end-of-tab receipts (`ReceiptData.clientTab`)
-reuse the big client header and print `Orders: N` instead of `Order #x`.
+**Ticket layout** (bold hierarchy, #1427): kitchen tickets open with a heavy-ruled **call-out
+block** — the client name double-size with the order number double-height under it (a loose order
+promotes its `#N` to the big slot) — then one compact `HH:MM · helper` meta line. The location
+name is deliberately NOT printed (each kitchen printer sits at its location). Customer receipts
+keep the small `Client:` line, print amounts in one **right-aligned price column** (long names
+wrap within their column) and a double-height `TOTAL`; end-of-tab receipts (`ReceiptData.clientTab`)
+reuse the call-out block with `Orders: N` instead of `Order #x`. Layout lives in crouton-printing's
+`receipt-formatter.ts` (`formatReceipt` ESC/POS + `renderTicketHtml` mirror).
 
 ### Admin Pages (shipped by this package)
 
