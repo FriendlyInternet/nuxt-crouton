@@ -183,16 +183,15 @@ SettingsTab.
 
 The workspace **shell** itself is `EventWorkspace/Shell.vue` (auto-import `SalesEventWorkspaceShell`):
 resolves the event from a `:event-slug` prop via `useCollectionQuery('salesEvents')`, then renders
-**kassa-first — no tabs**: header + `<SalesPosPanel>` as the main surface. The header row (compact
-event switcher with a "create event" item in its `#content-top`, same pattern as
-`CroutonFormReferenceSelect`, the **Instellingen** toggle right beside it, and — only while open —
-the panel-wide **Opslaan** button at the row's right) lives **inside the settings container**: one
-bordered panel whose `UCollapsible` slides `SettingsTab` open under the header row. The Save button
-is Shell-hosted: SettingsTab gets `hide-save-bar` and hands `{ save, dirty, saving }` up via a
-`register` emit once its async setup resolves (NOT `defineExpose` + template ref — the ref binds
-before an async-setup component's exposed object attaches, which left Opslaan permanently disabled,
-#1321); Duplicate/Delete live as explained rows at
-the bottom of its Event Details card. The full event form (incl. slug) is not reachable from the workspace.
+**kassa-first — no header row**: `<SalesPosPanel>` is the main, chrome-less surface; everything else
+is a **pane** (Bestellingen / Klanten / Data / Instellingen) toggled from vertical tabs in the right
+gutter, whose top also hosts a compact icon-only **event switcher** (create-event in its
+`#content-top`, same pattern as `CroutonFormReferenceSelect`). **Instellingen** (admin only) is the
+tabbed `SettingsTab`, opened as a splitter pane on desktop and a `USlideover` on narrow; its
+panel-wide **Opslaan** is Shell-hosted in a **fixed footer below the scroll area**, driven by the
+`{ save, dirty, saving }` API SettingsTab hands up via a `register` emit (a template ref can't carry
+it — the ref binds before an async-setup component's exposed object attaches, #1321). Duplicate/Delete
+are explained rows in the Event Details card; the full event form (incl. slug) isn't reachable here.
 Beside the POS, up to three **side panes** open via vertical tabs stacked in a reserved gutter at
 the kassa's right edge (Shell-owned, no prop plumbing). Any combination can be open at once, each
 resizable via Reka UI's Splitter (`SplitterGroup`/`Panel`/`ResizeHandle`; panels carry explicit
@@ -204,15 +203,15 @@ session by `useAuth().loggedIn` (`dataPaneOpen`). **Narrow screens
 (`useMediaQuery('(max-width: 1023px)')`) drop the splitter entirely** — side-by-side panes would
 squeeze the kassa to nothing — and render the same pane headers + bodies as full-height
 `USlideover`s instead, toggled from a **segmented tab strip** above the kassa (no gutter/vertical
-tabs in narrow mode). **The whole header row is desktop-only** — on narrow the strip is the
-header: it opens with a compact **icon-only event switcher** (same items + create-event
-`#content-top` as the header's USelectMenu) and also hosts the **Instellingen gear** and the
+tabs in narrow mode). **The right-gutter tabs are desktop-only** — on narrow a **segmented tab
+strip** above the kassa replaces them: a compact **icon-only event switcher** (same items +
+create-event `#content-top`), the **Instellingen gear** and the
 **kassa edit-mode pencil** — lifted out of the kassa's category-tabs row via
 the `editMode` defineModel that OrderInterface and PosPanel expose (`hide-edit-toggle` hides the
-inline pencil so there's never two). **Settings join the same pattern on narrow**: Instellingen
-opens a `USlideover` (Opslaan in its header, driven by the same registered save API) instead of
-the inline collapsible — the double container ate too much phone viewport; the collapsible is
-desktop-only (`settingsOpen && !isNarrow`, so only one SettingsTab instance ever registers). In
+inline pencil so there's never two). **Settings follow suit on narrow**: Instellingen
+opens a `USlideover` instead of the desktop splitter pane (Opslaan in the same fixed footer, driven
+by the same registered save API) — only one `SettingsTab` instance ever mounts
+(`settingsPaneOpen && !isNarrow` vs `isNarrow`). In
 the slideover SettingsTab gets its `tabbed` prop: the three cards (Eventgegevens / Printers /
 Actieve helpers) render behind a segmented section strip, one at a time via `v-show` (all stay
 mounted so the panel-wide dirty/save covers fields on every tab). The slideover open state is ephemeral (`ref`s, not the

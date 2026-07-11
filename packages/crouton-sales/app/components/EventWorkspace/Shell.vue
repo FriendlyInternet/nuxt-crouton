@@ -11,7 +11,7 @@
  *  - "Klanten" (recurring-clients mode only) — client end-receipts (ClientsPanel)
  *  - "Data" (admin sessions only — PIN helpers never see it) — sales numbers
  *  - "Instellingen" (admin sessions only) — the tabbed SettingsTab, same
- *    sectioned design as the narrow slideover; Opslaan in the pane header
+ *    sectioned design as the narrow slideover; Opslaan in a fixed footer below the pane's scroll
  *
  * Any combination can be open at once, side by side.
  *
