@@ -336,7 +336,13 @@ card shows the real printer name instead of the generic fallback. The tab shows 
 tab visible). Failed lines carry an **icon-only re-print button** in the card's `#actions` slot
 (left of the LED, so the dot stays rightmost) — emits `retryJob` to OrdersTab, which POSTs
 `printqueues/retry-failed` with `{ jobId }` and refreshes the queue poll. The panel has extra
-bottom padding (`pb-6`) to separate an expanded ticket from the next row.
+bottom padding (`pb-6`) to separate an expanded ticket from the next row. The tab row also carries
+a **right-aligned whole-order Reprint button** (`UTabs` `#list-trailing` slot, `ms-auto`, #1517):
+two-step confirm (arm → fire, since it spits physical paper), emits `reprintOrder` to OrdersTab,
+which POSTs `printqueues/retry-failed` with `{ orderId }`. That resets the order's *existing* jobs
+from a terminal status (`2` done / `9` failed) back to `0` pending — no new jobs, no forced
+receipt — so the transport re-drains and reprints exactly what the order first produced. The
+button only shows while the Printers tab does (i.e. the event has printers).
 
 `SettingsTab.vue` edits the event's **core fields inline** (title, currency, client switch,
 helper PIN) **plus the receipt text settings** behind **one panel-wide Save button** (disabled
