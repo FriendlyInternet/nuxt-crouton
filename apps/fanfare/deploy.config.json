@@ -11,6 +11,8 @@
     "packages/crouton-charts/**",
     "packages/crouton-pages/**",
     "packages/crouton-sales/**",
+    "packages/crouton-themes/**",
+    "packages/crouton-admin/**",
     "pnpm-lock.yaml"
   ]
 }
