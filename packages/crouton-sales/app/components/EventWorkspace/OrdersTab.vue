@@ -346,10 +346,10 @@ function toggleExpand(id: string) {
         />
       </UChip>
       <template #content>
-        <!-- Container-responsive: 1 column in a narrow pane, 2 side by side
-             once the resizable pane has room. -->
+        <!-- One filter per row — the selects stack in a single column so each
+             (helper / client / printer / status) reads on its own line. -->
         <div class="rounded-lg bg-elevated/60 border border-default p-3 space-y-2" :class="headerControlled ? '' : 'mt-2'">
-          <div class="grid grid-cols-1 @md:grid-cols-2 gap-2">
+          <div class="grid grid-cols-1 gap-2">
             <USelectMenu
               v-model="selectedHelperName"
               :items="helperOptions"

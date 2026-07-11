@@ -44,10 +44,13 @@ const meta = computed(() => ({
 const ordersFiltersOpen = ref(false)
 const ordersFilterCount = ref(0)
 
-// Settings save API — same register handshake as the Shell (#1321).
+// Settings save API — handed up by SettingsTab once its async setup resolves
+// (#1321). The Save lives in a fixed FOOTER below the scroll area, so a long
+// settings tab scrolls cleanly above it.
 const settingsTab = shallowRef<{ save: () => Promise<void>, dirty: Ref<boolean>, saving: Ref<boolean> } | null>(null)
 const settingsDirty = computed(() => settingsTab.value?.dirty.value ?? false)
 const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
+
 </script>
 
 <template>
@@ -74,15 +77,6 @@ const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
             @click="ordersFiltersOpen = !ordersFiltersOpen"
           />
         </UChip>
-        <UButton
-          v-if="pane === 'settings'"
-          size="xs"
-          :loading="settingsSaving"
-          :disabled="!settingsDirty"
-          @click="settingsTab?.save()"
-        >
-          {{ t('sales.common.save') }}
-        </UButton>
       </SalesEventWorkspacePaneHeader>
 
       <div class="flex-1 overflow-y-auto p-4 pt-2">
@@ -107,6 +101,18 @@ const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
             <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
           </template>
         </Suspense>
+      </div>
+
+      <!-- Settings Save: a fixed footer outside the scroll area (content
+           scrolls above it, never behind). -->
+      <div
+        v-if="pane === 'settings'"
+        class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-4 py-3"
+      >
+        <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
+        <UButton :loading="settingsSaving" :disabled="!settingsDirty" @click="settingsTab?.save()">
+          {{ t('sales.common.save') }}
+        </UButton>
       </div>
     </template>
   </div>

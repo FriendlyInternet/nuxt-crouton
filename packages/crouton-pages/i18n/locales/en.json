@@ -95,6 +95,7 @@
     },
     "nav": {
       "menu": "Menu",
+      "theme": "Theme",
       "signOut": "Sign out"
     },
     "collection": {

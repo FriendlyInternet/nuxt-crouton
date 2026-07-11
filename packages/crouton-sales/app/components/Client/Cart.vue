@@ -103,13 +103,24 @@
           </label>
         </div>
 
-        <!-- Remarks accordion: one item per location with items in the cart,
-             each body its own note. Controlled by the toggle above (the
-             collapsible has no trigger of its own). -->
+        <!-- Remarks: one note per location with items in the cart. Controlled
+             by the toggle above (the collapsible has no trigger of its own).
+             A single location needs no accordion — its note shows directly. -->
         <UCollapsible v-if="remarkLocations.length > 0" v-model:open="remarksOpen">
           <template #content>
             <div class="mt-2 px-2 pb-1 rounded-lg bg-elevated/60">
-              <UAccordion type="multiple" :items="remarkAccordionItems" :ui="{ trigger: 'text-toned font-normal' }">
+              <div v-if="remarkLocations.length === 1" class="py-2">
+                <UTextarea
+                  :model-value="locationRemark(remarkLocations[0]?.id)"
+                  :placeholder="t('sales.cart.remarkPlaceholder')"
+                  :rows="2"
+                  autoresize
+                  variant="soft"
+                  class="w-full"
+                  @update:model-value="emitLocationRemark(remarkLocations[0]?.id, String($event))"
+                />
+              </div>
+              <UAccordion v-else type="multiple" :items="remarkAccordionItems" :ui="{ trigger: 'text-toned font-normal' }">
                 <template #default="{ item }">
                   <span class="flex items-center gap-2 text-sm">
                     {{ item.label }}

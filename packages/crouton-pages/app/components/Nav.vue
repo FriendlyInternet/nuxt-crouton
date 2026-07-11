@@ -95,6 +95,26 @@ const toggleColorMode = () => {
   colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
 }
 
+// Theme quick-select for the pill — a standalone palette dropdown wired to the
+// SAME source as the CV-menu Theme submenu: the shared state key the
+// crouton-themes base layer fills (empty when that layer isn't extended, so
+// this renders nothing without a hard dependency on the themes package). The
+// plugin stores a single "Theme ▸" submenu item; its children are the themes,
+// which we surface directly as the dropdown's items. Gated on the same
+// permission the CV menu uses (admins always; others when allowUserThemes).
+const themePreferenceItems = useState<DropdownMenuItem[]>('crouton:themePreferenceItems', () => [])
+const allowUserThemes = useState<boolean>('crouton:allowUserThemes', () => true)
+const canSwitchTheme = computed(() => allowUserThemes.value || isAdmin.value)
+const themeQuickItems = computed<DropdownMenuItem[][]>(() => {
+  const children = (themePreferenceItems.value[0] as { children?: DropdownMenuItem[] } | undefined)?.children
+  return canSwitchTheme.value && children?.length ? [children] : []
+})
+
+// Pill action slot — other layers push icon buttons here (e.g. pages' own
+// "edit this page" pencil); rendered in the pill next to the appearance
+// controls. See useCroutonNavPill.
+const { visibleActions: navPillActions } = useCroutonNavPill()
+
 // Admin dropdown menu items — mirrors AdminSidebar logic dynamically
 const adminPrefix = computed(() => {
   const teamParam = teamSlugRef.value || teamIdRef.value || currentTeam.value?.slug || ''
@@ -300,8 +320,37 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
           </template>
         </ClientOnly>
 
+        <!-- Package-contributed pill actions (e.g. the edit-page pencil).
+             Client-only: actions are registered on mount. -->
+        <ClientOnly>
+          <UButton
+            v-for="action in navPillActions"
+            :key="action.id"
+            :icon="action.icon"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :aria-label="action.label"
+            @click="action.onSelect"
+          />
+        </ClientOnly>
+
         <!-- Language Switcher -->
         <CroutonI18nLanguageSwitcher class="w-auto" />
+
+        <!-- Theme quick-select — only when the themes package populates the
+             shared items (client-only, so no SSR hydration mismatch). -->
+        <ClientOnly>
+          <UDropdownMenu v-if="themeQuickItems.length" :items="themeQuickItems">
+            <UButton
+              icon="i-lucide-palette"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :aria-label="t('pages.nav.theme')"
+            />
+          </UDropdownMenu>
+        </ClientOnly>
 
         <!-- Dark/Light Mode Toggle -->
         <ClientOnly>
@@ -440,8 +489,34 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
           </template>
         </ClientOnly>
 
-        <!-- Language + dark mode — always reachable, even on chrome-less pages -->
+        <!-- Package-contributed pill actions (e.g. the edit-page pencil). -->
+        <ClientOnly>
+          <UButton
+            v-for="action in navPillActions"
+            :key="action.id"
+            :icon="action.icon"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :aria-label="action.label"
+            @click="action.onSelect"
+          />
+        </ClientOnly>
+
+        <!-- Language + theme + dark mode — always reachable, even on chrome-less pages -->
         <CroutonI18nLanguageSwitcher class="w-auto" />
+
+        <ClientOnly>
+          <UDropdownMenu v-if="themeQuickItems.length" :items="themeQuickItems">
+            <UButton
+              icon="i-lucide-palette"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :aria-label="t('pages.nav.theme')"
+            />
+          </UDropdownMenu>
+        </ClientOnly>
 
         <ClientOnly>
           <UButton

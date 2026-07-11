@@ -188,8 +188,25 @@ const receiptDirty = computed(() =>
 const dirty = computed(() => eventDirty.value || receiptDirty.value)
 const saving = ref(false)
 
+// Changing the helper PIN must lock out helpers still holding a session on the
+// OLD pin — otherwise the new PIN is meaningless for anyone already logged in.
+// The revoke endpoint deactivates the event's active scoped tokens; the
+// before-redeem hook re-syncs the new pin into the grant on next login, so the
+// old pin simply stops working.
+const revokeEndpoint = computed(() =>
+  `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/revoke-helpers`
+)
+
+async function revokeHelperSessions(): Promise<number> {
+  const { revoked } = await $fetch<{ revoked: number }>(revokeEndpoint.value, { method: 'POST' })
+  await refreshActiveHelpers()
+  return revoked
+}
+
 async function saveSettings() {
   saving.value = true
+  // Capture before the update lands (props.event mutates on refetch).
+  const pinChanged = eventForm.value.helperPin !== (props.event.helperPin || '')
   try {
     const tasks: Promise<unknown>[] = []
     if (eventDirty.value) {
@@ -208,6 +225,13 @@ async function saveSettings() {
       )
     }
     await Promise.all(tasks)
+    // Lock out old-PIN helpers once the new PIN is persisted.
+    if (pinChanged) {
+      const revoked = await revokeHelperSessions()
+      if (revoked > 0) {
+        notify.info(t('sales.workspace.helpersLockedOut', { params: { count: revoked }, fallback: `Logged out ${revoked} helper(s) — they must re-enter the new PIN` }))
+      }
+    }
     notify.success(t('sales.workspace.settingsSaved'))
   }
   catch {
@@ -215,6 +239,22 @@ async function saveSettings() {
   }
   finally {
     saving.value = false
+  }
+}
+
+// Manual "log out all helpers" — kick everyone without changing the PIN.
+const loggingOutHelpers = ref(false)
+async function logoutAllHelpers() {
+  loggingOutHelpers.value = true
+  try {
+    const revoked = await revokeHelperSessions()
+    notify.success(t('sales.workspace.helpersLoggedOut', { params: { count: revoked }, fallback: `Logged out ${revoked} helper(s)` }))
+  }
+  catch {
+    notify.error(t('sales.workspace.helpersLogoutError', 'Could not log out the helpers'))
+  }
+  finally {
+    loggingOutHelpers.value = false
   }
 }
 
@@ -412,7 +452,10 @@ function helperExpiry(value: string): string {
 
 <template>
   <div class="space-y-4">
-    <!-- One Save for the whole panel: event fields + receipt text. -->
+    <!-- Standalone usage keeps a top Save row. When a host owns the panel
+         (hideSaveBar) it renders the Save as a fixed FOOTER below the scroll
+         area (via the `register` API), so a long tab scrolls cleanly above it —
+         a sticky bar inside the scroll floats over content mid-scroll. -->
     <div v-if="!hideSaveBar" class="flex items-center justify-end gap-3">
       <span v-if="dirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
       <UButton
@@ -467,10 +510,11 @@ function helperExpiry(value: string): string {
                pane. -->
           <div class="space-y-1">
             <div class="flex items-center justify-between gap-3">
-              <p class="text-sm font-medium leading-5">{{ t('sales.workspace.requiresClient') }}</p>
+              <p class="min-w-0 text-sm font-medium leading-5">{{ t('sales.workspace.requiresClient') }}</p>
               <USwitch
                 v-model="eventForm.requiresClient"
                 :aria-label="t('sales.workspace.requiresClient')"
+                class="shrink-0"
               />
             </div>
             <p class="text-sm text-muted">{{ t('sales.workspace.requiresClientDesc') }}</p>
@@ -617,7 +661,10 @@ function helperExpiry(value: string): string {
           </div>
         </template>
 
-        <UFormField :label="t('sales.workspace.helperPin')">
+        <UFormField
+          :label="t('sales.workspace.helperPin')"
+          :help="t('sales.workspace.helperPinRotateHint', 'Changing the PIN logs out every helper still on the old one.')"
+        >
           <UPinInput
             v-model="helperPinCells"
             :length="4"
@@ -626,6 +673,20 @@ function helperExpiry(value: string): string {
             :aria-label="t('sales.workspace.helperPin')"
           />
         </UFormField>
+
+        <UButton
+          block
+          size="sm"
+          color="warning"
+          variant="soft"
+          icon="i-lucide-lock"
+          class="mt-3"
+          :loading="loggingOutHelpers"
+          :disabled="!activeHelpers || activeHelpers.length === 0"
+          @click="logoutAllHelpers"
+        >
+          {{ t('sales.workspace.logoutAllHelpers', 'Log out all helpers') }}
+        </UButton>
 
         <USeparator class="my-4" />
 

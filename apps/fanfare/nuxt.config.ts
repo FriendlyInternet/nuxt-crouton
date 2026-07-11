@@ -25,6 +25,11 @@ export default defineNuxtConfig({
     '@fyit/crouton-pages',
     '@fyit/crouton-printing',
     '@fyit/crouton-sales',
+    // Base themes layer: ships the runtime switcher (useThemeSwitcher +
+    // themeProvider plugin), which populates the pill's theme quick-select and
+    // the CV-menu Theme submenu. The preset layers below are CSS/variants only.
+    // (It also re-pulls ko/minimal/kr11, which dedupe against the entries below.)
+    '@fyit/crouton-themes/themes',
     // Theme layers under test (#1303/#1332): the team Look-and-Feel presets
     // inject ko-*/bw-* classes at runtime, but without these layers the CSS
     // behind those classes never ships — presets were palette-only before.
