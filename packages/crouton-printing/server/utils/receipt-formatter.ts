@@ -287,6 +287,12 @@ function timeHM(d: Date, timeZone: string): string {
   return d.toLocaleTimeString(TIME_LOCALE, { timeZone, hour: '2-digit', minute: '2-digit' })
 }
 
+/** True when an item carries options or a note — the things that earn a blank
+ * separator line around it. Plain items (neither) pack tight together. */
+function itemHasDetail(item: ReceiptItem): boolean {
+  return Boolean(item.notes) || Object.values(item.options || {}).some(Boolean)
+}
+
 /**
  * Generate ESC/POS formatted receipt data for thermal printers
  * Returns both Base64 encoded string and raw buffer
@@ -321,25 +327,30 @@ export function formatReceipt(data: ReceiptData): FormattedReceipt {
     printer.drawLine(RULE_HEAVY)
 
     // ── Call-out block — the runner's glance target, framed by heavy rules ──
-    // Kitchen + end-of-tab: client name double-size with the order number (or
-    // tab order count) double-height under it. A loose kitchen order (no
-    // client) promotes its order number to the double-size slot instead. The
+    // Kitchen + end-of-tab: the #order-number (or tab order count) prints first
+    // at normal size, then the client name below at double-size — the name is
+    // the glance target, the id is the secondary reference. A loose kitchen
+    // order (no client) promotes its order number to the double-size slot. No
+    // blank padding around the block; the heavy rules already frame it. The
     // location name is deliberately not printed: each kitchen printer sits at
     // its location, so naming it on the ticket is noise.
     if (isKitchen || data.clientTab) {
       printer.alignLeft()
-      printer.println('')
       printer.bold(true)
-      printer.doubleSize(true)
-      printer.println(GUTTER + (data.clientName ? data.clientName.toUpperCase() : `#${data.orderNumber}`))
-      printer.doubleSize(false)
       if (data.clientName) {
-        printer.doubleHeight(true)
+        // The normal-size line's left edge aligns under the double-size line
+        // (a double-size gutter space ≈ two normal-size spaces).
         printer.println(GUTTER.repeat(2) + (data.clientTab ? `${L.orders}: ${data.clientTab.orderCount}` : `#${data.orderNumber}`))
-        printer.doubleHeight(false)
+        printer.doubleSize(true)
+        printer.println(GUTTER + data.clientName.toUpperCase())
+        printer.doubleSize(false)
+      }
+      else {
+        printer.doubleSize(true)
+        printer.println(GUTTER + `#${data.orderNumber}`)
+        printer.doubleSize(false)
       }
       printer.bold(false)
-      printer.println('')
       printer.drawLine(RULE_HEAVY)
     }
 
@@ -390,8 +401,13 @@ export function formatReceipt(data: ReceiptData): FormattedReceipt {
     printer.drawLine(RULE_LIGHT)
 
     // ── Items — amounts flush right in one column, names wrap within theirs ──
-    for (const [index, item] of (data.items || []).entries()) {
-      if (index > 0) printer.println('')
+    const items = data.items || []
+    for (const [index, item] of items.entries()) {
+      // Blank separator only when this item or the one above it carries
+      // options/notes; runs of plain items pack tight together.
+      if (index > 0 && (itemHasDetail(item) || itemHasDetail(items[index - 1]!))) {
+        printer.println('')
+      }
 
       const qtyName = `${item.quantity}× ${item.name}`
       printer.bold(true)
@@ -444,8 +460,10 @@ export function formatReceipt(data: ReceiptData): FormattedReceipt {
       for (const line of bodyLines(data.orderNotes)) printer.println(line)
     }
 
-    // ── Total — double height, same right-aligned amount column ──
-    if (!isKitchen && data.showPrices && data.total !== undefined) {
+    // ── Total — double height, same right-aligned amount column. Shown on any
+    // ticket that prices its items (incl. priced staff/kitchen tickets), not
+    // just customer receipts. ──
+    if (data.showPrices && data.total !== undefined) {
       printer.drawLine(RULE_LIGHT)
       printer.bold(true)
       printer.doubleHeight(true)
@@ -511,12 +529,16 @@ export function renderTicketHtml(data: ReceiptData): string {
     : `<header class="c"><strong class="team">${esc(data.teamName)}</strong><div>${esc(data.eventName)}</div></header>`)
   rows.push('<div class="hrx"></div>')
 
-  // Call-out block — client double-size with the order number under it; a
-  // loose kitchen order promotes its number to the big slot.
+  // Call-out block — the #order-number first at normal size, the client name
+  // below double-size (the glance target); a loose kitchen order promotes its
+  // number to the big slot.
   if (isKitchen || data.clientTab) {
-    rows.push(`<div class="client">${esc((data.clientName || `#${data.orderNumber}`).toUpperCase())}</div>`)
     if (data.clientName) {
       rows.push(`<div class="ordernum">${data.clientTab ? `${esc(L.orders)}: ${esc(data.clientTab.orderCount)}` : `#${esc(data.orderNumber)}`}</div>`)
+      rows.push(`<div class="client">${esc(data.clientName.toUpperCase())}</div>`)
+    }
+    else {
+      rows.push(`<div class="client">#${esc(data.orderNumber)}</div>`)
     }
     rows.push('<div class="hrx"></div>')
   }
@@ -544,13 +566,16 @@ export function renderTicketHtml(data: ReceiptData): string {
   rows.push('<div class="hr"></div><ul class="items">')
   for (const item of data.items || []) {
     const showPrice = data.showPrices && item.price !== undefined
+    // Items with options/notes get breathing room (`has-detail`); plain items
+    // pack tight — mirrors formatReceipt's blank-separator rule.
+    const detail = itemHasDetail(item)
     // The name and amount must be DIRECT children of the flex row — wrapped in
     // one <strong> they collapse into a single flex item and the price jams
     // against the name (the pre-#1427 misalignment).
     const line = showPrice
       ? `<span>${esc(item.quantity)}&times; ${esc(item.name)}</span><span class="amt">${esc(money(item.price! * item.quantity))}</span>`
       : `<span>${esc(item.quantity)}&times; ${esc(item.name)}</span>`
-    rows.push(`<li><div class="line item">${line}</div>`)
+    rows.push(`<li${detail ? ' class="has-detail"' : ''}><div class="line item">${line}</div>`)
     if (item.options) {
       for (const [optionName, optionValue] of Object.entries(item.options)) {
         if (!optionValue) continue
@@ -578,7 +603,7 @@ export function renderTicketHtml(data: ReceiptData): string {
   if (data.orderNotes && data.printMode === 'receipt') {
     rows.push(`<div class="hr"></div><div><strong>${esc(L.notes)}</strong></div><div>${esc(data.orderNotes)}</div>`)
   }
-  if (data.printMode === 'receipt' && data.showPrices && data.total !== undefined) {
+  if (data.showPrices && data.total !== undefined) {
     rows.push(`<div class="hr"></div><div class="line total"><span>${esc(L.total)}</span><span class="amt">${esc(money(data.total))}</span></div>`)
   }
   rows.push('<div class="hrx"></div>')
@@ -592,13 +617,14 @@ export function renderTicketHtml(data: ReceiptData): string {
 body { width: 80mm; margin: 0 auto; padding: 4mm; font: 13px/1.35 'Menlo','Consolas',monospace; color: #000; }
 .c { text-align: center; }
 .team { font-size: 15px; }
-.client { font-weight: 700; font-size: 24px; text-transform: uppercase; margin: 4px 0 0; }
-.ordernum { font-weight: 700; font-size: 17px; margin: 0 0 4px; }
+.client { font-weight: 700; font-size: 24px; text-transform: uppercase; margin: 0; }
+.ordernum { font-weight: 700; font-size: 13px; margin: 0; }
 .staff { text-align: center; font-weight: 700; margin: 4px 0; padding: 2px 0; background: #000; color: #fff; }
 .hr { border-top: 1px solid #000; margin: 6px 0; }
 .hrx { border-top: 3px double #000; margin: 6px 0; }
 .items { list-style: none; margin: 0; padding: 0; }
-.items li { margin-bottom: 6px; }
+.items li { margin-bottom: 2px; }
+.items li.has-detail { margin-top: 6px; margin-bottom: 6px; }
 .line { display: flex; justify-content: space-between; gap: 8px; }
 .line .amt { white-space: nowrap; }
 .item { font-weight: 700; }
