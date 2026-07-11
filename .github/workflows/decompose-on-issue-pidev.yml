@@ -64,6 +64,12 @@ on:
         required: false
         default: "claude-sonnet-5"
         type: string
+      provider:
+        description: "pi provider. anthropic (default) = funded PI_PROVIDER_KEY; zai = GLM Coding Plan via the runner box's pi auth store (#1421, self-hosted runner only). Default stays anthropic until the #1421 eval passes."
+        required: false
+        default: "anthropic"
+        type: choice
+        options: ["anthropic", "zai"]
   # PROMOTED past dispatch-only (#1017): a human applying the `delegate-pi` label starts a pi
   # run. We fire on EVERY labeled event but the job `if` gates to the exact `delegate-pi` label,
   # so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
@@ -161,6 +167,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           PI_MODEL: ${{ inputs.model || 'claude-sonnet-5' }}
+          PI_PROVIDER: ${{ inputs.provider || 'anthropic' }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
         run: |
           set -uo pipefail
@@ -193,7 +200,7 @@ jobs:
           # runs `true` as its own pipeline, clobbering PIPESTATUS[0] to 0 and masking the
           # failure as success. Verified empirically, #1299.)
           set +e
-          pi --print --provider anthropic --model "$PI_MODEL" --skill .claude/skills \
+          pi --print --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
