@@ -26,27 +26,12 @@
           @click.stop
         />
       </div>
-      <!-- UButton, not a raw button, so themes reach it (#1410); the class
-           list keeps the slide-out positioning + reveal behavior. -->
-      <UButton
-        v-if="editable"
-        color="neutral"
-        variant="ghost"
-        icon="i-lucide-pencil"
-        square
-        class="absolute right-0 top-0 bottom-0 z-10 justify-center rounded-none px-2.5
-               bg-elevated/95 hover:bg-elevated text-muted hover:text-highlighted
-               transition-all duration-200 ease-out translate-x-full group-hover/card:translate-x-0
-               pointer-coarse:translate-x-0"
-        :aria-label="t('common.edit')"
-        @click.stop="emit('edit', product.id)"
-      />
-
-      <!-- Hover pushes the content inward so the slide-out panels never cover
-           the title or price. -->
+      <!-- Hover pushes the content inward so the reorder grip never covers the
+           title. In edit mode the trailing action itself becomes a persistent
+           pencil (below), so there's no right-edge slide-out to make room for. -->
       <div
         class="transition-[padding] duration-200 ease-out"
-        :class="editable ? 'group-hover/card:ps-7 group-hover/card:pe-9 pointer-coarse:ps-7 pointer-coarse:pe-9' : ''"
+        :class="editable ? 'group-hover/card:ps-7 pointer-coarse:ps-7' : ''"
       >
       <SalesClientOrderLineItem
         :title="product.title"
@@ -64,8 +49,22 @@
           </UBadge>
           <!-- md buttons: the whole card is tappable, but these are the visible
                affordances — keep them comfortably thumb-sized for the POS. -->
+          <!-- Edit mode: the trailing action is EDIT, never add-to-cart — a
+               pencil makes clear that tapping edits the product, and the cart
+               path is disabled while editing. -->
           <UButton
-            v-if="isExpandable(product)"
+            v-if="editable"
+            variant="ghost"
+            color="neutral"
+            size="md"
+            square
+            icon="i-lucide-pencil"
+            class="group-hover/card:bg-accented/50 hover:bg-accented"
+            :aria-label="t('common.edit')"
+            @click.stop="emit('edit', product.id)"
+          />
+          <UButton
+            v-else-if="isExpandable(product)"
             variant="ghost"
             color="neutral"
             size="md"
@@ -351,10 +350,11 @@ function confirmProduct(product: SalesProduct) {
 }
 
 function handleProductClick(product: SalesProduct) {
-  // Inactive products are only visible in the editable POS — clicking one
-  // opens its edit form (to reactivate it) instead of the cart flow.
-  if (product.isActive === false) {
-    if (props.editable) emit('edit', product.id)
+  // In edit mode the list is an editing surface, not the cart — clicking any
+  // product (active or inactive) opens its edit form. Adding to cart is
+  // deliberately impossible while editing.
+  if (props.editable) {
+    emit('edit', product.id)
     return
   }
   if (isExpandable(product)) {
