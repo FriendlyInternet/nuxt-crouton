@@ -363,4 +363,97 @@ test.describe(`fixture "${FIXTURE}" sales/printing`, () => {
       await new Promise<void>(r => printer.close(() => r()))
     }
   })
+
+  // ── TIER 4 (device self-pairing, #1366) ───────────────────────────────────
+  // The inverse-pairing flow: an unclaimed device's poll answers 428 with a
+  // server-rendered pairing ticket; claiming it in the app makes the SAME poll
+  // serve the team's router-spooler jobs; a foreign device gets nothing; a
+  // wrong code is a 401; revoking returns the device to unclaimed.
+  test('tier 4: router self-pairing — unclaimed ticket, claim, jobs, foreign device, revoke', async ({ page, baseURL }) => {
+    test.setTimeout(FIRST_HIT + 60000)
+    const base = baseURL || 'http://localhost:3000'
+
+    const DEVICE = { id: 'rut-e2e-01', code: '824241' }
+    const deviceHeaders = (code = DEVICE.code) => ({ 'x-device-id': DEVICE.id, 'x-device-code': code })
+
+    const devicePoll = (headers: Record<string, string>) =>
+      page.request.get(`${base}/api/print-server/jobs?mark_as_printing=false`, { headers })
+
+    let ctx: Awaited<ReturnType<typeof setup>> | undefined
+    try {
+      ctx = await setup(page, base, 65000)
+
+      // Make sure a previous run's claim doesn't linger (idempotent reruns).
+      await page.request.delete(
+        `${base}/api/crouton-sales/teams/${ctx.teamId}/print-devices/${DEVICE.id}`,
+        { headers: authHeaders(base) }
+      ).catch(() => {})
+
+      // 1. Unclaimed: 428 + a server-rendered base64 pairing ticket.
+      const unclaimed = await devicePoll(deviceHeaders())
+      expect(unclaimed.status(), 'unclaimed poll answers 428').toBe(428)
+      const pairing = await unclaimed.json()
+      expect(pairing.status).toBe('unclaimed')
+      expect(typeof pairing.ticket).toBe('string')
+      // The ticket is real ESC/POS carrying the device id + code (printable
+      // bytes survive a base64 roundtrip).
+      const ticketBytes = Buffer.from(pairing.ticket, 'base64').toString('latin1')
+      expect(ticketBytes).toContain(DEVICE.id)
+      expect(ticketBytes).toContain(DEVICE.code)
+
+      // 2. Claim it for the team (the app half of the printed ticket).
+      const claim = await page.request.post(`${base}/api/crouton-sales/teams/${ctx.teamId}/print-devices`, {
+        headers: authHeaders(base),
+        data: { deviceId: DEVICE.id, code: DEVICE.code }
+      })
+      expect(claim.ok(), `claim failed: ${claim.status()} ${await claim.text()}`).toBeTruthy()
+
+      // 3. Route the event to the router and order: the device poll serves the
+      //    job in the LEGACY row shape (bare array, no eventId).
+      await setTransport(page, base, ctx, 'router-spooler')
+      await placeOrder(page, base, ctx)
+
+      const claimed = await devicePoll(deviceHeaders())
+      expect(claimed.status(), 'claimed poll answers 200').toBe(200)
+      const jobs = await claimed.json()
+      expect(Array.isArray(jobs), 'claimed poll returns the bare jobs array').toBeTruthy()
+      expect(jobs.length, 'the team\'s router-spooler job is served').toBeGreaterThan(0)
+      expect(jobs[0]).not.toHaveProperty('eventId')
+      expect(jobs[0].printData, 'job carries base64 printData').toBeTruthy()
+
+      // 4. Flip to local-drainer: the device poll goes empty — per-event
+      //    routing (#1324) is what makes team-wide serving leak-proof.
+      await setTransport(page, base, ctx, 'local-drainer')
+      const gated = await devicePoll(deviceHeaders())
+      expect(gated.status()).toBe(200)
+      expect(await gated.json(), 'no jobs once the event routes to the drainer').toHaveLength(0)
+
+      // 5. A foreign (unclaimed) device id gets a pairing ticket, never jobs.
+      const foreign = await page.request.get(`${base}/api/print-server/jobs`, {
+        headers: { 'x-device-id': 'rut-foreign-9', 'x-device-code': '000000' }
+      })
+      expect(foreign.status(), 'foreign device stays unclaimed').toBe(428)
+
+      // 6. A wrong code on a CLAIMED device is a 401 (counted toward lockout).
+      const wrong = await devicePoll(deviceHeaders('999999'))
+      expect(wrong.status(), 'wrong code is rejected').toBe(401)
+
+      // 7. Revoke: the device drops back to unclaimed (prints a fresh ticket).
+      const revoke = await page.request.delete(
+        `${base}/api/crouton-sales/teams/${ctx.teamId}/print-devices/${DEVICE.id}`,
+        { headers: authHeaders(base) }
+      )
+      expect(revoke.ok(), `revoke failed: ${revoke.status()}`).toBeTruthy()
+      const afterRevoke = await devicePoll(deviceHeaders())
+      expect(afterRevoke.status(), 'revoked device is unclaimed again').toBe(428)
+    } finally {
+      if (ctx) {
+        await page.request.delete(
+          `${base}/api/crouton-sales/teams/${ctx.teamId}/print-devices/${DEVICE.id}`,
+          { headers: authHeaders(base) }
+        ).catch(() => {})
+        await setTransport(page, base, ctx, 'local-drainer').catch(() => {})
+      }
+    }
+  })
 })

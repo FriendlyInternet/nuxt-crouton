@@ -162,6 +162,9 @@ const verifyDotClass = computed(() => {
           :copy-label="copyLabel"
           :copied-label="copiedLabel"
         />
+        <!-- Domain extras under the checklist (#1366: the sales embed mounts
+             its router-pairing claim form here for the router flow). -->
+        <slot name="setup-extra" :transport="selected" />
       </template>
     </UCollapsible>
 

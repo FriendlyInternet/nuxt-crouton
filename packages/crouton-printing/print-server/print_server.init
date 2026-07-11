@@ -1,11 +1,11 @@
 #!/bin/sh /etc/rc.common
 
-# procd boot service for the crouton-sales print spooler on Teltonika RutOS.
+# procd boot service for the crouton print spooler on Teltonika RutOS.
 #
 # Install:
 #   cp teltonika-simple-spooler-fast.sh /root/
 #   cp print_server.init /etc/init.d/print_server
-#   # edit the three env values below to match your deployment, then:
+#   # edit API_URL below to point at your app, then:
 #   chmod +x /etc/init.d/print_server
 #   /etc/init.d/print_server enable     # start on boot
 #   /etc/init.d/print_server start
@@ -13,12 +13,19 @@
 # Manage: /etc/init.d/print_server {start|stop|restart}
 # Logs:   logread -e print_server   (or `logread -f` for live)
 #
+# Self-pairing (#1366): no per-event EVENT_ID and no shared API_KEY anymore.
+# On first start the spooler generates a persistent identity
+# (/etc/print_server_device) and PRINTS a pairing ticket — type its Router-ID
+# + code into the app (event settings → Print flow → Setup → "Koppel router")
+# and the router serves that team's events from then on. New event = nothing
+# to do here.
+#
 # IMPORTANT:
-# - API_KEY must equal the app's NUXT_CROUTON_SALES_PRINT_API_KEY secret.
-# - EVENT_ID is per-event: change it and `restart` for each new event.
 # - `respawn` auto-restarts the spooler if it ever exits.
-# - Optional env: STATUS_CHECK=0 disables the DLE EOT print confirmation
-#   (legacy fire-and-forget); DRAIN_SECS tunes the post-send socket hold.
+# - Optional env: PRINTER_IP (printer for the pairing/diagnostic tickets,
+#   default 192.168.1.72); STATUS_CHECK=0 disables the DLE EOT print
+#   confirmation (legacy fire-and-forget); DRAIN_SECS tunes the post-send
+#   socket hold; TICKET_EVERY tunes the pairing-ticket reprint throttle.
 
 START=99
 STOP=10
@@ -29,9 +36,8 @@ start_service() {
     procd_open_instance
     procd_set_param command /bin/sh /root/teltonika-simple-spooler-fast.sh
     procd_set_param env \
-        API_URL=https://your-app.pages.dev \
-        EVENT_ID=__EVENT_ID__ \
-        API_KEY=__PRINT_API_KEY__
+        API_URL=https://your-app.example \
+        PRINTER_IP=192.168.1.72
     procd_set_param respawn
     procd_set_param stderr 1
     procd_set_param stdout 1

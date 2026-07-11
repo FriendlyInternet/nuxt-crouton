@@ -60,11 +60,27 @@ scp teltonika-simple-spooler-fast.sh root@<router-ip>:/root/
 # 2. copy + configure the boot service
 scp print_server.init root@<router-ip>:/etc/init.d/print_server
 ssh root@<router-ip>
-vi /etc/init.d/print_server     # set API_URL, EVENT_ID, API_KEY (see below)
+vi /etc/init.d/print_server     # set API_URL (+ PRINTER_IP if not .72)
 chmod +x /etc/init.d/print_server
 /etc/init.d/print_server enable
 /etc/init.d/print_server start
 ```
+
+**That's the last SSH.** On first start the spooler generates a persistent
+identity (`/etc/print_server_device`) and **prints a pairing ticket** on the
+`PRINTER_IP` printer (#1366). Type the ticket's Router-ID + code into the app
+(event settings → Print flow → **Setup** → *Koppel router*) — the router then
+serves every event of that team whose Print flow is **Via the venue router**
+(#1324). A new event needs nothing on the router; which events print is
+decided entirely by the in-app Print flow picker. Revoking the router in the
+app makes it print a fresh pairing ticket.
+
+While the app is **unreachable** (no uplink, wrong `API_URL`), the script
+prints a minimal English *diagnostic ticket* from its own strings instead —
+if that sheet prints, the printer leg works and the problem is the uplink; if
+nothing prints, look at the printer/power. Both tickets are throttled: once
+per service start, then at most ~hourly (poll-count based — the RUT clock
+freezes without NTP, the poll cadence doesn't).
 
 If you can't `scp` (no password handy), `cat > /root/teltonika-simple-spooler-fast.sh`
 and paste — **but** beware terminals that add leading spaces on paste: a shebang
@@ -88,21 +104,27 @@ Set in `/etc/init.d/print_server` under `procd_set_param env`:
 
 | Var | Value |
 |-----|-------|
-| `API_URL` | Base URL of the hosted app, e.g. `https://fanfare.pages.dev` |
-| `API_KEY` | **Must match** the app secret `NUXT_CROUTON_SALES_PRINT_API_KEY` |
-| `EVENT_ID` | The current sales event's id (per-event — see caveat) |
+| `API_URL` | Base URL of the hosted app, e.g. `https://kassa.friendlyinter.net` |
+| `PRINTER_IP` | Optional, default `192.168.1.72`. The printer used for the **pairing/diagnostic tickets only** — job tickets carry their own printer IP |
+| `DEVICE_FILE` | Optional, default `/etc/print_server_device`. Where the persistent device id + pairing code live (delete it to mint a new identity) |
+| `TICKET_EVERY` | Optional, default `1800` polls (~hourly). Pairing/diagnostic reprint throttle |
 | `STATUS_CHECK` | Optional, default `1`. Set `0` to skip the DLE EOT confirmation and mark jobs complete on TCP send alone (only for printers that don't answer DLE EOT — the TM-m30 does) |
 | `DRAIN_SECS` | Optional, default `2`. Seconds the socket is held open after sending so the printer can drain its buffer and reply |
 
-> The API key is a secret and is **not** stored in this repo. Set it on the
-> deployment with `wrangler pages secret put NUXT_CROUTON_SALES_PRINT_API_KEY`
-> and use the same value here.
+The device authenticates with its own printed code (`x-device-id` +
+`x-device-code` headers against `GET /api/print-server/jobs`) — there is no
+shared `API_KEY` and no `EVENT_ID` in this flow. The code is a per-device
+credential the app can revoke (crouton-auth scoped-access grant, with
+brute-force lockout).
 
-### ⚠️ EVENT_ID is per-event
+### Legacy: EVENT_ID + API_KEY (pre-#1366 script)
 
-The spooler polls **one** event. For each new event, update `EVENT_ID` and
-`/etc/init.d/print_server restart`. (A future improvement could poll all active
-events instead.)
+A router still running the old script polls
+`GET /api/print-server/events/$EVENT_ID/jobs` with the shared `x-api-key`
+(app secret `NUXT_CROUTON_SALES_PRINT_API_KEY`) and needs `EVENT_ID` updated +
+`/etc/init.d/print_server restart` **per event**. That endpoint keeps working
+during the migration — flash the new script whenever the router is physically
+reachable, pair it once, and never SSH per event again.
 
 ### ⚠️ The event's print flow must allow the spooler (#1324)
 
