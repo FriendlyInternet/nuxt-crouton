@@ -12,6 +12,11 @@
 //     variant-less usage resolves to, e.g. <UButton> → variant "ko"
 // Explicitly-set variants are the author's choice and are not remapped; use
 // useThemeSwitcher().getVariant('outline') to follow the active theme.
+//
+// Components WITHOUT a `variant` dimension (USwitch, UModal, USlideover,
+// UToast, UPagination) are themed AMBIENTLY instead — theme-scoped CSS in each
+// theme's main.css covering both activation paths ([data-theme="x"] from app
+// presets, .theme-x body class from useThemeSwitcher). See #1307/#1393.
 
 import type { ThemeName } from '../composables/useThemeSwitcher'
 
@@ -25,11 +30,38 @@ export interface ThemeUIConfig {
   card?: { defaultVariants?: { variant?: string } }
   badge?: { defaultVariants?: { variant?: string } }
   select?: { defaultVariants?: { variant?: string } }
+  selectMenu?: { defaultVariants?: { variant?: string } }
   textarea?: { defaultVariants?: { variant?: string } }
+  tabs?: { defaultVariants?: { variant?: string } }
+  checkbox?: { defaultVariants?: { variant?: string } }
+  radioGroup?: { defaultVariants?: { variant?: string } }
+  alert?: { defaultVariants?: { variant?: string } }
 }
 
 // Every config sets EVERY key the swap owns, so switching A → B never leaves
 // A's value behind (deepAssign only overwrites what the new object names).
+
+// Builds the common shape: every component key set to the SAME named variant.
+// Nuxt UI's own defaults (the reset values) are in defaultConfig below.
+const namedVariantConfig = (
+  variant: string,
+  colors: { primary: string, neutral: string },
+  overrides: Partial<ThemeUIConfig> = {}
+): ThemeUIConfig => ({
+  colors,
+  button: { defaultVariants: { variant } },
+  input: { defaultVariants: { variant } },
+  card: { defaultVariants: { variant } },
+  badge: { defaultVariants: { variant } },
+  select: { defaultVariants: { variant } },
+  selectMenu: { defaultVariants: { variant } },
+  textarea: { defaultVariants: { variant } },
+  tabs: { defaultVariants: { variant } },
+  checkbox: { defaultVariants: { variant } },
+  radioGroup: { defaultVariants: { variant } },
+  alert: { defaultVariants: { variant } },
+  ...overrides
+})
 
 // Default theme — Nuxt UI's own defaults, restated as the reset values.
 const defaultConfig: ThemeUIConfig = {
@@ -42,167 +74,68 @@ const defaultConfig: ThemeUIConfig = {
   card: { defaultVariants: { variant: 'outline' } },
   badge: { defaultVariants: { variant: 'solid' } },
   select: { defaultVariants: { variant: 'outline' } },
-  textarea: { defaultVariants: { variant: 'outline' } }
+  selectMenu: { defaultVariants: { variant: 'outline' } },
+  textarea: { defaultVariants: { variant: 'outline' } },
+  tabs: { defaultVariants: { variant: 'pill' } },
+  checkbox: { defaultVariants: { variant: 'list' } },
+  radioGroup: { defaultVariants: { variant: 'list' } },
+  alert: { defaultVariants: { variant: 'solid' } }
 }
 
 // KO — named variants registered by ko/app.config.ts (variant="ko" etc.)
-const koConfig: ThemeUIConfig = {
-  colors: {
-    primary: 'orange',
-    neutral: 'stone'
-  },
-  button: { defaultVariants: { variant: 'ko' } },
-  input: { defaultVariants: { variant: 'ko' } },
-  card: { defaultVariants: { variant: 'ko' } },
-  badge: { defaultVariants: { variant: 'solid' } },
-  select: { defaultVariants: { variant: 'outline' } },
-  textarea: { defaultVariants: { variant: 'outline' } }
-}
+// Badge keeps Nuxt UI's solid: the semantic palette does the work (no ko badge
+// variant registered in the layer).
+const koConfig = namedVariantConfig('ko', { primary: 'orange', neutral: 'stone' }, {
+  badge: { defaultVariants: { variant: 'solid' } }
+})
 
-// Minimal — named variants registered by minimal/app.config.ts
-const minimalConfig: ThemeUIConfig = {
-  colors: {
-    primary: 'zinc',
-    neutral: 'zinc'
-  },
-  button: { defaultVariants: { variant: 'minimal' } },
-  input: { defaultVariants: { variant: 'minimal' } },
-  card: { defaultVariants: { variant: 'minimal' } },
-  badge: { defaultVariants: { variant: 'solid' } },
-  select: { defaultVariants: { variant: 'outline' } },
-  textarea: { defaultVariants: { variant: 'outline' } }
-}
+// Minimal — named variants registered by minimal/app.config.ts (badge: same
+// deliberate pass as ko).
+const minimalConfig = namedVariantConfig('minimal', { primary: 'zinc', neutral: 'zinc' }, {
+  badge: { defaultVariants: { variant: 'solid' } }
+})
 
 // KR-11 — named variants registered by kr11/app.config.ts
-const kr11Config: ThemeUIConfig = {
-  colors: {
-    primary: 'emerald',
-    neutral: 'stone'
-  },
-  button: { defaultVariants: { variant: 'kr11' } },
-  input: { defaultVariants: { variant: 'kr11' } },
-  card: { defaultVariants: { variant: 'kr11' } },
-  badge: { defaultVariants: { variant: 'kr11' } },
-  select: { defaultVariants: { variant: 'outline' } },
-  textarea: { defaultVariants: { variant: 'outline' } }
-}
+const kr11Config = namedVariantConfig('kr11', { primary: 'emerald', neutral: 'stone' })
 
-// Black & White — named bw-* variants registered by blackandwhite/app.config.ts
-// (the layer also sets defaultVariants itself, so single-theme bw apps need no
-// runtime swap; these values are for switching TO bw in a multi-theme app).
+// Black & White — a DELIBERATE pass on named chrome (#1393): bw's design IS
+// Nuxt UI's standard variants under a strict neutral/neutral palette; only
+// buttons carry named bw-* variants. Everything else stays on the standard
+// variants the layer's own defaultVariants point at.
 const blackandwhiteConfig: ThemeUIConfig = {
-  colors: {
-    primary: 'neutral',
-    neutral: 'neutral'
-  },
+  colors: { primary: 'neutral', neutral: 'neutral' },
   button: { defaultVariants: { variant: 'bw-solid' } },
   input: { defaultVariants: { variant: 'subtle' } },
   card: { defaultVariants: { variant: 'outline' } },
   badge: { defaultVariants: { variant: 'solid' } },
   select: { defaultVariants: { variant: 'subtle' } },
-  textarea: { defaultVariants: { variant: 'subtle' } }
+  selectMenu: { defaultVariants: { variant: 'subtle' } },
+  textarea: { defaultVariants: { variant: 'subtle' } },
+  tabs: { defaultVariants: { variant: 'pill' } },
+  checkbox: { defaultVariants: { variant: 'list' } },
+  radioGroup: { defaultVariants: { variant: 'list' } },
+  alert: { defaultVariants: { variant: 'subtle' } }
 }
 
 // Brutalist — named variants registered by brutalist/app.config.ts
-const brutalistConfig: ThemeUIConfig = {
-  colors: {
-    primary: 'yellow',
-    neutral: 'neutral'
-  },
-  button: { defaultVariants: { variant: 'brutalist' } },
-  input: { defaultVariants: { variant: 'brutalist' } },
-  card: { defaultVariants: { variant: 'brutalist' } },
-  badge: { defaultVariants: { variant: 'brutalist' } },
-  select: { defaultVariants: { variant: 'brutalist' } },
-  textarea: { defaultVariants: { variant: 'brutalist' } }
-}
+const brutalistConfig = namedVariantConfig('brutalist', { primary: 'yellow', neutral: 'neutral' })
 
 // MTV — named variants registered by mtv/app.config.ts
-const mtvConfig: ThemeUIConfig = {
-  colors: {
-    primary: 'fuchsia',
-    neutral: 'zinc'
-  },
-  button: { defaultVariants: { variant: 'mtv' } },
-  input: { defaultVariants: { variant: 'mtv' } },
-  card: { defaultVariants: { variant: 'mtv' } },
-  badge: { defaultVariants: { variant: 'mtv' } },
-  select: { defaultVariants: { variant: 'mtv' } },
-  textarea: { defaultVariants: { variant: 'mtv' } }
-}
+const mtvConfig = namedVariantConfig('mtv', { primary: 'fuchsia', neutral: 'zinc' })
 
 // Terminal — named variants registered by terminal/app.config.ts
-const terminalConfig: ThemeUIConfig = {
-  colors: {
-    primary: 'green',
-    neutral: 'zinc'
-  },
-  button: { defaultVariants: { variant: 'terminal' } },
-  input: { defaultVariants: { variant: 'terminal' } },
-  card: { defaultVariants: { variant: 'terminal' } },
-  badge: { defaultVariants: { variant: 'terminal' } },
-  select: { defaultVariants: { variant: 'terminal' } },
-  textarea: { defaultVariants: { variant: 'terminal' } }
-}
+const terminalConfig = namedVariantConfig('terminal', { primary: 'green', neutral: 'zinc' })
 
 // Braun — named variants registered by braun/app.config.ts
-const braunConfig: ThemeUIConfig = {
-  colors: {
-    primary: 'orange',
-    neutral: 'stone'
-  },
-  button: { defaultVariants: { variant: 'braun' } },
-  input: { defaultVariants: { variant: 'braun' } },
-  card: { defaultVariants: { variant: 'braun' } },
-  badge: { defaultVariants: { variant: 'braun' } },
-  select: { defaultVariants: { variant: 'braun' } },
-  textarea: { defaultVariants: { variant: 'braun' } }
-}
+const braunConfig = namedVariantConfig('braun', { primary: 'orange', neutral: 'stone' })
 
 // Game Boy — named variants registered by gameboy/app.config.ts
-const gameboyConfig: ThemeUIConfig = {
-  colors: {
-    primary: 'green',
-    neutral: 'stone'
-  },
-  button: { defaultVariants: { variant: 'gameboy' } },
-  input: { defaultVariants: { variant: 'gameboy' } },
-  card: { defaultVariants: { variant: 'gameboy' } },
-  badge: { defaultVariants: { variant: 'gameboy' } },
-  select: { defaultVariants: { variant: 'gameboy' } },
-  textarea: { defaultVariants: { variant: 'gameboy' } }
-}
+const gameboyConfig = namedVariantConfig('gameboy', { primary: 'green', neutral: 'stone' })
 
 // Riso / E-ink / Blueprint — named variants registered by their layers (#1311)
-const risoConfig: ThemeUIConfig = {
-  colors: { primary: 'pink', neutral: 'stone' },
-  button: { defaultVariants: { variant: 'riso' } },
-  input: { defaultVariants: { variant: 'riso' } },
-  card: { defaultVariants: { variant: 'riso' } },
-  badge: { defaultVariants: { variant: 'riso' } },
-  select: { defaultVariants: { variant: 'riso' } },
-  textarea: { defaultVariants: { variant: 'riso' } }
-}
-
-const einkConfig: ThemeUIConfig = {
-  colors: { primary: 'neutral', neutral: 'neutral' },
-  button: { defaultVariants: { variant: 'eink' } },
-  input: { defaultVariants: { variant: 'eink' } },
-  card: { defaultVariants: { variant: 'eink' } },
-  badge: { defaultVariants: { variant: 'eink' } },
-  select: { defaultVariants: { variant: 'eink' } },
-  textarea: { defaultVariants: { variant: 'eink' } }
-}
-
-const blueprintConfig: ThemeUIConfig = {
-  colors: { primary: 'sky', neutral: 'slate' },
-  button: { defaultVariants: { variant: 'blueprint' } },
-  input: { defaultVariants: { variant: 'blueprint' } },
-  card: { defaultVariants: { variant: 'blueprint' } },
-  badge: { defaultVariants: { variant: 'blueprint' } },
-  select: { defaultVariants: { variant: 'blueprint' } },
-  textarea: { defaultVariants: { variant: 'blueprint' } }
-}
+const risoConfig = namedVariantConfig('riso', { primary: 'pink', neutral: 'stone' })
+const einkConfig = namedVariantConfig('eink', { primary: 'neutral', neutral: 'neutral' })
+const blueprintConfig = namedVariantConfig('blueprint', { primary: 'sky', neutral: 'slate' })
 
 // Export all theme configs
 export const THEME_UI_CONFIGS: Record<ThemeName, ThemeUIConfig> = {

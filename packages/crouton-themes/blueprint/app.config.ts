@@ -136,6 +136,90 @@ export default defineAppConfig({
           blueprint: 'bp-badge'
         }
       }
+    },
+
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          blueprint: "bp-input-base"
+        }
+      }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (the pill/link positioning compounds never fire for a named
+    // variant, and instant state changes fit the theme anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          blueprint: {
+            list: "bp-tabs-list",
+            trigger: "bp-tabs-trigger",
+            indicator: "bp-tabs-indicator"
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          blueprint: {
+            base: "bp-check-box",
+            indicator: "bp-check-indicator"
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          blueprint: {
+            base: "bp-radio-box",
+            indicator: "bp-radio-indicator"
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          blueprint: {
+            root: "bp-alert",
+            title: "bp-alert-title"
+          }
+        }
+      },
+      compoundVariants: [
+        { color: "primary", variant: "blueprint", class: { root: "bp-alert--primary" } },
+        { color: "warning", variant: "blueprint", class: { root: "bp-alert--warning" } },
+        { color: "error", variant: "blueprint", class: { root: "bp-alert--error" } },
+        { color: "neutral", variant: "blueprint", class: { root: "bp-alert--neutral" } }
+      ]
     }
   }
 })

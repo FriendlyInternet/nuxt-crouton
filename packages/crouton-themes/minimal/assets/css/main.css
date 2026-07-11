@@ -434,3 +434,200 @@
 .minimal-link.minimal-link--error {
   color: #dc2626 !important;
 }
+
+/* ============================================
+   TABS (#1393) — an underline, nothing else
+   ============================================ */
+
+.minimal-tabs-list {
+  background-color: transparent;
+  border-bottom: var(--minimal-border-width-thick) solid var(--minimal-black);
+  gap: 1rem;
+  padding: 0;
+  border-radius: 0;
+}
+
+.minimal-tabs-trigger {
+  font-family: var(--minimal-font);
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--minimal-gray-500);
+  border: none;
+  border-radius: 0;
+  padding: 0.5rem 0.25rem;
+  transition: color var(--minimal-transition);
+}
+
+.minimal-tabs-trigger:hover {
+  color: var(--minimal-black);
+}
+
+.minimal-tabs-trigger[data-state="active"] {
+  color: var(--minimal-black);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--minimal-black);
+}
+
+.minimal-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — a square and a circle
+   ============================================ */
+
+.minimal-check-box,
+.minimal-radio-box {
+  background-color: var(--minimal-white);
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.minimal-radio-box {
+  border-radius: 9999px;
+}
+
+.minimal-check-indicator {
+  background-color: var(--minimal-black);
+  color: var(--minimal-white);
+}
+
+.minimal-radio-indicator {
+  background-color: var(--minimal-white);
+  border-radius: 9999px;
+}
+
+.minimal-radio-indicator::after {
+  background-color: var(--minimal-black);
+  border-radius: 9999px;
+  width: 50%;
+  height: 50%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a framed note; errors invert
+   ============================================ */
+
+.minimal-alert {
+  font-family: var(--minimal-font);
+  background-color: var(--minimal-white);
+  color: var(--minimal-black);
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.minimal-alert-title {
+  font-weight: 600;
+}
+
+.minimal-alert--primary {
+  background-color: var(--minimal-white);
+}
+
+.minimal-alert--warning {
+  border-style: dashed;
+}
+
+.minimal-alert--error {
+  background-color: var(--minimal-black);
+  color: var(--minimal-white);
+}
+
+.minimal-alert--neutral {
+  border-width: var(--minimal-border-width);
+  border-color: var(--minimal-gray-300);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — switch, modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths)
+   ============================================ */
+
+[data-theme="minimal"] button[role="switch"],
+.theme-minimal button[role="switch"] {
+  border-radius: 9999px;
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  background-color: var(--minimal-white);
+  box-shadow: none;
+  transition: background-color var(--minimal-transition);
+}
+
+[data-theme="minimal"] button[role="switch"][data-state="checked"],
+.theme-minimal button[role="switch"][data-state="checked"] {
+  background-color: var(--minimal-black);
+}
+
+[data-theme="minimal"] button[role="switch"] > span,
+.theme-minimal button[role="switch"] > span {
+  background-color: var(--minimal-black);
+  box-shadow: none;
+}
+
+[data-theme="minimal"] button[role="switch"][data-state="checked"] > span,
+.theme-minimal button[role="switch"][data-state="checked"] > span {
+  background-color: var(--minimal-white);
+}
+
+[data-theme="minimal"] [role="dialog"][data-slot="content"],
+.theme-minimal [role="dialog"][data-slot="content"] {
+  background-color: var(--minimal-white);
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-theme="minimal"] [role="dialog"] [data-slot="title"],
+.theme-minimal [role="dialog"] [data-slot="title"] {
+  font-family: var(--minimal-font);
+  color: var(--minimal-black);
+  font-weight: 600;
+}
+
+[data-theme="minimal"] [data-slot="overlay"],
+.theme-minimal [data-slot="overlay"] {
+  background-color: rgb(0 0 0 / 0.35);
+  backdrop-filter: none;
+}
+
+[data-theme="minimal"] li[data-slot="base"],
+.theme-minimal li[data-slot="base"] {
+  background-color: var(--minimal-white);
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-theme="minimal"] li[data-slot="base"] [data-slot="title"],
+.theme-minimal li[data-slot="base"] [data-slot="title"] {
+  font-family: var(--minimal-font);
+  color: var(--minimal-black);
+  font-weight: 600;
+}
+
+[data-theme="minimal"] nav[data-slot="root"] button,
+.theme-minimal nav[data-slot="root"] button {
+  font-family: var(--minimal-font);
+  background-color: var(--minimal-white);
+  color: var(--minimal-black);
+  border: var(--minimal-border-width) solid var(--minimal-gray-300);
+  border-radius: 0;
+  box-shadow: none;
+  transition: border-color var(--minimal-transition);
+}
+
+[data-theme="minimal"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-minimal nav[data-slot="root"] button:hover:not(:disabled) {
+  border-color: var(--minimal-black);
+}
+
+[data-theme="minimal"] nav[data-slot="root"] button[data-selected],
+.theme-minimal nav[data-slot="root"] button[data-selected] {
+  background-color: var(--minimal-black);
+  color: var(--minimal-white);
+  border-color: var(--minimal-black);
+}

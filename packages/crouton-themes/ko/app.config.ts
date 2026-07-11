@@ -145,6 +145,118 @@ export default defineAppConfig({
           }
         }
       }
+    },
+
+    // #1333-deferred coverage, landed with #1393: selects + textarea reuse the
+    // ko-input chrome.
+    select: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: "ko-input-base"
+        }
+      }
+    },
+
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: "ko-input-base"
+        }
+      }
+    },
+
+    textarea: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            root: "ko-input",
+            base: "ko-input-base"
+          }
+        }
+      }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (the pill/link positioning compounds never fire for a named
+    // variant, and instant state changes fit the theme anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            list: "ko-tabs-list",
+            trigger: "ko-tabs-trigger",
+            indicator: "ko-tabs-indicator"
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            base: "ko-check-box",
+            indicator: "ko-check-indicator"
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            base: "ko-radio-box",
+            indicator: "ko-radio-indicator"
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            root: "ko-alert",
+            title: "ko-alert-title"
+          }
+        }
+      },
+      compoundVariants: [
+        { color: "primary", variant: "ko", class: { root: "ko-alert--primary" } },
+        { color: "warning", variant: "ko", class: { root: "ko-alert--warning" } },
+        { color: "error", variant: "ko", class: { root: "ko-alert--error" } },
+        { color: "neutral", variant: "ko", class: { root: "ko-alert--neutral" } }
+      ]
     }
   }
 })

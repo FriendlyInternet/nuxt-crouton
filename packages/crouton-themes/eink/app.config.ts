@@ -136,6 +136,90 @@ export default defineAppConfig({
           eink: 'eink-badge'
         }
       }
+    },
+
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          eink: "eink-input-base"
+        }
+      }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (the pill/link positioning compounds never fire for a named
+    // variant, and instant state changes fit the theme anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          eink: {
+            list: "eink-tabs-list",
+            trigger: "eink-tabs-trigger",
+            indicator: "eink-tabs-indicator"
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          eink: {
+            base: "eink-check-box",
+            indicator: "eink-check-indicator"
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          eink: {
+            base: "eink-radio-box",
+            indicator: "eink-radio-indicator"
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          eink: {
+            root: "eink-alert",
+            title: "eink-alert-title"
+          }
+        }
+      },
+      compoundVariants: [
+        { color: "primary", variant: "eink", class: { root: "eink-alert--primary" } },
+        { color: "warning", variant: "eink", class: { root: "eink-alert--warning" } },
+        { color: "error", variant: "eink", class: { root: "eink-alert--error" } },
+        { color: "neutral", variant: "eink", class: { root: "eink-alert--neutral" } }
+      ]
     }
   }
 })

@@ -143,6 +143,90 @@ export default defineAppConfig({
           braun: 'braun-badge'
         }
       }
+    },
+
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          braun: "braun-input-base"
+        }
+      }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (the pill/link positioning compounds never fire for a named
+    // variant, and instant state changes fit the theme anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          braun: {
+            list: "braun-tabs-list",
+            trigger: "braun-tabs-trigger",
+            indicator: "braun-tabs-indicator"
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          braun: {
+            base: "braun-check-box",
+            indicator: "braun-check-indicator"
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          braun: {
+            base: "braun-radio-box",
+            indicator: "braun-radio-indicator"
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          braun: {
+            root: "braun-alert",
+            title: "braun-alert-title"
+          }
+        }
+      },
+      compoundVariants: [
+        { color: "primary", variant: "braun", class: { root: "braun-alert--primary" } },
+        { color: "warning", variant: "braun", class: { root: "braun-alert--warning" } },
+        { color: "error", variant: "braun", class: { root: "braun-alert--error" } },
+        { color: "neutral", variant: "braun", class: { root: "braun-alert--neutral" } }
+      ]
     }
   }
 })

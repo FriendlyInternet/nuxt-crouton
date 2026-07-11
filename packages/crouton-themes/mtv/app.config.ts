@@ -91,6 +91,17 @@ export default defineAppConfig({
       }
     },
 
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          mtv: 'mtv-input-base'
+        }
+      }
+    },
+
     textarea: {
       slots: {
         root: subtractThemeDefaults,
@@ -144,6 +155,79 @@ export default defineAppConfig({
           mtv: 'mtv-badge'
         }
       }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (states snap like the rest of the theme; the pill/link
+    // positioning compounds never fire for a named variant anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          mtv: {
+            list: 'mtv-tabs-list',
+            trigger: 'mtv-tabs-trigger',
+            indicator: 'mtv-tabs-indicator'
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          mtv: {
+            base: 'mtv-check-box',
+            indicator: 'mtv-check-indicator'
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          mtv: {
+            base: 'mtv-radio-box',
+            indicator: 'mtv-radio-indicator'
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          mtv: {
+            root: 'mtv-alert',
+            title: 'mtv-alert-title'
+          }
+        }
+      },
+      compoundVariants: [
+        { color: 'primary', variant: 'mtv', class: { root: 'mtv-alert--primary' } },
+        { color: 'warning', variant: 'mtv', class: { root: 'mtv-alert--warning' } },
+        { color: 'error', variant: 'mtv', class: { root: 'mtv-alert--error' } },
+        { color: 'neutral', variant: 'mtv', class: { root: 'mtv-alert--neutral' } }
+      ]
     }
   }
 })

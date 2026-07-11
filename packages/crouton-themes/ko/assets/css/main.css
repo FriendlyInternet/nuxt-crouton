@@ -871,3 +871,207 @@ body.theme-ko {
   --ui-border-muted: #aeaba9;
   --ui-border-accented: #545251;
 }
+
+/* ============================================
+   TABS (#1393) — a mode row; the active mode is on the display
+   ============================================ */
+
+.ko-tabs-list {
+  background-color: var(--ko-surface-recess);
+  border-radius: var(--ko-button-radius);
+  gap: 0.25rem;
+  padding: 0.25rem;
+}
+
+.ko-tabs-trigger {
+  font-family: 'ko-tech', monospace;
+  font-size: 0.8rem;
+  background-color: transparent;
+  color: var(--ko-text-muted);
+  border: none;
+  border-radius: calc(var(--ko-button-radius) - 3px);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 0.45rem 0.9rem;
+  transition: color 100ms ease;
+}
+
+.ko-tabs-trigger:hover {
+  color: var(--ko-highlight-light);
+}
+
+.ko-tabs-trigger[data-state="active"] {
+  background-color: var(--ko-surface-panel);
+  color: var(--ko-accent-orange);
+  box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+.ko-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — chassis keys with LED states
+   ============================================ */
+
+.ko-check-box,
+.ko-radio-box {
+  background-color: var(--ko-surface-light);
+  border: 1px solid var(--ko-surface-recess);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 var(--ko-highlight-light), 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.ko-radio-box {
+  border-radius: 9999px;
+}
+
+.ko-check-indicator {
+  background-color: var(--ko-accent-orange);
+  color: var(--ko-surface-panel);
+  border-radius: 3px;
+}
+
+.ko-radio-indicator {
+  background-color: var(--ko-surface-light);
+  border-radius: 9999px;
+}
+
+.ko-radio-indicator::after {
+  background-color: var(--ko-accent-orange);
+  box-shadow: 0 0 4px var(--ko-highlight-orange);
+  border-radius: 9999px;
+  width: 55%;
+  height: 55%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a display readout
+   ============================================ */
+
+.ko-alert {
+  font-family: 'ko-tech', monospace;
+  background-color: var(--ko-surface-panel);
+  color: var(--ko-text-muted);
+  border: 1px solid var(--ko-surface-recess);
+  border-radius: var(--ko-button-radius);
+  box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.ko-alert-title {
+  color: var(--ko-accent-orange);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.ko-alert--primary .ko-alert-title {
+  color: var(--ko-accent-orange);
+}
+
+.ko-alert--warning .ko-alert-title {
+  color: var(--ko-accent-pink);
+}
+
+.ko-alert--error .ko-alert-title {
+  color: var(--ko-accent-red);
+}
+
+.ko-alert--error {
+  border-color: var(--ko-accent-red);
+}
+
+.ko-alert--neutral .ko-alert-title {
+  color: var(--ko-text-light);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination, switch
+   (no variant hook; scoped to both activation paths)
+   ============================================ */
+
+[data-theme="ko"] button[role="switch"],
+.theme-ko button[role="switch"] {
+  border: 1px solid var(--ko-surface-recess);
+  background-color: var(--ko-surface-mid);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: background-color 100ms ease;
+}
+
+[data-theme="ko"] button[role="switch"][data-state="checked"],
+.theme-ko button[role="switch"][data-state="checked"] {
+  background-color: var(--ko-accent-orange);
+}
+
+[data-theme="ko"] button[role="switch"] > span,
+.theme-ko button[role="switch"] > span {
+  background-color: var(--ko-surface-light);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+[data-theme="ko"] [role="dialog"][data-slot="content"],
+.theme-ko [role="dialog"][data-slot="content"] {
+  background-color: var(--ko-surface-light);
+  border: 1px solid var(--ko-surface-recess);
+  border-radius: var(--ko-button-radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), inset 0 1px 0 var(--ko-highlight-light);
+}
+
+[data-theme="ko"] [role="dialog"] [data-slot="title"],
+.theme-ko [role="dialog"] [data-slot="title"] {
+  font-family: 'ko-tech', monospace;
+  color: var(--ko-text-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+[data-theme="ko"] [data-slot="overlay"],
+.theme-ko [data-slot="overlay"] {
+  background-color: rgb(23 23 23 / 0.6);
+}
+
+[data-theme="ko"] li[data-slot="base"],
+.theme-ko li[data-slot="base"] {
+  font-family: 'ko-tech', monospace;
+  background-color: var(--ko-surface-panel);
+  border: 1px solid var(--ko-surface-recess);
+  border-radius: var(--ko-button-radius);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="ko"] li[data-slot="base"] [data-slot="title"],
+.theme-ko li[data-slot="base"] [data-slot="title"] {
+  color: var(--ko-accent-orange);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+[data-theme="ko"] li[data-slot="base"] [data-slot="description"],
+.theme-ko li[data-slot="base"] [data-slot="description"] {
+  color: var(--ko-text-muted);
+}
+
+[data-theme="ko"] nav[data-slot="root"] button,
+.theme-ko nav[data-slot="root"] button {
+  font-family: 'ko-tech', monospace;
+  background-color: var(--ko-surface-light);
+  color: var(--ko-text-dark);
+  border: 1px solid var(--ko-surface-recess);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 var(--ko-highlight-light), 0 1px 2px rgba(0, 0, 0, 0.25);
+  transition: none;
+}
+
+[data-theme="ko"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-ko nav[data-slot="root"] button:hover:not(:disabled) {
+  background-color: var(--ko-highlight-dark);
+}
+
+[data-theme="ko"] nav[data-slot="root"] button[data-selected],
+.theme-ko nav[data-slot="root"] button[data-selected] {
+  background-color: var(--ko-surface-panel);
+  color: var(--ko-accent-orange);
+  box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.4);
+}

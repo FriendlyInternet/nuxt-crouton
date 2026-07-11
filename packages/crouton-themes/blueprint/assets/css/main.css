@@ -290,3 +290,194 @@ body.theme-blueprint {
   --ui-border-muted: #2c567e;
   --ui-border-accented: #dce9f5;
 }
+
+/* ============================================
+   TABS (#1393) — drawing sheet index; active carries the pencil mark
+   ============================================ */
+
+.bp-tabs-list {
+  background-color: transparent;
+  border-bottom: 1px solid var(--bp-line-dim);
+  gap: 0.5rem;
+  padding: 0;
+}
+
+.bp-tabs-trigger {
+  font-family: var(--bp-mono);
+  background-color: transparent;
+  color: var(--bp-line-dim);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+  padding: 0.5rem 0.9rem;
+  transition: color 100ms ease;
+}
+
+.bp-tabs-trigger:hover {
+  color: var(--bp-line);
+}
+
+.bp-tabs-trigger[data-state="active"] {
+  color: var(--bp-blue-deep);
+  background-color: var(--bp-accent);
+  border-color: var(--bp-line);
+}
+
+.bp-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — survey marks on the sheet
+   ============================================ */
+
+.bp-check-box,
+.bp-radio-box {
+  background-color: transparent;
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.bp-radio-box {
+  border-radius: 9999px;
+}
+
+.bp-check-indicator {
+  background-color: var(--bp-accent);
+  color: var(--bp-blue-deep);
+}
+
+.bp-radio-indicator {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+
+.bp-radio-indicator::after {
+  background-color: var(--bp-accent);
+  border-radius: 9999px;
+  width: 55%;
+  height: 55%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a note block on the drawing
+   ============================================ */
+
+.bp-alert {
+  font-family: var(--bp-mono);
+  background-color: var(--bp-blue);
+  color: var(--bp-line);
+  border: 1px solid var(--bp-line);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 4px var(--bp-blue), inset 0 0 0 5px var(--bp-line-dim);
+}
+
+.bp-alert-title {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.bp-alert--primary {
+  border-style: solid;
+}
+
+.bp-alert--warning {
+  border: 1px dashed var(--bp-accent);
+  color: var(--bp-accent);
+  box-shadow: none;
+}
+
+.bp-alert--warning .bp-alert-title {
+  color: var(--bp-accent);
+}
+
+.bp-alert--error {
+  border: 1px dashed var(--bp-accent);
+  color: var(--bp-accent);
+  box-shadow: none;
+}
+
+.bp-alert--error .bp-alert-title {
+  color: var(--bp-accent);
+}
+
+.bp-alert--neutral {
+  border: 1px solid var(--bp-line-dim);
+  box-shadow: none;
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths like the switch)
+   ============================================ */
+
+[data-theme="blueprint"] [role="dialog"][data-slot="content"],
+.theme-blueprint [role="dialog"][data-slot="content"] {
+  background-color: var(--bp-blue);
+  border: 1px solid var(--bp-line);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 4px var(--bp-blue), inset 0 0 0 5px var(--bp-line-dim);
+}
+
+[data-theme="blueprint"] [role="dialog"] [data-slot="title"],
+.theme-blueprint [role="dialog"] [data-slot="title"] {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+[data-theme="blueprint"] [data-slot="overlay"],
+.theme-blueprint [data-slot="overlay"] {
+  background-color: rgb(13 44 77 / 0.7);
+}
+
+[data-theme="blueprint"] li[data-slot="base"],
+.theme-blueprint li[data-slot="base"] {
+  font-family: var(--bp-mono);
+  background-color: var(--bp-blue);
+  border: 1px solid var(--bp-line);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 3px var(--bp-blue), inset 0 0 0 4px var(--bp-line-dim);
+}
+
+[data-theme="blueprint"] li[data-slot="base"] [data-slot="title"],
+.theme-blueprint li[data-slot="base"] [data-slot="title"] {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+[data-theme="blueprint"] nav[data-slot="root"] button,
+.theme-blueprint nav[data-slot="root"] button {
+  font-family: var(--bp-mono);
+  background-color: transparent;
+  color: var(--bp-line-dim);
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+  box-shadow: none;
+  transition: color 100ms ease;
+}
+
+[data-theme="blueprint"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-blueprint nav[data-slot="root"] button:hover:not(:disabled) {
+  color: var(--bp-line);
+  border-color: var(--bp-line);
+}
+
+[data-theme="blueprint"] nav[data-slot="root"] button[data-selected],
+.theme-blueprint nav[data-slot="root"] button[data-selected] {
+  background-color: var(--bp-accent);
+  color: var(--bp-blue-deep);
+  border-color: var(--bp-accent);
+}

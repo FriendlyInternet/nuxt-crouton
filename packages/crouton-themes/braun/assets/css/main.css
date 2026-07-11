@@ -341,3 +341,186 @@ body.theme-braun {
   --ui-border-muted: #e2ded6;
   --ui-border-accented: #b5afa2;
 }
+
+/* ============================================
+   TABS (#1393) — a key row; the active key is pressed
+   ============================================ */
+
+.braun-tabs-list {
+  background-color: var(--braun-cream);
+  border: 1px solid var(--braun-hairline);
+  border-radius: calc(var(--braun-radius) * 2);
+  gap: 0.25rem;
+  padding: 0.25rem;
+}
+
+.braun-tabs-trigger {
+  background-color: transparent;
+  color: var(--braun-label);
+  border: 1px solid transparent;
+  border-radius: var(--braun-radius);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.45rem 0.9rem;
+  transition: all var(--braun-ease);
+}
+
+.braun-tabs-trigger:hover {
+  color: var(--braun-text);
+}
+
+.braun-tabs-trigger[data-state="active"] {
+  background-color: var(--braun-cream-raised);
+  color: var(--braun-charcoal);
+  border-color: var(--braun-hairline);
+  box-shadow: var(--braun-shadow);
+}
+
+.braun-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — precise switches; the dot is orange
+   ============================================ */
+
+.braun-check-box,
+.braun-radio-box {
+  background-color: var(--braun-cream-raised);
+  border: 1px solid var(--braun-hairline);
+  box-shadow: var(--braun-shadow);
+}
+
+.braun-check-box {
+  border-radius: var(--braun-radius);
+}
+
+.braun-check-indicator {
+  background-color: var(--braun-orange);
+  color: #fff;
+  border-radius: calc(var(--braun-radius) - 1px);
+}
+
+.braun-radio-indicator {
+  background-color: var(--braun-cream-raised);
+}
+
+.braun-radio-indicator::after {
+  background-color: var(--braun-orange);
+  border-radius: 9999px;
+  width: 55%;
+  height: 55%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — an instrument label, orange when it matters
+   ============================================ */
+
+.braun-alert {
+  background-color: var(--braun-cream-raised);
+  color: var(--braun-text);
+  border: 1px solid var(--braun-hairline);
+  border-left: 4px solid var(--braun-orange);
+  border-radius: calc(var(--braun-radius) * 2);
+  box-shadow: var(--braun-shadow);
+}
+
+.braun-alert-title {
+  color: var(--braun-charcoal);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.braun-alert--primary {
+  border-left-color: var(--braun-orange);
+}
+
+.braun-alert--warning {
+  border-left-color: var(--braun-orange);
+  background-color: #fdf4ec;
+}
+
+.braun-alert--error {
+  border-left-color: var(--braun-red);
+  background-color: #f9efec;
+}
+
+.braun-alert--neutral {
+  border-left-color: var(--braun-charcoal);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths like the switch)
+   ============================================ */
+
+[data-theme="braun"] [role="dialog"][data-slot="content"],
+.theme-braun [role="dialog"][data-slot="content"] {
+  background-color: var(--braun-cream-raised);
+  border: 1px solid var(--braun-hairline);
+  border-radius: calc(var(--braun-radius) * 3);
+  box-shadow: 0 8px 30px rgba(46, 44, 41, 0.18);
+}
+
+[data-theme="braun"] [role="dialog"] [data-slot="title"],
+.theme-braun [role="dialog"] [data-slot="title"] {
+  color: var(--braun-charcoal);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.85rem;
+}
+
+[data-theme="braun"] [data-slot="overlay"],
+.theme-braun [data-slot="overlay"] {
+  background-color: rgb(46 44 41 / 0.35);
+}
+
+[data-theme="braun"] li[data-slot="base"],
+.theme-braun li[data-slot="base"] {
+  background-color: var(--braun-cream-raised);
+  border: 1px solid var(--braun-hairline);
+  border-left: 4px solid var(--braun-orange);
+  border-radius: calc(var(--braun-radius) * 2);
+  box-shadow: 0 4px 16px rgba(46, 44, 41, 0.14);
+}
+
+[data-theme="braun"] li[data-slot="base"] [data-slot="title"],
+.theme-braun li[data-slot="base"] [data-slot="title"] {
+  color: var(--braun-charcoal);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+}
+
+[data-theme="braun"] nav[data-slot="root"] button,
+.theme-braun nav[data-slot="root"] button {
+  background-color: var(--braun-cream-raised);
+  color: var(--braun-text);
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+  box-shadow: var(--braun-shadow);
+  font-weight: 600;
+  transition: all var(--braun-ease);
+}
+
+[data-theme="braun"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-braun nav[data-slot="root"] button:hover:not(:disabled) {
+  color: var(--braun-charcoal);
+  box-shadow: var(--braun-shadow-pressed);
+}
+
+[data-theme="braun"] nav[data-slot="root"] button[data-selected],
+.theme-braun nav[data-slot="root"] button[data-selected] {
+  background-color: var(--braun-charcoal);
+  color: var(--braun-cream-raised);
+  border-color: var(--braun-charcoal);
+}

@@ -307,3 +307,175 @@ body.theme-gameboy {
   --ui-border-muted: #558042;
   --ui-border-accented: #0f380f;
 }
+
+/* ============================================
+   TABS (#1393) — menu row; the active entry is inked
+   ============================================ */
+
+.gb-tabs-list {
+  background-color: transparent;
+  border-bottom: var(--gb-step) solid var(--gb-0);
+  gap: 0.25rem;
+  padding: 0;
+}
+
+.gb-tabs-trigger {
+  background-color: transparent;
+  color: var(--gb-0);
+  border: var(--gb-step) solid transparent;
+  border-bottom: none;
+  border-radius: 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.5rem 0.9rem;
+  transition: none;
+}
+
+.gb-tabs-trigger:hover {
+  background-color: var(--gb-2);
+}
+
+.gb-tabs-trigger[data-state="active"] {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+  border-color: var(--gb-0);
+}
+
+.gb-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — 4 shades, square pixels
+   ============================================ */
+
+.gb-check-box,
+.gb-radio-box {
+  background-color: var(--gb-3);
+  border: 2px solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.gb-check-indicator {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
+
+.gb-radio-indicator {
+  background-color: var(--gb-3);
+}
+
+.gb-radio-indicator::after {
+  background-color: var(--gb-0);
+  border-radius: 0;
+  width: 50%;
+  height: 50%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a dialog box since 1989
+   ============================================ */
+
+.gb-alert {
+  background-color: var(--gb-3);
+  color: var(--gb-0);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  outline: 1px solid var(--gb-0);
+  outline-offset: 3px;
+}
+
+.gb-alert-title {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.gb-alert--primary {
+  background-color: var(--gb-2);
+}
+
+.gb-alert--warning {
+  background-color: var(--gb-2);
+}
+
+.gb-alert--error {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+  outline-color: var(--gb-1);
+}
+
+.gb-alert--neutral {
+  background-color: var(--gb-3);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths like the switch)
+   ============================================ */
+
+[data-theme="gameboy"] [role="dialog"][data-slot="content"],
+.theme-gameboy [role="dialog"][data-slot="content"] {
+  background-color: var(--gb-3);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  outline: 1px solid var(--gb-0);
+  outline-offset: 3px;
+  box-shadow: 6px 6px 0 var(--gb-1);
+}
+
+[data-theme="gameboy"] [role="dialog"] [data-slot="title"],
+.theme-gameboy [role="dialog"] [data-slot="title"] {
+  color: var(--gb-0);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+[data-theme="gameboy"] [data-slot="overlay"],
+.theme-gameboy [data-slot="overlay"] {
+  background-color: rgb(15 56 15 / 0.6);
+}
+
+[data-theme="gameboy"] li[data-slot="base"],
+.theme-gameboy li[data-slot="base"] {
+  background-color: var(--gb-3);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--gb-1);
+}
+
+[data-theme="gameboy"] li[data-slot="base"] [data-slot="title"],
+.theme-gameboy li[data-slot="base"] [data-slot="title"] {
+  color: var(--gb-0);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+[data-theme="gameboy"] nav[data-slot="root"] button,
+.theme-gameboy nav[data-slot="root"] button {
+  background-color: var(--gb-3);
+  color: var(--gb-0);
+  border: 2px solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 700;
+  transition: none;
+}
+
+[data-theme="gameboy"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-gameboy nav[data-slot="root"] button:hover:not(:disabled) {
+  background-color: var(--gb-2);
+}
+
+[data-theme="gameboy"] nav[data-slot="root"] button[data-selected],
+.theme-gameboy nav[data-slot="root"] button[data-selected] {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
