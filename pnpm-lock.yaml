@@ -1452,6 +1452,9 @@ importers:
       nuxt:
         specifier: ^4.4.8
         version: 4.4.8(acbda501943d3a88c40c15b150712194)
+      std-env:
+        specifier: ^3.10.0
+        version: 3.10.0
     devDependencies:
       unbuild:
         specifier: ^3.6.1

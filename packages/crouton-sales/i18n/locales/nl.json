@@ -624,10 +624,10 @@
         "routerClaim": "Vul de Router-ID en code van de bon hieronder in bij \"Koppel router\".",
         "routerLegacy": "Oudere router zonder koppelbon? Volg de EVENT_ID-stappen in print-server/README.md.",
         "routerVerify": "Klaar wanneer dit bolletje groen wordt — de router pollt binnen ~30 seconden.",
-        "drainerIntro": "Een toestel op locatie (Pi / mini-pc) draait zelf de app en print rechtstreeks naar de printers — geen routerconfiguratie nodig.",
-        "drainerEnv": "Eenmalig op het toestel op locatie, in de service die de app start (systemd of .env — niet per event), schakel de drainer in:",
+        "drainerIntro": "Een toestel op locatie (Pi / mini-pc) draait de app en print rechtstreeks naar de printers — automatisch, geen routerconfiguratie en niets in te schakelen.",
+        "drainerOverride": "Geavanceerd: op een toestel op locatie print de app standaard lokaal. Forceer het overal aan, of schakel het uit op een toestel dat niet mag printen, met de env-override:",
         "drainerPrinters": "Voeg elke printer toe onder Printers met zijn LAN-IP en poort 9100 — het toestel moet de printers op zijn netwerk kunnen bereiken.",
-        "drainerFlip": "Laat deze printflow op \"Lokaal toestel\" staan — de routerflow is de standaard, en het toestel bedient enkel events die op Lokaal toestel staan.",
+        "drainerFlip": "Laat deze printflow op \"Lokaal toestel\" staan — de routerflow is de standaard, en het toestel print alleen voor events die op Lokaal toestel staan.",
         "drainerVerify": "Klaar wanneer dit bolletje groen wordt — het toestel meldt zich binnen ~30 seconden."
       },
       "pairing": {

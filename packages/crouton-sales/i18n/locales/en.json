@@ -624,10 +624,10 @@
         "routerClaim": "Enter the ticket's Router-ID and code below under \"Pair router\".",
         "routerLegacy": "Older router without a pairing ticket? Follow the EVENT_ID steps in print-server/README.md.",
         "routerVerify": "Done when this dot turns green — the router polls within ~30 seconds.",
-        "drainerIntro": "A device at the venue (Pi / mini-PC) runs the app itself and prints straight to the printers — no router config involved.",
-        "drainerEnv": "One-time on the venue device, in the service that starts the app (systemd or .env — not per event), enable the drainer:",
+        "drainerIntro": "A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — automatically, no router config and nothing to enable.",
+        "drainerOverride": "Advanced: the app prints locally by default on a venue device. Force it on anywhere, or disable it on a device that must not print, with the env override:",
         "drainerPrinters": "Add each printer under Printers with its LAN IP and port 9100 — the device must reach the printers on its network.",
-        "drainerFlip": "Keep this Print flow on \"Local device\" — the router flow is the default, and the device only serves events set to Local device.",
+        "drainerFlip": "Keep this Print flow on \"Local device\" — the router flow is the default, and the device prints for itself only for events set to Local device.",
         "drainerVerify": "Done when this dot turns green — the device ticks within ~30 seconds."
       },
       "pairing": {
