@@ -3,8 +3,8 @@
 
   "_tiers": "Each tier maps to a concrete model per harness. out_per_mtok is the Claude baseline output price ($/Mtok) — the cost lever; pi's cheaper/local equivalents are measured for real by the #865 eval loop, not assumed here. pi_local = the local (~$0) option on the Mac mini (informational; the generator reads `pi`).",
   "tiers": {
-    "small":  { "claude": "haiku",  "pi": "deepseek-v3.2", "pi_local": "ollama:qwen2.5-coder:7b", "out_per_mtok": 5,  "note": "reports / triage / decompose — no code written" },
-    "medium": { "claude": "sonnet", "pi": "deepseek-v3.2", "out_per_mtok": 15, "note": "most work" },
+    "small":  { "claude": "haiku",  "pi": "zai/glm-5.2", "pi_local": "ollama:qwen2.5-coder:7b", "out_per_mtok": 5,  "note": "reports / triage / decompose — no code written. pi tier MEASURED (#1409: beat the Haiku baseline on report fidelity at $0 marginal, flat GLM Coding Plan)" },
+    "medium": { "claude": "sonnet", "pi": "zai/glm-5.2", "out_per_mtok": 15, "note": "most work. pi tier MEASURED (#1421: autonomous code-writing eval — correct house-style PR, artifact-gate PASS, no #1019 stall, $0 marginal)" },
     "large":  { "claude": "opus",   "pi": "claude-opus-4-8", "out_per_mtok": 75, "note": "hard build / synthesis — quality-sensitive" }
   },
 
@@ -22,7 +22,8 @@
 
   "_overrides": "Per-flow exceptions that pin an exact model regardless of tier. This is where a one-off flow declares itself VISIBLY instead of burying the decision in a branch.",
   "overrides": [
-    { "flow": "prototype-example", "model": "claude-opus-4-8", "why": "exploratory prototype flow — quality over cost (replace with your real flow)" }
+    { "flow": "a11y-daily-pidev", "model": "zai/glm-5.2", "why": "#1409 eval: matched engine ground truth (153/152), beat the metered Haiku baseline (+28% overcount, $0.347/run) at $0 marginal on the flat GLM Coding Plan. Workflow default since #1413." },
+    { "flow": "decompose-on-issue-pidev", "model": "zai/glm-5.2", "why": "#1421 eval: autonomous code-writing run produced a correct house-style PR (#1434), artifact-gate PASS, no #1019 stall, $0 marginal. Owner-approved flip 2026-07-11; metered anthropic/sonnet lane stays selectable as baseline. Subscription auth never backs unattended CI — the zai flat plan is vendor-permitted for pi (officially whitelisted)." }
   ],
 
   "_known_gaps": "The top-level workflow loop (claude.yml, decompose-on-issue.yml, resume-on-comment, fix-ci-on-failure, a11y[-daily], frontend-review, red-team[-daily], gate-smoke, loop-station-advisor) is now PINNED to claude-sonnet-5 via `--model` in each step's claude_args (#1158, closing the earlier UNPINNED gap that let the action default to the older claude-sonnet-4-6). `--model` sets only the MAIN loop; Task-spawned sub-agents still resolve their own frontmatter model (task-worker = opus). OPEN: whether a sub-agent's `model: sonnet` frontmatter alias also resolves to sonnet-4-6 in the pinned action SHA — verify against a post-merge run's modelUsage and, if so, pin the full id in frontmatter too."
