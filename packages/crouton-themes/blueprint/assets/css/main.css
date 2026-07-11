@@ -514,3 +514,109 @@ body.theme-blueprint {
   --ui-border-muted: #cbd8e5;
   --ui-border-accented: #16406e;
 }
+
+/* ============================================
+   SECOND-TIER CHROME (#1458) — UCalendar, USlider, UColorPicker
+   Ambient (no variant hook) — same scoped pattern as switch/toast/pagination.
+   White line-work on deep blue; pencil-yellow accent.
+   ============================================ */
+
+/* UCalendar — a drafting sheet date block. */
+[data-theme="blueprint"] [data-slot="grid"],
+.theme-blueprint [data-slot="grid"] {
+  background-color: var(--bp-blue-deep);
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+  padding: 0.25rem;
+}
+[data-theme="blueprint"] [data-slot="heading"],
+.theme-blueprint [data-slot="heading"] {
+  font-family: var(--bp-mono);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bp-line);
+}
+[data-theme="blueprint"] [data-slot="headCell"],
+.theme-blueprint [data-slot="headCell"] {
+  font-family: var(--bp-mono);
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--bp-line-dim);
+}
+[data-theme="blueprint"] [data-slot="cellTrigger"],
+.theme-blueprint [data-slot="cellTrigger"] {
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--bp-line);
+  font-family: var(--bp-mono);
+  transition: none;
+}
+[data-theme="blueprint"] [data-slot="cellTrigger"]:hover:not([data-disabled]),
+.theme-blueprint [data-slot="cellTrigger"]:hover:not([data-disabled]) {
+  background-color: var(--bp-accent);
+  color: var(--bp-on-accent);
+}
+[data-theme="blueprint"] [data-slot="cellTrigger"][data-selected],
+.theme-blueprint [data-slot="cellTrigger"][data-selected] {
+  background-color: var(--bp-line);
+  color: var(--bp-blue);
+  border-color: var(--bp-line);
+}
+[data-theme="blueprint"] [data-slot="cellTrigger"][data-outside],
+.theme-blueprint [data-slot="cellTrigger"][data-outside] {
+  color: var(--bp-line-dim);
+  opacity: 0.5;
+}
+[data-theme="blueprint"] [data-slot="cellTrigger"][data-disabled],
+.theme-blueprint [data-slot="cellTrigger"][data-disabled] {
+  opacity: 0.3;
+}
+
+/* USlider — a dimension rule. */
+[data-theme="blueprint"] [data-slot="track"]:not([data-color-picker-track]),
+.theme-blueprint [data-slot="track"]:not([data-color-picker-track]) {
+  background-color: var(--bp-blue-deep);
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+}
+[data-theme="blueprint"] [data-slot="range"],
+.theme-blueprint [data-slot="range"] {
+  background-color: var(--bp-accent);
+}
+[data-theme="blueprint"] [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"],
+.theme-blueprint [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"] {
+  background-color: var(--bp-blue);
+  border: 2px solid var(--bp-accent);
+  border-radius: 0;
+}
+
+/* UColorPicker — a drafting key. */
+[data-theme="blueprint"] [data-slot="picker"],
+.theme-blueprint [data-slot="picker"] {
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+  overflow: hidden;
+}
+[data-theme="blueprint"] [data-slot="selector"],
+.theme-blueprint [data-slot="selector"] {
+  border: 1px solid var(--bp-line-dim);
+}
+[data-theme="blueprint"] [data-slot="selectorThumb"],
+.theme-blueprint [data-slot="selectorThumb"] {
+  border: 2px solid var(--bp-line);
+  border-radius: 0;
+  background-color: var(--bp-accent);
+}
+[data-theme="blueprint"] [data-color-picker-track],
+.theme-blueprint [data-color-picker-track] {
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+}
+[data-theme="blueprint"] [data-slot="trackThumb"],
+.theme-blueprint [data-slot="trackThumb"] {
+  border: 2px solid var(--bp-line);
+  border-radius: 0;
+  background-color: var(--bp-accent);
+}

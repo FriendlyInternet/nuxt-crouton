@@ -596,3 +596,108 @@ body.theme-mtv {
   --ui-border-muted: #322a3e;
   --ui-border-accented: #f6f2ea;
 }
+
+/* ============================================
+   SECOND-TIER CHROME (#1458) — UCalendar, USlider, UColorPicker
+   Ambient (no variant hook) — same scoped pattern as switch/toast/pagination.
+   ============================================ */
+
+/* UCalendar — a promo stapled to the wall. */
+[data-theme="mtv"] [data-slot="grid"],
+.theme-mtv [data-slot="grid"] {
+  background-color: var(--mtv-surface);
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--mtv-cyan);
+  padding: 0.25rem;
+}
+[data-theme="mtv"] [data-slot="heading"],
+.theme-mtv [data-slot="heading"] {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--mtv-ink);
+}
+[data-theme="mtv"] [data-slot="headCell"],
+.theme-mtv [data-slot="headCell"] {
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--mtv-ink);
+}
+[data-theme="mtv"] [data-slot="cellTrigger"],
+.theme-mtv [data-slot="cellTrigger"] {
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+  background-color: var(--mtv-surface);
+  color: var(--mtv-ink);
+  font-weight: 800;
+  transition: none;
+}
+[data-theme="mtv"] [data-slot="cellTrigger"]:hover:not([data-disabled]),
+.theme-mtv [data-slot="cellTrigger"]:hover:not([data-disabled]) {
+  background-color: var(--mtv-yellow);
+  color: var(--mtv-on-neon);
+}
+[data-theme="mtv"] [data-slot="cellTrigger"][data-selected],
+.theme-mtv [data-slot="cellTrigger"][data-selected] {
+  background-color: var(--mtv-pink);
+  color: var(--mtv-on-pink);
+  box-shadow: 3px 3px 0 var(--mtv-cyan);
+}
+[data-theme="mtv"] [data-slot="cellTrigger"][data-outside],
+.theme-mtv [data-slot="cellTrigger"][data-outside] {
+  opacity: 0.4;
+}
+[data-theme="mtv"] [data-slot="cellTrigger"][data-disabled],
+.theme-mtv [data-slot="cellTrigger"][data-disabled] {
+  opacity: 0.3;
+}
+
+/* USlider — a neon fader. */
+[data-theme="mtv"] [data-slot="track"]:not([data-color-picker-track]),
+.theme-mtv [data-slot="track"]:not([data-color-picker-track]) {
+  background-color: var(--mtv-surface);
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+}
+[data-theme="mtv"] [data-slot="range"],
+.theme-mtv [data-slot="range"] {
+  background-color: var(--mtv-pink);
+}
+[data-theme="mtv"] [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"],
+.theme-mtv [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"] {
+  background-color: var(--mtv-yellow);
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--mtv-cyan);
+}
+
+/* UColorPicker — sticker swatches. */
+[data-theme="mtv"] [data-slot="picker"],
+.theme-mtv [data-slot="picker"] {
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--mtv-pink);
+  overflow: hidden;
+}
+[data-theme="mtv"] [data-slot="selector"],
+.theme-mtv [data-slot="selector"] {
+  border: var(--mtv-border) solid var(--mtv-ink);
+}
+[data-theme="mtv"] [data-slot="selectorThumb"],
+.theme-mtv [data-slot="selectorThumb"] {
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+  background-color: var(--mtv-yellow);
+}
+[data-theme="mtv"] [data-color-picker-track],
+.theme-mtv [data-color-picker-track] {
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+}
+[data-theme="mtv"] [data-slot="trackThumb"],
+.theme-mtv [data-slot="trackThumb"] {
+  border: var(--mtv-border) solid var(--mtv-ink);
+  border-radius: 0;
+  background-color: var(--mtv-yellow);
+}

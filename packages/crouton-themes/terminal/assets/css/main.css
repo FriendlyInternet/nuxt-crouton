@@ -590,3 +590,118 @@ body.theme-terminal {
   --ui-border-muted: #ccd4cc;
   --ui-border-accented: #157a36;
 }
+
+/* ============================================
+   SECOND-TIER CHROME (#1458) — UCalendar, USlider, UColorPicker
+   Ambient (no variant hook) — same scoped pattern as switch/toast/pagination.
+   ============================================ */
+
+/* UCalendar — a phosphor date readout on the tube. */
+[data-theme="terminal"] [data-slot="grid"],
+.theme-terminal [data-slot="grid"] {
+  background-color: var(--term-bg-raised);
+  border: 1px solid var(--term-phosphor-dim);
+  border-radius: 0;
+  box-shadow: var(--term-glow);
+  padding: 0.25rem;
+}
+[data-theme="terminal"] [data-slot="heading"],
+.theme-terminal [data-slot="heading"] {
+  font-family: var(--term-font);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--term-phosphor);
+  text-shadow: var(--term-glow);
+}
+[data-theme="terminal"] [data-slot="headCell"],
+.theme-terminal [data-slot="headCell"] {
+  font-family: var(--term-font);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--term-phosphor-dim);
+}
+[data-theme="terminal"] [data-slot="cellTrigger"],
+.theme-terminal [data-slot="cellTrigger"] {
+  border: 1px solid transparent;
+  border-radius: 0;
+  background-color: transparent;
+  color: var(--term-phosphor-soft);
+  font-family: var(--term-font);
+  transition: none;
+}
+[data-theme="terminal"] [data-slot="cellTrigger"]:hover:not([data-disabled]),
+.theme-terminal [data-slot="cellTrigger"]:hover:not([data-disabled]) {
+  background-color: rgba(51, 255, 102, 0.18);
+  color: var(--term-phosphor);
+  border-color: var(--term-phosphor);
+  text-shadow: var(--term-glow);
+}
+[data-theme="terminal"] [data-slot="cellTrigger"][data-selected],
+.theme-terminal [data-slot="cellTrigger"][data-selected] {
+  background-color: var(--term-phosphor);
+  color: var(--term-bg);
+  box-shadow: var(--term-glow);
+  text-shadow: none;
+}
+[data-theme="terminal"] [data-slot="cellTrigger"][data-outside],
+.theme-terminal [data-slot="cellTrigger"][data-outside] {
+  color: var(--term-phosphor-dim);
+  opacity: 0.5;
+}
+[data-theme="terminal"] [data-slot="cellTrigger"][data-disabled],
+.theme-terminal [data-slot="cellTrigger"][data-disabled] {
+  opacity: 0.3;
+}
+
+/* USlider — a phosphor level meter. */
+[data-theme="terminal"] [data-slot="track"]:not([data-color-picker-track]),
+.theme-terminal [data-slot="track"]:not([data-color-picker-track]) {
+  background-color: var(--term-bg-raised);
+  border: 1px solid var(--term-phosphor-dim);
+  border-radius: 0;
+}
+[data-theme="terminal"] [data-slot="range"],
+.theme-terminal [data-slot="range"] {
+  background-color: var(--term-phosphor);
+  box-shadow: var(--term-glow);
+}
+[data-theme="terminal"] [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"],
+.theme-terminal [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"] {
+  background-color: var(--term-bg);
+  border: 1px solid var(--term-phosphor);
+  border-radius: 0;
+  box-shadow: var(--term-glow);
+}
+
+/* UColorPicker — a CRT calibration panel. */
+[data-theme="terminal"] [data-slot="picker"],
+.theme-terminal [data-slot="picker"] {
+  border: 1px solid var(--term-phosphor-dim);
+  border-radius: 0;
+  box-shadow: var(--term-glow);
+  overflow: hidden;
+}
+[data-theme="terminal"] [data-slot="selector"],
+.theme-terminal [data-slot="selector"] {
+  border: 1px solid var(--term-phosphor-dim);
+}
+[data-theme="terminal"] [data-slot="selectorThumb"],
+.theme-terminal [data-slot="selectorThumb"] {
+  border: 1px solid var(--term-phosphor);
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: var(--term-glow);
+}
+[data-theme="terminal"] [data-color-picker-track],
+.theme-terminal [data-color-picker-track] {
+  border: 1px solid var(--term-phosphor-dim);
+  border-radius: 0;
+}
+[data-theme="terminal"] [data-slot="trackThumb"],
+.theme-terminal [data-slot="trackThumb"] {
+  border: 1px solid var(--term-phosphor);
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: var(--term-glow);
+}

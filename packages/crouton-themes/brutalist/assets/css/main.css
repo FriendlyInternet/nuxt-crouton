@@ -522,3 +522,111 @@ body.theme-brutalist {
   --ui-border-muted: #3c3a36;
   --ui-border-accented: #f4f1e8;
 }
+
+/* ============================================
+   SECOND-TIER CHROME (#1458) — UCalendar, USlider, UColorPicker
+   Ambient (no variant hook) — same scoped pattern as switch/toast/pagination.
+   Slots verified unique to each component against @nuxt/ui 4.9.0 dist:
+   Calendar grid/heading/headCell/cellTrigger; Slider range + track~thumb;
+   ColorPicker picker/selector/selectorThumb/[data-color-picker-track]/trackThumb.
+   ============================================ */
+
+/* UCalendar — a wall calendar stapled to the board. */
+[data-theme="brutalist"] [data-slot="grid"],
+.theme-brutalist [data-slot="grid"] {
+  background-color: var(--brutalist-paper);
+  border: var(--brutalist-border) solid var(--brutalist-ink);
+  border-radius: 0;
+  box-shadow: var(--brutalist-shadow);
+  padding: 0.25rem;
+}
+[data-theme="brutalist"] [data-slot="heading"],
+.theme-brutalist [data-slot="heading"] {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--brutalist-ink);
+}
+[data-theme="brutalist"] [data-slot="headCell"],
+.theme-brutalist [data-slot="headCell"] {
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--brutalist-ink);
+}
+[data-theme="brutalist"] [data-slot="cellTrigger"],
+.theme-brutalist [data-slot="cellTrigger"] {
+  border: 2px solid var(--brutalist-ink);
+  border-radius: 0;
+  background-color: var(--brutalist-paper);
+  color: var(--brutalist-ink);
+  font-weight: 800;
+  transition: none;
+}
+[data-theme="brutalist"] [data-slot="cellTrigger"]:hover:not([data-disabled]),
+.theme-brutalist [data-slot="cellTrigger"]:hover:not([data-disabled]) {
+  background-color: var(--brutalist-accent);
+  color: var(--brutalist-accent-ink);
+}
+[data-theme="brutalist"] [data-slot="cellTrigger"][data-selected],
+.theme-brutalist [data-slot="cellTrigger"][data-selected] {
+  background-color: var(--brutalist-ink);
+  color: var(--brutalist-paper);
+  box-shadow: 2px 2px 0 var(--brutalist-ink);
+}
+[data-theme="brutalist"] [data-slot="cellTrigger"][data-outside],
+.theme-brutalist [data-slot="cellTrigger"][data-outside] {
+  opacity: 0.4;
+}
+[data-theme="brutalist"] [data-slot="cellTrigger"][data-disabled],
+.theme-brutalist [data-slot="cellTrigger"][data-disabled] {
+  opacity: 0.3;
+}
+
+/* USlider — a stamped groove with an inked handle. */
+[data-theme="brutalist"] [data-slot="track"]:not([data-color-picker-track]),
+.theme-brutalist [data-slot="track"]:not([data-color-picker-track]) {
+  background-color: var(--brutalist-paper);
+  border: 2px solid var(--brutalist-ink);
+  border-radius: 0;
+}
+[data-theme="brutalist"] [data-slot="range"],
+.theme-brutalist [data-slot="range"] {
+  background-color: var(--brutalist-ink);
+}
+[data-theme="brutalist"] [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"],
+.theme-brutalist [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"] {
+  background-color: var(--brutalist-accent);
+  border: 2px solid var(--brutalist-ink);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 var(--brutalist-ink);
+}
+
+/* UColorPicker — swatches pinned to the sheet. */
+[data-theme="brutalist"] [data-slot="picker"],
+.theme-brutalist [data-slot="picker"] {
+  border: var(--brutalist-border) solid var(--brutalist-ink);
+  border-radius: 0;
+  box-shadow: var(--brutalist-shadow);
+  overflow: hidden;
+}
+[data-theme="brutalist"] [data-slot="selector"],
+.theme-brutalist [data-slot="selector"] {
+  border: 2px solid var(--brutalist-ink);
+}
+[data-theme="brutalist"] [data-slot="selectorThumb"],
+.theme-brutalist [data-slot="selectorThumb"] {
+  border: 2px solid var(--brutalist-ink);
+  border-radius: 0;
+  background-color: var(--brutalist-paper);
+}
+[data-theme="brutalist"] [data-color-picker-track],
+.theme-brutalist [data-color-picker-track] {
+  border: 2px solid var(--brutalist-ink);
+  border-radius: 0;
+}
+[data-theme="brutalist"] [data-slot="trackThumb"],
+.theme-brutalist [data-slot="trackThumb"] {
+  border: 2px solid var(--brutalist-ink);
+  border-radius: 0;
+  background-color: var(--brutalist-paper);
+}

@@ -652,3 +652,104 @@
   --minimal-gray-800: #e8e8e8;
   --minimal-gray-900: #f5f5f5;
 }
+
+/* ============================================
+   SECOND-TIER CHROME (#1458) — UCalendar, USlider, UColorPicker
+   Ambient (no variant hook) — same scoped pattern as switch/toast/pagination.
+   ============================================ */
+
+/* UCalendar — black lines on white. */
+[data-theme="minimal"] [data-slot="grid"],
+.theme-minimal [data-slot="grid"] {
+  background-color: var(--minimal-white);
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: var(--minimal-radius);
+  padding: 0.25rem;
+}
+[data-theme="minimal"] [data-slot="heading"],
+.theme-minimal [data-slot="heading"] {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--minimal-black);
+}
+[data-theme="minimal"] [data-slot="headCell"],
+.theme-minimal [data-slot="headCell"] {
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--minimal-muted);
+}
+[data-theme="minimal"] [data-slot="cellTrigger"],
+.theme-minimal [data-slot="cellTrigger"] {
+  border: 1px solid var(--minimal-gray-200);
+  border-radius: var(--minimal-radius);
+  background-color: var(--minimal-white);
+  color: var(--minimal-black);
+  transition: background-color var(--minimal-transition), color var(--minimal-transition);
+}
+[data-theme="minimal"] [data-slot="cellTrigger"]:hover:not([data-disabled]),
+.theme-minimal [data-slot="cellTrigger"]:hover:not([data-disabled]) {
+  background-color: var(--minimal-black);
+  color: var(--minimal-white);
+}
+[data-theme="minimal"] [data-slot="cellTrigger"][data-selected],
+.theme-minimal [data-slot="cellTrigger"][data-selected] {
+  background-color: var(--minimal-black);
+  color: var(--minimal-white);
+  border-color: var(--minimal-black);
+}
+[data-theme="minimal"] [data-slot="cellTrigger"][data-outside],
+.theme-minimal [data-slot="cellTrigger"][data-outside] {
+  color: var(--minimal-gray-400);
+}
+[data-theme="minimal"] [data-slot="cellTrigger"][data-disabled],
+.theme-minimal [data-slot="cellTrigger"][data-disabled] {
+  opacity: 0.3;
+}
+
+/* USlider — a thin black gauge. */
+[data-theme="minimal"] [data-slot="track"]:not([data-color-picker-track]),
+.theme-minimal [data-slot="track"]:not([data-color-picker-track]) {
+  background-color: var(--minimal-gray-100);
+  border: 1px solid var(--minimal-black);
+  border-radius: var(--minimal-radius);
+}
+[data-theme="minimal"] [data-slot="range"],
+.theme-minimal [data-slot="range"] {
+  background-color: var(--minimal-black);
+}
+[data-theme="minimal"] [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"],
+.theme-minimal [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"] {
+  background-color: var(--minimal-white);
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: var(--minimal-radius);
+}
+
+/* UColorPicker — framed swatches. */
+[data-theme="minimal"] [data-slot="picker"],
+.theme-minimal [data-slot="picker"] {
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: var(--minimal-radius);
+  overflow: hidden;
+}
+[data-theme="minimal"] [data-slot="selector"],
+.theme-minimal [data-slot="selector"] {
+  border: 1px solid var(--minimal-black);
+}
+[data-theme="minimal"] [data-slot="selectorThumb"],
+.theme-minimal [data-slot="selectorThumb"] {
+  border: 1px solid var(--minimal-black);
+  border-radius: var(--minimal-radius);
+  background-color: var(--minimal-white);
+}
+[data-theme="minimal"] [data-color-picker-track],
+.theme-minimal [data-color-picker-track] {
+  border: 1px solid var(--minimal-black);
+  border-radius: var(--minimal-radius);
+}
+[data-theme="minimal"] [data-slot="trackThumb"],
+.theme-minimal [data-slot="trackThumb"] {
+  border: 1px solid var(--minimal-black);
+  border-radius: var(--minimal-radius);
+  background-color: var(--minimal-white);
+}

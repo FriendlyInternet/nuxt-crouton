@@ -508,3 +508,106 @@ body.theme-gameboy {
   --ui-border-muted: #2c4f2c;
   --ui-border-accented: #9fc814;
 }
+
+/* ============================================
+   SECOND-TIER CHROME (#1458) — UCalendar, USlider, UColorPicker
+   Ambient (no variant hook) — same scoped pattern as switch/toast/pagination.
+   Four shades of green, 3px pixel borders — no hue introduced.
+   ============================================ */
+
+/* UCalendar — the DMG calendar screen. */
+[data-theme="gameboy"] [data-slot="grid"],
+.theme-gameboy [data-slot="grid"] {
+  background-color: var(--gb-3);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  padding: 0.25rem;
+}
+[data-theme="gameboy"] [data-slot="heading"],
+.theme-gameboy [data-slot="heading"] {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gb-0);
+}
+[data-theme="gameboy"] [data-slot="headCell"],
+.theme-gameboy [data-slot="headCell"] {
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--gb-1);
+}
+[data-theme="gameboy"] [data-slot="cellTrigger"],
+.theme-gameboy [data-slot="cellTrigger"] {
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  background-color: var(--gb-2);
+  color: var(--gb-0);
+  font-weight: 700;
+  transition: none;
+}
+[data-theme="gameboy"] [data-slot="cellTrigger"]:hover:not([data-disabled]),
+.theme-gameboy [data-slot="cellTrigger"]:hover:not([data-disabled]) {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
+[data-theme="gameboy"] [data-slot="cellTrigger"][data-selected],
+.theme-gameboy [data-slot="cellTrigger"][data-selected] {
+  background-color: var(--gb-0);
+  color: var(--gb-2);
+}
+[data-theme="gameboy"] [data-slot="cellTrigger"][data-outside],
+.theme-gameboy [data-slot="cellTrigger"][data-outside] {
+  color: var(--gb-1);
+  background-color: var(--gb-3);
+}
+[data-theme="gameboy"] [data-slot="cellTrigger"][data-disabled],
+.theme-gameboy [data-slot="cellTrigger"][data-disabled] {
+  opacity: 0.4;
+}
+
+/* USlider — a pixel gauge. */
+[data-theme="gameboy"] [data-slot="track"]:not([data-color-picker-track]),
+.theme-gameboy [data-slot="track"]:not([data-color-picker-track]) {
+  background-color: var(--gb-2);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+}
+[data-theme="gameboy"] [data-slot="range"],
+.theme-gameboy [data-slot="range"] {
+  background-color: var(--gb-0);
+}
+[data-theme="gameboy"] [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"],
+.theme-gameboy [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"] {
+  background-color: var(--gb-3);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+}
+
+/* UColorPicker — calibration on the LCD. */
+[data-theme="gameboy"] [data-slot="picker"],
+.theme-gameboy [data-slot="picker"] {
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  overflow: hidden;
+}
+[data-theme="gameboy"] [data-slot="selector"],
+.theme-gameboy [data-slot="selector"] {
+  border: var(--gb-step) solid var(--gb-0);
+}
+[data-theme="gameboy"] [data-slot="selectorThumb"],
+.theme-gameboy [data-slot="selectorThumb"] {
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  background-color: var(--gb-3);
+}
+[data-theme="gameboy"] [data-color-picker-track],
+.theme-gameboy [data-color-picker-track] {
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+}
+[data-theme="gameboy"] [data-slot="trackThumb"],
+.theme-gameboy [data-slot="trackThumb"] {
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  background-color: var(--gb-3);
+}
