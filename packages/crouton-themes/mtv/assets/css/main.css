@@ -360,3 +360,22 @@
     transform: none;
   }
 }
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the paper.
+   ============================================ */
+
+[data-theme="mtv"] body,
+body.theme-mtv {
+  --ui-text-dimmed: #7f7685;
+  --ui-text-muted: #675f6d;
+  --ui-text-toned: #3d3644;
+  --ui-text: #17131f;
+  --ui-text-highlighted: #17131f;
+  --ui-bg-muted: #efeae1;
+  --ui-bg-elevated: #eee8de;
+  --ui-bg-accented: #e6dfd3;
+  --ui-border: #d9d2c8;
+  --ui-border-muted: #e4ded4;
+  --ui-border-accented: #17131f;
+}

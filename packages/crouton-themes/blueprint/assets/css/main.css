@@ -271,3 +271,22 @@
 .theme-blueprint button[role="switch"][data-state="checked"] > span {
   background-color: var(--bp-accent);
 }
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the sheet.
+   ============================================ */
+
+[data-theme="blueprint"] body,
+body.theme-blueprint {
+  --ui-text-dimmed: #7fa3c4;
+  --ui-text-muted: #9db9d4;
+  --ui-text-toned: #c3d6e8;
+  --ui-text: #dce9f5;
+  --ui-text-highlighted: #ffffff;
+  --ui-bg-muted: #10344f;
+  --ui-bg-elevated: #0d2c4d;
+  --ui-bg-accented: #1a4570;
+  --ui-border: #7fa3c4;
+  --ui-border-muted: #2c567e;
+  --ui-border-accented: #dce9f5;
+}

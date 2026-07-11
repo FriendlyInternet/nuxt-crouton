@@ -677,3 +677,22 @@
     inset 0 1px 1px rgba(0, 0, 0, 0.15),
     0 0 6px rgba(76, 217, 100, 0.7);
 }
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the white chassis.
+   ============================================ */
+
+[data-theme="kr11"] body,
+body.theme-kr11 {
+  --ui-text-dimmed: #8a8a86;
+  --ui-text-muted: #666663;
+  --ui-text-toned: #4c4c49;
+  --ui-text: #3d3d3d;
+  --ui-text-highlighted: #2a2a28;
+  --ui-bg-muted: #ececea;
+  --ui-bg-elevated: #fafaf9;
+  --ui-bg-accented: #e5e5e2;
+  --ui-border: #d3d3d0;
+  --ui-border-muted: #e0e0dd;
+  --ui-border-accented: #aaa8a3;
+}

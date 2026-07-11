@@ -271,3 +271,22 @@
 .theme-riso button[role="switch"] > span {
   background-color: var(--riso-ink);
 }
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the paper.
+   ============================================ */
+
+[data-theme="riso"] body,
+body.theme-riso {
+  --ui-text-dimmed: #857c6d;
+  --ui-text-muted: #6d6558;
+  --ui-text-toned: #4a443b;
+  --ui-text: #2f2b27;
+  --ui-text-highlighted: #2f2b27;
+  --ui-bg-muted: #f1ecdf;
+  --ui-bg-elevated: #efe9db;
+  --ui-bg-accented: #e7e0cf;
+  --ui-border: #d8d0bf;
+  --ui-border-muted: #e2dbcc;
+  --ui-border-accented: #b5ab96;
+}

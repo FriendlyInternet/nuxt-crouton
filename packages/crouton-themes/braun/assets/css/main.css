@@ -322,3 +322,22 @@
 .theme-braun button[role="switch"][data-state="checked"] > span {
   background-color: #fff;
 }
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the cream chassis.
+   ============================================ */
+
+[data-theme="braun"] body,
+body.theme-braun {
+  --ui-text-dimmed: #8f8a80;
+  --ui-text-muted: #7a756c;
+  --ui-text-toned: #55524c;
+  --ui-text: #3a3835;
+  --ui-text-highlighted: #2e2c29;
+  --ui-bg-muted: #f6f4ef;
+  --ui-bg-elevated: #faf8f4;
+  --ui-bg-accented: #eae6de;
+  --ui-border: #d5d0c7;
+  --ui-border-muted: #e2ded6;
+  --ui-border-accented: #b5afa2;
+}

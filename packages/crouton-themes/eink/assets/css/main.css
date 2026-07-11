@@ -239,3 +239,22 @@
 .theme-eink button[role="switch"][data-state="checked"] > span {
   background-color: var(--eink-paper);
 }
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the display.
+   ============================================ */
+
+[data-theme="eink"] body,
+body.theme-eink {
+  --ui-text-dimmed: #8a8a8a;
+  --ui-text-muted: #6b6b6b;
+  --ui-text-toned: #3d3d3d;
+  --ui-text: #1c1c1c;
+  --ui-text-highlighted: #1c1c1c;
+  --ui-bg-muted: #eeece7;
+  --ui-bg-elevated: #ecebe6;
+  --ui-bg-accented: #e2e0da;
+  --ui-border: #cfccc6;
+  --ui-border-muted: #dedbd4;
+  --ui-border-accented: #1c1c1c;
+}

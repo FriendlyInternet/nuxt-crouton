@@ -285,3 +285,25 @@
   background-color: var(--gb-0);
   transition: none;
 }
+
+/* ============================================
+   SEMANTIC TOKENS (#1390)
+   Nuxt UI text/surface/border tokens tuned to the LCD so app surfaces
+   (muted copy, elevated panels, borders) stay in-palette and readable.
+   Scoped to body: inherited custom properties win over :root/.dark.
+   ============================================ */
+
+[data-theme="gameboy"] body,
+body.theme-gameboy {
+  --ui-text-dimmed: #3f6d3f;
+  --ui-text-muted: #2f5d2f;
+  --ui-text-toned: #1d4a1d;
+  --ui-text: #0f380f;
+  --ui-text-highlighted: #0f380f;
+  --ui-bg-muted: #a4c414;
+  --ui-bg-elevated: #a8c61e;
+  --ui-bg-accented: #8bac0f;
+  --ui-border: #306230;
+  --ui-border-muted: #558042;
+  --ui-border-accented: #0f380f;
+}
