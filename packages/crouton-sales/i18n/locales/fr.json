@@ -217,6 +217,8 @@
       "none": "Aucun",
       "active": "Actif",
       "inactive": "Inactif",
+      "on": "Activé",
+      "off": "Désactivé",
       "confirmDelete": "Confirmer la suppression"
     },
     "block": {
@@ -393,7 +395,8 @@
       "testPrintWaiting": "Envoi du ticket de test à l'imprimante…",
       "testPrintPrinted": "Imprimé — le ticket de test est passé",
       "testPrintFailed": "Échec de l'impression test",
-      "testPrintTimeout": "Aucune réponse — spooler hors ligne ou imprimante injoignable ?"
+      "testPrintTimeout": "Aucune réponse — spooler hors ligne ou imprimante injoignable ?",
+      "preview": "Aperçu"
     },
     "helperLogin": {
       "title": "Connexion bénévole",
@@ -444,6 +447,8 @@
       "location": "Lieu",
       "status": "Statut",
       "previewTitle": "Aperçu d'impression",
+      "previewFailed": "Impossible de charger l'aperçu",
+      "previewNote": "Comme l'imprimante l'imprime · avec vos réglages enregistrés",
       "printerInformation": "Informations sur l'imprimante",
       "name": "Nom",
       "ipAddress": "Adresse IP",

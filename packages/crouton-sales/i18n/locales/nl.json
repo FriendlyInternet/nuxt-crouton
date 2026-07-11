@@ -218,6 +218,8 @@
       "none": "Geen",
       "active": "Actief",
       "inactive": "Inactief",
+      "on": "Aan",
+      "off": "Uit",
       "confirmDelete": "Bevestig verwijderen"
     },
     "block": {
@@ -394,7 +396,8 @@
       "testPrintWaiting": "Testticket wordt naar de printer gestuurd…",
       "testPrintPrinted": "Afgedrukt — het testticket is doorgekomen",
       "testPrintFailed": "Testprint mislukt",
-      "testPrintTimeout": "Geen antwoord — spooler offline of printer onbereikbaar?"
+      "testPrintTimeout": "Geen antwoord — spooler offline of printer onbereikbaar?",
+      "preview": "Voorbeeld"
     },
     "helperLogin": {
       "title": "Helper-login",
@@ -445,6 +448,8 @@
       "location": "Locatie",
       "status": "Status",
       "previewTitle": "Printvoorbeeld",
+      "previewFailed": "Kon voorbeeld niet laden",
+      "previewNote": "Zoals de printer hem afdrukt · met je opgeslagen instellingen",
       "printerInformation": "Printerinformatie",
       "name": "Naam",
       "ipAddress": "IP-adres",

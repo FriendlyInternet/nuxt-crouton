@@ -218,6 +218,8 @@
       "none": "None",
       "active": "Active",
       "inactive": "Inactive",
+      "on": "On",
+      "off": "Off",
       "confirmDelete": "Confirm delete"
     },
     "block": {
@@ -394,7 +396,8 @@
       "testPrintWaiting": "Sending test ticket to the printer…",
       "testPrintPrinted": "Printed — the test ticket went through",
       "testPrintFailed": "Test print failed",
-      "testPrintTimeout": "No response — spooler down or printer unreachable?"
+      "testPrintTimeout": "No response — spooler down or printer unreachable?",
+      "preview": "Preview"
     },
     "helperLogin": {
       "title": "Helper Login",
@@ -445,6 +448,8 @@
       "location": "Location",
       "status": "Status",
       "previewTitle": "Print Preview",
+      "previewFailed": "Couldn't load preview",
+      "previewNote": "As the printer prints it · with your saved settings",
       "printerInformation": "Printer Information",
       "name": "Name",
       "ipAddress": "IP Address",

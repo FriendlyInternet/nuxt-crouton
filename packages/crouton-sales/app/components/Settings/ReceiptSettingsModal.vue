@@ -17,14 +17,14 @@
           <UFormField :label="t('sales.receipt.specialInstructionsTitle')" :help="t('sales.receipt.specialInstructionsHelp')">
             <UInput
               v-model="settings.special_instructions_title"
-              placeholder="SPECIAL INSTRUCTIONS:"
+              placeholder="OPMERKING:"
             />
           </UFormField>
 
           <UFormField :label="t('sales.receipt.staffOrderHeader')" :help="t('sales.receipt.staffOrderHeaderHelp')">
             <UInput
               v-model="settings.staff_order_header"
-              placeholder="*** STAFF ORDER ***"
+              placeholder="*** PERSONEEL ***"
             />
           </UFormField>
         </div>
@@ -33,7 +33,7 @@
           <UTextarea
             v-model="settings.footer_text"
             :rows="2"
-            placeholder="Thank you for your order!"
+            placeholder="Bedankt voor je bestelling!"
           />
         </UFormField>
       </div>
@@ -84,10 +84,12 @@ const isOpen = computed({
 
 const saving = ref(false)
 
+// Defaults mirror crouton-printing's canonical DEFAULT_RECEIPT_SETTINGS (Dutch),
+// so the form matches what actually prints for an unsaved event (#1514).
 const settings = ref<ReceiptSettings>({
-  special_instructions_title: 'SPECIAL INSTRUCTIONS:',
-  staff_order_header: '*** STAFF ORDER ***',
-  footer_text: 'Thank you for your order!',
+  special_instructions_title: 'OPMERKING:',
+  staff_order_header: '*** PERSONEEL ***',
+  footer_text: 'Bedankt voor je bestelling!',
 })
 
 async function loadSettings() {
