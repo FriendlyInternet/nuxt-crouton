@@ -792,12 +792,25 @@ async function handleSubmit() {
     }
 
     const rawContent = showBlockEditor.value ? (primary.content || state.value.content) : state.value.content
+    // Explicit allowlist of the fields this form owns — never spread the whole
+    // record: identity/ownership/hierarchy/audit fields (id, teamId, owner,
+    // path, depth, createdBy, *User joins…) must not ride along in the body,
+    // and untouched fields shouldn't be re-asserted beyond what the form
+    // actually presents (#1403).
     const submitData = {
-      ...state.value,
       title: primary.title || state.value.title,
       slug: primary.slug || state.value.slug,
+      pageType: state.value.pageType,
+      status: state.value.status,
+      visibility: state.value.visibility,
+      publishedAt: state.value.publishedAt,
+      showInNavigation: state.value.showInNavigation,
+      layout: state.value.layout,
+      parentId: state.value.parentId,
       seoTitle: (primary as any).seoTitle || '',
       seoDescription: (primary as any).seoDescription || '',
+      ogImage: state.value.ogImage,
+      robots: state.value.robots,
       content: rawContent && typeof rawContent === 'object' ? JSON.stringify(rawContent) : rawContent,
       translations,
       config: isRegularPage.value ? regularPageConfig() : state.value.config
