@@ -254,6 +254,10 @@ const sizeClasses = computed(() => {
         </slot>
 
         <!-- Add booking tab (slides down from under the date block on hover) -->
+        <!-- Deliberately a raw button (#1410): a calendar hover cell whose
+             geometry (absolute slide-down tab under the date block) and
+             booked-state colors are the widget itself — no Nuxt UI equivalent.
+             Colors use semantic tokens where possible. -->
         <button
           v-if="!isCreatingDate(day)"
           type="button"
