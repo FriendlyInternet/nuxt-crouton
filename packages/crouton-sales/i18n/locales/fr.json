@@ -386,7 +386,10 @@
       "driverNetwork": "Imprimante réseau",
       "driverNetworkHelp": "Imprimante thermique sur le réseau du lieu (ESC/POS).",
       "driverBrowser": "Navigateur / AirPrint",
-      "driverBrowserHelp": "Imprimer via la boîte de dialogue d’impression de l’appareil, depuis un écran passerelle."
+      "driverBrowserHelp": "Imprimer via la boîte de dialogue d’impression de l’appareil, depuis un écran passerelle.",
+      "testPrint": "Impression test",
+      "testPrintQueued": "Ticket de test en file — regardez l'imprimante",
+      "testPrintError": "Échec de l'impression test"
     },
     "helperLogin": {
       "title": "Connexion bénévole",

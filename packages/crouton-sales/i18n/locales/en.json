@@ -387,7 +387,10 @@
       "driverNetwork": "Network printer",
       "driverNetworkHelp": "Thermal printer on the venue network (ESC/POS).",
       "driverBrowser": "Browser / AirPrint",
-      "driverBrowserHelp": "Print via the device print dialog from a print-bridge screen."
+      "driverBrowserHelp": "Print via the device print dialog from a print-bridge screen.",
+      "testPrint": "Test print",
+      "testPrintQueued": "Test ticket queued — watch the printer",
+      "testPrintError": "Test print failed"
     },
     "helperLogin": {
       "title": "Helper Login",

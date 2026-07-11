@@ -163,6 +163,19 @@
             :loading="deleting"
             @confirm="handleDelete"
           />
+          <!-- Testprint (#1391): a tiny ticket through the REAL print flow
+               (queue → the event's transport → paper) — proves the whole
+               chain, not just this form's values. Saved printers only. -->
+          <UButton
+            v-if="action === 'update' && state.id"
+            variant="outline"
+            color="neutral"
+            icon="i-lucide-printer-check"
+            :loading="testPrinting"
+            @click="handleTestPrint"
+          >
+            {{ t('sales.form.testPrint', 'Testprint') }}
+          </UButton>
           <CroutonFormActionButton
             class="flex-1"
             :action="action"
@@ -310,6 +323,32 @@ const handleSubmit = async () => {
 
 // Delete stays in-form (a nested overlay would leave this slideover open on a
 // deleted record); the arm→confirm step lives in CroutonDeleteButton.
+// Testprint (#1391): POST the team-authed probe endpoint; the job then rides
+// the event's Print flow like any order ticket. Outcome shows on the printer
+// LEDs / job list — the toast only confirms "queued".
+const notify = useNotify()
+const route = useRoute()
+const testPrinting = ref(false)
+
+async function handleTestPrint() {
+  if (!state.value.id || !state.value.eventId) return
+  testPrinting.value = true
+  try {
+    await $fetch(
+      `/api/crouton-sales/teams/${route.params.team}/events/${state.value.eventId}/printers/${state.value.id}/test-print`,
+      { method: 'POST' }
+    )
+    notify.success(t('sales.form.testPrintQueued', 'Test ticket queued — watch the printer'))
+  }
+  catch (e: unknown) {
+    const description = (e as { data?: { statusText?: string } })?.data?.statusText
+    notify.error(t('sales.form.testPrintError', 'Test print failed'), description ? { description } : undefined)
+  }
+  finally {
+    testPrinting.value = false
+  }
+}
+
 const deleting = ref(false)
 
 const handleDelete = async () => {
