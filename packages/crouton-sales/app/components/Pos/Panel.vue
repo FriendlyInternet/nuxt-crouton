@@ -99,6 +99,12 @@ const sessionMatchesEvent = computed(() =>
 
 // Login form state (helper PIN fallback)
 const formState = reactive({ helperName: '', pin: '' })
+// UPinInput binds an array (one digit per cell); keep the joined string as the
+// source of truth so onLoginSubmit / login() stay unchanged. Fixed 4 digits (#1480).
+const pinCells = computed<number[]>({
+  get: () => formState.pin.split('').map(Number),
+  set: cells => { formState.pin = cells.join('') }
+})
 const loginError = ref('')
 const submitting = ref(false)
 
@@ -286,15 +292,13 @@ onUnmounted(unhookMutation)
             />
           </UFormField>
           <UFormField :label="t('sales.helperLogin.pin')" name="pin">
-            <UInput
-              v-model="formState.pin"
-              type="password"
-              :placeholder="t('sales.helperLogin.enterPin')"
+            <UPinInput
+              v-model="pinCells"
+              :length="4"
+              type="number"
+              mask
               size="lg"
-              class="w-full"
-              :ui="{ base: 'font-mono text-center tracking-widest' }"
-              inputmode="numeric"
-              pattern="[0-9]*"
+              :aria-label="t('sales.helperLogin.pin')"
             />
           </UFormField>
           <UButton

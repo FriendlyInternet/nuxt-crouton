@@ -172,6 +172,13 @@ const eventDirty = computed(() =>
   || eventForm.value.helperPin !== (props.event.helperPin || '')
 )
 
+// UPinInput binds an array (one digit per cell); keep the joined string on
+// eventForm.helperPin so the dirty-check + save keep working. Fixed 4 digits (#1480).
+const helperPinCells = computed<number[]>({
+  get: () => (eventForm.value.helperPin || '').split('').map(Number),
+  set: cells => { eventForm.value.helperPin = cells.join('') }
+})
+
 const receiptDirty = computed(() =>
   receiptForm.value.special_instructions_title !== receiptSaved.value.special_instructions_title
   || receiptForm.value.staff_order_header !== receiptSaved.value.staff_order_header
@@ -611,13 +618,12 @@ function helperExpiry(value: string): string {
         </template>
 
         <UFormField :label="t('sales.workspace.helperPin')">
-          <UInput
-            v-model="eventForm.helperPin"
-            type="text"
-            :placeholder="t('sales.helperLogin.enterPin')"
+          <UPinInput
+            v-model="helperPinCells"
+            :length="4"
+            type="number"
             size="sm"
-            :ui="{ base: 'font-mono' }"
-            class="w-full"
+            :aria-label="t('sales.workspace.helperPin')"
           />
         </UFormField>
 
