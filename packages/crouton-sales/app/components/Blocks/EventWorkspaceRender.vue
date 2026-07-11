@@ -85,16 +85,15 @@ function openPane(pane: 'orders' | 'clients' | 'data' | 'settings') {
     />
 
     <!-- Wide-screen team member → the full workspace inline (event fixed, no
-         switcher). Variant-less UCard (#1407): the theme's card chrome frames
-         the block instead of a hardcoded rounded-3xl shell. -->
-    <UCard v-else-if="showInlineShell">
-      <Suspense>
-        <SalesEventWorkspaceShell :event-slug="eventSlug" :show-switcher="false" />
-        <template #fallback>
-          <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
-        </template>
-      </Suspense>
-    </UCard>
+         switcher). Bare — the shell's kassa module draws its own border, so a
+         card wrapper doubled the frame (card border + module border) and its
+         body padding ate kassa height. -->
+    <Suspense v-else-if="showInlineShell">
+      <SalesEventWorkspaceShell :event-slug="eventSlug" :show-switcher="false" />
+      <template #fallback>
+        <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
+      </template>
+    </Suspense>
 
     <!-- Otherwise → "Open kassa" launcher + fullscreen modal. Two cases: a
          member on a narrow screen (modal hosts the full workspace shell), or an
