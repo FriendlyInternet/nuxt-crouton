@@ -579,7 +579,11 @@ const monthCellHeight = computed(() => {
                 : '',
             ]"
             :title="getDayBlockedReason(day.toDate(getLocalTimeZone())) || undefined"
+            :role="hasBookings(day.toDate(getLocalTimeZone())) ? 'button' : undefined"
+            :tabindex="hasBookings(day.toDate(getLocalTimeZone())) && !isDayUnavailable(day.toDate(getLocalTimeZone())) ? 0 : undefined"
             @click="hasBookings(day.toDate(getLocalTimeZone())) && emit('select', day.toDate(getLocalTimeZone()))"
+            @keydown.enter.prevent="hasBookings(day.toDate(getLocalTimeZone())) && emit('select', day.toDate(getLocalTimeZone()))"
+            @keydown.space.prevent="hasBookings(day.toDate(getLocalTimeZone())) && emit('select', day.toDate(getLocalTimeZone()))"
           >
             <!-- Day number -->
             <span

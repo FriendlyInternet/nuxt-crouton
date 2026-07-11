@@ -258,6 +258,8 @@ const timelineItems = computed<TimelineItem[]>(() => {
     }"
     @mouseenter="isHovered = true"
     @mouseleave="isHovered = false"
+    @focusin="isHovered = true"
+    @focusout="isHovered = false"
   >
     <!-- Main layout: responsive flex with space-between on desktop -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 md:gap-3 relative overflow-hidden">

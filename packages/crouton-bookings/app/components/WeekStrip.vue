@@ -228,7 +228,11 @@ const sizeClasses = computed(() => {
             ? 'bg-elevated shadow-md'
             : isHighlighted(day) && 'bg-elevated shadow-sm',
         ]"
+        role="button"
+        :tabindex="isDayDisabled(day) ? -1 : 0"
         @click="onDayClick(day)"
+        @keydown.enter.prevent="onDayClick(day)"
+        @keydown.space.prevent="onDayClick(day)"
       >
         <!-- Weekday label -->
         <span :class="['text-muted uppercase tracking-wider font-medium', sizeClasses.weekday]">

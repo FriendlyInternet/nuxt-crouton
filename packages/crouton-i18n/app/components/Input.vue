@@ -234,7 +234,7 @@ function previewText(field: string, locale: string): string {
                 <div v-if="openGroupsState[group.name]" class="flex-1 flex flex-col gap-1 min-h-0 pt-2">
                   <div v-for="field in group.fields" :key="`narrow-g-${field}`" class="flex-1 flex flex-col gap-1 min-h-0">
                     <div v-if="group.fields.length > 1 || showAiTranslate" class="flex items-center justify-between h-5 shrink-0">
-                      <label v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                      <span v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                       <CroutonI18nBlockTranslateTrigger
                         v-if="showAiTranslate && isBlockEditorField(field) && hasSourceContent(field, narrowLocaleTab)"
                         :loading="isFieldTranslating(field, narrowLocaleTab)"
@@ -282,7 +282,7 @@ function previewText(field: string, locale: string): string {
                 <div v-if="openGroupsState[group.name]" class="flex flex-col gap-2 pb-2">
                   <div v-for="field in group.fields" :key="`narrow-g-${field}`" class="flex flex-col gap-1">
                     <div class="flex items-center justify-between h-5">
-                      <label class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                      <span class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                       <AITranslateButton
                         v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, narrowLocaleTab)"
                         :source-text="getBestSourceText(field, narrowLocaleTab)"
@@ -341,9 +341,9 @@ function previewText(field: string, locale: string): string {
             ]"
           >
             <div v-if="!bareFields?.includes(field)" class="flex items-center justify-between h-5">
-              <label class="text-xs font-medium text-muted uppercase tracking-wide">
+              <span class="text-xs font-medium text-muted uppercase tracking-wide">
                 {{ field }}
-              </label>
+              </span>
               <!-- AI Translate button - uses stub (renders nothing) if crouton-ai not extended -->
               <AITranslateButton
                 v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, narrowLocaleTab)"
@@ -520,7 +520,7 @@ function previewText(field: string, locale: string): string {
                   <div v-if="openGroupsState[group.name]" class="flex-1 flex flex-col gap-1 min-h-0 pt-2">
                     <div v-for="field in group.fields" :key="`primary-g-${field}`" class="flex-1 flex flex-col gap-1 min-h-0">
                       <div v-if="group.fields.length > 1 || showAiTranslate" class="flex items-center justify-between h-5 shrink-0">
-                        <label v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                        <span v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                         <CroutonI18nBlockTranslateTrigger
                           v-if="showAiTranslate && isBlockEditorField(field) && hasSourceContent(field, primaryEditingLocale)"
                           :loading="isFieldTranslating(field, primaryEditingLocale)"
@@ -569,7 +569,7 @@ function previewText(field: string, locale: string): string {
                   <div v-if="openGroupsState[group.name]" class="flex flex-col gap-2 pt-2 pb-1">
                     <div v-for="field in group.fields" :key="`primary-g-${field}`" class="flex flex-col gap-1">
                       <div class="flex items-center justify-between h-5">
-                        <label class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                        <span class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                         <AITranslateButton
                           v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, primaryEditingLocale)"
                           :source-text="getBestSourceText(field, primaryEditingLocale)"
@@ -628,9 +628,9 @@ function previewText(field: string, locale: string): string {
               ]"
             >
               <div class="flex items-center justify-between h-5">
-                <label class="text-xs font-medium text-muted uppercase tracking-wide">
+                <span class="text-xs font-medium text-muted uppercase tracking-wide">
                   {{ field }}
-                </label>
+                </span>
                 <!-- AI Translate button for primary locale -->
                 <AITranslateButton
                   v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, primaryEditingLocale)"
@@ -779,7 +779,7 @@ function previewText(field: string, locale: string): string {
                   <div v-if="openGroupsState[group.name]" class="flex-1 flex flex-col gap-1 min-h-0 pt-2">
                     <div v-for="field in group.fields" :key="`secondary-g-${field}`" class="flex-1 flex flex-col gap-1 min-h-0">
                       <div v-if="group.fields.length > 1 || showAiTranslate" class="flex items-center justify-between h-5 shrink-0">
-                        <label v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                        <span v-if="group.fields.length > 1" class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                         <CroutonI18nBlockTranslateTrigger
                           v-if="showAiTranslate && isBlockEditorField(field) && hasSourceContent(field, secondaryEditingLocale)"
                           :loading="isFieldTranslating(field, secondaryEditingLocale)"
@@ -831,7 +831,7 @@ function previewText(field: string, locale: string): string {
                   <div v-if="openGroupsState[group.name]" class="flex flex-col gap-2 pt-2 pb-1">
                     <div v-for="field in group.fields" :key="`secondary-g-${field}`" class="flex flex-col gap-1">
                       <div class="flex items-center justify-between h-5">
-                        <label class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</label>
+                        <span class="text-xs font-medium text-muted uppercase tracking-wide">{{ field }}</span>
                         <AITranslateButton
                           v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, secondaryEditingLocale)"
                           :source-text="getBestSourceText(field, secondaryEditingLocale)"
@@ -886,9 +886,9 @@ function previewText(field: string, locale: string): string {
               ]"
             >
               <div class="flex items-center justify-between h-5">
-                <label class="text-xs font-medium text-muted uppercase tracking-wide">
+                <span class="text-xs font-medium text-muted uppercase tracking-wide">
                   {{ field }}
-                </label>
+                </span>
                 <!-- AI Translate button - uses stub (renders nothing) if crouton-ai not extended -->
                 <AITranslateButton
                   v-if="showAiTranslate && !isBlockEditorField(field) && hasSourceContent(field, secondaryEditingLocale)"
