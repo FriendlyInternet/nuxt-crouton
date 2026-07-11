@@ -1,151 +1,69 @@
+<!--
+  SalesSettingsPrintPreviewModal (#1504)
+  Preview what a printer actually prints. Fetches the server-rendered ticket
+  (renderTicketHtml — the exact browser-print engine) for this printer + event
+  and drops it into a SANDBOXED iframe, so the preview can't drift from reality
+  and the ticket's own print CSS can't leak into the app. Reflects the saved
+  printer (Prijzen tonen + type) and the event's saved receipt-text settings.
+  Preview-only: Testprint lives in the printer form beside the Voorbeeld button.
+-->
 <template>
-  <UModal v-model:open="isOpen">
-    <template #header>
-      <div class="flex items-center gap-2">
-        <UIcon name="i-lucide-eye" class="w-5 h-5" />
-        <span>{{ t('sales.print.previewTitle') }}</span>
-      </div>
-    </template>
-
+  <UModal v-model:open="isOpen" :title="t('sales.print.previewTitle', 'Voorbeeld')">
     <template #body>
-      <div v-if="printer" class="space-y-4">
-        <!-- Printer Info -->
-        <UCard>
-          <div class="space-y-3">
-            <h4 class="font-medium">{{ t('sales.print.printerInformation') }}</h4>
-            <div class="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span class="font-medium">{{ t('sales.print.name') }}:</span>
-                {{ printer.title }}
-              </div>
-              <div>
-                <span class="font-medium">{{ t('sales.print.ipAddress') }}:</span>
-                {{ printer.ipAddress }}:{{ printer.port || '9100' }}
-              </div>
-              <div>
-                <span class="font-medium">{{ t('sales.print.location') }}:</span>
-                {{ locationName || t('sales.common.none') }}
-              </div>
-              <div>
-                <span class="font-medium">{{ t('sales.print.status') }}:</span>
-                <UBadge
-                  :color="printer.isActive ? 'success' : 'neutral'"
-                  variant="soft"
-                  size="xs"
-                  class="ml-1"
-                >
-                  {{ printer.isActive ? t('sales.common.active') : t('sales.common.inactive') }}
-                </UBadge>
-              </div>
-            </div>
-          </div>
-        </UCard>
+      <div class="space-y-4">
+        <div v-if="pending" class="p-10 flex justify-center">
+          <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-muted" />
+        </div>
 
-        <!-- Receipt Preview — deliberately NOT themed (#1394): this mocks the
-             physical thermal paper the printer spits out, so it keeps literal
-             paper white / ink gray regardless of app theme (chrome-vs-data
-             rule: the modal chrome themes, the paper mock doesn't). -->
-        <UCard class="bg-gray-50 dark:bg-gray-900">
-          <div class="flex justify-center">
-            <div
-              class="bg-white shadow-xl rounded-lg overflow-hidden"
-              style="width: 320px; font-family: 'Courier New', monospace;"
-            >
-              <div class="p-4" style="background: linear-gradient(to bottom, #ffffff 0%, #f8f8f8 100%);">
-                <!-- Header -->
-                <div class="text-center border-b-2 border-dashed border-gray-400 pb-2 mb-2">
-                  <div class="font-bold text-lg">PRINTER TEST</div>
-                </div>
-
-                <!-- Printer Details -->
-                <div class="text-sm py-2">
-                  <div>Printer: {{ printer.title }}</div>
-                  <div>IP: {{ printer.ipAddress }}:{{ printer.port || '9100' }}</div>
-                  <div>Time: {{ currentTime }}</div>
-                </div>
-
-                <div class="border-t-2 border-dashed border-gray-400 my-2" />
-
-                <!-- Sample Order -->
-                <div class="font-bold text-lg py-1">
-                  Sample Order #12345
-                </div>
-
-                <div class="text-sm space-y-1">
-                  <div class="flex justify-between">
-                    <span>1x Sample Product</span>
-                    <span v-if="printer.showPrices">$10.00</span>
-                  </div>
-                  <div class="flex justify-between">
-                    <span>2x Another Item</span>
-                    <span v-if="printer.showPrices">$15.00</span>
-                  </div>
-                </div>
-
-                <div class="border-t-2 border-dashed border-gray-400 my-2" />
-
-                <div class="text-sm py-1 font-bold">
-                  {{ receiptSettings.special_instructions_title }}
-                </div>
-                <div class="text-sm">
-                  Please serve with extra napkins
-                </div>
-
-                <div class="border-t-2 border-dashed border-gray-400 my-2" />
-
-                <div v-if="printer.showPrices" class="flex justify-between font-bold text-lg py-1">
-                  <span>TOTAL:</span>
-                  <span>$25.00</span>
-                </div>
-
-                <div class="border-t-2 border-dashed border-gray-400 my-2" />
-
-                <!-- Footer -->
-                <div class="text-center text-sm py-2">
-                  {{ receiptSettings.footer_text }}
-                </div>
-
-                <!-- Tear edge effect -->
-                <div
-                  class="mt-4 -mx-4 h-4"
-                  style="background: repeating-linear-gradient(90deg, transparent 0, transparent 6px, #e5e5e5 6px, #e5e5e5 8px);"
-                />
-              </div>
-            </div>
-          </div>
-        </UCard>
-
-        <!-- Info Alert -->
         <UAlert
-          icon="i-lucide-info"
-          color="info"
+          v-else-if="error"
+          color="error"
           variant="soft"
-          :title="t('sales.print.previewInformation')"
-        >
-          <template #description>
-            {{ t('sales.print.previewDescription') }}
-          </template>
-        </UAlert>
-      </div>
-      <div v-else class="p-8 text-center text-muted">
-        {{ t('sales.print.noPrinterSelected') }}
+          icon="i-lucide-triangle-alert"
+          :title="t('sales.print.previewFailed', 'Kon voorbeeld niet laden')"
+          :description="errorMessage"
+        />
+
+        <template v-else-if="data">
+          <!-- Printer info (chrome — themed) -->
+          <div class="rounded-lg bg-elevated p-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            <div><span class="text-muted">{{ t('sales.print.name', 'Naam') }}:</span> {{ data.printer.title }}</div>
+            <div><span class="text-muted">{{ t('sales.print.ipAddress', 'IP') }}:</span> {{ data.printer.ipAddress }}:{{ data.printer.port || 9100 }}</div>
+            <div>
+              <span class="text-muted">{{ t('sales.form.printerType', 'Type') }}:</span>
+              {{ data.printer.type === 'receipt' ? t('sales.form.printerTypeReceipt', 'Afrekening') : t('sales.form.printerTypeKitchen', 'Bestelling') }}
+            </div>
+            <div>
+              <span class="text-muted">{{ t('sales.form.showPrices', 'Prijzen') }}:</span>
+              <UBadge :color="data.printer.showPrices ? 'primary' : 'neutral'" variant="soft" size="xs" class="ml-1">
+                {{ data.printer.showPrices ? t('sales.common.on', 'Aan') : t('sales.common.off', 'Uit') }}
+              </UBadge>
+            </div>
+          </div>
+
+          <!-- The ticket — real renderTicketHtml output in a sandboxed iframe.
+               Deliberately NOT themed (#1394): it mocks physical thermal paper,
+               so it stays literal white/ink regardless of app theme. -->
+          <div class="rounded-lg bg-[#e7e7ea] p-4 flex justify-center">
+            <iframe
+              :srcdoc="data.html"
+              sandbox=""
+              title="ticket"
+              class="w-[312px] h-[420px] border-0 bg-white shadow-xl"
+            />
+          </div>
+
+          <p class="text-xs text-muted text-center">
+            {{ t('sales.print.previewNote', 'Zoals de printer hem afdrukt · met je opgeslagen instellingen') }}
+          </p>
+        </template>
       </div>
     </template>
 
     <template #footer>
-      <div class="flex justify-end gap-3">
-        <UButton variant="outline" @click="close">
-          {{ t('sales.common.close') }}
-        </UButton>
-        <UButton
-          v-if="printer"
-          color="primary"
-          icon="i-lucide-printer"
-          :loading="testPrinting"
-          :disabled="!printer.isActive"
-          @click="testPrint"
-        >
-          {{ t('sales.print.testPrint') }}
+      <div class="flex justify-end w-full">
+        <UButton variant="outline" color="neutral" @click="isOpen = false">
+          {{ t('sales.common.close', 'Sluiten') }}
         </UButton>
       </div>
     </template>
@@ -153,58 +71,56 @@
 </template>
 
 <script setup lang="ts">
-import type { SalesPrinter } from '../../types'
-import type { ReceiptSettings } from './ReceiptSettingsModal.vue'
-
 const props = defineProps<{
-  modelValue: boolean
-  printer: SalesPrinter | null
-  /** API endpoint for test print (e.g., '/api/teams/xxx/pos-printers') */
-  testPrintApiBase: string
-  receiptSettings: ReceiptSettings
-  /** Location name to display (optional) */
-  locationName?: string
+  /** v-model:open */
+  open: boolean
+  printerId: string
+  eventId: string
+  /** Team route param (uuid or slug) for the endpoint URL. */
+  teamParam: string
 }>()
 
-const emit = defineEmits<{
-  'update:modelValue': [value: boolean]
-  'test-print': [printer: SalesPrinter]
-}>()
-
-const notify = useNotify()
+const emit = defineEmits<{ 'update:open': [value: boolean] }>()
 const { t } = useT()
 
 const isOpen = computed({
-  get: () => props.modelValue,
-  set: value => emit('update:modelValue', value),
+  get: () => props.open,
+  set: value => emit('update:open', value)
 })
 
-const testPrinting = ref(false)
+interface PreviewResponse {
+  html: string
+  printer: { title: string, ipAddress: string, port: number | null, type: string, showPrices: boolean, isActive: boolean }
+}
 
-const currentTime = computed(() => new Date().toLocaleString())
+const data = ref<PreviewResponse | null>(null)
+const pending = ref(false)
+const error = ref<unknown>(null)
+const errorMessage = computed(() => {
+  const e = error.value as { data?: { statusText?: string }, message?: string } | null
+  return e?.data?.statusText || e?.message || t('sales.orders.error', 'Er ging iets mis')
+})
 
-async function testPrint() {
-  if (!props.printer) return
-
-  testPrinting.value = true
+async function load() {
+  if (!props.printerId || !props.eventId) return
+  pending.value = true
+  error.value = null
   try {
-    await $fetch(
-      `${props.testPrintApiBase}/${props.printer.id}/test`,
-      { method: 'POST' },
+    data.value = await $fetch<PreviewResponse>(
+      `/api/crouton-sales/teams/${props.teamParam}/events/${props.eventId}/printers/${props.printerId}/preview`
     )
-    notify.success(t('sales.print.testQueued'), { description: t('sales.print.testQueuedDesc') })
-    emit('test-print', props.printer)
   }
-  catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : t('sales.print.testFailed')
-    notify.error(t('sales.orders.error'), { description: errorMessage })
+  catch (e: unknown) {
+    error.value = e
+    data.value = null
   }
   finally {
-    testPrinting.value = false
+    pending.value = false
   }
 }
 
-function close() {
-  isOpen.value = false
-}
+// Fetch each time the modal opens (settings/prices may have changed since last).
+watch(isOpen, (open) => {
+  if (open) load()
+})
 </script>
