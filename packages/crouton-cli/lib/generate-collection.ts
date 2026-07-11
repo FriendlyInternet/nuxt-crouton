@@ -445,16 +445,19 @@ async function createDatabaseTable(config: { name: string; layer: string; fields
 // mode 'client' (default): the form-facing schema the composable exports —
 // form state binds these fields to inputs, so non-required fields stay
 // `.optional()` (null only for json/date/meta.nullable, as before).
-// mode 'server': the wire-facing body schema the generated endpoints validate —
+// mode 'server': the wire-facing body schema the generated POST validates —
 // nullable columns round-trip null and `null` is how a client clears a field,
 // so every non-required field is `.nullish()` (#1403).
+// mode 'server-patch': the PATCH body — like 'server', plus partial-locale
+// translations (#1414): per-locale fields optional, null entry deletes a
+// locale, and the default-locale invariant moves post-merge into the handler.
 export function buildFieldsSchema(params: {
   fields: Field[]
   config: Record<string, any> | null
   hierarchy: HierarchyConfig
   cases: any
   layerCamelCase: string
-  mode?: 'client' | 'server'
+  mode?: 'client' | 'server' | 'server-patch'
 }): string {
   const { fields, config, hierarchy, cases, layerCamelCase, mode = 'client' } = params
   const translatableFieldNames = config?.translations?.collections?.[cases.plural] || []
@@ -491,7 +494,7 @@ export function buildFieldsSchema(params: {
         } else {
           return `${f.name}: ${baseZod}`
         }
-      } else if (mode === 'server') {
+      } else if (mode !== 'client') {
         // Wire schema: non-required columns are nullable in the DB and
         // round-trip as null (a loaded record PATCHed back, or an explicit
         // null to clear the field) — so every non-required field must accept
@@ -507,7 +510,7 @@ export function buildFieldsSchema(params: {
     })
   const translatableFieldsSchema = fields
     .filter(f => translatableFieldNames.includes(f.name))
-    .map(f => `${f.name}: ${f.zod}${mode === 'server' ? '.nullish()' : '.optional()'}`)
+    .map(f => `${f.name}: ${f.zod}${mode === 'client' ? '.optional()' : '.nullish()'}`)
   let allFieldsSchema = [...regularFieldsSchema, ...translatableFieldsSchema].join(',\n  ')
   if (hierarchy?.enabled) {
     const hierarchySchemaField = `parentId: z.string().nullable().optional()`
@@ -516,17 +519,25 @@ export function buildFieldsSchema(params: {
   if (translatableFieldNames.length > 0) {
     const translatableFields = fields.filter(f => translatableFieldNames.includes(f.name))
     const requiredTranslatableFields = translatableFields.filter(f => f.meta?.required)
+    // PATCH wire shape (#1414): per-locale required fields are
+    // present ⇒ non-empty, absent ⇒ untouched, never null; other per-locale
+    // fields are clearable (nullish). POST/client keep the strict shape — a
+    // new record must arrive complete.
+    const isPatch = mode === 'server-patch'
     const translationsFieldSchema = translatableFields.map((f) => {
       if (f.meta?.required) {
-        return `      ${f.name}: z.string().min(1, '${f.name.charAt(0).toUpperCase() + f.name.slice(1)} is required')`
+        return `      ${f.name}: z.string().min(1, '${f.name.charAt(0).toUpperCase() + f.name.slice(1)} is required')${isPatch ? '.optional()' : ''}`
       } else {
-        return `      ${f.name}: z.string().optional()`
+        return `      ${f.name}: z.string()${isPatch ? '.nullish()' : '.optional()'}`
       }
     }).join(',\n')
     // Validate the app's default locale (not a hardcoded 'en') — single-language
     // apps (e.g. defaultLocale: 'nl') must validate that locale, not English.
+    // On PATCH the invariant is enforced POST-MERGE in the generated handler
+    // (a partial payload legitimately omits the default locale), so no wire
+    // refine — and a null locale entry means "delete this locale".
     const defaultLocale = config?.defaultLocale || 'en'
-    const requiredFieldsCheck = requiredTranslatableFields.length > 0
+    const requiredFieldsCheck = requiredTranslatableFields.length > 0 && !isPatch
       ? `.refine(
     (translations) => translations.${defaultLocale} && ${requiredTranslatableFields.map(f => `translations.${defaultLocale}.${f.name}`).join(' && ')},
     { message: 'Translations for ${requiredTranslatableFields.map(f => f.name).join(', ')} (${defaultLocale}) are required' }
@@ -536,7 +547,7 @@ export function buildFieldsSchema(params: {
     z.string(),
     z.object({
 ${translationsFieldSchema}
-    })
+    })${isPatch ? '.nullable()' : ''}
   )${requiredFieldsCheck}`
   }
   return allFieldsSchema
@@ -646,10 +657,12 @@ function buildGeneratorData(params: {
     .join('')
 
   const fieldsSchema = buildFieldsSchema({ fields, config, hierarchy, cases, layerCamelCase })
-  // Wire-facing variant for the generated endpoints: accepts null on every
+  // Wire-facing variants for the generated endpoints: accept null on every
   // non-required field (#1403). Kept separate from the client/form schema so
-  // FormData never widens to null.
+  // FormData never widens to null. The PATCH variant additionally allows
+  // partial-locale translations (#1414).
   const serverFieldsSchema = buildFieldsSchema({ fields, config, hierarchy, cases, layerCamelCase, mode: 'server' })
+  const patchFieldsSchema = buildFieldsSchema({ fields, config, hierarchy, cases, layerCamelCase, mode: 'server-patch' })
 
   const fieldsDefault = buildFieldsDefault({ fields, config, hierarchy, cases })
 
@@ -676,6 +689,7 @@ function buildGeneratorData(params: {
     fields,
     fieldsSchema,
     serverFieldsSchema,
+    patchFieldsSchema,
     repeaterItemSchemasCode,
     fieldsDefault,
     fieldsColumns,

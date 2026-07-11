@@ -216,6 +216,22 @@ export function generatePatchEndpoint(data: Record<string, any>, config: Record<
   // locally so the server validation doesn't reference an undefined symbol.
   const itemSchemasPrefix = data.repeaterItemSchemasCode ? `${data.repeaterItemSchemasCode}\n\n` : ''
 
+  // Post-merge default-locale invariant (#1414): the wire schema allows
+  // partial-locale payloads, so "the default locale keeps its required
+  // fields" is checked on the merged RESULT, mirroring the POST refine.
+  const translatableNames: string[] = Array.isArray(hasTranslations) ? hasTranslations : []
+  const requiredTranslatable = fields.filter((f: any) => translatableNames.includes(f.name) && f.meta?.required)
+  const defaultLocale = config?.defaultLocale || 'en'
+  const mergedInvariant = requiredTranslatable.length > 0
+    ? `
+    if (!(merged.${defaultLocale} && ${requiredTranslatable.map((f: any) => `merged.${defaultLocale}.${f.name}`).join(' && ')})) {
+      throw createError({
+        status: 400,
+        statusText: 'Translations for ${requiredTranslatable.map((f: any) => f.name).join(', ')} (${defaultLocale}) are required'
+      })
+    }`
+    : ''
+
   return `// Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 ${imports}
@@ -223,7 +239,7 @@ import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/t
 import { z } from 'zod'
 
 ${itemSchemasPrefix}const bodySchema = z.object({
-  ${bodyFieldsSchemaOf(data)}${hasTranslations ? ',\n  // Transient hint: which locale the translation patch targets (not a column)\n  locale: z.string().optional()' : ''}
+  ${data.patchFieldsSchema ?? bodyFieldsSchemaOf(data)}${hasTranslations ? ',\n  // Transient hint: which locale the translation patch targets (not a column)\n  locale: z.string().optional()' : ''}
 }).partial().strip()
 
 export default defineEventHandler(async (event) => {
@@ -241,18 +257,21 @@ export default defineEventHandler(async (event) => {
   const body = await readValidatedBody(event, bodySchema.parse)${hasTranslations
     ? `
 
-  // Handle translation updates properly
-  if (body.translations && body.locale) {
+  // Merge translations into the existing record (partial-locale PATCH, #1414):
+  // each sent locale patches per-field; a null locale entry deletes that
+  // locale; omitted locales and fields stay untouched. The default-locale
+  // invariant is enforced on the merged result, not the wire payload.
+  if (body.translations) {
     const [existing] = await get${prefixedPascalCasePlural}ByIds(team.id, [${camelCase}Id]) as any[]
-    if (existing) {
-      body.translations = {
-        ...existing.translations,
-        [body.locale]: {
-          ...existing.translations?.[body.locale],
-          ...body.translations[body.locale]
-        }
+    const merged: Record<string, any> = { ...(existing?.translations ?? {}) }
+    for (const [loc, patch] of Object.entries(body.translations)) {
+      if (patch === null) {
+        delete merged[loc]
+      } else {
+        merged[loc] = { ...merged[loc], ...patch }
       }
-    }
+    }${mergedInvariant}
+    body.translations = merged
   }`
     : ''}
 

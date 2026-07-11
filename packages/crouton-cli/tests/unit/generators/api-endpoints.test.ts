@@ -119,11 +119,26 @@ describe('API Endpoint Generators', () => {
       expect(result).toContain('updates[key] = value')
     })
 
-    it('includes translation merge logic when configured', () => {
+    it('includes translation merge logic when configured (#1414: unconditional, per-locale)', () => {
       const result = generatePatchEndpoint(apiEndpointData, translationsConfig as AnyConfig)
-      expect(result).toContain('body.translations')
-      expect(result).toContain('existing.translations')
+      expect(result).toContain('if (body.translations) {')
+      expect(result).toContain('...(existing?.translations ?? {})')
       expect(result).toContain('getShopProductsByIds')
+      // null locale entry = delete that locale
+      expect(result).toContain('if (patch === null)')
+      expect(result).toContain('delete merged[loc]')
+      // per-field merge for sent locales
+      expect(result).toContain('merged[loc] = { ...merged[loc], ...patch }')
+    })
+
+    it('enforces the default-locale invariant post-merge, not on the wire (#1414)', () => {
+      const result = generatePatchEndpoint(apiEndpointData, translationsConfig as AnyConfig)
+      // the invariant guards the merged result
+      expect(result).toContain('merged.en && merged.en.name')
+      expect(result).toContain("'Translations for name (en) are required'")
+      // and the PATCH wire schema carries no refine
+      const schemaSection = result.slice(0, result.indexOf('defineEventHandler'))
+      expect(schemaSection).not.toContain('.refine(')
     })
   })
 
