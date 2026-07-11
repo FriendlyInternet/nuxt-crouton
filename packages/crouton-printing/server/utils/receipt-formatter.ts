@@ -608,6 +608,97 @@ body { width: 80mm; margin: 0 auto; padding: 4mm; font: 13px/1.35 'Menlo','Conso
 </style></head><body>${rows.join('')}</body></html>`
 }
 
+/** Fixed pairing-ticket labels per locale (#1366) — same pattern as
+ * RECEIPT_LABELS: this package ships no i18n, the server renders the ticket
+ * in the app's default locale so the router never composes text. */
+interface PairingLabels {
+  title: string
+  steps: string[]
+  deviceId: string
+  code: string
+  reprint: string
+}
+
+const PAIRING_LABELS: Record<ReceiptLocale, PairingLabels> = {
+  nl: {
+    title: 'KOPPEL DEZE ROUTER',
+    steps: ['Open het event in de app:', 'Instellingen → Printflow → Setup', 'Vul in bij "Koppel router":'],
+    deviceId: 'Router-ID',
+    code: 'Code',
+    reprint: 'Deze bon herprint tot de router gekoppeld is.'
+  },
+  en: {
+    title: 'PAIR THIS ROUTER',
+    steps: ['Open the event in the app:', 'Settings → Print flow → Setup', 'Enter under "Pair router":'],
+    deviceId: 'Router ID',
+    code: 'Code',
+    reprint: 'This ticket reprints until the router is paired.'
+  },
+  fr: {
+    title: 'COUPLER CE ROUTEUR',
+    steps: ["Ouvrez l'événement dans l'app :", 'Paramètres → Flux d\'impression → Setup', 'Saisissez sous « Coupler le routeur » :'],
+    deviceId: 'ID routeur',
+    code: 'Code',
+    reprint: "Ce ticket se réimprime tant que le routeur n'est pas couplé."
+  }
+}
+
+export interface PairingTicketData {
+  /** The device's self-generated persistent id (printed verbatim — the operator types it back). */
+  deviceId: string
+  /** The device's printed pairing code. */
+  code: string
+  /** App default locale for the fixed labels (crouton-i18n defaultLocale; default nl). */
+  locale?: ReceiptLocale
+  /** Shown centered in the footer so the installer knows WHICH app to open. */
+  appUrl?: string
+}
+
+/**
+ * The unclaimed router's self-introduction (#1366): rendered SERVER-side and
+ * handed to the device as base64 in the `{ status: 'unclaimed' }` poll reply —
+ * the router only ever prints bytes it is given, so wording/language stay
+ * updatable without touching the device. Bold-hierarchy styling (#1427).
+ */
+export function formatPairingTicket(data: PairingTicketData): FormattedReceipt {
+  const L = PAIRING_LABELS[data.locale || DEFAULT_RECEIPT_LOCALE]
+  const printer = new EscPosBuilder()
+
+  printer.drawLine(RULE_HEAVY)
+  printer.alignCenter()
+  printer.bold(true)
+  printer.doubleHeight(true)
+  printer.println(L.title)
+  printer.doubleHeight(false)
+  printer.bold(false)
+  printer.drawLine(RULE_HEAVY)
+
+  printer.alignLeft()
+  for (const step of L.steps) printer.println(GUTTER + step)
+  printer.println('')
+
+  printer.bold(true)
+  printer.println(`${GUTTER}${L.deviceId}:`)
+  printer.doubleHeight(true)
+  printer.println(GUTTER.repeat(2) + data.deviceId)
+  printer.doubleHeight(false)
+  printer.println(`${GUTTER}${L.code}:`)
+  printer.doubleSize(true)
+  printer.println(GUTTER + data.code)
+  printer.doubleSize(false)
+  printer.bold(false)
+
+  printer.println('')
+  printer.drawLine(RULE_LIGHT)
+  printer.alignCenter()
+  if (data.appUrl) printer.println(data.appUrl)
+  printer.println(L.reprint)
+  printer.println('')
+  printer.cut()
+
+  return printer.build()
+}
+
 /**
  * Generate a test receipt for printer testing
  */

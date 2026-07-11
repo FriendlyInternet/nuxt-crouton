@@ -1077,6 +1077,126 @@ body.theme-ko {
 }
 
 /* ============================================
+   CALENDAR (#1458) — a date pad on the chassis: silkscreen weekday
+   labels, key-like day cells, the selected day lights up on the LCD.
+   Named variant (ko-cal-*); selected/today state is ours to supply —
+   the named variant never fires Nuxt UI's color compounds.
+   ============================================ */
+
+.ko-cal-heading {
+  font-family: 'ko-tech', monospace;
+  color: var(--ko-text-dark);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.ko-cal-head {
+  font-family: 'ko-tech', monospace;
+  font-size: 0.7rem;
+  color: var(--ko-text-label);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  border-radius: 4px;
+}
+
+.ko-cal-cell {
+  font-family: 'ko-tech', monospace;
+  color: var(--ko-text-dark);
+  border-radius: 4px;
+  transition: background-color 100ms ease, color 100ms ease;
+}
+
+.ko-cal-cell:hover:not([data-selected]):not([data-disabled]) {
+  background-color: var(--ko-highlight-dark);
+}
+
+.ko-cal-cell[data-highlighted] {
+  background-color: var(--ko-highlight-dark);
+}
+
+/* Selected day: on the display — orange-on-panel, pressed in. */
+.ko-cal-cell[data-selected] {
+  background-color: var(--ko-surface-panel);
+  color: var(--ko-accent-orange);
+  box-shadow: inset 1px 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* Today: an LED under the key, lit but not engaged. */
+.ko-cal-cell[data-today]:not([data-selected]) {
+  position: relative;
+}
+
+.ko-cal-cell[data-today]:not([data-selected])::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 9999px;
+  background-color: var(--ko-accent-orange);
+  box-shadow: 0 0 4px var(--ko-highlight-orange);
+}
+
+.ko-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker have no variant
+   dimension; scoped to both activation paths like the switch above.
+   Slider anchors on [data-slider-impl] (unique to USlider — the color
+   picker has a "track" slot too), picker on its own slot names.
+   ============================================ */
+
+/* Slider: a fader — recessed slot, orange level, chassis-key cap. */
+[data-theme="ko"] [data-slider-impl] [data-slot="track"],
+.theme-ko [data-slider-impl] [data-slot="track"] {
+  background-color: var(--ko-surface-mid);
+  border: 1px solid var(--ko-surface-recess);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="ko"] [data-slider-impl] [data-slot="range"],
+.theme-ko [data-slider-impl] [data-slot="range"] {
+  background-color: var(--ko-accent-orange);
+  border-radius: 4px;
+}
+
+[data-theme="ko"] [data-slider-impl] [data-slot="thumb"],
+.theme-ko [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--ko-surface-light);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 var(--ko-highlight-light), 0 1px 2px rgba(0, 0, 0, 0.25);
+  --tw-ring-color: var(--ko-surface-recess);
+}
+
+/* Color picker: frame the color surfaces like display panels —
+   dark bezel border only, never tint the colors themselves. */
+[data-theme="ko"] [data-slot="picker"] [data-slot="selector"],
+.theme-ko [data-slot="picker"] [data-slot="selector"],
+[data-theme="ko"] [data-color-picker-track],
+.theme-ko [data-color-picker-track] {
+  border: 1px solid var(--ko-surface-recess);
+  border-radius: var(--ko-button-radius);
+}
+
+[data-theme="ko"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-ko [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: calc(var(--ko-button-radius) - 1px);
+}
+
+[data-theme="ko"] [data-slot="selectorThumb"],
+.theme-ko [data-slot="selectorThumb"],
+[data-theme="ko"] [data-slot="trackThumb"],
+.theme-ko [data-slot="trackThumb"] {
+  border-radius: 9999px;
+  --tw-ring-color: var(--ko-surface-panel);
+}
+
+/* ============================================
    DUAL SCHEME (#1395) — the black-unit counterpart (the dark TE
    hardware), DESIGNED not inverted: charcoal chassis, light silkscreen,
    the displays were already dark and stay identical. Activated by the

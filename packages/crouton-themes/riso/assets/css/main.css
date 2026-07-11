@@ -461,6 +461,97 @@ body.theme-riso {
 }
 
 /* ============================================
+   CALENDAR (#1458) — a printed almanac grid: teal weekday heads, the
+   pink-with-teal-misregistration block for the selected day. Named
+   variant (riso-cal-*); selected/today state is ours to supply.
+   ============================================ */
+
+.riso-cal-heading {
+  color: var(--riso-ink);
+  letter-spacing: 0.02em;
+}
+
+.riso-cal-head {
+  color: var(--riso-teal);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+
+.riso-cal-cell {
+  color: var(--riso-ink);
+  border: 1px solid transparent;
+  border-radius: 2px;
+  transition: background-color 120ms ease;
+}
+
+.riso-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.riso-cal-cell[data-highlighted] {
+  background-color: var(--riso-pink-soft);
+  background-image: var(--riso-grain);
+}
+
+.riso-cal-cell[data-selected] {
+  background-color: var(--riso-pink);
+  color: var(--riso-on-pink);
+  box-shadow: 2px 2px 0 var(--riso-teal-soft);
+}
+
+.riso-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--riso-teal);
+  box-shadow: 1.5px 1.5px 0 var(--riso-teal-soft);
+}
+
+.riso-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker. No variant hook;
+   scoped to both activation paths. Slider anchors on [data-slider-impl]
+   (unique to USlider). Pink ink pass with teal misregistration.
+   ============================================ */
+
+[data-theme="riso"] [data-slider-impl] [data-slot="track"],
+.theme-riso [data-slider-impl] [data-slot="track"] {
+  background-color: var(--riso-surface);
+  border: 1px solid var(--riso-ink);
+  border-radius: 999px;
+}
+
+[data-theme="riso"] [data-slider-impl] [data-slot="range"],
+.theme-riso [data-slider-impl] [data-slot="range"] {
+  background-color: var(--riso-pink);
+}
+
+[data-theme="riso"] [data-slider-impl] [data-slot="thumb"],
+.theme-riso [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--riso-pink);
+  box-shadow: 2px 2px 0 var(--riso-teal-soft);
+  --tw-ring-color: var(--riso-ink);
+}
+
+[data-theme="riso"] [data-slot="picker"] [data-slot="selector"],
+.theme-riso [data-slot="picker"] [data-slot="selector"],
+[data-theme="riso"] [data-color-picker-track],
+.theme-riso [data-color-picker-track] {
+  border: 1px solid var(--riso-ink);
+  border-radius: 2px;
+}
+
+[data-theme="riso"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-riso [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 2px;
+}
+
+[data-theme="riso"] [data-slot="selectorThumb"],
+.theme-riso [data-slot="selectorThumb"],
+[data-theme="riso"] [data-slot="trackThumb"],
+.theme-riso [data-slot="trackThumb"] {
+  --tw-ring-color: var(--riso-ink);
+}
+
+/* ============================================
    DUAL SCHEME (#1395) — fluoro on black card, DESIGNED not inverted:
    the pink/teal passes stay fluoro, the stock goes black (a night-mode
    riso zine). Activated by the colorMode class on <html>.

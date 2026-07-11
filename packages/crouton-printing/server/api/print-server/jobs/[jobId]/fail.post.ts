@@ -6,16 +6,19 @@
  * print_failed) subscribe to that hook (#329); this endpoint stays
  * domain-agnostic.
  */
-import { requirePrintServerKey } from '../../../../utils/print-server-auth'
+import { requireSpoolerCallbackAuth } from '../../../../utils/print-server-auth'
+import { getPrintJobTeamId } from '../../../../utils/spooler-device'
 import { failPrintJob } from '../../../../utils/print-job-status'
 
 export default defineEventHandler(async (event) => {
-  requirePrintServerKey(event)
-
   const jobId = getRouterParam(event, 'jobId')
   if (!jobId) {
     throw createError({ status: 400, statusText: 'Job ID is required' })
   }
+
+  // Device callers (#1366) are scoped to their claimed team's jobs; the
+  // legacy script authenticates with the shared x-api-key instead.
+  await requireSpoolerCallbackAuth(event, await getPrintJobTeamId(useDB(), jobId) ?? null)
 
   const body = await readBody<{ errorMessage?: string }>(event).catch(() => null)
   const errorMessage = body?.errorMessage || 'Print job failed'

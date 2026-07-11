@@ -633,6 +633,98 @@
 }
 
 /* ============================================
+   CALENDAR (#1458) — pure geometry, square cells, inversion for the
+   selected day. Named variant (minimal-cal-*); selected/today state is
+   ours to supply.
+   ============================================ */
+
+.minimal-cal-heading {
+  color: var(--minimal-black);
+  font-weight: 600;
+}
+
+.minimal-cal-head {
+  color: var(--minimal-muted);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  border-radius: 0;
+}
+
+.minimal-cal-cell {
+  color: var(--minimal-black);
+  border: 1px solid transparent;
+  border-radius: 0;
+  transition: var(--minimal-transition);
+}
+
+.minimal-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.minimal-cal-cell[data-highlighted] {
+  border-color: var(--minimal-black);
+}
+
+.minimal-cal-cell[data-selected] {
+  background-color: var(--minimal-black);
+  color: var(--minimal-white);
+}
+
+.minimal-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--minimal-black);
+  border-width: var(--minimal-border-width-thick);
+}
+
+.minimal-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker. No variant hook;
+   scoped to both activation paths. Slider anchors on [data-slider-impl]
+   (unique to USlider). Thin black lines, square, no shadow.
+   ============================================ */
+
+[data-theme="minimal"] [data-slider-impl] [data-slot="track"],
+.theme-minimal [data-slider-impl] [data-slot="track"] {
+  background-color: var(--minimal-white);
+  border: 1px solid var(--minimal-black);
+  border-radius: 0;
+}
+
+[data-theme="minimal"] [data-slider-impl] [data-slot="range"],
+.theme-minimal [data-slider-impl] [data-slot="range"] {
+  background-color: var(--minimal-black);
+  border-radius: 0;
+}
+
+[data-theme="minimal"] [data-slider-impl] [data-slot="thumb"],
+.theme-minimal [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--minimal-black);
+  border-radius: 0;
+  --tw-ring-color: var(--minimal-white);
+}
+
+[data-theme="minimal"] [data-slot="picker"] [data-slot="selector"],
+.theme-minimal [data-slot="picker"] [data-slot="selector"],
+[data-theme="minimal"] [data-color-picker-track],
+.theme-minimal [data-color-picker-track] {
+  border: 1px solid var(--minimal-black);
+  border-radius: 0;
+}
+
+[data-theme="minimal"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-minimal [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="minimal"] [data-slot="selectorThumb"],
+.theme-minimal [data-slot="selectorThumb"],
+[data-theme="minimal"] [data-slot="trackThumb"],
+.theme-minimal [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--minimal-black);
+}
+
+/* ============================================
    DUAL SCHEME (#1395) — the negative, DESIGNED for the same geometry:
    white lines on black, grays re-stepped for the dark page. Activated
    by the colorMode class on <html>.

@@ -766,6 +766,89 @@ export async function verifyAndRedeemGrant(
 }
 
 /**
+ * Options for verifying a credential by resource alone (no organization).
+ */
+export interface VerifyGrantByResourceOptions {
+  /** Resource type the credential claims (e.g. 'print-device') */
+  resourceType: string
+  /** Resource ID — for devices, the device's self-generated id */
+  resourceId: string
+  /** Presented secret */
+  secret: string
+  /** Credential presentation type (default: 'pin') */
+  credentialType?: string
+}
+
+export type VerifyGrantByResourceResult =
+  | { ok: true, organizationId: string, grantId: string, role: string }
+  | { ok: false, reason: 'not_found' | 'invalid_secret' | 'locked', retryAfterMs?: number }
+
+/**
+ * Verify a presented credential against a resource's grant WITHOUT knowing
+ * the organization — the grant's `organizationId` IS the answer ("whose
+ * device is this?"). Built for the inverse-pairing device poll (#1366): the
+ * router presents its self-generated id + printed code on every poll, so
+ * unlike `verifyAndRedeemGrant` this mints no token, never bumps `usedCount`,
+ * and a clean success performs NO database write. Failure counting and the
+ * exponential lockout are shared with redemption — this is the security
+ * boundary for the low-entropy printed code.
+ */
+export async function verifyScopedGrantByResource(
+  options: VerifyGrantByResourceOptions
+): Promise<VerifyGrantByResourceResult> {
+  const { resourceType, resourceId, secret, credentialType = 'pin' } = options
+
+  const db = useDB()
+  const now = new Date()
+
+  const [grant] = await db
+    .select()
+    .from(scopedAccessGrant)
+    .where(
+      and(
+        eq(scopedAccessGrant.resourceType, resourceType),
+        eq(scopedAccessGrant.resourceId, resourceId),
+        eq(scopedAccessGrant.credentialType, credentialType),
+        eq(scopedAccessGrant.isActive, true)
+      )
+    )
+    .limit(1)
+
+  if (!grant || (grant.expiresAt && grant.expiresAt <= now)) {
+    return { ok: false, reason: 'not_found' }
+  }
+
+  if (grant.lockedUntil && grant.lockedUntil > now) {
+    return { ok: false, reason: 'locked', retryAfterMs: grant.lockedUntil.getTime() - now.getTime() }
+  }
+
+  if (!(await verifyGrantSecret(secret, grant.secretHash))) {
+    const failedAttempts = grant.failedAttempts + 1
+    const lockedUntil = failedAttempts >= GRANT_LOCKOUT_THRESHOLD
+      ? new Date(now.getTime() + lockoutDuration(failedAttempts))
+      : null
+    await db
+      .update(scopedAccessGrant)
+      .set({ failedAttempts, lockedUntil })
+      .where(eq(scopedAccessGrant.id, grant.id))
+    return lockedUntil
+      ? { ok: false, reason: 'locked', retryAfterMs: lockedUntil.getTime() - now.getTime() }
+      : { ok: false, reason: 'invalid_secret' }
+  }
+
+  // Reset failure state only when there is something to reset — this path
+  // runs on every ~2s device poll and must stay write-free when clean.
+  if (grant.failedAttempts > 0 || grant.lockedUntil) {
+    await db
+      .update(scopedAccessGrant)
+      .set({ failedAttempts: 0, lockedUntil: null })
+      .where(eq(scopedAccessGrant.id, grant.id))
+  }
+
+  return { ok: true, organizationId: grant.organizationId, grantId: grant.id, role: grant.role }
+}
+
+/**
  * Revoke all grants for a resource.
  *
  * Auth can't FK into domain tables, so domains must call this when the

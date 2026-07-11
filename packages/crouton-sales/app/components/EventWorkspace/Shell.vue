@@ -196,6 +196,22 @@ const hasGutter = computed(() =>
 // selects live in OrdersTab — state is lifted here, count feeds the chip.
 const ordersFiltersOpen = ref(false)
 const ordersFilterCount = ref(0)
+
+// Kassa height: fill the viewport from wherever the module actually starts —
+// hosts differ wildly (admin page with navbar, chrome-less full-screen CMS
+// page, fullscreen modal), so a hardcoded budget always wastes space in one
+// of them. Measured after mount (SSR falls back to the class budget below);
+// 1rem breathing room at the bottom.
+const kassaRef = ref<HTMLElement | null>(null)
+const kassaTop = ref<number | null>(null)
+function measureKassaTop() {
+  if (kassaRef.value) kassaTop.value = Math.max(0, Math.round(kassaRef.value.getBoundingClientRect().top))
+}
+onMounted(() => nextTick(measureKassaTop))
+useEventListener('resize', measureKassaTop)
+const kassaHeightStyle = computed(() =>
+  kassaTop.value === null ? undefined : { height: `calc(100dvh - ${kassaTop.value}px - 1rem)` }
+)
 </script>
 
 <template>
@@ -324,9 +340,14 @@ const ordersFilterCount = ref(0)
          kassa's right edge (reserved gutter via pe-11, so they never
          overflow the page). -->
     <div class="relative" :class="hasGutter ? 'pe-11' : ''">
-    <!-- Height budget: the desktop header row is gone, so the kassa reclaims
-         its ~4.5rem (13rem → 8.5rem of surrounding chrome). -->
-    <div class="flex border border-default rounded-xl overflow-clip bg-default h-[calc(100dvh-8.5rem)] min-h-[28rem]">
+    <!-- Height: measured to fill the viewport from the module's real top
+         (kassaHeightStyle); the class budget is only the SSR/first-paint
+         fallback before the measurement lands. -->
+    <div
+      ref="kassaRef"
+      class="flex border border-default rounded-xl overflow-clip bg-default h-[calc(100dvh-8.5rem)] min-h-[28rem]"
+      :style="kassaHeightStyle"
+    >
       <SplitterGroup
         direction="horizontal"
         auto-save-id="sales-workspace-pos"

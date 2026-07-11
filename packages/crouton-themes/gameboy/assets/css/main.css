@@ -481,6 +481,97 @@ body.theme-gameboy {
 }
 
 /* ============================================
+   CALENDAR (#1458) — an RPG menu grid, 4 shades only, states via
+   inversion never hue. Named variant (gb-cal-*); selected/today state
+   is ours to supply. No glide — the DMG doesn't animate.
+   ============================================ */
+
+.gb-cal-heading {
+  color: var(--gb-0);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gb-cal-head {
+  color: var(--gb-1);
+  text-transform: uppercase;
+  border-radius: 0;
+}
+
+.gb-cal-cell {
+  color: var(--gb-0);
+  border: 2px solid transparent;
+  border-radius: 0;
+  transition: none;
+}
+
+.gb-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.gb-cal-cell[data-highlighted] {
+  background-color: var(--gb-2);
+  color: var(--gb-0);
+}
+
+.gb-cal-cell[data-selected] {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
+
+.gb-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--gb-0);
+}
+
+.gb-cal-cell[data-outside-view] {
+  color: var(--gb-1);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider (a DMG volume slider) + color picker.
+   No variant hook; scoped to both activation paths. Slider anchors on
+   [data-slider-impl] (unique to USlider). 4 shades only.
+   ============================================ */
+
+[data-theme="gameboy"] [data-slider-impl] [data-slot="track"],
+.theme-gameboy [data-slider-impl] [data-slot="track"] {
+  background-color: var(--gb-2);
+  border: 2px solid var(--gb-0);
+  border-radius: 0;
+}
+
+[data-theme="gameboy"] [data-slider-impl] [data-slot="range"],
+.theme-gameboy [data-slider-impl] [data-slot="range"] {
+  background-color: var(--gb-0);
+  border-radius: 0;
+}
+
+[data-theme="gameboy"] [data-slider-impl] [data-slot="thumb"],
+.theme-gameboy [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--gb-3);
+  border-radius: 0;
+  --tw-ring-color: var(--gb-0);
+}
+
+[data-theme="gameboy"] [data-slot="picker"] [data-slot="selector"],
+.theme-gameboy [data-slot="picker"] [data-slot="selector"],
+[data-theme="gameboy"] [data-color-picker-track],
+.theme-gameboy [data-color-picker-track] {
+  border: 2px solid var(--gb-0);
+  border-radius: 0;
+}
+
+[data-theme="gameboy"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-gameboy [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="gameboy"] [data-slot="selectorThumb"],
+.theme-gameboy [data-slot="selectorThumb"],
+[data-theme="gameboy"] [data-slot="trackThumb"],
+.theme-gameboy [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--gb-0);
+}
+
+/* ============================================
    DUAL SCHEME (#1395) — the backlit-mod counterpart: same 4-shade
    constraint, screen goes deep olive-black, ink goes lit green.
    Activated by the colorMode class on <html>.

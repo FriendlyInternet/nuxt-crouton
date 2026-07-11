@@ -220,6 +220,27 @@ export default defineAppConfig({
         { color: "error", variant: "riso", class: { root: "riso-alert--error" } },
         { color: "neutral", variant: "riso", class: { root: "riso-alert--neutral" } }
       ]
+    },
+
+    // #1458 second-tier coverage. Calendar: the color dimension fires on
+    // headCell/cellTrigger regardless of variant (like checkbox), so both
+    // carry markers + the replacer; selected/today state lives entirely in
+    // the theme CSS via [data-selected]/[data-today].
+    calendar: {
+      slots: {
+        headCell: subtractThemeDefaults,
+        cellTrigger: subtractThemeDefaults,
+        headingLabel: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          riso: {
+            headingLabel: "riso-cal-heading",
+            headCell: "riso-cal-head",
+            cellTrigger: "riso-cal-cell"
+          }
+        }
+      }
     }
   }
 })

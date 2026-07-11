@@ -485,6 +485,104 @@ body.theme-blueprint {
 }
 
 /* ============================================
+   CALENDAR (#1458) — a dimension grid on the sheet: mono title block,
+   the drawn part for the selected day, the pencil-yellow callout for
+   today. Named variant (bp-cal-*); selected/today state is ours.
+   ============================================ */
+
+.bp-cal-heading {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bp-cal-head {
+  font-family: var(--bp-mono);
+  color: var(--bp-line-dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.bp-cal-cell {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  border: 1px solid transparent;
+  border-radius: 0;
+  transition: background-color 120ms ease;
+}
+
+.bp-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.bp-cal-cell[data-highlighted] {
+  background-color: rgba(220, 233, 245, 0.12);
+  border-color: var(--bp-line-dim);
+}
+
+.bp-cal-cell[data-selected] {
+  background-color: var(--bp-line);
+  color: var(--bp-blue-deep);
+}
+
+.bp-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--bp-accent);
+  color: var(--bp-accent);
+}
+
+.bp-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider (a dimension line with a callout) +
+   color picker. No variant hook; scoped to both activation paths.
+   Slider anchors on [data-slider-impl] (unique to USlider).
+   ============================================ */
+
+[data-theme="blueprint"] [data-slider-impl] [data-slot="track"],
+.theme-blueprint [data-slider-impl] [data-slot="track"] {
+  background-color: transparent;
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+}
+
+[data-theme="blueprint"] [data-slider-impl] [data-slot="range"],
+.theme-blueprint [data-slider-impl] [data-slot="range"] {
+  background-color: var(--bp-line);
+  border-radius: 0;
+}
+
+[data-theme="blueprint"] [data-slider-impl] [data-slot="thumb"],
+.theme-blueprint [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--bp-blue-deep);
+  border-radius: 0;
+  --tw-ring-color: var(--bp-line);
+}
+
+[data-theme="blueprint"] [data-slot="picker"] [data-slot="selector"],
+.theme-blueprint [data-slot="picker"] [data-slot="selector"],
+[data-theme="blueprint"] [data-color-picker-track],
+.theme-blueprint [data-color-picker-track] {
+  border: 1px solid var(--bp-line);
+  outline: 1px solid var(--bp-line-dim);
+  outline-offset: 2px;
+  border-radius: 0;
+}
+
+[data-theme="blueprint"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-blueprint [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="blueprint"] [data-slot="selectorThumb"],
+.theme-blueprint [data-slot="selectorThumb"],
+[data-theme="blueprint"] [data-slot="trackThumb"],
+.theme-blueprint [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--bp-line);
+}
+
+/* ============================================
    DUAL SCHEME (#1395) — pencil-on-white, DESIGNED not inverted: blue
    linework on white drafting paper, the pencil mark goes graphite-gold.
    Activated by the colorMode class on <html>.

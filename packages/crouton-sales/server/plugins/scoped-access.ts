@@ -24,7 +24,7 @@
  *    resolved — the page then falls back to its page-code gate.
  */
 import { eq, and } from 'drizzle-orm'
-import { upsertScopedGrant } from '@fyit/crouton-auth/server/utils/scoped-access'
+import { upsertScopedGrant, verifyScopedGrantByResource } from '@fyit/crouton-auth/server/utils/scoped-access'
 import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
 
 interface BeforeRedeemContext {
@@ -38,6 +38,16 @@ interface DeriveScopePayload {
   teamId: string
   blocks: Array<{ type?: string, attrs?: Record<string, unknown> }>
   result: { resourceType: string, resourceId: string, nameRequired?: boolean } | null
+}
+
+interface DeviceAuthContext {
+  deviceId: string
+  code: string
+  result:
+    | { status: 'claimed', teamId: string }
+    | { status: 'unclaimed', locale?: 'en' | 'nl' | 'fr' }
+    | { status: 'denied', retryAfterMs?: number }
+    | null
 }
 
 export default defineNitroPlugin((nitroApp) => {
@@ -91,6 +101,34 @@ export default defineNitroPlugin((nitroApp) => {
       resourceType: 'event',
       resourceId: salesEvent.id,
       nameRequired: true
+    }
+  })
+
+  // 3. `crouton:printing:device-auth` — the paired-router poll (#1366).
+  //    crouton-printing has no auth, so it asks over this hook who a device
+  //    belongs to; the answer is the device's scoped-access grant, whose
+  //    organizationId IS the claim. An unknown device is 'unclaimed' — the
+  //    poll then carries a server-rendered pairing ticket (the printed code
+  //    the operator types into the claim form).
+  nitroApp.hooks.hook('crouton:printing:device-auth' as any, async (ctx: DeviceAuthContext) => {
+    if (ctx.result) return
+
+    const verified = await verifyScopedGrantByResource({
+      resourceType: 'print-device',
+      resourceId: ctx.deviceId,
+      secret: ctx.code
+    })
+
+    if (verified.ok) {
+      ctx.result = { status: 'claimed', teamId: verified.organizationId }
+    }
+    else if (verified.reason === 'not_found') {
+      // Pairing-ticket locale = the app's default receipt locale (nl) — the
+      // formatter's own default; override here if an app ever needs to.
+      ctx.result = { status: 'unclaimed' }
+    }
+    else {
+      ctx.result = { status: 'denied', retryAfterMs: verified.retryAfterMs }
     }
   })
 })

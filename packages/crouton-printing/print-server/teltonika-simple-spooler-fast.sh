@@ -1,16 +1,27 @@
 #!/bin/sh
 
-# Crouton-sales print spooler for Teltonika RUT-series routers (BusyBox/RutOS).
+# Crouton print spooler for Teltonika RUT-series routers (BusyBox/RutOS).
 #
 # Polls the hosted app for pending print jobs, decodes the base64 ESC/POS
 # payload, streams it to the thermal printer's raw TCP port (9100), then calls
 # back to mark the job complete/failed. Outbound-only — no inbound exposure.
 #
+# Self-pairing (#1366): the router generates a persistent device id + pairing
+# code on first boot and authenticates every request with them. While nobody
+# has claimed the device in the app, the poll answers HTTP 428 with a
+# server-rendered pairing ticket, which this script prints on the attached
+# thermal printer (throttled) — read the ticket, type the code into the app
+# (event settings → Print flow → Setup → "Koppel router"), done. No per-event
+# EVENT_ID, no shared API key, zero SSH after first imaging.
+#
 # Config is via environment variables (set them in the procd init service,
 # /etc/init.d/print_server — see print_server.init):
-#   API_URL   - base URL of the hosted app, e.g. https://your-app.pages.dev
-#   API_KEY   - must match the app's NUXT_CROUTON_SALES_PRINT_API_KEY secret
-#   EVENT_ID  - the sales event to poll jobs for
+#   API_URL     - base URL of the hosted app, e.g. https://your-app.example
+#   PRINTER_IP  - printer used for the pairing/diagnostic tickets ONLY
+#                 (job tickets carry their own printer ip). Default the
+#                 documented static: 192.168.1.72
+#   DEVICE_FILE - where the persistent identity lives (default
+#                 /etc/print_server_device — /etc persists across reboots)
 #
 # Notes:
 # - Uses a pure-awk base64 decoder because the minimal BusyBox build on RutOS
@@ -20,12 +31,17 @@
 # - A job is only marked complete after the printer confirms it is online with
 #   paper present (ESC/POS DLE EOT status queries appended to the payload).
 #   Set STATUS_CHECK=0 for the legacy "TCP send = done" behavior.
+# - Ticket reprint throttling counts POLLS, not wall-clock time — the RUT's
+#   clock freezes without NTP, but the 2s poll cadence never does.
 
 # Configuration - can be overridden with environment variables
 API_URL="${API_URL:-http://192.168.1.214:3000}"
-API_KEY="${API_KEY:-1234}"
-EVENT_ID="${EVENT_ID:-CHANGE_ME}"
+PRINTER_IP="${PRINTER_IP:-192.168.1.72}"
+DEVICE_FILE="${DEVICE_FILE:-/etc/print_server_device}"
 PRINTER_PORT="9100"
+# Reprint the pairing/diagnostic ticket at most every N polls (~2s each;
+# 1800 ≈ hourly) — and always once on service start.
+TICKET_EVERY="${TICKET_EVERY:-1800}"
 # STATUS_CHECK=1 (default): after sending the ticket, query the printer with
 # ESC/POS DLE EOT and only mark the job complete when the printer answers
 # "online, paper present". STATUS_CHECK=0 restores the legacy fire-and-forget
@@ -39,9 +55,28 @@ DRAIN_SECS="${DRAIN_SECS:-2}"
 # Add Google DNS if not present
 grep -q "8.8.8.8" /etc/resolv.conf || echo "nameserver 8.8.8.8" >> /etc/resolv.conf
 
+# --- Persistent device identity (#1366) --------------------------------------
+# Generated once from the kernel's uuid (no clock dependency), then reused
+# forever. The printed pairing code is what the operator types into the app.
+if [ ! -f "$DEVICE_FILE" ]; then
+    UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '-')
+    if [ -z "$UUID" ]; then
+        echo "$(date '+%H:%M:%S') FATAL: cannot read /proc/sys/kernel/random/uuid"
+        exit 1
+    fi
+    # 6-digit code from a second uuid's digits (uuid hex alone can be light on
+    # digits; two reads always yield enough).
+    DIGITS=$(cat /proc/sys/kernel/random/uuid /proc/sys/kernel/random/uuid | tr -cd '0-9')
+    {
+        echo "DEVICE_ID=rut-$(echo "$UUID" | cut -c1-8)"
+        echo "DEVICE_CODE=$(echo "$DIGITS" | cut -c1-6)"
+    } > "$DEVICE_FILE"
+fi
+. "$DEVICE_FILE"
+
 echo "$(date '+%H:%M:%S') Crouton print spooler started"
 echo "  API_URL: $API_URL"
-echo "  EVENT_ID: $EVENT_ID"
+echo "  DEVICE_ID: $DEVICE_ID"
 
 # Faster base64 decoder - simplified version
 decode_base64() {
@@ -118,7 +153,8 @@ classify_status() {
 report_complete() {
     for _ in 1 2 3; do
         curl -s -f -m 10 -X POST \
-            -H "x-api-key: $API_KEY" \
+            -H "x-device-id: $DEVICE_ID" \
+            -H "x-device-code: $DEVICE_CODE" \
             -H "Content-Type: application/json" \
             "$API_URL/api/print-server/jobs/$1/complete" >/dev/null 2>&1 && return 0
         sleep 2
@@ -130,13 +166,60 @@ report_complete() {
 report_fail() {
     for _ in 1 2 3; do
         curl -s -f -m 10 -X POST \
-            -H "x-api-key: $API_KEY" \
+            -H "x-device-id: $DEVICE_ID" \
+            -H "x-device-code: $DEVICE_CODE" \
             -H "Content-Type: application/json" \
             -d "{\"errorMessage\":\"$2\"}" \
             "$API_URL/api/print-server/jobs/$1/fail" >/dev/null 2>&1 && return 0
         sleep 2
     done
     echo "$(date '+%H:%M:%S') WARNING: could not report job $1 failed"
+}
+
+# --- Pairing / diagnostic tickets (#1366) ------------------------------------
+# Both are throttled by POLL COUNT (clock-freeze-safe): printed when the
+# counter hits 0 (service start) and then every TICKET_EVERY polls while the
+# condition persists. Printing resets the shared counter.
+TICKET_COUNTDOWN=0
+
+ticket_due() {
+    [ "$TICKET_COUNTDOWN" -le 0 ]
+}
+
+ticket_printed() {
+    TICKET_COUNTDOWN=$TICKET_EVERY
+}
+
+# Print the server-rendered pairing ticket ($1 = base64 ESC/POS).
+print_pairing_ticket() {
+    TMPFILE="/tmp/pairing_ticket.bin"
+    echo "$1" | decode_base64 > "$TMPFILE"
+    if [ -s "$TMPFILE" ]; then
+        ( cat "$TMPFILE"; sleep "$DRAIN_SECS" ) | timeout 15 nc "$PRINTER_IP" "$PRINTER_PORT" >/dev/null 2>&1 \
+            && echo "$(date '+%H:%M:%S') Pairing ticket printed on $PRINTER_IP (device $DEVICE_ID)"
+    fi
+    rm -f "$TMPFILE"
+}
+
+# The app is unreachable — print a minimal English diagnostic from our own
+# strings (the server can't render anything for us now). Doubles as a printer
+# self-test: if this sheet prints, the printer leg works and the problem is
+# the uplink; if nothing prints, look at the printer/power.
+print_diagnostic_ticket() {
+    {
+        # ESC @ init, ESC t 19 (CP858)
+        printf '\033@\033t\023'
+        printf 'PRINT SERVER: CANNOT REACH APP\n\n'
+        printf 'Device:  %s\n' "$DEVICE_ID"
+        printf 'API_URL: %s\n' "$API_URL"
+        printf 'Error:   %s\n\n' "$1"
+        printf 'This sheet printing means the printer\n'
+        printf 'works - check the internet uplink or\n'
+        printf 'the API_URL in /etc/init.d/print_server\n\n\n'
+        # GS V 0 — full cut
+        printf '\035V\000'
+    } | timeout 15 nc "$PRINTER_IP" "$PRINTER_PORT" >/dev/null 2>&1 \
+        && echo "$(date '+%H:%M:%S') Diagnostic ticket printed on $PRINTER_IP"
 }
 
 # Process one job, start to finish (pre-flight → send → confirm → callback)
@@ -223,12 +306,51 @@ process_job() {
 }
 
 while true; do
-    # Poll API. Generous timeout: a bulk requeue ("Resend failed jobs") returns
-    # every ticket's base64 in one response — with -m 5 that truncated over 5G,
-    # leaving jobs flipped to status=printing but never parsed (stuck forever).
+    [ "$TICKET_COUNTDOWN" -gt 0 ] && TICKET_COUNTDOWN=$((TICKET_COUNTDOWN - 1))
+
+    # Poll the device-scoped endpoint (#1366) — the claim in the app decides
+    # which events we serve; no EVENT_ID here. Generous timeout: a bulk
+    # requeue ("Resend failed jobs") returns every ticket's base64 in one
+    # response — with -m 5 that truncated over 5G, leaving jobs flipped to
+    # status=printing but never parsed (stuck forever).
+    BODYFILE="/tmp/poll_body.$$"
+    HTTP_CODE=$(curl -s -m 30 -o "$BODYFILE" -w '%{http_code}' \
+        -H "x-device-id: $DEVICE_ID" \
+        -H "x-device-code: $DEVICE_CODE" \
+        "$API_URL/api/print-server/jobs?mark_as_printing=true" 2>/dev/null)
+    CURL_EXIT=$?
     # Remove newlines from JSON response for grep/sed parsing.
-    RESPONSE=$(curl -s -m 30 -H "x-api-key: $API_KEY" "$API_URL/api/print-server/events/$EVENT_ID/jobs?mark_as_printing=true" 2>/dev/null)
-    RESPONSE=$(echo "$RESPONSE" | tr -d '\n\r' | tr -s ' ')
+    RESPONSE=$(tr -d '\n\r' < "$BODYFILE" 2>/dev/null | tr -s ' ')
+    rm -f "$BODYFILE"
+
+    if [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP_CODE" = "000" ]; then
+        # App unreachable — one diagnostic sheet per throttle window.
+        if ticket_due; then
+            print_diagnostic_ticket "curl exit $CURL_EXIT (no HTTP response)"
+            ticket_printed
+        fi
+        sleep 2
+        continue
+    fi
+
+    if [ "$HTTP_CODE" = "428" ]; then
+        # Unclaimed: the body carries a server-rendered pairing ticket.
+        if ticket_due; then
+            TICKET_B64=$(echo "$RESPONSE" | sed -n 's/.*"ticket": *"\([^"]*\)".*/\1/p')
+            [ -n "$TICKET_B64" ] && print_pairing_ticket "$TICKET_B64"
+            ticket_printed
+        fi
+        sleep 2
+        continue
+    fi
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        # 401/429/5xx: wrong code, lockout, or server trouble — log, never
+        # print (a lockout printing sheets every poll would drain the roll).
+        echo "$(date '+%H:%M:%S') Poll answered HTTP $HTTP_CODE"
+        sleep 2
+        continue
+    fi
 
     if [ ! -z "$RESPONSE" ] && echo "$RESPONSE" | grep -q '"printData"'; then
         # Extract all job data in one pass (handle space after colon in JSON)

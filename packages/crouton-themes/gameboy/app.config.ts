@@ -228,6 +228,27 @@ export default defineAppConfig({
         { color: "error", variant: "gameboy", class: { root: "gb-alert--error" } },
         { color: "neutral", variant: "gameboy", class: { root: "gb-alert--neutral" } }
       ]
+    },
+
+    // #1458 second-tier coverage. Calendar: the color dimension fires on
+    // headCell/cellTrigger regardless of variant (like checkbox), so both
+    // carry markers + the replacer; selected/today state lives entirely in
+    // the theme CSS via [data-selected]/[data-today].
+    calendar: {
+      slots: {
+        headCell: subtractThemeDefaults,
+        cellTrigger: subtractThemeDefaults,
+        headingLabel: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          gameboy: {
+            headingLabel: 'gb-cal-heading',
+            headCell: 'gb-cal-head',
+            cellTrigger: 'gb-cal-cell'
+          }
+        }
+      }
     }
   }
 })
