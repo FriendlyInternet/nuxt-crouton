@@ -27,11 +27,11 @@ const event = computed(() =>
 
 <template>
   <slot v-if="event" :event="event" />
-  <div
+  <UAlert
     v-else
-    class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-  >
-    <UIcon name="i-lucide-calendar-x" class="w-6 h-6 mx-auto mb-2 text-muted" />
-    {{ notFoundLabel }}
-  </div>
+    color="neutral"
+    variant="soft"
+    icon="i-lucide-calendar-x"
+    :title="notFoundLabel"
+  />
 </template>

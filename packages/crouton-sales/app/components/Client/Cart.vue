@@ -29,25 +29,29 @@
             :remark="entry.item.remarks"
           >
             <template #actions>
-              <!-- md: +/− are the most-tapped controls during an order — keep
-                   them thumb-sized on touch devices. -->
-              <UButton
-                icon="i-lucide-minus"
-                size="md"
-                color="neutral"
-                variant="soft"
-                square
-                @click="$emit('updateQuantity', entry.index, entry.item.quantity - 1)"
-              />
-              <span :key="entry.item.quantity" class="w-6 text-center text-sm animate-pop">{{ entry.item.quantity }}</span>
-              <UButton
-                icon="i-lucide-plus"
-                size="md"
-                color="neutral"
-                variant="soft"
-                square
-                @click="$emit('updateQuantity', entry.index, entry.item.quantity + 1)"
-              />
+              <!-- One grouped stepper (#1407): UFieldGroup joins −/qty/+ so
+                   themes style it as a single control. md: +/− are the
+                   most-tapped controls during an order — keep them thumb-sized
+                   on touch devices. -->
+              <UFieldGroup size="md">
+                <UButton
+                  icon="i-lucide-minus"
+                  color="neutral"
+                  variant="soft"
+                  square
+                  @click="$emit('updateQuantity', entry.index, entry.item.quantity - 1)"
+                />
+                <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
+                  <span :key="entry.item.quantity" class="animate-pop">{{ entry.item.quantity }}</span>
+                </UBadge>
+                <UButton
+                  icon="i-lucide-plus"
+                  color="neutral"
+                  variant="soft"
+                  square
+                  @click="$emit('updateQuantity', entry.index, entry.item.quantity + 1)"
+                />
+              </UFieldGroup>
             </template>
           </SalesClientOrderLineItem>
         </div>
