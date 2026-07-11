@@ -452,11 +452,11 @@ function helperExpiry(value: string): string {
 
 <template>
   <div class="space-y-4">
-    <!-- Standalone (non-tabbed, non-host) usage keeps a top Save row. In tabbed
-         mode the Save button lives at the BOTTOM of the panel instead (sticky
-         bar below), so it reads as clearly attached to whichever section's
-         fields are on screen. -->
-    <div v-if="!hideSaveBar && !tabbed" class="flex items-center justify-end gap-3">
+    <!-- Standalone usage keeps a top Save row. When a host owns the panel
+         (hideSaveBar) it renders the Save as a fixed FOOTER below the scroll
+         area (via the `register` API), so a long tab scrolls cleanly above it —
+         a sticky bar inside the scroll floats over content mid-scroll. -->
+    <div v-if="!hideSaveBar" class="flex items-center justify-end gap-3">
       <span v-if="dirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
       <UButton
         :loading="saving"
@@ -712,24 +712,6 @@ function helperExpiry(value: string): string {
           {{ t('sales.workspace.noHelpers') }}
         </div>
       </UCard>
-    </div>
-
-    <!-- Tabbed mode: one panel-wide Save anchored to the bottom of the section.
-         Sticky so it stays reachable while a long tab (printers/receipt text)
-         scrolls, and visually attached to the tab's content — hosts no longer
-         render a header Save. -->
-    <div
-      v-if="tabbed"
-      class="sticky bottom-0 z-10 -mx-4 mt-2 flex items-center justify-end gap-3 border-t border-default bg-default/95 px-4 py-3 backdrop-blur"
-    >
-      <span v-if="dirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
-      <UButton
-        :loading="saving"
-        :disabled="!dirty"
-        @click="saveSettings"
-      >
-        {{ t('sales.common.save') }}
-      </UButton>
     </div>
   </div>
 </template>

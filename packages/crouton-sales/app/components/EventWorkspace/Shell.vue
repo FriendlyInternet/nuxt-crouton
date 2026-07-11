@@ -28,6 +28,7 @@
 // on) — UDashboardPanel itself needs a top-level UDashboardGroup, which can't
 // be embedded mid-page.
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
+import type { Ref } from 'vue'
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
 
 const props = withDefaults(defineProps<{
@@ -123,6 +124,14 @@ const unhookMutation = useNuxtApp().hook('crouton:mutation', (payload: any) => {
   }
 })
 onUnmounted(unhookMutation)
+
+// SettingsTab's save API — the Save button lives in a fixed FOOTER below the
+// settings scroll area (desktop pane + narrow slideover). Handed up via the
+// child's `register` emit: a template ref binds before an async-setup
+// component's exposed object attaches (#1321).
+const settingsTab = shallowRef<{ save: () => Promise<void>, dirty: Ref<boolean>, saving: Ref<boolean> } | null>(null)
+const settingsDirty = computed(() => settingsTab.value?.dirty.value ?? false)
+const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
 
 // Side panes beside the POS: orders, clients (end-of-tab receipts —
 // recurring-clients mode only), and data (sales numbers — admins only).
@@ -432,9 +441,9 @@ const kassaHeightStyle = computed(() =>
           />
           <!-- Settings pane hosts the tabbed (sectioned) SettingsTab — the
                pane is never wide enough for the old 3-column layout, so the
-               narrow-mode design is the design. SettingsTab owns its own Save
-               (a sticky bar at the bottom of the section); the narrow slideover
-               is gated on isNarrow so only one instance ever mounts. -->
+               narrow-mode design is the design. Save lives in a fixed footer
+               below the scroll area (via the registered save API); the narrow
+               slideover is gated on isNarrow so only one instance mounts. -->
           <SplitterPanel id="settings" :order="5" :default-size="30" :min-size="20" class="min-w-0 flex flex-col">
             <SalesEventWorkspacePaneHeader
               icon="i-lucide-settings"
@@ -443,11 +452,17 @@ const kassaHeightStyle = computed(() =>
             />
             <div class="flex-1 overflow-y-auto p-4 pt-3">
               <Suspense>
-                <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed />
+                <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
                 <template #fallback>
                   <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
                 </template>
               </Suspense>
+            </div>
+            <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-4 py-3">
+              <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
+              <UButton :loading="settingsSaving" :disabled="!settingsDirty" @click="settingsTab?.save()">
+                {{ t('sales.common.save') }}
+              </UButton>
             </div>
           </SplitterPanel>
         </template>
@@ -635,9 +650,9 @@ const kassaHeightStyle = computed(() =>
       </template>
     </USlideover>
 
-    <!-- Narrow-mode settings: same surface as the panes. SettingsTab owns its
-         own Save (sticky bar at the section bottom) — only one SettingsTab
-         instance ever mounts (the collapsible is gated on !isNarrow). -->
+    <!-- Narrow-mode settings: same surface as the panes. Save lives in a fixed
+         footer below the scroll area — only one SettingsTab instance ever
+         mounts (the collapsible is gated on !isNarrow). -->
     <USlideover v-if="isNarrow" v-model:open="settingsSlideoverOpen">
       <template #content>
         <div class="flex flex-col h-full min-h-0">
@@ -648,11 +663,17 @@ const kassaHeightStyle = computed(() =>
           />
           <div class="flex-1 overflow-y-auto p-4 pt-3">
             <Suspense>
-              <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed />
+              <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
               <template #fallback>
                 <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
               </template>
             </Suspense>
+          </div>
+          <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-4 py-3">
+            <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
+            <UButton :loading="settingsSaving" :disabled="!settingsDirty" @click="settingsTab?.save()">
+              {{ t('sales.common.save') }}
+            </UButton>
           </div>
         </div>
       </template>
