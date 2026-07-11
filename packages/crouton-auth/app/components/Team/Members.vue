@@ -403,6 +403,8 @@ const columns = computed<TableColumn<MemberRow>[]>(() => {
             :variant="layout === 'grid' ? 'subtle' : 'ghost'"
             :color="layout === 'grid' ? 'primary' : 'neutral'"
             size="xs"
+            :aria-label="t('teams.gridLayout', 'Grid layout')"
+            :aria-pressed="layout === 'grid'"
             @click="layout = 'grid'"
           />
           <UButton
@@ -410,6 +412,8 @@ const columns = computed<TableColumn<MemberRow>[]>(() => {
             :variant="layout === 'table' ? 'subtle' : 'ghost'"
             :color="layout === 'table' ? 'primary' : 'neutral'"
             size="xs"
+            :aria-label="t('teams.tableLayout', 'Table layout')"
+            :aria-pressed="layout === 'table'"
             @click="layout = 'table'"
           />
         </div>

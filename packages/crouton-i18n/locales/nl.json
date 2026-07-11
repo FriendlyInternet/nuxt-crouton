@@ -355,6 +355,8 @@
     "switchTeam": "Team wisselen",
     "selectTeam": "Selecteer team",
     "teamMembers": "Teamleden",
+    "gridLayout": "Rasterweergave",
+    "tableLayout": "Tabelweergave",
     "addMember": "Lid toevoegen",
     "removeMember": "Lid verwijderen",
     "memberCount": "{count} lid/leden",
