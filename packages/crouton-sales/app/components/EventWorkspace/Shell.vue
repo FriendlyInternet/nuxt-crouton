@@ -2,25 +2,24 @@
 /**
  * Event Workspace shell (reusable)
  *
- * Kassa-first: resolves an event from its slug, then renders the header
- * (event switcher + actions) above the POS, which is the main surface. No
- * tabs — the two former tabs became header-driven panels:
+ * Kassa-first: resolves an event from its slug, then renders the POS as the
+ * main (and only chrome-less) surface — there is NO header row. Everything
+ * else is a pane toggled from the vertical tabs in the right gutter (which
+ * also hosts the compact icon-only event switcher at its top):
  *
- *  - "Instellingen" expands the settings (SettingsTab) inline under the header
- *  - "Bestellingen" toggles the orders list (OrdersTab) as a pane beside
- *    the POS's products/cart columns
- *  - "Klanten" (recurring-clients mode only) toggles the client end-receipts
- *    list (ClientsPanel) as another pane
- *  - "Data" (admin sessions only — PIN helpers never see it) toggles the
- *    event's sales numbers (DataPanel) as a third pane — any combination can
- *    be open at once, side by side
+ *  - "Bestellingen" — the orders list (OrdersTab)
+ *  - "Klanten" (recurring-clients mode only) — client end-receipts (ClientsPanel)
+ *  - "Data" (admin sessions only — PIN helpers never see it) — sales numbers
+ *  - "Instellingen" (admin sessions only) — the tabbed SettingsTab, same
+ *    sectioned design as the narrow slideover; Opslaan in the pane header
+ *
+ * Any combination can be open at once, side by side.
  *
  * Used in two places:
  *  - the admin page `/admin/[team]/sales/events/[slug]`
  *  - the `eventWorkspaceBlock` CMS block, for signed-in team members only
- *    (event fixed by the editor, so the switcher is hidden; the header stays
- *    so the settings/orders toggles are reachable). Anonymous visitors get
- *    <SalesPosPanel> from the block instead — never this shell.
+ *    (event fixed by the editor, so the switcher is hidden). Anonymous
+ *    visitors get <SalesPosPanel> from the block instead — never this shell.
  *
  * @see app/pages/admin/[team]/sales/events/[slug]/index.vue
  * @see app/components/Blocks/EventWorkspaceRender.vue
@@ -126,11 +125,7 @@ const unhookMutation = useNuxtApp().hook('crouton:mutation', (payload: any) => {
 })
 onUnmounted(unhookMutation)
 
-// Header-driven panels. Local state — not worth query params, and the CMS
-// block (showHeaderActions=false) never exposes the toggles.
-const settingsOpen = ref(false)
-
-// SettingsTab's save API — the Save button lives in our header row. Handed up
+// SettingsTab's save API — the Save button lives in the pane header. Handed up
 // via the child's `register` emit: a template ref binds before an async-setup
 // component's defineExpose attaches, so it would stay a bare public proxy and
 // the button would never enable (#1321).
@@ -148,12 +143,14 @@ const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
 const ordersOpen = useLocalStorage('sales-workspace-orders-open', false, { initOnMounted: true })
 const clientsOpen = useLocalStorage('sales-workspace-clients-open', false, { initOnMounted: true })
 const dataOpen = useLocalStorage('sales-workspace-data-open', false, { initOnMounted: true })
+const settingsOpen = useLocalStorage('sales-workspace-settings-open', false, { initOnMounted: true })
 
 // The stored flags are global, but the clients pane only exists in
-// recurring-clients mode and the data pane only for admin sessions — gate
-// the persisted values per event/session.
+// recurring-clients mode and the data/settings panes only for admin sessions —
+// gate the persisted values per event/session.
 const clientsPaneOpen = computed(() => clientsOpen.value && !!event.value?.requiresClient)
 const dataPaneOpen = computed(() => dataOpen.value && loggedIn.value)
+const settingsPaneOpen = computed(() => settingsOpen.value && loggedIn.value && props.showHeaderActions)
 
 // Narrow screens can't host side-by-side panes — the splitter would squeeze
 // the kassa to nothing. Below lg the panes become slideovers instead, toggled
@@ -173,16 +170,9 @@ const dataSlideoverOpen = ref(false)
 
 onMounted(() => { hydrated.value = true })
 
-// Settings follow the same split: inline collapsible under the header on
-// desktop, but a slideover on narrow screens — the inline panel's nested
-// containers eat too much of a phone viewport. One toggle, two surfaces.
+// Settings follow the same split as the other panes: a splitter pane (tabbed
+// SettingsTab) on desktop, a slideover on narrow screens.
 const settingsSlideoverOpen = ref(false)
-const settingsToggled = computed(() => isNarrow.value ? settingsSlideoverOpen.value : settingsOpen.value)
-
-function toggleSettings() {
-  if (isNarrow.value) settingsSlideoverOpen.value = !settingsSlideoverOpen.value
-  else settingsOpen.value = !settingsOpen.value
-}
 
 // Kassa edit mode, lifted so the narrow tab strip can host the pencil (the
 // inline pencil in the kassa's category-tabs row is hidden on narrow via
@@ -197,6 +187,8 @@ const hasGutter = computed(() =>
     !ordersOpen.value
     || (!!event.value?.requiresClient && !clientsPaneOpen.value)
     || (loggedIn.value && !dataPaneOpen.value)
+    || (loggedIn.value && props.showHeaderActions && !settingsPaneOpen.value)
+    || (props.showHeader && props.showSwitcher)
   )
 )
 
@@ -215,105 +207,10 @@ const ordersFilterCount = ref(0)
   </div>
 
   <div v-else class="space-y-4">
-    <!-- Header + settings: one bordered container. The header row (event
-         switcher, settings toggle right beside it, Save on the right while
-         open) stays visible; the settings slide open underneath, inside the
-         same panel. Same right gutter as the kassa when a vertical tab hangs
-         there, so the container aligns with the kassa edge, not the gutter. -->
-    <!-- Desktop only — on narrow the strip below carries the switcher and
-         toggles, and the event name is already where you came from (events
-         list) plus the page title. -->
-    <div v-if="showHeader && !isNarrow" :class="hasGutter ? 'pe-11' : ''">
-      <div class="border border-default rounded-xl bg-elevated/20">
-        <div class="flex flex-wrap items-center gap-2 p-3 sm:p-4">
-          <USelectMenu
-            v-if="showSwitcher"
-            :model-value="event.id"
-            :items="eventOptions"
-            value-key="id"
-            :placeholder="t('sales.events.selectEvent')"
-            icon="i-lucide-ticket"
-            size="sm"
-            class="w-56"
-            :ui="{ base: 'font-semibold' }"
-            @update:model-value="switchEvent"
-          >
-            <!-- Create-from-dropdown, same pattern as CroutonFormReferenceSelect -->
-            <template #content-top>
-              <div class="p-1">
-                <UButton
-                  color="neutral"
-                  icon="i-lucide-plus"
-                  variant="soft"
-                  block
-                  @click="openCreateEvent"
-                >
-                  {{ t('reference.createNew', { label: t('sales.events.title') }) }}
-                </UButton>
-              </div>
-            </template>
-          </USelectMenu>
-          <h2 v-else class="font-semibold text-lg">{{ event.title }}</h2>
-          <!-- Desktop only — on narrow the toggle lives in the tab strip. -->
-          <UButton
-            v-if="showHeaderActions && !isNarrow"
-            icon="i-lucide-settings"
-            size="sm"
-            color="neutral"
-            :variant="settingsToggled ? 'solid' : 'outline'"
-            @click="toggleSettings"
-          >
-            {{ t('sales.events.settings') }}
-          </UButton>
-          <p v-if="event.eventType" class="text-muted text-sm ms-2">
-            {{ event.eventType }}
-          </p>
-          <!-- Panel-wide Save, hosted here so it shares the header line.
-               Drives the { save, dirty, saving } API SettingsTab registers. -->
-          <div v-if="settingsOpen && !isNarrow" class="ms-auto flex items-center gap-3">
-            <span v-if="settingsDirty" class="text-sm text-muted hidden sm:inline">
-              {{ t('sales.workspace.unsavedChanges') }}
-            </span>
-            <UButton
-              size="sm"
-              :loading="settingsSaving"
-              :disabled="!settingsDirty"
-              @click="settingsTab?.save()"
-            >
-              {{ t('sales.common.save') }}
-            </UButton>
-          </div>
-          <!-- Fullscreen-modal exit (closable) — the wide-viewport twin of the
-               strip's ✕, for a modal resized past the narrow breakpoint. -->
-          <UButton
-            v-if="closable"
-            icon="i-lucide-x"
-            size="sm"
-            color="neutral"
-            variant="ghost"
-            :class="settingsOpen ? '' : 'ms-auto'"
-            :aria-label="t('sales.common.close')"
-            @click="emit('close')"
-          />
-        </div>
-
-        <!-- Own Suspense — SettingsTab is an async-setup component. Desktop
-             only: narrow screens get the settings slideover below instead
-             (never both, so only one instance registers its save API). -->
-        <UCollapsible :open="settingsOpen && !isNarrow">
-          <template #content>
-            <div class="p-4 sm:p-6 pt-1">
-              <Suspense>
-                <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar @register="settingsTab = $event" />
-                <template #fallback>
-                  <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
-                </template>
-              </Suspense>
-            </div>
-          </template>
-        </UCollapsible>
-      </div>
-    </div>
+    <!-- No desktop header row anymore: the event switcher moved into the
+         gutter, settings became a pane like orders/data, and the kassa is the
+         page — the event name lives in the switcher and the page you came
+         from. -->
 
     <!-- Narrow screens: the side panes can't fit beside the kassa, so they
          open as slideovers from this row. Styled as a segmented tab strip
@@ -393,7 +290,7 @@ const ordersFilterCount = ref(0)
         :variant="settingsSlideoverOpen ? 'solid' : 'ghost'"
         class="shrink-0 justify-center"
         :aria-label="t('sales.events.settings')"
-        @click="toggleSettings"
+        @click="settingsSlideoverOpen = true"
       />
       <!-- Kassa edit-mode pencil, lifted out of the category-tabs row on
            narrow screens (hide-edit-toggle on the POS below). -->
@@ -427,21 +324,25 @@ const ordersFilterCount = ref(0)
          kassa's right edge (reserved gutter via pe-11, so they never
          overflow the page). -->
     <div class="relative" :class="hasGutter ? 'pe-11' : ''">
-    <div class="flex border border-default rounded-xl overflow-clip bg-default h-[calc(100dvh-13rem)] min-h-[28rem]">
+    <!-- Height budget: the desktop header row is gone, so the kassa reclaims
+         its ~4.5rem (13rem → 8.5rem of surrounding chrome). -->
+    <div class="flex border border-default rounded-xl overflow-clip bg-default h-[calc(100dvh-8.5rem)] min-h-[28rem]">
       <SplitterGroup
         direction="horizontal"
         auto-save-id="sales-workspace-pos"
         class="flex flex-1 min-w-0"
       >
         <SplitterPanel id="pos" :order="1" :min-size="35" class="min-w-0">
-          <!-- No panel header: the workspace header above already names the
-               event (the standalone order page keeps it). -->
+          <!-- No panel header: the event is named by the gutter switcher (the
+               standalone order page keeps its own). closable: with no desktop
+               header row, the kassa's category row hosts the modal exit
+               everywhere except when the narrow strip already carries one. -->
           <SalesPosPanel
             :event-slug="event.slug"
             :team-param="teamParam"
             :show-header="false"
             :hide-edit-toggle="isNarrow && showStrip"
-            :closable="closable && isNarrow && !showStrip"
+            :closable="closable && !(isNarrow && showStrip)"
             v-model:edit-mode="kassaEditMode"
             @close="emit('close')"
           />
@@ -513,6 +414,40 @@ const ordersFilterCount = ref(0)
             </div>
           </SplitterPanel>
         </template>
+        <template v-if="settingsPaneOpen && !isNarrow">
+          <SplitterResizeHandle
+            class="w-1 shrink-0 bg-accented hover:bg-primary/60 data-[state=drag]:bg-primary transition-colors"
+          />
+          <!-- Settings pane hosts the tabbed (sectioned) SettingsTab — the
+               pane is never wide enough for the old 3-column layout, so the
+               narrow-mode design is the design. Opslaan lives in the pane
+               header, driven by the registered save API; the narrow slideover
+               is gated on isNarrow so only one instance ever registers. -->
+          <SplitterPanel id="settings" :order="5" :default-size="30" :min-size="20" class="min-w-0 flex flex-col">
+            <SalesEventWorkspacePaneHeader
+              icon="i-lucide-settings"
+              :title="t('sales.events.settings')"
+              @close="settingsOpen = false"
+            >
+              <UButton
+                size="xs"
+                :loading="settingsSaving"
+                :disabled="!settingsDirty"
+                @click="settingsTab?.save()"
+              >
+                {{ t('sales.common.save') }}
+              </UButton>
+            </SalesEventWorkspacePaneHeader>
+            <div class="flex-1 overflow-y-auto p-4 pt-3">
+              <Suspense>
+                <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
+                <template #fallback>
+                  <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
+                </template>
+              </Suspense>
+            </div>
+          </SplitterPanel>
+        </template>
       </SplitterGroup>
 
     </div>
@@ -526,6 +461,41 @@ const ordersFilterCount = ref(0)
       v-if="hasGutter"
       class="absolute top-14 left-[calc(100%-2.75rem)] -ml-px flex flex-col gap-2"
     >
+      <!-- Compact event switcher (icon-only): the desktop header row is gone,
+           so switching/creating events lives at the top of the gutter — same
+           items + create-event #content-top as the narrow strip's switcher. -->
+      <USelectMenu
+        v-if="showHeader && showSwitcher"
+        :model-value="event.id"
+        :items="eventOptions"
+        value-key="id"
+        icon="i-lucide-ticket"
+        size="sm"
+        color="neutral"
+        variant="ghost"
+        class="shrink-0 justify-center rounded-none rounded-e-md border border-l-0 border-default
+               bg-elevated/60 hover:bg-elevated text-muted hover:text-highlighted py-3"
+        :ui="{ base: 'px-1.5', trailingIcon: 'hidden' }"
+        :aria-label="t('sales.events.selectEvent')"
+        @update:model-value="switchEvent"
+      >
+        <template #default>
+          <span class="sr-only">{{ event.title }}</span>
+        </template>
+        <template #content-top>
+          <div class="p-1">
+            <UButton
+              color="neutral"
+              icon="i-lucide-plus"
+              variant="soft"
+              block
+              @click="openCreateEvent"
+            >
+              {{ t('reference.createNew', { label: t('sales.events.title') }) }}
+            </UButton>
+          </div>
+        </template>
+      </USelectMenu>
       <UButton
         v-if="!ordersOpen"
         color="neutral"
@@ -569,6 +539,21 @@ const ordersFilterCount = ref(0)
         <UIcon name="i-lucide-chart-line" class="size-4 shrink-0" />
         <span class="[writing-mode:vertical-rl] text-sm font-medium tracking-wide">
           {{ t('sales.workspace.dataPanel.button') }}
+        </span>
+      </UButton>
+      <UButton
+        v-if="loggedIn && showHeaderActions && !settingsOpen"
+        color="neutral"
+        variant="soft"
+        class="flex-col items-center gap-1.5 px-1.5 py-3 rounded-none rounded-e-md
+               border border-l-0 border-default bg-elevated/60 hover:bg-elevated
+               text-muted hover:text-highlighted"
+        :aria-label="t('sales.events.settings')"
+        @click="settingsOpen = true"
+      >
+        <UIcon name="i-lucide-settings" class="size-4 shrink-0" />
+        <span class="[writing-mode:vertical-rl] text-sm font-medium tracking-wide">
+          {{ t('sales.events.settings') }}
         </span>
       </UButton>
     </div>
