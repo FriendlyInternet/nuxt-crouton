@@ -150,6 +150,48 @@ describe('buildFieldsSchema client mode (default) — FormData never widens to n
   })
 })
 
+describe('buildFieldsSchema server-patch mode — partial-locale translations (#1414)', () => {
+  const config = { defaultLocale: 'nl', translations: { collections: { products: ['title', 'slug', 'content'] } } }
+  const fieldsT = [
+    field('title', 'string', { required: true }),
+    field('slug', 'string', { required: true }),
+    field('content', 'text'),
+    field('layout', 'string')
+  ]
+  const schema = () => compilePatchSchema(build(fieldsT, config, 'server-patch'))
+
+  it('accepts a partial-locale patch (one field of one locale, no default locale sent)', () => {
+    const parsed = schema().parse({ translations: { fr: { content: 'bonjour' } } })
+    expect(parsed.translations).toEqual({ fr: { content: 'bonjour' } })
+  })
+
+  it('per-locale required fields: absent is fine, empty and null are rejected', () => {
+    expect(() => schema().parse({ translations: { nl: { title: '' } } })).toThrow()
+    expect(() => schema().parse({ translations: { nl: { title: null } } })).toThrow()
+    expect(schema().parse({ translations: { nl: { title: 'ok' } } }).translations.nl.title).toBe('ok')
+  })
+
+  it('a null locale entry is accepted (delete-locale semantics)', () => {
+    expect(schema().parse({ translations: { fr: null } }).translations.fr).toBeNull()
+  })
+
+  it('carries no wire refine — the default-locale invariant is enforced post-merge, not here', () => {
+    const out = build(fieldsT, config, 'server-patch')
+    expect(out).not.toContain('.refine(')
+  })
+
+  it('non-translations fields behave like server mode (nullish)', () => {
+    const out = build(fieldsT, config, 'server-patch')
+    expect(out).toContain('layout: z.string().nullish()')
+  })
+
+  it('server (POST) mode keeps the strict per-locale shape and refine', () => {
+    const out = build(fieldsT, config, 'server')
+    expect(out).toContain(".min(1, 'Title is required')")
+    expect(out).toContain('.refine(')
+  })
+})
+
 describe('buildFieldsTypes — read interface stays narrow (#1403)', () => {
   function buildTypes(fields: any[], config: Record<string, any> | null = null) {
     return buildFieldsTypes({ fields, config, hierarchy: { enabled: false } as any, cases })
