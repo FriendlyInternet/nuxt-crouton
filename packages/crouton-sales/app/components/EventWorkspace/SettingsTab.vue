@@ -425,6 +425,58 @@ async function deleteEvent() {
   }
 }
 
+// Bulk "Delete all orders" (#1519) — admin-only, typed-confirm. Wipes this
+// event's orders + items + print jobs; keeps the event, its menu and its
+// clients (their open-tab totals reset naturally). Deliberately stronger than
+// the Delete-event pill: bulk-destructive, so the admin must type the event
+// name before the destructive button enables.
+const { isAdmin } = useTeam()
+const nuxtApp = useNuxtApp()
+const deleteOrdersOpen = ref(false)
+const deleteOrdersConfirm = ref('')
+const deletingOrders = ref(false)
+const canDeleteOrders = computed(() =>
+  deleteOrdersConfirm.value.trim().length > 0
+  && deleteOrdersConfirm.value.trim() === (props.event.title || '').trim()
+)
+
+// Reset the typed confirmation whenever the modal closes so a re-open starts clean.
+watch(deleteOrdersOpen, (open) => {
+  if (!open) deleteOrdersConfirm.value = ''
+})
+
+async function deleteAllOrders() {
+  if (!canDeleteOrders.value) return
+  deletingOrders.value = true
+  try {
+    const res = await $fetch<{ deleted: { orders: number, items: number, jobs: number } }>(
+      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/orders`,
+      { method: 'DELETE' }
+    )
+    // The bulk DELETE bypasses useCollectionMutation, so emit the hook ourselves
+    // — the Orders tab and any salesOrders-watching view empty live instead of
+    // only on their next poll.
+    await nuxtApp.hooks.callHook('crouton:mutation', {
+      operation: 'delete',
+      collection: 'salesOrders',
+      data: { eventId: props.event.id },
+      correlationId: `bulk-delete-orders-${props.event.id}`,
+      timestamp: Date.now()
+    })
+    notify.success(t('sales.workspace.deleteAllOrdersDone', {
+      params: { count: res.deleted.orders },
+      fallback: `Deleted ${res.deleted.orders} order(s)`
+    }))
+    deleteOrdersOpen.value = false
+  }
+  catch {
+    notify.error(t('sales.workspace.deleteAllOrdersError', 'Could not delete the orders'))
+  }
+  finally {
+    deletingOrders.value = false
+  }
+}
+
 // Active helpers card (scoped tokens, not a collection)
 interface ActiveHelper {
   id: string
@@ -552,6 +604,25 @@ function helperExpiry(value: string): string {
               />
             </div>
             <p class="text-sm text-muted">{{ t('sales.workspace.deleteEventDesc') }}</p>
+          </div>
+
+          <!-- Bulk "Delete all orders" (#1519) — admin only, typed-confirm
+               modal (not a one-tap pill, because it's bulk-destructive). -->
+          <div v-if="isAdmin" class="space-y-1">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm font-medium leading-5">{{ t('sales.workspace.deleteAllOrders', 'Delete all orders') }}</p>
+              <UButton
+                size="xs"
+                variant="outline"
+                color="error"
+                icon="i-lucide-trash-2"
+                class="shrink-0"
+                @click="deleteOrdersOpen = true"
+              >
+                {{ t('sales.workspace.deleteAllOrdersAction', 'Delete orders…') }}
+              </UButton>
+            </div>
+            <p class="text-sm text-muted">{{ t('sales.workspace.deleteAllOrdersDesc', 'Clear every order, item and print job for this event. Keeps the event, its menu and its clients.') }}</p>
           </div>
         </div>
       </UCard>
@@ -713,5 +784,61 @@ function helperExpiry(value: string): string {
         </div>
       </UCard>
     </div>
+
+    <!-- Bulk "Delete all orders" typed-confirm (#1519). Admin-only trigger;
+         the destructive button stays disabled until the event name is typed
+         exactly, since this can't be undone. -->
+    <UModal v-model:open="deleteOrdersOpen">
+      <template #header>
+        <div class="flex items-center gap-2.5">
+          <span class="flex size-8 items-center justify-center rounded-lg bg-error/10 text-error">
+            <UIcon name="i-lucide-alert-triangle" class="size-5" />
+          </span>
+          <span class="text-lg font-semibold">{{ t('sales.workspace.deleteAllOrdersTitle', 'Delete all orders?') }}</span>
+        </div>
+      </template>
+
+      <template #body>
+        <div class="space-y-4">
+          <p class="text-sm text-muted">
+            {{ t('sales.workspace.deleteAllOrdersWarning', {
+              params: { event: event.title },
+              fallback: `This permanently deletes all orders for “${event.title}”, including their items and print jobs. Other events are untouched. Client tabs stay but reset to empty. This can't be undone.`
+            }) }}
+          </p>
+          <UFormField
+            :label="t('sales.workspace.deleteAllOrdersConfirmLabel', {
+              params: { event: event.title },
+              fallback: `Type “${event.title}” to confirm`
+            })"
+          >
+            <UInput
+              v-model="deleteOrdersConfirm"
+              class="w-full"
+              autofocus
+              :placeholder="event.title"
+              @keydown.enter="deleteAllOrders"
+            />
+          </UFormField>
+        </div>
+      </template>
+
+      <template #footer="{ close }">
+        <div class="flex justify-end gap-2 w-full">
+          <UButton color="neutral" variant="ghost" @click="close">
+            {{ t('sales.common.cancel') }}
+          </UButton>
+          <UButton
+            color="error"
+            icon="i-lucide-trash-2"
+            :loading="deletingOrders"
+            :disabled="!canDeleteOrders"
+            @click="deleteAllOrders"
+          >
+            {{ t('sales.workspace.deleteAllOrdersConfirm', 'Delete all orders') }}
+          </UButton>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>
