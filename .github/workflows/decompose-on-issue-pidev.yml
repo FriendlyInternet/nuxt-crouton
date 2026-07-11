@@ -342,7 +342,18 @@ jobs:
               if (logFile && fs.existsSync(logFile)) {
                 const log = fs.readFileSync(logFile, 'utf8')
                 const tail = log.length > 600 ? log.slice(-600) : log
-                if (/credit balance is too low|insufficient.*(credit|balance|quota)|billing/i.test(log)) {
+                // GLM Coding Plan quota (z.ai) — checked FIRST: its 429 is distinct from an
+                // Anthropic billing failure and must not fall through to the generic SDK-error
+                // bucket (the #1451/#1492 misdiagnosis). z.ai emits `429 {"code":"1308",
+                // "message":"Usage limit reached for 5 hour. Your limit will reset at <ts>"}`.
+                const glmReset = (log.match(/reset at ([0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:]+)/i) || [])[1]
+                if (/\b1308\b|usage limit reached/i.test(log)) {
+                  why = 'the GLM Coding Plan quota was reached mid-run'
+                    + (glmReset ? ` (the plan window resets at ${glmReset})` : ' (z.ai 5-hour / weekly window)')
+                  action = 'wait for that window to reset then re-dispatch on GLM (free), '
+                    + 'or escalate this one leaf to the metered `provider=anthropic` lane to unblock now — '
+                    + 'this is NOT a code/SDK bug, nothing is broken'
+                } else if (/credit balance is too low|insufficient.*(credit|balance|quota)|billing/i.test(log)) {
                   why = 'the Anthropic key (`PI_PROVIDER_KEY`) is out of credit'
                   action = 'top up the account, then re-dispatch' // NB: not "enable auto-reload" — owner declined it (#1327); the pi-key-canary workflow tracks key health
                 } else if (failed) {
