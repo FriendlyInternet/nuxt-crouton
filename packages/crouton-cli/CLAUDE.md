@@ -142,25 +142,33 @@ and SSR errors like `$setup.t is not a function`.
 2. **Installs** package via detected package manager (pnpm/yarn/npm)
 3. **Updates** `nuxt.config.ts` - adds to `extends` array
 4. **Updates** `server/db/schema.ts` - adds schema export (if applicable)
-5. **Generates** migrations **build-first** (if applicable) — see below
+5. **Generates** migrations **directly** — drizzle-kit, no Nuxt build (see below)
 6. **Applies** migrations with `npx nuxt db:migrate` (if applicable)
 
-#### Build-first migration generation (the schema.mjs gotcha, #523)
+#### Direct migration generation — no Nuxt round trip (#1445 WS2)
 
-`drizzle-kit generate` (the app's `db:generate` script) reads the **bundled**
-schema at `.nuxt/hub/db/schema.mjs`, which NuxtHub only writes during
-**`nuxt build`** — `nuxt prepare` emits `schema.entry.ts`, NOT the `.mjs`. So
-running `db:generate` on a fresh tree finds no schema and emits **zero**
-migrations; the first deploy then fails the remote-migrate step with *"No
-migrations present"* (the #457 library-catalog failure).
+`lib/utils/generate-migrations.ts` (`generateMigrations(appDir)`) resolves the
+app's schema graph directly (`resolveSchemaGraph`, from `schema-sources.ts` — the
+same set NuxtHub globs), gates it for duplicate tables (`findDuplicateTables`,
+`duplicate-tables.ts`), then runs the app's own `db:generate` (drizzle-kit reads
+the runtime-resolving `drizzle.config.ts` and is resolved from the app dir). **No
+`nuxt build`, no `nuxt db generate`** — the old build-first dance (build →
+poll for `.nuxt/hub/db/schema.mjs` → kill) is gone. Used by `crouton config`,
+`crouton add` (step 5), and `crouton init` (step 3).
 
-`lib/utils/generate-migrations.ts` (`generateMigrations(cwd)`) fixes this: it
-starts `NITRO_PRESET=node-server nuxt build`, waits for the bundle to appear
-(written early, before the slow Nitro stage), stops the build, then runs the
-app's own `db:generate`. Used by both `crouton add` (step 5) and `crouton init`
-(step 3). It **requires installed deps** (it builds); on a bare tree with no
-`node_modules` it returns `deps-missing` and the caller prints the exact manual
-sequence (`manualMigrationSteps()`) instead of silently shipping no migrations.
+Failure contract (strengthens #1302 / #1286, fixes #1357's exit-0 disease):
+- **Duplicate table** (two DISTINCT defs share a name) → throws `DuplicateTableError`
+  naming both files → the CLI exits **non-zero**.
+- **Unresolvable `extends`** (e.g. an out-of-monorepo scaffold whose deps aren't
+  installed, so a layer can't resolve) → **defers** softly: `{ generated: false,
+  reason: 'deferred', recipe }`, the caller prints `manualMigrationSteps()`.
+- **drizzle-kit error** → `{ reason: 'generate-failed', detail }` → non-zero.
+
+The scaffolded `drizzle.config.ts` (`tmplDrizzleConfig`) calls
+`resolveSchemaSourcesSync(process.cwd())` at runtime — a **sync** resolver
+(drizzle-kit's esbuild config loader is CJS and rejects top-level await), imported
+with an explicit `.ts` extension, with a **relative** `out` (0.31.10 re-reads
+`meta/` via a `./` join; an absolute out ENOENTs on the second run).
 
 ## Init Command (Full Pipeline)
 
@@ -198,11 +206,11 @@ crouton init my-app --dry-run
    config** — so the schema-first pipeline is a single `crouton init` command, not a manual
    workaround (#1233).
 2. **generate** — Generates collections from `crouton.config.js` (if collections are defined)
-3. **migrations** — Generates the initial D1 migrations **build-first** (see the
-   `crouton add` section). Runs only when deps are already installed; on a bare
-   scaffold (no `node_modules`) it defers and the summary prints the exact
-   `pnpm install` → build → `db:generate` sequence — so a fresh app is never
-   silently shipped without its migrations (#523).
+3. **migrations** — Generates the initial D1 migrations **directly** (drizzle-kit,
+   no Nuxt build — see the `crouton add` section). On an out-of-monorepo scaffold
+   whose deps aren't installed (so a layer can't resolve) it **defers** and the
+   summary prints the exact `pnpm install` → `db:generate` sequence — so a fresh
+   app is never silently shipped without its migrations (#523, #1445 WS2).
 4. **doctor** — Validates everything is wired correctly
 5. **Summary** — Prints next steps (dev server, deploy)
 
@@ -319,7 +327,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/db-pull.ts` | Remote D1 → local dev pull |
 | `lib/module-registry.ts` | Module definitions for `crouton add` |
 | `lib/add-module.ts` | Module installation implementation |
-| `lib/utils/generate-migrations.ts` | Build-first migration generation (`generateMigrations`) — emits the `.nuxt/hub/db/schema.mjs` bundle, then `db:generate`; used by `add`+`init` (#523) |
+| `lib/utils/generate-migrations.ts` | Direct migration generation (`generateMigrations`, `prepareSchemaForMigration`, `DuplicateTableError`) — resolve graph → duplicate gate → app's `db:generate` (drizzle-kit, no Nuxt). Deferral/throw failure contract. Used by config/`add`/`init` (#1445 WS2) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/dialects.ts` | PostgreSQL/SQLite configs |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
