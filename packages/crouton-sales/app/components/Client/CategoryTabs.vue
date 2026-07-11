@@ -95,15 +95,16 @@
 
     <!-- Add category: starts a draft tab instead of opening a form -->
     <li role="presentation" class="shrink-0">
-      <button
-        type="button"
-        class="flex items-center justify-center size-8 rounded-md cursor-pointer
-               text-muted hover:text-highlighted hover:bg-elevated/60 transition-colors"
+      <!-- UButton, not a raw button, so themes reach it (#1410) -->
+      <UButton
+        color="neutral"
+        variant="ghost"
+        icon="i-lucide-plus"
+        square
+        class="size-8 justify-center text-muted hover:text-highlighted"
         :aria-label="t('sales.workspace.add')"
         @click="startCreate"
-      >
-        <UIcon name="i-lucide-plus" class="size-4" />
-      </button>
+      />
     </li>
   </ul>
 </template>
