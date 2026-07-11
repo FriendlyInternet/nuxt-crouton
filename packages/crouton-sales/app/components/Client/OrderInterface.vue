@@ -92,8 +92,10 @@
           </div>
         </div>
 
-        <!-- Cart sidebar (wide panes only) -->
-        <div class="hidden @2xl:flex w-80 border-l border-default flex-col">
+        <!-- Cart sidebar (wide panes only). bg-elevated/40 tints the whole
+             order column (name row + cart) so it reads as its own surface in
+             every theme — semantic token, so themes restyle it for free. -->
+        <div class="hidden @2xl:flex w-80 border-l border-default flex-col bg-elevated/40">
           <!-- h-14 matches the category-tabs row so both bottom borders align.
                Every order needs a client indication on the ticket: reusable
                clients when the event requires them, otherwise a plain
