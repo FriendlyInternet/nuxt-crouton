@@ -553,17 +553,23 @@ uses. The split (verified 2026-07-11):
     tint the color surfaces): frame `[data-slot="selector"]` +
     `[data-color-picker-track]`, round-off `selectorThumb`/`trackThumb` (camelCase
     in the DOM). Both scoped to BOTH activation paths like the #1393 ambient set.
+  - **UPinInput** (#1482 — crouton-sales volunteer login `Pos/Panel.vue` + admin
+    event-PIN `SettingsTab.vue`, themed once #1480 made it a real consumer) — a
+    **named variant** like `input`: it has a `variant` dimension + a `base` slot
+    per cell, so each theme registers `pinInput.variants.variant.<p>.base` pointing
+    at its existing `<p>-input-base` class (marker + replacer on `base`) — the
+    cells reuse the theme's input look for **zero new CSS**; the square geometry
+    comes from the size variant (no input-base class sets `width`, checked).
+    Runtime scalar `pinInput.defaultVariants.variant` in `themeConfigs.ts`.
 - **Documented skips** — no consumer anywhere in the repo, so stock (they still
-  adapt to the theme via the `#1390` semantic `--ui-*` tokens — verified not
-  broken, e.g. terminal's PIN boxes render as phosphor-bordered squares):
-  - **UPinInput** — the issue's real-use map guessed 2FA, but `TwoFactorForm.vue`
-    (and the POS helper-login) use a plain **`UInput`** for the code, not
-    `UPinInput`. No consumer → skip.
+  adapt to the theme via the `#1390` semantic `--ui-*` tokens):
   - **UInputTags**, **UCommandPalette** — zero consumers outside the playground
     `/matrix` zoo.
+  - (**UPinInput** was a skip here until #1480 gave it real consumers — the issue's
+    map guessed 2FA, but that form uses a plain `UInput`. Now themed, above.)
 
-blackandwhite stays the deliberate stock pass here too (its calendar runtime is
-`solid`, no `bw-cal-*` variant).
+blackandwhite stays the deliberate stock pass here too (calendar runtime `solid`,
+pinInput runtime `subtle` to match its stock inputs — no `bw-*` variants).
 
 ## Dual scheme (#1395) — every theme works in light AND dark
 
