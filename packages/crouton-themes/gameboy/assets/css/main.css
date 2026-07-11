@@ -479,3 +479,32 @@ body.theme-gameboy {
   background-color: var(--gb-0);
   color: var(--gb-3);
 }
+
+/* ============================================
+   DUAL SCHEME (#1395) — the backlit-mod counterpart: same 4-shade
+   constraint, screen goes deep olive-black, ink goes lit green.
+   Activated by the colorMode class on <html>.
+   ============================================ */
+
+.dark {
+  --gb-0: #9fc814;   /* lit ink */
+  --gb-1: #6f9410;   /* mid glow */
+  --gb-2: #1e3d1e;   /* active fills, dark */
+  --gb-3: #0c1f0c;   /* the unlit screen */
+}
+
+/* Semantic tokens for the dark screen (counterpart of the base block). */
+[data-theme="gameboy"].dark body,
+.dark body.theme-gameboy {
+  --ui-text-dimmed: #567a2a;
+  --ui-text-muted: #6f9410;
+  --ui-text-toned: #8ab312;
+  --ui-text: #9fc814;
+  --ui-text-highlighted: #c2e63a;
+  --ui-bg-muted: #102810;
+  --ui-bg-elevated: #123012;
+  --ui-bg-accented: #1e3d1e;
+  --ui-border: #6f9410;
+  --ui-border-muted: #2c4f2c;
+  --ui-border-accented: #9fc814;
+}

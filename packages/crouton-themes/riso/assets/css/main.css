@@ -10,6 +10,9 @@
   --riso-teal: #00887a;
   --riso-pink-soft: rgba(255, 72, 176, 0.18);
   --riso-teal-soft: rgba(0, 136, 122, 0.16);
+  /* Raised print stock + text-on-fluoro constant (#1395). */
+  --riso-surface: #fffdf6;
+  --riso-on-pink: #fff8f0;
   /* Grain: tiny SVG turbulence tile, self-contained (CSP-safe data URI). */
   --riso-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
 }
@@ -62,7 +65,7 @@
 /* Overprint alert: both inks at once. */
 .riso-btn--alert {
   background-color: var(--riso-pink);
-  color: var(--riso-paper);
+  color: var(--riso-on-pink);
   background-image: var(--riso-grain), linear-gradient(var(--riso-teal-soft), var(--riso-teal-soft));
 }
 
@@ -175,7 +178,7 @@
 }
 
 .riso-input-base {
-  background-color: #fffdf6;
+  background-color: var(--riso-surface);
   color: var(--riso-ink);
   border: 2px solid var(--riso-ink);
   border-radius: 2px;
@@ -204,7 +207,7 @@
    ============================================ */
 
 .riso-card {
-  background-color: #fffdf6;
+  background-color: var(--riso-surface);
   background-image: var(--riso-grain);
   border: 2px solid var(--riso-ink);
   border-radius: 2px;
@@ -257,7 +260,7 @@
 [data-theme="riso"] button[role="switch"],
 .theme-riso button[role="switch"] {
   border: 2px solid var(--riso-ink);
-  background-color: #fffdf6;
+  background-color: var(--riso-surface);
   box-shadow: 2px 2px 0 var(--riso-teal-soft);
   transition: background-color 100ms ease;
 }
@@ -334,7 +337,7 @@ body.theme-riso {
 
 .riso-check-box,
 .riso-radio-box {
-  background-color: #fffdf6;
+  background-color: var(--riso-surface);
   border: 2px solid var(--riso-ink);
   border-radius: 2px;
   box-shadow: 2px 2px 0 var(--riso-pink-soft);
@@ -342,11 +345,11 @@ body.theme-riso {
 
 .riso-check-indicator {
   background-color: var(--riso-pink);
-  color: var(--riso-paper);
+  color: var(--riso-on-pink);
 }
 
 .riso-radio-indicator {
-  background-color: #fffdf6;
+  background-color: var(--riso-surface);
 }
 
 .riso-radio-indicator::after {
@@ -364,7 +367,7 @@ body.theme-riso {
    ============================================ */
 
 .riso-alert {
-  background-color: #fffdf6;
+  background-color: var(--riso-surface);
   background-image: var(--riso-grain);
   color: var(--riso-ink);
   border: 2px solid var(--riso-ink);
@@ -386,7 +389,7 @@ body.theme-riso {
 
 .riso-alert--error {
   background-color: var(--riso-pink);
-  color: var(--riso-paper);
+  color: var(--riso-on-pink);
   box-shadow: 5px 5px 0 var(--riso-teal-soft);
 }
 
@@ -401,7 +404,7 @@ body.theme-riso {
 
 [data-theme="riso"] [role="dialog"][data-slot="content"],
 .theme-riso [role="dialog"][data-slot="content"] {
-  background-color: #fffdf6;
+  background-color: var(--riso-surface);
   background-image: var(--riso-grain);
   border: 2px solid var(--riso-ink);
   border-radius: 2px;
@@ -421,7 +424,7 @@ body.theme-riso {
 
 [data-theme="riso"] li[data-slot="base"],
 .theme-riso li[data-slot="base"] {
-  background-color: #fffdf6;
+  background-color: var(--riso-surface);
   background-image: var(--riso-grain);
   border: 2px solid var(--riso-ink);
   border-radius: 2px;
@@ -436,7 +439,7 @@ body.theme-riso {
 
 [data-theme="riso"] nav[data-slot="root"] button,
 .theme-riso nav[data-slot="root"] button {
-  background-color: #fffdf6;
+  background-color: var(--riso-surface);
   color: var(--riso-ink);
   border: 2px solid var(--riso-ink);
   border-radius: 2px;
@@ -453,6 +456,37 @@ body.theme-riso {
 [data-theme="riso"] nav[data-slot="root"] button[data-selected],
 .theme-riso nav[data-slot="root"] button[data-selected] {
   background-color: var(--riso-pink);
-  color: var(--riso-paper);
+  color: var(--riso-on-pink);
   box-shadow: 2px 2px 0 var(--riso-teal-soft);
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — fluoro on black card, DESIGNED not inverted:
+   the pink/teal passes stay fluoro, the stock goes black (a night-mode
+   riso zine). Activated by the colorMode class on <html>.
+   ============================================ */
+
+.dark {
+  --riso-paper: #1b1815;
+  --riso-ink: #f0ebe0;
+  --riso-surface: #262220;
+  --riso-pink-soft: rgba(255, 72, 176, 0.24);
+  --riso-teal-soft: rgba(0, 176, 158, 0.22);
+  --riso-teal: #17b09e;
+}
+
+/* Semantic tokens for the black card (counterpart of the #1390 block). */
+[data-theme="riso"].dark body,
+.dark body.theme-riso {
+  --ui-text-dimmed: #8f887b;
+  --ui-text-muted: #a69e8f;
+  --ui-text-toned: #cfc7b8;
+  --ui-text: #f0ebe0;
+  --ui-text-highlighted: #fff8ec;
+  --ui-bg-muted: #221e1b;
+  --ui-bg-elevated: #262220;
+  --ui-bg-accented: #302b27;
+  --ui-border: #45403a;
+  --ui-border-muted: #332f2a;
+  --ui-border-accented: #f0ebe0;
 }

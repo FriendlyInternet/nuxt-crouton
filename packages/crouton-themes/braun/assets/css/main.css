@@ -524,3 +524,45 @@ body.theme-braun {
   color: var(--braun-cream-raised);
   border-color: var(--braun-charcoal);
 }
+
+/* ============================================
+   DUAL SCHEME (#1395) — the black-unit counterpart, DESIGNED not inverted:
+   charcoal chassis, backlit light legends, the one orange unchanged.
+   Activated by the colorMode class on <html>.
+   ============================================ */
+
+.dark {
+  --braun-cream: #23211e;
+  --braun-cream-raised: #2b2926;
+  --braun-charcoal: #e8e4dc;
+  --braun-hairline: #3d3a36;
+  --braun-text: #d5d0c7;
+  --braun-label: #918c83;
+  --braun-red: #d96a52;
+  --braun-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --braun-shadow-pressed: inset 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.dark .braun-alert--warning {
+  background-color: #322a20;
+}
+
+.dark .braun-alert--error {
+  background-color: #33231f;
+}
+
+/* Semantic tokens for the charcoal chassis (counterpart of the #1390 block). */
+[data-theme="braun"].dark body,
+.dark body.theme-braun {
+  --ui-text-dimmed: #7d786f;
+  --ui-text-muted: #918c83;
+  --ui-text-toned: #b8b2a8;
+  --ui-text: #d5d0c7;
+  --ui-text-highlighted: #f0ece4;
+  --ui-bg-muted: #26241f;
+  --ui-bg-elevated: #2b2926;
+  --ui-bg-accented: #34312d;
+  --ui-border: #3d3a36;
+  --ui-border-muted: #33302c;
+  --ui-border-accented: #55514b;
+}

@@ -17,9 +17,11 @@ export interface ThemeConfig {
   /** Default base variant for this theme (solid, outline, ghost, etc.) */
   defaultVariant: BaseVariant
   /**
-   * The color scheme this theme is designed for. Applying the theme pins the
-   * app's color mode to it (#1387 — a light-paper theme under dark-mode text
-   * tokens washes out). Omit for themes that adapt to both (blackandwhite).
+   * The color scheme this theme was DESIGNED in — its default. Applying the
+   * theme sets the color mode to it only while the user has no explicit
+   * preference (#1395 relaxed the #1387 pin: every theme now ships a designed
+   * counterpart palette for the other scheme, so an explicit light/dark
+   * choice always wins). Omit for themes that adapt to both (blackandwhite).
    */
   colorMode?: 'light' | 'dark'
 }
@@ -189,10 +191,13 @@ export function useThemeSwitcher() {
       })
     }
 
-    // Pin the scheme the theme was designed for (#1387); adaptive themes
-    // (blackandwhite, default) leave the user's preference untouched.
+    // The theme's designed scheme is a DEFAULT, not a lock (#1395 relaxed the
+    // #1387 pin): applied only while the user has no explicit preference
+    // ('system'). Every theme now carries a designed counterpart palette for
+    // the other scheme, so an explicit light/dark choice always wins; adaptive
+    // themes (blackandwhite, default) never touch the preference at all.
     const scheme = AVAILABLE_THEMES.find(t => t.name === theme)?.colorMode
-    if (scheme) {
+    if (scheme && colorMode.preference === 'system') {
       colorMode.preference = scheme
     }
   }

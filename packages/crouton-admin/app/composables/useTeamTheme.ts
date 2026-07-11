@@ -173,9 +173,12 @@ export function applyThemeSettings(settings: TeamThemeSettings, colorMode?: { pr
     }
     else {
       updateAppConfig({ ui: entry.ui as any })
-      // Pin the scheme the theme was designed for (#1387).
+      // The theme's designed scheme is a DEFAULT, not a lock (#1395 relaxed
+      // the #1387 pin): applied only while the visitor has no explicit
+      // preference ('system'). Themes carry designed counterpart palettes
+      // for both schemes, so an explicit light/dark choice always wins.
       const scheme = THEME_PRESET_REGISTRY[preset as ThemePresetName]?.colorMode
-      if (scheme && colorMode) {
+      if (scheme && colorMode && colorMode.preference === 'system') {
         colorMode.preference = scheme
       }
     }

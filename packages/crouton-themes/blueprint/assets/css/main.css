@@ -10,6 +10,8 @@
   --bp-line-dim: #7fa3c4;
   --bp-accent: #ffd66b;   /* the surveyor's pencil mark */
   --bp-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  /* Text on the pencil accent — constant across schemes (#1395). */
+  --bp-on-accent: #0d2c4d;
 }
 
 /* ============================================
@@ -321,7 +323,7 @@ body.theme-blueprint {
 }
 
 .bp-tabs-trigger[data-state="active"] {
-  color: var(--bp-blue-deep);
+  color: var(--bp-on-accent);
   background-color: var(--bp-accent);
   border-color: var(--bp-line);
 }
@@ -348,7 +350,7 @@ body.theme-blueprint {
 
 .bp-check-indicator {
   background-color: var(--bp-accent);
-  color: var(--bp-blue-deep);
+  color: var(--bp-on-accent);
 }
 
 .bp-radio-indicator {
@@ -478,6 +480,37 @@ body.theme-blueprint {
 [data-theme="blueprint"] nav[data-slot="root"] button[data-selected],
 .theme-blueprint nav[data-slot="root"] button[data-selected] {
   background-color: var(--bp-accent);
-  color: var(--bp-blue-deep);
+  color: var(--bp-on-accent);
   border-color: var(--bp-accent);
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — pencil-on-white, DESIGNED not inverted: blue
+   linework on white drafting paper, the pencil mark goes graphite-gold.
+   Activated by the colorMode class on <html>.
+   ============================================ */
+
+.light {
+  --bp-blue: #f4f7fa;
+  --bp-blue-deep: #e9eef5;
+  --bp-line: #16406e;
+  --bp-line-dim: #6787a8;
+  --bp-accent: #b58900;
+}
+
+/* Semantic tokens for the white sheet (counterpart of the #1390 block). */
+[data-theme="blueprint"].light body,
+.light body.theme-blueprint {
+  --ui-text-dimmed: #7d94ab;
+  --ui-text-muted: #5b7a99;
+  --ui-text-toned: #2e567f;
+  --ui-text: #16406e;
+  --ui-text-highlighted: #0d2c4d;
+  --ui-bg: #f4f7fa;
+  --ui-bg-muted: #edf1f7;
+  --ui-bg-elevated: #e9eef5;
+  --ui-bg-accented: #dde5ef;
+  --ui-border: #b5c6d8;
+  --ui-border-muted: #cbd8e5;
+  --ui-border-accented: #16406e;
 }
