@@ -327,9 +327,7 @@ const groupedItems = computed<CartGroup[]>(() => {
 
 const emit = defineEmits<{
   updateQuantity: [index: number, quantity: number]
-  remove: [index: number]
   checkout: []
-  clear: []
   updateLocationRemark: [locationId: string, value: string]
   'update:isPersonnel': [value: boolean]
   dismissPrintWarning: [orderId: string]

@@ -121,30 +121,39 @@ interface Segment {
   phrase: string
 }
 
+/** Normalized word tokens with punctuation and filler words removed. */
+function tokenize(raw: string): string[] {
+  return normalize(raw)
+    .replace(/[^\p{L}\p{N} ]/gu, ' ')
+    .split(/\s+/)
+    .filter(t => t && !FILLER_WORDS.has(t))
+}
+
+/** The first numeric token (digit or nl number word) becomes the quantity;
+ * every other token stays in the product phrase. */
+function extractQuantity(tokens: string[]): { quantity: number | null, phraseTokens: string[] } {
+  let quantity: number | null = null
+  const phraseTokens: string[] = []
+  for (const token of tokens) {
+    const value = /^\d+$/.test(token) ? Number(token) : NUMBER_WORDS[token]
+    if (quantity === null && value !== undefined && value > 0) {
+      quantity = value
+    }
+    else {
+      phraseTokens.push(token)
+    }
+  }
+  return { quantity, phraseTokens }
+}
+
 /** Split the utterance on "en"/commas, then pull the quantity + product
- * phrase out of each part. Returns null for parts that are pure filler. */
+ * phrase out of each part. Pure-filler parts are dropped. */
 function segment(utterance: string): Segment[] {
   const segments: Segment[] = []
   for (const part of utterance.split(/,|\ben\b/)) {
     const raw = part.trim()
     if (!raw) continue
-    const tokens = normalize(raw)
-      .replace(/[^\p{L}\p{N} ]/gu, ' ')
-      .split(/\s+/)
-      .filter(t => t && !FILLER_WORDS.has(t))
-
-    let quantity: number | null = null
-    const phraseTokens: string[] = []
-    for (const token of tokens) {
-      if (quantity === null) {
-        const asDigit = /^\d+$/.test(token) ? Number(token) : NUMBER_WORDS[token]
-        if (asDigit !== undefined && asDigit > 0) {
-          quantity = asDigit
-          continue
-        }
-      }
-      phraseTokens.push(token)
-    }
+    const { quantity, phraseTokens } = extractQuantity(tokenize(raw))
     if (!phraseTokens.length && quantity === null) continue // pure filler
     segments.push({ raw, quantity: quantity ?? 1, phrase: phraseTokens.join(' ') })
   }

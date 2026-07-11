@@ -140,9 +140,7 @@
               :voice-transcript="voiceTranscript ?? undefined"
               :voice-unmatched="voiceUnmatched"
               @update-quantity="updateQuantity"
-              @remove="removeFromCart"
               @checkout="handleCheckout"
-              @clear="clearCart"
               @update-location-remark="setLocationRemark"
               @update:is-personnel="isPersonnel = $event"
               @dismiss-print-warning="dismissPrintWarning"
@@ -235,9 +233,7 @@
                   :voice-transcript="voiceTranscript ?? undefined"
                   :voice-unmatched="voiceUnmatched"
                   @update-quantity="updateQuantity"
-                  @remove="removeFromCart"
                   @checkout="handleCheckout"
-                  @clear="clearCart"
                   @update-location-remark="setLocationRemark"
                   @update:is-personnel="isPersonnel = $event"
                   @dismiss-print-warning="dismissPrintWarning"
@@ -320,10 +316,8 @@ const {
   isPersonnel,
   isCheckingOut,
   addToCart,
-  removeFromCart,
   updateQuantity,
   syncCartProducts,
-  clearCart,
   checkout,
 } = usePosOrder()
 
