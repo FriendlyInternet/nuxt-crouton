@@ -27,20 +27,20 @@ export interface PagesPage {
   id: string
   teamId: string
   owner: string
-  title?: string | null
-  slug?: string | null
+  title?: string
+  slug?: string
   pageType: string
-  content?: string | null
+  content?: string
   config?: Record<string, any> | null
   status: string
   visibility: string
   publishedAt?: Date | null
-  showInNavigation?: boolean | null
-  layout?: string | null
-  seoTitle?: string | null
-  seoDescription?: string | null
-  ogImage?: string | null
-  robots?: string | null
+  showInNavigation?: boolean
+  layout?: string
+  seoTitle?: string
+  seoDescription?: string
+  ogImage?: string
+  robots?: string
   parentId?: string | null
   path?: string
   depth?: number
@@ -56,9 +56,15 @@ export interface PagesPage {
 }
 
 export type PagesPageFormData = z.infer<typeof pagesPageSchema>
+// Optional (undefined-including) props also accept null on the WRITE path: the
+// server body schema validates non-required fields as .nullish() (#1403 — a
+// nullable column round-trips null, and null is how a client clears a field),
+// so the create input must admit the validated body. The read interface above
+// deliberately stays narrow (form bindings/consumers never want null).
+type NullableOptionals<T> = { [K in keyof T]: undefined extends T[K] ? T[K] | null : T[K] }
 // New* allows the server-set fields (id, createdBy, updatedBy) as optional — the
 // generated POST endpoint provides them; other callers (e.g. seed) may omit them.
-export type NewPagesPage = Omit<PagesPage, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'> & { id?: string; createdBy?: string; updatedBy?: string }
+export type NewPagesPage = NullableOptionals<Omit<PagesPage, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>> & { id?: string; createdBy?: string; updatedBy?: string }
 
 // Props type for the Form component
 export interface PagesPageFormProps {
