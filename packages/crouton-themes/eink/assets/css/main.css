@@ -562,3 +562,107 @@ body.theme-eink {
   --ui-border-muted: #2a2a29;
   --ui-border-accented: #d8d8d2;
 }
+
+/* ============================================
+   SECOND-TIER CHROME (#1458) — UCalendar, USlider, UColorPicker
+   Ambient (no variant hook) — same scoped pattern as switch/toast/pagination.
+   Greyscale only; states flip like a page refresh.
+   ============================================ */
+
+/* UCalendar — a newspaper date block. */
+[data-theme="eink"] [data-slot="grid"],
+.theme-eink [data-slot="grid"] {
+  background-color: var(--eink-paper);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  padding: 0.25rem;
+}
+[data-theme="eink"] [data-slot="heading"],
+.theme-eink [data-slot="heading"] {
+  font-family: var(--eink-serif);
+  font-weight: 700;
+  text-transform: small-caps;
+  color: var(--eink-ink);
+}
+[data-theme="eink"] [data-slot="headCell"],
+.theme-eink [data-slot="headCell"] {
+  font-family: var(--eink-serif);
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--eink-gray);
+}
+[data-theme="eink"] [data-slot="cellTrigger"],
+.theme-eink [data-slot="cellTrigger"] {
+  border: 1px solid var(--eink-hairline);
+  border-radius: 0;
+  background-color: var(--eink-paper);
+  color: var(--eink-ink);
+  font-family: var(--eink-serif);
+  transition: none;
+}
+[data-theme="eink"] [data-slot="cellTrigger"]:hover:not([data-disabled]),
+.theme-eink [data-slot="cellTrigger"]:hover:not([data-disabled]) {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+[data-theme="eink"] [data-slot="cellTrigger"][data-selected],
+.theme-eink [data-slot="cellTrigger"][data-selected] {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+  border-color: var(--eink-ink);
+}
+[data-theme="eink"] [data-slot="cellTrigger"][data-outside],
+.theme-eink [data-slot="cellTrigger"][data-outside] {
+  color: var(--eink-gray);
+}
+[data-theme="eink"] [data-slot="cellTrigger"][data-disabled],
+.theme-eink [data-slot="cellTrigger"][data-disabled] {
+  opacity: 0.4;
+}
+
+/* USlider — an ink gauge. */
+[data-theme="eink"] [data-slot="track"]:not([data-color-picker-track]),
+.theme-eink [data-slot="track"]:not([data-color-picker-track]) {
+  background-color: var(--eink-hairline);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+}
+[data-theme="eink"] [data-slot="range"],
+.theme-eink [data-slot="range"] {
+  background-color: var(--eink-ink);
+}
+[data-theme="eink"] [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"],
+.theme-eink [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"] {
+  background-color: var(--eink-paper);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+}
+
+/* UColorPicker — a print calibration block. */
+[data-theme="eink"] [data-slot="picker"],
+.theme-eink [data-slot="picker"] {
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  overflow: hidden;
+}
+[data-theme="eink"] [data-slot="selector"],
+.theme-eink [data-slot="selector"] {
+  border: 1px solid var(--eink-ink);
+}
+[data-theme="eink"] [data-slot="selectorThumb"],
+.theme-eink [data-slot="selectorThumb"] {
+  border: 1px solid var(--eink-paper);
+  border-radius: 0;
+  background-color: var(--eink-ink);
+}
+[data-theme="eink"] [data-color-picker-track],
+.theme-eink [data-color-picker-track] {
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+}
+[data-theme="eink"] [data-slot="trackThumb"],
+.theme-eink [data-slot="trackThumb"] {
+  border: 1px solid var(--eink-paper);
+  border-radius: 0;
+  background-color: var(--eink-ink);
+}

@@ -1229,3 +1229,111 @@ body.theme-ko {
   --ui-border-muted: #383633;
   --ui-border-accented: #5a5751;
 }
+
+/* ============================================
+   SECOND-TIER CHROME (#1458) — UCalendar, USlider, UColorPicker
+   Ambient (no variant hook) — same scoped pattern as switch/toast/pagination.
+   ============================================ */
+
+/* UCalendar — an LCD panel on the chassis. */
+[data-theme="ko"] [data-slot="grid"],
+.theme-ko [data-slot="grid"] {
+  background-color: var(--ko-surface-panel);
+  border: 2px solid var(--ko-surface-dark);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+  padding: 0.25rem;
+}
+[data-theme="ko"] [data-slot="heading"],
+.theme-ko [data-slot="heading"] {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ko-text-light);
+}
+[data-theme="ko"] [data-slot="headCell"],
+.theme-ko [data-slot="headCell"] {
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ko-text-label);
+}
+[data-theme="ko"] [data-slot="cellTrigger"],
+.theme-ko [data-slot="cellTrigger"] {
+  border: 1px solid var(--ko-surface-recess);
+  border-radius: 3px;
+  background-color: var(--ko-surface-mid);
+  color: var(--ko-text-light);
+  font-weight: 600;
+  transition: background-color 100ms ease;
+}
+[data-theme="ko"] [data-slot="cellTrigger"]:hover:not([data-disabled]),
+.theme-ko [data-slot="cellTrigger"]:hover:not([data-disabled]) {
+  background-color: var(--ko-accent-orange);
+  color: var(--ko-highlight-light);
+}
+[data-theme="ko"] [data-slot="cellTrigger"][data-selected],
+.theme-ko [data-slot="cellTrigger"][data-selected] {
+  background-color: var(--ko-accent-orange);
+  color: var(--ko-highlight-light);
+  border-color: var(--ko-accent-orange-dark);
+  box-shadow: 0 0 6px var(--ko-accent-orange);
+}
+[data-theme="ko"] [data-slot="cellTrigger"][data-outside],
+.theme-ko [data-slot="cellTrigger"][data-outside] {
+  color: var(--ko-text-label);
+  opacity: 0.6;
+}
+[data-theme="ko"] [data-slot="cellTrigger"][data-disabled],
+.theme-ko [data-slot="cellTrigger"][data-disabled] {
+  opacity: 0.3;
+}
+
+/* USlider — a recessed fader. */
+[data-theme="ko"] [data-slot="track"]:not([data-color-picker-track]),
+.theme-ko [data-slot="track"]:not([data-color-picker-track]) {
+  background-color: var(--ko-surface-recess);
+  border: 1px solid var(--ko-surface-dark);
+  border-radius: 3px;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+[data-theme="ko"] [data-slot="range"],
+.theme-ko [data-slot="range"] {
+  background-color: var(--ko-accent-orange);
+}
+[data-theme="ko"] [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"],
+.theme-ko [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"] {
+  background-color: var(--ko-surface-light);
+  border: 2px solid var(--ko-accent-orange);
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* UColorPicker — a calibration panel. */
+[data-theme="ko"] [data-slot="picker"],
+.theme-ko [data-slot="picker"] {
+  border: 2px solid var(--ko-surface-dark);
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+[data-theme="ko"] [data-slot="selector"],
+.theme-ko [data-slot="selector"] {
+  border: 1px solid var(--ko-surface-recess);
+}
+[data-theme="ko"] [data-slot="selectorThumb"],
+.theme-ko [data-slot="selectorThumb"] {
+  border: 2px solid var(--ko-highlight-light);
+  border-radius: 50%;
+  background-color: var(--ko-accent-orange);
+}
+[data-theme="ko"] [data-color-picker-track],
+.theme-ko [data-color-picker-track] {
+  border: 1px solid var(--ko-surface-dark);
+  border-radius: 3px;
+}
+[data-theme="ko"] [data-slot="trackThumb"],
+.theme-ko [data-slot="trackThumb"] {
+  border: 2px solid var(--ko-highlight-light);
+  border-radius: 50%;
+  background-color: var(--ko-accent-orange);
+}

@@ -581,3 +581,110 @@ body.theme-riso {
   --ui-border-muted: #332f2a;
   --ui-border-accented: #f0ebe0;
 }
+
+/* ============================================
+   SECOND-TIER CHROME (#1458) — UCalendar, USlider, UColorPicker
+   Ambient (no variant hook) — same scoped pattern as switch/toast/pagination.
+   Pink + teal inks on warm paper; misregistration shadows.
+   ============================================ */
+
+/* UCalendar — a riso print block. */
+[data-theme="riso"] [data-slot="grid"],
+.theme-riso [data-slot="grid"] {
+  background-color: var(--riso-surface);
+  border: 2px solid var(--riso-ink);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--riso-teal);
+  padding: 0.25rem;
+}
+[data-theme="riso"] [data-slot="heading"],
+.theme-riso [data-slot="heading"] {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--riso-ink);
+}
+[data-theme="riso"] [data-slot="headCell"],
+.theme-riso [data-slot="headCell"] {
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--riso-teal);
+}
+[data-theme="riso"] [data-slot="cellTrigger"],
+.theme-riso [data-slot="cellTrigger"] {
+  border: 1px solid var(--riso-ink);
+  border-radius: 0;
+  background-color: var(--riso-paper);
+  color: var(--riso-ink);
+  font-weight: 600;
+  transition: none;
+}
+[data-theme="riso"] [data-slot="cellTrigger"]:hover:not([data-disabled]),
+.theme-riso [data-slot="cellTrigger"]:hover:not([data-disabled]) {
+  background-color: var(--riso-teal-soft);
+  color: var(--riso-teal);
+}
+[data-theme="riso"] [data-slot="cellTrigger"][data-selected],
+.theme-riso [data-slot="cellTrigger"][data-selected] {
+  background-color: var(--riso-pink);
+  color: var(--riso-on-pink);
+  box-shadow: 2px 2px 0 var(--riso-teal);
+}
+[data-theme="riso"] [data-slot="cellTrigger"][data-outside],
+.theme-riso [data-slot="cellTrigger"][data-outside] {
+  color: var(--riso-ink);
+  opacity: 0.4;
+}
+[data-theme="riso"] [data-slot="cellTrigger"][data-disabled],
+.theme-riso [data-slot="cellTrigger"][data-disabled] {
+  opacity: 0.3;
+}
+
+/* USlider — a two-ink fader. */
+[data-theme="riso"] [data-slot="track"]:not([data-color-picker-track]),
+.theme-riso [data-slot="track"]:not([data-color-picker-track]) {
+  background-color: var(--riso-paper);
+  border: 1px solid var(--riso-ink);
+  border-radius: 0;
+}
+[data-theme="riso"] [data-slot="range"],
+.theme-riso [data-slot="range"] {
+  background-color: var(--riso-pink);
+}
+[data-theme="riso"] [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"],
+.theme-riso [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"] {
+  background-color: var(--riso-surface);
+  border: 1px solid var(--riso-ink);
+  border-radius: 0;
+  box-shadow: 2px 2px 0 var(--riso-teal);
+}
+
+/* UColorPicker — riso calibration. */
+[data-theme="riso"] [data-slot="picker"],
+.theme-riso [data-slot="picker"] {
+  border: 2px solid var(--riso-ink);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--riso-pink);
+  overflow: hidden;
+}
+[data-theme="riso"] [data-slot="selector"],
+.theme-riso [data-slot="selector"] {
+  border: 1px solid var(--riso-ink);
+}
+[data-theme="riso"] [data-slot="selectorThumb"],
+.theme-riso [data-slot="selectorThumb"] {
+  border: 1px solid var(--riso-ink);
+  border-radius: 0;
+  background-color: var(--riso-surface);
+}
+[data-theme="riso"] [data-color-picker-track],
+.theme-riso [data-color-picker-track] {
+  border: 1px solid var(--riso-ink);
+  border-radius: 0;
+}
+[data-theme="riso"] [data-slot="trackThumb"],
+.theme-riso [data-slot="trackThumb"] {
+  border: 1px solid var(--riso-ink);
+  border-radius: 0;
+  background-color: var(--riso-surface);
+}

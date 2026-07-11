@@ -671,3 +671,111 @@ body.theme-braun {
   --ui-border-muted: #33302c;
   --ui-border-accented: #55514b;
 }
+
+/* ============================================
+   SECOND-TIER CHROME (#1458) — UCalendar, USlider, UColorPicker
+   Ambient (no variant hook) — same scoped pattern as switch/toast/pagination.
+   ============================================ */
+
+/* UCalendar — a machined face plate. */
+[data-theme="braun"] [data-slot="grid"],
+.theme-braun [data-slot="grid"] {
+  background-color: var(--braun-cream-raised);
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+  box-shadow: var(--braun-shadow);
+  padding: 0.5rem;
+}
+[data-theme="braun"] [data-slot="heading"],
+.theme-braun [data-slot="heading"] {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--braun-text);
+  font-size: 0.8rem;
+}
+[data-theme="braun"] [data-slot="headCell"],
+.theme-braun [data-slot="headCell"] {
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--braun-label);
+  font-size: 0.7rem;
+}
+[data-theme="braun"] [data-slot="cellTrigger"],
+.theme-braun [data-slot="cellTrigger"] {
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+  background-color: var(--braun-cream);
+  color: var(--braun-text);
+  font-weight: 500;
+  transition: background-color var(--braun-ease), box-shadow var(--braun-ease);
+}
+[data-theme="braun"] [data-slot="cellTrigger"]:hover:not([data-disabled]),
+.theme-braun [data-slot="cellTrigger"]:hover:not([data-disabled]) {
+  background-color: var(--braun-cream-raised);
+  box-shadow: var(--braun-shadow);
+}
+[data-theme="braun"] [data-slot="cellTrigger"][data-selected],
+.theme-braun [data-slot="cellTrigger"][data-selected] {
+  background-color: var(--braun-orange);
+  color: var(--braun-cream);
+  border-color: var(--braun-orange);
+}
+[data-theme="braun"] [data-slot="cellTrigger"][data-outside],
+.theme-braun [data-slot="cellTrigger"][data-outside] {
+  color: var(--braun-label);
+}
+[data-theme="braun"] [data-slot="cellTrigger"][data-disabled],
+.theme-braun [data-slot="cellTrigger"][data-disabled] {
+  opacity: 0.4;
+}
+
+/* USlider — a smooth analog fader. */
+[data-theme="braun"] [data-slot="track"]:not([data-color-picker-track]),
+.theme-braun [data-slot="track"]:not([data-color-picker-track]) {
+  background-color: var(--braun-hairline);
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+}
+[data-theme="braun"] [data-slot="range"],
+.theme-braun [data-slot="range"] {
+  background-color: var(--braun-charcoal);
+}
+[data-theme="braun"] [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"],
+.theme-braun [data-slot="track"]:not([data-color-picker-track]) ~ [data-slot="thumb"] {
+  background-color: var(--braun-cream-raised);
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+  box-shadow: var(--braun-shadow);
+}
+
+/* UColorPicker — a machined dial cluster. */
+[data-theme="braun"] [data-slot="picker"],
+.theme-braun [data-slot="picker"] {
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+  box-shadow: var(--braun-shadow);
+  overflow: hidden;
+}
+[data-theme="braun"] [data-slot="selector"],
+.theme-braun [data-slot="selector"] {
+  border: 1px solid var(--braun-hairline);
+}
+[data-theme="braun"] [data-slot="selectorThumb"],
+.theme-braun [data-slot="selectorThumb"] {
+  border: 2px solid var(--braun-cream-raised);
+  border-radius: 50%;
+  background-color: var(--braun-orange);
+}
+[data-theme="braun"] [data-color-picker-track],
+.theme-braun [data-color-picker-track] {
+  border: 1px solid var(--braun-hairline);
+  border-radius: var(--braun-radius);
+}
+[data-theme="braun"] [data-slot="trackThumb"],
+.theme-braun [data-slot="trackThumb"] {
+  border: 2px solid var(--braun-cream-raised);
+  border-radius: 50%;
+  background-color: var(--braun-orange);
+}
