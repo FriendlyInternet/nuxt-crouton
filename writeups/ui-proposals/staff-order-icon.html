@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<!-- ui-proposal for issue #1508 — staff-order label → icon in the cart footer controls row -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UI Proposal — Staff-order switch: text label → icon</title>
+<style>
+  :root{
+    --page:#0a0e17; --ink:#e8edf6; --muted:#8b97ad;
+    --app-bg:#0b0f1a; --card:#151b27; --card-2:#11161f; --line:#222b3a; --line-soft:#1b2230;
+    --green:#34d399; --green-d:#0e3a2a; --warning:#fbbf24; --radius:16px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:radial-gradient(1100px 500px at 75% -10%, #16213c 0%, var(--page) 55%);
+    color:var(--ink); line-height:1.55; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:980px; margin:0 auto; padding:40px 20px 80px;}
+  .eyebrow{text-transform:uppercase; letter-spacing:.18em; font-size:12px; color:var(--green); font-weight:700;}
+  h1{font-size:clamp(26px,4vw,38px); margin:6px 0 6px; line-height:1.1;}
+  .lede{color:var(--muted); font-size:16px; max-width:64ch; margin:0 0 28px;}
+
+  .stage{display:flex; flex-wrap:wrap; gap:32px; justify-content:center; align-items:flex-start;}
+  .col{display:flex; flex-direction:column; align-items:center; gap:12px;}
+  .col h2{font-size:15px; margin:0; display:flex; align-items:center; gap:8px;}
+  .tag{font-size:11px; padding:2px 9px; border-radius:999px; border:1px solid var(--line); color:var(--muted);}
+  .tag.bad{color:#f6a; border-color:#5b2740;} .tag.good{color:var(--green); border-color:#1f5e47;}
+  .note{font-size:12.5px; color:var(--muted); max-width:320px; text-align:center;}
+
+  /* ---- phone frame (mobile surfaces) ---- */
+  .phone{width:300px; border-radius:40px; padding:10px; background:linear-gradient(#1c2433,#11161f); border:1px solid #2b3852; box-shadow:0 24px 60px rgba(0,0,0,.5);}
+  .phone .screen{background:var(--app-bg); border-radius:31px; overflow:hidden; height:430px; display:flex; flex-direction:column; position:relative;}
+  .statusbar{display:flex; justify-content:space-between; align-items:center; padding:10px 18px 4px; font-size:12px;}
+
+  .ic{width:17px; height:17px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex:none;}
+  .ic.sm{width:15px;height:15px;}
+  .check{color:var(--green); flex:none; margin-top:2px;}
+
+  /* line items area (context above the footer) */
+  .items{flex:1; padding:8px 12px; overflow:hidden;}
+  .line{display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--line-soft);}
+  .line .t{flex:1; font-size:13px; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .line .p{font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums;}
+  .stepper{display:flex; align-items:center; gap:0; border:1px solid var(--line); border-radius:8px; overflow:hidden;}
+  .stepper span{width:24px; height:24px; display:grid; place-items:center; background:var(--card-2); color:var(--muted); font-size:13px;}
+  .stepper b{width:26px; height:24px; display:grid; place-items:center; background:var(--card); font-size:12px; font-variant-numeric:tabular-nums;}
+
+  /* footer controls row */
+  .footer{border-top:1px solid var(--line); padding:12px 12px; display:flex; flex-direction:column; gap:12px;}
+  .controls{display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .remark{display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:13px; white-space:nowrap;}
+  /* switch atom */
+  .switch{width:34px; height:20px; border-radius:999px; background:var(--warning); position:relative; flex:none;}
+  .switch::after{content:""; position:absolute; top:2px; right:2px; width:16px; height:16px; border-radius:50%; background:#fff;}
+
+  /* BEFORE: text label + switch — overflows on narrow pane */
+  .staff-text{display:inline-flex; align-items:center; gap:8px; min-width:0;}
+  .staff-text .lbl{font-size:13px; color:var(--warning); font-weight:600; white-space:nowrap;}
+  .clip{position:relative; overflow:hidden;}
+  .clip::after{content:""; position:absolute; top:0; right:0; bottom:0; width:34px; background:linear-gradient(to right, transparent, var(--app-bg));}
+
+  /* AFTER: icon-only staff toggle */
+  .staff-icon{display:inline-flex; align-items:center; gap:8px; flex:none;}
+  .staff-icon .glyph{width:30px; height:30px; border-radius:8px; display:grid; place-items:center; color:var(--warning); background:rgba(251,191,36,.12); border:1px solid rgba(251,191,36,.35);}
+  .tip{position:absolute; bottom:60px; right:14px; background:#0f1420; border:1px solid var(--line); color:var(--ink); font-size:11px; padding:4px 8px; border-radius:7px; box-shadow:0 8px 24px rgba(0,0,0,.5);}
+  .tip::after{content:""; position:absolute; bottom:-5px; right:20px; width:9px; height:9px; background:#0f1420; border-right:1px solid var(--line); border-bottom:1px solid var(--line); transform:rotate(45deg);}
+
+  .orderbtn{display:flex; align-items:center; justify-content:center; gap:8px; background:var(--green); color:#04231a; font-weight:700; font-size:14px; border-radius:11px; padding:12px; }
+
+  .changes{margin-top:40px; background:#101725; border:1px solid var(--line); border-radius:16px; padding:20px 22px;}
+  .changes h3{margin:0 0 12px; font-size:16px;}
+  .changes ul{margin:0; padding-left:0; list-style:none; display:grid; gap:10px;}
+  .changes li{display:flex; gap:10px; align-items:flex-start; font-size:14px; color:#cdd6e6;}
+  .changes li b{color:#fff;}
+  .changes code{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.9em; background:rgba(52,211,153,.12); color:#a9f0d2; padding:1px 6px; border-radius:6px;}
+  footer.fin{margin-top:30px; color:var(--muted); font-size:12.5px; text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="eyebrow">nuxt-crouton · proposal · #1508</span>
+  <h1>Staff-order switch: text label → icon</h1>
+  <p class="lede">On a narrow (phone) pane the Dutch label <b>“Personeelsbestelling”</b> beside the staff-order switch runs off the edge of the cart's one-line controls row. Replacing the visible text with a compact <b>person/badge icon</b> (translated string kept as <code>aria-label</code> + tooltip) fits cleanly at any pane width.</p>
+
+  <div class="stage">
+
+    <!-- ============ BEFORE ============ -->
+    <div class="col">
+      <h2>Before <span class="tag bad">today</span></h2>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>23:45</span><span>···· 32</span></div>
+        <div class="items">
+          <div class="line"><span class="t">Pils</span><span class="p">€ 2,50</span>
+            <span class="stepper"><span>−</span><b>3</b><span>+</span></span></div>
+          <div class="line"><span class="t">Cola</span><span class="p">€ 2,00</span>
+            <span class="stepper"><span>−</span><b>1</b><span>+</span></span></div>
+          <div class="line"><span class="t">Frietje speciaal</span><span class="p">€ 4,50</span>
+            <span class="stepper"><span>−</span><b>2</b><span>+</span></span></div>
+        </div>
+        <div class="footer">
+          <div class="controls">
+            <span class="remark">
+              <svg class="ic sm" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Opmerking
+            </span>
+            <span class="staff-text clip">
+              <span class="lbl">Personeelsbestelling</span>
+              <span class="switch"></span>
+            </span>
+          </div>
+          <div class="orderbtn">Bestel · € 16,00</div>
+        </div>
+      </div></div>
+      <p class="note">The label eats the row — its tail clips under the pane edge and crowds the switch.</p>
+    </div>
+
+    <!-- ============ AFTER ============ -->
+    <div class="col">
+      <h2>After <span class="tag good">proposed</span></h2>
+      <div class="phone"><div class="screen">
+        <div class="statusbar"><span>23:45</span><span>···· 32</span></div>
+        <div class="items">
+          <div class="line"><span class="t">Pils</span><span class="p">€ 2,50</span>
+            <span class="stepper"><span>−</span><b>3</b><span>+</span></span></div>
+          <div class="line"><span class="t">Cola</span><span class="p">€ 2,00</span>
+            <span class="stepper"><span>−</span><b>1</b><span>+</span></span></div>
+          <div class="line"><span class="t">Frietje speciaal</span><span class="p">€ 4,50</span>
+            <span class="stepper"><span>−</span><b>2</b><span>+</span></span></div>
+        </div>
+        <div class="tip">Personeelsbestelling</div>
+        <div class="footer">
+          <div class="controls">
+            <span class="remark">
+              <svg class="ic sm" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              Opmerking
+            </span>
+            <span class="staff-icon" aria-label="Personeelsbestelling" title="Personeelsbestelling">
+              <span class="glyph">
+                <!-- i-lucide-chef-hat (reviewer's final pick) -->
+                <svg class="ic" viewBox="0 0 24 24" stroke-width="2"><path d="M17 21a1 1 0 0 0 1-1v-5.35c0-.457.316-.844.727-1.041a4 4 0 0 0-2.134-7.589a5 5 0 0 0-9.186 0a4 4 0 0 0-2.134 7.588c.411.198.727.585.727 1.041V20a1 1 0 0 0 1 1ZM6 17h12"/></svg>
+              </span>
+              <span class="switch"></span>
+            </span>
+          </div>
+          <div class="orderbtn">Bestel · € 16,00</div>
+        </div>
+      </div></div>
+      <p class="note">Icon + switch stay compact at any width. Tooltip + <code>aria-label</code> keep the meaning reachable (hover / screen reader).</p>
+    </div>
+
+  </div>
+
+  <div class="changes">
+    <h3>What changes (and what doesn't)</h3>
+    <ul>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Text label → icon.</b> The visible <code>{{ t('sales.cart.staffOrder') }}</code> text is replaced by a person/badge glyph (<code>i-lucide-user-cog</code>) so the controls row never overflows on narrow panes.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Meaning stays reachable.</b> The translated string is preserved as the icon's <code>aria-label</code> and a hover/tap tooltip — screen readers still announce “Personeelsbestelling / Staff order”.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Active state.</b> When staff order is on, the icon adopts the warning tint (matching today's <code>text-warning</code> label emphasis) so the toggled state is still visible at a glance.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Scope.</b> Only the staff-order control in <code>Client/Cart.vue</code>'s footer changes. The remark toggle, the switch behaviour (<code>update:isPersonnel</code>), and everything else are untouched.</span></li>
+    </ul>
+  </div>
+
+  <footer class="fin">Mockup only · pure HTML/CSS/SVG, no JS · labels from <code>packages/crouton-sales/i18n/locales/nl.json</code> (Personeelsbestelling)</footer>
+
+</div>
+</body>
+</html>
