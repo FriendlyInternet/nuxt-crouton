@@ -355,13 +355,15 @@ useHead({
         leave-from-class="opacity-100 scale-100"
         leave-to-class="opacity-0 scale-90"
       >
-        <button
+        <UButton
           v-if="isAdmin && !isEditing && page?.id"
-          class="fixed bottom-6 right-6 z-40 flex items-center justify-center size-12 rounded-full bg-muted/80 backdrop-blur-sm text-muted-foreground border border-default shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 cursor-pointer"
+          icon="i-lucide-pencil"
+          color="neutral"
+          variant="soft"
+          :aria-label="t('pages.admin.editPage', 'Edit Page')"
+          class="fixed bottom-6 right-6 z-40 size-12 justify-center rounded-full backdrop-blur-sm shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200"
           @click="startEditing"
-        >
-          <UIcon name="i-lucide-pencil" class="size-5" />
-        </button>
+        />
       </Transition>
     </ClientOnly>
   </div>

@@ -172,10 +172,10 @@ function handleAssetSelected(asset: Record<string, any>) {
 
     <!-- No Video State — Browse tab shown first if available -->
     <div v-if="!hasVideo && mode === 'preview'" class="flex flex-col gap-2">
-      <div class="flex items-center justify-center h-32 rounded-lg border-2 border-dashed border-default bg-neutral-50 dark:bg-neutral-900">
+      <div class="flex items-center justify-center h-32 rounded-lg border-2 border-dashed border-default bg-muted">
         <div class="text-center">
-          <UIcon name="i-lucide-video" class="size-8 text-neutral-400 mb-2" />
-          <p class="text-sm text-neutral-500">
+          <UIcon name="i-lucide-video" class="size-8 text-dimmed mb-2" />
+          <p class="text-sm text-muted">
             {{ t('pages.blocks.video.noVideoSet') }}
           </p>
         </div>
@@ -310,15 +310,15 @@ function handleAssetSelected(asset: Record<string, any>) {
     <div v-if="mode === 'upload'" class="space-y-2">
       <button
         type="button"
-        class="flex h-32 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-default bg-neutral-50 hover:bg-neutral-100 dark:bg-neutral-800 dark:hover:bg-neutral-900 transition-colors"
+        class="flex h-32 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-default bg-muted hover:bg-elevated transition-colors"
         :disabled="uploading"
         @click="openFilePicker()"
       >
         <UIcon
           :name="uploading ? 'i-lucide-loader-2' : 'i-lucide-upload'"
-          :class="['size-6 text-neutral-400', { 'animate-spin': uploading }]"
+          :class="['size-6 text-dimmed', { 'animate-spin': uploading }]"
         />
-        <span class="text-sm text-neutral-500">
+        <span class="text-sm text-muted">
           {{ uploading ? t('pages.blocks.media.uploading') : t('pages.blocks.video.clickToSelect') }}
         </span>
       </button>

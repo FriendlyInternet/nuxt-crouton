@@ -78,9 +78,9 @@ async function handleFileUpload(event: Event) {
   <div class="space-y-3">
     <!-- File Preview -->
     <div v-if="hasFile && mode === 'preview'" class="space-y-2">
-      <div class="flex items-center gap-3 rounded-lg border border-default p-3 bg-neutral-50 dark:bg-neutral-900">
+      <div class="flex items-center gap-3 rounded-lg border border-default p-3 bg-muted">
         <UIcon name="i-lucide-file" class="size-5 text-primary shrink-0" />
-        <span class="text-sm text-neutral-700 dark:text-neutral-300 truncate flex-1">
+        <span class="text-sm text-default truncate flex-1">
           {{ displayName }}
         </span>
         <div class="flex gap-1 shrink-0">
@@ -105,11 +105,11 @@ async function handleFileUpload(event: Event) {
     <!-- Upload Mode -->
     <div v-if="mode === 'upload'" class="space-y-2">
       <label
-        class="flex flex-col items-center justify-center h-24 rounded-lg border-2 border-dashed border-default bg-neutral-50 dark:bg-neutral-900 cursor-pointer hover:border-primary/50 transition-colors"
+        class="flex flex-col items-center justify-center h-24 rounded-lg border-2 border-dashed border-default bg-muted cursor-pointer hover:border-primary/50 transition-colors"
       >
-        <UIcon v-if="!isUploading" name="i-lucide-upload" class="size-6 text-neutral-400 mb-1" />
-        <UIcon v-else name="i-lucide-loader-2" class="size-6 text-neutral-400 mb-1 animate-spin" />
-        <span class="text-xs text-neutral-500">
+        <UIcon v-if="!isUploading" name="i-lucide-upload" class="size-6 text-dimmed mb-1" />
+        <UIcon v-else name="i-lucide-loader-2" class="size-6 text-dimmed mb-1 animate-spin" />
+        <span class="text-xs text-muted">
           {{ isUploading ? t('pages.blocks.media.uploading') : t('pages.blocks.file.clickToUpload') }}
         </span>
         <input

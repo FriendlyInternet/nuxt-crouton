@@ -279,7 +279,7 @@ function removeFile(index: number) {
               size="xs"
               @update:model-value="updateButton(index, 'external', $event)"
             />
-            <span class="text-xs text-neutral-500">{{ t('pages.blocks.buttonRow.openInNewTab') }}</span>
+            <span class="text-xs text-muted">{{ t('pages.blocks.buttonRow.openInNewTab') }}</span>
           </div>
         </template>
       </template>
@@ -287,9 +287,9 @@ function removeFile(index: number) {
       <!-- Download mode: File upload -->
       <template v-else>
         <!-- File preview -->
-        <div v-if="btn.file" class="flex items-center gap-2 rounded-md border border-default p-2 bg-neutral-50 dark:bg-neutral-900">
+        <div v-if="btn.file" class="flex items-center gap-2 rounded-md border border-default p-2 bg-muted">
           <UIcon name="i-lucide-file" class="size-4 text-primary shrink-0" />
-          <span class="text-xs text-neutral-600 dark:text-neutral-400 truncate flex-1">
+          <span class="text-xs text-toned truncate flex-1">
             {{ btn.fileName || btn.file.split('/').pop() }}
           </span>
           <UButton
@@ -304,13 +304,13 @@ function removeFile(index: number) {
         <!-- Upload zone -->
         <label
           v-else
-          class="flex flex-col items-center justify-center h-16 rounded-md border-2 border-dashed border-default bg-neutral-50 dark:bg-neutral-900 cursor-pointer hover:border-primary/50 transition-colors"
+          class="flex flex-col items-center justify-center h-16 rounded-md border-2 border-dashed border-default bg-muted cursor-pointer hover:border-primary/50 transition-colors"
         >
           <UIcon
             :name="uploadingIndex === index ? 'i-lucide-loader-2' : 'i-lucide-upload'"
-            :class="['size-4 text-neutral-400', { 'animate-spin': uploadingIndex === index }]"
+            :class="['size-4 text-dimmed', { 'animate-spin': uploadingIndex === index }]"
           />
-          <span class="text-[10px] text-neutral-500 mt-1">
+          <span class="text-[10px] text-muted mt-1">
             {{ uploadingIndex === index ? t('pages.blocks.media.uploading') : t('pages.blocks.media.clickToUpload') }}
           </span>
           <input
