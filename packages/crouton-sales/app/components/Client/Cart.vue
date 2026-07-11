@@ -81,14 +81,23 @@
             @click="remarksOpen = !remarksOpen"
           />
           <span v-else />
-          <!-- Staff order: prints the staff banner on tickets (receipt settings) -->
+          <!-- Staff order: prints the staff banner on tickets (receipt settings).
+               Icon, not text (#1508): the translated label ("Personeelsbestelling")
+               overflowed the compact one-line controls row on narrow phone panes.
+               The name stays reachable — tooltip on the icon + aria-label on the
+               switch — and the icon takes the warning tint while active. -->
           <label class="flex items-center gap-2 cursor-pointer">
-            <span class="text-sm" :class="isPersonnel ? 'text-warning font-medium' : 'text-muted'">
-              {{ t('sales.cart.staffOrder') }}
-            </span>
+            <UTooltip :text="t('sales.cart.staffOrder')">
+              <UIcon
+                name="i-lucide-chef-hat"
+                class="size-5"
+                :class="isPersonnel ? 'text-warning' : 'text-muted'"
+              />
+            </UTooltip>
             <USwitch
               :model-value="isPersonnel ?? false"
               color="warning"
+              :aria-label="t('sales.cart.staffOrder')"
               @update:model-value="$emit('update:isPersonnel', $event)"
             />
           </label>
