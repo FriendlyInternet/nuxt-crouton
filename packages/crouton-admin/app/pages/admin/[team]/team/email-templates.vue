@@ -214,16 +214,16 @@ onMounted(loadSettings)
       <div class="flex flex-col lg:flex-row gap-6">
         <!-- Email type selector (sidebar) -->
         <div class="lg:w-56 shrink-0">
+          <!-- Type nav — UButton (not raw buttons) so themes reach it (#1410) -->
           <nav class="flex lg:flex-col gap-1">
-            <button
+            <UButton
               v-for="type in emailTypes"
               :key="type.key"
-              class="flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left w-full transition-colors"
-              :class="[
-                activeType === type.key
-                  ? 'bg-primary/10 text-primary font-medium'
-                  : 'text-muted hover:bg-elevated hover:text-default'
-              ]"
+              :color="activeType === type.key ? 'primary' : 'neutral'"
+              :variant="activeType === type.key ? 'soft' : 'ghost'"
+              size="md"
+              class="w-full justify-start gap-2 text-left"
+              :class="activeType === type.key ? '' : 'text-muted hover:text-default'"
               @click="activeType = type.key"
             >
               <UIcon :name="type.icon" class="size-4 shrink-0" />
@@ -232,7 +232,7 @@ onMounted(loadSettings)
                 v-if="hasOverrides(type.key)"
                 class="size-1.5 rounded-full bg-primary ml-auto shrink-0"
               />
-            </button>
+            </UButton>
           </nav>
         </div>
 
