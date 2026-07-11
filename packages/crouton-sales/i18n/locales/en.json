@@ -618,18 +618,30 @@
         "toggle": "Setup",
         "copy": "Copy",
         "copied": "Copied",
-        "routerIntro": "One-time router config lives in /etc/init.d/print_server — set the values below, restart the service, and only EVENT_ID changes per event.",
+        "routerIntro": "One-time: image the router (API_URL in /etc/init.d/print_server). After that it introduces itself — a new event needs nothing on the router.",
         "routerPrinters": "Put the printers on the router's own network with a static IP, and add each one under Printers with that IP and port 9100.",
-        "routerEventId": "Set EVENT_ID to this event's id — this is the per-event value: update it and restart for every new event.",
-        "routerApiUrl": "Set API_URL to this app:",
-        "routerApiKey": "Set API_KEY to the same value as this app secret (the secret itself is never shown here):",
-        "routerRestart": "Apply the config on the router:",
+        "routerTicket": "The router prints its own pairing ticket (on start, until it is paired). No ticket? Check power, printer, and that API_URL points at this app:",
+        "routerClaim": "Enter the ticket's Router-ID and code below under \"Pair router\".",
+        "routerLegacy": "Older router without a pairing ticket? Follow the EVENT_ID steps in print-server/README.md.",
         "routerVerify": "Done when this dot turns green — the router polls within ~30 seconds.",
         "drainerIntro": "A device at the venue (Pi / mini-PC) runs the app itself and prints straight to the printers — no router config involved.",
         "drainerEnv": "Start the app on the venue device with the print drainer enabled:",
         "drainerPrinters": "Add each printer under Printers with its LAN IP and port 9100 — the device must reach the printers on its network.",
         "drainerFlip": "Keep this Print flow on \"Local device\" — the router flow is the default, and the device only serves events set to Local device.",
         "drainerVerify": "Done when this dot turns green — the device ticks within ~30 seconds."
+      },
+      "pairing": {
+        "title": "Pair router",
+        "description": "A factory-fresh router prints its own pairing ticket. Enter the Router ID and code from that ticket — after that, new events need nothing on the router.",
+        "deviceId": "Router ID",
+        "code": "Code",
+        "claim": "Pair",
+        "revoke": "Unpair",
+        "claimSuccess": "Router paired — it starts printing within ~30 seconds",
+        "claimConflict": "This router is paired to another team — unpair it there first",
+        "claimError": "Could not pair the router — check the id and code on the ticket",
+        "revokeSuccess": "Router unpaired — it will print a new pairing ticket",
+        "revokeError": "Could not unpair the router"
       }
     }
   }

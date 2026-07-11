@@ -296,28 +296,21 @@ const appOrigin = useRequestURL().origin
 const printTransportSetup = computed(() => [
   {
     value: 'router-spooler' as const,
-    intro: t('sales.printFlow.setup.routerIntro', 'One-time router config lives in /etc/init.d/print_server — set the values below, restart the service, and only EVENT_ID changes per event.'),
+    intro: t('sales.printFlow.setup.routerIntro', 'One-time: image the router (API_URL in /etc/init.d/print_server). After that it introduces itself — a new event needs nothing on the router.'),
     steps: [
       {
         text: t('sales.printFlow.setup.routerPrinters', 'Put the printers on the router\'s own network with a static IP, and add each one under Printers with that IP and port 9100.')
       },
       {
-        text: t('sales.printFlow.setup.routerEventId', 'Set EVENT_ID to this event\'s id — this is the per-event value: update it and restart for every new event.'),
-        value: props.event.id,
-        valueLabel: 'EVENT_ID'
-      },
-      {
-        text: t('sales.printFlow.setup.routerApiUrl', 'Set API_URL to this app:'),
+        text: t('sales.printFlow.setup.routerTicket', 'The router prints its own pairing ticket (on start, until it is paired). No ticket? Check power, printer, and that API_URL points at this app:'),
         value: appOrigin,
         valueLabel: 'API_URL'
       },
       {
-        text: t('sales.printFlow.setup.routerApiKey', 'Set API_KEY to the same value as this app secret (the secret itself is never shown here):'),
-        value: 'NUXT_CROUTON_SALES_PRINT_API_KEY'
+        text: t('sales.printFlow.setup.routerClaim', 'Enter the ticket\'s Router-ID and code below under "Pair router".')
       },
       {
-        text: t('sales.printFlow.setup.routerRestart', 'Apply the config on the router:'),
-        value: '/etc/init.d/print_server restart'
+        text: t('sales.printFlow.setup.routerLegacy', 'Older router without a pairing ticket? Follow the EVENT_ID steps in print-server/README.md.')
       },
       {
         text: t('sales.printFlow.setup.routerVerify', 'Done when this dot turns green — the router polls within ~30 seconds.'),
@@ -552,7 +545,17 @@ function helperExpiry(value: string): string {
               :copy-label="t('sales.printFlow.setup.copy', 'Copy')"
               :copied-label="t('sales.printFlow.setup.copied', 'Copied')"
               @update:transport="setPrintTransport"
-            />
+            >
+              <!-- Router self-pairing (#1366): claim form + coupled routers,
+                   router flow only. Team-wide — the picker stays the only
+                   per-event switch. -->
+              <template #setup-extra="{ transport: selectedFlow }">
+                <SalesEventWorkspaceRouterPairing
+                  v-if="selectedFlow === 'router-spooler'"
+                  :team-param="teamParam"
+                />
+              </template>
+            </CroutonPrintingTransportPicker>
 
             <USeparator />
 

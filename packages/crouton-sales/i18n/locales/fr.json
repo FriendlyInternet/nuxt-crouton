@@ -617,18 +617,30 @@
         "toggle": "Configuration",
         "copy": "Copier",
         "copied": "Copié",
-        "routerIntro": "La configuration du routeur se fait une seule fois dans /etc/init.d/print_server — définissez les valeurs ci-dessous, redémarrez le service ; seul EVENT_ID change par événement.",
+        "routerIntro": "Une seule fois : installez le routeur (API_URL dans /etc/init.d/print_server). Ensuite il se présente lui-même — un nouvel événement ne demande rien sur le routeur.",
         "routerPrinters": "Placez les imprimantes sur le réseau propre du routeur avec une IP fixe, et ajoutez chacune sous Imprimantes avec cette IP et le port 9100.",
-        "routerEventId": "Définissez EVENT_ID sur l'id de cet événement — c'est la valeur par événement : modifiez-la et redémarrez à chaque nouvel événement.",
-        "routerApiUrl": "Définissez API_URL sur cette application :",
-        "routerApiKey": "Définissez API_KEY sur la même valeur que ce secret de l'application (le secret lui-même n'est jamais affiché ici) :",
-        "routerRestart": "Appliquez la configuration sur le routeur :",
+        "routerTicket": "Le routeur imprime lui-même un ticket de couplage (au démarrage, tant qu'il n'est pas couplé). Pas de ticket ? Vérifiez l'alimentation, l'imprimante et qu'API_URL pointe vers cette application :",
+        "routerClaim": "Saisissez l'ID routeur et le code du ticket ci-dessous sous « Coupler le routeur ».",
+        "routerLegacy": "Routeur plus ancien sans ticket de couplage ? Suivez les étapes EVENT_ID dans print-server/README.md.",
         "routerVerify": "Terminé quand ce point devient vert — le routeur interroge sous ~30 secondes.",
         "drainerIntro": "Un appareil sur place (Pi / mini-PC) exécute lui-même l'application et imprime directement vers les imprimantes — aucune configuration du routeur.",
         "drainerEnv": "Démarrez l'application sur l'appareil avec le drainer d'impression activé :",
         "drainerPrinters": "Ajoutez chaque imprimante sous Imprimantes avec son IP LAN et le port 9100 — l'appareil doit atteindre les imprimantes sur son réseau.",
         "drainerFlip": "Laissez ce flux d'impression sur « Appareil local » — le flux routeur est le défaut, et l'appareil ne sert que les événements réglés sur Appareil local.",
         "drainerVerify": "Terminé quand ce point devient vert — l'appareil se manifeste sous ~30 secondes."
+      },
+      "pairing": {
+        "title": "Coupler le routeur",
+        "description": "Un routeur neuf imprime lui-même un ticket de couplage. Saisissez l'ID routeur et le code de ce ticket — ensuite, plus rien à faire sur le routeur pour les nouveaux événements.",
+        "deviceId": "ID routeur",
+        "code": "Code",
+        "claim": "Coupler",
+        "revoke": "Découpler",
+        "claimSuccess": "Routeur couplé — il commence à imprimer sous ~30 secondes",
+        "claimConflict": "Ce routeur est couplé à une autre équipe — découplez-le là-bas d'abord",
+        "claimError": "Impossible de coupler le routeur — vérifiez l'id et le code sur le ticket",
+        "revokeSuccess": "Routeur découplé — il imprimera un nouveau ticket de couplage",
+        "revokeError": "Impossible de découpler le routeur"
       }
     }
   }
