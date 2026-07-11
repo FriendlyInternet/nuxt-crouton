@@ -194,7 +194,7 @@ function removeFile(index: number) {
 
       <!-- Mode toggle: Link / Download -->
       <div class="flex items-center gap-2">
-        <UButtonGroup size="xs" class="w-full">
+        <UFieldGroup size="xs" class="w-full">
           <UButton
             :color="!btn.download ? 'primary' : 'neutral'"
             :variant="!btn.download ? 'solid' : 'outline'"
@@ -211,7 +211,7 @@ function removeFile(index: number) {
             class="flex-1"
             @click="toggleDownloadMode(index, true)"
           />
-        </UButtonGroup>
+        </UFieldGroup>
       </div>
 
       <!-- Label -->
@@ -225,7 +225,7 @@ function removeFile(index: number) {
       <!-- Link mode: page picker or custom URL -->
       <template v-if="!btn.download">
         <!-- Sub-toggle: link to a CMS page vs a custom URL -->
-        <UButtonGroup size="xs" class="w-full">
+        <UFieldGroup size="xs" class="w-full">
           <UButton
             :color="linkMode(btn) === 'page' ? 'primary' : 'neutral'"
             :variant="linkMode(btn) === 'page' ? 'solid' : 'outline'"
@@ -242,7 +242,7 @@ function removeFile(index: number) {
             class="flex-1"
             @click="setLinkMode(index, 'url')"
           />
-        </UButtonGroup>
+        </UFieldGroup>
 
         <!-- Page mode: pick a page from the CMS -->
         <USelectMenu

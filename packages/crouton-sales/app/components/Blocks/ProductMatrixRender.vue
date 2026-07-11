@@ -159,7 +159,7 @@ function downloadCsv() {
     <div class="flex items-center justify-between gap-2">
       <h3 v-if="attrs.title" class="min-w-0 truncate text-base @sm:text-lg font-semibold">{{ attrs.title }}</h3>
       <div class="ms-auto flex shrink-0 items-center gap-3">
-        <UButtonGroup size="sm">
+        <UFieldGroup size="sm">
           <UButton
             :color="measure === 'units' ? 'primary' : 'neutral'"
             :variant="measure === 'units' ? 'solid' : 'outline'"
@@ -178,7 +178,7 @@ function downloadCsv() {
           >
             <span class="hidden @sm:inline">{{ t('sales.block.revenue') }}</span>
           </UButton>
-        </UButtonGroup>
+        </UFieldGroup>
         <UButton
           size="sm"
           color="neutral"
