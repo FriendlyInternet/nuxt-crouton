@@ -202,6 +202,35 @@ const editorBlocksRef = ref()
 const isFullscreen = ref(false)
 const fsTargetRef = ref<HTMLElement | null>(null)
 
+// Mobile (< sm): a tappable summary card replaces the cramped inline editor and
+// opens the same fullscreen focus mode. Block count drives the card subtitle.
+const blockCount = computed(() => {
+  const countNodes = (nodes: unknown[]) =>
+    nodes.filter((n: any) => !(n?.type === 'paragraph' && (!n.content || n.content.length === 0))).length
+  const v = localContent.value as any
+  if (v && typeof v === 'object' && Array.isArray(v.content)) return countNodes(v.content)
+  if (typeof v === 'string' && v.trim()) {
+    try {
+      const parsed = JSON.parse(v)
+      if (Array.isArray(parsed?.content)) return countNodes(parsed.content)
+    } catch { /* plain text / html */ }
+    return 1
+  }
+  return 0
+})
+const blockCountLabel = computed(() => {
+  const n = blockCount.value
+  const word = n === 1 ? t('pages.editor.block', 'block') : t('pages.editor.blocks', 'blocks')
+  return `${n} ${word} · ${t('pages.editor.tapToEdit', 'Tap to edit')}`
+})
+
+// Fullscreen toggle presentation, hoisted out of the template so the markup
+// carries no inline ternaries: a labelled Done button while open, a plain
+// maximize icon while collapsed.
+const fsToggle = computed(() => isFullscreen.value
+  ? { icon: 'i-lucide-check', color: 'primary' as const, variant: 'soft' as const, label: t('pages.editor.done', 'Done') }
+  : { icon: 'i-lucide-maximize-2', color: 'neutral' as const, variant: 'ghost' as const, label: '' })
+
 
 // Property panel state (managed here, not in CroutonEditorBlocks)
 const selectedNode = ref<{ pos: number; node: any } | null>(null)
@@ -251,18 +280,23 @@ defineExpose({
     <!-- The editor body teleports into the fullscreen modal when expanded
          (same instance → content/cursor/collab preserved). -->
     <Teleport :to="fsTargetRef" :disabled="!isFullscreen || !fsTargetRef">
-      <div class="flex h-full min-h-0 flex-col" :class="isFullscreen ? 'p-3' : ''">
+      <!-- Inline body is hidden on mobile (< sm) when not fullscreen — the card
+           below is the mobile entry point. It always renders when fullscreen
+           (teleported into the modal) and on sm+ screens. -->
+      <div class="flex h-full min-h-0 flex-col" :class="isFullscreen ? 'p-3' : 'max-sm:hidden'">
         <!-- Tab buttons + fullscreen toggle -->
         <div class="flex items-center gap-2">
           <UTabs v-model="activeTab" :items="tabItems" :content="false" class="flex-1" :ui="{ indicator: 'bg-primary/10', trigger: 'data-[state=active]:text-primary' }" />
           <UButton
-            :icon="isFullscreen ? 'i-lucide-minimize-2' : 'i-lucide-maximize-2'"
-            color="neutral"
-            variant="ghost"
+            :icon="fsToggle.icon"
+            :color="fsToggle.color"
+            :variant="fsToggle.variant"
             size="xs"
-            :aria-label="isFullscreen ? t('pages.editor.exitFullscreen', 'Exit fullscreen') : t('pages.editor.fullscreen', 'Fullscreen')"
+            :aria-label="fsToggle.label || t('pages.editor.fullscreen', 'Fullscreen')"
             @click="isFullscreen = !isFullscreen"
-          />
+          >
+            <span v-if="fsToggle.label" class="text-xs font-medium">{{ fsToggle.label }}</span>
+          </UButton>
         </div>
 
         <!-- Editor Tab -->
@@ -327,11 +361,32 @@ defineExpose({
       </div>
     </Teleport>
 
-    <!-- Inline placeholder shown while the editor is teleported into fullscreen -->
+    <!-- Mobile entry point (< sm): tap to edit the content full-screen. Reuses
+         the same fullscreen focus mode, so no cramped inline editing on a phone. -->
+    <button
+      v-if="!isFullscreen"
+      type="button"
+      class="sm:hidden w-full text-left rounded-2xl border border-default bg-elevated/40 p-4 transition-colors hover:border-primary active:scale-[0.99]"
+      :aria-label="t('pages.editor.contentLabel', 'Content')"
+      @click="isFullscreen = true"
+    >
+      <div class="flex items-center gap-3">
+        <span class="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+          <UIcon name="i-lucide-layers" class="size-5" />
+        </span>
+        <span class="min-w-0">
+          <span class="block text-sm font-medium">{{ t('pages.editor.contentLabel', 'Content') }}</span>
+          <span class="block text-xs text-muted">{{ blockCountLabel }}</span>
+        </span>
+        <UIcon name="i-lucide-maximize-2" class="ml-auto size-5 text-muted" />
+      </div>
+    </button>
+
+    <!-- Inline placeholder shown while the editor is teleported into fullscreen (sm+) -->
     <button
       v-if="isFullscreen"
       type="button"
-      class="flex-1 min-h-[120px] flex items-center justify-center gap-2 rounded-lg border border-dashed border-default text-sm text-muted hover:text-default hover:border-primary transition-colors"
+      class="max-sm:hidden flex-1 min-h-[120px] flex items-center justify-center gap-2 rounded-lg border border-dashed border-default text-sm text-muted hover:text-default hover:border-primary transition-colors"
       @click="isFullscreen = true"
     >
       <UIcon name="i-lucide-maximize-2" class="size-4" />

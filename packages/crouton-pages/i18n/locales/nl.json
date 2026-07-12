@@ -179,7 +179,11 @@
       "chromeHideNav": "Verberg paginanavigatie",
       "chromeHideNavDescription": "Verberg de navigatiepil op deze pagina",
       "chromeHideAuth": "Verberg login- en accountknoppen",
-      "chromeHideAuthDescription": "Verberg login-, account- en beheermenu’s op deze pagina — taal en donkere modus blijven beschikbaar"
+      "chromeHideAuthDescription": "Verberg login-, account- en beheermenu’s op deze pagina — taal en donkere modus blijven beschikbaar",
+      "contentLabel": "Content",
+      "block": "blok",
+      "blocks": "blokken",
+      "tapToEdit": "Tik om te bewerken"
     },
     "sidebar": {
       "drafts": "Concepten",
@@ -962,6 +966,7 @@
     "undo": "Ongedaan maken",
     "redo": "Opnieuw",
     "ascending": "Oplopend",
-    "descending": "Aflopend"
+    "descending": "Aflopend",
+    "more": "Meer"
   }
 }

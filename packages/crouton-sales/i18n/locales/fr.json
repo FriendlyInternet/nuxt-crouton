@@ -288,6 +288,12 @@
       "all": "Tout",
       "title": "Catégories"
     },
+    "orderHistory": {
+      "title": "Mes commandes",
+      "loading": "Chargement de vos commandes…",
+      "empty": "Vous n'avez pas encore passé de commande.",
+      "loadError": "Impossible de charger vos commandes"
+    },
     "orders": {
       "title": "Commandes",
       "new": "Nouvelle Commande",
@@ -334,7 +340,8 @@
       "createNewClient": "Créer un nouveau client",
       "clientHelp": "Sélectionnez un client existant ou créez-en un nouveau",
       "clientRequired": "Client requis",
-      "clientRequiredDescription": "Cet événement nécessite un client. Veuillez en sélectionner ou en créer un."
+      "clientRequiredDescription": "Cet événement nécessite un client. Veuillez en sélectionner ou en créer un.",
+      "deleteError": "Impossible de supprimer la commande"
     },
     "events": {
       "title": "Événements",

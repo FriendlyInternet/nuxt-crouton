@@ -32,6 +32,7 @@
                 :reorder-pending="reorderingCategories"
                 @rename="handleCategoryRename"
                 @create="handleCategoryCreate"
+                @delete="handleCategoryDelete"
                 @reorder="handleCategoryReorder"
               />
             </div>
@@ -152,6 +153,18 @@
            root, so the fixed drawer + overlay resolve against the module instead
            of the viewport. Heights are % of the module. -->
       <div class="@2xl:hidden border-t border-default p-2 flex items-stretch gap-2">
+        <!-- My orders: the active user's own order history, opened as a
+             slideover from the collapsed bar (sits left of the order button;
+             takes the mic's spot now that talk-to-order is removed). -->
+        <UButton
+          size="lg"
+          square
+          icon="i-lucide-history"
+          color="neutral"
+          variant="soft"
+          :aria-label="t('sales.orderHistory.title')"
+          @click="historyOpen = true"
+        />
         <UDrawer
           v-model:open="mobileCartOpen"
           direction="bottom"
@@ -221,6 +234,18 @@
           </template>
         </UDrawer>
       </div>
+
+      <!-- Order history slideover (narrow-pane only, opened from the bar above).
+           Mounted only while open so its poll runs only while visible. -->
+      <USlideover v-model:open="historyOpen">
+        <template #content>
+          <SalesClientOrderHistory
+            :event-id="props.eventId"
+            :currency="props.currency"
+            @close="historyOpen = false"
+          />
+        </template>
+      </USlideover>
     </template>
   </div>
 </template>
@@ -369,6 +394,9 @@ const clientWarning = computed(() =>
 // Mobile cart drawer open state (closed automatically after checkout)
 const mobileCartOpen = ref(false)
 
+// Order-history slideover (narrow-pane bar). The active user's own orders.
+const historyOpen = ref(false)
+
 // Collapsed cart bar (narrow panes). Mirrors the print feedback while the
 // cart is empty; with items it stays the cart summary — a pending warning
 // then only swaps the icon (the rows wait inside the drawer).
@@ -456,12 +484,12 @@ const cartCountsByCategory = computed(() => {
 })
 
 // Filtered products based on selected category, in the same order the admin
-// arranged them (sortOrder, then title). Inactive products are hidden unless
+// arranged them (order, then title). Inactive products are hidden unless
 // the admin toggles them visible.
 const filteredProducts = computed(() => {
   const allProducts = ([...(products.value || [])] as SalesProduct[])
     .filter(p => p.isActive !== false || (editing.value && showInactive.value))
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.title.localeCompare(b.title))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title))
   if (selectedCategory.value === null) return allProducts
   return allProducts.filter(p => p.categoryId === selectedCategory.value)
 })
@@ -496,10 +524,18 @@ function openCreateProduct() {
 }
 
 // Pencil on the active category tab → inline rename in the tab itself; we
-// just persist. (Full form incl. delete stays reachable via the settings
-// panel's category list.)
+// just persist. (Full form also reachable via the team-level categories page.)
 async function handleCategoryRename({ id, title }: { id: string, title: string }) {
   await updateCategory(id, { title })
+}
+
+// Two-step trash in the tab's rename mode → delete the category. Clear the
+// selection if it was the active one (falls back to "all"). Products keep their
+// (now dangling) categoryId — surface them via the show-inactive/uncategorised
+// paths or reassign on the team page; deletion here is the tab affordance only.
+async function handleCategoryDelete({ id }: { id: string }) {
+  await deleteCategory([id])
+  if (selectedCategory.value === id) selectedCategory.value = null
 }
 
 // Pencil on a product card → update form (same two-step delete).
@@ -520,7 +556,7 @@ async function handleReorder(updates: Array<{ id: string, order: number }>) {
 // Tab drag-reorder → persist into the categories' displayOrder. Sequential
 // updates (not parallel) so the panel's mutation-driven refresh lands once
 // with the final order.
-const { update: updateCategory, create: createCategory } = useCollectionMutation('salesCategories')
+const { update: updateCategory, create: createCategory, deleteItems: deleteCategory } = useCollectionMutation('salesCategories')
 const reorderingCategories = ref(false)
 
 async function handleCategoryReorder(updates: Array<{ id: string, order: number }>) {

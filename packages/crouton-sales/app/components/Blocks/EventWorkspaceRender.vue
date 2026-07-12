@@ -146,12 +146,16 @@ function openPane(pane: 'orders' | 'clients' | 'data' | 'settings') {
                  strip on narrow, the header on wide) carries the exit ✕
                  (closable) — no separate close row wasting a line. -->
             <template v-if="loggedIn">
-              <div class="flex-1 min-h-0 overflow-y-auto p-4">
+              <!-- No inset padding: the shell runs edge-to-edge in the modal
+                   (fill) — a p-4 wrapper + the shell's own border frame made
+                   the kassa read as a boxed panel rather than full-screen. -->
+              <div class="flex-1 min-h-0">
                 <Suspense>
                   <SalesEventWorkspaceShell
                     :event-slug="eventSlug"
                     :show-switcher="false"
                     :show-strip="false"
+                    fill
                     closable
                     @close="kassaOpen = false"
                   />

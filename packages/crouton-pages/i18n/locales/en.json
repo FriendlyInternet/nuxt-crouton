@@ -179,7 +179,11 @@
       "chromeHideNav": "Hide page navigation",
       "chromeHideNavDescription": "Hide the navigation pill on this page",
       "chromeHideAuth": "Hide login & account controls",
-      "chromeHideAuthDescription": "Hide login, account and admin menus on this page — language and dark mode stay available"
+      "chromeHideAuthDescription": "Hide login, account and admin menus on this page — language and dark mode stay available",
+      "contentLabel": "Content",
+      "block": "block",
+      "blocks": "blocks",
+      "tapToEdit": "Tap to edit"
     },
     "sidebar": {
       "drafts": "Drafts",
@@ -962,6 +966,7 @@
     "undo": "Undo",
     "redo": "Redo",
     "ascending": "Ascending",
-    "descending": "Descending"
+    "descending": "Descending",
+    "more": "More"
   }
 }

@@ -179,7 +179,11 @@
       "chromeHideNav": "Masquer la navigation",
       "chromeHideNavDescription": "Masquer la pilule de navigation sur cette page",
       "chromeHideAuth": "Masquer les boutons de connexion et de compte",
-      "chromeHideAuthDescription": "Masquer les menus de connexion, de compte et d’administration sur cette page — la langue et le mode sombre restent disponibles"
+      "chromeHideAuthDescription": "Masquer les menus de connexion, de compte et d’administration sur cette page — la langue et le mode sombre restent disponibles",
+      "contentLabel": "Contenu",
+      "block": "bloc",
+      "blocks": "blocs",
+      "tapToEdit": "Toucher pour modifier"
     },
     "sidebar": {
       "drafts": "Brouillons",
@@ -962,6 +966,7 @@
     "undo": "Annuler",
     "redo": "Rétablir",
     "ascending": "Croissant",
-    "descending": "Décroissant"
+    "descending": "Décroissant",
+    "more": "Plus"
   }
 }

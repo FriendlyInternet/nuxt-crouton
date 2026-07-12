@@ -4281,6 +4281,14 @@
         "count": 1
       }
     },
+    "packages/crouton-sales/app/components/Client/OrderHistory.vue": {
+      "complexity_critical": {
+        "count": 1
+      },
+      "crap_critical": {
+        "count": 1
+      }
+    },
     "packages/crouton-sales/app/components/Client/OrderInterface.vue": {
       "complexity_critical": {
         "count": 1

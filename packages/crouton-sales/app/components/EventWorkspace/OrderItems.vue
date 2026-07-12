@@ -14,11 +14,13 @@ const props = defineProps<{
   locations?: Array<{ id: string, title: string }>
 }>()
 
-// Requeue one failed print job, or reprint the whole order — both handled by
-// OrdersTab, which owns the team/event context and the print-queue poll.
+// Requeue one failed print job, reprint the whole order, or hard-delete it —
+// all handled by OrdersTab, which owns the team/event context, the endpoints
+// and the print-queue poll.
 const emit = defineEmits<{
   retryJob: [jobId: string]
   reprintOrder: [orderId: string]
+  deleteOrder: [orderId: string]
 }>()
 
 const { t } = useT()
@@ -225,5 +227,12 @@ const namedLocationRemarks = computed(() => {
         </ul>
       </template>
     </UTabs>
+
+    <!-- Destructive footer action, below the totals and clear of the tab bar
+         (#1517's whole-order Reprint lives up there). Two-step pill: arm →
+         confirm hard-deletes the order + its items + its print jobs. -->
+    <div v-if="!pending" class="mt-3 pt-3 border-t border-dashed border-default flex justify-end">
+      <CroutonDeleteButton expanded @confirm="emit('deleteOrder', props.orderId)" />
+    </div>
   </div>
 </template>

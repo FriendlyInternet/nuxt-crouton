@@ -289,6 +289,12 @@
       "all": "All",
       "title": "Categories"
     },
+    "orderHistory": {
+      "title": "My orders",
+      "loading": "Loading your orders…",
+      "empty": "You haven't placed any orders yet.",
+      "loadError": "Could not load your orders"
+    },
     "orders": {
       "title": "Orders",
       "new": "New Order",
@@ -335,7 +341,8 @@
       "createNewClient": "Create new client",
       "clientHelp": "Select an existing client or create a new one",
       "clientRequired": "Client required",
-      "clientRequiredDescription": "This event requires a client. Please select or create one."
+      "clientRequiredDescription": "This event requires a client. Please select or create one.",
+      "deleteError": "Could not delete order"
     },
     "events": {
       "title": "Events",

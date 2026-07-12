@@ -289,6 +289,12 @@
       "all": "Alles",
       "title": "Categorieën"
     },
+    "orderHistory": {
+      "title": "Mijn bestellingen",
+      "loading": "Je bestellingen laden…",
+      "empty": "Je hebt nog geen bestellingen geplaatst.",
+      "loadError": "Kan je bestellingen niet laden"
+    },
     "orders": {
       "title": "Bestellingen",
       "new": "Nieuwe Bestelling",
@@ -335,7 +341,8 @@
       "createNewClient": "Nieuwe klant aanmaken",
       "clientHelp": "Selecteer een bestaande klant of maak een nieuwe aan",
       "clientRequired": "Klant vereist",
-      "clientRequiredDescription": "Dit evenement vereist een klant. Selecteer of maak er een aan."
+      "clientRequiredDescription": "Dit evenement vereist een klant. Selecteer of maak er een aan.",
+      "deleteError": "Kon bestelling niet verwijderen"
     },
     "events": {
       "title": "Evenementen",
