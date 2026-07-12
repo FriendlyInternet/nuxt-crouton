@@ -7,6 +7,7 @@
  */
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { personnelFilter } from '../../../../../utils/personnel-filter'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
@@ -15,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
   const db = useDB()
 
-  const { eventId } = getQuery(event)
+  const { eventId, personnel } = getQuery(event)
   const eventFilter = eventId ? eq(salesOrders.eventId, String(eventId)) : undefined
 
   // quantity is stored as TEXT → cast to a number before summing.
@@ -29,7 +30,7 @@ export default defineEventHandler(async (event) => {
     .from(salesOrderitems)
     .innerJoin(salesOrders, eq(salesOrderitems.orderId, salesOrders.id))
     .innerJoin(salesProducts, eq(salesOrderitems.productId, salesProducts.id))
-    .where(and(eq(salesOrders.teamId, team.id), eventFilter))
+    .where(and(eq(salesOrders.teamId, team.id), eventFilter, personnelFilter(personnel)))
     .groupBy(salesProducts.title)
     .orderBy(desc(quantityExpr))
     .limit(10)

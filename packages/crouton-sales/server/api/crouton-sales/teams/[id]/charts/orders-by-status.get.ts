@@ -7,13 +7,14 @@
  */
 import { and, count, desc, eq } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { personnelFilter } from '../../../../../utils/personnel-filter'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
   const db = useDB()
 
-  const { eventId } = getQuery(event)
+  const { eventId, personnel } = getQuery(event)
   const eventFilter = eventId ? eq(salesOrders.eventId, String(eventId)) : undefined
 
   const rows = await db
@@ -22,7 +23,7 @@ export default defineEventHandler(async (event) => {
       count: count()
     })
     .from(salesOrders)
-    .where(and(eq(salesOrders.teamId, team.id), eventFilter))
+    .where(and(eq(salesOrders.teamId, team.id), eventFilter, personnelFilter(personnel)))
     .groupBy(salesOrders.status)
     .orderBy(desc(count()))
 
