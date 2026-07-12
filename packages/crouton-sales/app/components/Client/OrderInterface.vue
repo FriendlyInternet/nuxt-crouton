@@ -159,6 +159,18 @@
            root, so the fixed drawer + overlay resolve against the module instead
            of the viewport. Heights are % of the module. -->
       <div class="@2xl:hidden border-t border-default p-2 flex items-stretch gap-2">
+        <!-- My orders: the active user's own order history, opened as a
+             slideover from the collapsed bar (sits left of the order button;
+             takes the mic's spot once talk-to-order is removed). -->
+        <UButton
+          size="lg"
+          square
+          icon="i-lucide-history"
+          color="neutral"
+          variant="soft"
+          :aria-label="t('sales.orderHistory.title')"
+          @click="historyOpen = true"
+        />
         <!-- Talk-to-order (#1429): the mic must be reachable without opening
              the drawer — a spoken order starts from the collapsed bar. Parsed
              lines land in the cart, the bar's count/total confirms them. -->
@@ -249,6 +261,18 @@
           </template>
         </UDrawer>
       </div>
+
+      <!-- Order history slideover (narrow-pane only, opened from the bar above).
+           Mounted only while open so its poll runs only while visible. -->
+      <USlideover v-model:open="historyOpen">
+        <template #content>
+          <SalesClientOrderHistory
+            :event-id="props.eventId"
+            :currency="props.currency"
+            @close="historyOpen = false"
+          />
+        </template>
+      </USlideover>
     </template>
   </div>
 </template>
@@ -442,6 +466,9 @@ const clientWarning = computed(() =>
 
 // Mobile cart drawer open state (closed automatically after checkout)
 const mobileCartOpen = ref(false)
+
+// Order-history slideover (narrow-pane bar). The active user's own orders.
+const historyOpen = ref(false)
 
 // Collapsed cart bar (narrow panes). Mirrors the print feedback while the
 // cart is empty; with items it stays the cart summary — a pending warning

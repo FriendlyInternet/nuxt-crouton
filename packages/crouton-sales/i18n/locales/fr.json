@@ -288,6 +288,12 @@
       "all": "Tout",
       "title": "Catégories"
     },
+    "orderHistory": {
+      "title": "Mes commandes",
+      "loading": "Chargement de vos commandes…",
+      "empty": "Vous n'avez pas encore passé de commande.",
+      "loadError": "Impossible de charger vos commandes"
+    },
     "orders": {
       "title": "Commandes",
       "new": "Nouvelle Commande",

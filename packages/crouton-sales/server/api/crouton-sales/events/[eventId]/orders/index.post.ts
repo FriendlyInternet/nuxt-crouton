@@ -1,6 +1,6 @@
 import { eq, sql } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
-import { requireScopedAccessToResource } from '@fyit/crouton-auth/server/utils/scoped-access'
+import { requireScopedEvent } from '../../../../../utils/require-scoped-event'
 import { organization } from '@fyit/crouton-auth/server/database/schema/auth'
 import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
@@ -29,14 +29,7 @@ interface CreateOrderBody {
 }
 
 export default defineEventHandler(async (event) => {
-  const eventId = getRouterParam(event, 'eventId')
-
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
-
-  const access = await requireScopedAccessToResource(event, 'event', eventId)
-  const db = useDB()
+  const { eventId, access, db } = await requireScopedEvent(event)
 
   const [eventWithTeam] = await db
     .select({ event: salesEvents, team: organization })
