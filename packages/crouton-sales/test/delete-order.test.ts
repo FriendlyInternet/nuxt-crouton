@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deleteOrderCascade } from '../server/utils/delete-order'
+import { deleteOrderCascade, findOwnedOrder, isOrderOwnedBy } from '../server/utils/delete-order'
 
 /**
  * The pure hard-delete cascade for one sales order (#1518): line items →
@@ -120,5 +120,67 @@ describe('deleteOrderCascade', () => {
 
     expect(result).toEqual({ deletedItems: 0, deletedJobs: 0 })
     expect(deletes.find(d => d.table === salesOrders)).toBeTruthy()
+  })
+})
+
+/**
+ * The ownership guard the endpoint leans on so its handler stays a thin compose
+ * (#1518). isOrderOwnedBy is the pure predicate; findOwnedOrder wraps the select.
+ */
+describe('isOrderOwnedBy', () => {
+  const row = { id: 'order-1', eventId: 'event-1', teamId: 'team-1' }
+
+  it('is true only when both event and team match', () => {
+    expect(isOrderOwnedBy(row, 'event-1', 'team-1')).toBe(true)
+  })
+
+  it('is false for a different event', () => {
+    expect(isOrderOwnedBy(row, 'event-2', 'team-1')).toBe(false)
+  })
+
+  it('is false for a different team (cross-team)', () => {
+    expect(isOrderOwnedBy(row, 'event-1', 'team-2')).toBe(false)
+  })
+
+  it('is false for a missing order row', () => {
+    expect(isOrderOwnedBy(null, 'event-1', 'team-1')).toBe(false)
+    expect(isOrderOwnedBy(undefined, 'event-1', 'team-1')).toBe(false)
+  })
+})
+
+describe('findOwnedOrder', () => {
+  // Fake db supporting select().from().where().limit() → [row].
+  function makeSelectDb(row: Record<string, unknown> | null) {
+    return {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: () => Promise.resolve(row ? [row] : [])
+          })
+        })
+      })
+    }
+  }
+  const selDeps = (db: any) => ({ db, tables: { salesOrders, salesOrderitems, printJobs }, ops })
+
+  it('returns the order when it belongs to the event + team', async () => {
+    const db = makeSelectDb({ id: 'order-1', eventId: 'event-1', teamId: 'team-1' })
+    const found = await findOwnedOrder('order-1', 'event-1', 'team-1', selDeps(db))
+    expect(found).toEqual({ id: 'order-1', eventId: 'event-1', teamId: 'team-1' })
+  })
+
+  it('returns null for a cross-event order', async () => {
+    const db = makeSelectDb({ id: 'order-1', eventId: 'other-event', teamId: 'team-1' })
+    expect(await findOwnedOrder('order-1', 'event-1', 'team-1', selDeps(db))).toBeNull()
+  })
+
+  it('returns null for a cross-team order', async () => {
+    const db = makeSelectDb({ id: 'order-1', eventId: 'event-1', teamId: 'other-team' })
+    expect(await findOwnedOrder('order-1', 'event-1', 'team-1', selDeps(db))).toBeNull()
+  })
+
+  it('returns null when the order does not exist', async () => {
+    const db = makeSelectDb(null)
+    expect(await findOwnedOrder('missing', 'event-1', 'team-1', selDeps(db))).toBeNull()
   })
 })

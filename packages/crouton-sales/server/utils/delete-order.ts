@@ -40,6 +40,50 @@ export interface DeleteOrderCascadeResult {
   deletedJobs: number
 }
 
+// The slim order shape the ownership guard reads.
+export interface OrderOwnershipRow {
+  id: string
+  eventId: string
+  teamId: string
+}
+
+/**
+ * Pure predicate: does this fetched order row belong to the given event AND
+ * team? A missing row (undefined/null) is never owned. Extracted so the
+ * endpoint's guard is one tested call instead of a branchy inline condition.
+ */
+export function isOrderOwnedBy(
+  order: OrderOwnershipRow | null | undefined,
+  eventId: string,
+  teamId: string
+): boolean {
+  return !!order && order.eventId === eventId && order.teamId === teamId
+}
+
+/**
+ * Look up an order and return it ONLY if it belongs to this event + team,
+ * else null. Keeps the ownership select + check out of the HTTP handler (which
+ * stays a thin compose that just maps null → 404).
+ */
+export async function findOwnedOrder(
+  orderId: string,
+  eventId: string,
+  teamId: string,
+  deps: DeleteOrderCascadeDeps
+): Promise<OrderOwnershipRow | null> {
+  const { db, tables } = deps
+  const { salesOrders } = tables
+  const { eq } = deps.ops ?? { eq: defaultEq, and: defaultAnd }
+
+  const [order] = await db
+    .select({ id: salesOrders.id, eventId: salesOrders.eventId, teamId: salesOrders.teamId })
+    .from(salesOrders)
+    .where(eq(salesOrders.id, orderId))
+    .limit(1)
+
+  return isOrderOwnedBy(order, eventId, teamId) ? (order as OrderOwnershipRow) : null
+}
+
 export async function deleteOrderCascade(
   orderId: string,
   deps: DeleteOrderCascadeDeps

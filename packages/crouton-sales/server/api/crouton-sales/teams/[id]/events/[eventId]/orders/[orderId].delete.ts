@@ -8,12 +8,11 @@
  * row. The `cancelled` status stays as the soft alternative for real events;
  * this is the hard remove for mistaken / test orders.
  */
-import { eq } from 'drizzle-orm'
 import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
-import { deleteOrderCascade } from '../../../../../../../utils/delete-order'
+import { deleteOrderCascade, findOwnedOrder } from '../../../../../../../utils/delete-order'
 
 export default defineEventHandler(async (event) => {
   const { team } = await requireTeamAdmin(event)
@@ -25,23 +24,16 @@ export default defineEventHandler(async (event) => {
   }
 
   const db = useDB()
+  const tables = { salesOrders, salesOrderitems, printJobs }
 
-  // Ownership guard: the order must belong to this team and this event. A
-  // missing / cross-team / cross-event order is a 404 — never delete blind.
-  const [order] = await db
-    .select({ id: salesOrders.id, eventId: salesOrders.eventId, teamId: salesOrders.teamId })
-    .from(salesOrders)
-    .where(eq(salesOrders.id, orderId))
-    .limit(1)
-
-  if (!order || order.eventId !== eventId || order.teamId !== team.id) {
+  // Ownership guard (tested helper): a missing / cross-team / cross-event order
+  // is a 404 — never delete blind.
+  const order = await findOwnedOrder(orderId, eventId, team.id, { db, tables })
+  if (!order) {
     throw createError({ status: 404, statusText: 'Order not found' })
   }
 
-  const { deletedItems, deletedJobs } = await deleteOrderCascade(orderId, {
-    db,
-    tables: { salesOrders, salesOrderitems, printJobs }
-  })
+  const { deletedItems, deletedJobs } = await deleteOrderCascade(orderId, { db, tables })
 
   return { success: true, orderId, deletedItems, deletedJobs }
 })
