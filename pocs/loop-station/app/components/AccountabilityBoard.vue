@@ -54,9 +54,42 @@ const netClass = (n: number) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero')
       </div>
     </div>
 
+    <details class="acc__guide">
+      <summary>How to read this board</summary>
+      <div class="acc__guidebody">
+        <p>
+          Two teams, scored against each other. Every <strong>confirmed</strong> defect is one
+          severity-weighted transaction: the <strong>author</strong> flow that shipped it is debited
+          <code>−w</code>, the <strong>gate</strong> that caught it is credited <code>+w</code>. A finding
+          only counts once <strong>confirmed</strong> (fix merged / reverted / a human <code>lgtm</code>) —
+          a <code>pending</code> finding moves nothing.
+        </p>
+        <p class="acc__weights">
+          <strong>Weight <code>w</code> by severity:</strong> critical&nbsp;5 · high&nbsp;3 · medium&nbsp;2 · low&nbsp;1.
+          A defect that <strong>escaped review</strong> and was caught later costs the author <code>2×w</code>
+          (and debits the gate that should have caught it).
+        </p>
+        <ul class="acc__cols2">
+          <li><strong>👷 Author · Net</strong> — running score: <code>+1</code> per clean merge, <code>−w</code> per defect. <em>Lower = ships more/worse defects.</em></li>
+          <li><strong>Def</strong> — count of confirmed defects charged to this flow.</li>
+          <li><strong>Clean</strong> — merged runs with <em>no</em> confirmed defect (each earned <code>+1</code>).</li>
+          <li><strong>Rate</strong> — <code>defects ÷ (defects + clean)</code>. <em>Higher = worse;</em> the list is sorted by it, worst first.</li>
+          <li><strong>🔎 Gate · Net</strong> — <code>+w</code> per confirmed catch, <code>−w</code> per false&nbsp;positive. <em>Higher = earns its keep.</em></li>
+          <li><strong>Catches</strong> — confirmed real defects this gate caught.</li>
+          <li><strong>False +</strong> — findings a human/author overruled (each cost the gate <code>−w</code>; the author is untouched). <em>A noisy gate.</em></li>
+        </ul>
+        <p class="acc__read">
+          <strong>Quick read for an agent:</strong> an author with a <em>negative Net and a high Rate</em> is the
+          flow shipping defects — route its work to a stricter model or add a gate. A gate with a
+          <em>high Net and low False+</em> is pulling its weight; a gate with <em>False+ ≥ Catches</em> is
+          crying wolf. Source: <code>findings.jsonl</code> × <code>eval-ledger.jsonl</code>, tallied deterministically (no LLM).
+        </p>
+      </div>
+    </details>
+
     <p class="acc__caveat">
-      First slice wires the <code>code-review</code> gate end-to-end (#1570); red-team / a11y / frontend-review and
-      the escaped-defect signal follow. A rejected (false-positive) finding debits the gate, never the author.
+      First slice wired the <code>code-review</code> gate; red-team / a11y / frontend-review capture and the
+      escaped-defect (revert) signal are now wired in CI (#1570). A rejected (false-positive) finding debits the gate, never the author.
     </p>
   </div>
 </template>
@@ -80,5 +113,17 @@ td { padding: 7px 8px; border-bottom: 1px solid #1c1c1c; font-family: var(--mono
 .pill.zero { background: rgba(90,102,117,0.15); color: var(--ko-text-label); }
 .acc__caveat { margin: 12px 0 0; font-size: 10.5px; color: var(--ko-text-label); }
 .acc__caveat code { font-family: var(--mono); color: var(--ko-text-muted); }
-@media (max-width: 860px) { .acc__cols { grid-template-columns: 1fr; } }
+.acc__guide { margin-top: 16px; border-top: 1px solid #1c1c1c; padding-top: 12px; }
+.acc__guide summary { cursor: pointer; font-size: 11px; letter-spacing: .04em; color: var(--ko-accent-blue); user-select: none; }
+.acc__guide summary:hover { color: #22d3ee; }
+.acc__guidebody { margin-top: 10px; font-size: 11.5px; line-height: 1.55; color: var(--ko-text-muted); }
+.acc__guidebody p { margin: 0 0 10px; }
+.acc__guidebody strong { color: var(--ko-text-light); }
+.acc__guidebody code { font-family: var(--mono); background: #0c0c0c; padding: .5px 5px; border-radius: 3px; color: var(--ko-text-muted); font-size: 10.5px; }
+.acc__weights { color: var(--ko-text-label); }
+.acc__cols2 { list-style: none; padding: 0; margin: 0 0 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 22px; }
+.acc__cols2 li { font-size: 11px; color: var(--ko-text-muted); }
+.acc__cols2 em { color: var(--ko-text-label); font-style: normal; }
+.acc__read { border-left: 2px solid var(--ko-accent-blue); padding-left: 10px; color: var(--ko-text-muted); }
+@media (max-width: 860px) { .acc__cols, .acc__cols2 { grid-template-columns: 1fr; } }
 </style>
