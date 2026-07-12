@@ -592,7 +592,11 @@ const kassaHeightStyle = computed(() =>
 
     <!-- Narrow-mode panes: same headers + bodies as the splitter panes, but
          as full-height slideovers (only mounted below lg). -->
-    <USlideover v-if="isNarrow" v-model:open="ordersSlideoverOpen">
+    <USlideover
+      v-if="isNarrow"
+      v-model:open="ordersSlideoverOpen"
+      :ui="{ content: 'pb-[env(safe-area-inset-bottom)]' }"
+    >
       <template #content>
         <div class="flex flex-col h-full min-h-0">
           <SalesEventWorkspacePaneHeader
@@ -630,6 +634,7 @@ const kassaHeightStyle = computed(() =>
     <USlideover
       v-if="isNarrow && event.requiresClient"
       v-model:open="clientsSlideoverOpen"
+      :ui="{ content: 'pb-[env(safe-area-inset-bottom)]' }"
     >
       <template #content>
         <div class="flex flex-col h-full min-h-0">
@@ -648,6 +653,7 @@ const kassaHeightStyle = computed(() =>
     <USlideover
       v-if="isNarrow && loggedIn"
       v-model:open="dataSlideoverOpen"
+      :ui="{ content: 'pb-[env(safe-area-inset-bottom)]' }"
     >
       <template #content>
         <div class="flex flex-col h-full min-h-0">
@@ -666,7 +672,11 @@ const kassaHeightStyle = computed(() =>
     <!-- Narrow-mode settings: same surface as the panes. Save lives in a fixed
          footer below the scroll area — only one SettingsTab instance ever
          mounts (the collapsible is gated on !isNarrow). -->
-    <USlideover v-if="isNarrow" v-model:open="settingsSlideoverOpen">
+    <USlideover
+      v-if="isNarrow"
+      v-model:open="settingsSlideoverOpen"
+      :ui="{ content: 'pb-[env(safe-area-inset-bottom)]' }"
+    >
       <template #content>
         <div class="flex flex-col h-full min-h-0">
           <SalesEventWorkspacePaneHeader
