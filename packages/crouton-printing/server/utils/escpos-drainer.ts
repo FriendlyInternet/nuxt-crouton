@@ -242,33 +242,36 @@ export async function drainPendingEscposJobs(db: any, opts: DrainOptions = {}): 
     .set({ status: PRINT_STATUS.PRINTING, updatedAt: new Date() })
     .where(inArray(printJobs.id, rows.map((r: any) => r.id)))
 
-  // Drain one printer's jobs strictly in order — Epson TM accepts a single
-  // :9100 connection at a time. Each job is self-guarded so a thrown DB/socket
-  // error fails just that job (recoverable via retry) and never derails the
-  // rest of the group.
-  const drainGroup = async (group: any[]) => {
-    for (const r of group) {
-      try {
-        if (!r.printerIp) {
-          await failPrintJob(db, r.id, 'No printer IP configured')
-          continue
-        }
-        const res = await printEscposJob(r.payload, r.printerIp, Number(r.printerPort) || DEFAULT_PORT)
-        if (res.ok) await completePrintJob(db, r.id)
-        else await failPrintJob(db, r.id, res.error || 'Print failed')
-      }
-      catch (err) {
-        try { await failPrintJob(db, r.id, err instanceof Error ? err.message : 'Drain error') }
-        catch { /* best effort — leave it PRINTING for retry-failed to recover */ }
-      }
-    }
-  }
-
   // Different printers drain concurrently; jobs to the same printer stay serial
-  // within their group. allSettled so one printer's failure can never reject
-  // the batch — worst case this is exactly the old sequential behaviour.
+  // within their group (drainOneJob per row). allSettled so one printer's
+  // failure can never reject the batch — worst case this is exactly the old
+  // sequential behaviour.
+  const drainGroup = async (group: any[]) => {
+    for (const r of group) await drainOneJob(db, r)
+  }
   const groups = groupJobsByPrinter(rows as any[])
   await Promise.allSettled(groups.map(drainGroup))
 
   return { processed: rows.length }
+}
+
+/**
+ * Print one claimed row and record its outcome. Self-guarded: a thrown
+ * DB/socket error fails just this job (recoverable via retry-failed) and never
+ * derails the rest of its printer's serial group.
+ */
+async function drainOneJob(db: any, r: any): Promise<void> {
+  try {
+    if (!r.printerIp) {
+      await failPrintJob(db, r.id, 'No printer IP configured')
+      return
+    }
+    const res = await printEscposJob(r.payload, r.printerIp, Number(r.printerPort) || DEFAULT_PORT)
+    if (res.ok) await completePrintJob(db, r.id)
+    else await failPrintJob(db, r.id, res.error || 'Print failed')
+  }
+  catch (err) {
+    // best effort — if even the fail-write throws, leave it PRINTING for retry-failed
+    await failPrintJob(db, r.id, err instanceof Error ? err.message : 'Drain error').catch(() => {})
+  }
 }

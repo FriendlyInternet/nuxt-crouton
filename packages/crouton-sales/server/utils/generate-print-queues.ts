@@ -181,15 +181,16 @@ export async function generateAndInsertPrintQueues(opts: GenerateInsertOptions):
   // and order-status tracking are unchanged — only the timing differs.
   const printerById = new Map(printers.map((p: any) => [p.id, p]))
   const inputs = jobs.map((job: any) => {
-    const printer: any = printerById.get(job.printerId)
+    // Default to {} so the field reads below need no per-field optional chaining.
+    const printer: any = printerById.get(job.printerId) ?? {}
     return {
       source: 'sales',
       printerId: job.printerId,
-      printerIp: printer?.ipAddress ?? null,
+      printerIp: printer.ipAddress ?? null,
       // salesPrinters.port is text-typed in the generated schema; coerce to a number.
-      printerPort: printer?.port != null ? Number(printer.port) : null,
-      printerTitle: printer?.title ?? null,
-      driver: printer?.driver ?? 'network-escpos',
+      printerPort: printer.port != null ? Number(printer.port) : null,
+      printerTitle: printer.title ?? null,
+      driver: printer.driver ?? 'network-escpos',
       payload: job.printData,
       printMode: job.printMode,
       locationId: job.locationId ?? null,
