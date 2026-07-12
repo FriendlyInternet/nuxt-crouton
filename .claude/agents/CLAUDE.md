@@ -104,6 +104,30 @@ critical convention break, diff-scoped so never the backlog). Its lens is conven
 only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
 (`/red-team`).
 
+## The simplify agent (standalone — the quality-pass analog of frontend-review)
+
+`simplify.md` is a **simplification / code-smell prober** (#1576), the quality sibling of
+`frontend-review`. Given `{ scope, depth, fix }` it reads the **diff** the way a senior
+doing a quality pass would — reactivity/async workarounds (`nextTick`/timers papering over
+state a library syncs on its own schedule — the #1550 `useSortable`-`onEnd` case),
+hand-rolled boilerplate that Nuxt/VueUse already do (`useFetch`/`onClickOutside`/
+`useLocalStorage`…), DRY violations the change introduces, over-engineered abstractions for
+one call site, non-idiomatic reactivity — and **returns structured severity-rated
+findings**. It reports; it patches only the safe deterministic set under `fix:true`.
+
+| Agent | File | Recurses? | Writes code? | Model |
+|-------|------|-----------|--------------|-------|
+| `simplify` | `simplify.md` | no | only under `fix:true` (safe set) | `sonnet` |
+
+**It is ADVISORY — it has no 🔴 and NEVER blocks a merge.** Simplification is a judgment
+call, so its whole point is to *inform*, and precision beats recall (a noisy taste call
+teaches people to mute it). It's the CI form of the on-demand `/simplify` built-in, run by
+`.github/workflows/simplify-review.yml` (per-PR `quick`, diff-scoped, report-only — posts a
+sticky comment + writes a verdict for the outage-check, always exits 0). Sonnet (not Haiku)
+because judgment/false-positive cost dominates here — see `routing.json`. Its lens is
+**simpler/less-duplicated/more-idiomatic** only — not bugs (`/code-review`, `red-team`),
+conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`).
+
 ### The agent contract
 
 - **Input is passed in the prompt** as a small JSON-ish object — e.g.

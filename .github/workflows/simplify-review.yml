@@ -1,0 +1,131 @@
+name: Simplify Review (PR)
+
+# Per-PR simplification / code-smell scan (#1576). Runs the `simplify` subagent at
+# depth=quick over the PR diff (reactivity smells like nextTick-as-workaround, DRY
+# violations, reinvented VueUse/Nuxt boilerplate, over-engineered abstractions on the
+# changed code) and posts an advisory sticky comment.
+#
+# ADVISORY ONLY — this check NEVER fails / blocks a merge. Simplification is a judgment
+# call, not a hard rule (unlike frontend-review, which blocks on 🔴 convention breaks), so
+# the agent has no 🔴 and this workflow always exits 0. It informs; it never gates.
+# Diff-scoped, so it only ever comments on what THIS PR introduces, never the backlog.
+# Mirrors frontend-review.yml / a11y.yml minus the gate step.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      # Smells live in code — scan PRs that touch source. (The agent further drops
+      # generated layers / dist / fixtures when it resolves the diff.)
+      - '**/*.vue'
+      - '**/*.ts'
+      - '**/*.mjs'
+      # Known-bad smoke fixtures are diff-scope-excluded so touching them never self-flags.
+      - '!.claude/gate-fixtures/**'
+
+concurrency:
+  group: simplify-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  simplify-review:
+    # Skip drafts and bot-authored PRs (agent/Dependabot noise isn't worth a quality pass).
+    if: >
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.type != 'Bot'
+    # Fork PRs never land on the self-hosted box (untrusted code on our hardware — runbook §5).
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    # permissions MUST be job-level: GitHub job-level `permissions` fully OVERRIDES (does not
+    # merge with) any workflow-level block, so `id-token: write` has to be here or the
+    # claude-code-action OIDC token request fails.
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the agent can diff the PR against its base branch.
+          fetch-depth: 0
+
+      # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+        id: agent
+        # Report-only workflow, but keep continue-on-error so a `max_turns`/SDK flake can't turn
+        # the run red — the sticky comment + verdict are the deliverable; the final step never
+        # fails regardless.
+        continue-on-error: true
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          show_full_output: true
+          # --allowedTools is REQUIRED (#834): the prompt has the top-level agent *act as* the
+          # subagent and call Bash/Write DIRECTLY (no sub-agent spawn to auto-grant frontmatter
+          # tools). Headless CI has no human to approve tool use, so without the allowlist every
+          # Bash/Write is DENIED — the agent computes the right findings but can't write the
+          # verdict or post the comment, burns turns on denied retries, and fails open (hollow).
+          # Bash covers `gh` (comment) + writing the verdict; Write/Edit for the file; Read/Grep/
+          # Glob for the scan.
+          # Sonnet, not Haiku: simplification is a JUDGMENT call and this check is advisory, so a
+          # noisy false positive is the failure mode — precision matters more than the cheaper
+          # tier here (mirrors red-team's reports-but-judgment tier). Reversible via routing.json
+          # + the #865 scoreboard.
+          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          prompt: |
+            Act as the **simplify subagent** defined in `.claude/agents/simplify.md`.
+            Input: { scope: "diff", depth: "quick", fix: false }.
+
+            The PR diff is this branch vs its base. The base branch is
+            `origin/${{ github.event.pull_request.base.ref }}` — diff against it
+            (`git diff --name-only origin/${{ github.event.pull_request.base.ref }}...HEAD`),
+            keep only the changed code files (`.vue`/`.ts`/`.mjs`; drop generated layers, `dist`,
+            `_archive`, fixtures), and scan ONLY those through the smell checklist in the agent
+            definition. Be precise and avoid false positives — a wrong advisory on taste teaches
+            people to ignore the whole check, so PRECISION BEATS RECALL: only raise a finding when
+            a concretely cleaner form exists and you can name it. This agent has NO 🔴 and NEVER
+            blocks.
+
+            Then do exactly two outputs:
+
+            1. **Post a single PR comment** summarising the findings using the review skill's
+               3-level format (🟡 Warning / 🔵 Note — there is no 🔴 here) — a short table + each
+               finding's `file:line`, smell class, one-line "why simpler", and the concrete cleaner
+               form. Make it a sticky comment containing the literal marker `<!-- simplify -->` on
+               its own line, and EDIT that comment in place if it already exists rather than posting
+               a new one. If there are no findings, post/update the comment saying the quick scan
+               found nothing — the diff reads clean.
+
+            2. **Write `simplify-verdict.json`** at the repo root, exactly:
+               `{"highest":"<none|note|warning>","warning":N,"note":N}`
+               where `highest` is the most severe finding's level (🟡→warning, 🔵→note, or `none`).
+               This is the machine signal the outage-check reads — always write it, even for a
+               clean scan.
+
+            Do NOT edit any `apps/`/`packages/` code (quick scan is report-only; `--fix` is a
+            separate, human-invoked path). Do NOT file GitHub issues. Reporting + the verdict file
+            is all.
+
+      # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
+      - uses: ./.github/actions/loop-station-trace
+        if: always()
+      # Fail-open must be VISIBLE (#1037): when no verdict exists, classify why (billing /
+      # max-turns / auth / silent no-write) and emit a warning annotation, so a dead agent
+      # can't be mistaken for a clean scan. (This check never FAILS, but a silent no-write
+      # should still surface as a warning rather than a hollow green.)
+      - uses: ./.github/actions/gate-outage-check
+        if: always()
+        with:
+          gate: simplify
+          verdict-file: simplify-verdict.json
+          agent-outcome: ${{ steps.agent.outcome }}
+      - name: Report (advisory — never blocks)
+        if: always()
+        run: |
+          if [ ! -f simplify-verdict.json ]; then
+            echo "No verdict file — outage classified by gate-outage-check above. Advisory check, not blocking."
+            exit 0
+          fi
+          echo "Verdict: $(cat simplify-verdict.json)"
+          HIGHEST=$(node -e "process.stdout.write((require('./simplify-verdict.json').highest||'none').toLowerCase())")
+          echo "simplify highest severity: ${HIGHEST}. Advisory only — see the simplify PR comment. Never blocks."
+          exit 0

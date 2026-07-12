@@ -21,6 +21,7 @@ Default tier: **medium**
 | `red-team` | medium | claude-sonnet-5 | zai/glm-5.2 | $15 | — | security analysis, reports only — opus was overkill; moved to Sonnet 5 (no code written, daily deep sweep is the cost). Free win per #823/#824. |
 | `a11y` | small | claude-haiku-4-5 | zai/glm-5.2 | $5 | — | template review, reports only — Sonnet→Haiku (#1272/#823); reversible if the #865 scoreboard shows missed axe findings |
 | `frontend-review` | small | claude-haiku-4-5 | zai/glm-5.2 | $5 | — | convention review, reports only — Sonnet→Haiku (#1272/#823); reversible if it stops catching v3 names |
+| `simplify` | medium | claude-sonnet-5 | zai/glm-5.2 | $15 | — | simplification / code-smell review, reports-only + ADVISORY (never blocks). Judgment-heavy and false-positive-sensitive (a noisy taste call teaches people to mute the check), so Sonnet not Haiku — mirrors red-team's reports-but-judgment tier. Reversible via the #865 scoreboard if it proves noisy (#1576). |
 
 ## Overrides (per-flow exact-model pins)
 - **a11y-daily-pidev** → `zai/glm-5.2` — #1409 eval: matched engine ground truth (153/152), beat the metered Haiku baseline (+28% overcount, $0.347/run) at $0 marginal on the flat GLM Coding Plan. Workflow default since #1413.
