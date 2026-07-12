@@ -17,13 +17,13 @@
 import { readFileSync, appendFileSync, existsSync, mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { validate } from './findings-schema.mjs'
+import { validate, dedupKey, parseFindings } from './findings-schema.mjs'
 import { parseArgs } from '../lib/cli-args.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const DEFAULT_FINDINGS = join(ROOT, 'writeups/loop-station/findings.jsonl')
 
-const args = parseArgs(process.argv.slice(2), { boolean: ['stdin', 'check', 'escaped'] })
+const args = parseArgs(process.argv.slice(2), { boolean: ['stdin', 'check', 'escaped', 'no-dedup'] })
 const findingsPath = args.findings ? String(args.findings) : DEFAULT_FINDINGS
 const checkOnly = 'check' in args
 
@@ -60,6 +60,17 @@ if (!res.ok) {
 if (checkOnly) {
   console.log('✓ finding valid (not written — --check)')
   process.exit(0)
+}
+
+// Idempotent by default: a rollup re-runs, so skip a finding whose (gate, ref,
+// escaped) identity is already recorded. --no-dedup forces the append.
+if (!('no-dedup' in args) && existsSync(findingsPath)) {
+  const { records } = parseFindings(readFileSync(findingsPath, 'utf8'))
+  const key = dedupKey(res.record)
+  if (records.some((r) => dedupKey(r) === key)) {
+    console.log(`• skipped (already recorded): ${key}`)
+    process.exit(0)
+  }
 }
 
 if (!existsSync(dirname(findingsPath))) mkdirSync(dirname(findingsPath), { recursive: true })

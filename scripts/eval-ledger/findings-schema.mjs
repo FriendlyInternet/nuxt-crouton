@@ -150,6 +150,18 @@ export function transactionsFor(f) {
   return out
 }
 
+/**
+ * Stable identity of a finding for idempotent capture — a rollup re-runs, so the
+ * same defect must never be appended twice. Keyed by the gate, what it's attributed
+ * to, and whether it escaped (a caught + an escaped finding on the same ref are
+ * distinct events). Status is deliberately NOT in the key: a pending finding that
+ * later resolves to confirmed is the SAME finding, updated in place — not a new one.
+ * @param {FindingRecord} f
+ */
+export function dedupKey(f) {
+  return [f.gate, f.author_ref || f.author_flow || '?', f.escaped ? 'escaped' : 'caught'].join('|')
+}
+
 /** Parse a JSONL string into validated findings, collecting parse/validation errors. */
 export function parseFindings(text) {
   const records = []

@@ -8,8 +8,10 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { transactionsFor, validate, SEVERITY_WEIGHT, ESCAPE_MULT } from './findings-schema.mjs'
+import { transactionsFor, validate, dedupKey, SEVERITY_WEIGHT, ESCAPE_MULT } from './findings-schema.mjs'
 import { tally } from './accountability.mjs'
+import { reconcile } from './reconcile-findings.mjs'
+import { resolveCandidates } from './ingest-findings.mjs'
 
 const finding = (over = {}) => ({
   ts: '2026-07-12T00:00:00Z',
@@ -124,4 +126,63 @@ test('validate fills defaults and coerces escaped to a boolean', () => {
   assert.equal(res.ok, true)
   assert.equal(res.record.severity, 'medium')
   assert.equal(res.record.escaped, false)
+})
+
+// ── dedupKey: identity is stable across a pending→confirmed transition ────────
+test('dedupKey ignores status; separates caught vs escaped on the same ref', () => {
+  const base = { gate: 'code-review', author_ref: 'r1', author_flow: null }
+  assert.equal(dedupKey({ ...base, status: 'pending', escaped: false }), dedupKey({ ...base, status: 'confirmed', escaped: false }))
+  assert.notEqual(dedupKey({ ...base, escaped: false }), dedupKey({ ...base, escaped: true }))
+})
+
+// ── reconcile: reverted ledger rows → escaped findings, idempotent ───────────
+test('reconcile derives an escaped finding from a reverted run', () => {
+  const ledger = [ledgerRow({ outcome: 'reverted', flow: 'decompose-spike', ref: 'https://x/pull/862' })]
+  const add = reconcile(ledger, [])
+  assert.equal(add.length, 1)
+  assert.equal(add[0].escaped, true)
+  assert.equal(add[0].gate, 'revert')
+  assert.equal(add[0].author_flow, 'decompose-spike')
+})
+
+test('reconcile skips a ref that already has an escaped finding (any gate)', () => {
+  const ledger = [ledgerRow({ outcome: 'reverted', flow: 'decompose-spike', ref: 'https://x/pull/862' })]
+  const existing = [finding({ gate: 'human-revert', escaped: true, author_ref: 'https://x/pull/862' })]
+  assert.deepEqual(reconcile(ledger, existing), [])
+})
+
+test('reconcile ignores non-reverted outcomes', () => {
+  assert.deepEqual(reconcile([ledgerRow({ outcome: 'merged' }), ledgerRow({ outcome: 'abandoned' })], []), [])
+})
+
+// ── resolveCandidates: merge confirms, close drops, open skips ────────────────
+const candidate = (over = {}) => ({
+  ts: '2026-07-12T00:00:00Z', gate: 'frontend-review', severity: 'critical',
+  author_ref: 'https://x/pull/999', author_flow: 'task-worker', status: 'pending',
+  escaped: false, missed_gate: null, finding_ref: null, notes: null, _pr: 999, ...over,
+})
+
+test('resolveCandidates: merged PR → confirmed caught finding', () => {
+  const { toAppend, outcomes } = resolveCandidates([candidate()], { 999: 'merged' }, [])
+  assert.equal(toAppend.length, 1)
+  assert.equal(toAppend[0].status, 'confirmed')
+  assert.equal(toAppend[0].confirmed_via, 'fix-merged')
+  assert.equal(toAppend[0]._pr, undefined) // the internal field is stripped
+  assert.equal(outcomes[0].outcome, 'confirmed')
+})
+
+test('resolveCandidates: closed PR drops, open PR skips', () => {
+  const { toAppend, outcomes } = resolveCandidates(
+    [candidate({ _pr: 1 }), candidate({ _pr: 2 })],
+    { 1: 'closed', 2: 'open' }, [],
+  )
+  assert.equal(toAppend.length, 0)
+  assert.deepEqual(outcomes.map((o) => o.outcome), ['dropped', 'skipped'])
+})
+
+test('resolveCandidates is idempotent against already-recorded findings', () => {
+  const existing = [validate({ ...candidate(), status: 'confirmed', confirmed_via: 'fix-merged' }).record]
+  const { toAppend, outcomes } = resolveCandidates([candidate()], { 999: 'merged' }, existing)
+  assert.equal(toAppend.length, 0)
+  assert.equal(outcomes[0].outcome, 'dup')
 })

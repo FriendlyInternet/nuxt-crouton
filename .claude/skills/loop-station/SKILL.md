@@ -249,14 +249,29 @@ opposing teams so we can see who ships clean and which gates actually earn their
 
 | file | role |
 |------|------|
-| `findings-schema.mjs` | finding record shape + `validate()` + `transactionsFor()` (the scoring rules — tune weights here) |
-| `append-finding.mjs` | validate + append ONE finding to `findings.jsonl` (`--check` to validate only) |
+| `findings-schema.mjs` | finding record shape + `validate()` + `transactionsFor()` (the scoring rules — tune weights here) + `dedupKey()` |
+| `append-finding.mjs` | validate + append ONE finding to `findings.jsonl` (idempotent via `dedupKey`; `--check` / `--no-dedup`) |
 | `accountability.mjs` | join findings × ledger → two leaderboards (markdown / `--json` / `--html`); importable `tally()` |
-| `accountability.test.mjs` | pins the arithmetic (caught/escaped/rejected/pending, clean-merge reward, sort order) |
+| `capture-finding.mjs` | gate-side: a `<gate>-verdict.json` → a pending finding **candidate** (only for 🔴 critical) |
+| `ingest-findings.mjs` | rollup-side: resolve candidates by PR-merge fact (merged → confirmed · closed → drop · open → skip); importable `resolveCandidates()` |
+| `reconcile-findings.mjs` | rollup-side: reverted eval-ledger rows → escaped-defect findings; importable `reconcile()` |
+| `accountability.test.mjs` | pins the arithmetic + reconcile + candidate resolution (19 tests) |
 
-First slice wires the **`code-review`** gate end-to-end; red-team / a11y / frontend-review
-and the escaped-defect (revert) signal are follow-ups. Rendered in `pocs/loop-station`
-(the `AccountabilityBoard` panel, staged by its `prepare-data.mjs`).
+## Capture in CI (#1570)
+
+Two deterministic sources feed `findings.jsonl` — **no LLM, no CI state machine**:
+
+1. **PR gates** (`frontend-review` / `a11y` / `red-team`) upload a finding **candidate**
+   artifact (`loop-station-finding-*`) whenever they flag a 🔴 critical. Confirmation is
+   the **durable PR-merge fact**: merged ⇒ the blocking defect was fixed ⇒ a *confirmed
+   caught* defect; closed ⇒ dropped; open ⇒ left for a later run.
+2. **Reverts** — a `reverted` run in the eval-ledger ⇒ a *confirmed escaped* defect.
+
+`.github/workflows/loop-station-findings.yml` (merge-to-`main` + weekly, mirrors
+`loop-station-usage.yml`) downloads the candidates, resolves them, runs `reconcile`, and
+commits new findings to `main`. **Only this main-context job writes the committed ledger** —
+a PR-branch gate run never does. Rendered in `pocs/loop-station` (the `AccountabilityBoard`
+panel, staged by its `prepare-data.mjs`).
 
 ## Run by hand
 
