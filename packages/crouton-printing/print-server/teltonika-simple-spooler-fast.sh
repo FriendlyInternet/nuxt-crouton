@@ -49,8 +49,63 @@ TICKET_EVERY="${TICKET_EVERY:-1800}"
 # answer DLE EOT.
 STATUS_CHECK="${STATUS_CHECK:-1}"
 # Seconds to hold the socket open after sending — lets the printer drain its
-# receive buffer and answer the status queries on the same connection.
+# receive buffer and answer the status queries on the same connection. With the
+# early-return read (#1539) this is now a CAP, not a fixed wait: a printer that
+# answers sooner is confirmed sooner; a slow one still gets up to DRAIN_SECS.
 DRAIN_SECS="${DRAIN_SECS:-2}"
+# Pre-flight status-read CAP (seconds). Same early-return semantics as
+# DRAIN_SECS: a fast printer clears in a fraction of this; a slow one gets the
+# full window. Raise it (e.g. 3) for a printer on a weak link without slowing a
+# fast one — the read returns on first reply regardless. Default matches the
+# historical fixed pre-flight wait so behaviour is unchanged unless overridden.
+PREFLIGHT_SECS="${PREFLIGHT_SECS:-1}"
+# Parallel per-printer drain (#1539). 1 (default): different printers drain
+# concurrently (one background worker per printer IP), jobs to the SAME printer
+# stay strictly serial (Epson TM = one :9100 connection at a time). Set to 0 to
+# force the legacy fully-sequential path (clean fallback, never worse).
+PARALLEL_DRAIN="${PARALLEL_DRAIN:-1}"
+
+# A complete DLE-EOT status reply is three bytes (status / offline cause /
+# paper); once we've collected that many the read may return early instead of
+# waiting out the fixed window (#1539).
+NEEDED_STATUS_BYTES=3
+
+# Sub-second poll primitive for the early-return reads. Prefer usleep (0.1s
+# granularity → a fast printer clears in <1s); fall back to whole-second sleep
+# on a BusyBox build without usleep (still correctly bounded by the cap, just
+# 1s granularity). Detected once here so the cap arithmetic stays consistent.
+if usleep 1000 2>/dev/null; then
+    POLL_CMD="usleep 100000"
+    POLLS_PER_SEC=10
+else
+    POLL_CMD="sleep 1"
+    POLLS_PER_SEC=1
+fi
+
+# Stream file $1 to printer $2:9100, holding the socket open until the DLE-EOT
+# reply lands in $4 (>= NEEDED_STATUS_BYTES bytes) or $3 seconds elapse —
+# whichever first. Early-return (#1539): only changes WHEN we stop waiting, not
+# WHAT we later conclude from the bytes. `timeout` is a hard safety net a few
+# seconds past the cap so a wedged nc can never hang the drain.
+send_and_wait_reply() {
+    _SEND_FILE="$1"; _IP="$2"; _CAP="$3"; _RESP="$4"
+    : > "$_RESP"
+    _MAX=$(( _CAP * POLLS_PER_SEC ))
+    [ "$_MAX" -lt 1 ] && _MAX=1
+    (
+        cat "$_SEND_FILE"
+        # Hold stdin (and thus the socket) open, polling for the reply. Break
+        # the instant the full status reply has arrived so nc gets EOF and
+        # closes early; otherwise fall through at the cap.
+        _n=0
+        while [ "$_n" -lt "$_MAX" ]; do
+            _b=$(wc -c < "$_RESP" 2>/dev/null | tr -d ' ')
+            { [ -n "$_b" ] && [ "$_b" -ge "$NEEDED_STATUS_BYTES" ]; } && break
+            $POLL_CMD
+            _n=$(( _n + 1 ))
+        done
+    ) | timeout $(( _CAP + 6 )) nc "$_IP" "$PRINTER_PORT" > "$_RESP" 2>/dev/null
+}
 
 # Add Google DNS if not present
 grep -q "8.8.8.8" /etc/resolv.conf || echo "nameserver 8.8.8.8" >> /etc/resolv.conf
@@ -251,8 +306,10 @@ process_job() {
         # empty connection a live ESC/POS printer always answers, even while
         # offline. This also avoids dumping the ticket into a jammed buffer,
         # which would print as a ghost ticket once paper is reloaded.
-        : > "$RESPFILE"
-        ( printf "$STATUS_QUERIES"; sleep 1 ) | timeout 8 nc "$JOB_PRINTER_IP" "$PRINTER_PORT" > "$RESPFILE" 2>/dev/null
+        QUERYFILE="/tmp/printquery_$JOB_ID.bin"
+        printf "$STATUS_QUERIES" > "$QUERYFILE"
+        send_and_wait_reply "$QUERYFILE" "$JOB_PRINTER_IP" "$PREFLIGHT_SECS" "$RESPFILE"
+        rm -f "$QUERYFILE"
 
         set -- $(read_status_bytes "$RESPFILE")
         # In the field, a printer that accepts nothing / answers nothing is
@@ -269,13 +326,13 @@ process_job() {
         fi
 
         # Printer is healthy — send the ticket with the same status queries
-        # appended as a confirmation pass. The trailing sleep keeps stdin (and
-        # thus the socket) open so the printer can drain its buffer and reply
-        # before nc closes — abrupt close right after send is how tickets used
-        # to vanish silently.
+        # appended as a confirmation pass. The read holds stdin (and thus the
+        # socket) open so the printer can drain its buffer and reply before nc
+        # closes — abrupt close right after send is how tickets used to vanish
+        # silently — but now returns the instant the reply lands (capped at
+        # DRAIN_SECS) instead of always waiting the full window.
         printf "$STATUS_QUERIES" >> "$TMPFILE"
-        : > "$RESPFILE"
-        ( cat "$TMPFILE"; sleep "$DRAIN_SECS" ) | timeout 15 nc "$JOB_PRINTER_IP" "$PRINTER_PORT" > "$RESPFILE" 2>/dev/null
+        send_and_wait_reply "$TMPFILE" "$JOB_PRINTER_IP" "$DRAIN_SECS" "$RESPFILE"
 
         set -- $(read_status_bytes "$RESPFILE")
         classify_status "${1:-}" "${2:-}" "${3:-}" \
@@ -357,37 +414,76 @@ while true; do
         JOBLIST="/tmp/jobs_$$.txt"
         echo "$RESPONSE" | grep -o '"id": *"[^"]*"' | sed 's/"id": *"\([^"]*\)"/\1/g' > "$JOBLIST"
 
-        # Process jobs SEQUENTIALLY. Two reasons:
-        # - Epson TM printers accept one connection on port 9100 at a time, so
-        #   parallel jobs to the same printer starve each other into timeouts.
-        # - There is deliberately no local "already processed" dedup: the server
-        #   flips jobs to status=printing on fetch, which is the real dedup, and
-        #   a requeued job ("Resend failed jobs") MUST print again even if this
-        #   spooler printed it before.
-        while IFS= read -r JOB_ID; do
-            if [ ! -z "$JOB_ID" ]; then
-                # Extract job data (camelCase field names for crouton-sales, handle spaces in JSON)
-                PRINT_DATA=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$JOB_ID\"[^}]*\"printData\": *\"\([^\"]*\)\".*/\1/p")
-                JOB_PRINTER_IP=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$JOB_ID\"[^}]*\"printerIp\": *\"\([^\"]*\)\".*/\1/p")
+        # Group jobs by printer IP (#1539). Different printers drain in PARALLEL
+        # (one background worker each); jobs to the SAME printer stay in one
+        # group and drain SERIALLY — Epson TM accepts one :9100 connection at a
+        # time, so parallel jobs to one printer starve each other into timeouts.
+        # No local "already processed" dedup by design: the server flips jobs to
+        # status=printing on fetch (the real dedup), and a requeued job MUST
+        # print again.
+        GROUP_PREFIX="/tmp/pjgroup_$$"
+        GROUP_IPS="/tmp/pjips_$$.txt"
+        rm -f "$GROUP_PREFIX"_* "$GROUP_IPS" 2>/dev/null
+        : > "$GROUP_IPS"
 
-                if [ ! -z "$PRINT_DATA" ] && [ ! -z "$JOB_PRINTER_IP" ]; then
-                    echo "$(date '+%H:%M:%S') Processing job $JOB_ID to $JOB_PRINTER_IP"
-                    process_job "$JOB_ID" "$PRINT_DATA" "$JOB_PRINTER_IP"
-                else
-                    # We saw the id but couldn't parse its data (truncated
-                    # response?) — fail it so it doesn't sit at status=printing.
-                    echo "$(date '+%H:%M:%S') Job $JOB_ID: could not parse job data from poll response"
-                    report_fail "$JOB_ID" "Spooler could not parse job from poll response"
-                fi
+        while IFS= read -r JOB_ID; do
+            [ -z "$JOB_ID" ] && continue
+            JOB_PRINTER_IP=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$JOB_ID\"[^}]*\"printerIp\": *\"\([^\"]*\)\".*/\1/p")
+            if [ -z "$JOB_PRINTER_IP" ]; then
+                # No routable printer — fail fast so it doesn't sit at printing.
+                echo "$(date '+%H:%M:%S') Job $JOB_ID: could not parse printer IP from poll response"
+                report_fail "$JOB_ID" "Spooler could not parse job from poll response"
+                continue
             fi
+            SAFE_IP=$(echo "$JOB_PRINTER_IP" | tr -c '0-9A-Za-z' '_')
+            GF="${GROUP_PREFIX}_${SAFE_IP}"
+            # First job for this printer? Record the IP and remember its group
+            # file maps back to the real IP.
+            if [ ! -f "$GF" ]; then
+                echo "$JOB_PRINTER_IP $GF" >> "$GROUP_IPS"
+            fi
+            echo "$JOB_ID" >> "$GF"
         done < "$JOBLIST"
 
-        rm -f "$JOBLIST"
+        # Drain one printer's group serially: extract each job's payload and
+        # print it in order (single :9100 connection at a time).
+        drain_printer_group() {
+            _GIP="$1"; _GFILE="$2"
+            while IFS= read -r _JID; do
+                [ -z "$_JID" ] && continue
+                _PDATA=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$_JID\"[^}]*\"printData\": *\"\([^\"]*\)\".*/\1/p")
+                if [ -z "$_PDATA" ]; then
+                    echo "$(date '+%H:%M:%S') Job $_JID: could not parse job data from poll response"
+                    report_fail "$_JID" "Spooler could not parse job from poll response"
+                    continue
+                fi
+                echo "$(date '+%H:%M:%S') Processing job $_JID to $_GIP"
+                process_job "$_JID" "$_PDATA" "$_GIP"
+            done < "$_GFILE"
+        }
+
+        # Fan out one worker per printer. PARALLEL_DRAIN=0 forces the legacy
+        # fully-sequential path (clean fallback, never worse than before).
+        while IFS= read -r GLINE; do
+            [ -z "$GLINE" ] && continue
+            GIP=${GLINE%% *}
+            GFILE=${GLINE#* }
+            if [ "$PARALLEL_DRAIN" = "1" ]; then
+                drain_printer_group "$GIP" "$GFILE" &
+            else
+                drain_printer_group "$GIP" "$GFILE"
+            fi
+        done < "$GROUP_IPS"
+        # Wait for every printer's worker before the next poll (no-op when the
+        # drain ran sequentially).
+        wait
+
+        rm -f "$JOBLIST" "$GROUP_IPS" "$GROUP_PREFIX"_*
 
         # Short sleep when jobs found
         sleep 1
     else
-        # Longer sleep when no jobs
-        sleep 2
+        # Tighter idle poll (#1539) — cheap ~1s pickup win when no jobs pending.
+        sleep 1
     fi
 done

@@ -26,6 +26,11 @@ import { PRINT_TRANSPORT, getAllPrintTransports, shouldStampHeartbeat, transport
 
 const DEFAULT_PORT = 9100
 
+// A complete DLE-EOT status reply is three bytes (status / offline cause /
+// paper). Once we've collected that many we know all we can, so the read may
+// return immediately instead of waiting out the fixed hold window (#1539).
+export const NEEDED_STATUS_BYTES = 3
+
 // The three real-time status queries, answered in order:
 //   DLE EOT 1 (printer status), DLE EOT 2 (offline cause), DLE EOT 4 (paper).
 const STATUS_QUERIES = Uint8Array.from([0x10, 0x04, 0x01, 0x10, 0x04, 0x02, 0x10, 0x04, 0x04])
@@ -54,33 +59,56 @@ export function classifyStatus(bytes: number[], noResponseMsg: string): string {
 }
 
 /**
- * Open a TCP connection to the printer, write `payload`, hold the socket open
- * `holdMs` to collect the reply, then close. Returns the first 3 response bytes
- * (the DLE-EOT answers). `node:net` is imported here so the module stays
- * Workers-import-safe.
+ * Decide whether a status read may resolve now: true once the full DLE-EOT
+ * reply (`needed` bytes, default 3) has arrived, else keep waiting. This is the
+ * early-return lever (#1539) — a fast printer answers in <1s and we proceed at
+ * once instead of waiting out the fixed hold window. It only changes *when* we
+ * stop waiting; the time cap stays the caller's `holdMs`, and what we conclude
+ * from the bytes (paper-out/offline) is unchanged.
+ */
+export function shouldResolveStatusRead(bytesReceived: number, needed: number = NEEDED_STATUS_BYTES): boolean {
+  return bytesReceived >= needed
+}
+
+/**
+ * Open a TCP connection to the printer, write `payload`, then return the first
+ * 3 response bytes (the DLE-EOT answers). Resolves the instant the full reply
+ * has arrived (`shouldResolveStatusRead`), capped at `holdMs` so a slow /
+ * silent printer still bounds the wait exactly as before. `node:net` is
+ * imported here so the module stays Workers-import-safe.
  */
 async function exchange(host: string, port: number, payload: Uint8Array, holdMs: number): Promise<number[]> {
   const net = await import('node:net')
   return new Promise<number[]>((resolve) => {
     const chunks: Buffer[] = []
+    let received = 0
     let settled = false
+    let holdTimer: ReturnType<typeof setTimeout> | undefined
     const socket = net.createConnection({ host, port })
 
     const finish = () => {
       if (settled) return
       settled = true
+      if (holdTimer) clearTimeout(holdTimer)
       try { socket.destroy() }
       catch { /* already closed */ }
-      resolve(Array.from(Buffer.concat(chunks).subarray(0, 3)))
+      resolve(Array.from(Buffer.concat(chunks).subarray(0, NEEDED_STATUS_BYTES)))
     }
 
     socket.setTimeout(CONNECT_TIMEOUT_MS)
     socket.on('timeout', finish)
     socket.on('error', finish)
-    socket.on('data', d => chunks.push(d as Buffer))
+    socket.on('data', (d) => {
+      chunks.push(d as Buffer)
+      received += (d as Buffer).length
+      // Early-return: proceed the moment the full status reply is in.
+      if (shouldResolveStatusRead(received)) finish()
+    })
     socket.on('connect', () => {
       socket.write(Buffer.from(payload))
-      setTimeout(finish, holdMs)
+      // holdMs is the CAP, not a fixed wait — finish() is idempotent so an
+      // early data-driven resolve simply cancels this timer.
+      holdTimer = setTimeout(finish, holdMs)
     })
   })
 }
@@ -111,6 +139,27 @@ export async function printEscposJob(printData: string, printerIp: string, port 
   return { ok: true }
 }
 
+/**
+ * Group pending jobs by printer IP, preserving first-seen order — the
+ * parallelism lever (#1539). Each returned group is drained on its own worker
+ * so different printers print concurrently, but every job for a single printer
+ * stays in ONE group and is drained serially (Epson TM accepts one :9100
+ * connection at a time — parallelising within a printer garbles tickets).
+ *
+ * IP-less jobs (null / undefined / '') collapse into a single group so they
+ * stay serial and each fail on their own; they are never parallelised.
+ */
+export function groupJobsByPrinter<T extends { printerIp?: string | null }>(rows: T[]): T[][] {
+  const groups = new Map<string, T[]>()
+  for (const row of rows) {
+    const key = row.printerIp || ''
+    const existing = groups.get(key)
+    if (existing) existing.push(row)
+    else groups.set(key, [row])
+  }
+  return Array.from(groups.values())
+}
+
 export interface DrainOptions {
   /** Limit to one event; omitted ⇒ every event with pending thermal jobs. */
   eventId?: string
@@ -121,8 +170,9 @@ export interface DrainOptions {
 /**
  * Claim and print all pending `network-escpos` jobs (one tick). Claims by
  * flipping pending → printing (so a crash leaves them recoverable by
- * retry-failed, exactly like the spooler), then prints sequentially — Epson TM
- * printers accept one connection on :9100 at a time. Returns how many it
+ * retry-failed, exactly like the spooler), then drains printers in PARALLEL —
+ * one worker per printer IP (`groupJobsByPrinter`), serial within a printer
+ * since Epson TM accepts one :9100 connection at a time. Returns how many it
  * processed. Intended to be called on an interval by the Nitro plugin; callers
  * must not run two ticks concurrently.
  */
@@ -189,15 +239,33 @@ export async function drainPendingEscposJobs(db: any, opts: DrainOptions = {}): 
     .set({ status: PRINT_STATUS.PRINTING, updatedAt: new Date() })
     .where(inArray(printJobs.id, rows.map((r: any) => r.id)))
 
-  for (const r of rows as any[]) {
-    if (!r.printerIp) {
-      await failPrintJob(db, r.id, 'No printer IP configured')
-      continue
+  // Drain one printer's jobs strictly in order — Epson TM accepts a single
+  // :9100 connection at a time. Each job is self-guarded so a thrown DB/socket
+  // error fails just that job (recoverable via retry) and never derails the
+  // rest of the group.
+  const drainGroup = async (group: any[]) => {
+    for (const r of group) {
+      try {
+        if (!r.printerIp) {
+          await failPrintJob(db, r.id, 'No printer IP configured')
+          continue
+        }
+        const res = await printEscposJob(r.payload, r.printerIp, Number(r.printerPort) || DEFAULT_PORT)
+        if (res.ok) await completePrintJob(db, r.id)
+        else await failPrintJob(db, r.id, res.error || 'Print failed')
+      }
+      catch (err) {
+        try { await failPrintJob(db, r.id, err instanceof Error ? err.message : 'Drain error') }
+        catch { /* best effort — leave it PRINTING for retry-failed to recover */ }
+      }
     }
-    const res = await printEscposJob(r.payload, r.printerIp, Number(r.printerPort) || DEFAULT_PORT)
-    if (res.ok) await completePrintJob(db, r.id)
-    else await failPrintJob(db, r.id, res.error || 'Print failed')
   }
+
+  // Different printers drain concurrently; jobs to the same printer stay serial
+  // within their group. allSettled so one printer's failure can never reject
+  // the batch — worst case this is exactly the old sequential behaviour.
+  const groups = groupJobsByPrinter(rows as any[])
+  await Promise.allSettled(groups.map(drainGroup))
 
   return { processed: rows.length }
 }
