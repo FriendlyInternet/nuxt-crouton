@@ -345,10 +345,11 @@ const overflowItems = computed(() => {
         @confirm="emit('delete')"
       />
 
-      <!-- Save -->
+      <!-- Save — the toolbar's primary action, so it's a solid (filled) button,
+           not the muted soft variant the secondary actions use. -->
       <UButton
         type="submit"
-        variant="soft"
+        variant="solid"
         color="primary"
         size="xs"
         icon="i-lucide-save"
