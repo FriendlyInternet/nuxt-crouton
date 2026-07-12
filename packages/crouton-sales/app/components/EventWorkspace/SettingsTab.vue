@@ -789,17 +789,15 @@ function helperExpiry(value: string): string {
          the destructive button stays disabled until the event name is typed
          exactly, since this can't be undone. -->
     <UModal v-model:open="deleteOrdersOpen">
-      <template #header>
-        <div class="flex items-center gap-2.5">
-          <span class="flex size-8 items-center justify-center rounded-lg bg-error/10 text-error">
-            <UIcon name="i-lucide-alert-triangle" class="size-5" />
-          </span>
-          <span class="text-lg font-semibold">{{ t('sales.workspace.deleteAllOrdersTitle', 'Delete all orders?') }}</span>
-        </div>
-      </template>
+      <template #content="{ close }">
+        <div class="p-6 space-y-4">
+          <div class="flex items-center gap-2.5">
+            <span class="flex size-8 items-center justify-center rounded-lg bg-error/10 text-error">
+              <UIcon name="i-lucide-alert-triangle" class="size-5" />
+            </span>
+            <span class="text-lg font-semibold">{{ t('sales.workspace.deleteAllOrdersTitle', 'Delete all orders?') }}</span>
+          </div>
 
-      <template #body>
-        <div class="space-y-4">
           <p class="text-sm text-muted">
             {{ t('sales.workspace.deleteAllOrdersWarning', {
               params: { event: event.title },
@@ -820,23 +818,21 @@ function helperExpiry(value: string): string {
               @keydown.enter="deleteAllOrders"
             />
           </UFormField>
-        </div>
-      </template>
 
-      <template #footer="{ close }">
-        <div class="flex justify-end gap-2 w-full">
-          <UButton color="neutral" variant="ghost" @click="close">
-            {{ t('sales.common.cancel') }}
-          </UButton>
-          <UButton
-            color="error"
-            icon="i-lucide-trash-2"
-            :loading="deletingOrders"
-            :disabled="!canDeleteOrders"
-            @click="deleteAllOrders"
-          >
-            {{ t('sales.workspace.deleteAllOrdersConfirm', 'Delete all orders') }}
-          </UButton>
+          <div class="flex justify-end gap-2 w-full">
+            <UButton color="neutral" variant="ghost" @click="close">
+              {{ t('sales.common.cancel') }}
+            </UButton>
+            <UButton
+              color="error"
+              icon="i-lucide-trash-2"
+              :loading="deletingOrders"
+              :disabled="!canDeleteOrders"
+              @click="deleteAllOrders"
+            >
+              {{ t('sales.workspace.deleteAllOrdersConfirm', 'Delete all orders') }}
+            </UButton>
+          </div>
         </div>
       </template>
     </UModal>
