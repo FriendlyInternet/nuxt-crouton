@@ -40,6 +40,19 @@ const pin = ref('')
 const name = ref('')
 const errorMessage = ref<string | null>(null)
 
+// The event scope is the sales helper PIN — a fixed 4-digit numeric code the
+// POS panel already renders as a UPinInput (#1480). Match it here so the same
+// PIN entered through a scoped CMS page looks the same. Every other scope
+// (booking guest, arbitrary page code) isn't guaranteed numeric/fixed-length,
+// so it keeps the plain password input. (#1529)
+const isPinScope = computed(() => props.scope.resourceType === 'event')
+// UPinInput binds an array (one digit per cell); keep the joined string as the
+// source of truth so unlock()/canSubmit stay unchanged (same proxy as Pos/Panel.vue).
+const pinCells = computed<number[]>({
+  get: () => pin.value.split('').map(Number),
+  set: cells => { pin.value = cells.join('') }
+})
+
 const pending = computed(() => scopedAccess.isLoading.value)
 const nameMissing = computed(() => !!props.scope.nameRequired && !name.value.trim())
 const canSubmit = computed(() => !!pin.value.trim() && !nameMissing.value)
@@ -99,7 +112,17 @@ async function unlock() {
           autocomplete="off"
           :autofocus="!!scope.nameRequired"
         />
+        <UPinInput
+          v-if="isPinScope"
+          v-model="pinCells"
+          :length="4"
+          type="number"
+          mask
+          size="lg"
+          :aria-label="t('pages.scopedGate.pinPlaceholder', 'Access code')"
+        />
         <UInput
+          v-else
           v-model="pin"
           :placeholder="t('pages.scopedGate.pinPlaceholder', 'Access code')"
           icon="i-lucide-key-round"
