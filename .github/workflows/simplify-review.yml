@@ -96,9 +96,11 @@ jobs:
                found nothing — the diff reads clean.
 
             2. **Write `simplify-verdict.json`** at the repo root, exactly:
-               `{"highest":"<none|note|warning>","warning":N,"note":N}`
-               where `highest` is the most severe finding's level (🟡→warning, 🔵→note, or `none`).
-               This is the machine signal the outage-check reads — always write it, even for a
+               `{"highest":"<none|note|warning>","warning":N,"note":N,"fixes":F}`
+               where `highest` is the most severe finding's level (🟡→warning, 🔵→note, or `none`),
+               and `fixes` is the TOTAL count of findings raised (`warning + note`; `0` for a clean
+               scan). `highest` is the signal the outage-check reads; `fixes` is the count the
+               accountability scoreboard's quality lane reads (#1584) — always write both, even for a
                clean scan.
 
             Do NOT edit any `apps/`/`packages/` code (quick scan is report-only; `--fix` is a
@@ -108,6 +110,32 @@ jobs:
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
       - uses: ./.github/actions/loop-station-trace
         if: always()
+      # Feed the accountability scoreboard's QUALITY lane (#1584, engine from #1570/#1578).
+      # /simplify is a cleanup on CORRECT code, not a defect — so it captures with
+      # `--class quality`: any reported cleanup (verdict `fixes > 0`) becomes a low-severity
+      # candidate in the SEPARATE quality lane (author `Qual +1`, never their defect Net/Rate).
+      # Same shape as the frontend-review / a11y / red-team capture steps (#1578). The candidate
+      # is an artifact; the main-context rollup (loop-station-findings.yml) confirms it on the
+      # durable PR-merge fact (merged → the simplification was accepted) and commits — a
+      # PR-branch run never writes findings.jsonl. report-only: `continue-on-error` so a missing
+      # script (before #1578 lands) or any hiccup never turns the advisory /simplify job red.
+      - name: Capture finding candidate
+        if: always()
+        continue-on-error: true
+        run: |
+          node scripts/eval-ledger/capture-finding.mjs \
+            --gate simplify --class quality \
+            --verdict simplify-verdict.json \
+            --pr ${{ github.event.pull_request.number }} \
+            --author_ref https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }} \
+            --out finding-candidate.json || true
+      - name: Upload finding candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loop-station-finding-${{ github.run_id }}
+          path: finding-candidate.json
+          if-no-files-found: ignore
       # Fail-open must be VISIBLE (#1037): when no verdict exists, classify why (billing /
       # max-turns / auth / silent no-write) and emit a warning annotation, so a dead agent
       # can't be mistaken for a clean scan. (This check never FAILS, but a silent no-write
