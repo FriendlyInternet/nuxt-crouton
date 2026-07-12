@@ -20,6 +20,8 @@ declare module 'nitropack' {
 
     'crouton:auth:email': (payload: CroutonAuthEmailPayload) => void | Promise<void>
 
+    'crouton:auth:email:result': (payload: CroutonAuthEmailResultPayload) => void | Promise<void>
+
     'crouton:scoped-access:before-redeem': (payload: ScopedAccessBeforeRedeemPayload) => void | Promise<void>
   }
 }
@@ -38,6 +40,22 @@ export interface ScopedAccessBeforeRedeemPayload {
   resourceType: string
   resourceId: string
   credentialType: string
+}
+
+/**
+ * Payload for the crouton:auth:email:result Nitro hook.
+ *
+ * Emitted by the email sender (crouton-email) AFTER an actual send attempt, so
+ * the crouton-auth email logger can update the row it logged as `pending` to
+ * the true outcome (`sent` / `failed`). When no sender is installed the hook
+ * never fires and the row stays `pending` — an honest "never confirmed" signal
+ * rather than a false `sent`.
+ */
+export interface CroutonAuthEmailResultPayload {
+  to: string
+  type: 'verification' | 'password-reset' | 'invitation' | 'magic-link'
+  ok: boolean
+  error?: string
 }
 
 export type CroutonAuthEmailPayload = {
