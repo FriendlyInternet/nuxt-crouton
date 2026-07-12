@@ -54,7 +54,7 @@ onUnmounted(unhookMutation)
 <template>
   <div class="space-y-4">
     <!-- Exclude staff orders from the totals by default; toggle folds them in -->
-    <div class="flex items-center justify-end">
+    <div class="flex items-center justify-start">
       <USwitch
         v-model="includePersonnel"
         :label="t('sales.workspace.dataPanel.includePersonnel')"
