@@ -2,75 +2,39 @@
  * Helper-authenticated "my orders" list.
  *
  * Returns the orders the *active user* placed for this event, newest first,
- * each with its line items (product title + options joined) and a combined
- * print-status bucket. This is the volunteer/admin-facing counterpart of the
- * team-authed workspace "Bestellingen" pane (OrdersTab), which a helper token
- * can't reach — it powers the POS order-history slideover.
+ * each with its line items (product title + resolved option labels) and a
+ * combined print-status bucket. This is the volunteer/admin-facing counterpart
+ * of the team-authed workspace "Bestellingen" pane (OrdersTab), which a helper
+ * token can't reach — it powers the POS order-history slideover.
  *
  * "This person" is keyed on `salesOrders.owner` (the helper displayName stamped
  * at checkout, `orders/index.post.ts`), which is stable across logins — the
  * same key OrdersTab's helper filter uses. `createdBy` is the scoped-token id,
  * which rotates every login, so it can't identify a person across sessions.
+ *
+ * The auth preamble lives in `requireScopedEvent` and the payload assembly in
+ * the pure, unit-tested `shapeMyOrders` — this handler is just the queries.
  */
 import { eq, and, inArray, desc } from 'drizzle-orm'
-import { requireScopedAccessToResource } from '@fyit/crouton-auth/server/utils/scoped-access'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
+import { requireScopedEvent } from '../../../../utils/require-scoped-event'
+import {
+  shapeMyOrders,
+  type MyOrderInput,
+  type MyOrderItemInput,
+  type MyOrderJobInput
+} from '../../../../utils/my-orders-shape'
 
 // Newest working set — a single person's orders over an event are bounded, but
 // a multi-day event could accumulate many; the slideover is a recent history,
 // not an archive.
 const MAX_ORDERS = 100
 
-interface OrderRow {
-  id: string
-  eventOrderNumber: number | null
-  clientName: string | null
-  overallRemarks: string | null
-  isPersonnel: boolean | null
-  status: string
-  createdAt: Date | string | number
-}
-
-interface ItemRow {
-  id: string
-  orderId: string
-  quantity: number | string
-  unitPrice: number
-  totalPrice: number
-  remarks: string | null
-  selectedOptions: unknown
-  productTitle: string | null
-  productOptions: unknown
-}
-
-interface JobRow {
-  refId: string | null
-  status: string | null
-  printMode: string | null
-}
-
-// Combined worst status across an order's jobs (status enum: '0'=pending,
-// '1'=printing, '2'=done, '9'=error). Mirrors OrdersTab's `ledFromStatuses`:
-// failed wins, then busy, then done; no jobs at all ⇒ 'none' (no LED).
-function bucketFromStatuses(statuses: string[]): 'none' | 'busy' | 'done' | 'failed' {
-  if (!statuses.length) return 'none'
-  if (statuses.includes('9')) return 'failed'
-  if (statuses.some(s => s === '0' || s === '1')) return 'busy'
-  return 'done'
-}
-
 export default defineEventHandler(async (event) => {
-  const eventId = getRouterParam(event, 'eventId')
-
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
-
-  const access = await requireScopedAccessToResource(event, 'event', eventId)
-  const db = useDB()
+  const { eventId, access, db } = await requireScopedEvent(event)
 
   const orders = await db
     .select({
@@ -88,15 +52,15 @@ export default defineEventHandler(async (event) => {
       eq(salesOrders.owner, access.displayName)
     ))
     .orderBy(desc(salesOrders.createdAt))
-    .limit(MAX_ORDERS) as OrderRow[]
+    .limit(MAX_ORDERS) as MyOrderInput[]
 
   if (!orders.length) return []
 
   const orderIds = orders.map(o => o.id)
 
-  // Items joined to their product (title + options), so the slideover can label
+  // Items joined to their product (title + options), so the shaper can label
   // lines and resolve option ids without a second round-trip.
-  const itemRows = await db
+  const items = await db
     .select({
       id: salesOrderitems.id,
       orderId: salesOrderitems.orderId,
@@ -110,11 +74,9 @@ export default defineEventHandler(async (event) => {
     })
     .from(salesOrderitems)
     .leftJoin(salesProducts, eq(salesOrderitems.productId, salesProducts.id))
-    .where(inArray(salesOrderitems.orderId, orderIds)) as ItemRow[]
+    .where(inArray(salesOrderitems.orderId, orderIds)) as MyOrderItemInput[]
 
-  // Print jobs for these orders (source='sales', refType='order'). Display (KDS)
-  // jobs are bumped on a screen, not printed — exclude them from the LED.
-  const jobRows = await db
+  const jobs = await db
     .select({
       refId: printJobs.refId,
       status: printJobs.status,
@@ -125,41 +87,7 @@ export default defineEventHandler(async (event) => {
       eq(printJobs.source, 'sales'),
       eq(printJobs.refType, 'order'),
       inArray(printJobs.refId, orderIds)
-    )) as JobRow[]
+    )) as MyOrderJobInput[]
 
-  const itemsByOrder = new Map<string, ItemRow[]>()
-  for (const item of itemRows) {
-    const list = itemsByOrder.get(item.orderId)
-    if (list) list.push(item)
-    else itemsByOrder.set(item.orderId, [item])
-  }
-
-  const jobStatusByOrder = new Map<string, string[]>()
-  for (const job of jobRows) {
-    if (!job.refId || job.printMode === 'display') continue
-    const list = jobStatusByOrder.get(job.refId)
-    const s = String(job.status ?? '0')
-    if (list) list.push(s)
-    else jobStatusByOrder.set(job.refId, [s])
-  }
-
-  return orders.map(order => ({
-    id: order.id,
-    eventOrderNumber: order.eventOrderNumber,
-    clientName: order.clientName,
-    overallRemarks: order.overallRemarks,
-    isPersonnel: order.isPersonnel,
-    status: order.status,
-    createdAt: order.createdAt,
-    printStatus: bucketFromStatuses(jobStatusByOrder.get(order.id) || []),
-    items: (itemsByOrder.get(order.id) || []).map(item => ({
-      id: item.id,
-      quantity: item.quantity,
-      unitPrice: item.unitPrice,
-      totalPrice: item.totalPrice,
-      remarks: item.remarks,
-      selectedOptions: item.selectedOptions,
-      product: { title: item.productTitle, options: item.productOptions }
-    }))
-  }))
+  return shapeMyOrders(orders, items, jobs)
 })

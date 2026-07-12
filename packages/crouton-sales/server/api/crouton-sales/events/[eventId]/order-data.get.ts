@@ -1,5 +1,5 @@
 import { and, eq } from 'drizzle-orm'
-import { requireScopedAccessToResource } from '@fyit/crouton-auth/server/utils/scoped-access'
+import { requireScopedEvent } from '../../../../utils/require-scoped-event'
 import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
 import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
 import { salesCategories } from '~~/layers/sales/collections/categories/server/database/schema'
@@ -8,15 +8,7 @@ import { salesLocations } from '~~/layers/sales/collections/locations/server/dat
 
 // Helper-authenticated endpoint: all data needed for POS order interface
 export default defineEventHandler(async (event) => {
-  const eventId = getRouterParam(event, 'eventId')
-
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
-
-  const access = await requireScopedAccessToResource(event, 'event', eventId)
-
-  const db = useDB()
+  const { eventId, access, db } = await requireScopedEvent(event)
 
   const [salesEvent] = await db
     .select()

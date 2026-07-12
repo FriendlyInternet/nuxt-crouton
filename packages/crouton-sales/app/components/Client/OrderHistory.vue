@@ -24,14 +24,15 @@ const { t } = useT()
 const { token } = useHelperAuth()
 const { format: formatPrice } = useSalesCurrency(() => props.currency)
 
+// Server-shaped by shapeMyOrders: items already carry a resolved productTitle +
+// optionLabels, and the order its own total — no client-side assembly.
 interface HistoryItem {
   id: string
   quantity: number | string
-  unitPrice: number
   totalPrice: number
   remarks?: string | null
-  selectedOptions?: Record<string, unknown> | null
-  product?: { title?: string | null, options?: Array<{ id?: string, label?: string }> | null } | null
+  productTitle?: string | null
+  optionLabels: string[]
 }
 
 interface HistoryOrder {
@@ -43,6 +44,7 @@ interface HistoryOrder {
   status: string
   createdAt: string | number
   printStatus: 'none' | 'busy' | 'done' | 'failed'
+  total: number
   items: HistoryItem[]
 }
 
@@ -119,27 +121,12 @@ function orderTime(value: string | number): string {
     : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })
 }
 
-function orderTotal(order: HistoryOrder): number {
-  return order.items.reduce((sum, i) => sum + (Number(i.totalPrice) || 0), 0)
-}
-
-// Selected options are stored as option ids — resolve to labels via the joined
-// product's options array (one line per option), same as the workspace OrderItems.
-function optionLabels(item: HistoryItem): string[] {
-  const sel = item.selectedOptions
-  if (!sel) return []
-  const ids = Array.isArray(sel)
-    ? sel
-    : typeof sel === 'object'
-      ? Object.values(sel)
-      : [sel]
-  const productOptions = item.product?.options || []
-  return ids
-    .filter((id): id is string => Boolean(id))
-    .map(id => productOptions.find(o => o?.id === id)?.label || String(id))
-}
 </script>
 
+<!-- Vue template: inherent v-if/v-for branching (load/error/empty states + order
+     rows × expand × item/option loops), not unit-testable; mirrors the baselined
+     workspace OrdersTab/OrderItems templates. -->
+<!-- fallow-ignore-next-line complexity -->
 <template>
   <div class="flex flex-col h-full min-h-0">
     <header class="flex items-center gap-2 px-4 h-14 border-b border-default shrink-0">
@@ -207,7 +194,7 @@ function optionLabels(item: HistoryItem): string[] {
                   {{ orderTime(order.createdAt) }}
                 </p>
               </div>
-              <span class="shrink-0 tabular-nums text-sm text-muted">{{ formatPrice(orderTotal(order)) }}</span>
+              <span class="shrink-0 tabular-nums text-sm text-muted">{{ formatPrice(order.total) }}</span>
               <UTooltip v-if="order.printStatus !== 'none'" :text="ledLabel(order.printStatus)">
                 <span class="block size-2.5 rounded-full shrink-0 transition-colors" :class="ledClass(order.printStatus)" />
               </UTooltip>
@@ -228,8 +215,8 @@ function optionLabels(item: HistoryItem): string[] {
                 <li v-for="item in order.items" :key="item.id" class="flex items-start gap-3 py-2 text-sm">
                   <span class="shrink-0 tabular-nums font-medium text-muted w-8">{{ item.quantity }}×</span>
                   <div class="min-w-0 flex-1">
-                    <span class="font-medium">{{ item.product?.title || t('sales.orders.unknownProduct') }}</span>
-                    <p v-for="(label, i) in optionLabels(item)" :key="i" class="text-xs text-muted truncate">
+                    <span class="font-medium">{{ item.productTitle || t('sales.orders.unknownProduct') }}</span>
+                    <p v-for="(label, i) in item.optionLabels" :key="i" class="text-xs text-muted truncate">
                       {{ label }}
                     </p>
                     <p v-if="item.remarks" class="text-xs text-warning truncate">{{ item.remarks }}</p>
@@ -239,7 +226,7 @@ function optionLabels(item: HistoryItem): string[] {
               </ul>
               <div class="flex items-center justify-between border-t border-default mt-2 pt-2 text-sm font-semibold">
                 <span>{{ t('sales.orders.total') }}</span>
-                <span class="tabular-nums">{{ formatPrice(orderTotal(order)) }}</span>
+                <span class="tabular-nums">{{ formatPrice(order.total) }}</span>
               </div>
             </template>
           </div>

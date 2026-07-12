@@ -24,6 +24,8 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `app/components/Pos/` | Order management (OrdersList) |
 | `app/components/Settings/` | Print settings modals (opt-in) |
 | `server/utils/team-event.ts` | `requireTeamEvent(event)` — shared guard for `teams/[id]/events/[eventId]/*` endpoints: membership + event-ownership in one call (400/404). Extracted in #1324 to kill the per-endpoint copies; new event-scoped endpoints start here |
+| `server/utils/require-scoped-event.ts` | `requireScopedEvent(event)` — the **helper-token** analog of `requireTeamEvent`: validates `:eventId`, requires a scoped-access token for that event, returns `{ eventId, access, db }`. Used by the helper-authed `events/[eventId]/*` endpoints (`order-data`, `orders` POST, `my-orders`); extracted to kill the same preamble clone group the fallow audit flags |
+| `server/utils/my-orders-shape.ts` | Pure assembly for the `my-orders` endpoint — `shapeMyOrders(orders, items, jobs)` groups items per order, resolves option ids → labels (`resolveOptionLabels`), sums the order total, and buckets the combined print status (`bucketFromStatuses`: failed > busy > done, display jobs excluded). No DB/Nitro deps → unit-tested (`test/my-orders-shape.test.ts`) |
 | `server/utils/sync-outbox.ts` | Pi-side capture for the D1 live mirror (#176) — `recordOutboxEvents()` + `isCloudSyncEnabled()`; gated by `CROUTON_SALES_CLOUD_SYNC` |
 | `server/utils/sync-ingest.ts` | Cloud-side apply (#178) — `applyOutboxEvents()` idempotent upsert by nanoid |
 | `server/utils/cloud-sync-auth.ts` | Fail-closed `x-sync-key` auth for the ingest (#178) |
