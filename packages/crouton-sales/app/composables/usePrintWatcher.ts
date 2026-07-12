@@ -54,12 +54,8 @@ export interface UsePrintWatcherOptions {
 export function usePrintWatcher(options: UsePrintWatcherOptions = {}) {
   const { apiBasePath = '/api/crouton-sales/events' } = options
 
-  // Same reasoning as usePosOrder: the scoped-access-token cookie is shared
-  // with other scoped flows and may carry a token for a different resource —
-  // always send the helper token explicitly, the header wins server-side.
-  const { token: helperToken } = useHelperAuth()
-  const helperHeaders = (): Record<string, string> =>
-    helperToken.value ? { 'x-scoped-token': helperToken.value } : {}
+  // Always send the helper token explicitly (see useHelperHeaders for why).
+  const { helperHeaders } = useHelperHeaders()
 
   const watched = ref<WatchedOrder[]>([])
   const timers = new Map<string, ReturnType<typeof setInterval>>()
