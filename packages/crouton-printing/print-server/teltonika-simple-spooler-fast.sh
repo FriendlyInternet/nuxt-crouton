@@ -48,17 +48,17 @@ TICKET_EVERY="${TICKET_EVERY:-1800}"
 # behavior (complete as soon as the TCP send succeeds) for printers that don't
 # answer DLE EOT.
 STATUS_CHECK="${STATUS_CHECK:-1}"
-# Seconds to hold the socket open after sending — lets the printer drain its
-# receive buffer and answer the status queries on the same connection. With the
-# early-return read (#1539) this is now a CAP, not a fixed wait: a printer that
-# answers sooner is confirmed sooner; a slow one still gets up to DRAIN_SECS.
-DRAIN_SECS="${DRAIN_SECS:-2}"
-# Pre-flight status-read CAP (seconds). Same early-return semantics as
-# DRAIN_SECS: a fast printer clears in a fraction of this; a slow one gets the
-# full window. Raise it (e.g. 3) for a printer on a weak link without slowing a
-# fast one — the read returns on first reply regardless. Default matches the
-# historical fixed pre-flight wait so behaviour is unchanged unless overridden.
-PREFLIGHT_SECS="${PREFLIGHT_SECS:-1}"
+# Post-send status-read CAP in seconds (#1539) — NOT a fixed wait. With the
+# early-return read a printer that answers sooner is confirmed sooner, so this
+# is sized for the SLOWEST printer, not the old fixed-wait value: the known slow
+# printer (Bar) can take ~3s to answer DLE-EOT over its weak link. A fast printer
+# clears in a fraction of this; a slow one gets up to the cap.
+DRAIN_SECS="${DRAIN_SECS:-3}"
+# Pre-flight status-read CAP (seconds) — same early-return semantics as
+# DRAIN_SECS. Sized for the slowest printer (~3s): a fast printer clears in a
+# fraction of this; a slow one gets the full window; the read returns on first
+# reply regardless, so a larger cap never slows a fast printer.
+PREFLIGHT_SECS="${PREFLIGHT_SECS:-3}"
 # Parallel per-printer drain (#1539). 1 (default): different printers drain
 # concurrently (one background worker per printer IP), jobs to the SAME printer
 # stay strictly serial (Epson TM = one :9100 connection at a time). Set to 0 to

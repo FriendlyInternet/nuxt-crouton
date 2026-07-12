@@ -34,11 +34,14 @@ export const NEEDED_STATUS_BYTES = 3
 // The three real-time status queries, answered in order:
 //   DLE EOT 1 (printer status), DLE EOT 2 (offline cause), DLE EOT 4 (paper).
 const STATUS_QUERIES = Uint8Array.from([0x10, 0x04, 0x01, 0x10, 0x04, 0x02, 0x10, 0x04, 0x04])
-// Hold the socket open after writing so the printer can drain its buffer and
-// answer the status queries on the same connection (mirrors the spooler's
-// DRAIN_SECS; pre-flight is a smaller window — an idle printer replies at once).
-const DRAIN_MS = 2000
-const PREFLIGHT_HOLD_MS = 1200
+// CAPS, not fixed waits (#1539): with the early-return read in `exchange` a
+// printer that answers sooner is confirmed sooner, so these must be sized for
+// the SLOWEST printer, not the old fixed-wait value — the known slow printer
+// (Bar) can take ~3s to answer DLE-EOT over its weak link. A fast printer still
+// clears in a fraction of this; a slow one gets up to the cap. Kept in step
+// with the spooler's DRAIN_SECS / PREFLIGHT_SECS defaults (both 3s).
+const DRAIN_MS = 3000
+const PREFLIGHT_HOLD_MS = 3000
 const CONNECT_TIMEOUT_MS = 8000
 
 /**
