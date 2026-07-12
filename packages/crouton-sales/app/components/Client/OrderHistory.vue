@@ -123,10 +123,10 @@ function orderTime(value: string | number): string {
 
 </script>
 
-<!-- Vue template: inherent v-if/v-for branching (load/error/empty states + order
-     rows × expand × item/option loops), not unit-testable; mirrors the baselined
-     workspace OrdersTab/OrderItems templates. -->
-<!-- fallow-ignore-next-line complexity -->
+<!-- Template complexity is inherent v-if/v-for branching (load/error/empty states
+     + order rows × expand × item/option loops) and not unit-testable; a packages/*
+     .vue can't meet fallow's maxCrap 30, so this is baselined in
+     .fallow-health-baseline.json exactly like the sibling OrdersTab/OrderItems. -->
 <template>
   <div class="flex flex-col h-full min-h-0">
     <header class="flex items-center gap-2 px-4 h-14 border-b border-default shrink-0">
