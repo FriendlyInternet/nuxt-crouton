@@ -72,11 +72,22 @@ const REQUIRED_STR = ['ts', 'gate']
  * @param {any} rec
  */
 export function validate(rec) {
-  const errors = []
   if (rec == null || typeof rec !== 'object') {
     return { ok: false, errors: ['record is not an object'] }
   }
 
+  const errors = []
+  checkRawFields(rec, errors)
+  const withDefaults = applyDefaults(rec)
+  checkEnums(withDefaults, errors)
+  checkAttribution(withDefaults, errors)
+
+  if (errors.length) return { ok: false, errors }
+  return { ok: true, record: withDefaults }
+}
+
+/** Required non-empty strings + a parseable timestamp, read off the RAW record. */
+function checkRawFields(rec, errors) {
   for (const k of REQUIRED_STR) {
     if (typeof rec[k] !== 'string' || rec[k].length === 0) {
       errors.push(`"${k}" is required and must be a non-empty string`)
@@ -85,8 +96,11 @@ export function validate(rec) {
   if (typeof rec.ts === 'string' && Number.isNaN(Date.parse(rec.ts))) {
     errors.push(`"ts" is not a parseable ISO-8601 date: ${rec.ts}`)
   }
+}
 
-  const withDefaults = {
+/** Fill every optional field with its default; `escaped` normalizes to a strict boolean. */
+function applyDefaults(rec) {
+  return {
     ts: rec.ts,
     gate: rec.gate,
     severity: rec.severity ?? 'medium',
@@ -100,20 +114,22 @@ export function validate(rec) {
     finding_ref: rec.finding_ref ?? null,
     notes: rec.notes ?? null,
   }
+}
 
+/** Every enum-typed field must hold one of its allowed values. */
+function checkEnums(withDefaults, errors) {
   for (const k of ['severity', 'status', 'confirmed_via', 'class']) {
     if (!ENUMS[k].includes(withDefaults[k])) {
       errors.push(`"${k}" must be one of ${JSON.stringify(ENUMS[k])} (got ${JSON.stringify(withDefaults[k])})`)
     }
   }
+}
 
-  // An attributable finding needs SOMETHING to blame — a ledger ref or a flow.
+/** A confirmed, caught finding needs SOMETHING to blame — a ledger ref or a flow. */
+function checkAttribution(withDefaults, errors) {
   if (withDefaults.status === 'confirmed' && !withDefaults.author_ref && !withDefaults.author_flow && !withDefaults.escaped) {
     errors.push('a confirmed, caught finding needs "author_ref" or "author_flow" to attribute the −w')
   }
-
-  if (errors.length) return { ok: false, errors }
-  return { ok: true, record: withDefaults }
 }
 
 /** @param {FindingRecord} f — is this finding one that moves the board? */
