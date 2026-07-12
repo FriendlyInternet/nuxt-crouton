@@ -289,6 +289,12 @@
       "all": "Alles",
       "title": "Categorieën"
     },
+    "orderHistory": {
+      "title": "Mijn bestellingen",
+      "loading": "Je bestellingen laden…",
+      "empty": "Je hebt nog geen bestellingen geplaatst.",
+      "loadError": "Kan je bestellingen niet laden"
+    },
     "orders": {
       "title": "Bestellingen",
       "new": "Nieuwe Bestelling",

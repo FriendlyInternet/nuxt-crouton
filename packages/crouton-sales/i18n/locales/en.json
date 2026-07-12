@@ -289,6 +289,12 @@
       "all": "All",
       "title": "Categories"
     },
+    "orderHistory": {
+      "title": "My orders",
+      "loading": "Loading your orders…",
+      "empty": "You haven't placed any orders yet.",
+      "loadError": "Could not load your orders"
+    },
     "orders": {
       "title": "Orders",
       "new": "New Order",
