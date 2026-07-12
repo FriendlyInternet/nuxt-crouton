@@ -676,17 +676,6 @@
         "revokeSuccess": "Routeur découplé — il imprimera un nouveau ticket de couplage",
         "revokeError": "Impossible de découpler le routeur"
       }
-    },
-    "voice": {
-      "start": "Dicter une commande",
-      "stop": "Arrêter l'écoute",
-      "listening": "À l'écoute…",
-      "notUnderstood": "Non compris",
-      "error": "La reconnaissance vocale a échoué",
-      "errorDenied": "Autorisez l'accès au micro pour commander à la voix",
-      "errorMic": "Aucun microphone trouvé",
-      "errorNetwork": "Reconnaissance vocale injoignable — vérifiez la connexion",
-      "errorLang": "Cette langue de reconnaissance n'est pas prise en charge"
     }
   }
 }
