@@ -114,6 +114,9 @@ importers:
       '@fyit/crouton-core':
         specifier: workspace:*
         version: link:../../packages/crouton-core
+      '@fyit/crouton-email':
+        specifier: workspace:*
+        version: link:../../packages/crouton-email
       '@fyit/crouton-i18n':
         specifier: workspace:*
         version: link:../../packages/crouton-i18n

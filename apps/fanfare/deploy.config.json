@@ -1,12 +1,13 @@
 {
   "stagingUrl": "https://kassa.pmcp.dev",
   "productionUrl": "https://kassa.friendlyinter.net",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-email @fyit/crouton",
   "watchPaths": [
     "apps/fanfare/**",
     "packages/crouton/**",
     "packages/crouton-core/**",
     "packages/crouton-auth/**",
+    "packages/crouton-email/**",
     "packages/crouton-i18n/**",
     "packages/crouton-charts/**",
     "packages/crouton-pages/**",

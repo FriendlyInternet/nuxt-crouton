@@ -19,6 +19,12 @@ export default defineNuxtConfig({
   devServer: { port: 3007 },
   extends: [
     '@fyit/crouton-core',
+    // Email sender (Resend) — provides the crouton:auth:email listener that
+    // actually delivers team invites / verification mail. Without this layer the
+    // hook fires and gets logged, but nothing sends (fanfare had no sender at
+    // all before this). API key comes from the NUXT_EMAIL_RESEND_API_KEY worker
+    // secret; from/brand are configured below.
+    '@fyit/crouton-email',
     '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-charts',
@@ -91,6 +97,13 @@ export default defineNuxtConfig({
       printApiKey: '1234',
       cloudSyncSecret: '',
       print: { enabled: true }
+    },
+    // Transactional email (crouton-email → Resend). The API key is injected at
+    // runtime from the NUXT_EMAIL_RESEND_API_KEY worker secret; the sender is a
+    // verified Resend domain (messages.friendlyinter.net).
+    email: {
+      from: 'noreply@messages.friendlyinter.net',
+      fromName: 'Fanfare'
     }
   },
 
