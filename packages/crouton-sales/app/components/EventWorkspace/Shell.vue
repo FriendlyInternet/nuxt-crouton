@@ -471,7 +471,7 @@ const kassaHeightStyle = computed(() =>
                 </template>
               </Suspense>
             </div>
-            <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-4 py-3">
+            <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-3 py-3">
               <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
               <UButton :loading="settingsSaving" :disabled="!settingsDirty" @click="settingsTab?.save()">
                 {{ t('sales.common.save') }}
@@ -692,7 +692,7 @@ const kassaHeightStyle = computed(() =>
               </template>
             </Suspense>
           </div>
-          <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-4 py-3">
+          <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-3 py-3">
             <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
             <UButton :loading="settingsSaving" :disabled="!settingsDirty" @click="settingsTab?.save()">
               {{ t('sales.common.save') }}
