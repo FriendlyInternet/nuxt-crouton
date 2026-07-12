@@ -56,9 +56,12 @@ export function useVoiceOrder<T extends VoiceOrderProduct>(options: UseVoiceOrde
   const lastResult = ref<VoiceOrderParseResult<T> | null>(null)
   /** The last recognition error code (raw), for diagnostics/console — stays
    * set until the next start(). */
-  const errorCode = computed<VoiceOrderErrorCode | undefined>(
-    () => speech.error.value?.error as VoiceOrderErrorCode | undefined
-  )
+  const errorCode = computed<VoiceOrderErrorCode | undefined>(() => {
+    // speech.error is Error | SpeechRecognitionErrorEvent — only the recognition
+    // event carries a `.error` code; narrow before reading it.
+    const err = speech.error.value
+    return (err && 'error' in err ? err.error : undefined) as VoiceOrderErrorCode | undefined
+  })
 
   watch(speech.isFinal, (final) => {
     if (!final) return
