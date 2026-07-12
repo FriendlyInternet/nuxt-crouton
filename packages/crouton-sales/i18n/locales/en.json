@@ -570,7 +570,9 @@
         "button": "Data",
         "title": "Data",
         "revenueChart": "Revenue by day",
-        "productMatrix": "Sales per product × day"
+        "productMatrix": "Sales per product × day",
+        "includePersonnel": "Include staff orders",
+        "personnelChart": "Staff orders"
       },
       "launcher": {
         "ordersDesc": "All orders for this event — status, tickets, reprints",

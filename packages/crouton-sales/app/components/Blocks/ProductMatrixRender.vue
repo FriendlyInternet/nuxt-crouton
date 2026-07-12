@@ -28,6 +28,8 @@ interface Matrix {
 interface SalesProductMatrixAttrs {
   eventScope?: string
   measure?: 'units' | 'revenue'
+  /** Personnel (staff) order filter: exclude / only / all (default all). */
+  personnel?: 'all' | 'exclude' | 'only'
   title?: string
 }
 
@@ -46,9 +48,12 @@ async function load() {
   pending.value = true
   error.value = null
   try {
+    const query: Record<string, string> = {}
+    if (props.attrs.eventScope) query.eventId = props.attrs.eventScope
+    if (props.attrs.personnel) query.personnel = props.attrs.personnel
     matrix.value = await $fetch<Matrix>(
       `/api/crouton-sales/teams/${toValue(teamId)}/charts/product-day-matrix`,
-      { query: props.attrs.eventScope ? { eventId: props.attrs.eventScope } : {} }
+      { query }
     )
   } catch (e: any) {
     error.value = e?.data?.message || e?.statusMessage || 'Failed to load table data'
@@ -58,7 +63,7 @@ async function load() {
 }
 
 onMounted(load)
-watch(() => props.attrs.eventScope, load)
+watch(() => [props.attrs.eventScope, props.attrs.personnel], load)
 
 // Live beside the kassa (Data pane): checkout emits the salesOrders mutation
 // hook, so a fresh order re-pivots the table — otherwise it only loaded on
