@@ -5,6 +5,7 @@ const props = defineProps<{ board: Accountability }>()
 
 const authors = computed(() => props.board.authors ?? [])
 const gates = computed(() => props.board.gates ?? [])
+const qualityGates = computed(() => props.board.qualityGates ?? [])
 const sign = (n: number) => (n > 0 ? `+${n}` : `${n}`)
 const netClass = (n: number) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero')
 </script>
@@ -22,7 +23,7 @@ const netClass = (n: number) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero')
       <div class="acc__col">
         <div class="acc__ch">👷 Authors <span class="acc__chsub">worst-first · defect-rate</span></div>
         <table class="acc__table">
-          <thead><tr><th>Flow</th><th class="num">Net</th><th class="num">Def</th><th class="num">Clean</th><th class="num">Rate</th></tr></thead>
+          <thead><tr><th>Flow</th><th class="num">Net</th><th class="num">Def</th><th class="num">Clean</th><th class="num">Rate</th><th class="num" title="Quality-lane fixes (e.g. /simplify) — does NOT affect Net/Rate">Qual</th></tr></thead>
           <tbody>
             <tr v-for="a in authors" :key="a.agent">
               <td class="acc__name">{{ a.agent }}</td>
@@ -30,8 +31,9 @@ const netClass = (n: number) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero')
               <td class="num">{{ a.defects }}</td>
               <td class="num">{{ a.clean }}</td>
               <td class="num">{{ Math.round(a.rate * 100) }}%</td>
+              <td class="num acc__qual">{{ a.qualityFixes || 0 }}</td>
             </tr>
-            <tr v-if="!authors.length"><td colspan="5" class="acc__empty">No authored runs recorded yet.</td></tr>
+            <tr v-if="!authors.length"><td colspan="6" class="acc__empty">No authored runs recorded yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -48,10 +50,25 @@ const netClass = (n: number) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero')
               <td class="num">{{ g.catches }}</td>
               <td class="num">{{ g.falsePositives }}</td>
             </tr>
-            <tr v-if="!gates.length"><td colspan="4" class="acc__empty">No findings recorded yet.</td></tr>
+            <tr v-if="!gates.length"><td colspan="4" class="acc__empty">No defect findings recorded yet.</td></tr>
           </tbody>
         </table>
       </div>
+    </div>
+
+    <!-- quality lane: separate + low-weight, never mixed into the defect board -->
+    <div v-if="qualityGates.length" class="acc__quality">
+      <div class="acc__ch">🧹 Quality gates <span class="acc__chsub">separate low-weight lane · cleanups on correct code</span></div>
+      <table class="acc__table acc__qtable">
+        <thead><tr><th>Gate</th><th class="num">Net</th><th class="num">Fixes</th></tr></thead>
+        <tbody>
+          <tr v-for="g in qualityGates" :key="g.agent">
+            <td class="acc__name">{{ g.agent }}</td>
+            <td class="num"><span class="pill" :class="netClass(g.net)">{{ sign(g.net) }}</span></td>
+            <td class="num">{{ g.fixes }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <details class="acc__guide">
@@ -77,6 +94,7 @@ const netClass = (n: number) => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero')
           <li><strong>🔎 Gate · Net</strong> — <code>+w</code> per confirmed catch, <code>−w</code> per false&nbsp;positive. <em>Higher = earns its keep.</em></li>
           <li><strong>Catches</strong> — confirmed real defects this gate caught.</li>
           <li><strong>False +</strong> — findings a human/author overruled (each cost the gate <code>−w</code>; the author is untouched). <em>A noisy gate.</em></li>
+          <li><strong>🧹 Qual / Quality gates</strong> — a <em>separate low-weight lane</em> for cleanups on <em>correct</em> code (e.g. <code>/simplify</code>). It's tracked but <strong>never touches</strong> an author's defect Net/Rate — a verbose-but-correct diff is not a defect.</li>
         </ul>
         <p class="acc__read">
           <strong>Quick read for an agent:</strong> an author with a <em>negative Net and a high Rate</em> is the
@@ -125,5 +143,8 @@ td { padding: 7px 8px; border-bottom: 1px solid #1c1c1c; font-family: var(--mono
 .acc__cols2 li { font-size: 11px; color: var(--ko-text-muted); }
 .acc__cols2 em { color: var(--ko-text-label); font-style: normal; }
 .acc__read { border-left: 2px solid var(--ko-accent-blue); padding-left: 10px; color: var(--ko-text-muted); }
+.acc__qual { color: var(--ko-text-label); }
+.acc__quality { margin-top: 18px; padding-top: 12px; border-top: 1px dashed #1c1c1c; }
+.acc__qtable { max-width: 340px; }
 @media (max-width: 860px) { .acc__cols, .acc__cols2 { grid-template-columns: 1fr; } }
 </style>

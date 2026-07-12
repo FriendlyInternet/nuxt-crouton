@@ -130,15 +130,15 @@ try {
   const ledgerText = fs.existsSync(ledgerSrc) ? fs.readFileSync(ledgerSrc, 'utf8') : ''
   const { records: findings } = parseFindings(findingsText)
   const { records: ledger } = parseLedger(ledgerText)
-  const { authors, gates } = tally(findings, ledger)
+  const { authors, gates, qualityGates } = tally(findings, ledger)
   fs.writeFileSync(
     path.join(OUT, 'accountability.json'),
-    JSON.stringify({ authors, gates, findingCount: findings.length, generatedAt: new Date().toISOString() }, null, 2) + '\n'
+    JSON.stringify({ authors, gates, qualityGates, findingCount: findings.length, generatedAt: new Date().toISOString() }, null, 2) + '\n'
   )
   accountabilitySource = findings.length > 0 ? 'committed' : 'empty'
-  console.error(`[prepare-data] accountability.json ← findings×ledger (${findings.length} findings, ${authors.length} authors, ${gates.length} gates)`)
+  console.error(`[prepare-data] accountability.json ← findings×ledger (${findings.length} findings, ${authors.length} authors, ${gates.length} gates, ${qualityGates.length} quality gates)`)
 } catch (err) {
-  fs.writeFileSync(path.join(OUT, 'accountability.json'), JSON.stringify({ authors: [], gates: [], findingCount: 0 }) + '\n')
+  fs.writeFileSync(path.join(OUT, 'accountability.json'), JSON.stringify({ authors: [], gates: [], qualityGates: [], findingCount: 0 }) + '\n')
   console.error(`[prepare-data] accountability.json unavailable (${err.message}) → empty`)
 }
 

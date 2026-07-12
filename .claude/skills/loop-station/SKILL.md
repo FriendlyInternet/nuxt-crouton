@@ -245,6 +245,12 @@ opposing teams so we can see who ships clean and which gates actually earn their
 `w` is severity-weighted (`critical 5 / high 3 / medium 2 / low 1`). A find scores
 **only once confirmed** (fix merged / reverted / `lgtm`) — unconfirmed = `pending`.
 
+**Two lanes (`class`).** `defect` (default) = a correctness/security/a11y/convention failure —
+the main board. `quality` = a preference on *correct* code (a `/simplify` cleanup) — a
+**separate low-weight lane** that never touches an author's defect Net/Rate (so it can't
+punish verbose-but-correct code or drown the defect signal). A quality gate captures on any
+change (`capture-finding.mjs --gate simplify --class quality`), not just 🔴 critical.
+
 ## Files (live in `scripts/eval-ledger/` with the ledger they join)
 
 | file | role |

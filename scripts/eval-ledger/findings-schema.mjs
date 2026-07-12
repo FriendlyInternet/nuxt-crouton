@@ -56,6 +56,12 @@ export const ENUMS = {
   severity: ['critical', 'high', 'medium', 'low'],
   status: ['pending', 'confirmed', 'rejected'],
   confirmed_via: ['fix-merged', 'reverted', 'lgtm', 'incident', null],
+  // A finding's LANE. `defect` = a correctness/security/a11y/convention failure the author
+  // is culpable for (the main board). `quality` = a preference on correct code (e.g. a
+  // /simplify cleanup) — kept in a SEPARATE low-weight lane so it never dilutes the defect
+  // signal or punishes verbose-but-correct code. Default `defect` (back-compat: old lines
+  // have no class field). (#1570)
+  class: ['defect', 'quality'],
 }
 
 const REQUIRED_STR = ['ts', 'gate']
@@ -84,6 +90,7 @@ export function validate(rec) {
     ts: rec.ts,
     gate: rec.gate,
     severity: rec.severity ?? 'medium',
+    class: rec.class ?? 'defect',
     author_ref: rec.author_ref ?? null,
     author_flow: rec.author_flow ?? null,
     status: rec.status ?? 'pending',
@@ -94,7 +101,7 @@ export function validate(rec) {
     notes: rec.notes ?? null,
   }
 
-  for (const k of ['severity', 'status', 'confirmed_via']) {
+  for (const k of ['severity', 'status', 'confirmed_via', 'class']) {
     if (!ENUMS[k].includes(withDefaults[k])) {
       errors.push(`"${k}" must be one of ${JSON.stringify(ENUMS[k])} (got ${JSON.stringify(withDefaults[k])})`)
     }
@@ -159,7 +166,7 @@ export function transactionsFor(f) {
  * @param {FindingRecord} f
  */
 export function dedupKey(f) {
-  return [f.gate, f.author_ref || f.author_flow || '?', f.escaped ? 'escaped' : 'caught'].join('|')
+  return [f.class || 'defect', f.gate, f.author_ref || f.author_flow || '?', f.escaped ? 'escaped' : 'caught'].join('|')
 }
 
 /** Parse a JSONL string into validated findings, collecting parse/validation errors. */

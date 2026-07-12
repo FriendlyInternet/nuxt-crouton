@@ -23,35 +23,50 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 /**
  * The pure join — importable + unit-tested. Given validated findings + ledger
- * records, returns { authors, gates, transactions }.
- *   authors: [{ agent, net, defects, clean, rate }]  worst-first (rate desc, then net asc)
- *   gates:   [{ agent, net, catches, falsePositives }] best-first (net desc)
+ * records, returns { authors, gates, qualityGates, transactions }.
+ *   authors: [{ agent, net, defects, clean, rate, qualityFixes }]  worst-first (rate desc, then net asc)
+ *   gates:   [{ agent, net, catches, falsePositives }]  DEFECT gates, best-first (net desc)
+ *   qualityGates: [{ agent, net, fixes }]  the separate low-weight QUALITY lane (e.g. /simplify)
+ *
+ * Quality-class findings are kept OUT of the defect board (#1570): they never touch an
+ * author's defect Net/Rate or the clean-merge reward — a simplification isn't a defect.
+ * They only accrue a `qualityFixes` count per author + their own gate lane.
  * @param {import('./findings-schema.mjs').FindingRecord[]} findings
  * @param {import('./schema.mjs').LedgerRecord[]} ledger
  */
 export function tally(findings, ledger) {
-  const authors = new Map() // agent → { net, defects, clean }
-  const gates = new Map()   // agent → { net, catches, falsePositives }
-  const A = (a) => authors.get(a) || authors.set(a, { agent: a, net: 0, defects: 0, clean: 0 }).get(a)
+  const authors = new Map() // agent → { net, defects, clean, qualityFixes }
+  const gates = new Map()   // agent → { net, catches, falsePositives }  (defect lane)
+  const qGates = new Map()  // agent → { net, fixes }                    (quality lane)
+  const A = (a) => authors.get(a) || authors.set(a, { agent: a, net: 0, defects: 0, clean: 0, qualityFixes: 0 }).get(a)
   const G = (g) => gates.get(g) || gates.set(g, { agent: g, net: 0, catches: 0, falsePositives: 0 }).get(g)
+  const Q = (g) => qGates.get(g) || qGates.set(g, { agent: g, net: 0, fixes: 0 }).get(g)
 
   const transactions = []
-  // Author refs that carry a CONFIRMED defect — these runs don't earn the clean reward.
+  // Author refs that carry a CONFIRMED DEFECT — these runs don't earn the clean reward.
+  // A quality-class finding does NOT dirty a ref (correct code isn't a defect).
   const dirtyRefs = new Set()
 
   for (const f of findings) {
-    if (f.status === 'confirmed' && f.author_ref) dirtyRefs.add(f.author_ref)
+    const isQuality = f.class === 'quality'
+    if (!isQuality && f.status === 'confirmed' && f.author_ref) dirtyRefs.add(f.author_ref)
     for (const t of transactionsFor(f)) {
-      transactions.push({ ...t, ts: f.ts, gate: f.gate, severity: f.severity })
-      if (t.role === 'author') {
-        const a = A(t.agent)
-        a.net += t.delta
-        if (t.delta < 0) a.defects++
+      transactions.push({ ...t, ts: f.ts, gate: f.gate, severity: f.severity, class: f.class || 'defect' })
+      if (isQuality) {
+        // Quality lane: authors get a fix COUNT (not a net); the gate gets its own net.
+        if (t.role === 'author') { if (t.delta < 0) A(t.agent).qualityFixes++ }
+        else { const g = Q(t.agent); g.net += t.delta; if (t.delta > 0) g.fixes++ }
       } else {
-        const g = G(t.agent)
-        g.net += t.delta
-        if (t.delta > 0) g.catches++
-        else if (t.delta < 0) g.falsePositives++
+        if (t.role === 'author') {
+          const a = A(t.agent)
+          a.net += t.delta
+          if (t.delta < 0) a.defects++
+        } else {
+          const g = G(t.agent)
+          g.net += t.delta
+          if (t.delta > 0) g.catches++
+          else if (t.delta < 0) g.falsePositives++
+        }
       }
     }
   }
@@ -72,8 +87,10 @@ export function tally(findings, ledger) {
     .sort((x, y) => y.rate - x.rate || x.net - y.net || x.agent.localeCompare(y.agent))
   const gateRows = [...gates.values()]
     .sort((x, y) => y.net - x.net || y.catches - x.catches || x.agent.localeCompare(y.agent))
+  const qualityGateRows = [...qGates.values()]
+    .sort((x, y) => y.net - x.net || x.agent.localeCompare(y.agent))
 
-  return { authors: authorRows, gates: gateRows, transactions }
+  return { authors: authorRows, gates: gateRows, qualityGates: qualityGateRows, transactions }
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
@@ -92,11 +109,11 @@ if (isMain) {
   const { records: ledger, errors: lErr } = parseLedger(ledgerText)
   for (const e of [...fErr, ...lErr]) console.error(`⚠ ${e}`)
 
-  const { authors, gates } = tally(findings, ledger)
+  const { authors, gates, qualityGates } = tally(findings, ledger)
   const generated = new Date().toISOString()
 
   if (asJson) {
-    console.log(JSON.stringify({ generated, authors, gates }, null, 2))
+    console.log(JSON.stringify({ generated, authors, gates, qualityGates }, null, 2))
     process.exit(0)
   }
 
@@ -105,12 +122,19 @@ if (isMain) {
   if (asHtml) {
     const authorRows = authors.length
       ? authors.map((a) => `      <tr><td><code>${esc(a.agent)}</code></td><td class="n">${sign(a.net)}</td>` +
-          `<td class="n">${a.defects}</td><td class="n">${a.clean}</td><td class="n">${Math.round(a.rate * 100)}%</td></tr>`).join('\n')
-      : '      <tr><td colspan="5" class="empty">No authored runs recorded yet.</td></tr>'
+          `<td class="n">${a.defects}</td><td class="n">${a.clean}</td><td class="n">${Math.round(a.rate * 100)}%</td><td class="n">${a.qualityFixes || 0}</td></tr>`).join('\n')
+      : '      <tr><td colspan="6" class="empty">No authored runs recorded yet.</td></tr>'
     const gateRows = gates.length
       ? gates.map((g) => `      <tr><td><code>${esc(g.agent)}</code></td><td class="n">${sign(g.net)}</td>` +
           `<td class="n">${g.catches}</td><td class="n">${g.falsePositives}</td></tr>`).join('\n')
-      : '      <tr><td colspan="4" class="empty">No findings recorded yet.</td></tr>'
+      : '      <tr><td colspan="4" class="empty">No defect findings recorded yet.</td></tr>'
+    const qualitySection = qualityGates.length
+      ? `  <h2>🧹 Quality gates <span style="font-weight:400;color:#888">— separate low-weight lane</span></h2>
+  <table><thead><tr><th>Gate</th><th>Net</th><th>Fixes</th></tr></thead>
+    <tbody>
+${qualityGates.map((g) => `      <tr><td><code>${esc(g.agent)}</code></td><td class="n">${sign(g.net)}</td><td class="n">${g.fixes}</td></tr>`).join('\n')}
+    </tbody></table>`
+      : ''
     console.log(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>Accountability scoreboard</title>
 <style>
@@ -125,7 +149,7 @@ if (isMain) {
   <p>Every confirmed defect is severity-weighted: <strong>−w to the author, +w to the gate that caught it</strong>.
      A clean merge earns its author +1. From <code>findings.jsonl</code> × <code>eval-ledger.jsonl</code>.</p>
   <h2>👷 Authors <span style="font-weight:400;color:#888">— worst-first by defect-rate</span></h2>
-  <table><thead><tr><th>Author flow</th><th>Net</th><th>Defects</th><th>Clean</th><th>Rate</th></tr></thead>
+  <table><thead><tr><th>Author flow</th><th>Net</th><th>Defects</th><th>Clean</th><th>Rate</th><th>Qual</th></tr></thead>
     <tbody>
 ${authorRows}
     </tbody></table>
@@ -134,7 +158,8 @@ ${authorRows}
     <tbody>
 ${gateRows}
     </tbody></table>
-  <p class="meta">Generated ${esc(generated)}. A finding scores only once confirmed; a rejected (false-positive) finding debits the gate.</p>
+${qualitySection}
+  <p class="meta">Generated ${esc(generated)}. A finding scores only once confirmed; a rejected (false-positive) finding debits the gate. <code>Qual</code> = quality-lane fixes (e.g. /simplify), a separate low-weight signal — it does not affect Net/Rate.</p>
 </body></html>`)
     process.exit(0)
   }
@@ -152,19 +177,29 @@ ${gateRows}
   if (!authors.length) {
     lines.push('_No authored runs recorded yet._')
   } else {
-    lines.push('| Author flow | Net | Defects | Clean | Rate |')
-    lines.push('|---|--:|--:|--:|--:|')
-    for (const a of authors) lines.push(`| \`${a.agent}\` | ${sign(a.net)} | ${a.defects} | ${a.clean} | ${Math.round(a.rate * 100)}% |`)
+    lines.push('| Author flow | Net | Defects | Clean | Rate | Qual |')
+    lines.push('|---|--:|--:|--:|--:|--:|')
+    for (const a of authors) lines.push(`| \`${a.agent}\` | ${sign(a.net)} | ${a.defects} | ${a.clean} | ${Math.round(a.rate * 100)}% | ${a.qualityFixes || 0} |`)
+    lines.push('')
+    lines.push('_`Qual` = quality-lane fixes (e.g. `/simplify` cleanups) — a separate low-weight signal that does NOT affect Net/Rate._')
   }
   lines.push('')
   lines.push('## 🔎 Review gates — best-first by net catches')
   lines.push('')
   if (!gates.length) {
-    lines.push('_No findings recorded yet._')
+    lines.push('_No defect findings recorded yet._')
   } else {
     lines.push('| Gate | Net | Catches | False + |')
     lines.push('|---|--:|--:|--:|')
     for (const g of gates) lines.push(`| \`${g.agent}\` | ${sign(g.net)} | ${g.catches} | ${g.falsePositives} |`)
+  }
+  if (qualityGates.length) {
+    lines.push('')
+    lines.push('## 🧹 Quality gates — separate low-weight lane')
+    lines.push('')
+    lines.push('| Gate | Net | Fixes |')
+    lines.push('|---|--:|--:|')
+    for (const g of qualityGates) lines.push(`| \`${g.agent}\` | ${sign(g.net)} | ${g.fixes} |`)
   }
   console.log(lines.join('\n'))
 

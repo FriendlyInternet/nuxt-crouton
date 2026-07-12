@@ -186,3 +186,29 @@ test('resolveCandidates is idempotent against already-recorded findings', () => 
   assert.equal(toAppend.length, 0)
   assert.equal(outcomes[0].outcome, 'dup')
 })
+
+// ── quality lane (/simplify): separate, never dilutes the defect board (#1570) ─
+test('class defaults to defect and is enum-validated', () => {
+  assert.equal(validate({ ts: '2026-07-12T00:00:00Z', gate: 'code-review', status: 'pending' }).record.class, 'defect')
+  assert.equal(validate({ ts: '2026-07-12T00:00:00Z', gate: 'x', status: 'pending', class: 'bogus' }).ok, false)
+})
+
+test('dedupKey separates a quality finding from a defect one on the same gate+ref', () => {
+  const base = { gate: 'g', author_ref: 'r', escaped: false }
+  assert.notEqual(dedupKey({ ...base, class: 'defect' }), dedupKey({ ...base, class: 'quality' }))
+})
+
+test('quality findings stay OUT of the defect board and clean-merge math', () => {
+  const q = finding({ class: 'quality', gate: 'simplify', severity: 'low', author_flow: 'task-worker', author_ref: 'https://x/pull/7' })
+  const { authors, gates, qualityGates } = tally([q], [ledgerRow({ flow: 'task-worker', ref: 'https://x/pull/7' })])
+  const a = authors.find((x) => x.agent === 'task-worker')
+  // Quality did NOT count as a defect: net is the +1 clean reward, defects 0, but qualityFixes 1.
+  assert.equal(a.defects, 0)
+  assert.equal(a.net, 1)
+  assert.equal(a.clean, 1)
+  assert.equal(a.qualityFixes, 1)
+  // /simplify shows in the quality lane, never the defect gates board.
+  assert.equal(gates.find((g) => g.agent === 'simplify'), undefined)
+  assert.equal(qualityGates.find((g) => g.agent === 'simplify').net, SEVERITY_WEIGHT.low)
+  assert.equal(qualityGates.find((g) => g.agent === 'simplify').fixes, 1)
+})
