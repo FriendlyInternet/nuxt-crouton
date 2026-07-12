@@ -174,56 +174,6 @@
         </template>
       </UAlert>
 
-      <!-- Talk-to-order (#1429): segments the mic heard but couldn't match to
-           a product. Never silently dropped — the helper reads what was
-           misheard and taps it in manually. -->
-      <UAlert
-        v-if="(voiceUnmatched?.length ?? 0) > 0"
-        color="warning"
-        icon="i-lucide-mic-off"
-        :title="t('sales.voice.notUnderstood')"
-        close
-        @update:open="$emit('dismissVoiceUnmatched')"
-      >
-        <template #description>
-          <span v-for="(segment, i) in voiceUnmatched" :key="i" class="block text-xs">
-            "{{ segment }}"
-          </span>
-        </template>
-      </UAlert>
-
-      <!-- Live transcript while the mic listens — the helper sees what the
-           mic hears before it lands in the cart. -->
-      <p
-        v-if="voiceListening"
-        class="flex items-center gap-1.5 text-xs text-muted truncate"
-      >
-        <UIcon name="i-lucide-mic" class="shrink-0 text-error animate-pulse" />
-        {{ voiceTranscript?.trim() || t('sales.voice.listening') }}
-      </p>
-
-      <!-- Short-lived confirmation once listening ends: what the mic understood
-           and the lines it created, so the helper can trust the connection.
-           Fades out on its own (parent auto-clears after a few seconds). -->
-      <Transition
-        enter-active-class="transition duration-200 ease-out"
-        enter-from-class="opacity-0 -translate-y-1"
-        leave-active-class="transition duration-300 ease-in"
-        leave-to-class="opacity-0"
-      >
-        <div
-          v-if="voiceHeard && !voiceListening"
-          class="flex items-start gap-1.5 rounded-md bg-primary/10 px-2 py-1.5 text-xs text-primary"
-        >
-          <UIcon name="i-lucide-ear" class="mt-0.5 shrink-0" />
-          <span class="min-w-0">
-            <span class="text-muted">"{{ voiceHeard.transcript }}"</span>
-            <span aria-hidden="true"> → </span>
-            <span class="font-medium">{{ voiceHeard.summary }}</span>
-          </span>
-        </div>
-      </Transition>
-
       <!-- The order button is the print feedback: it spins while the kitchen
            tickets print and confirms green when every ticket is done. A new
            order always wins — items in the cart yield the button back to
@@ -272,17 +222,6 @@ const props = defineProps<{
   printState?: PrintButtonState
   /** Orders with failed/stuck tickets — rendered as dismissible warning rows. */
   printWarnings?: WatchedOrder[]
-  /** Talk-to-order (#1429): browser has speech recognition — shows the mic. */
-  voiceSupported?: boolean
-  /** The mic is live (pulses the button, shows the transcript line). */
-  voiceListening?: boolean
-  /** Interim transcript while listening. */
-  voiceTranscript?: string
-  /** Utterance segments that matched no product — dismissible warning rows. */
-  voiceUnmatched?: string[]
-  /** Short-lived "heard → created" confirmation after a spoken order; the
-   * parent auto-clears it after a few seconds. */
-  voiceHeard?: { transcript: string, summary: string } | null
 }>()
 
 // Locations represented by at least one cart item — a remark only prints if its
@@ -365,8 +304,6 @@ const emit = defineEmits<{
   updateLocationRemark: [locationId: string, value: string]
   'update:isPersonnel': [value: boolean]
   dismissPrintWarning: [orderId: string]
-  toggleVoice: []
-  dismissVoiceUnmatched: []
 }>()
 
 // Button state machine. Items in the cart always win (the volunteer is

@@ -137,18 +137,11 @@
               :submitting="isCheckingOut"
               :print-state="printButtonState"
               :print-warnings="printWarnings"
-              :voice-supported="voiceSupported"
-              :voice-listening="voiceListening"
-              :voice-transcript="voiceTranscript ?? undefined"
-              :voice-unmatched="voiceUnmatched"
-              :voice-heard="voiceHeard"
               @update-quantity="updateQuantity"
               @checkout="handleCheckout"
               @update-location-remark="setLocationRemark"
               @update:is-personnel="isPersonnel = $event"
               @dismiss-print-warning="dismissPrintWarning"
-              @toggle-voice="toggleVoice"
-              @dismiss-voice-unmatched="voiceUnmatched = []"
             />
           </div>
         </div>
@@ -217,18 +210,11 @@
                   :submitting="isCheckingOut"
                   :print-state="printButtonState"
                   :print-warnings="printWarnings"
-                  :voice-supported="voiceSupported"
-                  :voice-listening="voiceListening"
-                  :voice-transcript="voiceTranscript ?? undefined"
-                  :voice-unmatched="voiceUnmatched"
-                  :voice-heard="voiceHeard"
                   @update-quantity="updateQuantity"
                   @checkout="handleCheckout"
                   @update-location-remark="setLocationRemark"
                   @update:is-personnel="isPersonnel = $event"
                   @dismiss-print-warning="dismissPrintWarning"
-                  @toggle-voice="toggleVoice"
-                  @dismiss-voice-unmatched="voiceUnmatched = []"
                 />
               </div>
             </div>
@@ -320,52 +306,6 @@ const {
   watchOrder,
   dismiss: dismissPrintWarning
 } = usePrintWatcher()
-
-// Talk-to-order (#1429): one utterance per mic press, parsed against the
-// event's products; lines land in the cart like taps (addToCart merges), the
-// helper reviews and checks out normally. Never auto-submits. Segments the
-// parser couldn't match confidently surface as a dismissible warning in the
-// cart — misheard speech is shown, not guessed.
-const voiceUnmatched = ref<string[]>([])
-// A short-lived "heard → created" confirmation so the helper can see the link
-// between what the mic understood and the lines it added. Auto-clears after a
-// few seconds (refAutoReset), or immediately when the mic starts again.
-const voiceHeard = refAutoReset<{ transcript: string, summary: string } | null>(null, 6000)
-const {
-  isSupported: voiceSupported,
-  isListening: voiceListening,
-  transcript: voiceTranscript,
-  toggle: toggleVoice
-} = useVoiceOrder({
-  products: () => (products.value ?? []) as SalesProduct[],
-  onOrder({ lines, unmatched }) {
-    for (const line of lines) {
-      for (let i = 0; i < line.quantity; i++) addToCart(line.product)
-    }
-    voiceUnmatched.value = unmatched
-    // Only show the confirmation when something actually landed in the cart —
-    // a fully-unmatched utterance is covered by the "Niet begrepen" banner.
-    if (lines.length) {
-      voiceHeard.value = {
-        transcript: voiceTranscript.value?.trim() ?? '',
-        summary: lines.map(l => `${l.quantity}× ${l.product.title}`).join(', ')
-      }
-    }
-  },
-  // Reason-specific failure messages — a blanket "mislukt" hides whether the
-  // helper needs to grant the mic, is on an unsupported browser, or the engine
-  // is unreachable. Benign pauses never reach here (composable swallows them).
-  onError(code) {
-    const key = ({
-      'not-allowed': 'sales.voice.errorDenied',
-      'service-not-allowed': 'sales.voice.errorDenied',
-      'audio-capture': 'sales.voice.errorMic',
-      'network': 'sales.voice.errorNetwork',
-      'language-not-supported': 'sales.voice.errorLang'
-    } as Record<string, string>)[code] ?? 'sales.voice.error'
-    notify.error(t(key))
-  }
-})
 
 // Set the event ID
 selectedEventId.value = props.eventId
