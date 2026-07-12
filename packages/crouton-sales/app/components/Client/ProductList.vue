@@ -288,12 +288,22 @@ watch(() => props.products, (v) => { orderedProducts.value = [...(v || [])] }, {
 
 const orderOf = (p: SalesProduct) => p.order ?? 0
 
-function emitNewOrder() {
+// Emit the changed rows (index-as-order) of an already-reordered list.
+function emitNewOrder(list: SalesProduct[]) {
   const updates: Array<{ id: string, order: number }> = []
-  orderedProducts.value.forEach((p, index) => {
+  list.forEach((p, index) => {
     if (orderOf(p) !== index) updates.push({ id: p.id, order: index })
   })
   if (updates.length) emit('reorder', updates)
+}
+
+// Apply SortableJS's move (oldIndex → newIndex) to a copy of the list.
+function withMove(list: SalesProduct[], from: number, to: number): SalesProduct[] {
+  const next = [...list]
+  const [moved] = next.splice(from, 1)
+  if (moved === undefined) return next
+  next.splice(to, 0, moved)
+  return next
 }
 
 // Editable is fixed for the life of this component instance — OrderInterface
@@ -305,13 +315,14 @@ if (import.meta.client && props.editable) {
     handle: '.drag-handle',
     ghostClass: 'opacity-50',
     chosenClass: 'bg-elevated',
-    // useSortable syncs the bound `orderedProducts` array on nextTick (async),
-    // so read it AFTER the tick — reading synchronously here sees the pre-drag
-    // order, diffs to zero changes, and the reorder never persists (#1550).
-    onEnd: async (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex === evt.newIndex) return
-      await nextTick()
-      emitNewOrder()
+    // Derive the new order from the drag event itself — SortableJS's
+    // oldIndex/newIndex are the source of truth. (Don't read the bound array
+    // here: useSortable syncs it on nextTick, so at this point it's still the
+    // pre-drag order — which is exactly why we apply the move to it, #1550.)
+    onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
+      const { oldIndex, newIndex } = evt
+      if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+      emitNewOrder(withMove(orderedProducts.value, oldIndex, newIndex))
     }
   })
 }

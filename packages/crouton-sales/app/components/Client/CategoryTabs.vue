@@ -303,12 +303,22 @@ const listEl = ref<HTMLElement | null>(null)
 
 const orderOf = (c: SalesCategory) => (c as any).displayOrder ?? 0
 
-function emitNewOrder() {
+// Emit the changed rows (index-as-order) of an already-reordered list.
+function emitNewOrder(list: SalesCategory[]) {
   const updates: Array<{ id: string, order: number }> = []
-  orderedCategories.value.forEach((c, index) => {
+  list.forEach((c, index) => {
     if (orderOf(c) !== index) updates.push({ id: c.id, order: index })
   })
   if (updates.length) emit('reorder', updates)
+}
+
+// Apply SortableJS's move (oldIndex → newIndex) to a copy of the list.
+function withMove(list: SalesCategory[], from: number, to: number): SalesCategory[] {
+  const next = [...list]
+  const [moved] = next.splice(from, 1)
+  if (moved === undefined) return next
+  next.splice(to, 0, moved)
+  return next
 }
 
 if (import.meta.client && props.editable) {
@@ -320,13 +330,14 @@ if (import.meta.client && props.editable) {
     draggable: '[role="tab"]',
     ghostClass: 'opacity-50',
     disabled: props.reorderPending,
-    // useSortable syncs the bound `orderedCategories` array on nextTick (async),
-    // so read it AFTER the tick — reading synchronously here sees the pre-drag
-    // order, diffs to zero changes, and the reorder never persists (#1550).
-    onEnd: async (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex === evt.newIndex) return
-      await nextTick()
-      emitNewOrder()
+    // Derive the new order from the drag event itself — SortableJS's
+    // oldIndex/newIndex are the source of truth. (Don't read the bound array
+    // here: useSortable syncs it on nextTick, so at this point it's still the
+    // pre-drag order — which is exactly why we apply the move to it, #1550.)
+    onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
+      const { oldIndex, newIndex } = evt
+      if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+      emitNewOrder(withMove(orderedCategories.value, oldIndex, newIndex))
     }
   })
   watch(() => props.reorderPending, (pending) => {

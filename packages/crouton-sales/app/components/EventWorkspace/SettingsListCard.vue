@@ -52,13 +52,22 @@ watch(() => props.rows, (v) => { ordered.value = [...(v || [])] }, { immediate: 
 
 const listEl = ref<HTMLElement | null>(null)
 
-async function persistOrder() {
+async function persistOrder(list: typeof ordered.value) {
   const field = props.orderField
   if (!field) return
-  const changed = ordered.value
+  const changed = list
     .map((row, index) => ({ row, index }))
     .filter(({ row, index }) => (row[field] ?? 0) !== index)
   await Promise.all(changed.map(({ row, index }) => update(row.id, { [field]: index })))
+}
+
+// Apply SortableJS's move (oldIndex → newIndex) to a copy of the list.
+function withMove(list: typeof ordered.value, from: number, to: number) {
+  const next = [...list]
+  const [moved] = next.splice(from, 1)
+  if (moved === undefined) return next
+  next.splice(to, 0, moved)
+  return next
 }
 
 if (import.meta.client && props.orderField) {
@@ -66,13 +75,14 @@ if (import.meta.client && props.orderField) {
     animation: 150,
     handle: '.drag-handle',
     ghostClass: 'opacity-50',
-    // useSortable syncs the bound `ordered` array on nextTick (async), so read
-    // it AFTER the tick — reading synchronously here sees the pre-drag order,
-    // diffs to zero changes, and the reorder never persists (#1550).
-    onEnd: async (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex === evt.newIndex) return
-      await nextTick()
-      persistOrder()
+    // Derive the new order from the drag event itself — SortableJS's
+    // oldIndex/newIndex are the source of truth. (Don't read the bound array
+    // here: useSortable syncs it on nextTick, so at this point it's still the
+    // pre-drag order — which is exactly why we apply the move to it, #1550.)
+    onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
+      const { oldIndex, newIndex } = evt
+      if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+      persistOrder(withMove(ordered.value, oldIndex, newIndex))
     }
   })
 }

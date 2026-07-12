@@ -52,28 +52,38 @@ const listEl = ref<HTMLElement | null>(null)
 // /reorder endpoint (order = index) instead of per-item PATCH.
 const { reorderSiblings, reordering } = useTreeMutation('salesProducts')
 
-async function persistOrder() {
+async function persistOrder(list: SalesProduct[]) {
   if (reordering.value) return
   const updates: Array<{ id: string, order: number }> = []
-  orderedProducts.value.forEach((p, index) => {
+  list.forEach((p, index) => {
     if (orderOf(p) !== index) updates.push({ id: p.id, order: index })
   })
   if (updates.length) await reorderSiblings(updates)
 }
 
-// useSortable mutates orderedProducts on drop, but only on nextTick (async),
-// so read it AFTER the tick — reading synchronously in onEnd sees the pre-drag
-// order, diffs to zero changes, and the reorder never persists (#1550).
+// Apply SortableJS's move (oldIndex → newIndex) to a copy of the list.
+function withMove(list: SalesProduct[], from: number, to: number): SalesProduct[] {
+  const next = [...list]
+  const [moved] = next.splice(from, 1)
+  if (moved === undefined) return next
+  next.splice(to, 0, moved)
+  return next
+}
+
 if (import.meta.client) {
   useSortable(listEl, orderedProducts, {
     animation: 150,
     handle: '.drag-handle',
     ghostClass: 'opacity-50',
     chosenClass: 'bg-elevated',
-    onEnd: async (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex === evt.newIndex) return
-      await nextTick()
-      persistOrder()
+    // Derive the new order from the drag event itself — SortableJS's
+    // oldIndex/newIndex are the source of truth. (Don't read the bound array
+    // here: useSortable syncs it on nextTick, so at this point it's still the
+    // pre-drag order — which is exactly why we apply the move to it, #1550.)
+    onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
+      const { oldIndex, newIndex } = evt
+      if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+      persistOrder(withMove(orderedProducts.value, oldIndex, newIndex))
     }
   })
 }
