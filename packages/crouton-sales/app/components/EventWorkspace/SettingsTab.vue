@@ -270,6 +270,18 @@ const sections = computed(() => [
 ])
 const activeSection = ref('event')
 
+// Tabbed (narrow slideover) reads as ONE continuous card: strip each section's
+// UCard chrome (border/ring/shadow/rounded/bg) so the fields flow under the tab
+// header instead of sitting in a nested bordered box (#1556 follow-up). The
+// event section also drops its now-redundant "Eventgegevens" title (the tab
+// already says Gegevens); printers/helpers keep their header (it carries actions).
+const flushCardUi = computed(() => props.tabbed
+  ? { root: 'border-0 ring-0 shadow-none rounded-none bg-transparent divide-y-0', body: 'px-0 py-2', header: 'px-0' }
+  : undefined)
+const eventCardUi = computed(() => props.tabbed
+  ? { root: 'border-0 ring-0 shadow-none rounded-none bg-transparent divide-y-0', body: 'px-0 py-2', header: 'hidden' }
+  : undefined)
+
 // Per-event print flow (#1324): which transport delivers this event's thermal
 // jobs — the venue device's in-process drainer, the router spooler, or nobody.
 // The setting lives in crouton-printing (print_transports); this is its authed
@@ -521,7 +533,7 @@ function helperExpiry(value: string): string {
 
     <!-- Tabbed mode: segmented strip picks the visible card (same styling as
          the Shell's narrow tab strip). -->
-    <div v-if="tabbed" class="flex-none flex items-center rounded-lg bg-elevated p-1 gap-1 overflow-x-auto m-3 mb-2">
+    <div v-if="tabbed" class="flex-none flex items-center rounded-lg bg-elevated p-1 gap-1 overflow-x-auto mx-3 mt-3 mb-1">
       <UButton
         v-for="s in sections"
         :key="s.key"
@@ -542,7 +554,7 @@ function helperExpiry(value: string): string {
          panel-wide save cover every tab. -->
     <div class="grid grid-cols-1 gap-4 items-start" :class="tabbed ? 'flex-1 overflow-y-auto min-h-0 px-3 pb-3' : 'lg:grid-cols-3'">
       <!-- Event details (inline editable) -->
-      <UCard v-show="!tabbed || activeSection === 'event'">
+      <UCard v-show="!tabbed || activeSection === 'event'" :ui="eventCardUi">
         <template #header>
           <h3 class="font-semibold">{{ t('sales.workspace.eventDetails') }}</h3>
         </template>
@@ -630,6 +642,7 @@ function helperExpiry(value: string): string {
       <!-- Printers: LED per row = last-known online state (checked on print). -->
       <SalesEventWorkspaceSettingsListCard
         v-show="!tabbed || activeSection === 'printers'"
+        :flush="tabbed"
         :title="t('sales.sidebar.printers')"
         collection="salesPrinters"
         :rows="printerRows"
@@ -717,7 +730,7 @@ function helperExpiry(value: string): string {
       </SalesEventWorkspaceSettingsListCard>
 
       <!-- Helpers: shared login PIN + active sessions (scoped tokens, not a collection) -->
-      <UCard v-show="!tabbed || activeSection === 'helpers'">
+      <UCard v-show="!tabbed || activeSection === 'helpers'" :ui="flushCardUi">
         <template #header>
           <div class="flex items-center justify-between">
             <h3 class="font-semibold">{{ t('sales.workspace.activeHelpers') }}</h3>

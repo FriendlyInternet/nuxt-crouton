@@ -29,6 +29,9 @@ const props = defineProps<{
   createData?: Record<string, any>
   /** Enable drag-reorder, persisting the visual index into this field. */
   orderField?: string
+  /** Strip the card chrome (border/ring/shadow/rounded/bg) so the card blends
+   *  into a parent single-card surface — used by the tabbed settings slideover. */
+  flush?: boolean
 }>()
 
 const { t } = useT()
@@ -71,7 +74,7 @@ if (import.meta.client && props.orderField) {
 </script>
 
 <template>
-  <UCard :ui="{ body: 'p-2 sm:p-3' }">
+  <UCard :ui="props.flush ? { root: 'border-0 ring-0 shadow-none rounded-none bg-transparent divide-y-0', body: 'px-0 py-2', header: 'px-0' } : { body: 'p-2 sm:p-3' }">
     <template #header>
       <div class="flex items-center justify-between gap-2">
         <h3 class="font-semibold">{{ title }}</h3>
