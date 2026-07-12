@@ -320,8 +320,13 @@ if (import.meta.client && props.editable) {
     draggable: '[role="tab"]',
     ghostClass: 'opacity-50',
     disabled: props.reorderPending,
-    onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex !== evt.newIndex) emitNewOrder()
+    // useSortable syncs the bound `orderedCategories` array on nextTick (async),
+    // so read it AFTER the tick — reading synchronously here sees the pre-drag
+    // order, diffs to zero changes, and the reorder never persists (#1550).
+    onEnd: async (evt: { oldIndex?: number, newIndex?: number }) => {
+      if (evt.oldIndex === evt.newIndex) return
+      await nextTick()
+      emitNewOrder()
     }
   })
   watch(() => props.reorderPending, (pending) => {
