@@ -165,16 +165,24 @@ export async function generateAndInsertPrintQueues(opts: GenerateInsertOptions):
     opts.locationRemarks
   )
 
-  // Enqueue each job into the generic print_jobs queue (crouton-printing). The
-  // printer transport details (ip/port/title/driver) are denormalized onto the
-  // job at enqueue time so the transport stays self-contained — look them up
-  // from the salesPrinter that produced the job. `printing:job:created` fires
-  // per insert, which the sales subscriber mirrors to the cloud-sync outbox.
+  // Enqueue this order's jobs into the generic print_jobs queue (crouton-printing).
+  // The printer transport details (ip/port/title/driver) are denormalized onto
+  // each job at enqueue time so the transport stays self-contained — look them
+  // up from the salesPrinter that produced the job.
+  //
+  // Batched into ONE insert (#1539): enqueuing sequentially made an order's
+  // tickets go `pending` a poll-interval apart, so the fast-polling spooler
+  // grabbed them one at a time and the per-printer fan-out never received >1
+  // job together (it can only parallelise jobs delivered in the same poll). A
+  // single multi-row insert makes every ticket pending at the same instant, so
+  // one poll hands the fan-out the whole order and different printers overlap.
+  // Contract preserved: enqueuePrintJobs still fires ONE `printing:job:created`
+  // hook per job (see crouton-printing), so the sales cloud-sync outbox mirror
+  // and order-status tracking are unchanged — only the timing differs.
   const printerById = new Map(printers.map((p: any) => [p.id, p]))
-  const queueIds: string[] = []
-  for (const job of jobs) {
+  const inputs = jobs.map((job: any) => {
     const printer: any = printerById.get(job.printerId)
-    const id = await enqueuePrintJob(db, {
+    return {
       source: 'sales',
       printerId: job.printerId,
       printerIp: printer?.ipAddress ?? null,
@@ -189,9 +197,8 @@ export async function generateAndInsertPrintQueues(opts: GenerateInsertOptions):
       refId: orderId,
       eventId,
       teamId
-    })
-    queueIds.push(id)
-  }
+    }
+  })
 
-  return queueIds
+  return await enqueuePrintJobs(db, inputs)
 }
