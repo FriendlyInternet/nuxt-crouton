@@ -63,16 +63,56 @@
             :aria-label="t('common.edit')"
             @click.stop="emit('edit', product.id)"
           />
-          <UButton
-            v-else-if="isExpandable(product)"
-            variant="ghost"
-            color="neutral"
-            size="md"
-            square
-            :icon="activeProductId === product.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-            class="group-hover/card:bg-accented/50 hover:bg-accented"
-            @click.stop="toggleProduct(product)"
-          />
+          <!-- Configurable product (options/remark): expand chevron, with a
+               count badge once any variant of it sits in the cart. Removing a
+               specific variant stays in the cart — the row can't tell the
+               variants apart, so it only reports the total. -->
+          <template v-else-if="isExpandable(product)">
+            <UBadge
+              v-if="quantityOf(product) > 0"
+              color="primary"
+              variant="soft"
+              size="sm"
+              class="tabular-nums"
+            >
+              <span :key="quantityOf(product)" class="animate-pop">{{ quantityOf(product) }}</span>
+            </UBadge>
+            <UButton
+              variant="ghost"
+              color="neutral"
+              size="md"
+              square
+              :icon="activeProductId === product.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+              class="group-hover/card:bg-accented/50 hover:bg-accented"
+              @click.stop="toggleProduct(product)"
+            />
+          </template>
+          <!-- Plain product already in the cart: the full cart stepper inline,
+               so it can be decremented/removed without opening the cart. A
+               plain product maps to exactly one cart line (no options/remark),
+               so −/qty/+ is unambiguous. -->
+          <UFieldGroup v-else-if="quantityOf(product) > 0" size="md">
+            <UButton
+              icon="i-lucide-minus"
+              color="neutral"
+              variant="soft"
+              square
+              :aria-label="t('sales.cart.remove', 'Remove one')"
+              @click.stop="emit('decrement', product)"
+            />
+            <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
+              <span :key="quantityOf(product)" class="animate-pop">{{ quantityOf(product) }}</span>
+            </UBadge>
+            <UButton
+              icon="i-lucide-plus"
+              color="neutral"
+              variant="soft"
+              square
+              :aria-label="t('sales.cart.add', 'Add one')"
+              @click.stop="addProduct(product)"
+            />
+          </UFieldGroup>
+          <!-- Plain product not yet in the cart: single add button. -->
           <UButton
             v-else
             variant="ghost"
@@ -101,22 +141,23 @@
         >
           <!-- Options -->
           <template v-if="hasOptions(product)">
-            <!-- Multi-select: checkboxes -->
-            <template v-if="isMultiSelect(product)">
-              <UCheckbox
-                v-for="option in getOptions(product)"
-                :key="option.id"
-                :model-value="isOptionSelected(product.id, option.id)"
-                @update:model-value="toggleOption(product.id, option.id)"
-              >
-                <template #label>
-                  <span class="flex items-center justify-between w-full">
-                    <span>{{ option.label }}</span>
-                    <span v-if="option.priceModifier > 0" class="text-xs text-muted ml-2">+{{ format(option.priceModifier) }}</span>
-                  </span>
-                </template>
-              </UCheckbox>
-            </template>
+            <!-- Multi-select: card-variant checkbox group (big tap targets,
+                 matches the single-select radio cards below). -->
+            <UCheckboxGroup
+              v-if="isMultiSelect(product)"
+              variant="card"
+              :model-value="selectedOptionIds.get(product.id) || []"
+              :items="getOptions(product).map(o => ({ label: o.label, value: o.id, priceModifier: o.priceModifier }))"
+              :ui="{ fieldset: 'gap-y-2', item: 'w-full', label: 'w-full' }"
+              @update:model-value="setMultiOptions(product.id, ($event as string[]))"
+            >
+              <template #label="{ item }">
+                <span class="flex items-center justify-between w-full">
+                  <span>{{ item.label }}</span>
+                  <span v-if="item.priceModifier > 0" class="text-xs text-muted ml-2">+{{ format(item.priceModifier) }}</span>
+                </span>
+              </template>
+            </UCheckboxGroup>
 
             <!-- Single-select with a required remark: pick one, then confirm
                  below. Card-variant radios — each option is a full tappable
@@ -216,14 +257,27 @@ const props = defineProps<{
   products: SalesProduct[]
   /** Admin POS: show a drag handle (reorder) and edit pencil on each card. */
   editable?: boolean
+  /**
+   * Total quantity currently in the cart per product id. Drives the inline
+   * stepper (plain products) and the count badge (products with options/remark).
+   */
+  quantities?: Record<string, number>
 }>()
 
 const emit = defineEmits<{
   select: [product: SalesProduct, selectedOption?: string | string[], remark?: string]
   edit: [productId: string]
+  /** Decrement the plain (no options/remark) cart line for this product. */
+  decrement: [product: SalesProduct]
   /** New visual order after a drop — only the rows whose index changed. */
   reorder: [updates: Array<{ id: string, order: number }>]
 }>()
+
+// Total quantity of this product across all its cart lines (all option/remark
+// variants). For a plain product that's its single line's quantity.
+function quantityOf(product: SalesProduct): number {
+  return props.quantities?.[product.id] ?? 0
+}
 
 const containerRef = ref<HTMLElement | null>(null)
 
@@ -292,19 +346,9 @@ function getOptions(product: SalesProduct): ProductOption[] {
   return (product.options || []) as ProductOption[]
 }
 
-function isOptionSelected(productId: string, optionId: string): boolean {
-  const selected = selectedOptionIds.value.get(productId)
-  return selected?.includes(optionId) ?? false
-}
-
-function toggleOption(productId: string, optionId: string) {
-  const current = selectedOptionIds.value.get(productId) || []
-  if (current.includes(optionId)) {
-    selectedOptionIds.value.set(productId, current.filter(id => id !== optionId))
-  }
-  else {
-    selectedOptionIds.value.set(productId, [...current, optionId])
-  }
+// Multi-select (checkbox group): the group emits the full selected-id array.
+function setMultiOptions(productId: string, ids: string[]) {
+  selectedOptionIds.value.set(productId, ids)
 }
 
 // Single-select (when a remark is required): pick exactly one option.
