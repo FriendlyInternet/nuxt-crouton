@@ -80,7 +80,7 @@ interface Props {
   publicUrl?: string | null
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   showClose: false,
   pageId: null,
   publicUrl: null,
@@ -99,6 +99,52 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useT()
+
+// Mobile overflow menu (shown below @lg): the secondary actions that are
+// individual buttons on wide screens collapse into a single "⋯" dropdown so the
+// toolbar stays one clean row on a phone. Status + Save + Close stay visible.
+// Derived bits are hoisted into their own small computeds so the item-builder
+// below stays a flat, low-branch assembler.
+const showAiAction = computed(() => props.isRegularPage && props.hasAi)
+const canDelete = computed(() => props.action === 'update' && !!props.pageId)
+const openTo = computed(() => (props.status === 'published' ? props.publicUrl ?? undefined : undefined))
+const visibilityLabel = computed(() => props.visibilityConfig[props.visibility]?.label ?? t('pages.visibility.public'))
+const visibilityIcon = computed(() => props.visibilityConfig[props.visibility]?.icon ?? 'i-lucide-globe')
+const visibilityChildren = computed(() =>
+  Object.entries(props.visibilityConfig).map(([value, cfg]) => ({
+    label: cfg.label,
+    icon: cfg.icon,
+    onSelect: () => emit('update:visibility', value)
+  }))
+)
+// Delete keeps a guard: a nested "Delete? → confirm" step, mirroring the
+// two-click CroutonConfirmButton used on wide screens.
+const deleteGroup = computed(() => [{
+  label: t('common.delete'),
+  icon: 'i-lucide-trash-2',
+  color: 'error',
+  children: [{
+    label: t('pages.editor.confirmDelete'),
+    icon: 'i-lucide-trash-2',
+    color: 'error',
+    onSelect: () => emit('delete')
+  }]
+}])
+
+const overflowItems = computed(() => {
+  const main: any[] = [
+    { label: t('pages.editor.preview'), icon: 'i-lucide-eye', onSelect: () => emit('show-preview') }
+  ]
+  if (props.publicUrl) {
+    main.push({ label: t('pages.editor.open'), icon: 'i-lucide-external-link', to: openTo.value, target: '_blank', disabled: props.status !== 'published' })
+  }
+  if (showAiAction.value) {
+    main.push({ label: t('pages.editor.generate'), icon: 'i-lucide-sparkles', onSelect: () => emit('show-ai-generator') })
+  }
+  main.push({ label: t('pages.editor.settings'), icon: 'i-lucide-settings', onSelect: () => emit('show-settings') })
+  main.push({ label: visibilityLabel.value, icon: visibilityIcon.value, children: visibilityChildren.value })
+  return canDelete.value ? [main, deleteGroup.value] : [main]
+})
 </script>
 
 <template>
@@ -154,7 +200,7 @@ const { t } = useT()
           variant="ghost"
           color="neutral"
           size="xs"
-          class="px-2 @4xl:px-3"
+          class="hidden @lg:inline-flex px-2 @4xl:px-3"
         >
           <UIcon
             :name="visibilityConfig[visibility]?.icon || 'i-lucide-globe'"
@@ -202,7 +248,7 @@ const { t } = useT()
           color="neutral"
           icon="i-lucide-settings"
           size="xs"
-          class="px-2 @4xl:px-3"
+          class="hidden @lg:inline-flex px-2 @4xl:px-3"
           @click="emit('show-settings')"
         >
           <span class="hidden @4xl:inline">{{ t('pages.editor.settings') }}</span>
@@ -214,6 +260,21 @@ const { t } = useT()
 
     <!-- Right group: AI, Preview, Open, Cancel/Delete/Save, Close -->
     <UFieldGroup>
+      <!-- Mobile overflow (below @lg): folds the secondary actions into one menu -->
+      <UDropdownMenu
+        :items="overflowItems"
+        :content="{ align: 'end' }"
+      >
+        <UButton
+          class="@lg:hidden"
+          variant="ghost"
+          color="neutral"
+          icon="i-lucide-ellipsis"
+          size="xs"
+          :aria-label="t('common.more', 'More')"
+        />
+      </UDropdownMenu>
+
       <!-- AI page generator (regular pages only, when crouton-ai is installed) -->
       <UTooltip v-if="isRegularPage && hasAi" :text="t('pages.editor.generateWithAI')" :delay-duration="0">
         <UButton
@@ -221,6 +282,7 @@ const { t } = useT()
           color="primary"
           icon="i-lucide-sparkles"
           size="xs"
+          class="hidden @lg:inline-flex"
           @click="emit('show-ai-generator')"
         >
           <span class="hidden @4xl:inline">{{ t('pages.editor.generate') }}</span>
@@ -234,6 +296,7 @@ const { t } = useT()
           color="neutral"
           icon="i-lucide-eye"
           size="xs"
+          class="hidden @lg:inline-flex"
           @click="emit('show-preview')"
         >
           <span class="hidden @4xl:inline">{{ t('pages.editor.preview') }}</span>
@@ -254,6 +317,7 @@ const { t } = useT()
           color="neutral"
           icon="i-lucide-external-link"
           size="xs"
+          class="hidden @lg:inline-flex"
         >
           <span class="hidden @4xl:inline">{{ t('pages.editor.open') }}</span>
         </UButton>
@@ -271,12 +335,13 @@ const { t } = useT()
         {{ t('common.cancel') }}
       </UButton>
 
-      <!-- Delete (two-click confirm, edit mode) -->
+      <!-- Delete (two-click confirm, edit mode) — wide only; on mobile it lives in the ⋯ menu -->
       <CroutonConfirmButton
         v-if="action === 'update' && pageId"
         :label="t('common.delete')"
         :confirm-label="t('pages.editor.confirmDelete')"
         icon="i-lucide-trash-2"
+        class="hidden @lg:inline-flex"
         @confirm="emit('delete')"
       />
 
