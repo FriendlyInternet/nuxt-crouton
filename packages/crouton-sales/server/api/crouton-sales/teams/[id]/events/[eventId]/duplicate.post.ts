@@ -100,7 +100,7 @@ export default defineEventHandler(async (event) => {
       remarkPrompt: prod.remarkPrompt,
       hasOptions: prod.hasOptions,
       multipleOptionsAllowed: prod.multipleOptionsAllowed,
-      sortOrder: prod.sortOrder,
+      order: prod.order,
       createdBy: user.id,
       updatedBy: user.id
     })

@@ -530,12 +530,12 @@ const cartCountsByCategory = computed(() => {
 })
 
 // Filtered products based on selected category, in the same order the admin
-// arranged them (sortOrder, then title). Inactive products are hidden unless
+// arranged them (order, then title). Inactive products are hidden unless
 // the admin toggles them visible.
 const filteredProducts = computed(() => {
   const allProducts = ([...(products.value || [])] as SalesProduct[])
     .filter(p => p.isActive !== false || (editing.value && showInactive.value))
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.title.localeCompare(b.title))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title))
   if (selectedCategory.value === null) return allProducts
   return allProducts.filter(p => p.categoryId === selectedCategory.value)
 })

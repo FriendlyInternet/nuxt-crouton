@@ -26,7 +26,10 @@ export interface SalesProduct {
   hasOptions?: boolean
   multipleOptionsAllowed?: boolean
   options?: ProductOption[]
-  sortOrder?: number
+  // Sortable position column. Named `order` to match the generated backend
+  // (schema column, /reorder query, order-data) and useTreeMutation's payload
+  // key — the whole reorder chain is keyed on `order`, not `sortOrder`.
+  order?: number
 }
 
 export interface CartItem {
