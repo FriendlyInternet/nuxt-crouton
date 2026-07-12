@@ -10,6 +10,7 @@ import { eq, and, ne, inArray } from 'drizzle-orm'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
+import { resolvePrintOptionLabels } from './option-labels'
 
 export interface ClientTabLine {
   name: string
@@ -46,18 +47,9 @@ export async function aggregateClientTab(db: any, eventId: string, clientId: str
   for (const it of items as any[]) {
     const product: any = productById.get(it.productId)
 
-    // Resolve selected option IDs to readable labels (same convention as
-    // generate-print-queues: the POS stores option ids on the order item).
-    let optionLabels: string[] = []
-    const rawOptions = it.selectedOptions
-    if (rawOptions && Array.isArray(product?.options) && product.options.length > 0) {
-      const optionIds = Array.isArray(rawOptions)
-        ? rawOptions
-        : typeof rawOptions === 'string' ? [rawOptions] : []
-      optionLabels = optionIds
-        .map((id: string) => product.options.find((o: any) => o.id === id)?.label)
-        .filter((label: string | undefined): label is string => Boolean(label))
-    }
+    // Resolve selected option IDs to readable labels (print/receipt path —
+    // unknown ids dropped, shared with generate-print-queues).
+    const optionLabels = resolvePrintOptionLabels(it.selectedOptions, product?.options)
 
     const unitPrice = Number(it.unitPrice)
     const key = `${it.productId}|${unitPrice}|${[...optionLabels].sort().join(',')}`
