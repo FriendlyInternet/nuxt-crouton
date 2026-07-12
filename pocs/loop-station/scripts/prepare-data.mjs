@@ -113,9 +113,38 @@ if (fs.existsSync(usageSrc)) {
   console.error('[prepare-data] usage.jsonl: no rollup yet → empty')
 }
 
+// ── accountability.json (#1570) — reviewer/author scoreboard ─────────────────
+// Compute stays in the scripts (observatory boundary): tally findings × ledger
+// here, stage the ROLLUP for the app to render. Defensive — a missing source
+// degrades to an empty board, never a failed build.
+let accountabilitySource = null
+try {
+  const [{ parseFindings }, { parseLedger }, { tally }] = await Promise.all([
+    import(path.join(REPO, 'scripts', 'eval-ledger', 'findings-schema.mjs')),
+    import(path.join(REPO, 'scripts', 'eval-ledger', 'schema.mjs')),
+    import(path.join(REPO, 'scripts', 'eval-ledger', 'accountability.mjs')),
+  ])
+  const findingsSrc = path.join(REPO, 'writeups', 'loop-station', 'findings.jsonl')
+  const ledgerSrc = path.join(REPO, 'writeups', 'reports', 'eval-ledger.jsonl')
+  const findingsText = fs.existsSync(findingsSrc) ? fs.readFileSync(findingsSrc, 'utf8') : ''
+  const ledgerText = fs.existsSync(ledgerSrc) ? fs.readFileSync(ledgerSrc, 'utf8') : ''
+  const { records: findings } = parseFindings(findingsText)
+  const { records: ledger } = parseLedger(ledgerText)
+  const { authors, gates } = tally(findings, ledger)
+  fs.writeFileSync(
+    path.join(OUT, 'accountability.json'),
+    JSON.stringify({ authors, gates, findingCount: findings.length, generatedAt: new Date().toISOString() }, null, 2) + '\n'
+  )
+  accountabilitySource = findings.length > 0 ? 'committed' : 'empty'
+  console.error(`[prepare-data] accountability.json ← findings×ledger (${findings.length} findings, ${authors.length} authors, ${gates.length} gates)`)
+} catch (err) {
+  fs.writeFileSync(path.join(OUT, 'accountability.json'), JSON.stringify({ authors: [], gates: [], findingCount: 0 }) + '\n')
+  console.error(`[prepare-data] accountability.json unavailable (${err.message}) → empty`)
+}
+
 // ── sources.json — name the provenance so the view can label itself (#1065) ──
 fs.writeFileSync(
   path.join(OUT, 'sources.json'),
-  JSON.stringify({ trace: traceSource, usage: usageSource, generatedAt: new Date().toISOString() }, null, 2) + '\n'
+  JSON.stringify({ trace: traceSource, usage: usageSource, accountability: accountabilitySource, generatedAt: new Date().toISOString() }, null, 2) + '\n'
 )
-console.error(`[prepare-data] sources.json — trace: ${traceSource} · usage: ${usageSource ?? 'none'}`)
+console.error(`[prepare-data] sources.json — trace: ${traceSource} · usage: ${usageSource ?? 'none'} · accountability: ${accountabilitySource ?? 'none'}`)
