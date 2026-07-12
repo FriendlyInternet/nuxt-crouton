@@ -88,15 +88,23 @@ export default defineNitroPlugin((nitroApp) => {
 
         case 'invitation': {
           const brand = getEmailBrandConfig()
-          // Use BETTER_AUTH_URL for action links (reflects the actual running instance),
-          // falling back to brand.appUrl for backwards compatibility
           const runtimeConfig = payload._event ? useRuntimeConfig(payload._event) : useRuntimeConfig()
-          const actionBaseUrl = process.env.BETTER_AUTH_URL
+          // Prefer the ACTUAL request origin — the Cloudflare custom domain the
+          // invite was triggered from (staging vs prod vs preview) — so the link
+          // is correct per-env with no manually-set BETTER_AUTH_URL. Fall back to
+          // env / config / brand for headless contexts with no request.
+          let requestOrigin: string | undefined
+          try {
+            if (payload._event) requestOrigin = getRequestURL(payload._event).origin
+          }
+          catch {}
+          const actionBaseUrl = requestOrigin
+            || process.env.BETTER_AUTH_URL
             || (runtimeConfig as any).auth?.baseUrl
             || brand.appUrl
           const acceptLink = `${actionBaseUrl}/auth/accept-invitation/${payload.invitationId}`
           console.log(`[crouton-email] 🔗 Invitation accept link: ${acceptLink}`)
-          console.log(`[crouton-email] 🔍 BETTER_AUTH_URL=${process.env.BETTER_AUTH_URL}, auth.baseUrl=${(runtimeConfig as any).auth?.baseUrl}, brand.appUrl=${brand.appUrl}`)
+          console.log(`[crouton-email] 🔍 origin=${requestOrigin}, BETTER_AUTH_URL=${process.env.BETTER_AUTH_URL}, auth.baseUrl=${(runtimeConfig as any).auth?.baseUrl}, brand.appUrl=${brand.appUrl}`)
           const overrides = await getOverrides('team-invite', {
             organizationName: payload.organizationName
           })
