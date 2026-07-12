@@ -119,17 +119,29 @@ async function loadEvent() {
   }
 }
 
+// Monotonic request id so out-of-order refetches can't clobber. A catalog
+// reorder fires one mutation per moved row (a loop of PATCHes), each triggering
+// a refetch below; without this guard an EARLY refetch (reading the DB before
+// the later writes land) can resolve LAST and overwrite the fresh result with a
+// stale snapshot — the "drag snaps back on save" bug. Only the newest-issued
+// refetch is allowed to apply; the last one is issued after every write, so it
+// reads the fully-updated catalog.
+let orderDataReq = 0
 async function loadOrderData() {
   if (!publicEvent.value || !sessionMatchesEvent.value) return
+  const req = ++orderDataReq
   loadError.value = null
   try {
-    orderData.value = await $fetch<OrderData>(
+    const data = await $fetch<OrderData>(
       `/api/crouton-sales/events/${publicEvent.value.id}/order-data`,
       { headers: { 'x-scoped-token': token.value } }
     )
+    if (req === orderDataReq) orderData.value = data
   }
   catch (err: any) {
-    loadError.value = err?.data?.message || err?.statusMessage || t('sales.helperLogin.loadDataError')
+    if (req === orderDataReq) {
+      loadError.value = err?.data?.message || err?.statusMessage || t('sales.helperLogin.loadDataError')
+    }
   }
 }
 
