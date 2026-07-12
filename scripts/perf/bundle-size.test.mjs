@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { gzipSync } from 'node:zlib'
 import { measure, previousGzip } from './bundle-size.mjs'
-import { scoreBundle, SIZE_BANDS, REGRESSION_BANDS } from './scorecard.mjs'
+import { scoreBundle, CLIENT_SIZE_BANDS, SERVER_SIZE_BANDS, REGRESSION_BANDS, worst } from './scorecard.mjs'
 
 function fixture(files) {
   const dir = mkdtempSync(join(tmpdir(), 'bundle-'))
@@ -60,10 +60,26 @@ test('measure on a missing dir returns an empty, non-throwing record', () => {
 })
 
 // ── scorecard: size bands ────────────────────────────────────────────────────
-test('size band grades absolute gzip weight', () => {
+test('client size band grades absolute gzip weight (default bands)', () => {
   assert.equal(scoreBundle(100 * 1024, null).size.band, 'green')
-  assert.equal(scoreBundle(SIZE_BANDS.amber + 1, null).size.band, 'amber')
-  assert.equal(scoreBundle(SIZE_BANDS.red + 1, null).size.band, 'red')
+  assert.equal(scoreBundle(CLIENT_SIZE_BANDS.amber + 1, null).size.band, 'amber')
+  assert.equal(scoreBundle(CLIENT_SIZE_BANDS.red + 1, null).size.band, 'red')
+})
+
+test('server bands are more generous than client (Worker weight tolerance)', () => {
+  // A weight in the client-amber / server-green gap: 300 KB is amber for the browser
+  // budget but still green for the (larger) Worker budget.
+  const w = 300 * 1024
+  assert.ok(w > CLIENT_SIZE_BANDS.amber && w < SERVER_SIZE_BANDS.amber)
+  assert.equal(scoreBundle(w, null, CLIENT_SIZE_BANDS).size.band, 'amber')
+  assert.equal(scoreBundle(w, null, SERVER_SIZE_BANDS).size.band, 'green')
+  assert.equal(scoreBundle(SERVER_SIZE_BANDS.red + 1, null, SERVER_SIZE_BANDS).size.band, 'red')
+})
+
+test('worst() picks the most severe band', () => {
+  assert.equal(worst(['green', 'amber', 'green']), 'amber')
+  assert.equal(worst(['green', undefined, 'red']), 'red') // tolerates an unmeasured (null) target
+  assert.equal(worst(['green', 'green']), 'green')
 })
 
 // ── scorecard: regression bands ──────────────────────────────────────────────
@@ -87,15 +103,20 @@ test('overall is the worse of size and regression', () => {
   assert.equal(scoreBundle(Math.round(50 * 1024 * (1 + (REGRESSION_BANDS.red + 5) / 100)), 50 * 1024).overall, 'red')
 })
 
-// ── previousGzip: history lookup ─────────────────────────────────────────────
-test('previousGzip returns the last recorded total for the app, else null', () => {
+// ── previousGzip: history lookup (client + server) ───────────────────────────
+test('previousGzip returns the last client + server totals for the app', () => {
   const history = [
-    JSON.stringify({ app: 'velo', totalGzip: 111 }),
-    JSON.stringify({ app: 'fanfare', totalGzip: 222 }),
-    JSON.stringify({ app: 'velo', totalGzip: 333 }),
+    JSON.stringify({ app: 'velo', client: { totalGzip: 111 }, server: { totalGzip: 900 } }),
+    JSON.stringify({ app: 'fanfare', client: { totalGzip: 222 }, server: null }),
+    JSON.stringify({ app: 'velo', client: { totalGzip: 333 }, server: { totalGzip: 950 } }),
   ].join('\n')
-  assert.equal(previousGzip(history, 'velo'), 333)
-  assert.equal(previousGzip(history, 'fanfare'), 222)
-  assert.equal(previousGzip(history, 'unknown'), null)
-  assert.equal(previousGzip('', 'velo'), null)
+  assert.deepEqual(previousGzip(history, 'velo'), { client: 333, server: 950 })
+  assert.deepEqual(previousGzip(history, 'fanfare'), { client: 222, server: null })
+  assert.deepEqual(previousGzip(history, 'unknown'), { client: null, server: null })
+  assert.deepEqual(previousGzip('', 'velo'), { client: null, server: null })
+})
+
+test('previousGzip tolerates the pre-split record shape (top-level totalGzip = client)', () => {
+  const history = JSON.stringify({ app: 'velo', totalGzip: 444 })
+  assert.deepEqual(previousGzip(history, 'velo'), { client: 444, server: null })
 })

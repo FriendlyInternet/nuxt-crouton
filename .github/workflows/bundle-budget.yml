@@ -77,7 +77,19 @@ jobs:
               || { echo "::warning::$app build failed — skipping its bundle point"; continue; }
             ASSETS="$DIR/.output/public/_nuxt"
             if [ ! -d "$ASSETS" ]; then echo "::warning::$ASSETS missing after build — skipping"; continue; fi
-            node scripts/perf/bundle-size.mjs --app "$app" --dir "$ASSETS" --commit "$SHA" --pretty \
+
+            # Server/Worker number: bundle the REAL deployed Worker with wrangler's OFFLINE
+            # dry-run (tree-shaken, single script) — NOT the raw .output/server tree (which
+            # overstates it by multiples). Tolerant: if the dry-run fails we record client-only.
+            SERVER_ARG=""
+            if ( cd "$DIR" && npx wrangler deploy --dry-run --outdir=.wrangler-bundle --config .output/server/wrangler.json ) 2>/dev/null; then
+              [ -d "$DIR/.wrangler-bundle" ] && SERVER_ARG="--server-dir $DIR/.wrangler-bundle"
+            else
+              echo "::warning::$app wrangler dry-run failed — recording client bundle only"
+            fi
+
+            # shellcheck disable=SC2086 — SERVER_ARG is intentionally unquoted (empty or a flag pair)
+            node scripts/perf/bundle-size.mjs --app "$app" --dir "$ASSETS" $SERVER_ARG --commit "$SHA" --pretty \
               | node scripts/perf/append-bundle-history.mjs
             ANY=1
           done

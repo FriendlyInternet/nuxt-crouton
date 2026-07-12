@@ -12,28 +12,41 @@ One JSON record per (app, merge), appended by `scripts/perf/append-bundle-histor
 the metric travels with the code it measures (`git blame`-able). Written only by the
 main-context `bundle-budget.yml` job — never from a PR branch.
 
+Each record carries **two** measured targets — they answer different questions:
+
 | field | meaning |
 |-------|---------|
-| `generatedAt` / `commit` / `pr` | when + the merge/PR that caused the point |
-| `app` | the app measured (e.g. `velo`) |
-| `totalJs` / `gzipJs` · `totalCss` / `gzipCss` | raw + gzipped bytes by asset type |
-| `totalGzip` | **the budget number** — total gzipped JS+CSS the client downloads |
-| `chunks` | top chunks by gzipped size (`name`, `bytes`, `gzip`) |
-| `scorecard` | `size` band (absolute gzip weight) + `regression` band (% vs the previous point); `overall` = the worse |
+| `generatedAt` / `commit` / `pr` / `app` | when · the causing merge/PR · the app |
+| `client` | the **browser** bundle (`public/_nuxt`) → user load speed. `{ totalGzip, totalJs/gzipJs, totalCss/gzipCss, chunks, scorecard }` |
+| `server` | the **Worker** bundle → Cloudflare cold-start + CPU → *cost to run*. Same shape, or `null` if not measured |
+| `clientGzip` / `serverGzip` / `totalGzip` | convenience rollups (server may be null) |
+| `overall` | the worse of the two scorecards |
+| `*.scorecard` | per-target `size` band + `regression` band (% vs the previous point); `overall` = the worse |
 
-Bands are tuned in `scripts/perf/scorecard.mjs` (the one place). It's **deterministic**
-— same build → same bytes — which is exactly why it can be a budget, unlike Lighthouse
-vitals (those stay report-only in `unlighthouse.yml`).
+Bands live in `scripts/perf/scorecard.mjs` — **client** (amber 250 KB / red 500 KB gzip)
+and **server** (amber 500 KB / red 1 MB gzip, near Cloudflare's Worker ceiling) differ on
+purpose. Deterministic — same build → same bytes — which is why it can be a budget, unlike
+Lighthouse vitals (report-only in `unlighthouse.yml`).
+
+> **The server number is the wrangler-BUNDLED Worker, not `.output/server`.** The raw
+> `.output/server` tree is the unbundled Nitro output (hundreds of chunks, most tree-shaken
+> away at deploy) — measuring it overstates the real Worker by multiples. The workflow bundles
+> the true deployed Worker offline with `wrangler deploy --dry-run --outdir` and measures that;
+> the engine just measures whatever `--server-dir` it's handed.
 
 ## Regenerate by hand
 
 ```bash
 # after building an app (NITRO_PRESET=cloudflare_module nuxt build):
+# client only:
 node scripts/perf/bundle-size.mjs --app velo --dir apps/velo/.output/public/_nuxt --pretty
 
-# append a point (idempotent per app+commit):
-node scripts/perf/bundle-size.mjs --app velo --dir apps/velo/.output/public/_nuxt --commit "$SHA" \
-  | node scripts/perf/append-bundle-history.mjs
+# client + real Worker (bundle it offline first):
+( cd apps/velo && npx wrangler deploy --dry-run --outdir=.wrangler-bundle --config .output/server/wrangler.json )
+node scripts/perf/bundle-size.mjs --app velo \
+  --dir apps/velo/.output/public/_nuxt \
+  --server-dir apps/velo/.wrangler-bundle \
+  --commit "$SHA" --pretty | node scripts/perf/append-bundle-history.mjs
 ```
 
 CI: `.github/workflows/bundle-budget.yml` (weekly + `workflow_dispatch`) builds the
