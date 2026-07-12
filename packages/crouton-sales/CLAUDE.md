@@ -266,13 +266,15 @@ The shell uses top-level `await`, so any non-page consumer must give it a `<Susp
 
 `ProductsTab.vue` renders products as a **drag-reorderable list** (not a table): a bespoke `<ul>`
 with `useSortable` (`@vueuse/integrations`, via crouton-core) and a `.drag-handle` grip. Drop
-persists the new visual index to each moved row's `sortOrder` via `useCollectionMutation('salesProducts').update`
-— no reorder endpoint needed (the existing PATCH accepts `sortOrder`). The list is sorted by
-`sortOrder` (nullable integer, null⇒0) then title, and reordering operates on the currently
-**visible** set (whole list, or within the selected category tab). Note: `sales_products.sortOrder`
-is an `integer` column (migration `0003_furry_lilith`); the old redundant `order` int column was
-dropped. The generic tree/sortable reorder path (`useTreeMutation`) is **not** used here because it
-re-fetches all team products un-scoped to the event. Each row also surfaces routing/flags: the
+persists the new visual index through the generated `/reorder` endpoint via
+`useTreeMutation('salesProducts').reorderSiblings` (`order = index`). The sortable position column
+is **`order`** (`integer`, null⇒0) — the one the `sortable: true` generator produces (default
+`orderField: 'order'`) and that the whole reorder chain is keyed on: the DB column, the `/reorder`
+query, `order-data`, and `useTreeMutation`'s hardwired `order` payload key. The list is sorted by
+`order` then title, and reordering operates on the currently **visible** set (whole list, or within
+the selected category tab). ⚠️ There is **no `sortOrder` column** — an earlier revision of the POS
+components read `sortOrder`, which never existed in any consumer's schema, so reorders silently
+reverted to alphabetical (#1524). Each row also surfaces routing/flags: the
 product's **location** name (📍) and the active **printer(s)** at that location (🖨️, joined —
 derived by matching `salesPrinters.locationId` to the product's `locationId`), plus **options**
 and **remark** badges (`hasOptions` / `requiresRemark`). The tab therefore also queries
@@ -667,7 +669,7 @@ Components are auto-imported with `Sales` prefix (e.g., `SalesClientCart`, `Sale
 pencil (not the "+"/chevron) and tapping any product row opens its edit form — adding to cart is
 disabled while editing** (`ProductList` `editable`; the old right-edge slide-out hover pencil was
 dropped in favour of the persistent trailing pencil; reorder persists via
-`useTreeMutation('salesProducts').reorderSiblings`); the list sorts by `sortOrder` then title. An admin toolbar row pinned above the product list carries "add product" and a labeled show-inactive switch — inactive products render dimmed + badged. The Category/Location/Product/Printer update forms put a `CroutonDeleteButton` (shared two-step pill: click arms "sure?", click again deletes; from crouton-core) left of the save button in one `flex items-stretch` footer row — no nested delete overlay. SettingsTab's "Evenement verwijderen" row uses the same pill (deletes directly; Shell's mutation hook navigates away). Single-select options with a required remark render as a `URadioGroup` (a solid selected button read too heavy); multi-select stays checkboxes. PrinterForm's footer lists the actual validation messages (schema fields without a rendered input — e.g. nullable DB columns failing `.optional()` — would otherwise surface as an opaque count) |
+`useTreeMutation('salesProducts').reorderSiblings`); the list sorts by `order` then title. An admin toolbar row pinned above the product list carries "add product" and a labeled show-inactive switch — inactive products render dimmed + badged. The Category/Location/Product/Printer update forms put a `CroutonDeleteButton` (shared two-step pill: click arms "sure?", click again deletes; from crouton-core) left of the save button in one `flex items-stretch` footer row — no nested delete overlay. SettingsTab's "Evenement verwijderen" row uses the same pill (deletes directly; Shell's mutation hook navigates away). Single-select options with a required remark render as a `URadioGroup` (a solid selected button read too heavy); multi-select stays checkboxes. PrinterForm's footer lists the actual validation messages (schema fields without a rendered input — e.g. nullable DB columns failing `.optional()` — would otherwise surface as an opaque count) |
 | `Selector.vue` | `SalesClientSelector` | Client selector with create-on-type: `USelectMenu create-item` — typing an unknown name surfaces an "\"<naam>\" toevoegen" row, Enter/click creates + selects it inline (`@create` → helper-scoped POST; exact-match guard falls back to selecting the existing client). This is the **only** create path — the old `#content-top` "create new" button + modal were dropped once type-to-create landed. **A client indication is always mandatory** at checkout: `requiresClient` events show this selector, all other events show a plain `UInput` (`sales.cart.namePlaceholder` — "Naam of tafelnummer…") bound to `selectedClientName`; OrderInterface's `hasClient` gates Betalen on id-or-name either way, and the Cart warning text comes from the `clientWarning` prop (`selectClient` vs `enterName`). Clients created inline live in a local `createdClients` bridge until the next order-data refetch confirms them (create emits the `salesClients` `crouton:mutation` hook itself; a `props.clients` watch prunes confirmed copies) — so a tab settled elsewhere drops the client from the list live, and a vanished selection auto-clears |
 | `OfflineBanner.vue` | `SalesClientOfflineBanner` | Offline mode indicator |
 

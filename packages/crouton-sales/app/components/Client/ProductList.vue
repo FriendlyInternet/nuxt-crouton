@@ -232,7 +232,7 @@ const containerRef = ref<HTMLElement | null>(null)
 const orderedProducts = ref<SalesProduct[]>([])
 watch(() => props.products, (v) => { orderedProducts.value = [...(v || [])] }, { immediate: true })
 
-const orderOf = (p: SalesProduct) => p.sortOrder ?? 0
+const orderOf = (p: SalesProduct) => p.order ?? 0
 
 function emitNewOrder() {
   const updates: Array<{ id: string, order: number }> = []
