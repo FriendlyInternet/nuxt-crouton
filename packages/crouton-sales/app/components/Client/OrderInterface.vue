@@ -32,6 +32,7 @@
                 :reorder-pending="reorderingCategories"
                 @rename="handleCategoryRename"
                 @create="handleCategoryCreate"
+                @delete="handleCategoryDelete"
                 @reorder="handleCategoryReorder"
               />
             </div>
@@ -597,10 +598,18 @@ function openCreateProduct() {
 }
 
 // Pencil on the active category tab → inline rename in the tab itself; we
-// just persist. (Full form incl. delete stays reachable via the settings
-// panel's category list.)
+// just persist. (Full form also reachable via the team-level categories page.)
 async function handleCategoryRename({ id, title }: { id: string, title: string }) {
   await updateCategory(id, { title })
+}
+
+// Two-step trash in the tab's rename mode → delete the category. Clear the
+// selection if it was the active one (falls back to "all"). Products keep their
+// (now dangling) categoryId — surface them via the show-inactive/uncategorised
+// paths or reassign on the team page; deletion here is the tab affordance only.
+async function handleCategoryDelete({ id }: { id: string }) {
+  await deleteCategory([id])
+  if (selectedCategory.value === id) selectedCategory.value = null
 }
 
 // Pencil on a product card → update form (same two-step delete).
@@ -621,7 +630,7 @@ async function handleReorder(updates: Array<{ id: string, order: number }>) {
 // Tab drag-reorder → persist into the categories' displayOrder. Sequential
 // updates (not parallel) so the panel's mutation-driven refresh lands once
 // with the final order.
-const { update: updateCategory, create: createCategory } = useCollectionMutation('salesCategories')
+const { update: updateCategory, create: createCategory, deleteItems: deleteCategory } = useCollectionMutation('salesCategories')
 const reorderingCategories = ref(false)
 
 async function handleCategoryReorder(updates: Array<{ id: string, order: number }>) {
