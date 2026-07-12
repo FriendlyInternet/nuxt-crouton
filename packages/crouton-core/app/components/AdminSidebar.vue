@@ -40,7 +40,7 @@ const props = withDefaults(defineProps<Props>(), {
 // Try to use theme variant if available (from nuxt-crouton-themes)
 const themeHelpers = computed(() => {
   try {
-    // @ts-expect-error - composable may not exist when themes not installed
+    // @ts-ignore - composable only exists when the crouton-themes layer is extended
     const switcher = useThemeSwitcher?.()
     if (switcher) {
       return {

@@ -14,14 +14,34 @@ const props = defineProps<{
   locations?: Array<{ id: string, title: string }>
 }>()
 
-// Requeue one failed print job, or hard-delete this whole order — both handled
-// by OrdersTab, which owns the team/event context, the endpoints and the poll.
+// Requeue one failed print job, reprint the whole order, or hard-delete it —
+// all handled by OrdersTab, which owns the team/event context, the endpoints
+// and the print-queue poll.
 const emit = defineEmits<{
   retryJob: [jobId: string]
+  reprintOrder: [orderId: string]
   deleteOrder: [orderId: string]
 }>()
 
 const { t } = useT()
+
+// Whole-order Reprint is two-step (it fires physical paper): first tap arms,
+// second tap emits. Reset the armed state after a short window so a stray arm
+// doesn't linger. Mirrors the CroutonDeleteButton confirm pattern.
+const reprintArmed = ref(false)
+let reprintTimer: ReturnType<typeof setTimeout> | null = null
+function onReprintClick() {
+  if (!reprintArmed.value) {
+    reprintArmed.value = true
+    if (reprintTimer) clearTimeout(reprintTimer)
+    reprintTimer = setTimeout(() => { reprintArmed.value = false }, 4000)
+    return
+  }
+  if (reprintTimer) clearTimeout(reprintTimer)
+  reprintArmed.value = false
+  emit('reprintOrder', props.orderId)
+}
+onUnmounted(() => { if (reprintTimer) clearTimeout(reprintTimer) })
 
 const itemsQuery = computed(() => ({ orderId: props.orderId }))
 const { items, pending } = await useCollectionQuery('salesOrderitems', { query: itemsQuery })
@@ -118,6 +138,25 @@ const namedLocationRemarks = computed(() => {
       size="sm"
       :ui="{ list: tabs.length > 1 ? '' : 'hidden' }"
     >
+      <!-- Whole-order Reprint, pushed to the far right of the tab row (ms-auto).
+           Two-step confirm — it fires physical paper. Distinct from the per-job
+           reprint inside the Printers tab. Emits up to OrdersTab, which owns the
+           team/event context and refreshes the print-queue poll. -->
+      <template #list-trailing>
+        <div class="ms-auto ps-3 self-center">
+          <UButton
+            size="xs"
+            :color="reprintArmed ? 'error' : 'warning'"
+            variant="soft"
+            icon="i-lucide-rotate-ccw"
+            :label="reprintArmed
+              ? t('sales.orders.rePrintConfirm', 'Confirm reprint?')
+              : t('sales.orders.rePrintOrder', 'Reprint')"
+            @click="onReprintClick"
+          />
+        </div>
+      </template>
+
       <template #order>
         <div v-if="rows.length === 0" class="py-2 text-sm text-muted">
           {{ t('sales.orders.noItems') }}

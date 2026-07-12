@@ -179,6 +179,23 @@ async function retryPrintJob(jobId: string) {
   }
 }
 
+// Whole-order Reprint (OrderItems emits the orderId). Same team-authed endpoint,
+// keyed by { orderId }: it resets the order's existing done/failed jobs back to
+// pending so the transport re-drains them. Refresh flips the LEDs to Printing.
+async function reprintOrder(orderId: string) {
+  try {
+    await $fetch(
+      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/printqueues/retry-failed`,
+      { method: 'POST', body: { orderId } }
+    )
+    await refreshPrintJobs()
+    retryNotify.success(t('sales.orders.reprintQueued', 'Reprint queued'))
+  }
+  catch {
+    retryNotify.error(t('sales.orders.reprintError', 'Could not reprint this order'))
+  }
+}
+
 // Hard-delete one order (team-admin endpoint cascades to its items + print
 // jobs). Fire the salesOrders crouton:mutation so every listener refreshes —
 // notably the POS client picker's tab totals — then refresh this list + the
@@ -375,10 +392,10 @@ function toggleExpand(id: string) {
         />
       </UChip>
       <template #content>
-        <!-- Container-responsive: 1 column in a narrow pane, 2 side by side
-             once the resizable pane has room. -->
+        <!-- One filter per row — the selects stack in a single column so each
+             (helper / client / printer / status) reads on its own line. -->
         <div class="rounded-lg bg-elevated/60 border border-default p-3 space-y-2" :class="headerControlled ? '' : 'mt-2'">
-          <div class="grid grid-cols-1 @md:grid-cols-2 gap-2">
+          <div class="grid grid-cols-1 gap-2">
             <USelectMenu
               v-model="selectedHelperName"
               :items="helperOptions"
@@ -538,6 +555,7 @@ function toggleExpand(id: string) {
           :print-jobs="jobsByOrder.get(order.id) || []"
           :has-printers="printerList.length > 0"
           @retry-job="retryPrintJob"
+          @reprint-order="reprintOrder"
           @delete-order="deleteOrder"
         />
       </li>

@@ -21,6 +21,7 @@ CMS-like page management system for Nuxt Crouton. Provides:
 | `app/utils/page-path.ts` | Shared nested-URL builder (`buildSlugPath`, `buildPagePath`) — single source of truth |
 | `app/composables/usePageBlocks.ts` | Block manipulation utilities |
 | `app/composables/useFooterPage.ts` | Fetch singleton footer page for current team |
+| `app/composables/useNavPill.ts` | `useCroutonNavPill()` — the **floating-nav action slot**. A shared-state registry (`crouton:navPillActions`, same cross-layer decoupling as `crouton:themePreferenceItems`) any package pushes icon buttons into: `register(action)` → unregister fn; `visibleActions` (filtered by reactive `show`, `order`-sorted). Register **client-side** (actions carry functions — not SSR-serializable). `Nav.vue` renders them in both pills; the pages package is the first consumer (the edit-page pencil, registered in `[...slug].vue`) |
 | `app/components/Renderer.vue` | `CroutonPagesRenderer` - Renders page based on type |
 | `app/components/CollectionPageRenderer.vue` | `CroutonPagesCollectionPageRenderer` - Bridge for publishable collection pages |
 | `app/components/RegularContent.vue` | `CroutonPagesRegularContent` - Rich text content display |
@@ -480,6 +481,22 @@ the access gate renders chrome-less too. On regular pages `handleSubmit`
 strips config to the page-level keys (`hideNav`, `hideAuthControls`,
 `requiredScope`) instead of nulling it — type-specific config still resets
 when the page type changes.
+
+### The floating nav pill (`Nav.vue`) — theme quick-select + action slot
+
+The right pill (bottom-left on full-screen pages) hosts the user/admin controls plus:
+
+- **Theme quick-select** — a palette `UDropdownMenu` reading the shared
+  `crouton:themePreferenceItems` state (filled by the crouton-themes base layer's
+  `themeProvider.client` plugin). Rendered only when that state is populated **and**
+  `allowUserThemes || isAdmin`, inside `<ClientOnly>` (no hard dep on crouton-themes;
+  hidden entirely when the themes layer isn't extended). Dark-mode toggle stays adjacent.
+- **Package action slot** — `useCroutonNavPill().visibleActions` render as ghost icon
+  buttons. Any layer contributes via `register()` (see the composable in Key Files). The
+  **edit-page pencil** is pages' own contribution: `[...slug].vue` registers it on mount
+  (`show: isAdmin && !isEditing && page.id`, `onSelect: startEditing`) — it **replaced the
+  old fixed bottom-right FAB**. Client-only registration, so the button appears just after
+  hydration.
 
 ## Common Tasks
 
