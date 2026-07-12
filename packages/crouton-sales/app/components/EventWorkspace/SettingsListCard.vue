@@ -122,17 +122,17 @@ if (import.meta.client && props.orderField) {
             class="drag-handle size-4 text-muted cursor-grab active:cursor-grabbing"
           />
         </div>
-        <button
-          type="button"
-          class="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-2.5
-                 bg-elevated/95 hover:bg-elevated text-muted hover:text-highlighted cursor-pointer
+        <UButton
+          icon="i-lucide-pencil"
+          variant="ghost"
+          color="neutral"
+          :aria-label="t('common.edit')"
+          class="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-2.5 rounded-none
+                 bg-elevated/95 hover:bg-elevated text-muted hover:text-highlighted
                  transition-all duration-200 ease-out translate-x-full group-hover/row:translate-x-0
                  pointer-coarse:translate-x-0"
-          :aria-label="t('common.edit')"
           @click.stop="openEdit(row.id)"
-        >
-          <UIcon name="i-lucide-pencil" class="size-4" />
-        </button>
+        />
         <div
           class="px-3 py-2 transition-[padding] duration-200 ease-out group-hover/row:pe-9 pointer-coarse:pe-9"
           :class="orderField ? 'group-hover/row:ps-7 pointer-coarse:ps-7' : ''"

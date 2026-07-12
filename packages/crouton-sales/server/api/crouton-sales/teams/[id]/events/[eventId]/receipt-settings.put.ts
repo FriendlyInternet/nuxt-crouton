@@ -1,6 +1,6 @@
 import { eq, and } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamEvent } from '../../../../../../utils/team-event'
 import { salesEventsettings } from '~~/layers/sales/collections/eventsettings/server/database/schema'
 
 export interface ReceiptSettings {
@@ -10,12 +10,7 @@ export interface ReceiptSettings {
 }
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await resolveTeamAndCheckMembership(event)
-  const eventId = getRouterParam(event, 'eventId')
-
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
+  const { team, user, db, eventId } = await requireTeamEvent(event)
 
   const body = await readBody<ReceiptSettings>(event)
 
@@ -23,7 +18,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 400, statusText: 'Request body is required' })
   }
 
-  const db = useDB()
   const settingValue = JSON.stringify(body)
 
   const [existing] = await db

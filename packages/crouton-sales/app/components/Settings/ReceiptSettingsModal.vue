@@ -1,14 +1,12 @@
 <template>
   <UModal v-model:open="isOpen">
-    <template #header>
-      <div class="flex items-center gap-2">
-        <UIcon name="i-lucide-receipt" class="w-5 h-5" />
-        <span>{{ t('sales.receipt.settingsTitle') }}</span>
-      </div>
-    </template>
+    <template #content="{ close }">
+      <div class="p-6 space-y-6">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-receipt" class="w-5 h-5" />
+          <span class="text-lg font-semibold">{{ t('sales.receipt.settingsTitle') }}</span>
+        </div>
 
-    <template #body>
-      <div class="space-y-6">
         <p class="text-sm text-muted">
           {{ t('sales.receipt.customize') }}
         </p>
@@ -36,21 +34,19 @@
             placeholder="Bedankt voor je bestelling!"
           />
         </UFormField>
-      </div>
-    </template>
 
-    <template #footer>
-      <div class="flex justify-end gap-3">
-        <UButton variant="outline" @click="close">
-          {{ t('sales.common.cancel') }}
-        </UButton>
-        <UButton
-          color="primary"
-          :loading="saving"
-          @click="save"
-        >
-          {{ t('sales.receipt.saveSettings') }}
-        </UButton>
+        <div class="flex justify-end gap-3">
+          <UButton variant="outline" @click="close">
+            {{ t('sales.common.cancel') }}
+          </UButton>
+          <UButton
+            color="primary"
+            :loading="saving"
+            @click="save"
+          >
+            {{ t('sales.receipt.saveSettings') }}
+          </UButton>
+        </div>
       </div>
     </template>
   </UModal>

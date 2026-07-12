@@ -8,9 +8,11 @@
   Preview-only: Testprint lives in the printer form beside the Voorbeeld button.
 -->
 <template>
-  <UModal v-model:open="isOpen" :title="t('sales.print.previewTitle', 'Voorbeeld')">
-    <template #body>
-      <div class="space-y-4">
+  <UModal v-model:open="isOpen">
+    <template #content="{ close }">
+      <div class="p-6 space-y-4">
+        <h3 class="text-lg font-semibold">{{ t('sales.print.previewTitle', 'Voorbeeld') }}</h3>
+
         <div v-if="pending" class="p-10 flex justify-center">
           <UIcon name="i-lucide-loader-circle" class="size-6 animate-spin text-muted" />
         </div>
@@ -57,14 +59,11 @@
             {{ t('sales.print.previewNote', 'Zoals de printer hem afdrukt · met je opgeslagen instellingen') }}
           </p>
         </template>
-      </div>
-    </template>
-
-    <template #footer>
-      <div class="flex justify-end w-full">
-        <UButton variant="outline" color="neutral" @click="isOpen = false">
-          {{ t('sales.common.close', 'Sluiten') }}
-        </UButton>
+        <div class="flex justify-end w-full">
+          <UButton variant="outline" color="neutral" @click="close">
+            {{ t('sales.common.close', 'Sluiten') }}
+          </UButton>
+        </div>
       </div>
     </template>
   </UModal>

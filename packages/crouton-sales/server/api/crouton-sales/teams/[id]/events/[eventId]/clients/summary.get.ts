@@ -5,20 +5,13 @@
  * client with nothing ordered has nothing to settle.
  */
 import { eq, and, ne, countDistinct, sql, asc } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamEvent } from '../../../../../../../utils/team-event'
 import { salesClients } from '~~/layers/sales/collections/clients/server/database/schema'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
-  const eventId = getRouterParam(event, 'eventId')
-
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
-
-  const db = useDB()
+  const { team, db, eventId } = await requireTeamEvent(event)
 
   const clients = await db
     .select({
