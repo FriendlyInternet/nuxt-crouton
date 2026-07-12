@@ -64,8 +64,11 @@ export async function collectSeedSql(options: CollectSeedSqlOptions): Promise<st
     locale: options.locale,
     withStaff: Boolean(options.withStaff),
     now: raw('unixepoch()'),
-    upsert(table, byId, values) {
-      statements.push(buildUpsert(table, byId, values ?? {}, { immutable: ['createdAt'] }))
+    upsert(table, byId, values, opts) {
+      statements.push(buildUpsert(table, byId, values ?? {}, {
+        immutable: ['createdAt'],
+        insertOnly: opts?.ifAbsent
+      }))
     },
     raw(sql) {
       const trimmed = sql.trim()
