@@ -63,11 +63,21 @@ const props = withDefaults(defineProps<{
    * tabs row and the ✕ beside it (closable pass-down).
    */
   showStrip?: boolean
+  /**
+   * Fill the host edge-to-edge instead of sitting as a bordered, rounded,
+   * viewport-measured card. Set by the fullscreen-modal host
+   * (EventWorkspaceRender, narrow member) so the kassa uses the modal's full
+   * height/width — no border frame, no measured `100dvh` budget (the modal is
+   * already the budget). The admin page + wide inline shell leave it off and
+   * keep the framed, measured card.
+   */
+  fill?: boolean
 }>(), {
   showSwitcher: true,
   showHeaderActions: true,
   showHeader: true,
-  showStrip: true
+  showStrip: true,
+  fill: false
 })
 
 const emit = defineEmits<{ close: [] }>()
@@ -222,7 +232,7 @@ const kassaHeightStyle = computed(() =>
     </div>
   </div>
 
-  <div v-else class="space-y-4">
+  <div v-else :class="fill ? 'h-full flex flex-col' : 'space-y-4'">
     <!-- No desktop header row anymore: the event switcher moved into the
          gutter, settings became a pane like orders/data, and the kassa is the
          page — the event name lives in the switcher and the page you came
@@ -339,14 +349,17 @@ const kassaHeightStyle = computed(() =>
          persist via autoSaveId). The vertical tabs hang just OUTSIDE the
          kassa's right edge (reserved gutter via pe-11, so they never
          overflow the page). -->
-    <div class="relative" :class="hasGutter ? 'pe-11' : ''">
+    <div class="relative" :class="[hasGutter ? 'pe-11' : '', fill ? 'flex-1 min-h-0' : '']">
     <!-- Height: measured to fill the viewport from the module's real top
          (kassaHeightStyle); the class budget is only the SSR/first-paint
-         fallback before the measurement lands. -->
+         fallback before the measurement lands. In `fill` mode the fullscreen
+         modal host IS the budget, so the kassa flexes to fill it edge-to-edge —
+         no border frame, no measured `100dvh` calc. -->
     <div
       ref="kassaRef"
-      class="flex border border-default rounded-xl overflow-clip bg-default h-[calc(100dvh-8.5rem)] min-h-[28rem]"
-      :style="kassaHeightStyle"
+      class="flex overflow-clip bg-default"
+      :class="fill ? 'h-full' : 'border border-default rounded-xl h-[calc(100dvh-8.5rem)] min-h-[28rem]'"
+      :style="fill ? undefined : kassaHeightStyle"
     >
       <SplitterGroup
         direction="horizontal"

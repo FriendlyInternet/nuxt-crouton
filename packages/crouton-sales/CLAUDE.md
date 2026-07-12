@@ -257,7 +257,13 @@ current event navigates back to the events list via a `crouton:mutation` hook (m
 `<Suspense>`.
 Props: `eventSlug` (required), `teamParam` (defaults to `route.params.team`, present in both admin
 and public CMS routes), `tabParam` (**legacy, ignored** — kept for consumer compatibility),
-`showSwitcher` / `showHeaderActions` / `showHeader` (default `true`).
+`showSwitcher` / `showHeaderActions` / `showHeader` (default `true`), and `fill` (default `false`) —
+set by the fullscreen-modal host (`EventWorkspaceRender`, narrow member) so the kassa runs
+**edge-to-edge**: the shell root flexes to the modal's height (`h-full`) and the kassa drops its
+`border rounded-xl` frame + the measured `100dvh` budget (the modal IS the budget). Without `fill`
+(admin page + wide inline shell) the kassa keeps the framed, viewport-measured card. The block's
+member modal also drops its `p-4` inset when passing `fill`, so nothing boxes the kassa inside the
+fullscreen modal.
 The `eventWorkspaceBlock` renderer mounts the shell **only for signed-in team members** and passes
 `:show-switcher="false"` (event fixed by the editor) — the header stays visible so the
 settings/orders toggles are reachable. Anonymous visitors (volunteers) get `<SalesPosPanel>`
