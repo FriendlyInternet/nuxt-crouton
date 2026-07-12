@@ -24,6 +24,8 @@ const props = withDefaults(defineProps<{
   currency?: string | null
   /** Poll cadence for the summary numbers. */
   pollMs?: number
+  /** Personnel (staff) order filter: exclude / only / all (default all). */
+  personnel?: 'all' | 'exclude' | 'only'
 }>(), {
   currency: 'EUR',
   pollMs: 15000,
@@ -38,7 +40,7 @@ const productRows = ref<ProductRow[]>([])
 const loaded = ref(false)
 
 const base = computed(() => `/api/crouton-sales/teams/${props.teamParam}/charts`)
-const query = computed(() => ({ eventId: props.eventId }))
+const query = computed(() => ({ eventId: props.eventId, personnel: props.personnel }))
 
 async function fetchAll() {
   try {
@@ -75,6 +77,9 @@ onMounted(() => {
   fetchAll()
   useIntervalFn(fetchAll, props.pollMs)
 })
+
+// Refetch immediately when the personnel filter flips (don't wait for the poll).
+watch(() => props.personnel, () => fetchAll())
 </script>
 
 <template>

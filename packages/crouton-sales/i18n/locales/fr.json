@@ -569,7 +569,9 @@
         "button": "Données",
         "title": "Données",
         "revenueChart": "Revenu par jour",
-        "productMatrix": "Ventes par produit × jour"
+        "productMatrix": "Ventes par produit × jour",
+        "includePersonnel": "Inclure les commandes du personnel",
+        "personnelChart": "Commandes du personnel"
       },
       "launcher": {
         "ordersDesc": "Toutes les commandes de cet événement — statut, tickets, réimpressions",

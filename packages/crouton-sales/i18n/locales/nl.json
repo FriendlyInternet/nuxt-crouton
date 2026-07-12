@@ -570,7 +570,9 @@
         "button": "Data",
         "title": "Data",
         "revenueChart": "Omzet per dag",
-        "productMatrix": "Verkoop per product × dag"
+        "productMatrix": "Verkoop per product × dag",
+        "includePersonnel": "Personeel meetellen",
+        "personnelChart": "Personeelsbestellingen"
       },
       "launcher": {
         "ordersDesc": "Alle bestellingen van dit event — status, tickets, opnieuw printen",
