@@ -341,7 +341,8 @@
       "createNewClient": "Create new client",
       "clientHelp": "Select an existing client or create a new one",
       "clientRequired": "Client required",
-      "clientRequiredDescription": "This event requires a client. Please select or create one."
+      "clientRequiredDescription": "This event requires a client. Please select or create one.",
+      "deleteError": "Could not delete order"
     },
     "events": {
       "title": "Events",
