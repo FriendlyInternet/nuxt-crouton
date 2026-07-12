@@ -8,6 +8,10 @@
  * (`test/my-orders-shape.test.ts`) — which also collapses the CRAP the endpoint
  * would otherwise carry as untested branchy logic.
  */
+import { SALES_PRINT_STATUS, bucketPrintStatuses, type PrintStatusBucket } from '../../shared/utils/print-status'
+
+// Re-exported under the old name for the existing test/importers.
+export { bucketPrintStatuses as bucketFromStatuses }
 
 export interface MyOrderInput {
   id: string
@@ -37,8 +41,6 @@ export interface MyOrderJobInput {
   printMode: string | null
 }
 
-export type PrintStatusBucket = 'none' | 'busy' | 'done' | 'failed'
-
 export interface MyOrderItem {
   id: string
   quantity: number | string
@@ -60,18 +62,6 @@ export interface MyOrder {
   printStatus: PrintStatusBucket
   total: number
   items: MyOrderItem[]
-}
-
-/**
- * Combined worst status across an order's jobs (status enum: '0'=pending,
- * '1'=printing, '2'=done, '9'=error). Mirrors OrdersTab's `ledFromStatuses`:
- * failed wins, then busy, then done; no jobs at all ⇒ 'none' (no LED).
- */
-export function bucketFromStatuses(statuses: string[]): PrintStatusBucket {
-  if (!statuses.length) return 'none'
-  if (statuses.includes('9')) return 'failed'
-  if (statuses.some(s => s === '0' || s === '1')) return 'busy'
-  return 'done'
 }
 
 /**
@@ -109,7 +99,7 @@ export function shapeMyOrders(
   for (const job of jobs) {
     if (!job.refId || job.printMode === 'display') continue
     const list = statusesByOrder.get(job.refId)
-    const s = String(job.status ?? '0')
+    const s = String(job.status ?? SALES_PRINT_STATUS.PENDING)
     if (list) list.push(s)
     else statusesByOrder.set(job.refId, [s])
   }
@@ -132,7 +122,7 @@ export function shapeMyOrders(
       isPersonnel: order.isPersonnel,
       status: order.status,
       createdAt: order.createdAt,
-      printStatus: bucketFromStatuses(statusesByOrder.get(order.id) || []),
+      printStatus: bucketPrintStatuses(statusesByOrder.get(order.id) || []),
       total: orderItems.reduce((sum, i) => sum + (Number(i.totalPrice) || 0), 0),
       items: orderItems
     }

@@ -22,6 +22,16 @@ export function useSalesCollectionForm(
 ) {
   const { create, update, deleteItems } = useCollectionMutation(options.collection)
   const { close, loading } = useCrouton()
+  const notify = useNotify()
+  const { t } = useT()
+
+  // Surface a mutation failure to the user instead of only logging it — a
+  // failed create/update/delete otherwise looks like a silent no-op (#1567).
+  const notifyError = (error: unknown) => {
+    notify.error(t('sales.orders.error'), {
+      description: error instanceof Error ? error.message : undefined
+    })
+  }
 
   // Merge activeItem for both create (preset eventId from the event workspace)
   // and update (the full record being edited). initFormState coerces a nullable
@@ -36,7 +46,7 @@ export function useSalesCollectionForm(
   const submitters: Record<SalesCollectionFormProps['action'], () => Promise<unknown> | undefined> = {
     create: () => create(state.value),
     update: () => (state.value.id ? update(state.value.id, state.value) : undefined),
-    delete: () => deleteItems(props.items as any)
+    delete: () => deleteItems((props.items ?? []).map(i => i.id))
   }
   const submitAction = () => submitters[props.action]?.()
 
@@ -45,7 +55,9 @@ export function useSalesCollectionForm(
       await submitAction()
       close()
     } catch (error) {
+      // Keep the overlay open (state intact) and tell the user it failed.
       console.error('Form submission failed:', error)
+      notifyError(error)
     }
   }
 
@@ -61,6 +73,7 @@ export function useSalesCollectionForm(
       close()
     } catch (error) {
       console.error('Delete failed:', error)
+      notifyError(error)
     } finally {
       deleting.value = false
     }

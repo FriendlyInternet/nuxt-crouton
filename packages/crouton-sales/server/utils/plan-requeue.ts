@@ -12,11 +12,7 @@
  * into drizzle conditions. Keeping it pure makes the branch logic unit-testable
  * without a Nitro/DB context (see test/plan-requeue.test.ts).
  */
-
-// print_jobs.status enum (text, matching the on-site spooler contract):
-// '0'=pending | '1'=printing | '2'=done | '9'=error.
-const STATUS_DONE = '2'
-const STATUS_FAILED = '9'
+import { SALES_PRINT_STATUS } from '../../shared/utils/print-status'
 
 export interface RequeueRequest {
   /** Narrow the failed-retry to one printer (event scope only). */
@@ -60,7 +56,7 @@ export function planRequeue(body: RequeueRequest | null | undefined): RequeuePla
     return {
       scope: 'order',
       // Reprint what the order produced: both completed and failed tickets.
-      resetStatuses: [STATUS_DONE, STATUS_FAILED],
+      resetStatuses: [SALES_PRINT_STATUS.COMPLETED, SALES_PRINT_STATUS.FAILED],
       // A deliberate whole-order reprint does not sweep in stale printing jobs.
       includeStalePrinting: false,
       orderId: body.orderId,
@@ -69,7 +65,7 @@ export function planRequeue(body: RequeueRequest | null | undefined): RequeuePla
 
   return {
     scope: 'event',
-    resetStatuses: [STATUS_FAILED],
+    resetStatuses: [SALES_PRINT_STATUS.FAILED],
     includeStalePrinting: true,
     jobId: body?.jobId,
     printerId: body?.printerId,

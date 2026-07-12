@@ -86,18 +86,3 @@ export interface SalesProductMatrixBlockAttrs {
   measure?: 'units' | 'revenue'
   title?: string
 }
-
-// Print queue item type (opt-in)
-export interface SalesPrintQueueItem {
-  id: string
-  eventId: string
-  orderId: string
-  printerId: string
-  locationId?: string
-  status: PrintStatus
-  printData: string
-  printMode?: string
-  errorMessage?: string
-  retryCount?: number
-  completedAt?: string
-}
