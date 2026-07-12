@@ -107,31 +107,37 @@ send_and_wait_reply() {
     ) | timeout $(( _CAP + 6 )) nc "$_IP" "$PRINTER_PORT" > "$_RESP" 2>/dev/null
 }
 
-# Add Google DNS if not present
-grep -q "8.8.8.8" /etc/resolv.conf || echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+# Runtime side effects (DNS, device identity, startup banner) are skipped when
+# the script is SOURCED as a library (SPOOLER_LIB=1) so tests can load the
+# functions without touching /etc or /proc. The main loop is likewise guarded
+# just before it below.
+if [ -z "$SPOOLER_LIB" ]; then
+    # Add Google DNS if not present
+    grep -q "8.8.8.8" /etc/resolv.conf || echo "nameserver 8.8.8.8" >> /etc/resolv.conf
 
-# --- Persistent device identity (#1366) --------------------------------------
-# Generated once from the kernel's uuid (no clock dependency), then reused
-# forever. The printed pairing code is what the operator types into the app.
-if [ ! -f "$DEVICE_FILE" ]; then
-    UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '-')
-    if [ -z "$UUID" ]; then
-        echo "$(date '+%H:%M:%S') FATAL: cannot read /proc/sys/kernel/random/uuid"
-        exit 1
+    # --- Persistent device identity (#1366) ----------------------------------
+    # Generated once from the kernel's uuid (no clock dependency), then reused
+    # forever. The printed pairing code is what the operator types into the app.
+    if [ ! -f "$DEVICE_FILE" ]; then
+        UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '-')
+        if [ -z "$UUID" ]; then
+            echo "$(date '+%H:%M:%S') FATAL: cannot read /proc/sys/kernel/random/uuid"
+            exit 1
+        fi
+        # 6-digit code from a second uuid's digits (uuid hex alone can be light
+        # on digits; two reads always yield enough).
+        DIGITS=$(cat /proc/sys/kernel/random/uuid /proc/sys/kernel/random/uuid | tr -cd '0-9')
+        {
+            echo "DEVICE_ID=rut-$(echo "$UUID" | cut -c1-8)"
+            echo "DEVICE_CODE=$(echo "$DIGITS" | cut -c1-6)"
+        } > "$DEVICE_FILE"
     fi
-    # 6-digit code from a second uuid's digits (uuid hex alone can be light on
-    # digits; two reads always yield enough).
-    DIGITS=$(cat /proc/sys/kernel/random/uuid /proc/sys/kernel/random/uuid | tr -cd '0-9')
-    {
-        echo "DEVICE_ID=rut-$(echo "$UUID" | cut -c1-8)"
-        echo "DEVICE_CODE=$(echo "$DIGITS" | cut -c1-6)"
-    } > "$DEVICE_FILE"
-fi
-. "$DEVICE_FILE"
+    . "$DEVICE_FILE"
 
-echo "$(date '+%H:%M:%S') Crouton print spooler started"
-echo "  API_URL: $API_URL"
-echo "  DEVICE_ID: $DEVICE_ID"
+    echo "$(date '+%H:%M:%S') Crouton print spooler started"
+    echo "  API_URL: $API_URL"
+    echo "  DEVICE_ID: $DEVICE_ID"
+fi
 
 # Faster base64 decoder - simplified version
 decode_base64() {
@@ -362,6 +368,83 @@ process_job() {
     rm -f "$TMPFILE" "$RESPFILE"
 }
 
+# --- Parallel per-printer drain (#1539) --------------------------------------
+# Split into top-level functions so a local test (SPOOLER_LIB=1) can drive the
+# real grouping + fan-out with stubbed nc/curl and measure actual concurrency.
+# Shared globals: RESPONSE (poll body), JOBLIST (one job id per line),
+# GROUP_PREFIX / GROUP_IPS (temp paths), PARALLEL_DRAIN.
+GROUP_PREFIX="/tmp/pjgroup_$$"
+GROUP_IPS="/tmp/pjips_$$.txt"
+
+# Read $JOBLIST + $RESPONSE and bucket job ids into one group file per printer
+# IP. Different printers become different groups (drained in parallel); jobs to
+# the SAME printer stay in one group (drained serially — Epson TM accepts one
+# :9100 connection at a time). No local dedup by design: the server flips jobs
+# to status=printing on fetch (the real dedup), and a requeued job MUST reprint.
+group_jobs_by_printer() {
+    rm -f "$GROUP_PREFIX"_* "$GROUP_IPS" 2>/dev/null
+    : > "$GROUP_IPS"
+    while IFS= read -r JOB_ID; do
+        [ -z "$JOB_ID" ] && continue
+        JOB_PRINTER_IP=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$JOB_ID\"[^}]*\"printerIp\": *\"\([^\"]*\)\".*/\1/p")
+        if [ -z "$JOB_PRINTER_IP" ]; then
+            # No routable printer — fail fast so it doesn't sit at printing.
+            echo "$(date '+%H:%M:%S') Job $JOB_ID: could not parse printer IP from poll response"
+            report_fail "$JOB_ID" "Spooler could not parse job from poll response"
+            continue
+        fi
+        SAFE_IP=$(echo "$JOB_PRINTER_IP" | tr -c '0-9A-Za-z' '_')
+        GF="${GROUP_PREFIX}_${SAFE_IP}"
+        # First job for this printer? Record "IP groupfile" once.
+        [ -f "$GF" ] || echo "$JOB_PRINTER_IP $GF" >> "$GROUP_IPS"
+        echo "$JOB_ID" >> "$GF"
+    done < "$JOBLIST"
+}
+
+# Drain one printer's group SERIALLY: extract each job's payload and print it in
+# order (single :9100 connection at a time).
+drain_printer_group() {
+    _GIP="$1"; _GFILE="$2"
+    while IFS= read -r _JID; do
+        [ -z "$_JID" ] && continue
+        _PDATA=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$_JID\"[^}]*\"printData\": *\"\([^\"]*\)\".*/\1/p")
+        if [ -z "$_PDATA" ]; then
+            echo "$(date '+%H:%M:%S') Job $_JID: could not parse job data from poll response"
+            report_fail "$_JID" "Spooler could not parse job from poll response"
+            continue
+        fi
+        echo "$(date '+%H:%M:%S') Processing job $_JID to $_GIP"
+        process_job "$_JID" "$_PDATA" "$_GIP"
+    done < "$_GFILE"
+}
+
+# Fan out one worker per printer group. PARALLEL_DRAIN=1 (default) backgrounds
+# each group in its OWN subshell so different printers overlap; PARALLEL_DRAIN=0
+# runs them one at a time (clean fallback, never worse than before). The
+# subshell is spawned explicitly — `( … ) &` — rather than `func &`, so the
+# whole group loop (incl. its `while … done < file` redirection) runs in a
+# forked child and the groups genuinely overlap under BusyBox ash.
+fan_out_drain() {
+    _bg=0
+    while IFS= read -r GLINE; do
+        [ -z "$GLINE" ] && continue
+        GIP=${GLINE%% *}
+        GFILE=${GLINE#* }
+        if [ "$PARALLEL_DRAIN" = "1" ]; then
+            ( drain_printer_group "$GIP" "$GFILE" ) &
+            _bg=1
+        else
+            drain_printer_group "$GIP" "$GFILE"
+        fi
+    done < "$GROUP_IPS"
+    # Wait for every printer's worker before returning (no-op when sequential).
+    [ "$_bg" = "1" ] && wait
+}
+
+# Sourced as a library (tests): stop here — everything above is defined, the
+# runtime loop below is skipped.
+if [ -n "$SPOOLER_LIB" ]; then return 0 2>/dev/null || exit 0; fi
+
 while true; do
     [ "$TICKET_COUNTDOWN" -gt 0 ] && TICKET_COUNTDOWN=$((TICKET_COUNTDOWN - 1))
 
@@ -414,69 +497,11 @@ while true; do
         JOBLIST="/tmp/jobs_$$.txt"
         echo "$RESPONSE" | grep -o '"id": *"[^"]*"' | sed 's/"id": *"\([^"]*\)"/\1/g' > "$JOBLIST"
 
-        # Group jobs by printer IP (#1539). Different printers drain in PARALLEL
-        # (one background worker each); jobs to the SAME printer stay in one
-        # group and drain SERIALLY — Epson TM accepts one :9100 connection at a
-        # time, so parallel jobs to one printer starve each other into timeouts.
-        # No local "already processed" dedup by design: the server flips jobs to
-        # status=printing on fetch (the real dedup), and a requeued job MUST
-        # print again.
-        GROUP_PREFIX="/tmp/pjgroup_$$"
-        GROUP_IPS="/tmp/pjips_$$.txt"
-        rm -f "$GROUP_PREFIX"_* "$GROUP_IPS" 2>/dev/null
-        : > "$GROUP_IPS"
-
-        while IFS= read -r JOB_ID; do
-            [ -z "$JOB_ID" ] && continue
-            JOB_PRINTER_IP=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$JOB_ID\"[^}]*\"printerIp\": *\"\([^\"]*\)\".*/\1/p")
-            if [ -z "$JOB_PRINTER_IP" ]; then
-                # No routable printer — fail fast so it doesn't sit at printing.
-                echo "$(date '+%H:%M:%S') Job $JOB_ID: could not parse printer IP from poll response"
-                report_fail "$JOB_ID" "Spooler could not parse job from poll response"
-                continue
-            fi
-            SAFE_IP=$(echo "$JOB_PRINTER_IP" | tr -c '0-9A-Za-z' '_')
-            GF="${GROUP_PREFIX}_${SAFE_IP}"
-            # First job for this printer? Record the IP and remember its group
-            # file maps back to the real IP.
-            if [ ! -f "$GF" ]; then
-                echo "$JOB_PRINTER_IP $GF" >> "$GROUP_IPS"
-            fi
-            echo "$JOB_ID" >> "$GF"
-        done < "$JOBLIST"
-
-        # Drain one printer's group serially: extract each job's payload and
-        # print it in order (single :9100 connection at a time).
-        drain_printer_group() {
-            _GIP="$1"; _GFILE="$2"
-            while IFS= read -r _JID; do
-                [ -z "$_JID" ] && continue
-                _PDATA=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$_JID\"[^}]*\"printData\": *\"\([^\"]*\)\".*/\1/p")
-                if [ -z "$_PDATA" ]; then
-                    echo "$(date '+%H:%M:%S') Job $_JID: could not parse job data from poll response"
-                    report_fail "$_JID" "Spooler could not parse job from poll response"
-                    continue
-                fi
-                echo "$(date '+%H:%M:%S') Processing job $_JID to $_GIP"
-                process_job "$_JID" "$_PDATA" "$_GIP"
-            done < "$_GFILE"
-        }
-
-        # Fan out one worker per printer. PARALLEL_DRAIN=0 forces the legacy
-        # fully-sequential path (clean fallback, never worse than before).
-        while IFS= read -r GLINE; do
-            [ -z "$GLINE" ] && continue
-            GIP=${GLINE%% *}
-            GFILE=${GLINE#* }
-            if [ "$PARALLEL_DRAIN" = "1" ]; then
-                drain_printer_group "$GIP" "$GFILE" &
-            else
-                drain_printer_group "$GIP" "$GFILE"
-            fi
-        done < "$GROUP_IPS"
-        # Wait for every printer's worker before the next poll (no-op when the
-        # drain ran sequentially).
-        wait
+        # Group by printer, then fan out one worker per printer (see the
+        # group_jobs_by_printer / fan_out_drain functions above). Both read the
+        # current $RESPONSE and $JOBLIST.
+        group_jobs_by_printer
+        fan_out_drain
 
         rm -f "$JOBLIST" "$GROUP_IPS" "$GROUP_PREFIX"_*
 
