@@ -49,16 +49,16 @@ TICKET_EVERY="${TICKET_EVERY:-1800}"
 # answer DLE EOT.
 STATUS_CHECK="${STATUS_CHECK:-1}"
 # Post-send status-read CAP in seconds (#1539) — NOT a fixed wait. With the
-# early-return read a printer that answers sooner is confirmed sooner, so this
-# is sized for the SLOWEST printer, not the old fixed-wait value: the known slow
-# printer (Bar) can take ~3s to answer DLE-EOT over its weak link. A fast printer
-# clears in a fraction of this; a slow one gets up to the cap.
-DRAIN_SECS="${DRAIN_SECS:-3}"
+# early-return read a printer that answers sooner is confirmed sooner, so the
+# cap never slows a fast printer regardless of its value. Default is
+# OPTIMISTICALLY LOW (field-test the fast path first); if the slow printer (Bar)
+# turns out to need longer, bump it on the router with no rebuild: DRAIN_SECS=3.
+DRAIN_SECS="${DRAIN_SECS:-2}"
 # Pre-flight status-read CAP (seconds) — same early-return semantics as
-# DRAIN_SECS. Sized for the slowest printer (~3s): a fast printer clears in a
-# fraction of this; a slow one gets the full window; the read returns on first
-# reply regardless, so a larger cap never slows a fast printer.
-PREFLIGHT_SECS="${PREFLIGHT_SECS:-3}"
+# DRAIN_SECS: a fast printer clears in a fraction of this; a slow one gets the
+# full window; the read returns on first reply regardless. Kept optimistically
+# low; one-line override on the router if the field test needs it: PREFLIGHT_SECS=3.
+PREFLIGHT_SECS="${PREFLIGHT_SECS:-1}"
 # Parallel per-printer drain (#1539). 1 (default): different printers drain
 # concurrently (one background worker per printer IP), jobs to the SAME printer
 # stay strictly serial (Epson TM = one :9100 connection at a time). Set to 0 to

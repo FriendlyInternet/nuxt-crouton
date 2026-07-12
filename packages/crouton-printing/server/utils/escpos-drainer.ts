@@ -35,13 +35,13 @@ export const NEEDED_STATUS_BYTES = 3
 //   DLE EOT 1 (printer status), DLE EOT 2 (offline cause), DLE EOT 4 (paper).
 const STATUS_QUERIES = Uint8Array.from([0x10, 0x04, 0x01, 0x10, 0x04, 0x02, 0x10, 0x04, 0x04])
 // CAPS, not fixed waits (#1539): with the early-return read in `exchange` a
-// printer that answers sooner is confirmed sooner, so these must be sized for
-// the SLOWEST printer, not the old fixed-wait value — the known slow printer
-// (Bar) can take ~3s to answer DLE-EOT over its weak link. A fast printer still
-// clears in a fraction of this; a slow one gets up to the cap. Kept in step
-// with the spooler's DRAIN_SECS / PREFLIGHT_SECS defaults (both 3s).
-const DRAIN_MS = 3000
-const PREFLIGHT_HOLD_MS = 3000
+// printer that answers sooner is confirmed sooner, so a fast printer clears in
+// a fraction of these regardless of the value. Defaults stay OPTIMISTICALLY LOW
+// (field-test the fast path first); a slow printer on a weak link is a one-env
+// bump with NO rebuild — set CROUTON_PRINTING_PREFLIGHT_MS / _DRAIN_MS on the
+// Node host (mirrors the spooler's PREFLIGHT_SECS / DRAIN_SECS env overrides).
+const DRAIN_MS = Number(process.env.CROUTON_PRINTING_DRAIN_MS) || 2000
+const PREFLIGHT_HOLD_MS = Number(process.env.CROUTON_PRINTING_PREFLIGHT_MS) || 1200
 const CONNECT_TIMEOUT_MS = 8000
 
 /**
