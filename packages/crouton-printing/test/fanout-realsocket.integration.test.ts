@@ -25,6 +25,9 @@ import { spawn } from 'node:child_process'
 const here = dirname(fileURLToPath(import.meta.url))
 const spooler = resolve(here, '../print-server/teltonika-simple-spooler-fast.sh')
 const REAL_NC = '/usr/bin/nc'
+// Local-only proof: needs a real system `nc` at a known path + real TCP; the CI
+// container has neither reliably, and the field test already confirmed concurrency.
+const CI_SKIP = !!process.env.CI || !existsSync(REAL_NC)
 
 let work: string | null = null
 afterEach(() => { if (work) { rmSync(work, { recursive: true, force: true }); work = null } })
@@ -120,7 +123,7 @@ fan_out_drain
   return { spread, printersConnected: firstByIp.size, httpHits: httpHits.length }
 }
 
-describe('fan_out_drain over REAL loopback TCP + real nc/curl (#1539 confirmation)', () => {
+describe.skipIf(CI_SKIP)('fan_out_drain over REAL loopback TCP + real nc/curl (#1539 confirmation)', () => {
   it('opens the 3 printers CONCURRENTLY (=1) vs SERIALLY (=0) — real nc/curl', async () => {
     // Both modes back-to-back on the same machine, then compare by RATIO so the
     // result is immune to CPU contention from the parallel test suite (absolute
