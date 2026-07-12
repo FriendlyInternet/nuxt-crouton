@@ -159,20 +159,6 @@
            root, so the fixed drawer + overlay resolve against the module instead
            of the viewport. Heights are % of the module. -->
       <div class="@2xl:hidden border-t border-default p-2 flex items-stretch gap-2">
-        <!-- Talk-to-order (#1429): the mic must be reachable without opening
-             the drawer — a spoken order starts from the collapsed bar. Parsed
-             lines land in the cart, the bar's count/total confirms them. -->
-        <UButton
-          v-if="voiceSupported"
-          size="lg"
-          square
-          icon="i-lucide-mic"
-          :color="voiceListening ? 'error' : 'neutral'"
-          :variant="voiceListening ? 'solid' : 'soft'"
-          :class="voiceListening ? 'animate-pulse' : undefined"
-          :aria-label="voiceListening ? t('sales.voice.stop') : t('sales.voice.start')"
-          @click="toggleVoice"
-        />
         <UDrawer
           v-model:open="mobileCartOpen"
           direction="bottom"

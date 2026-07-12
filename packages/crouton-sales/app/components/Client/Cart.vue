@@ -227,32 +227,17 @@
       <!-- The order button is the print feedback: it spins while the kitchen
            tickets print and confirms green when every ticket is done. A new
            order always wins — items in the cart yield the button back to
-           "Bestel" while the watcher continues in the background. The mic sits
-           beside it (not in the items-gated controls row above) so a spoken
-           order can START an empty cart. -->
-      <div class="flex items-stretch gap-2">
-        <UButton
-          :label="orderButton.label"
-          size="lg"
-          class="flex-1"
-          :color="orderButton.color"
-          :icon="orderButton.icon"
-          :loading="orderButton.loading"
-          :disabled="orderButton.disabled"
-          @click="handleOrderClick"
-        />
-        <UButton
-          v-if="voiceSupported"
-          size="lg"
-          square
-          icon="i-lucide-mic"
-          :color="voiceListening ? 'error' : 'neutral'"
-          :variant="voiceListening ? 'solid' : 'soft'"
-          :class="voiceListening ? 'animate-pulse' : undefined"
-          :aria-label="voiceListening ? t('sales.voice.stop') : t('sales.voice.start')"
-          @click="$emit('toggleVoice')"
-        />
-      </div>
+           "Bestel" while the watcher continues in the background. -->
+      <UButton
+        :label="orderButton.label"
+        size="lg"
+        block
+        :color="orderButton.color"
+        :icon="orderButton.icon"
+        :loading="orderButton.loading"
+        :disabled="orderButton.disabled"
+        @click="handleOrderClick"
+      />
     </template>
   </UCard>
 </template>
