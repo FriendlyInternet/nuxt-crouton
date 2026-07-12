@@ -86,7 +86,9 @@
               :key="editing ? 'edit' : 'view'"
               :products="filteredProducts"
               :editable="editing"
+              :quantities="productQuantities"
               @select="handleProductSelect"
+              @decrement="handleProductDecrement"
               @edit="openEditProduct"
               @reorder="handleReorder"
             />
@@ -431,6 +433,29 @@ function handleProductSelect(
   remark?: string
 ) {
   addToCart(product, remark, selectedOption)
+}
+
+// Total quantity in the cart per product id (summed across every option/remark
+// variant). Drives the product row's inline stepper (plain products) and the
+// count badge (products with options/remark) in SalesClientProductList.
+const productQuantities = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const item of cartItems.value) {
+    counts[item.product.id] = (counts[item.product.id] || 0) + item.quantity
+  }
+  return counts
+})
+
+// Row "−" on a plain product: decrement its single cart line (no options, no
+// remark — the only line a row-level stepper can unambiguously target).
+// updateQuantity removes the line when it hits 0.
+function handleProductDecrement(product: SalesProduct) {
+  const index = cartItems.value.findIndex(item =>
+    item.product.id === product.id && !item.selectedOptions && !item.remarks
+  )
+  if (index !== -1) {
+    updateQuantity(index, cartItems.value[index]!.quantity - 1)
+  }
 }
 
 // Categories in the admin-arranged order: displayOrder, then title. Drives
