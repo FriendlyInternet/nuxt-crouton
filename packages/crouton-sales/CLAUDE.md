@@ -159,7 +159,9 @@ tab, not one order (the complete/fail callbacks skip order auto-complete when nu
 (a loose order promotes its `#N` to the big slot) — then one compact `HH:MM · helper` meta line.
 The location name is deliberately NOT printed (each kitchen printer sits at its location). **Items
 pack tight**: a blank separator line prints only around an item that carries options/notes, so runs
-of plain items sit together (#1503). A **`TOTAL` prints on any ticket that shows prices** (incl. a
+of plain items sit together (#1503). Each item's **product name, options, and note lines print
+double-height** (height only — the price column still aligns) so products and comments read big at a
+glance; the HTML/preview mirror bumps the matching font sizes. A **`TOTAL` prints on any ticket that shows prices** (incl. a
 priced `*** PERSONEEL ***` staff ticket), not just customer receipts. Customer receipts keep the
 small `Client:` line, print amounts in one **right-aligned price column** (long names wrap within
 their column) and a double-height `TOTAL`; end-of-tab receipts (`ReceiptData.clientTab`) reuse the
