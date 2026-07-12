@@ -38,9 +38,11 @@ export function tally(findings, ledger) {
   const authors = new Map() // agent → { net, defects, clean, qualityFixes }
   const gates = new Map()   // agent → { net, catches, falsePositives }  (defect lane)
   const qGates = new Map()  // agent → { net, fixes }                    (quality lane)
-  const A = (a) => authors.get(a) || authors.set(a, { agent: a, net: 0, defects: 0, clean: 0, qualityFixes: 0 }).get(a)
-  const G = (g) => gates.get(g) || gates.set(g, { agent: g, net: 0, catches: 0, falsePositives: 0 }).get(g)
-  const Q = (g) => qGates.get(g) || qGates.set(g, { agent: g, net: 0, fixes: 0 }).get(g)
+  const acc = {
+    A: (a) => authors.get(a) || authors.set(a, { agent: a, net: 0, defects: 0, clean: 0, qualityFixes: 0 }).get(a),
+    G: (g) => gates.get(g) || gates.set(g, { agent: g, net: 0, catches: 0, falsePositives: 0 }).get(g),
+    Q: (g) => qGates.get(g) || qGates.set(g, { agent: g, net: 0, fixes: 0 }).get(g),
+  }
 
   const transactions = []
   // Author refs that carry a CONFIRMED DEFECT — these runs don't earn the clean reward.
@@ -52,35 +54,11 @@ export function tally(findings, ledger) {
     if (!isQuality && f.status === 'confirmed' && f.author_ref) dirtyRefs.add(f.author_ref)
     for (const t of transactionsFor(f)) {
       transactions.push({ ...t, ts: f.ts, gate: f.gate, severity: f.severity, class: f.class || 'defect' })
-      if (isQuality) {
-        // Quality lane: authors get a fix COUNT (not a net); the gate gets its own net.
-        if (t.role === 'author') { if (t.delta < 0) A(t.agent).qualityFixes++ }
-        else { const g = Q(t.agent); g.net += t.delta; if (t.delta > 0) g.fixes++ }
-      } else {
-        if (t.role === 'author') {
-          const a = A(t.agent)
-          a.net += t.delta
-          if (t.delta < 0) a.defects++
-        } else {
-          const g = G(t.agent)
-          g.net += t.delta
-          if (t.delta > 0) g.catches++
-          else if (t.delta < 0) g.falsePositives++
-        }
-      }
+      applyTransaction(t, isQuality, acc)
     }
   }
 
-  // Clean-merge author reward: a merged, successful run with no confirmed defect.
-  for (const r of ledger) {
-    if (r.outcome !== 'merged' || !isSuccess(r)) continue
-    if (r.ref && dirtyRefs.has(r.ref)) continue
-    const flow = r.flow
-    if (!flow) continue
-    const a = A(flow)
-    a.net += CLEAN_MERGE_REWARD
-    a.clean++
-  }
+  applyCleanMergeRewards(ledger, dirtyRefs, acc.A)
 
   const authorRows = [...authors.values()]
     .map((a) => ({ ...a, rate: a.defects + a.clean > 0 ? a.defects / (a.defects + a.clean) : 0 }))
@@ -91,6 +69,53 @@ export function tally(findings, ledger) {
     .sort((x, y) => y.net - x.net || x.agent.localeCompare(y.agent))
 
   return { authors: authorRows, gates: gateRows, qualityGates: qualityGateRows, transactions }
+}
+
+/**
+ * Route one scoring transaction into the right accumulator. Quality-class findings
+ * feed the separate low-weight lane; everything else feeds the defect board.
+ * `acc` bundles the get-or-create accessors `{ A, G, Q }`.
+ */
+function applyTransaction(t, isQuality, acc) {
+  if (isQuality) applyQualityTx(t, acc)
+  else applyDefectTx(t, acc)
+}
+
+/** Quality lane: authors accrue a fix COUNT (not a net); the gate gets its own net. */
+function applyQualityTx(t, { A, Q }) {
+  if (t.role === 'author') {
+    if (t.delta < 0) A(t.agent).qualityFixes++
+    return
+  }
+  const g = Q(t.agent)
+  g.net += t.delta
+  if (t.delta > 0) g.fixes++
+}
+
+/** Defect board: author −w / +clean-reward; gate +w for a catch, −w for a false positive. */
+function applyDefectTx(t, { A, G }) {
+  if (t.role === 'author') {
+    const a = A(t.agent)
+    a.net += t.delta
+    if (t.delta < 0) a.defects++
+    return
+  }
+  const g = G(t.agent)
+  g.net += t.delta
+  if (t.delta > 0) g.catches++
+  else if (t.delta < 0) g.falsePositives++
+}
+
+/** Clean-merge author reward: a merged, successful run with no confirmed defect. */
+function applyCleanMergeRewards(ledger, dirtyRefs, A) {
+  for (const r of ledger) {
+    if (r.outcome !== 'merged' || !isSuccess(r)) continue
+    if (r.ref && dirtyRefs.has(r.ref)) continue
+    if (!r.flow) continue
+    const a = A(r.flow)
+    a.net += CLEAN_MERGE_REWARD
+    a.clean++
+  }
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
