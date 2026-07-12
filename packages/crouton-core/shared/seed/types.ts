@@ -52,7 +52,13 @@ export type CreatePageWithBlocksFn = (options: CreatePageWithBlocksOptions) => s
 export type UpsertFn = (
   table: string,
   byId: Record<string, unknown>,
-  values?: Record<string, unknown>
+  values?: Record<string, unknown>,
+  /**
+   * `ifAbsent: true` → insert the row only when it's missing; never overwrite an
+   * existing row on a re-seed. Use for demo rows a user may edit (order, title,
+   * price) so a redeploy's re-seed doesn't clobber their changes (#1579).
+   */
+  options?: { ifAbsent?: boolean }
 ) => void
 
 export interface SeedContext {

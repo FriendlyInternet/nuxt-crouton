@@ -52,6 +52,13 @@ export function sqlValue(value: unknown): string {
 export interface UpsertOptions {
   /** Columns never overwritten on conflict (e.g. `createdAt`). */
   immutable?: string[]
+  /**
+   * Insert-if-absent: emit `ON CONFLICT DO NOTHING` regardless of updatable
+   * columns, so an existing row is never overwritten. For demo/seed rows a
+   * user may edit — the row seeds once, then belongs to the user (a re-seed
+   * on redeploy leaves their edits intact). #1579.
+   */
+  insertOnly?: boolean
 }
 
 /**
@@ -84,7 +91,7 @@ export function buildUpsert(
   const updateCols = cols.filter(c => !conflictCols.includes(c) && !immutable.has(c))
 
   let stmt = `INSERT INTO ${quoteIdent(table)} (${insertCols}) VALUES (${insertVals})`
-  if (updateCols.length > 0) {
+  if (!options.insertOnly && updateCols.length > 0) {
     const setClause = updateCols
       .map(c => `${quoteIdent(c)} = excluded.${quoteIdent(c)}`)
       .join(', ')

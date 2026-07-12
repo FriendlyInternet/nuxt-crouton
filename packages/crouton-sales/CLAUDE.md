@@ -840,6 +840,11 @@ Part of the composable seeding system (epic #82, contract in
   the event's helper PIN.
 
 Idempotent (stable ids). Run via an app's `crouton-seed` / `db:seed:*` scripts.
+**All sales demo rows are seeded `{ ifAbsent: true }`** (#1579): `db:seed:staging`
+re-runs on every staging deploy, and a plain upsert (`DO UPDATE`) would overwrite
+a user's edits (reorder/rename/reprice) on the seeded event every deploy. `ifAbsent`
+makes each row insert-once-then-belong-to-the-user (`DO NOTHING` on conflict) — a
+deleted row is still re-created, an existing one is left alone.
 
 ## Dependencies
 

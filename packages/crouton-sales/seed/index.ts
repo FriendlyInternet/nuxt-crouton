@@ -59,7 +59,10 @@ function seedCatalog(ctx: SeedContext) {
     updatedAt: ctx.now,
     createdBy: 'seed',
     updatedBy: 'seed'
-  })
+  // ifAbsent: seed the demo once — a re-seed on every staging deploy must NOT
+  // overwrite the user's edits (title/pin/order/price). Deleted rows are still
+  // re-created; only existing ones are left alone (#1579).
+  }, { ifAbsent: true })
 
   const categoryIds: Record<SeedProduct['category'], string> = {
     drinks: seedId('cat', ctx.teamSlug, EVENT_SLUG, 'drinks'),
@@ -76,7 +79,7 @@ function seedCatalog(ctx: SeedContext) {
     updatedAt: ctx.now,
     createdBy: 'seed',
     updatedBy: 'seed'
-  })
+  }, { ifAbsent: true })
   ctx.upsert('sales_categories', { id: categoryIds.food }, {
     teamId: ctx.teamId,
     owner: 'seed',
@@ -87,7 +90,7 @@ function seedCatalog(ctx: SeedContext) {
     updatedAt: ctx.now,
     createdBy: 'seed',
     updatedBy: 'seed'
-  })
+  }, { ifAbsent: true })
 
   for (const product of PRODUCTS) {
     ctx.upsert('sales_products', { id: seedId('prd', ctx.teamSlug, EVENT_SLUG, product.slug) }, {
@@ -106,7 +109,7 @@ function seedCatalog(ctx: SeedContext) {
       updatedAt: ctx.now,
       createdBy: 'seed',
       updatedBy: 'seed'
-    })
+    }, { ifAbsent: true })
   }
 }
 

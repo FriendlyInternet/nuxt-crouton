@@ -119,10 +119,14 @@ runtime), exported at `@fyit/crouton-core/shared/seed`:
 - `SeedProvider` (`{ id, dependsOn?, seed(ctx) }`) + `SeedContext` (`teamId`,
   `teamSlug`, `locale`, `upsert(table, byId, values)`, `now`, optional
   `createPageWithBlocks`). Each package ships a provider at `<pkg>/seed`.
-- `buildUpsert(table, byId, values)` → idempotent `INSERT … ON CONFLICT(byId)
-  DO UPDATE SET …` SQL (identifiers double-quoted so `order` is safe;
-  `createdAt` held immutable on update). `seedId(...parts)` / `seedOrgId(slug)`
-  derive stable ids so re-runs upsert instead of duplicating.
+- `buildUpsert(table, byId, values, options?)` → idempotent `INSERT … ON
+  CONFLICT(byId) DO UPDATE SET …` SQL (identifiers double-quoted so `order` is
+  safe; `createdAt` held immutable on update). `options.insertOnly: true` forces
+  `ON CONFLICT DO NOTHING` — seed the row once, never overwrite it on a re-run;
+  surfaced on `ctx.upsert(table, byId, values, { ifAbsent: true })` for demo rows
+  a user may edit so a redeploy's re-seed doesn't clobber their changes (#1579).
+  `seedId(...parts)` / `seedOrgId(slug)` derive stable ids so re-runs upsert
+  instead of duplicating.
 - `topoSort(providers)` + `collectSeedSql({ providers, teamSlug, teamId, locale,
   withStaff, createPageWithBlocks })` order providers by `dependsOn` and return
   the combined SQL. The CLI `crouton-seed` command wraps this with discovery +
