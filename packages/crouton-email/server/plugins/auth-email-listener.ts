@@ -8,6 +8,7 @@ import {
 import { getEmailBrandConfig } from '../utils/template-renderer'
 import { resolveEmailOverrides } from '../utils/resolve-email-settings'
 import type { EmailTemplateType } from '../utils/resolve-email-settings'
+import type { SendEmailResult } from '../../types'
 
 /**
  * Resolve a team/organization brand name from the URL in the email payload.
@@ -51,6 +52,8 @@ export default defineNitroPlugin((nitroApp) => {
   console.log('[crouton-email] 🔌 auth-email-listener plugin registered')
   nitroApp.hooks.hook('crouton:auth:email', async (payload) => {
     console.log(`[crouton-email] 📨 Hook received: type=${payload.type}, to=${payload.to}`)
+    let sendResult: SendEmailResult | undefined
+    let caughtError: string | undefined
     try {
       switch (payload.type) {
         case 'verification': {
@@ -58,7 +61,7 @@ export default defineNitroPlugin((nitroApp) => {
             resolveBrandName(payload.url),
             getOverrides('verification', { userEmail: payload.to })
           ])
-          await sendVerificationLink({
+          sendResult = await sendVerificationLink({
             to: payload.to,
             link: payload.url,
             name: payload.userName,
@@ -73,7 +76,7 @@ export default defineNitroPlugin((nitroApp) => {
             resolveBrandName(payload.url),
             getOverrides('password-reset', { userEmail: payload.to })
           ])
-          await sendPasswordReset({
+          sendResult = await sendPasswordReset({
             to: payload.to,
             link: payload.url,
             name: payload.userName,
@@ -98,7 +101,7 @@ export default defineNitroPlugin((nitroApp) => {
             organizationName: payload.organizationName
           })
           console.log(`[crouton-email] 📋 Overrides resolved:`, overrides ? 'yes' : 'none')
-          const result = await sendTeamInvite({
+          sendResult = await sendTeamInvite({
             to: payload.to,
             link: acceptLink,
             inviterName: payload.inviterName,
@@ -107,7 +110,7 @@ export default defineNitroPlugin((nitroApp) => {
             brandName: payload.organizationName,
             ...(overrides && { overrides })
           }, payload._event)
-          console.log(`[crouton-email] 📬 sendTeamInvite result:`, JSON.stringify(result))
+          console.log(`[crouton-email] 📬 sendTeamInvite result:`, JSON.stringify(sendResult))
           break
         }
 
@@ -116,7 +119,7 @@ export default defineNitroPlugin((nitroApp) => {
             resolveBrandName(payload.url),
             getOverrides('magic-link', { userEmail: payload.to })
           ])
-          await sendMagicLink({
+          sendResult = await sendMagicLink({
             to: payload.to,
             link: payload.url,
             ...(brandName && { brandName }),
@@ -128,7 +131,25 @@ export default defineNitroPlugin((nitroApp) => {
     }
     catch (err) {
       // Email failure must never break auth flow
+      caughtError = err instanceof Error ? err.message : String(err)
       console.error(`[crouton-email] Failed to send ${payload.type} email to ${payload.to}:`, err)
+    }
+    finally {
+      // Report the real outcome so crouton-auth's logger can flip the row it
+      // logged as `pending` to `sent` / `failed` (issue #1542). Best-effort —
+      // a hook failure must never break the auth flow.
+      const ok = sendResult?.success === true
+      try {
+        await nitroApp.hooks.callHook('crouton:auth:email:result', {
+          to: payload.to,
+          type: payload.type,
+          ok,
+          error: ok ? undefined : (caughtError ?? sendResult?.error ?? 'send failed')
+        })
+      }
+      catch (hookErr) {
+        console.error('[crouton-email] Failed to emit email result hook:', hookErr)
+      }
     }
   })
 })
