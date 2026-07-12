@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import { bucketPrintStatuses } from '../../../shared/utils/print-status'
 
 const props = defineProps<{
   event: SalesEvent
@@ -225,20 +226,19 @@ async function deleteOrder(orderId: string) {
   }
 }
 
-// Combined worst status across a set of jobs (status enum: 0=pending,
-// 1=printing, 2=done, 9=error). Red wins, then orange (busy), then green;
-// no jobs at all ⇒ grey.
+// Map the shared worst-status bucket (failed > busy > done; none ⇒ no jobs) to
+// this row's LED dot. Red wins, then orange (busy), then green; none ⇒ grey.
 function ledFromStatuses(statuses: string[]) {
-  if (!statuses.length) {
-    return { class: 'bg-accented', label: t('sales.printQueue.noTicket', 'No ticket') }
+  switch (bucketPrintStatuses(statuses)) {
+    case 'failed':
+      return { class: 'bg-error', label: t('sales.printQueue.statusError', 'Error') }
+    case 'busy':
+      return { class: 'bg-warning animate-pulse', label: t('sales.printQueue.statusPrinting', 'Printing') }
+    case 'done':
+      return { class: 'bg-success', label: t('sales.printQueue.statusDone', 'Done') }
+    default:
+      return { class: 'bg-accented', label: t('sales.printQueue.noTicket', 'No ticket') }
   }
-  if (statuses.includes('9')) {
-    return { class: 'bg-error', label: t('sales.printQueue.statusError', 'Error') }
-  }
-  if (statuses.some(s => s === '0' || s === '1')) {
-    return { class: 'bg-warning animate-pulse', label: t('sales.printQueue.statusPrinting', 'Printing') }
-  }
-  return { class: 'bg-success', label: t('sales.printQueue.statusDone', 'Done') }
 }
 
 // One LED per order row, across every printer's jobs.

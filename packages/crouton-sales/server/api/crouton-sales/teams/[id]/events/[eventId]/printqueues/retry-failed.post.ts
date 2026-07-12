@@ -21,9 +21,10 @@ import { eq, and, or, lt, inArray } from 'drizzle-orm'
 import { requireTeamEvent } from '../../../../../../../utils/team-event'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { planRequeue, type RequeueRequest } from '../../../../../../../utils/plan-requeue'
+import { SALES_PRINT_STATUS } from '../../../../../../../../shared/utils/print-status'
 
-const STATUS_PENDING = '0'
-const STATUS_PRINTING = '1'
+const STATUS_PENDING = SALES_PRINT_STATUS.PENDING
+const STATUS_PRINTING = SALES_PRINT_STATUS.PRINTING
 const STALE_PRINTING_MS = 2 * 60 * 1000
 
 export default defineEventHandler(async (event) => {

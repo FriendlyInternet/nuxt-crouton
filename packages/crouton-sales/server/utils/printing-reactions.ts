@@ -26,9 +26,10 @@
  */
 import { and, count, eq, ne, notInArray } from 'drizzle-orm'
 import type { OutboxEvent } from './sync-outbox'
+import { SALES_PRINT_STATUS } from '../../shared/utils/print-status'
 
-const STATUS_COMPLETED = '2'
-const STATUS_FAILED = '9'
+const STATUS_COMPLETED = SALES_PRINT_STATUS.COMPLETED
+const STATUS_FAILED = SALES_PRINT_STATUS.FAILED
 
 /** The shape the lazy orders-schema loader must resolve (the generated layer). */
 export interface OrdersSchema {

@@ -14,6 +14,7 @@
  * pending: spooler down / printer unreachable).
  */
 import { FetchError } from 'ofetch'
+import { SALES_PRINT_STATUS } from '../../shared/utils/print-status'
 
 export interface PrintWatchJob {
   id: string
@@ -111,13 +112,13 @@ export function usePrintWatcher(options: UsePrintWatcherOptions = {}) {
         jobs = []
       }
 
-      const statuses = jobs.map(j => String(j.status ?? '0'))
+      const statuses = jobs.map(j => String(j.status ?? SALES_PRINT_STATUS.PENDING))
       entry.failures = jobs
-        .filter(j => String(j.status ?? '0') === '9')
+        .filter(j => String(j.status ?? SALES_PRINT_STATUS.PENDING) === SALES_PRINT_STATUS.FAILED)
         .map(j => ({ printerTitle: j.printerTitle || '?', errorMessage: j.errorMessage }))
 
-      const allDone = jobs.length > 0 && statuses.every(s => s === '2')
-      const allTerminal = jobs.length > 0 && statuses.every(s => s === '2' || s === '9')
+      const allDone = jobs.length > 0 && statuses.every(s => s === SALES_PRINT_STATUS.COMPLETED)
+      const allTerminal = jobs.length > 0 && statuses.every(s => s === SALES_PRINT_STATUS.COMPLETED || s === SALES_PRINT_STATUS.FAILED)
 
       if (allDone) {
         entry.state = 'confirmed'

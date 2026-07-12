@@ -20,6 +20,7 @@
  * leave both grey. Pure + unit-tested (test/printer-led.test.ts); the Vue
  * component only maps the returned state → dot class + i18n label.
  */
+import { SALES_PRINT_STATUS } from '../../shared/utils/print-status'
 
 /** LED state, decoupled from any styling/i18n (the component maps these). */
 export type LedState = 'online' | 'offline' | 'printing' | 'unknown'
@@ -50,9 +51,9 @@ function jobTime(job: LedJob): number {
 
 /** Map a print-job status code to an LED state (2 = done, 9 = failed). */
 function stateForStatus(status: string | number | null | undefined): LedState {
-  switch (String(status ?? '0')) {
-    case '2': return 'online'
-    case '9': return 'offline'
+  switch (String(status ?? SALES_PRINT_STATUS.PENDING)) {
+    case SALES_PRINT_STATUS.COMPLETED: return 'online'
+    case SALES_PRINT_STATUS.FAILED: return 'offline'
     default: return 'printing'
   }
 }

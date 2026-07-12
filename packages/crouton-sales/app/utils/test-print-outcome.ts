@@ -18,6 +18,8 @@
  * (plus how long it's been waiting) here to decide whether to settle the button.
  * Status codes mirror the spooler contract (see print_jobs.status).
  */
+import { SALES_PRINT_STATUS } from '../../shared/utils/print-status'
+
 export type TestPrintPhase = 'pending' | 'printed' | 'failed'
 export type TestPrintFailureReason = 'error' | 'timeout'
 
@@ -47,14 +49,14 @@ export interface TestPrintResult {
 }
 
 export function evaluateTestPrint({ job, elapsedMs, timeoutMs }: TestPrintTick): TestPrintResult {
-  const status = String(job?.status ?? '0')
+  const status = String(job?.status ?? SALES_PRINT_STATUS.PENDING)
 
   // A terminal status wins regardless of the clock — a done job is printed,
   // an errored job is failed, even if we only saw it after the timeout.
-  if (status === '2') {
+  if (status === SALES_PRINT_STATUS.COMPLETED) {
     return { phase: 'printed', settled: true }
   }
-  if (status === '9') {
+  if (status === SALES_PRINT_STATUS.FAILED) {
     return { phase: 'failed', settled: true, reason: 'error', errorMessage: job?.errorMessage ?? null }
   }
 
