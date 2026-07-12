@@ -1,0 +1,100 @@
+name: bundle-budget
+
+# Deterministic client-bundle trend (#1581). Builds the launched apps, measures
+# each app's `.output/public/_nuxt` (raw + gzip JS/CSS, top chunks), scores it
+# against the budget bands, and commits one point per app to
+# writeups/perf/bundle-history.jsonl. The product-perf sibling of Loop Station's
+# WS1 harness-size inventory — same producer shape (deterministic → committed
+# JSONL → threshold), pointed at the app instead of the harness.
+#
+# Weekly + on-demand (not per-merge): a full build of every app is heavy, and the
+# number only needs a regular trend point, not one per commit. Per-merge causal
+# attribution (build only the app a merge touched, feed a regression into the
+# accountability quality lane #1570) is the documented follow-up.
+#
+# Deterministic (same build → same bytes) — unlike Lighthouse vitals, which stay
+# report-only in unlighthouse.yml. So this CAN carry a budget without flakiness.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays 06:17 UTC (before the loop-station rollups)
+  workflow_dispatch:
+    inputs:
+      apps:
+        description: 'Space-separated app names to measure (default: all launched apps)'
+        required: false
+        type: string
+
+permissions:
+  contents: write # commit the new bundle-history.jsonl points back to main
+
+concurrency:
+  group: bundle-budget
+  cancel-in-progress: false # never drop a data point mid-write
+
+jobs:
+  measure:
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the commit-back rebases cleanly
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Build every @fyit/* package first (content-addressed cache) so the app
+      # builds don't hit the "Could not load @fyit/crouton" cold-start trap (#1222).
+      - uses: ./.github/actions/warm-packages
+
+      - name: Build + measure each launched app
+        env:
+          # Only the build-time prerender pass needs these.
+          BETTER_AUTH_SECRET: prerender-placeholder
+          BETTER_AUTH_URL: http://localhost:3000
+        run: |
+          set -uo pipefail
+          APPS="${{ inputs.apps }}"
+          if [ -z "$APPS" ]; then
+            APPS=$(for f in apps/*/deploy.config.json; do [ -f "$f" ] && basename "$(dirname "$f")"; done | tr '\n' ' ')
+          fi
+          echo "Measuring: $APPS"
+          SHA="${GITHUB_SHA}"
+          ANY=0
+          for app in $APPS; do
+            DIR="apps/$app"
+            if [ ! -d "$DIR" ]; then echo "::warning::$DIR not found — skipping"; continue; fi
+            echo "── building $app ──"
+            # Same build a deploy runs; measure the client assets it emits.
+            ( cd "$DIR" && npx nuxt prepare && NITRO_PRESET=cloudflare_module npx nuxt build ) \
+              || { echo "::warning::$app build failed — skipping its bundle point"; continue; }
+            ASSETS="$DIR/.output/public/_nuxt"
+            if [ ! -d "$ASSETS" ]; then echo "::warning::$ASSETS missing after build — skipping"; continue; fi
+            node scripts/perf/bundle-size.mjs --app "$app" --dir "$ASSETS" --commit "$SHA" --pretty \
+              | node scripts/perf/append-bundle-history.mjs
+            ANY=1
+          done
+          [ "$ANY" = "1" ] || echo "::warning::no app produced a bundle point this run"
+
+      - name: Commit new bundle points (if any)
+        run: |
+          if git diff --quiet -- writeups/perf/bundle-history.jsonl; then
+            echo "no new bundle points — nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add writeups/perf/bundle-history.jsonl
+          git commit -m "chore(perf): record app bundle-size trend [skip ci]"
+          for i in 1 2 3 4; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            echo "push attempt $i failed; retrying…"; sleep $((2 ** i))
+          done
+          exit 1
