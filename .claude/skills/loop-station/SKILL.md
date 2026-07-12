@@ -218,3 +218,50 @@ same tokenizer** (a heuristic→anthropic switch isn't real growth).
 ```bash
 node .claude/skills/loop-station/advisor.mjs --pretty   # see findings + actionable verdict
 ```
+
+---
+
+# WS6 — accountability scoreboard (#1570)
+
+The reviewer-vs-author lens: every **confirmed defect** is a severity-weighted,
+zero-sum-ish transaction — **−w to the author flow, +w to the gate that caught it**
+— and a clean merge earns its author +1. Turns review gates and coding agents into
+opposing teams so we can see who ships clean and which gates actually earn their keep.
+
+> Boundary holds: a new *lens* over existing data, not a new pipeline. It joins the
+> **findings** ledger (`writeups/loop-station/findings.jsonl`) × the run-outcome
+> **eval-ledger** (`writeups/reports/eval-ledger.jsonl`, #883). The tally is
+> deterministic arithmetic — no LLM. Severity comes from the gate's own rating.
+
+## The asymmetric model (decided on #1570)
+
+| Event | Author | Catcher | Gate that missed it |
+|---|--:|--:|--:|
+| Defect caught in review | −w | +w | — |
+| Clean merge, stays clean | +1 | 0 | — |
+| Defect escaped, caught later | −w·2 | +w | −w |
+| Flag rejected (false-positive) | 0 | −w (noise) | — |
+
+`w` is severity-weighted (`critical 5 / high 3 / medium 2 / low 1`). A find scores
+**only once confirmed** (fix merged / reverted / `lgtm`) — unconfirmed = `pending`.
+
+## Files (live in `scripts/eval-ledger/` with the ledger they join)
+
+| file | role |
+|------|------|
+| `findings-schema.mjs` | finding record shape + `validate()` + `transactionsFor()` (the scoring rules — tune weights here) |
+| `append-finding.mjs` | validate + append ONE finding to `findings.jsonl` (`--check` to validate only) |
+| `accountability.mjs` | join findings × ledger → two leaderboards (markdown / `--json` / `--html`); importable `tally()` |
+| `accountability.test.mjs` | pins the arithmetic (caught/escaped/rejected/pending, clean-merge reward, sort order) |
+
+First slice wires the **`code-review`** gate end-to-end; red-team / a11y / frontend-review
+and the escaped-defect (revert) signal are follow-ups. Rendered in `pocs/loop-station`
+(the `AccountabilityBoard` panel, staged by its `prepare-data.mjs`).
+
+## Run by hand
+
+```bash
+node scripts/eval-ledger/accountability.mjs            # the two leaderboards
+node scripts/eval-ledger/append-finding.mjs --gate code-review --severity high \
+  --status confirmed --confirmed_via fix-merged --author_flow task-worker --author_ref <PR-url>
+```
