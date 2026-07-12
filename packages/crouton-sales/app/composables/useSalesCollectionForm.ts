@@ -36,7 +36,7 @@ export function useSalesCollectionForm(
   const submitters: Record<SalesCollectionFormProps['action'], () => Promise<unknown> | undefined> = {
     create: () => create(state.value),
     update: () => (state.value.id ? update(state.value.id, state.value) : undefined),
-    delete: () => deleteItems(props.items as any)
+    delete: () => deleteItems((props.items ?? []).map(i => i.id))
   }
   const submitAction = () => submitters[props.action]?.()
 
