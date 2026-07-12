@@ -103,56 +103,47 @@ const { t } = useT()
 // Mobile overflow menu (shown below @lg): the secondary actions that are
 // individual buttons on wide screens collapse into a single "⋯" dropdown so the
 // toolbar stays one clean row on a phone. Status + Save + Close stay visible.
+// Derived bits are hoisted into their own small computeds so the item-builder
+// below stays a flat, low-branch assembler.
+const showAiAction = computed(() => props.isRegularPage && props.hasAi)
+const canDelete = computed(() => props.action === 'update' && !!props.pageId)
+const openTo = computed(() => (props.status === 'published' ? props.publicUrl ?? undefined : undefined))
+const visibilityLabel = computed(() => props.visibilityConfig[props.visibility]?.label ?? t('pages.visibility.public'))
+const visibilityIcon = computed(() => props.visibilityConfig[props.visibility]?.icon ?? 'i-lucide-globe')
+const visibilityChildren = computed(() =>
+  Object.entries(props.visibilityConfig).map(([value, cfg]) => ({
+    label: cfg.label,
+    icon: cfg.icon,
+    onSelect: () => emit('update:visibility', value)
+  }))
+)
+// Delete keeps a guard: a nested "Delete? → confirm" step, mirroring the
+// two-click CroutonConfirmButton used on wide screens.
+const deleteGroup = computed(() => [{
+  label: t('common.delete'),
+  icon: 'i-lucide-trash-2',
+  color: 'error',
+  children: [{
+    label: t('pages.editor.confirmDelete'),
+    icon: 'i-lucide-trash-2',
+    color: 'error',
+    onSelect: () => emit('delete')
+  }]
+}])
+
 const overflowItems = computed(() => {
-  const actions: any[] = [
+  const main: any[] = [
     { label: t('pages.editor.preview'), icon: 'i-lucide-eye', onSelect: () => emit('show-preview') }
   ]
-
   if (props.publicUrl) {
-    actions.push({
-      label: t('pages.editor.open'),
-      icon: 'i-lucide-external-link',
-      to: props.status === 'published' ? props.publicUrl : undefined,
-      target: '_blank',
-      disabled: props.status !== 'published'
-    })
+    main.push({ label: t('pages.editor.open'), icon: 'i-lucide-external-link', to: openTo.value, target: '_blank', disabled: props.status !== 'published' })
   }
-
-  if (props.isRegularPage && props.hasAi) {
-    actions.push({ label: t('pages.editor.generate'), icon: 'i-lucide-sparkles', onSelect: () => emit('show-ai-generator') })
+  if (showAiAction.value) {
+    main.push({ label: t('pages.editor.generate'), icon: 'i-lucide-sparkles', onSelect: () => emit('show-ai-generator') })
   }
-
-  actions.push({ label: t('pages.editor.settings'), icon: 'i-lucide-settings', onSelect: () => emit('show-settings') })
-
-  actions.push({
-    label: props.visibilityConfig[props.visibility]?.label ?? t('pages.visibility.public'),
-    icon: props.visibilityConfig[props.visibility]?.icon ?? 'i-lucide-globe',
-    children: Object.entries(props.visibilityConfig).map(([value, cfg]) => ({
-      label: cfg.label,
-      icon: cfg.icon,
-      onSelect: () => emit('update:visibility', value)
-    }))
-  })
-
-  const groups: any[] = [actions]
-
-  // Delete keeps a guard: a nested "Delete? → confirm" step, mirroring the
-  // two-click CroutonConfirmButton used on wide screens.
-  if (props.action === 'update' && props.pageId) {
-    groups.push([{
-      label: t('common.delete'),
-      icon: 'i-lucide-trash-2',
-      color: 'error',
-      children: [{
-        label: t('pages.editor.confirmDelete'),
-        icon: 'i-lucide-trash-2',
-        color: 'error',
-        onSelect: () => emit('delete')
-      }]
-    }])
-  }
-
-  return groups
+  main.push({ label: t('pages.editor.settings'), icon: 'i-lucide-settings', onSelect: () => emit('show-settings') })
+  main.push({ label: visibilityLabel.value, icon: visibilityIcon.value, children: visibilityChildren.value })
+  return canDelete.value ? [main, deleteGroup.value] : [main]
 })
 </script>
 

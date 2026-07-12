@@ -224,6 +224,13 @@ const blockCountLabel = computed(() => {
   return `${n} ${word} · ${t('pages.editor.tapToEdit', 'Tap to edit')}`
 })
 
+// Fullscreen toggle presentation, hoisted out of the template so the markup
+// carries no inline ternaries: a labelled Done button while open, a plain
+// maximize icon while collapsed.
+const fsToggle = computed(() => isFullscreen.value
+  ? { icon: 'i-lucide-check', color: 'primary' as const, variant: 'soft' as const, label: t('pages.editor.done', 'Done') }
+  : { icon: 'i-lucide-maximize-2', color: 'neutral' as const, variant: 'ghost' as const, label: '' })
+
 
 // Property panel state (managed here, not in CroutonEditorBlocks)
 const selectedNode = ref<{ pos: number; node: any } | null>(null)
@@ -281,14 +288,14 @@ defineExpose({
         <div class="flex items-center gap-2">
           <UTabs v-model="activeTab" :items="tabItems" :content="false" class="flex-1" :ui="{ indicator: 'bg-primary/10', trigger: 'data-[state=active]:text-primary' }" />
           <UButton
-            :icon="isFullscreen ? 'i-lucide-check' : 'i-lucide-maximize-2'"
-            :color="isFullscreen ? 'primary' : 'neutral'"
-            :variant="isFullscreen ? 'soft' : 'ghost'"
+            :icon="fsToggle.icon"
+            :color="fsToggle.color"
+            :variant="fsToggle.variant"
             size="xs"
-            :aria-label="isFullscreen ? t('pages.editor.done', 'Done') : t('pages.editor.fullscreen', 'Fullscreen')"
+            :aria-label="fsToggle.label || t('pages.editor.fullscreen', 'Fullscreen')"
             @click="isFullscreen = !isFullscreen"
           >
-            <span v-if="isFullscreen" class="text-xs font-medium">{{ t('pages.editor.done', 'Done') }}</span>
+            <span v-if="fsToggle.label" class="text-xs font-medium">{{ fsToggle.label }}</span>
           </UButton>
         </div>
 
