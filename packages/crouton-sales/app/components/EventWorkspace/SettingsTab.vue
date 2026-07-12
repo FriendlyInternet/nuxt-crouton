@@ -264,9 +264,9 @@ onUnmounted(() => emit('register', null))
 
 // Tabbed mode (narrow slideover): which card is showing.
 const sections = computed(() => [
-  { key: 'event', label: t('sales.workspace.eventDetails'), icon: 'i-lucide-ticket' },
-  { key: 'printers', label: t('sales.sidebar.printers'), icon: 'i-lucide-printer' },
-  { key: 'helpers', label: t('sales.workspace.activeHelpers'), icon: 'i-lucide-users' }
+  { key: 'event', label: t('sales.workspace.settingsTabData'), icon: 'i-lucide-ticket' },
+  { key: 'printers', label: t('sales.workspace.settingsTabPrinters'), icon: 'i-lucide-printer' },
+  { key: 'helpers', label: t('sales.workspace.settingsTabHelpers'), icon: 'i-lucide-users' }
 ])
 const activeSection = ref('event')
 
@@ -503,7 +503,7 @@ function helperExpiry(value: string): string {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div :class="tabbed ? 'flex flex-col h-full min-h-0' : 'space-y-4'">
     <!-- Standalone usage keeps a top Save row. When a host owns the panel
          (hideSaveBar) it renders the Save as a fixed FOOTER below the scroll
          area (via the `register` API), so a long tab scrolls cleanly above it —
@@ -521,7 +521,7 @@ function helperExpiry(value: string): string {
 
     <!-- Tabbed mode: segmented strip picks the visible card (same styling as
          the Shell's narrow tab strip). -->
-    <div v-if="tabbed" class="flex items-center rounded-lg bg-elevated p-1 gap-1 overflow-x-auto">
+    <div v-if="tabbed" class="flex-none flex items-center rounded-lg bg-elevated p-1 gap-1 overflow-x-auto m-3 mb-2">
       <UButton
         v-for="s in sections"
         :key="s.key"
@@ -540,7 +540,7 @@ function helperExpiry(value: string): string {
          printers (incl. receipt text), helpers (incl. PIN). Tabbed mode shows
          one at a time but keeps all mounted (v-show) so dirty state and the
          panel-wide save cover every tab. -->
-    <div class="grid grid-cols-1 gap-4 items-start" :class="tabbed ? '' : 'lg:grid-cols-3'">
+    <div class="grid grid-cols-1 gap-4 items-start" :class="tabbed ? 'flex-1 overflow-y-auto min-h-0 px-3 pb-3' : 'lg:grid-cols-3'">
       <!-- Event details (inline editable) -->
       <UCard v-show="!tabbed || activeSection === 'event'">
         <template #header>

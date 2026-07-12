@@ -463,7 +463,7 @@ const kassaHeightStyle = computed(() =>
               :title="t('sales.events.settings')"
               @close="settingsOpen = false"
             />
-            <div class="flex-1 overflow-y-auto p-4 pt-3">
+            <div class="flex-1 min-h-0">
               <Suspense>
                 <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
                 <template #fallback>
@@ -684,7 +684,7 @@ const kassaHeightStyle = computed(() =>
             :title="t('sales.events.settings')"
             @close="settingsSlideoverOpen = false"
           />
-          <div class="flex-1 overflow-y-auto p-4 pt-3">
+          <div class="flex-1 min-h-0">
             <Suspense>
               <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
               <template #fallback>
