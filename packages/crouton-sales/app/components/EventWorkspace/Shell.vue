@@ -463,7 +463,7 @@ const kassaHeightStyle = computed(() =>
               :title="t('sales.events.settings')"
               @close="settingsOpen = false"
             />
-            <div class="flex-1 overflow-y-auto p-4 pt-3">
+            <div class="flex-1 min-h-0">
               <Suspense>
                 <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
                 <template #fallback>
@@ -471,7 +471,7 @@ const kassaHeightStyle = computed(() =>
                 </template>
               </Suspense>
             </div>
-            <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-4 py-3">
+            <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-3 py-3">
               <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
               <UButton :loading="settingsSaving" :disabled="!settingsDirty" @click="settingsTab?.save()">
                 {{ t('sales.common.save') }}
@@ -684,7 +684,7 @@ const kassaHeightStyle = computed(() =>
             :title="t('sales.events.settings')"
             @close="settingsSlideoverOpen = false"
           />
-          <div class="flex-1 overflow-y-auto p-4 pt-3">
+          <div class="flex-1 min-h-0">
             <Suspense>
               <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
               <template #fallback>
@@ -692,7 +692,7 @@ const kassaHeightStyle = computed(() =>
               </template>
             </Suspense>
           </div>
-          <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-4 py-3">
+          <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-3 py-3">
             <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
             <UButton :loading="settingsSaving" :disabled="!settingsDirty" @click="settingsTab?.save()">
               {{ t('sales.common.save') }}
