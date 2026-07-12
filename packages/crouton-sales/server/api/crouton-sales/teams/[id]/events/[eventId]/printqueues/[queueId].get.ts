@@ -10,19 +10,16 @@
  * bulky base64 payload) so it stays cheap to poll every couple of seconds.
  */
 import { eq, and } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamEvent } from '../../../../../../../utils/team-event'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
-  const eventId = getRouterParam(event, 'eventId')
+  const { team, db, eventId } = await requireTeamEvent(event)
   const queueId = getRouterParam(event, 'queueId')
 
-  if (!eventId || !queueId) {
-    throw createError({ status: 400, statusText: 'Event ID and queue ID are required' })
+  if (!queueId) {
+    throw createError({ status: 400, statusText: 'Queue ID is required' })
   }
-
-  const db = useDB()
 
   const [job] = await db
     .select({

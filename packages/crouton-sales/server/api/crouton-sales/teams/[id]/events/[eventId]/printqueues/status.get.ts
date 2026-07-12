@@ -8,18 +8,11 @@
  * seconds.
  */
 import { eq, and } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamEvent } from '../../../../../../../utils/team-event'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
-  const eventId = getRouterParam(event, 'eventId')
-
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
-
-  const db = useDB()
+  const { team, db, eventId } = await requireTeamEvent(event)
 
   return db
     .select({

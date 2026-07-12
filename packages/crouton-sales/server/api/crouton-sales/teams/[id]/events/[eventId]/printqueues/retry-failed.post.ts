@@ -18,7 +18,7 @@
  * translates the plan into drizzle conditions.
  */
 import { eq, and, or, lt, inArray } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamEvent } from '../../../../../../../utils/team-event'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { planRequeue, type RequeueRequest } from '../../../../../../../utils/plan-requeue'
 
@@ -27,12 +27,7 @@ const STATUS_PRINTING = '1'
 const STALE_PRINTING_MS = 2 * 60 * 1000
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
-  const eventId = getRouterParam(event, 'eventId')
-
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
+  const { team, db, eventId } = await requireTeamEvent(event)
 
   const body = await readBody<RequeueRequest>(event).catch(() => null)
   const plan = planRequeue(body)
@@ -72,8 +67,6 @@ export default defineEventHandler(async (event) => {
       conditions.push(eq(printJobs.id, plan.jobId))
     }
   }
-
-  const db = useDB()
 
   const requeued = await db
     .update(printJobs)
