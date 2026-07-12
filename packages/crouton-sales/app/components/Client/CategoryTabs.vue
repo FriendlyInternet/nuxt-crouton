@@ -60,6 +60,20 @@
       >
       <span v-else class="truncate">{{ withCount(cat.title, counts?.[cat.id] || 0) }}</span>
 
+      <!-- Delete (rename mode only): two-step — first tap arms, second deletes.
+           mousedown.prevent keeps the input focused so the click lands. -->
+      <span
+        v-if="editingId === cat.id"
+        role="button"
+        :aria-label="confirmDeleteId === cat.id ? t('sales.common.remove') : t('common.delete')"
+        class="inline-flex items-center justify-center size-6 rounded-full shrink-0 active:scale-95 transition-all"
+        :class="confirmDeleteId === cat.id ? 'bg-error text-inverted' : 'bg-black/15 hover:bg-black/30'"
+        @mousedown.stop.prevent
+        @click.stop="onDeleteClick(cat.id)"
+      >
+        <UIcon :name="confirmDeleteId === cat.id ? 'i-lucide-check' : 'i-lucide-trash-2'" class="size-3.5" />
+      </span>
+
       <!-- Rename pencil (right, active tab only) -->
       <span
         v-if="isActive(cat.id) && editingId !== cat.id"
@@ -138,6 +152,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string | null]
   'rename': [payload: { id: string, title: string }]
   'create': [payload: { title: string }]
+  'delete': [payload: { id: string }]
   'reorder': [updates: Array<{ id: string, order: number }>]
 }>()
 
@@ -232,6 +247,7 @@ function commitEdit() {
   const title = editingTitle.value.trim()
   const original = orderedCategories.value.find(c => c.id === id)?.title
   editingId.value = null
+  confirmDeleteId.value = null
   if (title && title !== original) {
     emit('rename', { id, title })
   }
@@ -239,6 +255,23 @@ function commitEdit() {
 
 function cancelEdit() {
   editingId.value = null
+  confirmDeleteId.value = null
+}
+
+// Inline delete (two-step) — the trash in rename mode arms a confirm on the
+// first tap, deletes on the second. `@mousedown.prevent` on the button keeps
+// the rename input focused so its blur/click-outside doesn't exit edit mode
+// before the click lands (same touch-focus reality the rename input handles).
+const confirmDeleteId = ref<string | null>(null)
+function onDeleteClick(id: string) {
+  if (confirmDeleteId.value === id) {
+    confirmDeleteId.value = null
+    editingId.value = null
+    emit('delete', { id })
+  }
+  else {
+    confirmDeleteId.value = id
+  }
 }
 
 // --- Inline create (editable POS) -------------------------------------------

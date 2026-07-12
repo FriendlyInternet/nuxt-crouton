@@ -1,38 +1,33 @@
 import { subtractThemeDefaults } from '../lib/subtractive'
 
+// Black & White theme layer config.
+//
+// House rule (matches every other theme, e.g. brutalist/app.config.ts): a theme
+// LAYER app.config carries ONLY `colors` (its palette — reset at runtime by
+// themeConfigs.ts → defaultConfig) plus per-component `slots.base: replacer` +
+// named `variants`. It must NOT set standard-variant `defaultVariants`, a global
+// `theme` size, or app-level component overrides (container / navigationMenu /
+// dashboardPanel) — those are merged into the CONSUMING app's global Nuxt UI
+// config on `extends` and would apply on EVERY theme, including default, with no
+// runtime reset (the kassa/fanfare leak, #1525). The scalar defaultVariants swap
+// for bw (subtle inputs etc.) lives in themeConfigs.ts, which resets on switch.
 export default defineAppConfig({
   ui: {
-    theme: {
-      defaultVariants: {
-        size: 'sm'
-      }
-    },
     colors: {
       primary: 'neutral',
       neutral: 'neutral'
     },
-    container: {
-      base: 'w-full max-w-full mx-auto px-4 sm:px-6 lg:px-8'
-    },
-    select: {
-      slots: {
-        content: 'min-w-fit'
-      },
-      defaultVariants: {
-        variant: 'subtle'
-      }
-    },
     button: {
       // NAMED bw-* variants + a defaultVariants pointer (#1304, was an override
-      // of the standard solid/outline/... slots). Same single-theme contract —
-      // a plain <UButton> in an app extending this layer resolves to bw-solid —
-      // but the standard variants stay untouched, so in a multi-theme app (the
-      // playground) this layer no longer restyles the other themes' buttons,
-      // and an explicit variant="outline" is the author's literal choice.
-      // The shared marker-gated replacer (#1304) strips the conflicting
-      // defaults (color/elevation/motion/underline) when a bw-* marker is
-      // present, so the CSS needs no !important; Nuxt UI's rounding, sizing
-      // and focus ring are kept.
+      // of the standard solid/outline/... slots). A plain <UButton> in a
+      // single-theme bw app (extending only this layer, no runtime switcher)
+      // resolves to bw-solid; in a multi-theme app the runtime themeConfigs swap
+      // owns the default. The standard variants stay untouched, so this layer no
+      // longer restyles other themes' buttons, and an explicit variant="outline"
+      // is the author's literal choice. The shared marker-gated replacer (#1304)
+      // strips the conflicting defaults (color/elevation/motion/underline) when a
+      // bw-* marker is present, so the CSS needs no !important; Nuxt UI's
+      // rounding, sizing and focus ring are kept.
       slots: {
         base: subtractThemeDefaults
       },
@@ -47,47 +42,6 @@ export default defineAppConfig({
           'bw-ghost': 'bw-ghost',
           'bw-link': 'bw-link'
         }
-      }
-    },
-    dashboardPanel: {
-      slots: {
-        body: 'p-4'
-      }
-    },
-    navigationMenu: {
-      props: {
-        color: 'primary',
-        variant: 'pill',
-        orientation: 'vertical',
-        highlight: false,
-        highlightColor: 'primary',
-        collapsed: false
-      },
-      slots: {
-        root: 'w-full'
-      }
-    },
-    card: {
-      defaultVariants: {
-        variant: 'outline'
-      }
-    },
-    input: {
-      variants: {
-        variant: {}
-      },
-      defaultVariants: {
-        variant: 'subtle'
-      }
-    },
-    alert: {
-      defaultVariants: {
-        variant: 'subtle'
-      }
-    },
-    textarea: {
-      defaultVariants: {
-        variant: 'subtle'
       }
     }
   }

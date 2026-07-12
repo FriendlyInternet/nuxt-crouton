@@ -341,7 +341,8 @@
       "createNewClient": "Nieuwe klant aanmaken",
       "clientHelp": "Selecteer een bestaande klant of maak een nieuwe aan",
       "clientRequired": "Klant vereist",
-      "clientRequiredDescription": "Dit evenement vereist een klant. Selecteer of maak er een aan."
+      "clientRequiredDescription": "Dit evenement vereist een klant. Selecteer of maak er een aan.",
+      "deleteError": "Kon bestelling niet verwijderen"
     },
     "events": {
       "title": "Evenementen",
@@ -676,17 +677,6 @@
         "revokeSuccess": "Router ontkoppeld — hij print een nieuwe koppelbon",
         "revokeError": "Kon de router niet ontkoppelen"
       }
-    },
-    "voice": {
-      "start": "Bestelling inspreken",
-      "stop": "Stop met luisteren",
-      "listening": "Aan het luisteren…",
-      "notUnderstood": "Niet begrepen",
-      "error": "Spraakherkenning mislukt",
-      "errorDenied": "Geef toegang tot de microfoon om te bestellen met je stem",
-      "errorMic": "Geen microfoon gevonden",
-      "errorNetwork": "Spraakherkenning niet bereikbaar — controleer de verbinding",
-      "errorLang": "Nederlands wordt niet ondersteund door deze browser"
     }
   }
 }

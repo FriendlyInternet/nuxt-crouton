@@ -410,13 +410,17 @@ export function formatReceipt(data: ReceiptData): FormattedReceipt {
       }
 
       const qtyName = `${item.quantity}× ${item.name}`
+      // Product name double-height (still 48 cols wide, so the right-aligned
+      // price column stays put) + bold — the kitchen's glance target (#1503).
       printer.bold(true)
+      printer.doubleHeight(true)
       if (data.showPrices && item.price !== undefined) {
         for (const line of amountLines(qtyName, money(item.price * item.quantity))) printer.println(line)
       }
       else {
         for (const line of bodyLines(qtyName)) printer.println(line)
       }
+      printer.doubleHeight(false)
       printer.bold(false)
 
       // Selected options — priced modifiers right-align to the same column.
@@ -436,6 +440,9 @@ export function formatReceipt(data: ReceiptData): FormattedReceipt {
           displayValue = String(optionValue)
         }
         const label = `· ${optionName === displayValue ? displayValue : `${optionName}: ${displayValue}`}`
+        // Modifiers/comments share the product's double-height so the whole
+        // item block reads as one larger, legible unit (#1503).
+        printer.doubleHeight(true)
         if (data.showPrices && optionPrice) {
           for (const line of amountLines(label, `+${money(optionPrice)}`, 4)) printer.println(line)
         }
@@ -443,11 +450,14 @@ export function formatReceipt(data: ReceiptData): FormattedReceipt {
           const suffix = optionPrice ? ` (+${money(optionPrice)})` : ''
           for (const line of bodyLines(label + suffix, 4)) printer.println(line)
         }
+        printer.doubleHeight(false)
       }
 
-      // Item notes/modifications
+      // Item notes/modifications — double-height alongside the product (#1503).
       if (item.notes) {
+        printer.doubleHeight(true)
         for (const line of bodyLines(`→ ${item.notes}`, 4)) printer.println(line)
+        printer.doubleHeight(false)
       }
     }
 
@@ -627,9 +637,11 @@ body { width: 80mm; margin: 0 auto; padding: 4mm; font: 13px/1.35 'Menlo','Conso
 .items li.has-detail { margin-top: 6px; margin-bottom: 6px; }
 .line { display: flex; justify-content: space-between; gap: 8px; }
 .line .amt { white-space: nowrap; }
-.item { font-weight: 700; }
-.total { font-weight: 700; font-size: 17px; }
-.opt { padding-left: 12px; }
+/* Products + comments read a notch larger than the body — mirrors the
+   double-height product/option/note lines on the thermal ticket (#1503). */
+.item { font-weight: 700; font-size: 16px; }
+.total { font-weight: 700; font-size: 18px; }
+.opt { padding-left: 12px; font-size: 14px; }
 @media print { body { padding: 0; } }
 </style></head><body>${rows.join('')}</body></html>`
 }

@@ -32,6 +32,7 @@
                 :reorder-pending="reorderingCategories"
                 @rename="handleCategoryRename"
                 @create="handleCategoryCreate"
+                @delete="handleCategoryDelete"
                 @reorder="handleCategoryReorder"
               />
             </div>
@@ -137,18 +138,11 @@
               :submitting="isCheckingOut"
               :print-state="printButtonState"
               :print-warnings="printWarnings"
-              :voice-supported="voiceSupported"
-              :voice-listening="voiceListening"
-              :voice-transcript="voiceTranscript ?? undefined"
-              :voice-unmatched="voiceUnmatched"
-              :voice-heard="voiceHeard"
               @update-quantity="updateQuantity"
               @checkout="handleCheckout"
               @update-location-remark="setLocationRemark"
               @update:is-personnel="isPersonnel = $event"
               @dismiss-print-warning="dismissPrintWarning"
-              @toggle-voice="toggleVoice"
-              @dismiss-voice-unmatched="voiceUnmatched = []"
             />
           </div>
         </div>
@@ -161,7 +155,7 @@
       <div class="@2xl:hidden border-t border-default p-2 flex items-stretch gap-2">
         <!-- My orders: the active user's own order history, opened as a
              slideover from the collapsed bar (sits left of the order button;
-             takes the mic's spot once talk-to-order is removed). -->
+             takes the mic's spot now that talk-to-order is removed). -->
         <UButton
           size="lg"
           square
@@ -170,20 +164,6 @@
           variant="soft"
           :aria-label="t('sales.orderHistory.title')"
           @click="historyOpen = true"
-        />
-        <!-- Talk-to-order (#1429): the mic must be reachable without opening
-             the drawer — a spoken order starts from the collapsed bar. Parsed
-             lines land in the cart, the bar's count/total confirms them. -->
-        <UButton
-          v-if="voiceSupported"
-          size="lg"
-          square
-          icon="i-lucide-mic"
-          :color="voiceListening ? 'error' : 'neutral'"
-          :variant="voiceListening ? 'solid' : 'soft'"
-          :class="voiceListening ? 'animate-pulse' : undefined"
-          :aria-label="voiceListening ? t('sales.voice.stop') : t('sales.voice.start')"
-          @click="toggleVoice"
         />
         <UDrawer
           v-model:open="mobileCartOpen"
@@ -243,18 +223,11 @@
                   :submitting="isCheckingOut"
                   :print-state="printButtonState"
                   :print-warnings="printWarnings"
-                  :voice-supported="voiceSupported"
-                  :voice-listening="voiceListening"
-                  :voice-transcript="voiceTranscript ?? undefined"
-                  :voice-unmatched="voiceUnmatched"
-                  :voice-heard="voiceHeard"
                   @update-quantity="updateQuantity"
                   @checkout="handleCheckout"
                   @update-location-remark="setLocationRemark"
                   @update:is-personnel="isPersonnel = $event"
                   @dismiss-print-warning="dismissPrintWarning"
-                  @toggle-voice="toggleVoice"
-                  @dismiss-voice-unmatched="voiceUnmatched = []"
                 />
               </div>
             </div>
@@ -358,52 +331,6 @@ const {
   watchOrder,
   dismiss: dismissPrintWarning
 } = usePrintWatcher()
-
-// Talk-to-order (#1429): one utterance per mic press, parsed against the
-// event's products; lines land in the cart like taps (addToCart merges), the
-// helper reviews and checks out normally. Never auto-submits. Segments the
-// parser couldn't match confidently surface as a dismissible warning in the
-// cart — misheard speech is shown, not guessed.
-const voiceUnmatched = ref<string[]>([])
-// A short-lived "heard → created" confirmation so the helper can see the link
-// between what the mic understood and the lines it added. Auto-clears after a
-// few seconds (refAutoReset), or immediately when the mic starts again.
-const voiceHeard = refAutoReset<{ transcript: string, summary: string } | null>(null, 6000)
-const {
-  isSupported: voiceSupported,
-  isListening: voiceListening,
-  transcript: voiceTranscript,
-  toggle: toggleVoice
-} = useVoiceOrder({
-  products: () => (products.value ?? []) as SalesProduct[],
-  onOrder({ lines, unmatched }) {
-    for (const line of lines) {
-      for (let i = 0; i < line.quantity; i++) addToCart(line.product)
-    }
-    voiceUnmatched.value = unmatched
-    // Only show the confirmation when something actually landed in the cart —
-    // a fully-unmatched utterance is covered by the "Niet begrepen" banner.
-    if (lines.length) {
-      voiceHeard.value = {
-        transcript: voiceTranscript.value?.trim() ?? '',
-        summary: lines.map(l => `${l.quantity}× ${l.product.title}`).join(', ')
-      }
-    }
-  },
-  // Reason-specific failure messages — a blanket "mislukt" hides whether the
-  // helper needs to grant the mic, is on an unsupported browser, or the engine
-  // is unreachable. Benign pauses never reach here (composable swallows them).
-  onError(code) {
-    const key = ({
-      'not-allowed': 'sales.voice.errorDenied',
-      'service-not-allowed': 'sales.voice.errorDenied',
-      'audio-capture': 'sales.voice.errorMic',
-      'network': 'sales.voice.errorNetwork',
-      'language-not-supported': 'sales.voice.errorLang'
-    } as Record<string, string>)[code] ?? 'sales.voice.error'
-    notify.error(t(key))
-  }
-})
 
 // Set the event ID
 selectedEventId.value = props.eventId
@@ -597,10 +524,18 @@ function openCreateProduct() {
 }
 
 // Pencil on the active category tab → inline rename in the tab itself; we
-// just persist. (Full form incl. delete stays reachable via the settings
-// panel's category list.)
+// just persist. (Full form also reachable via the team-level categories page.)
 async function handleCategoryRename({ id, title }: { id: string, title: string }) {
   await updateCategory(id, { title })
+}
+
+// Two-step trash in the tab's rename mode → delete the category. Clear the
+// selection if it was the active one (falls back to "all"). Products keep their
+// (now dangling) categoryId — surface them via the show-inactive/uncategorised
+// paths or reassign on the team page; deletion here is the tab affordance only.
+async function handleCategoryDelete({ id }: { id: string }) {
+  await deleteCategory([id])
+  if (selectedCategory.value === id) selectedCategory.value = null
 }
 
 // Pencil on a product card → update form (same two-step delete).
@@ -621,7 +556,7 @@ async function handleReorder(updates: Array<{ id: string, order: number }>) {
 // Tab drag-reorder → persist into the categories' displayOrder. Sequential
 // updates (not parallel) so the panel's mutation-driven refresh lands once
 // with the final order.
-const { update: updateCategory, create: createCategory } = useCollectionMutation('salesCategories')
+const { update: updateCategory, create: createCategory, deleteItems: deleteCategory } = useCollectionMutation('salesCategories')
 const reorderingCategories = ref(false)
 
 async function handleCategoryReorder(updates: Array<{ id: string, order: number }>) {
