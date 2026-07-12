@@ -251,8 +251,13 @@ if (import.meta.client && props.editable) {
     handle: '.drag-handle',
     ghostClass: 'opacity-50',
     chosenClass: 'bg-elevated',
-    onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex !== evt.newIndex) emitNewOrder()
+    // useSortable syncs the bound `orderedProducts` array on nextTick (async),
+    // so read it AFTER the tick — reading synchronously here sees the pre-drag
+    // order, diffs to zero changes, and the reorder never persists (#1550).
+    onEnd: async (evt: { oldIndex?: number, newIndex?: number }) => {
+      if (evt.oldIndex === evt.newIndex) return
+      await nextTick()
+      emitNewOrder()
     }
   })
 }

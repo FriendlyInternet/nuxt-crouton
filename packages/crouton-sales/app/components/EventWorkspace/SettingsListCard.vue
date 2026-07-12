@@ -63,8 +63,13 @@ if (import.meta.client && props.orderField) {
     animation: 150,
     handle: '.drag-handle',
     ghostClass: 'opacity-50',
-    onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex !== evt.newIndex) persistOrder()
+    // useSortable syncs the bound `ordered` array on nextTick (async), so read
+    // it AFTER the tick — reading synchronously here sees the pre-drag order,
+    // diffs to zero changes, and the reorder never persists (#1550).
+    onEnd: async (evt: { oldIndex?: number, newIndex?: number }) => {
+      if (evt.oldIndex === evt.newIndex) return
+      await nextTick()
+      persistOrder()
     }
   })
 }

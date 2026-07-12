@@ -61,15 +61,19 @@ async function persistOrder() {
   if (updates.length) await reorderSiblings(updates)
 }
 
-// useSortable mutates orderedProducts directly on drop; onEnd fires after.
+// useSortable mutates orderedProducts on drop, but only on nextTick (async),
+// so read it AFTER the tick — reading synchronously in onEnd sees the pre-drag
+// order, diffs to zero changes, and the reorder never persists (#1550).
 if (import.meta.client) {
   useSortable(listEl, orderedProducts, {
     animation: 150,
     handle: '.drag-handle',
     ghostClass: 'opacity-50',
     chosenClass: 'bg-elevated',
-    onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex !== evt.newIndex) persistOrder()
+    onEnd: async (evt: { oldIndex?: number, newIndex?: number }) => {
+      if (evt.oldIndex === evt.newIndex) return
+      await nextTick()
+      persistOrder()
     }
   })
 }
