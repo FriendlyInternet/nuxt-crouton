@@ -116,6 +116,26 @@ jobs:
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
       - uses: ./.github/actions/loop-station-trace
         if: always()
+      # Capture a 🔴-critical verdict as an accountability finding candidate (#1570).
+      # Report-only (continue-on-error + always) so it never affects the gate. The
+      # candidate is an artifact; the main-context rollup (loop-station-findings.yml)
+      # confirms it on PR-merge and commits — a PR-branch run never writes findings.jsonl.
+      - name: Capture finding candidate
+        if: always()
+        continue-on-error: true
+        run: |
+          node scripts/eval-ledger/capture-finding.mjs \
+            --gate a11y --verdict a11y-verdict.json \
+            --pr ${{ github.event.pull_request.number }} \
+            --author_ref https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }} \
+            --out finding-candidate.json || true
+      - name: Upload finding candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loop-station-finding-${{ github.run_id }}
+          path: finding-candidate.json
+          if-no-files-found: ignore
       # Fail-open must be VISIBLE (#1037): when no verdict exists, classify why (billing /
       # max-turns / auth / silent no-write) and emit a warning annotation + step summary,
       # so a dead agent can't be mistaken for a clean scan.
