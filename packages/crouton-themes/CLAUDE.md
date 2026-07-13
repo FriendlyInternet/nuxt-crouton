@@ -494,6 +494,30 @@ token so `card = --ui-radius * 2` equals the theme's card/panel radius):
 theme's stylesheet rule; #1595 makes presets defer to the theme's token (the
 inline set is kept only for the "custom" preset's radius slider).
 
+## Complete base `--ui-*` token set per theme (#1597)
+
+Radius is one token of a set. A theme owns its **whole** base semantic layer so
+*calm/unmarked* surfaces read as the theme, not Nuxt UI's default slate. The
+canonical set every theme declares (ambient block, both `[data-theme="x"]` +
+`.theme-x`, both light **and** dark via #1395):
+
+- **surfaces** `--ui-bg`, `--ui-bg-muted`, `--ui-bg-elevated`, `--ui-bg-accented`
+- **text** `--ui-text-dimmed`, `--ui-text-muted`, `--ui-text-toned`, `--ui-text`, `--ui-text-highlighted`
+- **border** `--ui-border`, `--ui-border-muted`, `--ui-border-accented`
+- **geometry** `--ui-radius`
+
+Prefer mapping onto the theme's **own** palette vars (e.g. minimal → its
+`--minimal-gray-*` scale, brutalist → `var(--brutalist-paper)`) so the dual-scheme
+flip is inherited for free — one declaration covers light + dark. Literal hex is
+fine too but then the dark counterpart block must re-tune it. **`--ui-bg` (the base
+surface) is easy to forget** — several themes set the muted/elevated variants but
+not the base, leaving a `bg-default` surface Nuxt-UI-white; #1597 filled those.
+
+**blackandwhite is the one deliberate exception** — it drives its palette from the
+`neutral` color alias in its `app.config` (so `--ui-color-neutral-*` resolve the
+default tokens to greys) rather than declaring explicit `--ui-*`; leave it stock.
+When adding a theme, declare the full set (or, like bw, document why it derives them).
+
 ## Chrome vs data (#1333)
 
 Themes style the **interaction chrome** — buttons, inputs, selects, textareas,

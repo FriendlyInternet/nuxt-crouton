@@ -868,6 +868,9 @@
 
 [data-theme="ko"] body,
 body.theme-ko {
+  /* Base surface token (#1597): ref the chassis var (flips in dark, #1395) so a
+     calm bg-default surface is the ko chassis, not Nuxt UI white. */
+  --ui-bg: var(--ko-surface-light);
   --ui-text-dimmed: #6b6763;
   --ui-text-muted: #57534f;
   --ui-text-toned: #4a4744;

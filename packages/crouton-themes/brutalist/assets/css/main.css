@@ -590,6 +590,9 @@
 
 [data-theme="brutalist"] body,
 body.theme-brutalist {
+  /* Base surface token (#1597): was unset, so a calm bg-default surface stayed
+     Nuxt UI white instead of the paper. Ref the paper var (flips in dark, #1395). */
+  --ui-bg: var(--brutalist-paper);
   --ui-text-dimmed: #75716a;
   --ui-text-muted: #5c5952;
   --ui-text-toned: #33312c;

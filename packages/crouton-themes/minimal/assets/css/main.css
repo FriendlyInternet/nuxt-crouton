@@ -554,6 +554,22 @@
 [data-theme="minimal"],
 .theme-minimal {
   --ui-radius: 0;
+  /* Complete base palette (#1597): minimal declared no --ui-* surface/text/border
+     tokens, so calm surfaces fell back to Nuxt UI's default slate instead of its
+     own monochrome. Map them onto minimal's greyscale — which .dark flips
+     (#1395) — so both schemes follow from one declaration. */
+  --ui-bg: var(--minimal-white);
+  --ui-bg-muted: var(--minimal-gray-50);
+  --ui-bg-elevated: var(--minimal-gray-100);
+  --ui-bg-accented: var(--minimal-gray-200);
+  --ui-text-dimmed: var(--minimal-gray-400);
+  --ui-text-muted: var(--minimal-gray-500);
+  --ui-text-toned: var(--minimal-gray-600);
+  --ui-text: var(--minimal-gray-800);
+  --ui-text-highlighted: var(--minimal-black);
+  --ui-border: var(--minimal-gray-300);
+  --ui-border-muted: var(--minimal-gray-200);
+  --ui-border-accented: var(--minimal-gray-400);
 }
 
 [data-theme="minimal"] button[role="switch"],
