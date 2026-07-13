@@ -84,7 +84,9 @@ ledger **is the frozen spec** — no reconstruction needed; go straight to A1 to
 **If the POC predates the convention (retrofit, one-time tax):** reconstruct the spec from
 `HANDOFF.md` + `changelog.json` + the spike code + the planted `data-handoff` hooks. This is *lossy*
 — a reconstructed list can't be certified exhaustive — so lean harder on the comparison gate (C1) and
-the live POC as ground truth. Draft from the artifacts; the **human verifies it against the running
+the live POC as ground truth. **Draft every reconstructed entry as `status: proposed`** — proven in
+the POC but not yet reconciled in graduation, so it has an honest home that isn't the frozen contract
+(and the sign-off hook won't let it pose as `settled` yet). The **human verifies it against the running
 POC and signs off** (you usually can't reach the live POC from a sandbox — draft, they own the check).
 
 ### A1. Reconcile the spec against the running POC (gate)
@@ -93,7 +95,9 @@ Drive the running POC and sort behaviour into three buckets — **confirmed** (w
 does it, the spec doesn't mention it → add or consciously drop — the unknown-unknowns a checklist
 misses). Drive what's drivable; code-confirm gesture states honestly. Wherever a state is hard to
 locate, plant a stable `data-handoff` hook and name it on the spec entry — that hook is the shared
-vocabulary the rebuild reproduces, so the same walk runs on POC *and* app.
+vocabulary the rebuild reproduces, so the same walk runs on POC *and* app. **Each confirmed entry
+flips `proposed` → `settled` with the recorded `signedOff`** (the retrofit drafts; A1 is where the
+human sign-off makes them the contract). Entries you'll deliberately change become `stopgap`/`new`.
 
 > Needs an environment that can actually run the POC. A sandbox that kills dev servers / blocks the
 > preview URL can't do A1 — the human drives; you draft and reconcile from artifacts.
