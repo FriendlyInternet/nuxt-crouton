@@ -87,8 +87,10 @@
               :products="filteredProducts"
               :editable="editing"
               :quantities="productQuantities"
+              :cart-lines="cartLinesByProduct"
               @select="handleProductSelect"
               @decrement="handleProductDecrement"
+              @variant-quantity="updateQuantity"
               @edit="openEditProduct"
               @reorder="handleReorder"
             />
@@ -444,6 +446,25 @@ const productQuantities = computed(() => {
     counts[item.product.id] = (counts[item.product.id] || 0) + item.quantity
   }
   return counts
+})
+
+// Cart lines for configurable products (options/remark), grouped by product id
+// and carrying their cart index. Drives the "ordered variants" list inside the
+// product's expandable — each variant gets its own −/qty/+ stepper (targeting
+// its exact line by index) so it can be adjusted without opening the cart.
+// Plain lines are excluded: they already have the inline row stepper.
+const cartLinesByProduct = computed(() => {
+  const map: Record<string, Array<{ index: number, selectedOptions?: string | string[], remarks?: string, quantity: number }>> = {}
+  cartItems.value.forEach((item, index) => {
+    if (!item.selectedOptions && !item.remarks) return
+    ;(map[item.product.id] ||= []).push({
+      index,
+      selectedOptions: item.selectedOptions,
+      remarks: item.remarks,
+      quantity: item.quantity
+    })
+  })
+  return map
 })
 
 // Row "−" on a plain product: decrement its single cart line (no options, no

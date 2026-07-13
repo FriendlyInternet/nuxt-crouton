@@ -282,7 +282,8 @@
       "noProducts": "Aucun produit disponible",
       "outOfStock": "Rupture de stock",
       "options": "Options",
-      "addToCart": "Ajouter au panier"
+      "addToCart": "Ajouter au panier",
+      "inCart": "Commandé"
     },
     "categories": {
       "all": "Tout",
