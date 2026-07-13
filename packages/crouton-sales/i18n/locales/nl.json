@@ -283,7 +283,8 @@
       "noProducts": "Geen producten beschikbaar",
       "outOfStock": "Uitverkocht",
       "options": "Opties",
-      "addToCart": "Toevoegen aan winkelwagen"
+      "addToCart": "Toevoegen aan winkelwagen",
+      "inCart": "Besteld"
     },
     "categories": {
       "all": "Alles",

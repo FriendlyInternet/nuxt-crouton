@@ -283,7 +283,8 @@
       "noProducts": "No products available",
       "outOfStock": "Out of stock",
       "options": "Options",
-      "addToCart": "Add to Cart"
+      "addToCart": "Add to Cart",
+      "inCart": "Ordered"
     },
     "categories": {
       "all": "All",

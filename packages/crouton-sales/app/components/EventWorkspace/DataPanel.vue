@@ -53,8 +53,11 @@ onUnmounted(unhookMutation)
 
 <template>
   <div class="space-y-4">
-    <!-- Exclude staff orders from the totals by default; toggle folds them in -->
-    <div class="flex items-center justify-start">
+    <!-- Exclude staff orders from the totals by default; toggle folds them in.
+         Sticky to the top of the scrolling pane (bleeds over the host's p-4
+         padding via negative margins + a solid bg) so the personnel toggle
+         stays reachable while the numbers below scroll. -->
+    <div class="sticky top-0 z-10 -mx-4 -mt-2 flex items-center border-b border-default bg-default px-4 py-2">
       <USwitch
         v-model="includePersonnel"
         :label="t('sales.workspace.dataPanel.includePersonnel')"

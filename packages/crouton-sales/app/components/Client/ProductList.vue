@@ -240,6 +240,44 @@
           >
             {{ t('sales.products.addToCart') }}
           </UButton>
+
+          <!-- Ordered variants of this product already in the cart: each line
+               (its options/remark) with its own −/qty/+ stepper, so what's been
+               ordered is visible and adjustable without opening the cart. -->
+          <div
+            v-if="linesFor(product).length"
+            class="pt-2.5 border-t border-default space-y-1.5"
+          >
+            <p class="text-xs font-medium text-muted">{{ t('sales.products.inCart') }}</p>
+            <div
+              v-for="line in linesFor(product)"
+              :key="line.index"
+              class="flex items-center gap-2"
+            >
+              <span class="flex-1 min-w-0 truncate text-sm">{{ variantLabel(product, line) }}</span>
+              <UFieldGroup size="sm">
+                <UButton
+                  icon="i-lucide-minus"
+                  color="neutral"
+                  variant="soft"
+                  square
+                  :aria-label="t('sales.cart.remove')"
+                  @click="emit('variantQuantity', line.index, line.quantity - 1)"
+                />
+                <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
+                  <span :key="line.quantity" class="animate-pop">{{ line.quantity }}</span>
+                </UBadge>
+                <UButton
+                  icon="i-lucide-plus"
+                  color="neutral"
+                  variant="soft"
+                  square
+                  :aria-label="t('sales.cart.add')"
+                  @click="emit('variantQuantity', line.index, line.quantity + 1)"
+                />
+              </UFieldGroup>
+            </div>
+          </div>
         </div>
       </Transition>
       </div>
@@ -262,6 +300,13 @@ const props = defineProps<{
    * stepper (plain products) and the count badge (products with options/remark).
    */
   quantities?: Record<string, number>
+  /**
+   * Cart lines for configurable products (options/remark), keyed by product id
+   * and carrying each line's cart index. Drives the "ordered variants" list
+   * inside the expandable — one −/qty/+ stepper per variant, targeting its
+   * exact line by index.
+   */
+  cartLines?: Record<string, Array<{ index: number, selectedOptions?: string | string[], remarks?: string, quantity: number }>>
 }>()
 
 const emit = defineEmits<{
@@ -269,6 +314,9 @@ const emit = defineEmits<{
   edit: [productId: string]
   /** Decrement the plain (no options/remark) cart line for this product. */
   decrement: [product: SalesProduct]
+  /** Set the quantity of one configurable-product cart line (by cart index);
+   *  0 removes it. Fired by the ordered-variants steppers in the expandable. */
+  variantQuantity: [index: number, quantity: number]
   /** New visual order after a drop — only the rows whose index changed. */
   reorder: [updates: Array<{ id: string, order: number }>]
 }>()
@@ -277,6 +325,29 @@ const emit = defineEmits<{
 // variants). For a plain product that's its single line's quantity.
 function quantityOf(product: SalesProduct): number {
   return props.quantities?.[product.id] ?? 0
+}
+
+// The cart lines (variants) of a configurable product, for the ordered list
+// inside its expandable.
+function linesFor(product: SalesProduct) {
+  return props.cartLines?.[product.id] ?? []
+}
+
+// Human label for one ordered variant: its selected option labels (ids resolved
+// against the product's options) and any per-item remark, joined. Falls back to
+// the product title if a line somehow carries neither.
+function variantLabel(
+  product: SalesProduct,
+  line: { selectedOptions?: string | string[], remarks?: string }
+): string {
+  const parts: string[] = []
+  if (line.selectedOptions) {
+    const ids = Array.isArray(line.selectedOptions) ? line.selectedOptions : [line.selectedOptions]
+    const opts = getOptions(product)
+    parts.push(...ids.map(id => opts.find(o => o.id === id)?.label || id))
+  }
+  if (line.remarks) parts.push(line.remarks)
+  return parts.join(' · ') || product.title
 }
 
 const containerRef = ref<HTMLElement | null>(null)
@@ -404,9 +475,10 @@ function confirmProduct(product: SalesProduct) {
   poppedId.value = product.id
   emit('select', product, options, remark)
 
+  // Clear the inputs but keep the panel open — the just-added variant appears
+  // in the "ordered" list below, and the user can compose another combo.
   selectedOptionIds.value.delete(product.id)
   remarks.value.delete(product.id)
-  activeProductId.value = null
 }
 
 function handleProductClick(product: SalesProduct) {

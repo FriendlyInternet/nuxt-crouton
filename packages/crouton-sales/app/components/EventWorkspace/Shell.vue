@@ -473,7 +473,7 @@ const kassaHeightStyle = computed(() =>
             </div>
             <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-3 py-3">
               <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
-              <UButton :loading="settingsSaving" :disabled="!settingsDirty" @click="settingsTab?.save()">
+              <UButton :loading="settingsSaving" :disabled="!settingsDirty" :color="settingsDirty ? 'primary' : 'neutral'" :variant="settingsDirty ? 'solid' : 'soft'" @click="settingsTab?.save()">
                 {{ t('sales.common.save') }}
               </UButton>
             </div>
@@ -598,7 +598,7 @@ const kassaHeightStyle = computed(() =>
       :ui="{ content: 'pb-[env(safe-area-inset-bottom)]' }"
     >
       <template #content>
-        <div class="flex flex-col h-full min-h-0">
+        <div class="flex flex-col h-full min-h-0 touch-manipulation">
           <SalesEventWorkspacePaneHeader
             icon="i-lucide-clipboard-list"
             :title="t('sales.orders.title')"
@@ -637,7 +637,7 @@ const kassaHeightStyle = computed(() =>
       :ui="{ content: 'pb-[env(safe-area-inset-bottom)]' }"
     >
       <template #content>
-        <div class="flex flex-col h-full min-h-0">
+        <div class="flex flex-col h-full min-h-0 touch-manipulation">
           <SalesEventWorkspacePaneHeader
             icon="i-lucide-users"
             :title="t('sales.workspace.clientsPanel.title')"
@@ -656,7 +656,7 @@ const kassaHeightStyle = computed(() =>
       :ui="{ content: 'pb-[env(safe-area-inset-bottom)]' }"
     >
       <template #content>
-        <div class="flex flex-col h-full min-h-0">
+        <div class="flex flex-col h-full min-h-0 touch-manipulation">
           <SalesEventWorkspacePaneHeader
             icon="i-lucide-chart-line"
             :title="t('sales.workspace.dataPanel.title')"
@@ -678,7 +678,7 @@ const kassaHeightStyle = computed(() =>
       :ui="{ content: 'pb-[env(safe-area-inset-bottom)]' }"
     >
       <template #content>
-        <div class="flex flex-col h-full min-h-0">
+        <div class="flex flex-col h-full min-h-0 touch-manipulation">
           <SalesEventWorkspacePaneHeader
             icon="i-lucide-settings"
             :title="t('sales.events.settings')"
@@ -694,7 +694,7 @@ const kassaHeightStyle = computed(() =>
           </div>
           <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-3 py-3">
             <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
-            <UButton :loading="settingsSaving" :disabled="!settingsDirty" @click="settingsTab?.save()">
+            <UButton :loading="settingsSaving" :disabled="!settingsDirty" :color="settingsDirty ? 'primary' : 'neutral'" :variant="settingsDirty ? 'solid' : 'soft'" @click="settingsTab?.save()">
               {{ t('sales.common.save') }}
             </UButton>
           </div>
