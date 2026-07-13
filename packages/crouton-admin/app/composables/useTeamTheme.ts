@@ -197,12 +197,18 @@ export function applyThemeSettings(settings: TeamThemeSettings, colorMode?: { pr
   }
 
   if (import.meta.client) {
-    document.documentElement.style.setProperty('--ui-radius', `${radius}rem`)
-    // Set data-theme for ambient CSS (e.g. background colors, global font overrides)
+    // Set data-theme for ambient CSS (background, fonts) — and let radius follow
+    // the right owner (#1595). A preset theme declares its own --ui-radius base
+    // token in CSS (#1594); an inline style would BEAT that stylesheet rule, so
+    // for a preset we must NOT set radius inline — clear any left by a prior
+    // custom selection so the theme's token wins. Only "custom" (the slider)
+    // owns radius inline.
     if (preset === 'custom') {
+      document.documentElement.style.setProperty('--ui-radius', `${radius}rem`)
       document.documentElement.removeAttribute('data-theme')
     }
     else {
+      document.documentElement.style.removeProperty('--ui-radius')
       document.documentElement.dataset.theme = preset
     }
   }
