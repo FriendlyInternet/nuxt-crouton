@@ -525,6 +525,8 @@ function helperExpiry(value: string): string {
       <UButton
         :loading="saving"
         :disabled="!dirty"
+        :color="dirty ? 'primary' : 'neutral'"
+        :variant="dirty ? 'solid' : 'soft'"
         @click="saveSettings"
       >
         {{ t('sales.common.save') }}
