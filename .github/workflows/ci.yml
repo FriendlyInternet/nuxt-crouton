@@ -18,6 +18,13 @@ on:
       - 'pnpm-lock.yaml'
       - '.github/workflows/ci.yml'
 
+# Cancel superseded PR runs when a new commit is pushed; each PR is its own group
+# (ref in the key). cancel-in-progress is event-conditional so a push→main run is
+# NEVER cancelled mid-flight. (#1523)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Was `lint-and-typecheck` — renamed under #1097: the job never ran eslint and
   # only typechecks the MCP server, so the old name overclaimed. App typecheck
