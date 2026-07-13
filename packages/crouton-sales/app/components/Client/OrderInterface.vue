@@ -190,7 +190,7 @@
           />
 
           <template #content>
-            <div class="h-full flex flex-col">
+            <div class="h-full flex flex-col touch-manipulation">
               <div class="p-3 border-b border-default shrink-0">
                 <SalesClientSelector
                   v-if="props.requiresClient"
