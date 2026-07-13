@@ -1452,7 +1452,7 @@ async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer
 
   // Update schema index for each collection
   for (const col of allCollections) {
-    const { exportName: colExportName, importPath: colImportPath, schemaIndexPath: colSchemaIndexPath } = buildSchemaExportNames(col.name, col.layer)
+    const { exportName: colExportName, importPath: colImportPath, schemaIndexPath: colSchemaIndexPath } = await buildSchemaExportNames(col.name, col.layer)
     const colSchemaResult = await addNamedSchemaExport(colSchemaIndexPath, colExportName, colImportPath, force)
     if (!colSchemaResult.added && colSchemaResult.reason !== 'already exported') {
       console.error(`  ✗ Failed to update schema index for ${col.name}: ${colSchemaResult.reason}`)
