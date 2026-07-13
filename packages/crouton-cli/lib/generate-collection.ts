@@ -14,7 +14,7 @@ import type { DetectionResult, DetectedField, FormEnhancement, ListEnhancement, 
 import { detectRequiredDependencies, displayMissingDependencies, ensureLayersExtended } from './utils/module-detector.ts'
 import { setupCroutonCssSource, displayManualCssSetupInstructions } from './utils/css-setup.ts'
 import { syncFrameworkPackages, addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-config.ts'
-import { addNamedSchemaExport } from './utils/update-schema-index.ts'
+import { addNamedSchemaExport, getSchemaPath } from './utils/update-schema-index.ts'
 import { generateMigrations, DuplicateTableError } from './utils/generate-migrations.ts'
 import { addToAppConfig, resolveAppConfigPath } from './utils/update-app-config.ts'
 import { loadFields } from './utils/load-fields.ts'
@@ -335,8 +335,10 @@ function runListContributions(
 
 // parseArgs() removed in Phase 5 — args now passed as options from citty entry point
 
-// Build the schema export names for a collection (layer-prefixed)
-function buildSchemaExportNames(collectionName: string, layer: string) {
+// Build the schema export names for a collection (layer-prefixed).
+// The barrel path resolves through getSchemaPath (modern→legacy) so generate and
+// rollback target the SAME file — otherwise the asymmetry just moves (#1445 WS4).
+export async function buildSchemaExportNames(collectionName: string, layer: string) {
   const cases = toCase(collectionName)
   const layerCamelCase = layer
     .split(/[-_]/)
@@ -345,7 +347,7 @@ function buildSchemaExportNames(collectionName: string, layer: string) {
   return {
     exportName: `${layerCamelCase}${cases.pascalCasePlural}`,
     importPath: `../../layers/${layer}/collections/${cases.plural}/server/database/schema`,
-    schemaIndexPath: path.resolve('server', 'db', 'schema.ts')
+    schemaIndexPath: await getSchemaPath()
   }
 }
 
@@ -367,7 +369,7 @@ async function createDatabaseTable(config: { name: string; layer: string; fields
 
     // First, update the schema index to include the new collection
     console.log(`↻ Updating schema index...`)
-    const { exportName, importPath: schemaImportPath, schemaIndexPath } = buildSchemaExportNames(name, layer)
+    const { exportName, importPath: schemaImportPath, schemaIndexPath } = await buildSchemaExportNames(name, layer)
     const schemaResult = await addNamedSchemaExport(schemaIndexPath, exportName, schemaImportPath, force)
     const schemaUpdated = schemaResult.added || schemaResult.reason === 'already exported'
 
