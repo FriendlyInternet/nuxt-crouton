@@ -13,7 +13,9 @@ crouton add <modules...>                     # Add Crouton modules to project
 crouton add --list                           # List available modules
 crouton install                              # Install required modules
 crouton init <name> [options]                 # Full pipeline: scaffold → generate → doctor
-crouton rollback <layer> <collection>        # Remove collection
+crouton rollback <layer> <collection>        # Remove collection (code-only)
+crouton rollback <layer> <collection> --drop-table          # …and emit a DROP TABLE migration
+crouton rollback <layer> <collection> --drop-table --dry-run # …preview that DROP, write nothing
 crouton rollback-interactive                 # Interactive removal UI
 crouton seed-translations                    # Seed i18n data
 crouton db-pull                              # Pull remote D1 → local dev
@@ -214,6 +216,33 @@ crouton init my-app --dry-run
 4. **doctor** — Validates everything is wired correctly
 5. **Summary** — Prints next steps (dev server, deploy)
 
+## Rollback Command (`crouton rollback`)
+
+Removes a generated collection — files, schema-index re-export, `app.config.ts`
+entry, and layer/root `extends`. Two things WS4 (#1445) got right:
+
+- **Barrel path is resolved, not hardcoded.** Both rollback's `cleanSchemaIndex`
+  and the generator's `buildSchemaExportNames` route the schema barrel through
+  `getSchemaPath` (`update-schema-index.ts`, modern `server/db/schema.ts` → legacy
+  `server/database/schema.ts` → `server/database/schema/index.ts`). Before this,
+  rollback only cleaned the legacy `index.ts`, so on a modern app it **no-op'd and
+  left a dangling re-export that crashed the next generate.** (The magicast finders
+  in `update-schema-index.ts` also had to learn that `$ast` can be the `Program`
+  node itself, not a `File` — otherwise they scanned an empty body and matched
+  nothing.)
+- **The table story.** A default (code-only) rollback removes the collection from
+  the schema *view* but the table still lives in the DB + drizzle's `meta/`
+  snapshot — so it **names the orphaned table and warns that the next `crouton
+  config` will emit its `DROP TABLE`**, bundled into an unrelated migration.
+  - `--drop-table` emits that `DROP TABLE` **now**, as its own migration (via the
+    WS2 machinery — `generateMigrations`, drizzle-kit, no Nuxt).
+  - `--drop-table --dry-run` **previews** the DROP and writes nothing: drizzle-kit's
+    CLI has no dry-run flag, so it saves the barrel → removes the export → generates
+    into a temp `out` seeded with a copy of `meta/` → prints the SQL → restores the
+    barrel byte-for-byte. NB the temp `out` lives **inside the app with a relative
+    path** — drizzle-kit 0.31 re-reads `meta/` via a `./`-join, so an absolute out
+    ENOENTs on the snapshot (and exits 0 anyway).
+
 ## Deploy Scaffolding — Cloudflare Workers (the crouton standard)
 
 When `cf` is enabled (default), `scaffold-app` emits a **Workers (static-assets)**
@@ -327,12 +356,13 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/db-pull.ts` | Remote D1 → local dev pull |
 | `lib/module-registry.ts` | Module definitions for `crouton add` |
 | `lib/add-module.ts` | Module installation implementation |
+| `lib/rollback-collection.ts` | Remove a collection — files, schema barrel, `app.config`, `extends`. Barrel via `getSchemaPath` (modern→legacy). `orphanTableName`/`dropTableWarning` (the code-only-rollback warning) + `generateDropMigration` (`--drop-table` emit / `--dry-run` temp-out preview) — #1445 WS4 |
 | `lib/utils/generate-migrations.ts` | Direct migration generation (`generateMigrations`, `prepareSchemaForMigration`, `DuplicateTableError`) — resolve graph → duplicate gate → app's `db:generate` (drizzle-kit, no Nuxt). Deferral/throw failure contract. Used by config/`add`/`init` (#1445 WS2) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/dialects.ts` | PostgreSQL/SQLite configs |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
 | `lib/utils/update-nuxt-config.ts` | Update nuxt.config.ts extends |
-| `lib/utils/update-schema-index.ts` | Update schema exports |
+| `lib/utils/update-schema-index.ts` | Update schema exports (`add`/`removeSchemaExport`) + `getSchemaPath` (resolve the barrel modern→legacy). NB the magicast finders handle `$ast` being the `Program` node itself, not only a `File` (#1445 WS4) |
 | `lib/utils/schema-sources.ts` | `resolveSchemaSources(appDir, {dialect})` — reproduces NuxtHub's per-layer `server/db/schema*` glob over the recursive `extends` graph (app root + auto-scanned `layers/*` + `@fyit/*`/subpath extends, realpath-deduped, magicast static parse), WITHOUT a Nuxt process. Feeds drizzle-kit directly; parity-verified vs NuxtHub (epic #1445 WS1a). Duplicate-table gate over its output is WS1b |
 | `lib/utils/duplicate-tables.ts` | `findDuplicateTables(resolvedPaths)` — identity-aware gate over the resolver's output: jiti-imports each file through ONE instance, and fails only when a table name maps to ≥2 DISTINCT drizzle objects (benign same-object re-exports pass; catches distinct dups arriving via `export * from` that a regex misses). drizzle-kit otherwise silently last-wins. Epic #1445 WS1b |
 
