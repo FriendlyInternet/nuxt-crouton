@@ -29,6 +29,15 @@
   --ui-bg: var(--braun-cream);
 }
 
+/* Base geometry token (#1594): tie Nuxt UI's radius scale to the theme's own
+   machined radius so calm surfaces (unmarked cards/rows) match the chassis, not
+   just named variants. card = --ui-radius * 2 = braun-radius. Scoped to both
+   activation paths. */
+[data-theme="braun"],
+.theme-braun {
+  --ui-radius: calc(var(--braun-radius) / 2);
+}
+
 /* ============================================
    BUTTONS — machined keys
    ============================================ */

@@ -68,6 +68,15 @@
   background-color: var(--ko-surface-light);
 }
 
+/* Base geometry token (#1594): tie Nuxt UI's radius scale to the theme's own
+   panel radius so calm surfaces (unmarked cards/rows) match the hardware panels,
+   not just named variants. card = --ui-radius * 2 = ko-wrapper-radius. Scoped
+   to both activation paths. */
+[data-theme="ko"],
+.theme-ko {
+  --ui-radius: calc(var(--ko-wrapper-radius) / 2);
+}
+
 /* The display font is CHROME, not body copy (#1304 readability feedback):
    putting ko-tech on the root made every form label and paragraph read like
    a spec sheet. Scope it to headings + explicit .ko-font opt-ins; tactile

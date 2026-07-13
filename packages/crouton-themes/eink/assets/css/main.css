@@ -20,6 +20,9 @@
 .theme-eink {
   background-color: var(--eink-paper);
   --ui-bg: var(--eink-paper);
+  /* Base geometry token (#1594): newspaper geometry is square — drive Nuxt UI's
+     radius scale to 0 so calm surfaces square too, not just named variants. */
+  --ui-radius: 0;
 }
 
 /* ============================================

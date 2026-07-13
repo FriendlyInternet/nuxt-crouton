@@ -25,6 +25,9 @@
   background-color: var(--gb-3);
   color: var(--gb-0);
   --ui-bg: var(--gb-3);
+  /* Base geometry token (#1594): chunky pixel corners are square — drive Nuxt
+     UI's radius scale to 0 so calm surfaces square too, not just named variants. */
+  --ui-radius: 0;
 }
 
 /* ============================================

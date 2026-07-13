@@ -548,6 +548,14 @@
    (no variant hook; scoped to both activation paths)
    ============================================ */
 
+/* Base geometry token (#1594): minimal is sharp square corners — drive Nuxt
+   UI's radius scale to 0 so calm surfaces (unmarked cards/rows) square too, not
+   just the theme's named variants. Scoped to both activation paths. */
+[data-theme="minimal"],
+.theme-minimal {
+  --ui-radius: 0;
+}
+
 [data-theme="minimal"] button[role="switch"],
 .theme-minimal button[role="switch"] {
   border-radius: 9999px;
