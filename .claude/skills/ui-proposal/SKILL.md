@@ -156,6 +156,11 @@ it lands in "Files changed" so the reviewer can inline-comment a specific change
    ```
    Use the actual **head branch** in the URL (e.g. `receiptDesign`, `claude/issue-<NN>-<slug>`);
    the image re-renders whenever the committed file changes, so editing in place (step 5) works.
+   > **Confirm it rendered, not just that the URL is 200 (step 3).** Read the posted body back:
+   > if the image shows as *code* not an image (the #569/#613 symptom), the GitHub-MCP writer
+   > mangled the Markdown URL (backtick-wrapped it / dropped the `src`) — a break `curl`-ing the
+   > URL can't detect. Re-post with an HTML `<img src="<raw-url>" alt="…" width="380">` tag (a URL
+   > in an attribute can't be auto-wrapped) and re-read to confirm. (#1615)
 5. **Steer feedback to the `.md`** — inline comments in the diff (PR) or on the committed file.
 6. Apply `status:blocked`, @mention `@pmcp`, and **stop**.
 
