@@ -26,7 +26,10 @@ async function pathExists(filePath: string): Promise<boolean> {
  * Find re-export declarations in the AST that match a given source path pattern.
  */
 function findExportBySource(mod: any, pattern: string): any {
-  const program = mod.$ast.program || mod.$ast.body
+  // magicast's $ast may be a File (has .program) or the Program node itself
+  // (has .body). Falling back to mod.$ast.body grabbed the statements ARRAY, whose
+  // .body is undefined → the loop saw an empty list and never matched (#1445 WS4).
+  const program = mod.$ast.program || mod.$ast
   const body = program?.body || []
   for (const node of body) {
     if (
@@ -44,7 +47,7 @@ function findExportBySource(mod: any, pattern: string): any {
  * Find a named re-export by export name.
  */
 function findExportByName(mod: any, exportName: string): any {
-  const program = mod.$ast.program || mod.$ast.body
+  const program = mod.$ast.program || mod.$ast
   const body = program?.body || []
   for (const node of body) {
     if (node.type === 'ExportNamedDeclaration' && node.specifiers) {
