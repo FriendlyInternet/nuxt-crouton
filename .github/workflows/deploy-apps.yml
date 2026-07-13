@@ -69,6 +69,16 @@ on:
         default: false
         type: boolean
 
+# Cancel superseded PR *preview* runs when a new commit is pushed to the same PR branch.
+# cancel-in-progress is event-conditional (`pull_request` only) so a push→main STAGING
+# deploy + D1 migration and a workflow_dispatch PRODUCTION deploy are NEVER cancelled
+# mid-flight — cancelling a running deploy/migration is dangerous (#318, #1523). This
+# concurrency sits on the caller; the reusable deploy-app.yml inherits it, so groups are
+# per-app/PR here (not on the leaf) — no cross-app cancellation.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Figure out which opted-in apps to deploy (and to which env) → a matrix the deploy
   # job fans out over. push/pull_request → STAGING only (env hard-coded below, #318).

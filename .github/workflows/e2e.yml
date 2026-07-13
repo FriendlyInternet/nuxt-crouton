@@ -29,6 +29,13 @@ on:
     - cron: '0 4 * * *'   # nightly full-matrix backstop (selection can't silently hide a regression)
   workflow_dispatch:        # manual full-matrix run
 
+# Cancel superseded PR runs when a new commit is pushed; each PR is its own group
+# (ref in the key). cancel-in-progress is event-conditional so the push→main backstop,
+# the nightly schedule, and manual dispatches are NEVER cancelled mid-flight. (#1523)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Decide which fixtures to run. PR → only what's affected; everything else → all.
   detect:

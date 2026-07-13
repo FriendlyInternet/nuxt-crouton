@@ -49,6 +49,15 @@ on:
         required: false
         type: string
 
+# Cancel superseded PR *preview* runs when a new commit is pushed to the same PR branch.
+# cancel-in-progress is event-conditional (`pull_request` only) so a manual
+# workflow_dispatch preview is NEVER cancelled mid-flight. This concurrency sits on the
+# caller; the reusable deploy-app.yml inherits it, so groups are per-POC/PR (not on the
+# leaf) — no cross-POC cancellation. (#1523)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Figure out which opted-in POCs to deploy → a matrix the deploy job fans out over.
   detect:
