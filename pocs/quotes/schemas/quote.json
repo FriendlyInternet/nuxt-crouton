@@ -1,0 +1,6 @@
+{
+  "text": { "type": "text", "meta": { "required": true } },
+  "author": { "type": "string", "meta": { "maxLength": 255 } },
+  "source": { "type": "string", "meta": { "maxLength": 255 } },
+  "tags": { "type": "array" }
+}
