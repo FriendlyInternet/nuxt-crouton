@@ -13,7 +13,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import type { LayoutTree } from '@fyit/crouton-core/app/types/layout'
-import { sanitizeLayoutTree } from '../layout-tree'
+import { sanitizeLayoutTree } from '@fyit/crouton-core/app/utils/layout-tree'
 import {
   serializeLayoutTree,
   parseLayoutTree,
