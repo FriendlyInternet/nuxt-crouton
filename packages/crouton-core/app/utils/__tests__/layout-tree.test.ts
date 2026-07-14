@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { sanitizeLayoutTree } from '../layout-tree'
-import type { LayoutTree } from '@fyit/crouton-core/app/types/layout'
+import type { LayoutTree } from '../../types/layout'
 
 const validTree: LayoutTree = {
   renderer: 'panes',

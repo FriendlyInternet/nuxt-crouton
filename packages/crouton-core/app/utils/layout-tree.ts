@@ -13,9 +13,13 @@
  * It does NOT resolve components or sanitize per-block config — that stays with
  * the renderer + `useCroutonLayoutBlocks().sanitizeConfig` so there's one
  * allowlist. Pure (no Nuxt runtime) so it's unit-testable.
+ *
+ * Lives in crouton-core (auto-imported) alongside the `LayoutTree` types it pairs
+ * with, so crouton-pages' `PaneBlock` can validate an embedded layout WITHOUT the
+ * app extending crouton-layout (#1618). crouton-layout re-consumes it from here.
  */
-import type { LayoutBreakpoint, LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
-import { isLayoutCollapseStyle, isLayoutCollapseEdge, isLayoutCollapseAffordance } from '@fyit/crouton-core/app/types/layout'
+import type { LayoutBreakpoint, LayoutNode, LayoutTree } from '../types/layout'
+import { isLayoutCollapseStyle, isLayoutCollapseEdge, isLayoutCollapseAffordance } from '../types/layout'
 
 /** Hard recursion cap — a hostile/looping tree can't blow the stack. */
 const MAX_DEPTH = 12

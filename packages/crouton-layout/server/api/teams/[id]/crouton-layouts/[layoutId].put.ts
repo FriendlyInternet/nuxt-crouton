@@ -1,7 +1,7 @@
 import { eq, and } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { layoutConfigs } from '../../../../database/schema/layoutConfigs'
-import { sanitizeLayoutTree } from '../../../../../app/utils/layout-tree'
+import { sanitizeLayoutTree } from '@fyit/crouton-core/app/utils/layout-tree'
 
 /**
  * Upsert a saved layout tree by id, scoped to the caller's team (#706).
