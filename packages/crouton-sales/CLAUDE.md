@@ -253,8 +253,11 @@ open pane's tab hides — the pane header (icon + title, mirroring the tab) carr
   `SalesBlocksProductMatrixRender` (product × day pivot, reused as-is via `attrs.eventScope`).
   The chart/matrix endpoints are team-members-only, matching the gate. The
   **"Personeel meetellen" (include-staff) toggle is sticky** to the top of the
-  scrolling pane (`sticky top-0`, bleeds over the host `p-4` via negative margins
+  scrolling pane (`sticky -top-2`, bleeds over the host `p-4` via negative margins
   + solid `bg-default`), so it stays reachable while the numbers below scroll (#1608).
+  `-top-2` cancels the host's `pt-2` so no content scrolls into the 8px gap above the
+  bar (the IMG_1493 bleed regression), and symmetric `py-3` keeps the toggle centered
+  both at rest and when stuck (an earlier `pt-4 pb-2` looked top-heavy at rest).
 Per-order print status lives on the order rows as LED dots. Event dates are deliberately not shown
 anywhere in the workspace (irrelevant to the POS flow; columns remain in the DB). Deleting the
 current event navigates back to the events list via a `crouton:mutation` hook (matched on
