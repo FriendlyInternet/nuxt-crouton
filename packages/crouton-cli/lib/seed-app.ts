@@ -15,6 +15,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
 
 export interface SeedAppOptions {
   /** App directory (defaults to cwd). */
@@ -241,14 +242,141 @@ function collectDefaultLayoutSql(appDir: string, core: any, teamId: string): str
   return core.buildUpsert('layout_configs', { id }, values, { immutable: ['createdAt'] })
 }
 
+/** Where a LOCAL seed must land: the sqlite file `nuxt dev` (`hub: { db: 'sqlite' }`) reads. */
+export function localSeedDbPath(appDir: string): string {
+  return join(appDir, '.data', 'db', 'sqlite.db')
+}
+
+export type SeedTarget =
+  | { kind: 'sqlite', path: string }
+  | { kind: 'wrangler', db: string, remote: true }
+
 /**
- * Run the seed: discover → order → collect SQL → execute via wrangler.
- * Returns the generated SQL (handy for tests / dry runs).
+ * Route a seed to its executor (#1612). LOCAL seeds go straight to the DB `nuxt dev` actually
+ * reads (`.data/db/sqlite.db`) — NOT the miniflare `.wrangler` DB that `wrangler d1 execute
+ * --local` writes and that dev never opens (the split that made local seed data "disappear").
+ * REMOTE is unchanged: `wrangler d1 execute --remote`.
+ */
+export function resolveSeedTarget(opts: { db: string, remote: boolean, appDir: string }): SeedTarget {
+  return opts.remote
+    ? { kind: 'wrangler', db: opts.db, remote: true }
+    : { kind: 'sqlite', path: localSeedDbPath(opts.appDir) }
+}
+
+/**
+ * A local seed needs the DB `nuxt dev` created + migrated at its first boot. If it isn't there
+ * yet, fail with the recipe rather than seeding an absent/empty file (#1612).
+ */
+export function assertLocalSeedReady(appDir: string): void {
+  if (!existsSync(localSeedDbPath(appDir))) {
+    throw new Error(
+      `No local database at ${localSeedDbPath(appDir)} — run \`pnpm dev\` once to create and `
+      + `migrate it, then re-run the seed.`,
+    )
+  }
+}
+
+// better-sqlite3 is a native module — require it LAZILY (only when a local seed actually runs),
+// so remote/dry-run paths and non-seed CLI commands never load it.
+const requireCjs = createRequire(import.meta.url)
+
+/** Execute seed SQL directly against the local `.data` sqlite DB — what `nuxt dev` reads (#1612). */
+export function runLocalSeed(appDir: string, sql: string): void {
+  assertLocalSeedReady(appDir)
+  const Database = requireCjs('better-sqlite3')
+  const db = new Database(localSeedDbPath(appDir))
+  try {
+    db.exec(sql)
+  }
+  finally {
+    db.close()
+  }
+}
+
+/**
+ * Assemble the INDEPENDENT seed chunks (#1370): one per provider, plus the app's collection
+ * fixtures and default layout. Independent (not one atomic batch) so a provider whose table
+ * isn't in this app (e.g. bookings, pulled in transitively but never extended) warns + is
+ * skipped rather than sinking the auth team + the app's own rows.
+ */
+async function buildSeedChunks(opts: {
+  core: any
+  providers: LoadedProviders['providers']
+  createPageWithBlocks?: Function
+  appDir: string
+  teamSlug: string
+  teamId: string
+  locale: string
+  withStaff?: boolean
+}): Promise<Array<{ label: string, sql: string }>> {
+  const { core, providers, createPageWithBlocks, appDir, teamSlug, teamId, locale, withStaff } = opts
+  const chunks: Array<{ label: string, sql: string }> = []
+  for (const provider of providers) {
+    const psql: string = await core.collectSeedSql({
+      providers: [provider], teamSlug, teamId, locale, withStaff, createPageWithBlocks,
+    })
+    if (psql.trim()) chunks.push({ label: `provider:${provider.id}`, sql: psql })
+  }
+  const fixtureSql = collectCollectionFixtureSql(appDir, core, teamId)
+  if (fixtureSql.trim()) chunks.push({ label: 'collection-fixtures', sql: fixtureSql })
+  const layoutSql = collectDefaultLayoutSql(appDir, core, teamId)
+  if (layoutSql.trim()) chunks.push({ label: 'default-layout', sql: layoutSql })
+  return chunks
+}
+
+/**
+ * Build the per-chunk executor for the resolved target (#1612): LOCAL writes straight into
+ * `.data/db/sqlite.db` (what `nuxt dev` reads) via better-sqlite3; REMOTE goes through
+ * `wrangler d1 execute --remote` (--command uses the D1 query API — the only D1 permission a
+ * deploy token needs; execFileSync passes SQL as one argv entry, no shell, so JSON/quotes in
+ * fixture data need no escaping).
+ */
+function makeSeedChunkRunner(db: string, appDir: string, remote: boolean): (sql: string) => void {
+  const target = resolveSeedTarget({ db, remote, appDir })
+  if (target.kind === 'sqlite') {
+    assertLocalSeedReady(appDir) // fail fast with the recipe
+    return (chunkSql: string) => runLocalSeed(appDir, chunkSql)
+  }
+  return (chunkSql: string) => {
+    execFileSync(
+      'npx',
+      ['wrangler', 'd1', 'execute', db, '--remote', `--command=${chunkSql}`, '--yes'],
+      { cwd: appDir, stdio: 'inherit', env: process.env },
+    )
+  }
+}
+
+/** Resolve the seed's effective inputs (app dir + team + locale defaults). */
+function normalizeSeedOptions(options: SeedAppOptions): { appDir: string, teamSlug: string, locale: string } {
+  return {
+    appDir: resolve(options.dir ?? process.cwd()),
+    teamSlug: options.team ?? 'test1',
+    locale: options.locale ?? 'nl',
+  }
+}
+
+/** Report the per-chunk outcome: throw if EVERYTHING failed, else warn (partial) / success. */
+function reportSeedOutcome(r: { ok: number, skipped: string[], db: string, remote: boolean }): void {
+  if (r.ok === 0 && r.skipped.length > 0) {
+    // Nothing seeded at all → a real problem (bad DB / token / all tables missing), not a
+    // tolerable partial skip. Surface it so the deploy's seed step can warn loudly.
+    throw new Error(`All ${r.skipped.length} seed chunk(s) failed: ${r.skipped.join(', ')}`)
+  }
+  if (r.skipped.length > 0) {
+    consola.warn(`Seeded ${r.ok} chunk(s) into ${r.db}; skipped ${r.skipped.length} (${r.skipped.join(', ')}) — see warnings above.`)
+  }
+  else {
+    consola.success(`Seeded ${r.ok} chunk(s) into ${r.db} (${r.remote ? 'remote' : 'local'}).`)
+  }
+}
+
+/**
+ * Run the seed: discover → order → collect SQL → execute against the resolved target
+ * (local `.data` sqlite, or remote via wrangler). Returns the generated SQL (handy for tests /
+ * dry runs).
  */
 export async function seedApp(options: SeedAppOptions): Promise<string> {
-  const appDir = resolve(options.dir ?? process.cwd())
-  const teamSlug = options.team ?? 'test1'
-  const locale = options.locale ?? 'nl'
+  const { appDir, teamSlug, locale } = normalizeSeedOptions(options)
 
   consola.start(`Seeding ${options.db} (${options.remote ? 'remote' : 'local'}) — team "${teamSlug}", locale "${locale}"`)
 
@@ -264,25 +392,12 @@ export async function seedApp(options: SeedAppOptions): Promise<string> {
   const core: any = await tsImport(jiti, '@fyit/crouton-core/shared/seed')
   const teamId = core.seedOrgId(teamSlug)
 
-  // Build the seed as INDEPENDENT chunks — one per provider, plus the app's collection
-  // fixtures and default layout — instead of one atomic batch. Why (#1370, the snippets
-  // dogfood): `@fyit/crouton` pulls in `@fyit/crouton-bookings` transitively, so the BFS
-  // discovers a bookings provider even for an app that never extends bookings as a layer
-  // (its migrations never created `bookings_settings`). As one `--command` batch, that single
-  // missing table aborted EVERYTHING — no auth team, no collection rows → an empty preview.
-  // Per-chunk, a failing provider warns + is skipped and the auth team + the app's own rows
-  // + layout still seed.
-  const chunks: Array<{ label: string; sql: string }> = []
-  for (const provider of providers) {
-    const psql: string = await core.collectSeedSql({
-      providers: [provider], teamSlug, teamId, locale, withStaff: options.withStaff, createPageWithBlocks,
-    })
-    if (psql.trim()) chunks.push({ label: `provider:${provider.id}`, sql: psql })
-  }
-  const fixtureSql = collectCollectionFixtureSql(appDir, core, teamId)
-  if (fixtureSql.trim()) chunks.push({ label: 'collection-fixtures', sql: fixtureSql })
-  const layoutSql = collectDefaultLayoutSql(appDir, core, teamId)
-  if (layoutSql.trim()) chunks.push({ label: 'default-layout', sql: layoutSql })
+  // Independent chunks (#1370) — see buildSeedChunks: a provider whose table isn't in this app
+  // warns + is skipped instead of sinking the whole seed.
+  const chunks = await buildSeedChunks({
+    core, providers, createPageWithBlocks, appDir,
+    teamSlug, teamId, locale, withStaff: options.withStaff,
+  })
 
   const sql = chunks.map(c => c.sql).join('\n')
   if (!chunks.length) {
@@ -295,28 +410,9 @@ export async function seedApp(options: SeedAppOptions): Promise<string> {
     return sql
   }
 
-  // Run each chunk as its own `wrangler d1 execute --command`. --command (not --file) uses the
-  // D1 query API — the only D1 permission a deploy token needs (a --file bulk import needs
-  // User-Details:Read the token lacks). execFileSync passes SQL as one argv entry (no shell),
-  // so JSON/quotes in fixture data need no escaping. Curated seeds are small (arg-length is fine).
-  const runChunk = (chunkSql: string) => {
-    execFileSync(
-      'npx',
-      ['wrangler', 'd1', 'execute', options.db, options.remote ? '--remote' : '--local', `--command=${chunkSql}`, '--yes'],
-      { cwd: appDir, stdio: 'inherit', env: process.env },
-    )
-  }
-  const { ok, skipped } = runSeedChunks(chunks, runChunk)
-  if (ok === 0 && skipped.length > 0) {
-    // Nothing seeded at all → a real problem (bad DB / token / all tables missing), not a
-    // tolerable partial skip. Surface it so the deploy's seed step can warn loudly.
-    throw new Error(`All ${skipped.length} seed chunk(s) failed: ${skipped.join(', ')}`)
-  }
-  if (skipped.length > 0) {
-    consola.warn(`Seeded ${ok} chunk(s) into ${options.db}; skipped ${skipped.length} (${skipped.join(', ')}) — see warnings above.`)
-  } else {
-    consola.success(`Seeded ${ok} chunk(s) into ${options.db} (${options.remote ? 'remote' : 'local'}).`)
-  }
+  // Route each chunk to its executor (#1612) — local `.data` sqlite or remote wrangler.
+  const { ok, skipped } = runSeedChunks(chunks, makeSeedChunkRunner(options.db, appDir, !!options.remote))
+  reportSeedOutcome({ ok, skipped, db: options.db, remote: !!options.remote })
   return sql
 }
 

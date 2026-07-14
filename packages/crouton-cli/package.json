@@ -52,6 +52,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^1.0.1",
+    "better-sqlite3": "^12.4.1",
     "c12": "^3.0.0",
     "citty": "^0.2.1",
     "consola": "^3.4.0",
@@ -68,6 +69,7 @@
     "node": ">=18.0.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.0.0",
     "@types/pluralize": "^0.0.33",
     "vitest": "^2.1.0"

@@ -26,14 +26,21 @@ crouton-seed --db <name> [--remote]          # Seed an app DB from its packages'
 ## App Seeding (`crouton-seed`)
 
 `crouton-seed` (separate bin, `bin/crouton-seed.mjs` → `lib/seed-app.ts`) fills an
-app's D1 with the demo data its extended packages ship (epic #82). It mirrors the
-`db:migrate` local/remote split via `wrangler d1 execute`:
+app's D1 with the demo data its extended packages ship (epic #82):
 
 ```bash
-crouton-seed --db fanfare-db            # local  (→ wrangler d1 execute --local)
+crouton-seed --db fanfare-db            # local  (→ .data/db/sqlite.db — what nuxt dev reads, #1612)
 crouton-seed --db fanfare-db --remote   # remote (→ wrangler d1 execute --remote)
 crouton-seed --db fanfare-db --dry-run  # print the generated SQL, don't execute
 ```
+
+**Local seeds land where `nuxt dev` reads (#1612).** A local seed writes straight into
+`<app>/.data/db/sqlite.db` (the NuxtHub `hub: { db: 'sqlite' }` dev DB) via `better-sqlite3` —
+NOT the miniflare `.wrangler` DB that `wrangler d1 execute --local` writes and that dev never
+opens (the split that used to make locally-seeded data "disappear"). If `.data/db/sqlite.db`
+doesn't exist yet, the seed fails with a recipe (run `pnpm dev` once to create + migrate it).
+`--remote` is unchanged (`wrangler d1 execute --remote`). Routing lives in `resolveSeedTarget` /
+`runLocalSeed` (`lib/seed-app.ts`); contract: `tests/unit/seed-local-{target,write}.test.ts`.
 
 | Flag | Default | Purpose |
 |------|---------|---------|
@@ -51,7 +58,8 @@ loads each package's `./seed` export via **jiti** (no build step), topo-sorts th
 providers by `dependsOn` (`auth → sales → pages`), then calls
 `collectSeedSql()` from `@fyit/crouton-core/shared/seed` to turn their declarative
 `ctx.upsert(...)` calls into idempotent `INSERT … ON CONFLICT(id) DO UPDATE` SQL,
-which it runs via `wrangler d1 execute --command`. Stable, namespace-derived ids
+which it executes against the local `.data/db/sqlite.db` (#1612) or, with `--remote`,
+via `wrangler d1 execute --command`. Stable, namespace-derived ids
 (`seed:org:test1`, `seed:event:test1:vlaamsekermis`) make re-runs upsert in place.
 
 **Resilient per-chunk execution (#1370):** the seed runs as INDEPENDENT chunks — one
