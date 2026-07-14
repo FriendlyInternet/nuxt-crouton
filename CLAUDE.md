@@ -157,6 +157,8 @@ The approval file is gitignored and session-scoped. Always clean it up after fin
 
 This applies to all agents and sub-agents.
 
+**PR-time backstop (#1611).** The PreToolUse hook only runs *in an agent session*, so it can't catch a `packages/**` change on its way to `main`. The `packages-guard` CI check (`.github/workflows/packages-guard.yml`, decision in the unit-tested `scripts/packages-guard.mjs`) is the authoritative PR-time gate: a PR touching `packages/**` **fails** unless the edit is *declared* — a **`packages:approved`** label, a **`Packages-approved: <why>`** body line, **or** a linked signed-off **`pkg:*`** issue — and it comments the blast-radius (which package files changed). It's declaration, not prohibition. (Distinct from `guard-package-approval.yml`, which only fails a *committed* `.package-edit-approved` override file.)
+
 ### Context Clearing Between Tasks
 After each task: announce completion, STOP. User runs `/clear`. Fresh agent reads the relevant GitHub issue/epic (and PROGRESS_TRACKER.md if a phase rollup exists) and continues.
 

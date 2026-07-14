@@ -1,0 +1,100 @@
+name: Packages guard
+
+# #1611 — the PR-time half of the packages/ HARD GATE. The local PreToolUse hook
+# (.claude/hooks/gate-package-edits.sh) only runs inside an agent session, so a PR can
+# quietly change shared `packages/**` code with nothing catching it on the way to main.
+# This fails such a PR unless the edit is *declared* — a `packages:approved` label, a
+# `Packages-approved:` body line, or a linked signed-off `pkg:*` issue. Not prohibition:
+# package work is legitimate, but shared code ripples across every consuming app, so it
+# must be declared and the blast radius made visible.
+#
+# The decision lives in the pure, unit-tested scripts/packages-guard.mjs; this workflow only
+# resolves the impure inputs (changed files, labels, body, linked-issue labels) and posts the
+# blast-radius comment. Distinct from guard-package-approval.yml, which only fails a *committed*
+# .claude/.package-edit-approved override file.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: read
+
+jobs:
+  declared:
+    name: Packages edit declared
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gather PR inputs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            const pr = context.payload.pull_request
+
+            // Changed files (paginated).
+            const files = await github.paginate(github.rest.pulls.listFiles,
+              { ...context.repo, pull_number: pr.number })
+            const changedFiles = files.map(f => f.filename)
+
+            const prLabels = (pr.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+            const body = pr.body || ''
+
+            // A linked signed-off pkg:* issue counts as a declaration — resolve the body's
+            // closing/refs references (Closes/Fixes/Resolves/Refs #NN) and collect their labels.
+            const refRe = /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?|refs?)\s*:?\s+#(\d+)/gi
+            const refNums = [...new Set([...body.matchAll(refRe)].map(m => Number(m[1])))]
+            const linkedIssueLabels = []
+            for (const issue_number of refNums) {
+              try {
+                const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
+                if (issue.pull_request) continue // a PR reference, not an issue
+                for (const l of issue.labels || []) linkedIssueLabels.push(typeof l === 'string' ? l : l.name)
+              } catch (e) { core.warning(`could not resolve #${issue_number}: ${e.message}`) }
+            }
+
+            fs.writeFileSync('guard-input.json',
+              JSON.stringify({ changedFiles, prLabels, body, linkedIssueLabels }))
+            core.info(`Changed files: ${changedFiles.length}; PR labels: ${prLabels.join(', ') || '(none)'}`)
+
+      - name: Evaluate packages guard
+        run: node scripts/packages-guard.mjs guard-input.json guard-output.json
+
+      - name: Verdict — comment on the blast radius / set check state
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            const marker = '<!-- packages-guard -->'
+            const pr = context.payload.pull_request
+
+            let out
+            try { out = JSON.parse(fs.readFileSync('guard-output.json', 'utf8')) }
+            catch (e) { core.setFailed(`packages-guard did not produce a result: ${e.message}`); return }
+
+            // Find any prior guard comment (marker dedup — an `edited`/`synchronize` re-run updates it).
+            const comments = await github.paginate(github.rest.issues.listComments,
+              { ...context.repo, issue_number: pr.number })
+            const prior = comments.find(c => (c.body || '').includes(marker))
+
+            if (out.declared) {
+              if (!out.touched.length) { core.info('No packages/** files changed — no-op.'); return }
+              core.info(`Declared via ${out.signal} — guard satisfied.`)
+              if (prior) {
+                await github.rest.issues.updateComment({ ...context.repo, comment_id: prior.id,
+                  body: `${marker}\n✅ Packages edit declared (via ${out.signal}) — guard satisfied.\n\n<sub>🤖 agent pipeline (CI) · packages-guard (#1611)</sub>` })
+              }
+              return
+            }
+
+            const bodyText = out.commentBody
+            if (prior) await github.rest.issues.updateComment({ ...context.repo, comment_id: prior.id, body: bodyText })
+            else await github.rest.issues.createComment({ ...context.repo, issue_number: pr.number, body: bodyText })
+
+            core.setFailed(out.reason)

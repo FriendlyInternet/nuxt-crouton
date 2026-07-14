@@ -272,3 +272,6 @@
 - name: "ui-approved"
   color: "0e8a16"
   description: "Informational UI sign-off marker — resumes NOTHING (approval = lgtm comment, #572); digest badge"
+- name: "packages:approved"
+  color: "5319e7"
+  description: "PR: the packages/** edit is declared/approved — one signal that satisfies the packages-guard CI gate (#1611)"
