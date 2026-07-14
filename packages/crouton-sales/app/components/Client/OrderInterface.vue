@@ -3,8 +3,12 @@
        squeezed beside the orders pane it flips to mobile mode (cart drawer at
        the bottom) exactly like on a phone. [contain:layout] makes this root the
        containing block for the fixed cart drawer (container-type alone does
-       not — verified in Chromium), keeping the drawer inside the POS module. -->
-  <div class="h-full flex flex-col @container [contain:layout]">
+       not — verified in Chromium), keeping the drawer inside the POS module.
+       touch-manipulation on the root disables iOS double-tap-to-zoom for the
+       WHOLE kassa surface (product grid + steppers + tabs), not just the
+       slide-outs — maximum-scale=1 can't stop it (Safari ignores it for user
+       gestures) and #1610 only covered the slide-out roots (#1628). -->
+  <div class="h-full flex flex-col @container [contain:layout] touch-manipulation">
     <SalesClientOfflineBanner />
 
     <div v-if="loading" class="flex-1 flex items-center justify-center">
