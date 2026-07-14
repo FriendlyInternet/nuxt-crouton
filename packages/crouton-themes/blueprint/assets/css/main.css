@@ -27,6 +27,9 @@
   background-size: 24px 24px;
   color: var(--bp-line);
   --ui-bg: var(--bp-blue);
+  /* Base geometry token (#1594): drafting-sheet line-work is square — drive
+     Nuxt UI's radius scale to 0 so calm surfaces square too. */
+  --ui-radius: 0;
 }
 
 /* ============================================

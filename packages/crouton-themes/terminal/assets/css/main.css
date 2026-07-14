@@ -29,6 +29,10 @@
   /* Drive Nuxt UI's surface token too — app shells (incl. the playground
      wrapper) paint with var(--ui-bg), which would otherwise stay light. */
   --ui-bg: var(--term-bg);
+  /* Base geometry token (#1594): a CRT has square corners — drive Nuxt UI's
+     radius scale to 0 so calm surfaces (unmarked cards/rows) square too, not
+     just the theme's named variants. */
+  --ui-radius: 0;
 }
 
 /* Scanlines: subtle, pure-CSS, on a non-interactive overlay. */

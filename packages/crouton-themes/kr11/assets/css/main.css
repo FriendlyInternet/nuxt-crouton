@@ -645,6 +645,10 @@
 [data-theme="kr11"],
 .theme-kr11 {
   background-color: var(--kr-chassis);
+  /* Base geometry token (#1594): tie Nuxt UI's radius scale to the theme's own
+     card radius so calm surfaces (unmarked cards/rows) match the tactile pads,
+     not just the theme's named variants. card = --ui-radius * 2 = kr-card-radius. */
+  --ui-radius: calc(var(--kr-card-radius) / 2);
 }
 
 /* USwitch as hardware: a cream pad track with an LED thumb — USwitch has
@@ -687,6 +691,9 @@
 
 [data-theme="kr11"] body,
 body.theme-kr11 {
+  /* Base surface token (#1597): ref the chassis var (flips in dark, #1395) so a
+     calm bg-default surface is the kr11 chassis, not Nuxt UI white. */
+  --ui-bg: var(--kr-chassis);
   --ui-text-dimmed: #8a8a86;
   --ui-text-muted: #666663;
   --ui-text-toned: #4c4c49;

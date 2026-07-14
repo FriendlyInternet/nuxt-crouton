@@ -33,6 +33,14 @@
   background-color: var(--brutalist-paper);
 }
 
+/* Base geometry token (#1594): brutalism is hard square corners — drive Nuxt
+   UI's radius scale to 0 so calm surfaces (unmarked cards/rows) square too, not
+   just the theme's named variants. Scoped to both activation paths. */
+[data-theme="brutalist"],
+.theme-brutalist {
+  --ui-radius: 0;
+}
+
 /* Chrome without a variant hook (owner feedback on #1307: "the switcher could
    be more in style"). USwitch has no `variant` dimension, so the marker-gated
    replacer can never fire for it — theme it ambiently, scoped to the active
@@ -582,6 +590,9 @@
 
 [data-theme="brutalist"] body,
 body.theme-brutalist {
+  /* Base surface token (#1597): was unset, so a calm bg-default surface stayed
+     Nuxt UI white instead of the paper. Ref the paper var (flips in dark, #1395). */
+  --ui-bg: var(--brutalist-paper);
   --ui-text-dimmed: #75716a;
   --ui-text-muted: #5c5952;
   --ui-text-toned: #33312c;

@@ -28,6 +28,14 @@
   --ui-bg: var(--riso-paper);
 }
 
+/* Base geometry token (#1594): riso print has a tiny 2px radius — drive Nuxt
+   UI's radius scale so calm surfaces (unmarked cards/rows) match, not just the
+   theme's named variants (card = --ui-radius * 2 = 2px). Both activation paths. */
+[data-theme="riso"],
+.theme-riso {
+  --ui-radius: 1px;
+}
+
 /* ============================================
    BUTTONS — misregistered ink blocks
    The second color prints slightly OFF — that's the whole charm.

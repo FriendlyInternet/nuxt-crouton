@@ -465,6 +465,59 @@ Use theme-prefixed CSS custom properties:
 }
 ```
 
+## Base geometry token — `--ui-radius` (#1594)
+
+A theme's **border-radius is a base UI token it owns**, not something squared per
+named-variant. Nuxt UI derives its whole radius scale from one token —
+`--radius-sm: var(--ui-radius)`, `--radius-md: calc(var(--ui-radius) * 1.5)`,
+`--radius-lg: calc(var(--ui-radius) * 2)` (a `UCard` = `rounded-lg`) — so setting
+`--ui-radius` once re-shapes **every** rounded surface, including *calm/unmarked*
+ones (a plain `variant="soft"` card, e.g. the kassa POS rows). Squaring only via a
+theme's marker CSS (`.brutalist-card { border-radius:0 }`) reaches solely the
+components using that named variant, leaving calm surfaces at Nuxt UI's default
+`0.25rem` — the "themed chrome, rounded data rows" mismatch #1594 fixes.
+
+**Every theme declares `--ui-radius`** in an ambient block scoped to **both**
+activation paths (`[data-theme="x"]` app-preset + `.theme-x` switcher), next to its
+`--ui-*` color tokens. Current values (rounded themes tie it to their own radius
+token so `card = --ui-radius * 2` equals the theme's card/panel radius):
+
+| Theme | `--ui-radius` | | Theme | `--ui-radius` |
+|---|---|---|---|---|
+| minimal, brutalist, gameboy, terminal, eink, blueprint, mtv | `0` | | ko | `calc(var(--ko-wrapper-radius) / 2)` |
+| kr11 | `calc(var(--kr-card-radius) / 2)` | | braun | `calc(var(--braun-radius) / 2)` |
+| riso | `1px` (card 2px) | | blackandwhite | *(unset — deliberate `0.25rem` pass)* |
+
+**When adding a theme, set `--ui-radius`** — it's a base token, filled in first
+(before the named-variant CSS). ⚠️ The crouton-admin **team-preset** path
+(`applyThemeSettings`) sets `--ui-radius` **inline** on `<html>`, which beats a
+theme's stylesheet rule; #1595 makes presets defer to the theme's token (the
+inline set is kept only for the "custom" preset's radius slider).
+
+## Complete base `--ui-*` token set per theme (#1597)
+
+Radius is one token of a set. A theme owns its **whole** base semantic layer so
+*calm/unmarked* surfaces read as the theme, not Nuxt UI's default slate. The
+canonical set every theme declares (ambient block, both `[data-theme="x"]` +
+`.theme-x`, both light **and** dark via #1395):
+
+- **surfaces** `--ui-bg`, `--ui-bg-muted`, `--ui-bg-elevated`, `--ui-bg-accented`
+- **text** `--ui-text-dimmed`, `--ui-text-muted`, `--ui-text-toned`, `--ui-text`, `--ui-text-highlighted`
+- **border** `--ui-border`, `--ui-border-muted`, `--ui-border-accented`
+- **geometry** `--ui-radius`
+
+Prefer mapping onto the theme's **own** palette vars (e.g. minimal → its
+`--minimal-gray-*` scale, brutalist → `var(--brutalist-paper)`) so the dual-scheme
+flip is inherited for free — one declaration covers light + dark. Literal hex is
+fine too but then the dark counterpart block must re-tune it. **`--ui-bg` (the base
+surface) is easy to forget** — several themes set the muted/elevated variants but
+not the base, leaving a `bg-default` surface Nuxt-UI-white; #1597 filled those.
+
+**blackandwhite is the one deliberate exception** — it drives its palette from the
+`neutral` color alias in its `app.config` (so `--ui-color-neutral-*` resolve the
+default tokens to greys) rather than declaring explicit `--ui-*`; leave it stock.
+When adding a theme, declare the full set (or, like bw, document why it derives them).
+
 ## Chrome vs data (#1333)
 
 Themes style the **interaction chrome** — buttons, inputs, selects, textareas,

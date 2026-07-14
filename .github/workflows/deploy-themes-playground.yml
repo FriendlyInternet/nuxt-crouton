@@ -1,0 +1,69 @@
+name: Deploy Themes Playground
+
+# Self-contained Workers deploy for the crouton-themes PLAYGROUND (#1598), the
+# theme sign-off surface at themes.pmcp.dev. Modeled on deploy-docs.yml — the
+# playground is NOT an apps/<name> app, so it is NOT picked up by the generic
+# deploy-apps.yml (which scans apps/*/deploy.config.json). It's a public gallery
+# with no DB/KV/auth, single env, so nitro's cloudflare_module preset generates
+# the deploy config and we `wrangler deploy` directly.
+#
+# Trunk = staging (#347): a themes change ships continuously on merge to main, so
+# the gallery always reflects the current themes. themes.pmcp.dev is a staging
+# preview domain (public gallery) — NOT a #318 prod cash-register app, so this is
+# not the prod gate.
+#
+# The custom domain (themes.pmcp.dev, custom_domain route in the playground's
+# wrangler.jsonc) auto-attaches on deploy; repo-level CLOUDFLARE_* secrets carry
+# the zone DNS/Routes edit scope pmcp.dev needs.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/crouton-themes/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deploy-themes-playground.yml'
+  pull_request:
+    paths:
+      - 'packages/crouton-themes/**'
+      - '.github/workflows/deploy-themes-playground.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy themes playground to Cloudflare Workers
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      NODE_OPTIONS: '--max-old-space-size=8192'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # build (cloudflare_module → nitro writes .output/server/wrangler.json,
+      # picking up the custom_domain route) then deploy. cf:staging runs from the
+      # playground dir, so `wrangler deploy` reads that package's wrangler.jsonc.
+      - name: Build + deploy
+        if: github.event_name != 'pull_request'
+        run: pnpm --filter crouton-themes-playground cf:staging
+
+      # On PRs, build only (no deploy) as a smoke test that the cloudflare_module
+      # build succeeds.
+      - name: Build only (PR smoke test)
+        if: github.event_name == 'pull_request'
+        run: NITRO_PRESET=cloudflare_module pnpm --filter crouton-themes-playground build

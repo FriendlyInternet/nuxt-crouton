@@ -31,6 +31,9 @@
 [data-theme="mtv"],
 .theme-mtv {
   background-color: var(--mtv-paper);
+  /* Base geometry token (#1594): hard-edged slabs — drive Nuxt UI's radius
+     scale to 0 so calm surfaces square too, not just named variants. */
+  --ui-radius: 0;
 }
 
 /* ============================================
@@ -556,6 +559,9 @@
 
 [data-theme="mtv"] body,
 body.theme-mtv {
+  /* Base surface token (#1597): ref the paper var (flips in dark, #1395) so a
+     calm bg-default surface is mtv paper, not Nuxt UI white. */
+  --ui-bg: var(--mtv-paper);
   --ui-text-dimmed: #7f7685;
   --ui-text-muted: #675f6d;
   --ui-text-toned: #3d3644;
