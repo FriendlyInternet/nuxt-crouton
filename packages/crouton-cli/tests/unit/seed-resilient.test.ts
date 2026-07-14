@@ -6,7 +6,7 @@ import { runSeedChunks } from '../../lib/seed-app'
 // `bookings_settings` table). As ONE atomic --command that aborted the whole seed. runSeedChunks
 // runs each chunk independently so a dormant-package failure warns + skips and the rest still land.
 describe('runSeedChunks', () => {
-  it('a failing chunk (missing table) is skipped; every other chunk still runs', () => {
+  it('a failing chunk (missing table) is skipped; every other chunk still runs', async () => {
     const ran: string[] = []
     const run = (sql: string) => {
       ran.push(sql)
@@ -20,7 +20,7 @@ describe('runSeedChunks', () => {
       { label: 'collection-fixtures', sql: 'INSERT INTO main_snippets ...' },
       { label: 'default-layout', sql: 'INSERT INTO layout_configs ...' },
     ]
-    const { ok, skipped } = runSeedChunks(chunks, run)
+    const { ok, skipped } = await runSeedChunks(chunks, run)
 
     expect(ok).toBe(3) // auth + fixtures + layout
     expect(skipped).toEqual(['provider:bookings'])
@@ -29,9 +29,9 @@ describe('runSeedChunks', () => {
     expect(ran.some(s => s.includes('main_snippets'))).toBe(true) // the app's own rows DID seed
   })
 
-  it('all-good → ok=count, nothing skipped', () => {
+  it('all-good → ok=count, nothing skipped', async () => {
     const run = vi.fn()
-    const { ok, skipped } = runSeedChunks(
+    const { ok, skipped } = await runSeedChunks(
       [{ label: 'a', sql: 'x' }, { label: 'b', sql: 'y' }],
       run,
     )
@@ -40,8 +40,8 @@ describe('runSeedChunks', () => {
     expect(run).toHaveBeenCalledTimes(2)
   })
 
-  it('empty chunk list → ok=0, nothing skipped (caller decides "nothing to seed")', () => {
-    const { ok, skipped } = runSeedChunks([], () => {})
+  it('empty chunk list → ok=0, nothing skipped (caller decides "nothing to seed")', async () => {
+    const { ok, skipped } = await runSeedChunks([], () => {})
     expect(ok).toBe(0)
     expect(skipped).toEqual([])
   })

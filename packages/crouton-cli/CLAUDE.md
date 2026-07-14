@@ -26,14 +26,23 @@ crouton-seed --db <name> [--remote]          # Seed an app DB from its packages'
 ## App Seeding (`crouton-seed`)
 
 `crouton-seed` (separate bin, `bin/crouton-seed.mjs` → `lib/seed-app.ts`) fills an
-app's D1 with the demo data its extended packages ship (epic #82). It mirrors the
-`db:migrate` local/remote split via `wrangler d1 execute`:
+app's D1 with the demo data its extended packages ship (epic #82):
 
 ```bash
-crouton-seed --db fanfare-db            # local  (→ wrangler d1 execute --local)
+crouton-seed --db fanfare-db            # local  (→ .data/db/sqlite.db via libsql, #1612)
 crouton-seed --db fanfare-db --remote   # remote (→ wrangler d1 execute --remote)
 crouton-seed --db fanfare-db --dry-run  # print the generated SQL, don't execute
 ```
+
+**Local writes the DB `nuxt dev` reads (#1612).** The `--local` path executes the seed SQL
+**directly against `<app>/.data/db/sqlite.db`** — the file `nuxt dev` (`hub: { db: 'sqlite' }`)
+reads via the libsql driver — using `@libsql/client` (the same driver, resolved from the app;
+it ships with `@nuxthub/core`). It does **not** shell to `wrangler d1 execute --local`, which
+writes a *different* file (the miniflare DB, `.wrangler/state/v3/d1/…`); that split meant
+locally-seeded rows never appeared in the running dev app. The DB must already exist with its
+migrations applied — run `pnpm dev` once, then `pnpm db:migrate` — else the seed errors with an
+actionable message instead of silently seeding into nothing. `--remote` is unchanged (still
+`wrangler d1 execute --remote`).
 
 | Flag | Default | Purpose |
 |------|---------|---------|
@@ -346,7 +355,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 |------|---------|
 | `bin/crouton-generate.js` | CLI entry point (citty with 12 subcommands) |
 | `bin/crouton-seed.mjs` | `crouton-seed` entry — app DB seeding (citty) |
-| `lib/seed-app.ts` | Seed runner: discover providers, order, collect SQL, run wrangler. Also seeds the **default layout** (`crouton.layout.json` → `layout_configs[default]`, #709) |
+| `lib/seed-app.ts` | Seed runner: discover providers, order, collect SQL, execute it — **local → `.data/db/sqlite.db` via libsql** (`seedLocalChunks`/`localDbPath`, the file `nuxt dev` reads, #1612), remote → `wrangler d1 execute --remote`. Also seeds the **default layout** (`crouton.layout.json` → `layout_configs[default]`, #709) |
 | `lib/compose-layout.ts` | **Deterministic default-layout step** (#709) — after generation, runs `@fyit/crouton-layout`'s `composeDefaultLayout` (moved out of crouton-core, #751) over the generated collections and writes `crouton.layout.json` (a `layout_configs` tree the POC boots with). `registryKeyFor(layer, collection)` mirrors the generated registry key; mirrors the core + bookings block sizing contracts (no live `app.config` at generate time) |
 | `lib/generate-collection.ts` | Main orchestrator (~74KB) |
 | `lib/init-app.ts` | Init pipeline (scaffold → generate → doctor) |

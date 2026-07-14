@@ -13,8 +13,9 @@ import { createJiti } from 'jiti'
 import consola from 'consola'
 import { execFileSync } from 'node:child_process'
 import { readFileSync, existsSync, readdirSync } from 'node:fs'
-import { join, resolve, dirname } from 'node:path'
+import { join, resolve, dirname, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
 
 export interface SeedAppOptions {
   /** App directory (defaults to cwd). */
@@ -295,18 +296,15 @@ export async function seedApp(options: SeedAppOptions): Promise<string> {
     return sql
   }
 
-  // Run each chunk as its own `wrangler d1 execute --command`. --command (not --file) uses the
-  // D1 query API — the only D1 permission a deploy token needs (a --file bulk import needs
-  // User-Details:Read the token lacks). execFileSync passes SQL as one argv entry (no shell),
-  // so JSON/quotes in fixture data need no escaping. Curated seeds are small (arg-length is fine).
-  const runChunk = (chunkSql: string) => {
-    execFileSync(
-      'npx',
-      ['wrangler', 'd1', 'execute', options.db, options.remote ? '--remote' : '--local', `--command=${chunkSql}`, '--yes'],
-      { cwd: appDir, stdio: 'inherit', env: process.env },
-    )
-  }
-  const { ok, skipped } = runSeedChunks(chunks, runChunk)
+  // Local vs remote take DIFFERENT execution paths (#1612):
+  // - remote → `wrangler d1 execute --remote` against Cloudflare D1 (unchanged).
+  // - local  → execute straight against `.data/db/sqlite.db` — the file `nuxt dev`
+  //   (`hub: { db: 'sqlite' }`) actually reads via libsql. The old `wrangler --local`
+  //   wrote the *miniflare* DB (`.wrangler/state/v3/d1/…`), a different file, so
+  //   locally-seeded rows never appeared in the running dev app.
+  const { ok, skipped } = options.remote
+    ? await runSeedChunks(chunks, remoteWranglerRunner(options.db, appDir))
+    : await seedLocalChunks(appDir, chunks)
   if (ok === 0 && skipped.length > 0) {
     // Nothing seeded at all → a real problem (bad DB / token / all tables missing), not a
     // tolerable partial skip. Surface it so the deploy's seed step can warn loudly.
@@ -324,17 +322,18 @@ export async function seedApp(options: SeedAppOptions): Promise<string> {
  * Run seed SQL chunks resiliently (#1370): execute each via `run`; if one throws, WARN and skip
  * it rather than aborting the rest — so a provider whose table isn't in this app (e.g. bookings,
  * pulled in transitively but never extended) doesn't sink the auth team + the app's own rows.
- * `run` is injected so the resilience is unit-testable without wrangler.
+ * `run` is injected so the resilience is unit-testable without a real DB, and may be sync (the
+ * wrangler path) or async (`await`ed — the local libsql path, #1612).
  */
-export function runSeedChunks(
+export async function runSeedChunks(
   chunks: Array<{ label: string; sql: string }>,
-  run: (sql: string) => void,
-): { ok: number; skipped: string[] } {
+  run: (sql: string) => void | Promise<void>,
+): Promise<{ ok: number; skipped: string[] }> {
   let ok = 0
   const skipped: string[] = []
   for (const { label, sql } of chunks) {
     try {
-      run(sql)
+      await run(sql)
       ok++
     } catch (e) {
       skipped.push(label)
@@ -342,4 +341,81 @@ export function runSeedChunks(
     }
   }
   return { ok, skipped }
+}
+
+/**
+ * The path `nuxt dev` (`hub: { db: 'sqlite' }`) reads in local dev: `<appDir>/.data/db/sqlite.db`,
+ * opened via the libsql driver (`@nuxthub/core` → `drizzle-orm/libsql`). This is NOT the miniflare
+ * DB (`.wrangler/state/v3/d1/…`) that `wrangler d1 execute --local` writes — the split #1612 fixes.
+ */
+export function localDbPath(appDir: string): string {
+  return join(appDir, '.data', 'db', 'sqlite.db')
+}
+
+/**
+ * Load `@libsql/client` — the SAME driver `nuxt dev` uses to read `.data/db/sqlite.db`, so we write
+ * exactly the file (and format) it reads. Resolve it from the APP first (it ships with
+ * `@nuxthub/core`, so any dev-capable app has it), falling back to the CLI's own resolution.
+ */
+async function loadLibsqlCreateClient(appDir: string): Promise<(config: { url: string }) => any> {
+  try {
+    const req = createRequire(pathToFileURL(join(appDir, '_seed-runner.mjs')).href)
+    return req('@libsql/client').createClient
+  } catch {
+    // Fall through to the CLI's own module resolution.
+  }
+  try {
+    return (await import('@libsql/client')).createClient
+  } catch {
+    throw new Error(
+      "@libsql/client not found — it ships with @nuxthub/core; run `pnpm install` in the app, then retry.",
+    )
+  }
+}
+
+/**
+ * Execute the seed chunks straight against the local dev DB (`.data/db/sqlite.db`) via libsql —
+ * the file `nuxt dev` reads — so locally-seeded rows actually appear in the running app (#1612).
+ * The DB must already exist with its migrations applied (run `pnpm dev` once, then `db:migrate`);
+ * we detect its absence and message clearly rather than silently seeding into nothing. Resilient
+ * per-chunk (#1370): a chunk hitting a table this app never migrated warns + skips, the rest land.
+ */
+export async function seedLocalChunks(
+  appDir: string,
+  chunks: Array<{ label: string; sql: string }>,
+): Promise<{ ok: number; skipped: string[] }> {
+  const dbPath = localDbPath(appDir)
+  if (!existsSync(dbPath)) {
+    throw new Error(
+      `Local dev database not found at ${relative(appDir, dbPath) || dbPath}.\n`
+      + 'Run `pnpm dev` once to initialise it and `pnpm db:migrate` to apply migrations, then re-run the seed.',
+    )
+  }
+
+  const createClient = await loadLibsqlCreateClient(appDir)
+  const client = createClient({ url: `file:${dbPath}` })
+  try {
+    // executeMultiple runs the chunk's statements as one script (same batch semantics the old
+    // `wrangler --command` used), so a mid-chunk failure surfaces to runSeedChunks' skip logic.
+    return await runSeedChunks(chunks, (sql: string) => client.executeMultiple(sql))
+  } finally {
+    client.close()
+  }
+}
+
+/**
+ * The remote seed path (`--remote`, unchanged, #1612): each chunk as its own
+ * `wrangler d1 execute --command` against Cloudflare D1. --command (not --file) uses the D1 query
+ * API — the only D1 permission a deploy token needs (a --file bulk import needs User-Details:Read
+ * the token lacks). execFileSync passes SQL as one argv entry (no shell), so JSON/quotes in fixture
+ * data need no escaping. Curated seeds are small (arg-length is fine).
+ */
+function remoteWranglerRunner(db: string, appDir: string): (sql: string) => void {
+  return (chunkSql: string) => {
+    execFileSync(
+      'npx',
+      ['wrangler', 'd1', 'execute', db, '--remote', `--command=${chunkSql}`, '--yes'],
+      { cwd: appDir, stdio: 'inherit', env: process.env },
+    )
+  }
 }
