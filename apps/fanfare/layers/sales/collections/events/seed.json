@@ -1,0 +1,18 @@
+{
+  "table": "sales_events",
+  "key": "slug",
+  "rows": [
+    {
+      "slug": "mosselconcert",
+      "title": "Mosselconcert met Dieter",
+      "description": "Concert met special guest Dieter — mosselfestijn. Bestel je mosselen aan de kassa en vergeet je tafelnummer niet.",
+      "eventType": "concert",
+      "status": "active",
+      "isCurrent": true,
+      "requiresClient": false,
+      "helperPin": "1234",
+      "currency": "EUR",
+      "metadata": {}
+    }
+  ]
+}
