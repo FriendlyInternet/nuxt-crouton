@@ -191,6 +191,19 @@ export function useThemeSwitcher() {
       })
     }
 
+    // The pill is the authority when the user switches (#1625). The team-theme
+    // plugin (crouton-admin) styles via `data-theme` + an inline `--ui-radius`
+    // on <html>; the pill styles via the `theme-x` body class. Those two hooks
+    // don't reset each other, so a stale `data-theme` (or inline radius) left by
+    // the team plugin bleeds the previous theme's tokens into the newly-picked
+    // one — most visibly "default stays squared". Clear them so the body-class
+    // theme is the sole source: default → no class, no attr, no inline →
+    // Nuxt UI's own rounded 0.25rem.
+    if (import.meta.client) {
+      document.documentElement.removeAttribute('data-theme')
+      document.documentElement.style.removeProperty('--ui-radius')
+    }
+
     // The theme's designed scheme is a DEFAULT, not a lock (#1395 relaxed the
     // #1387 pin): applied only while the user has no explicit preference
     // ('system'). Every theme now carries a designed counterpart palette for
