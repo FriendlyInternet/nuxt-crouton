@@ -1,7 +1,7 @@
 {
   "id": { "type": "uuid", "meta": { "primaryKey": true } },
   "eventId": { "type": "uuid", "refTarget": "events", "meta": { "required": true, "label": "Event" } },
-  "locationId": { "type": "uuid", "refTarget": "locations", "meta": { "required": true, "label": "Location" } },
+  "locationId": { "type": "uuid", "refTarget": "locations", "meta": { "label": "Location", "helpText": "Routing key for kitchen printers only — receipt printers ignore it (PrinterForm requires it for type kitchen)" } },
   "title": { "type": "string", "meta": { "required": true, "label": "Printer Name", "maxLength": 100 } },
   "ipAddress": { "type": "string", "meta": { "required": true, "label": "IP Address" } },
   "port": { "type": "string", "meta": { "label": "Port", "default": "9100", "helpText": "ESC/POS raw TCP port. 9100 is universal." } },
