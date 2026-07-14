@@ -255,11 +255,30 @@ defineExpose({
   <ClientOnly>
     <USlideover v-if="isMobile" v-model:open="isContentPanelOpen" side="right">
       <template #content>
-        <slot
-          v-if="showContent"
-          name="content"
-          v-bind="contentSlotProps"
-        />
+        <div class="flex h-full flex-col">
+          <!-- Back bar: the full-screen slideover leaves no tappable backdrop,
+               so this is the only way to dismiss the detail and return to the
+               sidebar list. Consumer content slots carry no close affordance. -->
+          <div class="flex items-center gap-1.5 shrink-0 px-2 py-1.5 border-b border-default bg-elevated/30">
+            <UButton
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-arrow-left"
+              size="sm"
+              :aria-label="$t('common.back')"
+              @click="isContentPanelOpen = false"
+            />
+            <span v-if="title" class="text-sm font-medium text-muted truncate">{{ title }}</span>
+          </div>
+
+          <div class="flex-1 min-h-0 overflow-hidden">
+            <slot
+              v-if="showContent"
+              name="content"
+              v-bind="contentSlotProps"
+            />
+          </div>
+        </div>
       </template>
     </USlideover>
   </ClientOnly>
