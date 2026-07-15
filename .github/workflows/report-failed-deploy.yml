@@ -2,14 +2,22 @@ name: Report failed post-merge deploy
 
 # (#340, epic #336) The dangerous failures happen AFTER merge: a staging/prod deploy
 # breaks once the PR is already closed and the task ticket is done, so it can vanish
-# silently. This opens exactly ONE new, labelled issue (pinging the owner) whenever a
-# post-merge deploy fails — nothing is lost.
+# silently. This watchdog makes sure the breakage isn't lost.
 #
-# Trigger: workflow_run[completed] of the per-app/poc deploy workflows. We act only on
-# conclusion==failure for a deploy that ran off `main` (i.e. post-merge — these deploys
-# fire on push to main now that trunk = staging, #347; they don't run on PRs). Idempotent:
-# a hidden `run:<id>` marker in the issue body means a re-run of the same failed deploy
-# never opens a duplicate.
+# Trigger: workflow_run[completed] of the deploy workflows. We act only on
+# conclusion==failure for a deploy that ran off `main` (post-merge; these deploys fire on
+# push to main now that trunk = staging, #347 — they don't run on PRs).
+#
+# The DECISION is the pure, unit-tested scripts/deploy-failure-report.mjs (#1639); this
+# workflow only does the GitHub I/O. Three behaviours it replaced (they produced the
+# duplicate/misleading tickets #1617/#1548/#1535):
+#   • Rolling dedup — ONE ticket per workflow[+app], commented on re-failure (keyed by a
+#     hidden marker), not one issue per failed run.
+#   • Transient-flake classification — the failed-job logs are fetched and classified; a CF
+#     infra blip (D1 7429, fetch-failed) is labelled `transient-infra` and does NOT @-ping;
+#     a real regression pings loudly.
+#   • Honest attribution — a non-`push` run (workflow_dispatch) caveats that the commit is
+#     the branch tip at run time, not necessarily the cause (the #1617 misattribution).
 
 on:
   workflow_run:
@@ -22,9 +30,12 @@ on:
 permissions:
   contents: read
   issues: write
+  actions: read   # read the failed run's jobs + logs for flake classification
 
+# Serialise reports for the same workflow+branch so the find-existing-then-create step can't
+# race two failing runs into two duplicate rolling tickets.
 concurrency:
-  group: report-failed-deploy-${{ github.event.workflow_run.id }}
+  group: report-failed-deploy-${{ github.event.workflow_run.name }}-${{ github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 jobs:
@@ -34,59 +45,69 @@ jobs:
       github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4   # needed to import scripts/deploy-failure-report.mjs
       - uses: actions/github-script@v7
         with:
           script: |
             const { owner, repo } = context.repo
-            const run = context.payload.workflow_run
-            const MARKER = `<!-- failed-deploy run:${run.id} -->`
-            const HEADER = '> 🤖 **Claude Code** · agent pipeline (CI) · _post-merge deploy watchdog (#340)_'
+            const wr = context.payload.workflow_run
+            const { classifyLogs, slugFromPath, decideReport, keyMarker } =
+              await import(`${process.env.GITHUB_WORKSPACE}/scripts/deploy-failure-report.mjs`)
 
-            // Idempotency: scan recent OPEN issues for this run's marker (listForRepo is
-            // immediately consistent, unlike the search index). One issue per failing run.
-            const since = new Date(Date.now() - 14 * 24 * 3600 * 1000).toISOString()
-            const recent = await github.paginate(github.rest.issues.listForRepo,
+            const run = {
+              id: wr.id, name: wr.name, event: wr.event, path: wr.path,
+              head_sha: wr.head_sha, head_commit: wr.head_commit, html_url: wr.html_url,
+              head_branch: wr.head_branch, repoFullName: `${owner}/${repo}`
+            }
+            const slug = slugFromPath(run.path)
+
+            // ── fetch the failed jobs' logs (best-effort) → classify transient vs real ──
+            let logsText = ''
+            try {
+              const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun,
+                { owner, repo, run_id: run.id, per_page: 100 })
+              const failed = jobs.filter(j => j.conclusion === 'failure')
+              for (const j of failed) {
+                try {
+                  const res = await github.rest.actions.downloadJobLogsForWorkflowRun({ owner, repo, job_id: j.id })
+                  logsText += '\n' + String(res.data || '')
+                } catch (e) { core.info(`log fetch failed for job ${j.id}: ${e.message}`) }
+              }
+            } catch (e) { core.info(`could not list jobs for run ${run.id}: ${e.message}`) }
+            // Bound the text we classify (tail — the error is at the end).
+            logsText = logsText.slice(-40000)
+            const classification = classifyLogs(logsText)
+            core.info(`classification: ${classification.transient ? 'transient' : 'real'} (${classification.reason || 'no signature'})`)
+
+            // ── find the existing OPEN rolling ticket for this workflow[+slug] ──
+            const marker = keyMarker(run.name, slug)
+            const since = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString()
+            const openIssues = await github.paginate(github.rest.issues.listForRepo,
               { owner, repo, state: 'open', since, per_page: 100 })
-            if (recent.some(i => !i.pull_request && (i.body || '').includes(MARKER))) {
-              core.info(`Issue for run ${run.id} already exists — no duplicate.`); return
+            const found = openIssues.find(i => !i.pull_request && (i.body || '').includes(marker))
+            let existing = null
+            if (found) {
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: found.number, per_page: 100 })
+              existing = { number: found.number, text: (found.body || '') + '\n' + comments.map(c => c.body || '').join('\n') }
             }
 
-            // App slug from the workflow file: .github/workflows/deploy-<slug>.yml.
-            // The generic per-workspace workflows (deploy-apps.yml / deploy-pocs.yml, #481)
-            // carry no app in their path — the app lives in the matrix, not the filename —
-            // so treat their "slug" as none (one issue per failing RUN, no app label).
-            const rawSlug = (run.path.match(/deploy-([a-z0-9-]+)\.yml$/) || [])[1] || null
-            const slug = (rawSlug === 'apps' || rawSlug === 'pocs') ? null : rawSlug
-
-            // Apply an app:/poc: label only if it actually exists (don't auto-create a wrong one).
-            const labels = ['type:fix', 'meta:agents']
+            // ── resolve an existing app:/poc: label (don't auto-create a wrong one) ──
+            let appLabel = null
             if (slug) {
               const all = await github.paginate(github.rest.issues.listLabelsForRepo, { owner, repo, per_page: 100 })
               const names = new Set(all.map(l => l.name))
-              const appLabel = [`app:${slug}`, `poc:${slug}`].find(n => names.has(n))
-              if (appLabel) labels.push(appLabel)
+              appLabel = [`app:${slug}`, `poc:${slug}`].find(n => names.has(n)) || null
             }
 
-            const sha7 = (run.head_sha || '').slice(0, 7)
-            const commitUrl = `https://github.com/${owner}/${repo}/commit/${run.head_sha}`
-            const title = `🚨 ${run.name} failed on ${run.head_branch} (post-merge)`
-            const body = [
-              `🔴 **@pmcp — a post-merge deploy failed: \`${run.name}\` broke on \`${run.head_branch}\`.**`,
-              '',
-              `The change is already merged, so this ticket exists so the breakage isn't lost.`,
-              '',
-              `- **Failing run:** ${run.html_url}`,
-              `- **Landed commit:** [\`${sha7}\`](${commitUrl})${run.head_commit?.message ? ' — ' + run.head_commit.message.split('\n')[0] : ''}`,
-              `- **Branch / env:** \`${run.head_branch}\``,
-              slug ? `- **App:** \`${slug}\`` : null,
-              '',
-              '## 🧪 How to verify the fix',
-              `1. Reproduce: re-run \`${run.name}\` or run the app's deploy locally and watch for the same error.`,
-              `2. Fix the cause on a branch, open a PR (\`Closes #<this>\`), and confirm the deploy goes green.`,
-              '',
-              `<sub>${HEADER.replace(/^> /, '')}</sub>`,
-              MARKER,
-            ].filter(l => l !== null).join('\n')
-
-            const issue = await github.rest.issues.create({ owner, repo, title, body, labels })
-            core.info(`Opened #${issue.data.number} for failed deploy run ${run.id}.`)
+            // ── decide + act ──
+            const d = decideReport({ run, classification, existing, appLabel })
+            if (d.action === 'skip') { core.info(d.reason); return }
+            if (d.action === 'comment') {
+              const body = d.ping ? `@pmcp — new failure on this deploy:\n\n${d.body}` : d.body
+              await github.rest.issues.createComment({ owner, repo, issue_number: d.issueNumber, body })
+              core.info(`Appended failed run ${run.id} to rolling ticket #${d.issueNumber}.`)
+              return
+            }
+            const issue = await github.rest.issues.create({ owner, repo, title: d.title, body: d.body, labels: d.labels })
+            core.info(`Opened #${issue.data.number} for failed deploy run ${run.id} (${classification.transient ? 'transient' : 'real'}).`)
