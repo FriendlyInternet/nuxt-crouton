@@ -98,80 +98,16 @@ jobs:
           DISPATCH_ENV: ${{ github.event.inputs.environment }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.after }}
-        run: |
-          set -euo pipefail
-          include='[]'
-
-          # Append one app (read from its deploy.config.json) to the matrix include.
-          add_app() {
-            local app="$1" env="$2"
-            local cfg="apps/$app/deploy.config.json"
-            if [ ! -f "$cfg" ]; then
-              echo "skip: apps/$app has no deploy.config.json (not opted in)"
-              return
-            fi
-            local su pu lp rq
-            su=$(jq -r '.stagingUrl // ""' "$cfg")
-            pu=$(jq -r '.productionUrl // ""' "$cfg")
-            lp=$(jq -r '.layerPackages // ""' "$cfg")
-            # secrets.required → the deploy fails loudly if WORKER_SECRETS_JSON
-            # resolves empty (the Environment-scoping trap, #1094)
-            rq=$(jq '.secrets.required // false' "$cfg")
-            include=$(printf '%s' "$include" | jq \
-              --arg a "$app" --arg e "$env" --arg su "$su" --arg pu "$pu" --arg lp "$lp" --argjson rq "$rq" \
-              '. + [{app:$a, environment:$e, stagingUrl:$su, productionUrl:$pu, layerPackages:$lp, requireWorkerSecrets:$rq}]')
-          }
-
-          if [ "$EVENT" = "workflow_dispatch" ]; then
-            # Single named app. environment honours the input; anything other than the
-            # explicit "production" choice falls back to staging (defensive whitelist).
-            env="staging"
-            [ "${DISPATCH_ENV:-staging}" = "production" ] && env="production"
-            [ -n "${DISPATCH_APP:-}" ] && add_app "$DISPATCH_APP" "$env"
-          else
-            # push / pull_request → STAGING ONLY (#318). Deploy each opted-in app whose
-            # watchPaths match a changed file.
-            if [ -z "${BASE_SHA:-}" ] || [ "$BASE_SHA" = "0000000000000000000000000000000000000000" ]; then
-              changed=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)
-            else
-              changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true)
-            fi
-            echo "Changed files:"; printf '%s\n' "$changed"
-
-            for cfg in apps/*/deploy.config.json; do
-              [ -f "$cfg" ] || continue
-              app=$(basename "$(dirname "$cfg")")
-              # Rung split (#1297): a pull_request deploys ONLY the app whose OWN paths
-              # (apps/<app>/**) changed. A shared-package change that breaks a consuming
-              # app is caught by the fixture smoke (fast, no deploy) + the rung-2 push
-              # deploy — NOT a per-PR fan-out redeploy of every consuming app, which
-              # saturated the runners and starved the changed app's own deploy (#1297).
-              # push (merge to main) keeps the full watchPaths incl. shared packages.
-              if [ "$EVENT" = "pull_request" ]; then
-                pats=("apps/$app/**")
-              else
-                mapfile -t pats < <(jq -r '.watchPaths[]? // empty' "$cfg")
-              fi
-              hit=false
-              while IFS= read -r f; do
-                [ -z "$f" ] && continue
-                for pat in "${pats[@]:-}"; do
-                  [ -z "$pat" ] && continue
-                  # In [[ ]] pattern matching '*' spans '/', so 'packages/foo/**'
-                  # matches any file under packages/foo and 'pnpm-lock.yaml' is exact.
-                  if [[ "$f" == $pat ]]; then hit=true; break; fi
-                done
-                $hit && break
-              done <<< "$changed"
-              if $hit; then add_app "$app" "staging"; fi
-            done
-          fi
-
-          matrix=$(jq -cn --argjson inc "$include" '{include:$inc}')
-          if [ "$(printf '%s' "$include" | jq 'length')" -gt 0 ]; then any=true; else any=false; fi
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-          echo "any=$any" >> "$GITHUB_OUTPUT"
-          echo "Detected matrix: $matrix"
+        # The decision lives in the pure, unit-tested scripts/deploy-detect.mjs (mirrors
+        # scripts/packages-guard.mjs). It fixes #1499: the old inline bash used
+        # `git diff … 2>/dev/null || true`, which turned a FAILED diff into an empty one —
+        # indistinguishable from "nothing changed" — so a merge that should have deployed was
+        # silently skipped while the run went green. The script never swallows a diff failure:
+        # on push it prefers the merge's first-parent diff (robust to concurrent pushes) and
+        # exits NON-ZERO (loud red → report-failed-deploy fires) if it can't compute a diff or
+        # the changed-file set comes back empty on a triggered push/PR. Contract:
+        # scripts/deploy-detect.test.mjs (`node --test`).
+        run: node scripts/deploy-detect.mjs
 
   # One deploy-app.yml call per detected app. Skipped cleanly when nothing opted-in changed.
   deploy:

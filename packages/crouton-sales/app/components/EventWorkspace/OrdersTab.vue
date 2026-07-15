@@ -49,29 +49,32 @@ const selectedPrinterId = ref<string | null>(null)
 const selectedPrintStatus = ref<string | null>(null)
 
 // All filters apply server-side — the list is paginated, so client-side
-// filtering would miss matches on other pages. Printer filters go through
-// an EXISTS over the order's print jobs.
-const ordersQuery = computed(() => {
-  const q: Record<string, string> = { eventId: props.event.id }
-  if (selectedHelperName.value) q.owner = selectedHelperName.value
-  if (selectedClientId.value) q.clientId = selectedClientId.value
-  if (selectedPrinterId.value) q.printerId = selectedPrinterId.value
-  if (selectedPrintStatus.value) q.printStatus = selectedPrintStatus.value
-  return q
+// filtering would miss matches on other pages. Helper/printer/status filters
+// need logic the generic CRUD generator can't produce (printer/status match the
+// shared crouton-printing queue via EXISTS), so this hits the package-owned
+// filtered-orders endpoint rather than the generated salesOrders collection —
+// that keeps the filtering correct without per-app patches (drop-in).
+const ordersPageSize = 25
+const ordersPage = ref(1)
+
+const ordersUrl = computed(() => {
+  const params = new URLSearchParams({ page: String(ordersPage.value), pageSize: String(ordersPageSize) })
+  if (selectedHelperName.value) params.set('owner', selectedHelperName.value)
+  if (selectedClientId.value) params.set('clientId', selectedClientId.value)
+  if (selectedPrinterId.value) params.set('printerId', selectedPrinterId.value)
+  if (selectedPrintStatus.value) params.set('printStatus', selectedPrintStatus.value)
+  return `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/orders?${params}`
 })
 
 // Server pagination: events run into hundreds of orders, and this view polls
-// every 2s — fetch only the newest page (server orders by createdAt desc).
-const {
-  items: orders,
-  pending: ordersPending,
-  refresh: refreshOrders,
-  page: ordersPage,
-  pageCount: ordersPageCount
-} = await useCollectionQuery(
-  'salesOrders',
-  { query: ordersQuery, watch: true, pagination: { pageSize: 25 } }
+// every 2s — fetch only the current page (server orders by createdAt desc).
+// useFetch tracks the reactive URL, so a page/filter change refetches.
+const { data: ordersData, pending: ordersPending, refresh: refreshOrders } = await useFetch<{ items: any[], total: number }>(
+  ordersUrl,
+  { default: () => ({ items: [], total: 0 }) }
 )
+const orders = computed(() => ordersData.value?.items || [])
+const ordersPageCount = computed(() => Math.max(1, Math.ceil((ordersData.value?.total ?? 0) / ordersPageSize)))
 
 // Filter change ⇒ back to page 1 (the old page may not exist in the new set).
 watch([selectedHelperName, selectedClientId, selectedPrinterId, selectedPrintStatus], () => {
