@@ -22,8 +22,6 @@ interface Props {
   showClose?: boolean
   /** Show a leading back arrow in the toolbar (mobile workspace slideover) */
   showBack?: boolean
-  /** Override the i18n input layout ('tabs' for narrow panels, 'side-by-side' for wide) */
-  i18nLayout?: 'tabs' | 'side-by-side'
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -31,7 +29,6 @@ const props = withDefaults(defineProps<Props>(), {
   defaultParentId: null,
   showClose: false,
   showBack: false,
-  i18nLayout: 'side-by-side'
 })
 
 const emit = defineEmits<{
