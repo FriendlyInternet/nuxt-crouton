@@ -90,6 +90,11 @@ const epics = (data.epics || []).slice().sort((a, b) => {
   return pct(b) - pct(a)
 })
 
+// Initiatives: super-epics that group several epics. Rendered as a compact
+// rollup band above the flat epic list — the gather step already computed the
+// aggregate + pulled them out of `epics`, so they don't double-render. (#1637)
+const initiatives = (data.initiatives || []).slice()
+
 // Loose tickets: open issues that belong to no epic (no `epic` label, no parent).
 // Grouped by type so a pile of chores reads as one block, not noise.
 const loose = (data.loose || []).slice()
@@ -205,6 +210,36 @@ function actionableCard(a) {
     ${stepsBlock}
     <div style="margin-top:18px;font-size:13px">${links.join(' &nbsp;·&nbsp; ')}</div>
   </td></tr>`
+}
+
+// Compact initiative rollup — title + aggregate progress + member epic links.
+// Not a full epicCard: an initiative is a lens, so it reads in three lines.
+const memberSep = `<span class="mut" style="color:${C.faint}"> · </span>`
+function initiativeRow(it) {
+  const blockedChip = it.blockedCount ? '&nbsp;&nbsp;' + statusChip(`${it.blockedCount} blocked`, 'orange') : ''
+  const headline =
+    `${it.activeCount}/${it.epicsTotal} epic${it.epicsTotal === 1 ? '' : 's'} active` +
+    ` · ${it.childrenDone}/${it.childrenTotal} child issue${it.childrenTotal === 1 ? '' : 's'} done`
+  const members = (it.members || [])
+    .map((m) => `<a href="${esc(m.url)}" ${linkS}>#${esc(m.number)}</a>${m.blocked ? `<span class="mut" style="color:${C.faint}"> ⛔</span>` : ''}`)
+    .join(memberSep)
+  return `
+  <tr><td class="rule" style="padding:18px 0;border-top:1px solid ${C.border}">
+    <div style="font-size:17px;font-weight:400;line-height:1.5;color:${C.ink}">
+      <a href="${esc(it.url)}" class="ink lnk" style="color:${C.ink};text-decoration:none">${esc(it.title)}</a> ${num(it.number)}${blockedChip}
+    </div>
+    <div class="mut" style="font-style:italic;color:${C.mut};font-size:13px;margin-top:6px">${headline}</div>
+    <div class="sub" style="color:${C.sub};font-size:14px;line-height:1.9;margin-top:8px">${members || '<span style="font-style:italic">no open member epics</span>'}</div>
+  </td></tr>`
+}
+function initiativesSection(items) {
+  if (!items || !items.length) return ''
+  return `
+    <tr><td style="padding:34px 0 6px">
+      ${sectionLabel('Initiatives', 'cyan')}
+      <div class="mut" style="font-style:italic;color:${C.mut};font-size:14px;margin-top:8px">${items.length} initiative${items.length === 1 ? '' : 's'} grouping the open epics.</div>
+    </td></tr>
+    ${items.map(initiativeRow).join('')}`
 }
 
 function actionablesSection(items) {
@@ -417,6 +452,8 @@ const html = `<!doctype html>
 
     ${actionablesSection(actionables)}
 
+    ${initiativesSection(initiatives)}
+
     <tr><td style="padding:34px 0 0">${sectionLabel('Since yesterday')}</td></tr>
     <tr><td style="padding:20px 0 0">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
@@ -489,6 +526,24 @@ const txtActionables = (items) => {
   )
 }
 
+const txtInitiatives = (items) => {
+  if (!items || !items.length) return ''
+  return (
+    `INITIATIVES (${items.length})\n\n` +
+    items
+      .map((it) => {
+        const head = `${it.title}  (#${it.number})${it.blockedCount ? `  [${it.blockedCount} blocked]` : ''}`
+        const stat = `  ${it.activeCount}/${it.epicsTotal} epics active · ${it.childrenDone}/${it.childrenTotal} child issues done`
+        const mem = (it.members || []).length
+          ? '  ' + it.members.map((m) => `#${m.number}${m.blocked ? '⛔' : ''}`).join(' · ')
+          : '  (no open member epics)'
+        return `${head}\n${stat}\n${mem}\n      ${it.url}`
+      })
+      .join('\n\n') +
+    `\n\n${'='.repeat(64)}\n\n`
+  )
+}
+
 const txtReadyToClose = (allEpics) => {
   const items = (allEpics || []).filter(isCloseable)
   if (!items.length) return ''
@@ -510,6 +565,7 @@ const txt =
   `${repo} · last ${windowHours}h · ${epics.length} open epic(s)\n` +
   `${'='.repeat(64)}\n\n` +
   txtActionables(actionables) +
+  txtInitiatives(initiatives) +
   txtReadyToClose(epics) +
   `SINCE YESTERDAY\n` +
   `  ${(activity.opened || []).length} opened · ${(activity.closed || []).length} closed · ${(activity.mergedPRs || []).length} PRs merged\n\n` +
@@ -602,6 +658,28 @@ const mdActionables = (items) => {
   )
 }
 
+const mdInitiatives = (items) => {
+  if (!items || !items.length) return ''
+  const block = items
+    .map((it) => {
+      const blocked = it.blockedCount ? ` · ⛔ ${it.blockedCount} blocked` : ''
+      const mem = (it.members || []).length
+        ? it.members.map((m) => `[#${m.number}](${m.url})${m.blocked ? ' ⛔' : ''}`).join(' · ')
+        : '_no open member epics_'
+      return (
+        `- **[${it.title}](${it.url})** — \`${it.activeCount}/${it.epicsTotal} epics active · ` +
+        `${it.childrenDone}/${it.childrenTotal} issues done\`${blocked}\n  ${mem}`
+      )
+    })
+    .join('\n')
+  return (
+    `### 🎛 Initiatives\n` +
+    `_${items.length} initiative${items.length === 1 ? '' : 's'} grouping the open epics._\n\n` +
+    block +
+    `\n\n`
+  )
+}
+
 const mdReadyToClose = (allEpics) => {
   const items = (allEpics || []).filter(isCloseable)
   if (!items.length) return ''
@@ -624,6 +702,7 @@ const md =
   `## 📊 Daily epic digest — ${prettyDate}\n` +
   `_${repo} · last ${windowHours}h · ${epics.length} open epic${epics.length === 1 ? '' : 's'}_\n\n` +
   mdActionables(actionables) +
+  mdInitiatives(initiatives) +
   mdReadyToClose(epics) +
   `**Since yesterday:** ${(activity.opened || []).length} opened · ${(activity.closed || []).length} closed · ${(activity.mergedPRs || []).length} PRs merged\n\n` +
   `<details><summary>Activity detail</summary>\n\n` +
