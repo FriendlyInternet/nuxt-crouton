@@ -533,22 +533,26 @@ function helperExpiry(value: string): string {
       </UButton>
     </div>
 
-    <!-- Tabbed mode: segmented strip picks the visible card (same styling as
-         the Shell's narrow tab strip). -->
-    <div v-if="tabbed" class="flex-none flex items-center rounded-lg bg-elevated p-1 gap-1 overflow-x-auto mx-3 mt-3 mb-1">
-      <UButton
-        v-for="s in sections"
-        :key="s.key"
-        :icon="s.icon"
-        size="sm"
-        color="neutral"
-        :variant="activeSection === s.key ? 'solid' : 'ghost'"
-        class="flex-1 justify-center whitespace-nowrap"
-        @click="activeSection = s.key"
-      >
-        {{ s.label }}
-      </UButton>
-    </div>
+    <!-- Tabbed mode: the section picker rides a shared CroutonSubBar (sticky
+         sub-bar shell, #307) styled like the pages editor's tabs — underline
+         active, so the section tabs pin above the scrolling settings body. -->
+    <CroutonSubBar v-if="tabbed" sticky>
+      <nav class="flex w-full items-center gap-0.5">
+        <UButton
+          v-for="s in sections"
+          :key="s.key"
+          :icon="s.icon"
+          size="sm"
+          :color="activeSection === s.key ? 'primary' : 'neutral'"
+          :variant="activeSection === s.key ? 'soft' : 'ghost'"
+          class="flex-1 justify-center whitespace-nowrap rounded-none border-b-2"
+          :class="activeSection === s.key ? 'border-primary' : 'border-transparent'"
+          @click="activeSection = s.key"
+        >
+          {{ s.label }}
+        </UButton>
+      </nav>
+    </CroutonSubBar>
 
     <!-- One row, three blocks: event (name + currency + client switch),
          printers (incl. receipt text), helpers (incl. PIN). Tabbed mode shows
