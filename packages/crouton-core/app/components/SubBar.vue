@@ -56,8 +56,10 @@ onMounted(() => {
     const el = (target === document ? document.scrollingElement : target) as HTMLElement | null
     if (!el || !el.contains?.(root.value)) return // only the scroller we live inside
     const newY = el.scrollTop
-    const barH = root.value.offsetHeight || 44
-    if (newY <= barH) hidden.value = false // near the top: always shown
+    // Hide on ANY downward scroll (past a tiny jitter deadzone), reveal on any
+    // upward scroll. Only forced-shown when parked at the very top, so the bar
+    // is always there when you arrive back at the start of the content.
+    if (newY <= 4) hidden.value = false // parked at the top: shown
     else if (newY > prevY + 2) hidden.value = true // scrolling down: hide
     else if (newY < prevY - 2) hidden.value = false // scrolling up: reveal
     prevY = newY
