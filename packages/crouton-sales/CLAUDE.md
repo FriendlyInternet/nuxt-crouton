@@ -23,6 +23,7 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `app/components/Settings/` | Print settings modals (opt-in) |
 | `server/utils/team-event.ts` | `requireTeamEvent(event)` — shared guard for `teams/[id]/events/[eventId]/*` endpoints: membership + event-ownership in one call (400/404). Extracted in #1324 to kill the per-endpoint copies; new event-scoped endpoints start here |
 | `server/utils/require-scoped-event.ts` | `requireScopedEvent(event)` — the **helper-token** analog of `requireTeamEvent`: validates `:eventId`, requires a scoped-access token for that event, returns `{ eventId, access, db }`. Used by the helper-authed `events/[eventId]/*` endpoints (`order-data`, `orders` POST, `my-orders`); extracted to kill the same preamble clone group the fallow audit flags |
+| `server/utils/order-filters.ts` | Pure request-shaping for the team-authed orders-list endpoint (`teams/[id]/events/[eventId]/orders.get.ts`) — `printStatusBucket` (busy 0/1 · done 2 · failed 9), `parseOrderFilters`, `parsePageParams`, `parseLocationRemarks`. DB-free → unit-tested (`test/order-filters.test.ts`); keeps the endpoint a thin fetch → build-where → delegate (same split as `my-orders-shape`) |
 | `server/utils/my-orders-shape.ts` | Pure assembly for the `my-orders` endpoint — `shapeMyOrders(orders, items, jobs)` groups items per order, resolves option ids → labels (`resolveOptionLabels`), sums the order total, and buckets the combined print status (`bucketFromStatuses`: failed > busy > done, display jobs excluded). No DB/Nitro deps → unit-tested (`test/my-orders-shape.test.ts`) |
 | `server/utils/sync-outbox.ts` | Pi-side capture for the D1 live mirror (#176) — `recordOutboxEvents()` + `isCloudSyncEnabled()`; gated by `CROUTON_SALES_CLOUD_SYNC` |
 | `server/utils/sync-ingest.ts` | Cloud-side apply (#178) — `applyOutboxEvents()` idempotent upsert by nanoid |
@@ -314,11 +315,17 @@ client (only when the event has `requiresClient` — loose orders carry no `clie
 and print status (busy / done / failed; printer + status selects only
 render when the event has active printers), stacked **one filter per row**
 (single column) so each reads on its own line. No order count, no manual refresh button: the 2s poll is the only refresh. All filters
-apply **server-side** (the list is paginated): the component sends `?owner=`, `?clientId=`,
-`?printerId=`, `?printStatus=` and the app's generated `sales-orders` GET must honor them —
-`getAllSalesOrders` matches printer filters via an EXISTS subquery on `salesPrintqueues`
-(`busy` = status 0/1, `done` = 2, `failed` = 9). Filter changes reset to page 1. It does **not**
-use `CroutonCollection`.
+apply **server-side** (the list is paginated). OrdersTab does **not** use the generated
+`salesOrders` collection GET — the helper/printer/status filters need logic the generic CRUD
+generator can't produce (printer/status match the shared crouton-printing `print_jobs` queue via a
+correlated EXISTS), which per-app generated code kept dropping (the "filters do nothing" bug). So
+it `useFetch`es the **package-owned** endpoint
+`GET /api/crouton-sales/teams/[id]/events/[eventId]/orders` (`?owner=`/`?clientId=`/`?printerId=`/
+`?printStatus=` + `?page=`/`?pageSize=`), which owns the filtered+paginated query the bookings
+`admin-bookings` way (package owns the query, app owns the tables via `~~/layers/…`). Status
+buckets: `busy` = 0/1, `done` = 2, `failed` = 9. Request-shaping is the pure, unit-tested
+`server/utils/order-filters.ts` (`test/order-filters.test.ts`); the endpoint stays a thin
+fetch → build-where → delegate. Filter changes reset to page 1.
 Each row shows **one combined printer LED** (`orderLed`): worst status across every job of the
 order — red (any failed, 9) > pulsing orange (any pending/printing, 0/1) > green (all done, 2);
 grey = no jobs at all. A hover `UPopover` on the dot breaks it down **per printer**, listing
@@ -450,6 +457,7 @@ All package endpoints live under `/api/crouton-sales/` with an explicit split:
 | Path | Auth | Purpose |
 |------|------|---------|
 | `teams/[id]/events/[eventId]/duplicate` POST | team admin | Clone an event + its categories/locations/products/printers |
+| `teams/[id]/events/[eventId]/orders` GET | team member | **Filtered + paginated orders list** for the workspace "Bestellingen" pane (`OrdersTab`). Owns the sales-specific filters the generic CRUD generator can't produce — helper (`?owner=`, matched on `salesOrders.owner`), `?clientId=`, and printer/print-status (`?printerId=`/`?printStatus=` = busy 0/1 · done 2 · failed 9) via a correlated EXISTS over the shared crouton-printing `print_jobs` queue (`source='sales'`, `refType='order'`). `?page=`/`?pageSize=` → `{ items, total, page, pageSize }`, slim projection (LEDs come from `printqueues/status`, items from the expand). The bookings `admin-bookings` pattern: package owns the query, app owns the table (`~~/layers/…`). Request-shaping is the pure, unit-tested `server/utils/order-filters.ts`. Replaced OrdersTab's old generated-collection call, which silently ignored 3 of the 4 filters |
 | `teams/[id]/events/[eventId]/orders` DELETE | team admin | **Delete all orders** (#1519): bulk-wipe one event's orders, cascading `salesOrders` → `salesOrderitems` → this event's sales-domain `print_jobs` (`source: 'sales'`), scoped strictly to `eventId` — never team-wide. Leaves `salesClients` intact (reusable; open-tab totals reset naturally). Returns `{ deleted: { orders, items, jobs } }`. Cascade sequencing is the pure `deleteAllEventOrders` (`server/utils/delete-event-orders.ts`, unit-tested); backs the typed-confirm danger-zone action in SettingsTab (admin-only, type the event name to enable) |
 | `teams/[id]/events/[eventId]/admin-helper-token` POST | team member | Issue a helper scoped-access token without PIN (displayName = user name) — lets logged-in admins open the POS directly |
 | `teams/[id]/events/[eventId]/active-helpers` GET | team admin | List currently-logged-in helpers for one event |
