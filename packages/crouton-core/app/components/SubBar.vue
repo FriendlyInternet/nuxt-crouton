@@ -5,16 +5,18 @@
  * default / trailing slots, optionally sticky over a scrolling container.
  *
  * It owns ONLY layout: spacing, the divider, background, horizontal-overflow
- * scrolling, and (opt-in) sticky pinning. It deliberately hosts NO tabs / filter
- * / dropdown logic — that's slot content. If you ever reach for a
- * `mode="tabs|filters"` prop, stop: the content belongs in a slot.
+ * scrolling, (opt-in) sticky pinning, and (opt-in) auto-hide on scroll. It
+ * deliberately hosts NO tabs / filter / dropdown logic — that's slot content. If
+ * you ever reach for a `mode="tabs|filters"` prop, stop: the content belongs in
+ * a slot.
  *
  * Consumers (epic #307): the pages editor language bar (leading = language
- * dropdown, trailing = Preview), sales settings tabs (default = UTabs, sticky),
- * the orders filter bar (default = filters, sticky).
+ * dropdown, trailing = Preview), sales settings tabs (default = tab strip,
+ * sticky + auto-hide), the sales orders filter bar (default = filters, sticky +
+ * auto-hide).
  *
  * @example
- * <CroutonSubBar sticky>
+ * <CroutonSubBar sticky auto-hide>
  *   <template #leading><LanguageDropdown /></template>
  *   <template #trailing><UButton icon="i-lucide-eye" /></template>
  * </CroutonSubBar>
@@ -24,20 +26,57 @@ interface Props {
   sticky?: boolean
   /** Draw the bottom divider (default true). */
   bordered?: boolean
+  /**
+   * Hide the bar while scrolling DOWN and reveal it immediately on scroll UP
+   * (the mobile-toolbar behaviour). Implies sticky — a non-pinned bar has
+   * nothing to hide. No-op on the server.
+   */
+  autoHide?: boolean
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   sticky: false,
   bordered: true,
+  autoHide: false,
 })
+
+const root = ref<HTMLElement | null>(null)
+const hidden = ref(false)
+let prevY = 0
+let cleanup: () => void = () => {}
+
+onMounted(() => {
+  if (!props.autoHide) return
+  // Capture-phase so we catch the scroll of WHATEVER ancestor actually scrolls
+  // (a pane body, a slideover, the document) without having to guess which
+  // element it is — no `useScroll(ref)` timing games.
+  const onScroll = (e: Event) => {
+    const target = e.target as HTMLElement | Document | null
+    if (!target || !root.value) return
+    const el = (target === document ? document.scrollingElement : target) as HTMLElement | null
+    if (!el || !el.contains?.(root.value)) return // only the scroller we live inside
+    const newY = el.scrollTop
+    const barH = root.value.offsetHeight || 44
+    if (newY <= barH) hidden.value = false // near the top: always shown
+    else if (newY > prevY + 2) hidden.value = true // scrolling down: hide
+    else if (newY < prevY - 2) hidden.value = false // scrolling up: reveal
+    prevY = newY
+  }
+  document.addEventListener('scroll', onScroll, { capture: true, passive: true })
+  cleanup = () => document.removeEventListener('scroll', onScroll, { capture: true })
+})
+
+onBeforeUnmount(() => cleanup())
 </script>
 
 <template>
   <div
-    class="flex items-center gap-2 px-2 py-1.5 bg-elevated/30 overflow-x-auto"
+    ref="root"
+    class="flex items-center gap-2 px-2 py-1.5 bg-elevated/30 overflow-x-auto transition-transform duration-200 ease-out"
     :class="[
       bordered ? 'border-b border-default' : '',
-      sticky ? 'sticky top-0 z-10' : '',
+      (sticky || autoHide) ? 'sticky top-0 z-10' : '',
+      hidden ? '-translate-y-full' : 'translate-y-0',
     ]"
   >
     <slot name="leading" />
