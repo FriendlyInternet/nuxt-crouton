@@ -2,10 +2,10 @@
 /**
  * PageEditor SettingsPanel
  *
- * The roomy, organized home for everything you configure about a page. Opens as
- * a right-hand slideover (built on core's CroutonFormExpandableSlideOver — we do
- * NOT hand-roll a slideover) and groups the controls that used to be crammed
- * into the toolbar + its tiny popover into clear sections:
+ * The roomy, organized home for everything you configure about a page. Renders
+ * INLINE (it's hosted in the editor's "Settings" tab — #307 mobile redesign),
+ * grouping the controls that used to be crammed into the toolbar + its tiny
+ * popover into clear sections:
  *
  *   General     — page type, parent page
  *   Appearance  — visual layout/template picker (CroutonPagesEditorLayoutPicker)
@@ -17,12 +17,11 @@
  *
  * @example
  * <CroutonPagesEditorSettingsPanel
- *   v-model:open="settingsOpen"
  *   :action="action"
- *   v-model:visibility="state.visibility"
- *   v-model:show-in-navigation="state.showInNavigation"
- *   v-model:layout="state.layout"
- *   v-model:parent-id="state.parentId"
+ *   :visibility="state.visibility"
+ *   :show-in-navigation="state.showInNavigation"
+ *   :layout="state.layout"
+ *   :parent-id="state.parentId"
  *   :page-type="state.pageType"
  *   :selected-page-type="selectedPageType"
  *   :page-type-options="pageTypeOptions"
@@ -31,9 +30,13 @@
  *   :parent-options="parentOptions"
  *   :pages-pending="pagesPending"
  *   :page-id="state.id"
- *   :visibility="state.visibility"
- *   v-model:hide-nav="chromeHideNav"
- *   v-model:hide-auth-controls="chromeHideAuthControls"
+ *   :hide-nav="chromeHideNav"
+ *   :hide-auth-controls="chromeHideAuthControls"
+ *   @update:show-in-navigation="state.showInNavigation = $event"
+ *   @update:layout="state.layout = $event"
+ *   @update:parent-id="state.parentId = $event"
+ *   @update:hide-nav="chromeHideNav = $event"
+ *   @update:hide-auth-controls="chromeHideAuthControls = $event"
  *   @layout-change="onLayoutChange"
  *   @save-access-code="saveAccessCode"
  *   @remove-access-code="removeAccessCode"
@@ -69,8 +72,6 @@ interface LayoutOption {
 }
 
 interface Props {
-  /** Whether the panel is open (v-model:open). */
-  open: boolean
   /** 'create' or 'update' — drives page-type editability. */
   action: 'create' | 'update'
   /** Current page visibility (gates the Access section). */
@@ -118,9 +119,7 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  'update:open': [value: boolean]
   'update:pageType': [value: string]
-  'update:visibility': [value: string]
   'update:showInNavigation': [value: boolean]
   'update:layout': [value: string]
   'update:parentId': [value: string | null]
@@ -132,11 +131,6 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useT()
-
-const isOpen = computed({
-  get: () => props.open,
-  set: value => emit('update:open', value)
-})
 
 // Local input for the scoped-visibility access code — the stored code is hashed
 // server-side and never round-trips; hasAccessCode only reports existence, so
@@ -154,13 +148,7 @@ const showAccessSection = computed(() => props.visibility === 'scoped')
 </script>
 
 <template>
-  <CroutonFormExpandableSlideOver
-    v-model:open="isOpen"
-    :title="t('pages.editor.pageSettings')"
-    icon="i-lucide-settings"
-    max-width="md"
-  >
-    <div class="space-y-6 p-1">
+  <div class="space-y-6">
       <!-- ───────── General ───────── -->
       <section class="space-y-3">
         <p class="text-xs font-semibold uppercase tracking-wide text-muted">
@@ -331,6 +319,5 @@ const showAccessSection = computed(() => props.visibility === 'scoped')
           </UFormField>
         </section>
       </template>
-    </div>
-  </CroutonFormExpandableSlideOver>
+  </div>
 </template>

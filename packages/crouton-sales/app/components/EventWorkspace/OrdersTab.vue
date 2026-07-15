@@ -392,63 +392,67 @@ function toggleExpand(id: string) {
         />
       </UChip>
       <template #content>
-        <!-- One filter per row — the selects stack in a single column so each
-             (helper / client / printer / status) reads on its own line. -->
-        <div class="rounded-lg bg-elevated/60 border border-default p-3 space-y-2" :class="headerControlled ? '' : 'mt-2'">
-          <div class="grid grid-cols-1 gap-2">
-            <USelectMenu
-              v-model="selectedHelperName"
-              :items="helperOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allHelpers')"
-              icon="i-lucide-user"
-              size="sm"
-              class="w-full"
-              :searchable="true"
-            />
-            <USelectMenu
-              v-if="clientFilterEnabled"
-              v-model="selectedClientId"
-              :items="clientOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allClients')"
-              icon="i-lucide-users"
-              size="sm"
-              class="w-full"
-              :searchable="true"
-            />
-            <USelectMenu
-              v-if="printerList.length"
-              v-model="selectedPrinterId"
-              :items="printerOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allPrinters')"
-              icon="i-lucide-printer"
-              size="sm"
-              class="w-full"
-            />
-            <USelectMenu
-              v-if="printerList.length"
-              v-model="selectedPrintStatus"
-              :items="printStatusOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allPrintStatuses')"
-              icon="i-lucide-circle-dot"
-              size="sm"
-              class="w-full"
-            />
+        <!-- Sticky filter bar (#307): the filters ride a CroutonSubBar pinned
+             under the pane header, so they stay reachable while the orders list
+             scrolls. Selects stack on a narrow pane and flow to columns when
+             there's room (@container). -->
+        <CroutonSubBar sticky auto-hide :class="headerControlled ? '' : 'mt-2'">
+          <div class="w-full space-y-2">
+            <div class="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-4">
+              <USelectMenu
+                v-model="selectedHelperName"
+                :items="helperOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allHelpers')"
+                icon="i-lucide-user"
+                size="sm"
+                class="w-full"
+                :searchable="true"
+              />
+              <USelectMenu
+                v-if="clientFilterEnabled"
+                v-model="selectedClientId"
+                :items="clientOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allClients')"
+                icon="i-lucide-users"
+                size="sm"
+                class="w-full"
+                :searchable="true"
+              />
+              <USelectMenu
+                v-if="printerList.length"
+                v-model="selectedPrinterId"
+                :items="printerOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allPrinters')"
+                icon="i-lucide-printer"
+                size="sm"
+                class="w-full"
+              />
+              <USelectMenu
+                v-if="printerList.length"
+                v-model="selectedPrintStatus"
+                :items="printStatusOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allPrintStatuses')"
+                icon="i-lucide-circle-dot"
+                size="sm"
+                class="w-full"
+              />
+            </div>
+            <div v-if="hasActiveFilters" class="flex justify-end">
+              <UButton
+                :label="t('sales.workspace.resetFilters')"
+                icon="i-lucide-rotate-ccw"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                @click="resetFilters"
+              />
+            </div>
           </div>
-          <div v-if="hasActiveFilters" class="flex justify-end">
-            <UButton
-              :label="t('sales.workspace.resetFilters')"
-              icon="i-lucide-rotate-ccw"
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              @click="resetFilters"
-            />
-          </div>
-        </div>
+        </CroutonSubBar>
       </template>
     </UCollapsible>
     <!-- Loading state only before first data — the 5s poll flips `pending`

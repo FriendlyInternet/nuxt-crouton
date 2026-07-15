@@ -219,8 +219,9 @@ opens a `USlideover` instead of the desktop splitter pane (Opslaan in the same f
 by the same registered save API) — only one `SettingsTab` instance ever mounts
 (`settingsPaneOpen && !isNarrow` vs `isNarrow`). In
 the slideover SettingsTab gets its `tabbed` prop: the three cards (Eventgegevens / Printers /
-Actieve helpers) render behind a segmented section strip, one at a time via `v-show` (all stay
-mounted so the panel-wide dirty/save covers fields on every tab). The slideover open state is ephemeral (`ref`s, not the
+Actieve helpers) render behind a section-tab strip — a **sticky `CroutonSubBar`** styled like the
+pages editor's tabs (underline-active; #307) — one at a time via `v-show` (all stay mounted so the
+panel-wide dirty/save covers fields on every tab). The slideover open state is ephemeral (`ref`s, not the
 persisted localStorage flags): an overlay auto-opening on page load would trap a phone user. An
 open pane's tab hides — the pane header (icon + title, mirroring the tab) carries the close ✕:
 - **"Bestellingen"** opens `OrdersTab`; its pane header also carries the orders filter toggle
@@ -301,8 +302,10 @@ badge: the printer LED conveys state. Staff orders (`isPersonnel`) carry a **war
 on the row (`border-s-2 border-s-warning`) instead of a badge. **Clicking a row toggles expand**
 (accordion-ish via an `expandedIds` Set; the chevron rotates). There is **no edit pencil** —
 orders are not editable from the workspace. Filters hide behind a **Filters toggle**
-(`UCollapsible`; a `UChip` with the active count marks a collapsed-but-filtered list). The panel
-is a `bg-elevated/60` card with a reset button (visible only while filters are active). The toggle
+(`UCollapsible`; a `UChip` with the active count marks a collapsed-but-filtered list). When open,
+the selects ride a **sticky `CroutonSubBar`** pinned under the pane header (so they stay reachable
+while the list scrolls; #307) — a responsive `@container` grid (one column on a narrow pane,
+flowing to 2–4 columns when wider) with a reset button (visible only while filters are active). The toggle
 is **header-controllable**: pass `v-model:filters-open` (+ listen to `@update:active-filter-count`
 for the chip) and OrdersTab hides its own button — Shell does this to host the toggle in the
 orders-pane header next to ✕; standalone usage without the prop keeps the internal button.
