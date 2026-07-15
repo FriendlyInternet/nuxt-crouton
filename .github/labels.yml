@@ -191,6 +191,9 @@
   description: "Performance"
 
 # ── Meta ──
+- name: "transient-infra"
+  color: "fbca04"
+  description: "A CI/deploy failure that self-healed — a transient runner/Cloudflare blip, not a code bug (#1639)"
 - name: "initiative"
   color: "0e2a63"
   description: "Umbrella grouping several epics toward one end-goal (super-epic rollup)"
