@@ -533,10 +533,13 @@ function helperExpiry(value: string): string {
       </UButton>
     </div>
 
-    <!-- Tabbed mode: the section picker rides a shared CroutonSubBar (sticky
-         sub-bar shell, #307) styled like the pages editor's tabs — underline
-         active, so the section tabs pin above the scrolling settings body. -->
-    <CroutonSubBar v-if="tabbed" sticky>
+    <!-- Scroll container (tabbed): hosts BOTH the sticky, auto-hiding section
+         strip and the cards, so the strip hides on scroll-down and reveals on
+         scroll-up. Standalone (non-tabbed) is a plain pass-through wrapper. -->
+    <div :class="tabbed ? 'flex-1 overflow-y-auto min-h-0' : ''">
+      <!-- Section picker on a shared CroutonSubBar (#307), styled like the
+           pages editor's tabs — underline active, sticky + auto-hide. -->
+      <CroutonSubBar v-if="tabbed" sticky auto-hide>
       <nav class="flex w-full items-center gap-0.5">
         <UButton
           v-for="s in sections"
@@ -558,7 +561,7 @@ function helperExpiry(value: string): string {
          printers (incl. receipt text), helpers (incl. PIN). Tabbed mode shows
          one at a time but keeps all mounted (v-show) so dirty state and the
          panel-wide save cover every tab. -->
-    <div class="grid grid-cols-1 gap-4 items-start" :class="tabbed ? 'flex-1 overflow-y-auto min-h-0 px-3 pb-3' : 'lg:grid-cols-3'">
+    <div class="grid grid-cols-1 gap-4 items-start" :class="tabbed ? 'px-3 pb-3 pt-3' : 'lg:grid-cols-3'">
       <!-- Event details (inline editable) -->
       <UCard v-show="!tabbed || activeSection === 'event'" :ui="eventCardUi">
         <template #header>
@@ -588,6 +591,28 @@ function helperExpiry(value: string): string {
               />
             </div>
             <p class="text-sm text-muted">{{ t('sales.workspace.requiresClientDesc') }}</p>
+          </div>
+
+          <USeparator />
+
+          <!-- Bulk "Delete all orders" (#1519) — its own section right under the
+               client setting (an operational reset, kept apart from the event
+               danger zone). Admin only; typed-confirm modal (not a one-tap pill). -->
+          <div v-if="isAdmin" class="space-y-1">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm font-medium leading-5">{{ t('sales.workspace.deleteAllOrders', 'Delete all orders') }}</p>
+              <UButton
+                size="xs"
+                variant="outline"
+                color="error"
+                icon="i-lucide-trash-2"
+                class="shrink-0"
+                @click="deleteOrdersOpen = true"
+              >
+                {{ t('sales.workspace.deleteAllOrdersAction', 'Delete orders…') }}
+              </UButton>
+            </div>
+            <p class="text-sm text-muted">{{ t('sales.workspace.deleteAllOrdersDesc', 'Clear every order, item and print job for this event. Keeps the event, its menu and its clients.') }}</p>
           </div>
 
           <USeparator />
@@ -622,25 +647,6 @@ function helperExpiry(value: string): string {
               />
             </div>
             <p class="text-sm text-muted">{{ t('sales.workspace.deleteEventDesc') }}</p>
-          </div>
-
-          <!-- Bulk "Delete all orders" (#1519) — admin only, typed-confirm
-               modal (not a one-tap pill, because it's bulk-destructive). -->
-          <div v-if="isAdmin" class="space-y-1">
-            <div class="flex items-center justify-between gap-3">
-              <p class="text-sm font-medium leading-5">{{ t('sales.workspace.deleteAllOrders', 'Delete all orders') }}</p>
-              <UButton
-                size="xs"
-                variant="outline"
-                color="error"
-                icon="i-lucide-trash-2"
-                class="shrink-0"
-                @click="deleteOrdersOpen = true"
-              >
-                {{ t('sales.workspace.deleteAllOrdersAction', 'Delete orders…') }}
-              </UButton>
-            </div>
-            <p class="text-sm text-muted">{{ t('sales.workspace.deleteAllOrdersDesc', 'Clear every order, item and print job for this event. Keeps the event, its menu and its clients.') }}</p>
           </div>
         </div>
       </UCard>
@@ -802,6 +808,7 @@ function helperExpiry(value: string): string {
           {{ t('sales.workspace.noHelpers') }}
         </div>
       </UCard>
+    </div>
     </div>
 
     <!-- Bulk "Delete all orders" typed-confirm (#1519). Admin-only trigger;

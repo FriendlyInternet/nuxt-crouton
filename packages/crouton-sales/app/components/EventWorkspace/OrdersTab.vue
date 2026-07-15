@@ -396,7 +396,7 @@ function toggleExpand(id: string) {
              under the pane header, so they stay reachable while the orders list
              scrolls. Selects stack on a narrow pane and flow to columns when
              there's room (@container). -->
-        <CroutonSubBar sticky :class="headerControlled ? '' : 'mt-2'">
+        <CroutonSubBar sticky auto-hide :class="headerControlled ? '' : 'mt-2'">
           <div class="w-full space-y-2">
             <div class="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-4">
               <USelectMenu
