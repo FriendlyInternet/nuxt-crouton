@@ -68,6 +68,17 @@ const props = defineProps<{
    * Takes priority over the derived fallback-locale placeholder. Opt-in. (#722)
    */
   fieldPlaceholders?: Record<string, string>
+  /**
+   * Externally-controlled editing locale (tabs layout). When set, this input
+   * edits that single locale and follows the value — so several inputs can be
+   * driven by ONE shared language selector (the pages editor's language bar).
+   */
+  activeLocale?: string
+  /**
+   * Hide the built-in locale switcher (the per-input EN/NL/FR strip). Pair with
+   * `activeLocale` + an external selector so the switching lives in one place.
+   */
+  hideLocaleSwitcher?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -107,6 +118,7 @@ const {
   toRef(props, 'primaryLocale'),
   toRef(props, 'secondaryLocale'),
   toRef(props, 'layout'),
+  toRef(props, 'activeLocale'),
 )
 
 // ─── Translation field values (get/set, locale completeness) ─────────────────
@@ -995,8 +1007,9 @@ function previewText(field: string, locale: string): string {
     <!-- TABS LAYOUT (default, for narrow containers) -->
     <!-- ============================================= -->
     <template v-else>
-      <!-- Language selector with status indicators -->
-      <div class="flex items-center justify-between">
+      <!-- Language selector with status indicators (hidden when an external
+           shared selector drives the locale — hideLocaleSwitcher) -->
+      <div v-if="!hideLocaleSwitcher" class="flex items-center justify-between">
         <UFieldGroup class="w-full">
           <UButton
             v-for="loc in locales"
@@ -1030,7 +1043,7 @@ function previewText(field: string, locale: string): string {
         <UFormField
           v-for="field in fields"
           :key="field"
-          :label="`${field.charAt(0).toUpperCase() + field.slice(1)} (${editingLocale.toUpperCase()})${editingLocale === requiredLocale ? ' *' : ''}`"
+          :label="`${field.charAt(0).toUpperCase() + field.slice(1)} (${editingLocale.toUpperCase()})`"
           :name="`translations.${editingLocale}.${field}`"
           :required="editingLocale === requiredLocale"
         >
