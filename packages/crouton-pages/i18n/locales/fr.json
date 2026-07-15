@@ -117,6 +117,9 @@
       "sectionAppearance": "Apparence",
       "sectionNavigation": "Navigation",
       "sectionAccess": "Accès",
+      "tabContent": "Contenu",
+      "tabSeo": "SEO",
+      "untitledShort": "Sans titre",
       "generate": "Générer",
       "preview": "Aperçu",
       "search": "Rechercher",
@@ -183,7 +186,9 @@
       "contentLabel": "Contenu",
       "block": "bloc",
       "blocks": "blocs",
-      "tapToEdit": "Toucher pour modifier"
+      "tapToEdit": "Toucher pour modifier",
+      "seoGenerate": "Générer avec IA",
+      "seoGenerateFailed": "Impossible de générer une description"
     },
     "sidebar": {
       "drafts": "Brouillons",

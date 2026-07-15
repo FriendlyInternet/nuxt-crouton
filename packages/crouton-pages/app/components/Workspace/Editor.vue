@@ -20,6 +20,8 @@ interface Props {
   defaultParentId?: string | null
   /** Show a close button in the header (used by InlineEditor) */
   showClose?: boolean
+  /** Show a leading back arrow in the toolbar (mobile workspace slideover) */
+  showBack?: boolean
   /** Override the i18n input layout ('tabs' for narrow panels, 'side-by-side' for wide) */
   i18nLayout?: 'tabs' | 'side-by-side'
 }
@@ -28,6 +30,7 @@ const props = withDefaults(defineProps<Props>(), {
   pageId: null,
   defaultParentId: null,
   showClose: false,
+  showBack: false,
   i18nLayout: 'side-by-side'
 })
 
@@ -36,6 +39,7 @@ const emit = defineEmits<{
   delete: [id: string]
   cancel: []
   close: []
+  back: []
 }>()
 
 const { t } = useT()
@@ -840,7 +844,8 @@ async function handleSubmit() {
   }
 }
 
-// Delete handler — confirmation is handled by CroutonConfirmButton in Toolbar
+// Delete handler — confirmation is the two-step "Delete? → confirm" in the
+// toolbar's ⋯ overflow menu
 function handleDelete() {
   if (!state.value.id) return
   const id = state.value.id
@@ -849,31 +854,68 @@ function handleDelete() {
   })
 }
 
-// Translatable fields
-// Document-first (#722): only the document body fields render inline (big title,
-// faint slug, content hero). SEO/OG/robots move into the disclosure below.
-const translatableFields = computed(() => {
-  if (showBlockEditor.value) {
-    return ['title', 'slug', 'content']
-  }
-  return ['title', 'slug']
-})
+// Translatable fields, split across tabs (#307): title + slug live in the
+// Settings tab (the page's identity), the block content fills the Content tab.
+const metaFields = ['title', 'slug']
+const contentFields = computed(() => (showBlockEditor.value ? ['content'] : []))
 
-// Per-field presentation for the inline document fields: borderless big title +
-// faint slug (read by CroutonI18nInput's bareFields/fieldUi, #722).
-const docFieldUi = {
-  title: { variant: 'none', size: 'xl', class: '!text-2xl font-bold leading-tight px-0' },
-  slug: { variant: 'none', size: 'md', class: 'text-muted px-0' },
-}
+// Placeholders for the title/slug identity inputs (rendered in the Settings tab
+// via the tabs-layout i18n input, which already gives them clear bordered inputs
+// + labels).
 const docFieldPlaceholders = computed(() => ({
   title: t('pages.editor.titlePlaceholder', 'Untitled page'),
   slug: t('pages.editor.slugPlaceholder', 'page-url-slug'),
 }))
 
-// SEO & social disclosure (root og/robots + per-locale seo text, bound to the
-// active app locale — refine to follow the locale tab in a later pass).
-const showSeoMeta = ref(false)
-const seoLocale = computed(() => locale.value || 'en')
+// Editor body tabs — the page config surfaces (Content / SEO / Settings) as a
+// horizontal nav so nothing hides in a slideover or an overflow menu (#307).
+// Panels are kept mounted (v-show) so switching tabs never resets the block
+// editor / i18n input state.
+// Settings is the first/default tab — it carries the page's identity (title,
+// slug) plus its setup; Content is the block canvas; SEO is the meta.
+const activeTab = ref<'content' | 'seo' | 'settings'>('settings')
+type EditorTab = { id: 'content' | 'seo' | 'settings', label: string, icon: string }
+const editorTabs = computed<EditorTab[]>(() => {
+  const tabs: EditorTab[] = [{ id: 'settings', label: t('pages.editor.settings', 'Settings'), icon: 'i-lucide-settings' }]
+  tabs.push({ id: 'content', label: t('pages.editor.tabContent', 'Content'), icon: 'i-lucide-file-text' })
+  if (!isCollectionPage.value) tabs.push({ id: 'seo', label: t('pages.editor.tabSeo', 'SEO'), icon: 'i-lucide-search' })
+  return tabs
+})
+// If the active tab disappears (e.g. switching to a collection page drops SEO),
+// fall back to Content so the body never goes blank.
+watch(editorTabs, (tabs) => {
+  if (!tabs.some(tab => tab.id === activeTab.value)) activeTab.value = 'content'
+})
+
+// Shared editing locale (#307) — ONE language selector in the editor's language
+// bar drives every translatable field across all tabs (title/slug, content,
+// SEO). Seeded from the app locale.
+const editingLocale = ref<string>(locale.value || 'en')
+const localeOptions = computed(() =>
+  (locales.value as Array<string | { code: string, name?: string }>).map((l) => {
+    const code = typeof l === 'string' ? l : l.code
+    const name = typeof l === 'string' ? l : (l.name || l.code)
+    return { value: code, label: name }
+  })
+)
+// Multi-locale apps only: a single-locale app needs no selector.
+const showLanguageBar = computed(() => localeOptions.value.length > 1)
+
+// Title of the currently-edited locale — shown in the toolbar for context and
+// used as the SEO-title placeholder (empty SEO title ⇒ falls back to the title).
+const currentTitle = computed(() => {
+  const tr = state.value.translations as Record<string, { title?: string }> | undefined
+  return tr?.[editingLocale.value]?.title || ''
+})
+const toolbarTitle = computed(() =>
+  currentTitle.value || (() => {
+    const tr = state.value.translations as Record<string, { title?: string }> | undefined
+    return (tr ? Object.values(tr).find(d => d?.title)?.title : '') || ''
+  })()
+)
+
+// SEO fields are translatable too — they follow the shared editing locale.
+const seoLocale = computed(() => editingLocale.value)
 function localeField(field: 'seoTitle' | 'seoDescription') {
   return computed<string>({
     get: () => {
@@ -889,6 +931,31 @@ function localeField(field: 'seoTitle' | 'seoDescription') {
 }
 const seoTitle = localeField('seoTitle')
 const seoDescription = localeField('seoDescription')
+
+// AI-draft the SEO description from the page's title + content (crouton-ai only).
+// Writes into the currently-edited locale's seoDescription.
+const seoGenerating = ref(false)
+async function generateSeoDescription() {
+  seoGenerating.value = true
+  try {
+    const tr = state.value.translations as Record<string, { content?: unknown }> | undefined
+    const content = tr?.[editingLocale.value]?.content ?? state.value.content
+    const { description } = await $fetch<{ description: string }>('/api/ai/generate-seo', {
+      method: 'POST',
+      body: {
+        title: currentTitle.value,
+        content,
+        language: localeOptions.value.find(l => l.value === editingLocale.value)?.label || editingLocale.value,
+      },
+    })
+    if (description) seoDescription.value = description
+  } catch (error) {
+    console.error('SEO description generation failed:', error)
+    useNotify().error(t('pages.editor.seoGenerateFailed', 'Could not generate a description'))
+  } finally {
+    seoGenerating.value = false
+  }
+}
 
 // Field components
 const fieldComponents = computed((): Record<string, string> => {
@@ -915,9 +982,6 @@ const fieldGroups = computed(() => ({
 // Preview drawer state
 const showPreview = ref(false)
 
-// Settings slideover state — opened from the toolbar's Settings button
-const settingsOpen = ref(false)
-
 // Detect optional packages via croutonApps registration
 const { hasApp } = useCroutonApps()
 const hasAssetsPicker = hasApp('assets')
@@ -936,7 +1000,7 @@ const previewLocale = ref<string>(locale.value)
 
 // Reset preview locale to current editor locale when preview opens
 watch(showPreview, (open) => {
-  if (open) previewLocale.value = locale.value
+  if (open) previewLocale.value = editingLocale.value
 })
 
 // Locales that actually have content (for the language selector)
@@ -1049,8 +1113,7 @@ defineExpose({ state })
       class="flex flex-col h-full"
       @submit="handleSubmit"
     >
-      <!-- Header Bar — slim: Status + Visibility + Settings on the left,
-           action group on the right. Page config lives in the SettingsPanel. -->
+      <!-- Consolidated bar: back · status · visibility · name · ⋯ · save -->
       <CroutonPagesEditorToolbar
         :action="action"
         :status="state.status"
@@ -1063,125 +1126,77 @@ defineExpose({ state })
         :has-ai="hasAI"
         :is-saving="isSaving"
         :show-close="showClose"
+        :show-back="showBack"
+        :page-title="toolbarTitle"
         :page-id="state.id"
         :public-url="publicUrl"
-        @update:status="state.status = $event"
-        @update:visibility="state.visibility = $event"
-        @show-settings="settingsOpen = true"
         @show-ai-generator="showAiGenerator = true"
         @show-preview="showPreview = true"
         @cancel="emit('cancel')"
         @delete="handleDelete"
         @close="emit('close')"
+        @back="emit('back')"
       />
 
-      <!-- Settings slideover — the roomy, organized home for all page config
-           (page type, parent, layout, navigation/chrome toggles, access code) -->
-      <CroutonPagesEditorSettingsPanel
-        v-model:open="settingsOpen"
-        :action="action"
-        :visibility="state.visibility"
-        :show-in-navigation="state.showInNavigation"
-        :layout="state.layout"
-        :parent-id="state.parentId"
-        :page-type="state.pageType"
-        :selected-page-type="selectedPageType"
-        :page-type-options="pageTypeOptions"
-        :layout-options="layoutOptions"
-        @update:page-type="state.pageType = $event"
-        :parent-options="parentOptions"
-        :pages-pending="pagesPending"
-        :page-id="state.id"
-        :has-access-code="hasAccessCode"
-        :access-code-pending="accessCodePending"
-        :scope-provided-by-block="scopeProvidedByBlock"
-        :hide-nav="chromeHideNav"
-        :hide-auth-controls="chromeHideAuthControls"
-        @update:show-in-navigation="state.showInNavigation = $event"
-        @update:layout="state.layout = $event"
-        @update:parent-id="state.parentId = $event"
-        @update:hide-nav="chromeHideNav = $event"
-        @update:hide-auth-controls="chromeHideAuthControls = $event"
-        @layout-change="onLayoutChange"
-        @save-access-code="saveAccessCode"
-        @remove-access-code="removeAccessCode"
-      />
-
-      <!-- Collection item picker — shown above the i18n input so it is always visible -->
-      <div v-if="isCollectionPage" class="px-4 pt-4 pb-2 shrink-0 border-b border-default">
-        <UFormField
-          :label="t('pages.editor.selectItem', { name: selectedPageType?.name ? t(selectedPageType.name) : 'Item' })"
-          name="config.itemId"
-        >
-          <CroutonFormReferenceSelect
-            v-model="collectionItemId"
-            :collection="collectionPageName"
-            :label="selectedPageType?.name ? t(selectedPageType.name) : undefined"
-            :label-key="collectionLabelKey"
-          />
-        </UFormField>
-      </div>
-
-      <!-- Collection binder config — pick which collection to bind + sort options -->
-      <div v-if="isBinderPage" class="px-4 pt-4 pb-3 shrink-0 border-b border-default space-y-3">
-        <UFormField :label="t('pages.editor.binder.bindCollection')" name="config.collection" :help="t('pages.editor.binder.bindCollectionHelp')">
+      <!-- Language bar — one selector drives the translatable fields on every
+           tab; Preview opens in the selected language. Multi-locale apps only. -->
+      <CroutonSubBar v-if="showLanguageBar">
+        <template #leading>
           <USelect
-            v-model="binderCollection"
-            :items="collectionOptions"
+            v-model="editingLocale"
+            :items="localeOptions"
             value-key="value"
-            :placeholder="t('pages.editor.binder.selectCollection')"
+            icon="i-lucide-languages"
             size="sm"
-            class="w-full"
+            class="min-w-40"
           />
-        </UFormField>
-        <div class="grid grid-cols-2 gap-2">
-          <UFormField :label="t('pages.editor.binder.sortField')" name="config.sortField" :help="t('pages.editor.binder.sortFieldHelp')">
-            <UInput
-              v-model="binderSortField"
-              placeholder="order"
-              size="sm"
-              class="w-full"
-            />
-          </UFormField>
-          <UFormField :label="t('pages.editor.binder.sortOrder')" name="config.sortOrder">
-            <USelect
-              v-model="binderSortOrder"
-              :items="[{ value: 'asc', label: t('common.ascending') }, { value: 'desc', label: t('common.descending') }]"
-              value-key="value"
-              size="sm"
-              class="w-full"
-            />
-          </UFormField>
-        </div>
-        <UFormField :label="t('pages.editor.binder.groupBy')" name="config.groupBy" :help="t('pages.editor.binder.groupByHelp')">
-          <UInput
-            v-model="binderGroupBy"
-            :placeholder="t('pages.editor.binder.groupByPlaceholder')"
+        </template>
+        <template #trailing>
+          <UButton
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-eye"
             size="sm"
-            class="w-full"
+            :label="t('pages.editor.preview')"
+            @click="showPreview = true"
           />
-        </UFormField>
-      </div>
+        </template>
+      </CroutonSubBar>
 
-      <!-- Content (document-first #722): big title + faint slug + content hero;
-           SEO / OG / robots live in one quiet disclosure below. -->
+      <!-- Horizontal tab nav — Content / SEO / Settings -->
+      <nav class="flex items-center gap-0.5 shrink-0 px-1 border-b border-default bg-elevated/20 overflow-x-auto">
+        <UButton
+          v-for="tab in editorTabs"
+          :key="tab.id"
+          :variant="activeTab === tab.id ? 'soft' : 'ghost'"
+          :color="activeTab === tab.id ? 'primary' : 'neutral'"
+          :icon="tab.icon"
+          size="sm"
+          class="shrink-0 rounded-none border-b-2"
+          :class="activeTab === tab.id ? 'border-primary' : 'border-transparent'"
+          @click="activeTab = tab.id"
+        >
+          {{ tab.label }}
+        </UButton>
+      </nav>
+
+      <!-- Tab panels — all kept mounted (v-show) so the block editor / i18n
+           input never loses state when switching tabs. -->
       <div class="flex-1 min-h-0 overflow-auto">
-        <div class="mx-auto flex h-full w-full max-w-3xl flex-col px-4 py-3">
+        <!-- ───────── Settings (title + slug + page setup) ───────── -->
+        <div v-show="activeTab === 'settings'" class="mx-auto w-full max-w-3xl px-4 py-4 space-y-6">
+          <!-- Page identity — title + slug. Tabs layout + the shared editing
+               locale (switcher hidden — the language bar drives it). -->
           <CroutonI18nInput
-            v-if="contentReady"
-            :key="contentKey"
             v-model="state.translations"
-            :fields="translatableFields"
-            :layout="i18nLayout"
+            :fields="metaFields"
+            layout="tabs"
+            :active-locale="editingLocale"
+            hide-locale-switcher
             :show-ai-translate="hasAI"
             field-type="page"
-            :field-components="fieldComponents"
             :field-options="fieldOptions"
-            :bare-fields="['title', 'slug']"
-            :field-ui="docFieldUi"
             :field-placeholders="docFieldPlaceholders"
-            :collab="collabForI18n"
-            :class="isCollectionPage ? 'min-h-64' : 'flex-1 min-h-0'"
           >
             <template v-if="hasMetadata" #header>
               <div class="flex items-center gap-3 text-xs text-muted">
@@ -1200,82 +1215,171 @@ defineExpose({ state })
               </div>
             </template>
           </CroutonI18nInput>
-          <div v-else class="h-full flex items-center justify-center">
-            <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-muted" />
+
+          <USeparator />
+
+          <CroutonPagesEditorSettingsPanel
+            :action="action"
+            :visibility="state.visibility"
+            :show-in-navigation="state.showInNavigation"
+            :layout="state.layout"
+            :parent-id="state.parentId"
+            :page-type="state.pageType"
+            :selected-page-type="selectedPageType"
+            :page-type-options="pageTypeOptions"
+            :layout-options="layoutOptions"
+            :parent-options="parentOptions"
+            :pages-pending="pagesPending"
+            :page-id="state.id"
+            :has-access-code="hasAccessCode"
+            :access-code-pending="accessCodePending"
+            :scope-provided-by-block="scopeProvidedByBlock"
+            :hide-nav="chromeHideNav"
+            :hide-auth-controls="chromeHideAuthControls"
+            @update:page-type="state.pageType = $event"
+            @update:show-in-navigation="state.showInNavigation = $event"
+            @update:layout="state.layout = $event"
+            @update:parent-id="state.parentId = $event"
+            @update:hide-nav="chromeHideNav = $event"
+            @update:hide-auth-controls="chromeHideAuthControls = $event"
+            @layout-change="onLayoutChange"
+            @save-access-code="saveAccessCode"
+            @remove-access-code="removeAccessCode"
+          />
+        </div>
+
+        <!-- ───────── Content (block editor fills the whole tab) ───────── -->
+        <div v-show="activeTab === 'content'" class="flex h-full flex-col">
+          <!-- Collection item picker (publishable item pages) -->
+          <div v-if="isCollectionPage" class="px-4 pt-4 pb-2 shrink-0 border-b border-default">
+            <UFormField
+              :label="t('pages.editor.selectItem', { name: selectedPageType?.name ? t(selectedPageType.name) : 'Item' })"
+              name="config.itemId"
+            >
+              <CroutonFormReferenceSelect
+                v-model="collectionItemId"
+                :collection="collectionPageName"
+                :label="selectedPageType?.name ? t(selectedPageType.name) : undefined"
+                :label-key="collectionLabelKey"
+              />
+            </UFormField>
           </div>
 
-          <!-- SEO & social — one quiet disclosure (root og/robots + per-locale seo text) -->
-          <div v-if="!isCollectionPage" class="mt-3 shrink-0 border-t border-default pt-2">
-            <!-- UButton (not raw) so themes reach it (#1410) -->
-            <UButton
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              class="gap-1 px-0 font-semibold uppercase tracking-wide text-muted hover:text-default"
-              @click="showSeoMeta = !showSeoMeta"
-            >
-              <UIcon :name="showSeoMeta ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'" class="size-3.5" />
-              {{ t('pages.editor.seoSocial', 'SEO & social') }}
-            </UButton>
-            <div v-if="showSeoMeta" class="mt-2 flex flex-col gap-2">
-              <UFormField :label="t('pages.fields.seoTitle', 'SEO title')" name="seoTitle">
-                <UInput v-model="seoTitle" size="sm" class="w-full" :placeholder="t('pages.editor.seoTitlePlaceholder', 'Defaults to the page title')" />
+          <!-- Collection binder config -->
+          <div v-if="isBinderPage" class="px-4 pt-4 pb-3 shrink-0 border-b border-default space-y-3">
+            <UFormField :label="t('pages.editor.binder.bindCollection')" name="config.collection" :help="t('pages.editor.binder.bindCollectionHelp')">
+              <USelect
+                v-model="binderCollection"
+                :items="collectionOptions"
+                value-key="value"
+                :placeholder="t('pages.editor.binder.selectCollection')"
+                size="sm"
+                class="w-full"
+              />
+            </UFormField>
+            <div class="grid grid-cols-2 gap-2">
+              <UFormField :label="t('pages.editor.binder.sortField')" name="config.sortField" :help="t('pages.editor.binder.sortFieldHelp')">
+                <UInput v-model="binderSortField" placeholder="order" size="sm" class="w-full" />
               </UFormField>
-              <UFormField :label="t('pages.fields.seoDescription', 'SEO description')" name="seoDescription">
-                <UTextarea v-model="seoDescription" :rows="2" size="sm" class="w-full" :placeholder="t('pages.editor.seoDescriptionPlaceholder', 'One-line summary for search & shares')" />
-              </UFormField>
-              <UFormField :label="t('pages.fields.ogImage')" name="ogImage">
-                <Suspense v-if="hasAssetsPicker">
-                  <CroutonAssetsPicker
-                    v-model="selectedOgImageAssetId"
-                    @select="handleAssetSelect"
-                  />
-                  <template #fallback>
-                    <div class="h-20 rounded-lg border-2 border-dashed border-default animate-pulse" />
-                  </template>
-                </Suspense>
-                <CroutonImageUpload
-                  v-else
-                  v-model="state.ogImage"
-                  size="sm"
-                  accept="image/*"
-                />
-              </UFormField>
-              <UFormField :label="t('pages.fields.robots')" name="robots">
+              <UFormField :label="t('pages.editor.binder.sortOrder')" name="config.sortOrder">
                 <USelect
-                  v-model="state.robots"
-                  :items="robotsOptions"
+                  v-model="binderSortOrder"
+                  :items="[{ value: 'asc', label: t('common.ascending') }, { value: 'desc', label: t('common.descending') }]"
                   value-key="value"
                   size="sm"
                   class="w-full"
                 />
               </UFormField>
-              <CroutonPagesEditorSeoPreview
-                :team-slug="teamSlugRef"
-                :translations="state.translations"
-                :og-image="state.ogImage"
-                :preview-locale="seoLocale"
-              />
+            </div>
+            <UFormField :label="t('pages.editor.binder.groupBy')" name="config.groupBy" :help="t('pages.editor.binder.groupByHelp')">
+              <UInput v-model="binderGroupBy" :placeholder="t('pages.editor.binder.groupByPlaceholder')" size="sm" class="w-full" />
+            </UFormField>
+          </div>
+
+          <!-- Block content — fills the tab inline (no summary card / slideout) -->
+          <div v-if="showBlockEditor" class="flex flex-1 min-h-0 flex-col px-3 py-3">
+            <CroutonI18nInput
+              v-if="contentReady"
+              :key="contentKey"
+              v-model="state.translations"
+              :fields="contentFields"
+              layout="tabs"
+              :active-locale="editingLocale"
+              hide-locale-switcher
+              :show-ai-translate="hasAI"
+              field-type="page"
+              :field-components="fieldComponents"
+              :collab="collabForI18n"
+              class="flex-1 min-h-0"
+            />
+            <div v-else class="h-full flex items-center justify-center">
+              <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-muted" />
             </div>
           </div>
 
           <!-- Config fields for app pages (non-regular, non-collection, non-block-content page types) -->
-          <template v-if="!showBlockEditor && !isCollectionPage && selectedPageType?.configSchema?.length">
-            <USeparator :label="t('pages.editor.pageSettings')" class="my-6" />
-            <div class="space-y-4">
-              <div v-for="field in selectedPageType.configSchema" :key="field.name" class="text-sm text-muted">
-                {{ t('pages.editor.configField', { name: field.name }) }}
+          <div v-else-if="!isCollectionPage" class="mx-auto w-full max-w-3xl px-4 py-4">
+            <template v-if="selectedPageType?.configSchema?.length">
+              <USeparator :label="t('pages.editor.pageSettings')" class="my-2" />
+              <div class="space-y-4">
+                <div v-for="field in selectedPageType.configSchema" :key="field.name" class="text-sm text-muted">
+                  {{ t('pages.editor.configField', { name: field.name }) }}
+                </div>
               </div>
-            </div>
-          </template>
-
-          <template v-else-if="!showBlockEditor && !isCollectionPage && !selectedPageType?.configSchema?.length">
-            <div class="p-4 bg-muted/30 rounded-lg text-center text-sm text-muted mt-6">
+            </template>
+            <div v-else class="p-4 bg-muted/30 rounded-lg text-center text-sm text-muted">
               <UIcon name="i-lucide-info" class="size-5 mb-2" />
               <p>{{ t('pages.editor.noConfig') }}</p>
               <p>{{ t('pages.editor.displaysComponent', { name: selectedPageType?.name ? t(selectedPageType.name) : '' }) }}</p>
             </div>
-          </template>
+          </div>
+        </div>
+
+        <!-- ───────── SEO & social ───────── -->
+        <div v-show="activeTab === 'seo'" class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-4">
+          <!-- SEO title — placeholder is the real page title, so an empty SEO
+               title transparently falls back to it. -->
+          <UFormField :label="t('pages.fields.seoTitle', 'SEO title')" name="seoTitle">
+            <UInput
+              v-model="seoTitle"
+              size="sm"
+              class="w-full"
+              :placeholder="currentTitle || t('pages.editor.seoTitlePlaceholder', 'Defaults to the page title')"
+            />
+          </UFormField>
+          <UFormField :label="t('pages.fields.seoDescription', 'SEO description')" name="seoDescription">
+            <UTextarea v-model="seoDescription" :rows="3" size="sm" class="w-full" :placeholder="t('pages.editor.seoDescriptionPlaceholder', 'One-line summary for search & shares')" />
+            <!-- AI drafts the description from the title + page content (crouton-ai only) -->
+            <div v-if="hasAI" class="mt-2 flex justify-end">
+              <UButton
+                color="primary"
+                variant="soft"
+                size="xs"
+                icon="i-lucide-sparkles"
+                :loading="seoGenerating"
+                :label="t('pages.editor.seoGenerate', 'Generate with AI')"
+                @click="generateSeoDescription"
+              />
+            </div>
+          </UFormField>
+          <UFormField :label="t('pages.fields.ogImage')" name="ogImage">
+            <Suspense v-if="hasAssetsPicker">
+              <CroutonAssetsPicker v-model="selectedOgImageAssetId" @select="handleAssetSelect" />
+              <template #fallback>
+                <div class="h-20 rounded-lg border-2 border-dashed border-default animate-pulse" />
+              </template>
+            </Suspense>
+            <CroutonImageUpload v-else v-model="state.ogImage" size="sm" accept="image/*" />
+          </UFormField>
+          <UFormField :label="t('pages.fields.robots')" name="robots">
+            <USelect v-model="state.robots" :items="robotsOptions" value-key="value" size="sm" class="w-full" />
+          </UFormField>
+          <CroutonPagesEditorSeoPreview
+            :team-slug="teamSlugRef"
+            :translations="state.translations"
+            :og-image="state.ogImage"
+            :preview-locale="seoLocale"
+          />
         </div>
       </div>
     </UForm>

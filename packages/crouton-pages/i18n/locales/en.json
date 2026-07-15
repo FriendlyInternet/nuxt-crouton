@@ -117,6 +117,9 @@
       "sectionAppearance": "Appearance",
       "sectionNavigation": "Navigation",
       "sectionAccess": "Access",
+      "tabContent": "Content",
+      "tabSeo": "SEO",
+      "untitledShort": "Untitled",
       "generate": "Generate",
       "preview": "Preview",
       "search": "Search",
@@ -183,7 +186,9 @@
       "contentLabel": "Content",
       "block": "block",
       "blocks": "blocks",
-      "tapToEdit": "Tap to edit"
+      "tapToEdit": "Tap to edit",
+      "seoGenerate": "Generate with AI",
+      "seoGenerateFailed": "Could not generate a description"
     },
     "sidebar": {
       "drafts": "Drafts",

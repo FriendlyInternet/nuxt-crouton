@@ -117,6 +117,9 @@
       "sectionAppearance": "Weergave",
       "sectionNavigation": "Navigatie",
       "sectionAccess": "Toegang",
+      "tabContent": "Inhoud",
+      "tabSeo": "SEO",
+      "untitledShort": "Naamloos",
       "generate": "Genereren",
       "preview": "Voorbeeld",
       "search": "Zoeken",
@@ -183,7 +186,9 @@
       "contentLabel": "Content",
       "block": "blok",
       "blocks": "blokken",
-      "tapToEdit": "Tik om te bewerken"
+      "tapToEdit": "Tik om te bewerken",
+      "seoGenerate": "Genereer met AI",
+      "seoGenerateFailed": "Kon geen beschrijving genereren"
     },
     "sidebar": {
       "drafts": "Concepten",
