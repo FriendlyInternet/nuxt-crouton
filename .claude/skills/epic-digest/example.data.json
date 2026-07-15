@@ -54,6 +54,26 @@
       ]
     }
   ],
+  "initiatives": [
+    {
+      "number": 1632,
+      "url": "https://github.com/FriendlyInternet/nuxt-crouton/issues/1632",
+      "title": "🎨 Visual Layout & Builder — the AI-composed, human-editable layout stack",
+      "epicsTotal": 5,
+      "activeCount": 2,
+      "blockedCount": 1,
+      "blocked": true,
+      "childrenTotal": 31,
+      "childrenDone": 14,
+      "members": [
+        { "number": 983, "title": "Graduate the Crouton Builder POC → crouton-layout package", "url": "https://github.com/FriendlyInternet/nuxt-crouton/issues/983", "done": 7, "total": 12, "status": "blocked", "blocked": true },
+        { "number": 703, "title": "Lean layout engine", "url": "https://github.com/FriendlyInternet/nuxt-crouton/issues/703", "done": 1, "total": 4, "status": "open", "blocked": false },
+        { "number": 868, "title": "Maquette — the semantic-zoom layout builder", "url": "https://github.com/FriendlyInternet/nuxt-crouton/issues/868", "done": 0, "total": 3, "status": "open", "blocked": false },
+        { "number": 905, "title": "App-canvas on Vue Flow", "url": "https://github.com/FriendlyInternet/nuxt-crouton/issues/905", "done": 6, "total": 12, "status": "open", "blocked": false },
+        { "number": 855, "title": "Mini-apps everywhere — one block, three renderers", "url": "https://github.com/FriendlyInternet/nuxt-crouton/issues/855", "done": 0, "total": 0, "status": "open", "blocked": false }
+      ]
+    }
+  ],
   "epics": [
     {
       "number": 318,
