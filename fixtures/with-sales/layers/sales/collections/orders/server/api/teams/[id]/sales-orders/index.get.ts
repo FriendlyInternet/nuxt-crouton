@@ -20,16 +20,26 @@ export default defineEventHandler(async (event) => {
     return result
   }
 
+  // Sales-specific filters from the "Bestellingen" pane: helper (owner),
+  // printer and print status, alongside the generic event/client filters.
+  const filters = {
+    eventId: query.eventId ? String(query.eventId) : undefined,
+    clientId: query.clientId ? String(query.clientId) : undefined,
+    owner: query.owner ? String(query.owner) : undefined,
+    printerId: query.printerId ? String(query.printerId) : undefined,
+    printStatus: query.printStatus ? String(query.printStatus) : undefined
+  }
+
   // Opt-in pagination: ?page=1&pageSize=10 → { items, total, page, pageSize }
   if (query.page !== undefined) {
     const page = Math.max(1, Number(query.page) || 1)
     const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 10))
-    const { items, total } = await getAllSalesOrders(team.id, { eventId: query.eventId ? String(query.eventId) : undefined, clientId: query.clientId ? String(query.clientId) : undefined, limit: pageSize, offset: (page - 1) * pageSize })
+    const { items, total } = await getAllSalesOrders(team.id, { ...filters, limit: pageSize, offset: (page - 1) * pageSize })
     dbTimer.end()
     return { items, total, page, pageSize }
   }
 
-  const result = await getAllSalesOrders(team.id, { eventId: query.eventId ? String(query.eventId) : undefined, clientId: query.clientId ? String(query.clientId) : undefined })
+  const result = await getAllSalesOrders(team.id, filters)
   dbTimer.end()
   return result
 })
