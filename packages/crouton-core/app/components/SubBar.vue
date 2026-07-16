@@ -50,15 +50,18 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const root = ref<HTMLElement | null>(null)
-const hidden = ref(false)
-// Measure the bar's own height so the hidden state can RECLAIM its space. A
-// plain `translateY(-100%)` hides the bar visually, but its box still occupies
-// layout — now that the bar is opaque that reserved slot reads as an empty gap
-// (a tall, open filter bar leaves a tall gap). Collapsing it with a negative
-// margin equal to the bar's height lets the content below slide up in sync with
-// the bar sliding away, so there's no hole.
-const { height: barHeight } = useElementSize(root)
+// The "headroom" pattern for `auto-hide`, with NO layout shift of the content:
+//  - `pinned = false` → the bar sits in normal document flow. Scrolling DOWN
+//    just carries it off the top like any other content (no reserved gap, the
+//    list never moves).
+//  - `pinned = true` → a scroll UP re-introduces it as a sticky overlay pinned
+//    at the top; `shown` drives the slide (-100% → 0). Content scrolls under it.
+// Releasing pinned→flow only happens back at the very top (slot aligns) or after
+// the hide-slide finishes, so neither transition jumps.
+const pinned = ref(false)
+const shown = ref(false)
 let prevY = 0
+let raf = 0
 let cleanup: () => void = () => {}
 
 onMounted(() => {
@@ -72,17 +75,40 @@ onMounted(() => {
     const el = (target === document ? document.scrollingElement : target) as HTMLElement | null
     if (!el || !el.contains?.(root.value)) return // only the scroller we live inside
     const newY = el.scrollTop
-    // Hide on ANY downward scroll (past a tiny jitter deadzone), reveal on any
-    // upward scroll. Only forced-shown when parked at the very top, so the bar
-    // is always there when you arrive back at the start of the content.
-    if (newY <= 4) hidden.value = false // parked at the top: shown
-    else if (newY > prevY + 2) hidden.value = true // scrolling down: hide
-    else if (newY < prevY - 2) hidden.value = false // scrolling up: reveal
+    if (newY <= 4) {
+      // Parked at the top: release into flow, fully visible.
+      pinned.value = false
+      shown.value = false
+    }
+    else if (newY > prevY + 2) {
+      // Scrolling down: let the bar ride away in flow. If it's currently a
+      // pinned overlay, slide it up first — it drops back to flow on transitionend.
+      if (pinned.value) shown.value = false
+    }
+    else if (newY < prevY - 2) {
+      // Scrolling up: reveal as a sticky overlay sliding in from the top.
+      if (!pinned.value) {
+        pinned.value = true // becomes sticky, rendered hidden (-100%)…
+        cancelAnimationFrame(raf)
+        raf = requestAnimationFrame(() => { shown.value = true }) // …then slides in
+      }
+      else {
+        shown.value = true
+      }
+    }
     prevY = newY
   }
   document.addEventListener('scroll', onScroll, { capture: true, passive: true })
-  cleanup = () => document.removeEventListener('scroll', onScroll, { capture: true })
+  cleanup = () => {
+    document.removeEventListener('scroll', onScroll, { capture: true })
+    cancelAnimationFrame(raf)
+  }
 })
+
+// After the hide-slide completes, drop the overlay back into normal flow.
+function onSlideEnd() {
+  if (pinned.value && !shown.value) pinned.value = false
+}
 
 onBeforeUnmount(() => cleanup())
 </script>
@@ -90,17 +116,19 @@ onBeforeUnmount(() => cleanup())
 <template>
   <div
     ref="root"
-    class="flex items-center gap-2 py-1.5 bg-default overflow-x-auto transition-[transform,margin] duration-200 ease-out"
+    class="flex items-center gap-2 py-1.5 bg-default overflow-x-auto transition-transform duration-200 ease-out"
     :class="[
       bordered ? 'border-b border-default' : '',
-      (sticky || autoHide) ? 'sticky top-0 z-10' : '',
-      hidden ? '-translate-y-full' : 'translate-y-0',
+      // auto-hide: sticky ONLY while pinned (a scroll-up reveal); otherwise the
+      // bar lives in flow. A plain `sticky` bar (no auto-hide) always pins.
+      autoHide ? (pinned ? 'sticky top-0 z-10' : '') : (sticky ? 'sticky top-0 z-10' : ''),
+      (autoHide && pinned && !shown) ? '-translate-y-full' : 'translate-y-0',
       // Full-bleed inside a `p-4` pane: cancel the host's horizontal padding,
       // re-inset the content by the same amount so it lines up with the padded
       // siblings below. Plain `px-2` otherwise.
       flush ? '-mx-4 px-4' : 'px-2',
     ]"
-    :style="autoHide && hidden ? { marginBottom: `-${barHeight}px` } : undefined"
+    @transitionend="onSlideEnd"
   >
     <slot name="leading" />
     <div class="min-w-0 flex-1">
