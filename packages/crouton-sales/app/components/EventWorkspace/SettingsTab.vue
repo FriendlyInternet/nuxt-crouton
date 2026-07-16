@@ -536,10 +536,12 @@ function helperExpiry(value: string): string {
     <!-- Scroll container (tabbed): hosts BOTH the sticky, auto-hiding section
          strip and the cards, so the strip hides on scroll-down and reveals on
          scroll-up. Standalone (non-tabbed) is a plain pass-through wrapper. -->
-    <div :class="tabbed ? 'flex-1 overflow-y-auto min-h-0' : ''">
+    <div :class="tabbed ? 'flex-1 overflow-y-auto min-h-0 px-4' : ''">
       <!-- Section picker on a shared CroutonSubBar (#307), styled like the
-           pages editor's tabs — underline active, sticky + auto-hide. -->
-      <CroutonSubBar v-if="tabbed" sticky auto-hide>
+           pages editor's tabs — underline active, sticky + auto-hide. `flush`
+           bleeds it out of the container's px-4 so the strip spans full width
+           while the tabs line up with the padded cards below. -->
+      <CroutonSubBar v-if="tabbed" sticky auto-hide flush>
       <nav class="flex w-full items-center gap-0.5">
         <UButton
           v-for="s in sections"
@@ -561,7 +563,7 @@ function helperExpiry(value: string): string {
          printers (incl. receipt text), helpers (incl. PIN). Tabbed mode shows
          one at a time but keeps all mounted (v-show) so dirty state and the
          panel-wide save cover every tab. -->
-    <div class="grid grid-cols-1 gap-4 items-start" :class="tabbed ? 'px-3 pb-3 pt-3' : 'lg:grid-cols-3'">
+    <div class="grid grid-cols-1 gap-4 items-start" :class="tabbed ? 'pb-3 pt-3' : 'lg:grid-cols-3'">
       <!-- Event details (inline editable) -->
       <UCard v-show="!tabbed || activeSection === 'event'" :ui="eventCardUi">
         <template #header>
