@@ -32,12 +32,21 @@ interface Props {
    * nothing to hide. No-op on the server.
    */
   autoHide?: boolean
+  /**
+   * Bleed out of a host that pads its scroll container (the standard `p-4`
+   * pane) so the bar spans the FULL width edge-to-edge — content stays inset
+   * to line up with the padded siblings. Use when the bar sits inside a padded
+   * scroll area; omit when the host has no horizontal padding (the bar is
+   * already full-width then).
+   */
+  flush?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
   sticky: false,
   bordered: true,
   autoHide: false,
+  flush: false,
 })
 
 const root = ref<HTMLElement | null>(null)
@@ -74,11 +83,15 @@ onBeforeUnmount(() => cleanup())
 <template>
   <div
     ref="root"
-    class="flex items-center gap-2 px-2 py-1.5 bg-elevated/30 overflow-x-auto transition-transform duration-200 ease-out"
+    class="flex items-center gap-2 py-1.5 bg-default overflow-x-auto transition-transform duration-200 ease-out"
     :class="[
       bordered ? 'border-b border-default' : '',
       (sticky || autoHide) ? 'sticky top-0 z-10' : '',
       hidden ? '-translate-y-full' : 'translate-y-0',
+      // Full-bleed inside a `p-4` pane: cancel the host's horizontal padding,
+      // re-inset the content by the same amount so it lines up with the padded
+      // siblings below. Plain `px-2` otherwise.
+      flush ? '-mx-4 px-4' : 'px-2',
     ]"
   >
     <slot name="leading" />
