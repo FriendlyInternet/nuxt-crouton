@@ -51,6 +51,13 @@ const props = withDefaults(defineProps<Props>(), {
 
 const root = ref<HTMLElement | null>(null)
 const hidden = ref(false)
+// Measure the bar's own height so the hidden state can RECLAIM its space. A
+// plain `translateY(-100%)` hides the bar visually, but its box still occupies
+// layout — now that the bar is opaque that reserved slot reads as an empty gap
+// (a tall, open filter bar leaves a tall gap). Collapsing it with a negative
+// margin equal to the bar's height lets the content below slide up in sync with
+// the bar sliding away, so there's no hole.
+const { height: barHeight } = useElementSize(root)
 let prevY = 0
 let cleanup: () => void = () => {}
 
@@ -83,7 +90,7 @@ onBeforeUnmount(() => cleanup())
 <template>
   <div
     ref="root"
-    class="flex items-center gap-2 py-1.5 bg-default overflow-x-auto transition-transform duration-200 ease-out"
+    class="flex items-center gap-2 py-1.5 bg-default overflow-x-auto transition-[transform,margin] duration-200 ease-out"
     :class="[
       bordered ? 'border-b border-default' : '',
       (sticky || autoHide) ? 'sticky top-0 z-10' : '',
@@ -93,6 +100,7 @@ onBeforeUnmount(() => cleanup())
       // siblings below. Plain `px-2` otherwise.
       flush ? '-mx-4 px-4' : 'px-2',
     ]"
+    :style="autoHide && hidden ? { marginBottom: `-${barHeight}px` } : undefined"
   >
     <slot name="leading" />
     <div class="min-w-0 flex-1">
