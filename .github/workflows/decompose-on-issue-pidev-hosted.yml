@@ -98,12 +98,30 @@ jobs:
           git config user.name  "nuxt-harness[bot]"
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
 
+      # ── Build the prompt from the CANONICAL operating contract (#1022) ────────────
+      # This action takes the prompt as a `with:` input (not a shell arg), so we can't
+      # `cat` a file straight into it like the mini variants do. Instead build it in a
+      # prior step from the SINGLE source — .claude/agents/pi-operating-contract.md —
+      # and pass it through as a multiline step output. That kills the old "kept in sync
+      # by hand" drift (this copy had already fallen behind — it was missing contract
+      # rule 5, the mandatory `Closes #N` line). Edit the contract in that ONE file.
+      - id: build-pi-prompt
+        env:
+          ISSUE: ${{ inputs.issue }}
+        run: |
+          {
+            echo 'prompt<<PI_PROMPT_EOF'
+            cat .claude/agents/pi-operating-contract.md
+            echo "/task-decompose #${ISSUE}"
+            echo 'PI_PROMPT_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       # ── The agent: pi.dev via the SHA-pinned third-party action ──────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
       # the worker PR) act as the Harness App and cascade. `token` = the funded metered
       # provider key (NOT a subscription — subscription OAuth must not back CI). The
-      # prompt is the SAME non-interactive contract as the mini variant (#1019/#1022),
-      # kept in sync by hand — if you edit one, edit both.
+      # prompt is the SAME non-interactive contract as the mini variants (#1019/#1022),
+      # now sourced from the one canonical file above rather than a hand-synced copy.
       - id: pi
         uses: shaftoe/pi-coding-agent-action@73ccd1aedef7c79a883aa6a81d680e377b66e58e # v2.25.1
         env:
@@ -114,11 +132,7 @@ jobs:
           model: ${{ inputs.model }}
           token: ${{ secrets.PI_PROVIDER_KEY }}
           export_session_jsonl: 'true'
-          prompt: |
-            You are running NON-INTERACTIVELY in CI. No human is attached and there is no terminal to read input from. NEVER pause, ask a question, or wait for confirmation, and do not invoke pi-ask-user. When a choice is ambiguous, pick the most sensible default, record the assumption in an issue or PR comment, and PROCEED. The run only succeeds if it produces a real deliverable: a PR (Closes #N), created sub-issues, or a held sign-off (status:blocked plus a review). Merely listing options or asking what to do is a FAILED run.
-            OPERATING CONTRACT (non-negotiable, #1022): (1) NEVER merge a pull request — not even one you opened. Open it and stop; the automerge workflow merges epic sub-PRs after CI passes. (2) Hold any sign-off as a TOP-LEVEL issue comment plus the status:blocked label — never inside a PR review body. (3) Reuse an existing epic/NNN-* branch idempotently — never create a duplicate epic branch. (4) You CANNOT modify .github/workflows/** (the App token lacks the workflows scope, by deliberate policy #1076): commit everything else, embed the needed workflow patch verbatim in the PR body under a "## Workflow patch (human applies)" heading, mention @pmcp in an issue comment, add status:blocked, and finish — that counts as a successful deliverable.
-            Given that, do the following now:
-            /task-decompose #${{ inputs.issue }}
+          prompt: ${{ steps.build-pi-prompt.outputs.prompt }}
 
       # ── #1072 metrics — the structured outputs this spike exists to evaluate ──────
       # The mini variant scrapes ~/.pi/agent/sessions JSONL on the box (#938); here the

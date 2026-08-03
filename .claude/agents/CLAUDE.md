@@ -177,6 +177,13 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   the human PAT and won't cascade). The invariants that keep it from looping are the pure, unit-tested
   `scripts/pipeline-loop-guard.mjs` (bot-actor · exact-label · depth cap) — see `task-decomposer.md`
   → “Event-driven mode”. Outside that one mode, the rule is unchanged: spawn, or do the leaf yourself.
+- **The pi operating contract is canonical in one file (#1022).** `--skill` loads `.claude/skills/**`
+  but not these agent contracts, so the non-negotiable subset pi must obey (never self-merge · sign-off
+  as a **top-level** comment · idempotent `epic/<NN>-*` reuse · `.github/workflows/**` → embed-a-patch ·
+  every PR body opens with `Closes #N`) lives in **`.claude/agents/pi-operating-contract.md`** and is
+  `cat` verbatim into the pi prompt by both `decompose-on-issue-pidev.yml` and `work-issue-pidev.yml`.
+  Edit the contract **there** (one place, so the two flows can't drift — they were byte-identical hand-
+  maintained copies before). Keep that file **pure prose**: it is injected raw, so no frontmatter/headers.
 - **A directly-dispatched child resolves to its parent's epic branch — never a new epic off
   `main`.** When `/task-decompose` is invoked on an issue that is itself a **sub-issue** (its
   `parent_issue_url` is set / it carries a parent epic), do **NOT** mint a fresh

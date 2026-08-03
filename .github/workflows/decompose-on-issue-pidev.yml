@@ -198,17 +198,14 @@ jobs:
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           LOG="decompose-pidev-exec-${{ github.run_id }}.log"
           START=$(date +%s)
-          # Front-load a tool-agnostic NON-INTERACTIVE directive (#1019) so pi does not
-          # stall-and-ask while headless (the #839 failure — pi asked "which option?" and
-          # stopped). Built in a FILE via a QUOTED heredoc (never PROMPT=$(cat <<EOF) — an
-          # apostrophe breaks that substitution, #1001), then EITHER an inline event-driven
-          # decompose directive (PIPELINE_MODE=event-driven) OR the /task-decompose command.
+          # Front-load the CANONICAL operating contract (#1022) so pi does not stall-and-ask
+          # while headless (the #839 failure) and follows the same non-negotiable rules a Claude
+          # task-worker does. The contract text lives in ONE place — .claude/agents/pi-operating-
+          # contract.md — and is `cat` into the prompt verbatim here AND in work-issue-pidev.yml,
+          # so the two flows can't drift (they were byte-identical hand-maintained copies before).
+          # That file is PURE PROSE by contract: no frontmatter/headers — it is injected raw.
           PROMPT_FILE="decompose-pidev-prompt-${{ github.run_id }}.txt"
-          cat > "$PROMPT_FILE" <<'PI_PROMPT'
-          You are running NON-INTERACTIVELY in CI. No human is attached and there is no terminal to read input from. NEVER pause, ask a question, or wait for confirmation, and do not invoke pi-ask-user. When a choice is ambiguous, pick the most sensible default, record the assumption in an issue or PR comment, and PROCEED. The run only succeeds if it produces a real deliverable: a PR (Closes #N), created sub-issues, or a held sign-off (status:blocked plus a review). Merely listing options or asking what to do is a FAILED run.
-          OPERATING CONTRACT (non-negotiable, #1022): (1) NEVER merge a pull request — not even one you opened. Open it and stop; the automerge workflow merges epic sub-PRs after CI passes. (2) Hold any sign-off as a TOP-LEVEL issue comment plus the status:blocked label — never inside a PR review body. (3) Reuse an existing epic/NNN-* branch idempotently — never create a duplicate epic branch. (4) You CANNOT modify .github/workflows/** (the App token lacks the workflows scope, by deliberate policy #1076): commit everything else, embed the needed workflow patch verbatim in the PR body under a "## Workflow patch (human applies)" heading, mention @pmcp in an issue comment, add status:blocked, and finish — that counts as a successful deliverable. (5) EVERY PR body MUST open with a literal "Closes #<the sub-issue it implements>" line — including a PR targeting an epic/* branch, where you may reason it is pointless because GitHub only auto-closes on the default branch. Write it anyway: resume-on-comment.yml's merge-on-approval step uses that line to identify which PR the owner's lgtm approved. Wording it as "Sub-issue: #N" instead makes the owner's approval a silent no-op (#1663). The matcher now also accepts a linked-issue relation and Sub-issue/Refs lines, but "Closes #N" is the form to write.
-          Given that, do the following now:
-          PI_PROMPT
+          cat .claude/agents/pi-operating-contract.md > "$PROMPT_FILE"
           # ── The task, by mode (#1696) — pi PLANS, code APPLIES ────────────────────────
           # EVENT-DRIVEN: two failure modes killed the earlier attempts. (1) `/task-decompose` hands
           # off by SPAWNING an Agent tree pi can't drive → the #1381/#1706 3-min no-op. (2) Having pi
@@ -349,9 +346,23 @@ jobs:
               createdSubIssues = subs.some(s => new Date(s.created_at).getTime() >= sinceMs)
             } catch (e) { core.warning(`sub-issue check skipped: ${e.message}`) }
 
+            // ── LEAF DISPATCH (#1740) ──────────────────────────────────────────────────
+            // A leaf plan ({"leaf": true}) is NOT a no-op. The deterministic apply step
+            // (scripts/apply-decompose-plan.mjs → buildActionList) labels the target `work-this`
+            // (WORKER_TRIGGER), which triggers the single-use worker (work-issue-pidev.yml) whose
+            // PR lands in a SEPARATE run with its own artifact-gate. So "dispatched the worker" is a
+            // complete, honest deliverable for THIS decompose run. Without this branch a correctly-
+            // classified leaf false-fails as "produced nothing / underspecified" (the #1713 case —
+            // an exemplary issue mis-blamed as underspecified). Same class as the #1074 child-
+            // deliverable blind spot. Signal: a `work-this` labeled event on the target since t0.
+            const leafDispatched = timeline.some(e =>
+              e.event === 'labeled' && e.label && e.label.name === 'work-this' &&
+              new Date(e.created_at).getTime() >= sinceMs
+            )
+
             const signoffHeld = blocked && newComment
-            if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues) {
-              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues}`)
+            if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues || leafDispatched) {
+              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues} leafDispatched=${leafDispatched}`)
               // Result-comment-back (#1017) — only on a label-triggered run (a human is watching the
               // issue). This comment posts as the Harness App (nuxt-harness[bot]) — an unmistakable
               // bot account — so it uses the agent-pipeline provenance header, NOT the @pmcp disclaimer.
@@ -362,6 +373,7 @@ jobs:
                 const what = freshPR
                   ? `done → PR #${freshPR}`
                   : (createdSubIssues ? 'decomposed → sub-issues created (see the tree)'
+                    : leafDispatched ? 'classified as a leaf → handed to the `work-this` worker (its PR lands in a separate run)'
                     : signoffHeld ? 'held for sign-off (`status:blocked` + a review)'
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
