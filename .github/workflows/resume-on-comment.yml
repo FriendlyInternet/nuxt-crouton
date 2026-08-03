@@ -244,9 +244,19 @@ jobs:
             }
             core.setOutput('merged', String(merged))
             core.setOutput('skipped', skipped.join('\n'))
-            // Clear the block defensively so the issue can close cleanly.
-            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
-            core.info(merged ? 'Gate PR merged — schedule-waves will advance the chain.' : 'No gate PR merged (none matched / already merged).')
+            // Clear the block ONLY on a real merge, so the issue can close cleanly (#1665).
+            // This used to be unconditional ("defensively"), which made a failed resume a
+            // ONE-WAY DOOR: the job guard above requires `status:blocked`, so stripping it
+            // after a miss meant every later reply was SILENTLY SKIPPED — no run, hence no
+            // artifact-gate, hence no explanation. #1655 needed the label restored by hand
+            // before the owner's approval could execute at all. If nothing merged, the issue
+            // genuinely IS still blocked; say so by leaving the label on.
+            if (merged) {
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
+              core.info('Gate PR merged — schedule-waves will advance the chain.')
+            } else {
+              core.info('No gate PR merged (none matched / already merged) — leaving status:blocked ON so a re-approval can still trigger.')
+            }
 
       # ── Artifact-gate (#603 P0) ────────────────────────────────────────────────
       # A resume must PRODUCE something — otherwise a no-op silently exits green and the
@@ -318,6 +328,17 @@ jobs:
             // A blanket "re-dispatch to retry" is the RIGHT remedy for a genuine no-op, but
             // the WRONG one when the merge step found a gate PR and passed over it — a retry
             // reproduces it verbatim (#1663). If we have skip reasons, name them instead.
+            // Belt-and-braces for #1665: whatever cleared the block, this run produced
+            // nothing — so the issue is still blocked and MUST keep the label, or the job
+            // guard above will silently skip every future reply. (We only reach here when
+            // `stillBlocked` was false; the merge step no longer clears on a miss, but any
+            // other path that does must not be able to strand the issue.)
+            if (!stillBlocked) {
+              try {
+                await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['status:blocked'] })
+                core.info('Re-applied status:blocked so a re-approval can trigger.')
+              } catch (e) { core.warning(`could not re-apply status:blocked: ${e.message}`) }
+            }
             const skipped = (process.env.MERGE_SKIPPED || '').trim()
             const remedy = skipped
               ? '**A gate PR was found but not merged — retrying will NOT help.** The merge step passed over:\n\n'
@@ -401,3 +422,62 @@ jobs:
               body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume timed out_\n\n'
                 + '⏱️ This resume was **cancelled** — almost always the 30-min job timeout. It may have '
                 + `partially progressed. 🔗 [Run log](${runUrl}) — comment again to retry.` })
+
+  # ── "Nothing happened" is never silence (#1665) ──────────────────────────────────
+  # The `resume` job above only runs while the issue carries `status:blocked`. So an
+  # approval reply on an issue that has LOST the label produces no run at all — no
+  # artifact-gate, no comment, nothing. That's exactly how #1655 looked to the owner:
+  # an lgtm that vanished. The label-clearing bug that caused it is fixed above; this
+  # job is the safety net for any OTHER route to the same state.
+  #
+  # Deliberately narrow, to stay quiet: it fires only when the reply reads as an
+  # approval AND the issue actually has a pending gate PR (open, into an `epic/*`
+  # branch). An approval word on an ordinary issue is ignored.
+  explain-skipped-approval:
+    if: |
+      !github.event.issue.pull_request &&
+      github.event.comment.user.type != 'Bot' &&
+      !contains(github.event.issue.labels.*.name, 'status:blocked') &&
+      (contains(github.event.comment.body, 'lgtm') || contains(github.event.comment.body, 'approve'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const body = context.payload.comment.body || ''
+            // Re-check precisely — the job `if` is a coarse prefilter.
+            if (!/\b(approve|approved|lgtm)\b/i.test(body)) return
+
+            // Is there really a gate waiting? Only then is silence a bug worth explaining.
+            let gatePR = null
+            try {
+              const tl = await github.paginate(github.rest.issues.listEventsForTimeline, { ...context.repo, issue_number })
+              const prNums = [...new Set(tl
+                .filter(e => e.event === 'cross-referenced' && e.source && e.source.issue && e.source.issue.pull_request)
+                .map(e => e.source.issue.number))]
+              for (const n of prNums) {
+                const pr = (await github.rest.pulls.get({ ...context.repo, pull_number: n })).data
+                if (pr.state === 'open' && !pr.merged && /^epic\//.test(pr.base.ref)) { gatePR = pr; break }
+              }
+            } catch (e) { core.warning(`gate-PR probe failed: ${e.message}`); return }
+            if (!gatePR) { core.info('No pending epic/* gate PR — an approval word here is not a gate reply.'); return }
+
+            // Don't re-explain the same thing on every reply.
+            const recent = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 })
+            const already = recent.slice(-3).some(c => (c.body || '').includes('<!-- skipped-approval-notice -->'))
+            if (already) { core.info('Already explained recently — staying quiet.'); return }
+
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '<!-- skipped-approval-notice -->\n'
+                + '> 🤖 **Claude Code** · agent pipeline (CI) · _approval reply on a non-blocked issue_\n\n'
+                + `🤷 **Your approval did not start anything** — and that is a bug, not a decision. PR #${gatePR.number} `
+                + `is still open into \`${gatePR.base.ref}\`, so a gate IS pending here.\n\n`
+                + 'The resume workflow only runs while this issue carries `status:blocked`, and the label is gone. '
+                + 'Add `status:blocked` back and reply again, and it will run.\n\n'
+                + '<sub>Root cause of the label going missing: #1665.</sub>' })
+            core.info(`Explained the skipped approval (pending gate PR #${gatePR.number}).`)
