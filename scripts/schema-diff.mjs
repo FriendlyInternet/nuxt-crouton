@@ -66,6 +66,28 @@ const STMT = new RegExp(
   'gi'
 )
 
+function applyCreate(tables, s) {
+  const name = s.match(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"[]?(\w+)/i)[1]
+  const body = s.slice(s.indexOf('(') + 1, s.lastIndexOf(')'))
+  const cols = {}
+  for (const decl of splitColumns(body)) {
+    const parsed = parseColumn(decl)
+    if (parsed) cols[parsed[0]] = parsed[1]
+  }
+  tables[name] = cols
+}
+
+function applyDrop(tables, s) {
+  delete tables[s.match(/DROP TABLE\s+(?:IF EXISTS\s+)?[`"[]?(\w+)/i)[1]]
+}
+
+function applyRename(tables, s) {
+  const m = s.match(/ALTER TABLE\s+[`"[]?(\w+)[`"\]]?\s+RENAME TO\s+[`"[]?(\w+)/i)
+  if (!m || !tables[m[1]]) return
+  tables[m[2]] = tables[m[1]]
+  delete tables[m[1]]
+}
+
 /**
  * Replay CREATE/DROP/RENAME so a drizzle table REBUILD resolves to its FINAL shape.
  *
@@ -80,25 +102,9 @@ export function finalTables(sql) {
   const tables = {}
   for (const [stmt] of sql.matchAll(STMT)) {
     const s = stmt.trim()
-    if (/^CREATE/i.test(s)) {
-      const name = s.match(/CREATE TABLE\s+(?:IF NOT EXISTS\s+)?[`"[]?(\w+)/i)[1]
-      const body = s.slice(s.indexOf('(') + 1, s.lastIndexOf(')'))
-      const cols = {}
-      for (const decl of splitColumns(body)) {
-        const parsed = parseColumn(decl)
-        if (parsed) cols[parsed[0]] = parsed[1]
-      }
-      tables[name] = cols
-    } else if (/^DROP/i.test(s)) {
-      const name = s.match(/DROP TABLE\s+(?:IF EXISTS\s+)?[`"[]?(\w+)/i)[1]
-      delete tables[name]
-    } else {
-      const m = s.match(/ALTER TABLE\s+[`"[]?(\w+)[`"\]]?\s+RENAME TO\s+[`"[]?(\w+)/i)
-      if (m && tables[m[1]]) {
-        tables[m[2]] = tables[m[1]]
-        delete tables[m[1]]
-      }
-    }
+    if (/^CREATE/i.test(s)) applyCreate(tables, s)
+    else if (/^DROP/i.test(s)) applyDrop(tables, s)
+    else applyRename(tables, s)
   }
   for (const t of Object.keys(tables)) if (t.startsWith('__new')) delete tables[t]
   return tables
@@ -107,20 +113,8 @@ export function finalTables(sql) {
 const isNotNull = def => /\bNOT NULL\b/i.test(def)
 const hasDefault = def => /\bDEFAULT\b/i.test(def)
 
-/**
- * Compare two schemas.
- *
- * `live` (when given) is authoritative for restore safety: the migration files can
- * have drifted from the database that actually exists.
- */
-export function diffSchemas(oldSql, newSql, liveSql = null) {
-  const oldT = finalTables(oldSql)
-  const newT = finalTables(newSql)
-  const liveT = liveSql ? finalTables(liveSql) : null
-
-  const droppedTables = Object.keys(oldT).filter(t => !(t in newT)).sort()
-  const addedTables = Object.keys(newT).filter(t => !(t in oldT)).sort()
-
+/** Per-column added/removed/changed across the tables both schemas share. */
+function diffColumns(oldT, newT) {
   const columns = []
   for (const t of Object.keys(oldT).filter(x => x in newT).sort()) {
     for (const c of [...new Set([...Object.keys(oldT[t]), ...Object.keys(newT[t])])].sort()) {
@@ -133,77 +127,104 @@ export function diffSchemas(oldSql, newSql, liveSql = null) {
       }
     }
   }
+  return columns
+}
 
-  // Restore blockers — the failures that actually stop a data reload.
-  const blockers = []
-  if (liveT) {
-    for (const t of Object.keys(liveT)) {
-      if (!(t in newT)) continue // table not in the baseline: nothing to restore into
-      for (const c of Object.keys(liveT[t])) {
-        if (!(c in newT[t])) {
-          blockers.push({ table: t, column: c, reason: 'live column missing from the new baseline — INSERT will fail' })
-        }
-      }
-      for (const [c, def] of Object.entries(newT[t])) {
-        if (!isNotNull(def) || hasDefault(def)) continue
-        if (!(c in liveT[t])) {
-          blockers.push({ table: t, column: c, reason: 'NOT NULL with no DEFAULT and absent from live data — INSERT will fail' })
-        } else if (!isNotNull(liveT[t][c])) {
-          // THE kassa case (#1455): the column exists on both sides, so a presence
-          // check is blind to it. Live permits NULL, the new baseline forbids it —
-          // any existing NULL row fails the restore.
-          blockers.push({ table: t, column: c, reason: 'live column is NULLABLE but the new baseline makes it NOT NULL with no DEFAULT — existing NULL rows will fail the restore' })
-        }
-      }
-    }
-  } else {
-    // Without a live dump, flag the shape of the kassa regression: a column that
-    // became NOT NULL. Advisory — only a live dump can confirm it actually breaks.
-    for (const c of columns) {
-      if (c.kind === 'changed' && !isNotNull(c.before) && isNotNull(c.after) && !hasDefault(c.after)) {
-        blockers.push({ table: c.table, column: c.column, reason: 'became NOT NULL (no DEFAULT) — pass --live to confirm against real rows' })
-      }
+/** One table, compared against the live schema: what will actually break the reload. */
+function blockersForTable(t, newCols, liveCols) {
+  const out = []
+  for (const c of Object.keys(liveCols)) {
+    if (!(c in newCols)) {
+      out.push({ table: t, column: c, reason: 'live column missing from the new baseline — INSERT will fail' })
     }
   }
+  for (const [c, def] of Object.entries(newCols)) {
+    if (!isNotNull(def) || hasDefault(def)) continue
+    if (!(c in liveCols)) {
+      out.push({ table: t, column: c, reason: 'NOT NULL with no DEFAULT and absent from live data — INSERT will fail' })
+    } else if (!isNotNull(liveCols[c])) {
+      // THE kassa case (#1455): the column exists on both sides, so a presence check
+      // is blind to it. Live permits NULL, the new baseline forbids it — any existing
+      // NULL row fails the restore.
+      out.push({ table: t, column: c, reason: 'live column is NULLABLE but the new baseline makes it NOT NULL with no DEFAULT — existing NULL rows will fail the restore' })
+    }
+  }
+  return out
+}
 
-  return { droppedTables, addedTables, columns, blockers }
+/**
+ * No live dump: flag the SHAPE of the kassa regression (nullable → NOT NULL).
+ * Advisory — only real rows can confirm it actually breaks, hence the message.
+ */
+function blockersFromShape(columns) {
+  return columns
+    .filter(c => c.kind === 'changed' && !isNotNull(c.before) && isNotNull(c.after) && !hasDefault(c.after))
+    .map(c => ({ table: c.table, column: c.column, reason: 'became NOT NULL (no DEFAULT) — pass --live to confirm against real rows' }))
+}
+
+/**
+ * Compare two schemas.
+ *
+ * `liveSql` (when given) is authoritative for restore safety: the migration files can
+ * have drifted from the database that actually exists.
+ */
+export function diffSchemas(oldSql, newSql, liveSql = null) {
+  const oldT = finalTables(oldSql)
+  const newT = finalTables(newSql)
+  const liveT = liveSql ? finalTables(liveSql) : null
+
+  const columns = diffColumns(oldT, newT)
+  const blockers = liveT
+    ? Object.keys(liveT).filter(t => t in newT).flatMap(t => blockersForTable(t, newT[t], liveT[t]))
+    : blockersFromShape(columns)
+
+  return {
+    droppedTables: Object.keys(oldT).filter(t => !(t in newT)).sort(),
+    addedTables: Object.keys(newT).filter(t => !(t in oldT)).sort(),
+    columns,
+    blockers
+  }
+}
+
+/** @returns {{oldPath?:string, newPath?:string, live:string|null, json:boolean}} */
+export function parseArgs(argv) {
+  const json = argv.includes('--json')
+  const rest = argv.slice(2).filter(a => a !== '--json')
+  const i = rest.indexOf('--live')
+  const live = i === -1 ? null : rest[i + 1]
+  const positional = i === -1 ? rest : [...rest.slice(0, i), ...rest.slice(i + 2)]
+  return { oldPath: positional[0], newPath: positional[1], live, json }
+}
+
+const COLUMN_LINE = {
+  added: c => `  + ${c.table}.${c.column}  (${c.after})`,
+  removed: c => `  - ${c.table}.${c.column}  (was ${c.before})`,
+  changed: c => `  ~ ${c.table}.${c.column}  ${c.before}  →  ${c.after}`
+}
+
+function report(r) {
+  console.log(`tables dropped: ${r.droppedTables.join(', ') || '(none)'}`)
+  console.log(`tables added:   ${r.addedTables.join(', ') || '(none)'}`)
+  console.log(`\ncolumn differences (${r.columns.length}):`)
+  for (const c of r.columns) console.log(COLUMN_LINE[c.kind](c))
+  console.log(`\nrestore blockers (${r.blockers.length}):`)
+  for (const b of r.blockers) console.log(`  ✗ ${b.table}.${b.column} — ${b.reason}`)
+  if (!r.blockers.length) console.log('  ✓ none — a data-only restore should load cleanly')
 }
 
 function main(argv) {
-  const args = argv.filter(a => a !== '--json')
-  const json = argv.includes('--json')
-  const liveIdx = args.indexOf('--live')
-  const live = liveIdx !== -1 ? args[liveIdx + 1] : null
-  const positional = args.filter((a, i) => a !== '--live' && (liveIdx === -1 || i !== liveIdx + 1))
-  const [oldPath, newPath] = positional.slice(2)
-
+  const { oldPath, newPath, live, json } = parseArgs(argv)
   if (!oldPath || !newPath) {
     console.error('usage: node scripts/schema-diff.mjs <old.sql> <new.sql> [--live <dump.sql>] [--json]')
     process.exit(2)
   }
-
   const r = diffSchemas(
     readFileSync(oldPath, 'utf8'),
     readFileSync(newPath, 'utf8'),
     live ? readFileSync(live, 'utf8') : null
   )
-
-  if (json) {
-    console.log(JSON.stringify(r, null, 2))
-  } else {
-    console.log(`tables dropped: ${r.droppedTables.join(', ') || '(none)'}`)
-    console.log(`tables added:   ${r.addedTables.join(', ') || '(none)'}`)
-    console.log(`\ncolumn differences (${r.columns.length}):`)
-    for (const c of r.columns) {
-      if (c.kind === 'added') console.log(`  + ${c.table}.${c.column}  (${c.after})`)
-      else if (c.kind === 'removed') console.log(`  - ${c.table}.${c.column}  (was ${c.before})`)
-      else console.log(`  ~ ${c.table}.${c.column}  ${c.before}  →  ${c.after}`)
-    }
-    console.log(`\nrestore blockers (${r.blockers.length}):`)
-    for (const b of r.blockers) console.log(`  ✗ ${b.table}.${b.column} — ${b.reason}`)
-    if (!r.blockers.length) console.log('  ✓ none — a data-only restore should load cleanly')
-  }
-
+  if (json) console.log(JSON.stringify(r, null, 2))
+  else report(r)
   process.exit(r.blockers.length ? 1 : 0)
 }
 
