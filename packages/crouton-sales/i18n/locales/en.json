@@ -683,6 +683,36 @@
         "revokeSuccess": "Router unpaired — it will print a new pairing ticket",
         "revokeError": "Could not unpair the router"
       }
+    },
+    "import": {
+      "action": "Import",
+      "title": "Import products",
+      "subtitle": "Paste rows from a spreadsheet. Nothing is saved until you press Import.",
+      "pasteLabel": "Pasted rows",
+      "pasteHint": "Include the header row (Name, Price, Category, Location).",
+      "mappingLabel": "Columns",
+      "mapColumn": "Map column",
+      "willCreateTitle": "Will also be created",
+      "listSeparator": ", ",
+      "statusHeader": "Status",
+      "statusNew": "New",
+      "statusDuplicate": "Already exists",
+      "statusError": "Error",
+      "createAnyway": "Create anyway",
+      "confirm": "Import",
+      "doneTitle": "Import complete",
+      "doneBody": "{created} created, {skipped} skipped, {errors} failed",
+      "failedTitle": "Import failed",
+      "failedBody": "Nothing was saved.",
+      "fieldIgnore": "Ignore",
+      "fieldTitle": "Product name",
+      "fieldPrice": "Price",
+      "fieldCategory": "Category",
+      "fieldLocation": "Location",
+      "fieldDescription": "Description",
+      "fieldActive": "Active",
+      "fieldRequiresRemark": "Requires remark",
+      "fieldRemarkPrompt": "Remark prompt"
     }
   }
 }

@@ -683,6 +683,36 @@
         "revokeSuccess": "Router ontkoppeld — hij print een nieuwe koppelbon",
         "revokeError": "Kon de router niet ontkoppelen"
       }
+    },
+    "import": {
+      "action": "Importeren",
+      "title": "Producten importeren",
+      "subtitle": "Plak rijen uit een spreadsheet. Er wordt niets opgeslagen tot je op Importeren drukt.",
+      "pasteLabel": "Geplakte rijen",
+      "pasteHint": "Neem de kopregel mee (Naam, Prijs, Categorie, Locatie).",
+      "mappingLabel": "Kolommen",
+      "mapColumn": "Kolom koppelen",
+      "willCreateTitle": "Wordt ook aangemaakt",
+      "listSeparator": ", ",
+      "statusHeader": "Status",
+      "statusNew": "Nieuw",
+      "statusDuplicate": "Bestaat al",
+      "statusError": "Fout",
+      "createAnyway": "Toch aanmaken",
+      "confirm": "Importeren",
+      "doneTitle": "Import voltooid",
+      "doneBody": "{created} aangemaakt, {skipped} overgeslagen, {errors} mislukt",
+      "failedTitle": "Import mislukt",
+      "failedBody": "Er is niets opgeslagen.",
+      "fieldIgnore": "Negeren",
+      "fieldTitle": "Productnaam",
+      "fieldPrice": "Prijs",
+      "fieldCategory": "Categorie",
+      "fieldLocation": "Locatie",
+      "fieldDescription": "Omschrijving",
+      "fieldActive": "Actief",
+      "fieldRequiresRemark": "Opmerking vereist",
+      "fieldRemarkPrompt": "Opmerking-prompt"
     }
   }
 }
