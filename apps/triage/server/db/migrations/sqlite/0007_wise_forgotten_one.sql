@@ -1,1 +1,0 @@
-ALTER TABLE `triage_inputs` ADD `accountId` text;

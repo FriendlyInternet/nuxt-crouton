@@ -1,4 +1,12 @@
 export default {
+  // Feature flags — which crouton packages to enable.
+  // crouton-layout is `bundled: true` (default-on), so dropping it from `extends`
+  // and package.json is not enough: without this flag `crouton config` writes the
+  // extends back and the module warns on every build (#1456, the #1454 lesson).
+  features: {
+    layout: false
+  },
+
   collections: [
     { name: 'flows', fieldsFile: './schemas/flow.json' },
     { name: 'inputs', fieldsFile: './schemas/input.json' },
