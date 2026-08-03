@@ -102,7 +102,7 @@ export default defineNuxtConfig({
     // verified Resend domain (messages.friendlyinter.net).
     email: {
       from: 'noreply@messages.friendlyinter.net',
-      fromName: 'Fanfare'
+      fromName: 'Kassa'
     }
   },
 
