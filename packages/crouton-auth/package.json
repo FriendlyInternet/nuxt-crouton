@@ -43,6 +43,10 @@
       "import": "./server/utils/scoped-access.ts",
       "types": "./server/utils/scoped-access.ts"
     },
+    "./server/utils/pairing-code": {
+      "import": "./server/utils/pairing-code.ts",
+      "types": "./server/utils/pairing-code.ts"
+    },
     "./server/utils/auth": {
       "import": "./server/utils/auth.ts",
       "types": "./server/utils/auth.ts"

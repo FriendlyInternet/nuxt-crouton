@@ -485,8 +485,13 @@ export async function extendScopedToken(
  * PINs are low-entropy, so the hash is NOT the security boundary here —
  * the per-grant lockout in verifyAndRedeemGrant is. SHA-256 keeps this
  * cheap on Workers; the salt only prevents trivial cross-grant comparison.
+ *
+ * Exported for sibling grant modules (e.g. pairing-code.ts) that need the same
+ * hashing/lockout primitives. Not part of the package's public API — consumers
+ * use upsertScopedGrant / verifyAndRedeemGrant instead.
+ * @internal
  */
-async function hashGrantSecret(secret: string, saltHex?: string): Promise<string> {
+export async function hashGrantSecret(secret: string, saltHex?: string): Promise<string> {
   const salt = saltHex ?? Array.from(crypto.getRandomValues(new Uint8Array(16)))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('')
@@ -498,20 +503,32 @@ async function hashGrantSecret(secret: string, saltHex?: string): Promise<string
   return `${salt}:${hash}`
 }
 
-async function verifyGrantSecret(secret: string, stored: string): Promise<boolean> {
+/**
+ * Exported for sibling grant modules — see hashGrantSecret.
+ * @internal
+ */
+export async function verifyGrantSecret(secret: string, stored: string): Promise<boolean> {
   const [salt] = stored.split(':')
   if (!salt) return false
   return (await hashGrantSecret(secret, salt)) === stored
 }
 
-/** Lockout policy: after this many consecutive failures, redemption locks */
-const GRANT_LOCKOUT_THRESHOLD = 5
+/**
+ * Lockout policy: after this many consecutive failures, redemption locks.
+ * Exported for sibling grant modules — see hashGrantSecret.
+ * @internal
+ */
+export const GRANT_LOCKOUT_THRESHOLD = 5
 /** Base lockout duration; doubles with each failure past the threshold */
 const GRANT_LOCKOUT_BASE_MS = 60 * 1000
 /** Lockout never exceeds this */
 const GRANT_LOCKOUT_MAX_MS = 60 * 60 * 1000
 
-function lockoutDuration(failedAttempts: number): number {
+/**
+ * Exported for sibling grant modules — see hashGrantSecret.
+ * @internal
+ */
+export function lockoutDuration(failedAttempts: number): number {
   const past = failedAttempts - GRANT_LOCKOUT_THRESHOLD
   return Math.min(GRANT_LOCKOUT_BASE_MS * 2 ** Math.max(past, 0), GRANT_LOCKOUT_MAX_MS)
 }
