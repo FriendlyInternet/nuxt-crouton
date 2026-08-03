@@ -193,16 +193,26 @@ const loginSubmitButton = computed(() => ({
   block: true
 }))
 
-// Prefill credentials from a shared link (e.g. /auth/login?email=…&password=…)
-// when the login form mounts. Fills the fields only — the user still clicks
-// Sign in (we never auto-submit). Re-applies if the form remounts (e.g. magic-
-// link toggle) while still in login mode.
+// Prefill credentials from a shared link (e.g. /auth/login?email=…&password=…).
+// Fills the fields only — the user still clicks Sign in (we never auto-submit).
+//
+// This watches the form ref AND the prefill values, `immediate` + `flush: 'post'`
+// (#1153): UAuthForm builds its own `state`, so the values can only be written
+// once that object exists. The old one-shot `watch(loginFormRef)` fired exactly
+// once — before `form.state` was ready it early-returned forever, and a prefill
+// arriving after mount (in-app nav → the router plugin opens the modal on an
+// already-mounted form) was never applied. Watching both sources means whichever
+// lands last still fills the form.
 const loginFormRef = useTemplateRef('loginForm')
-watch(loginFormRef, (form) => {
-  if (!form?.state) return
-  if (state.value.prefillEmail) form.state.email = state.value.prefillEmail
-  if (state.value.prefillPassword) form.state.password = state.value.prefillPassword
-})
+watch(
+  [loginFormRef, () => state.value.prefillEmail, () => state.value.prefillPassword],
+  ([form, email, password]) => {
+    if (!form?.state) return
+    if (email) form.state.email = email
+    if (password) form.state.password = password
+  },
+  { immediate: true, flush: 'post' }
+)
 
 async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: string, rememberMe?: boolean }>) {
   formError.value = null
@@ -211,6 +221,16 @@ async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: 
   if (showMagicLink.value) {
     await handleMagicLink(event.data.email)
     submitting.value = false
+    return
+  }
+
+  // The login UAuthForm carries no `:schema`, so `required` on the fields is
+  // cosmetic — an empty submit would reach the server and surface the raw Zod
+  // error (`[body.email] Invalid input: expected string, received undefined`).
+  // Answer it here instead (#1153).
+  if (!event.data.email || !event.data.password) {
+    submitting.value = false
+    formError.value = t('auth.credentialsRequired', 'Enter your email and password')
     return
   }
 
