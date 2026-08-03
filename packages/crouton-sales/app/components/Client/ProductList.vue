@@ -101,7 +101,7 @@
           <UFieldGroup v-else-if="quantityOf(product) > 0" size="md">
             <UButton
               icon="i-lucide-minus"
-              color="neutral"
+              color="error"
               variant="soft"
               square
               :aria-label="t('sales.cart.remove', 'Remove one')"
@@ -112,21 +112,26 @@
             </UBadge>
             <UButton
               icon="i-lucide-plus"
-              color="neutral"
+              color="success"
               variant="soft"
               square
               :aria-label="t('sales.cart.add', 'Add one')"
               @click.stop="addProduct(product)"
             />
           </UFieldGroup>
-          <!-- Plain product not yet in the cart: single add button. -->
+          <!-- Plain product not yet in the cart: single add button. Success, not
+               primary — it's the qty-0 face of the stepper above, and a `+` that
+               changed colour the moment you tapped it would read as two different
+               controls (#1733). `soft` for the same reason: it carries the same
+               tinted chip as the stepper it turns into, and as every other add
+               button in the panel below. -->
           <UButton
             v-else
-            variant="ghost"
-            color="primary"
+            variant="soft"
+            color="success"
             size="md"
             square
-            class="active:scale-90 transition-[transform,background-color] group-hover/card:bg-primary/10 hover:bg-primary/20"
+            class="active:scale-90 transition-transform"
             :aria-label="t('sales.cart.add', 'Add one')"
             @click.stop="addProduct(product)"
           >
@@ -170,7 +175,7 @@
               <UFieldGroup size="sm">
                 <UButton
                   icon="i-lucide-minus"
-                  color="neutral"
+                  color="error"
                   variant="soft"
                   square
                   :aria-label="t('sales.cart.remove')"
@@ -181,7 +186,7 @@
                 </UBadge>
                 <UButton
                   icon="i-lucide-plus"
-                  color="neutral"
+                  color="success"
                   variant="soft"
                   square
                   :aria-label="t('sales.cart.add')"
@@ -248,7 +253,7 @@
                 <UFieldGroup v-if="lineForOption(product, option.id)" size="sm">
                   <UButton
                     icon="i-lucide-minus"
-                    color="neutral"
+                    color="error"
                     variant="soft"
                     square
                     :aria-label="t('sales.cart.remove')"
@@ -261,7 +266,7 @@
                   </UBadge>
                   <UButton
                     icon="i-lucide-plus"
-                    color="neutral"
+                    color="success"
                     variant="soft"
                     square
                     :aria-label="t('sales.cart.add')"
@@ -271,7 +276,7 @@
                 <UButton
                   v-else
                   size="sm"
-                  color="primary"
+                  color="success"
                   variant="soft"
                   square
                   icon="i-lucide-plus"
@@ -324,7 +329,7 @@
             <UFieldGroup v-if="activePendingLine" size="lg">
               <UButton
                 icon="i-lucide-minus"
-                color="neutral"
+                color="error"
                 variant="soft"
                 square
                 :aria-label="t('sales.cart.remove', 'Remove one')"
@@ -335,7 +340,7 @@
               </UBadge>
               <UButton
                 icon="i-lucide-plus"
-                color="neutral"
+                color="success"
                 variant="soft"
                 square
                 :aria-label="t('sales.cart.add', 'Add one')"
@@ -345,7 +350,7 @@
             <UButton
               v-else
               size="lg"
-              color="primary"
+              color="success"
               square
               icon="i-lucide-plus"
               class="active:scale-90 transition-transform"
