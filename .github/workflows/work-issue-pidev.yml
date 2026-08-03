@@ -256,7 +256,10 @@ jobs:
           # runs `true` as its own pipeline, clobbering PIPESTATUS[0] to 0 and masking the
           # failure as success. Verified empirically, #1299.)
           set +e
-          pi --print --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
+          # --approve: trust the project so pi loads the lean .pi/settings.json CI profile AND the
+          # .pi/extensions/ completion-enforcer (#1782/#1764). Without it the untrusted runner path
+          # silently falls back to the global 28-extension profile (incl pi-ask-user) + ~2min startup.
+          pi --print --approve --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
