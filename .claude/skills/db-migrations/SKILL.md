@@ -41,7 +41,8 @@ schema.ts (app layer OR package)            ← Drizzle table definitions
 Measured on a cold scaffold (#1457): `crouton config` 0.8s, `pnpm db:generate` 1.8s,
 `pnpm dev` boots in ~6s. No `nuxt build`, so the build-first gotcha below cannot occur.
 
-**Legacy (bundled `.mjs`) — still live on `apps/triage` until #1456.** This is the
+**Legacy (bundled `.mjs`) — no app in this repo is on it any more (#1456 was the last).**
+Kept because an EXTERNAL consumer on an older scaffold still hits it. This is the
 world the build-first recipe further down exists for:
 
 ```
@@ -126,7 +127,7 @@ produce the migration in the same run — it prints
 and exits 0. That is the designed soft-defer (`reason: 'deferred'`, see
 `packages/crouton-cli/CLAUDE.md`), not a failure. Run `db:generate` and carry on.
 
-### The build-first gotcha — LEGACY apps only (`apps/triage` until #1456)
+### The build-first gotcha — LEGACY scaffolds only (no app in this repo, since #1456)
 
 Applies **only** where `drizzle.config.ts` still points at the bundled `.mjs`.
 `pnpm --filter <app> db:generate` reads `.nuxt/hub/db/schema.mjs`. On a freshly
