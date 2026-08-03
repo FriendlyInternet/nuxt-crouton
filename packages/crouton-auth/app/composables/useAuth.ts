@@ -96,36 +96,13 @@ export function useAuth() {
   // Get reactive session from useSession composable
   const { user: sessionUser, isAuthenticated, isPending, error: sessionError, refresh, clear, activeOrganization } = useSession()
 
-  /**
-   * Refresh session with retry for activeOrganization
-   *
-   * When auto-creating workspaces or using default teams, the database hook sets
-   * activeOrganizationId AFTER the session response is sent. This causes a timing
-   * issue where the initial refresh doesn't include the org. We retry after a delay
-   * to allow the hook to complete and the session to be updated in the database.
-   */
-  async function refreshWithOrgRetry(maxRetries = 3, delayMs = 200): Promise<void> {
-    await refresh()
-
-    // Only retry if auto-creating workspaces or using default team
-    const hasAutoSetup = config?.teams?.autoCreateOnSignup || config?.teams?.defaultTeamSlug
-    if (!hasAutoSetup) {
-      return
-    }
-
-    // If no activeOrg after initial refresh, retry with delays
-    for (let i = 0; i < maxRetries && !activeOrganization.value; i++) {
-      if (debug) {
-        console.log(`[@crouton/auth] refreshWithOrgRetry: attempt ${i + 1}/${maxRetries}, waiting ${delayMs}ms`)
-      }
-      await new Promise(resolve => setTimeout(resolve, delayMs))
-      await refresh()
-    }
-
-    if (debug && !activeOrganization.value) {
-      console.warn('[@crouton/auth] refreshWithOrgRetry: activeOrganization still null after retries')
-    }
-  }
+  // NOTE (#1712): a `refreshWithOrgRetry` wrapper used to sit here — it called
+  // refresh(), then slept and retried up to 3× waiting for activeOrganizationId
+  // to appear. It existed because the old `session.create.after` hook wrote the
+  // org AFTER the session response was already sent, so the first refresh
+  // genuinely couldn't see it. #1703 moved that to `session.create.before`, so
+  // the org is present before the session cookie is even written and there is
+  // nothing left to wait for. Call sites now use plain refresh().
 
   if (debug) {
     console.log('[@crouton/auth] useAuth: initialized', {
@@ -208,11 +185,11 @@ export function useAuth() {
       }
 
       if (debug) {
-        console.log('[@crouton/auth] login: calling refreshWithOrgRetry to update session state')
+        console.log('[@crouton/auth] login: refreshing session state')
       }
 
-      // Refresh session with retry to handle async org assignment
-      await refreshWithOrgRetry()
+      // Pull the new session into shared state (the server already set its org)
+      await refresh()
 
       if (debug) {
         console.log('[@crouton/auth] login: after refresh', {
@@ -320,11 +297,11 @@ export function useAuth() {
       }
 
       if (debug) {
-        console.log('[@crouton/auth] register: calling refreshWithOrgRetry to update session state')
+        console.log('[@crouton/auth] register: refreshing session state')
       }
 
-      // Refresh session with retry to handle async org assignment
-      await refreshWithOrgRetry()
+      // Pull the new session into shared state (the server already set its org)
+      await refresh()
 
       if (debug) {
         console.log('[@crouton/auth] register: after refresh', {
