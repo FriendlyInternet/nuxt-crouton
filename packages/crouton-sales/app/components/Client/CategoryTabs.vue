@@ -61,12 +61,14 @@
       <span v-else class="truncate">{{ withCount(cat.title, counts?.[cat.id] || 0) }}</span>
 
       <!-- Delete (rename mode only): two-step — first tap arms, second deletes.
-           mousedown.prevent keeps the input focused so the click lands. -->
+           The `tab-delete-btn` class is load-bearing, not styling: onClickOutside
+           IGNORES it (see below). mousedown.prevent additionally keeps the input
+           focused so the caret doesn't jump between the two taps. -->
       <span
         v-if="editingId === cat.id"
         role="button"
-        :aria-label="confirmDeleteId === cat.id ? t('sales.common.remove') : t('common.delete')"
-        class="inline-flex items-center justify-center size-6 rounded-full shrink-0 active:scale-95 transition-all"
+        :aria-label="confirmDeleteId === cat.id ? t('sales.common.confirmDelete') : t('common.delete')"
+        class="tab-delete-btn inline-flex items-center justify-center size-6 rounded-full shrink-0 active:scale-95 transition-all"
         :class="confirmDeleteId === cat.id ? 'bg-error text-inverted' : 'bg-black/15 hover:bg-black/30'"
         @mousedown.stop.prevent
         @click.stop="onDeleteClick(cat.id)"
@@ -216,6 +218,9 @@ function startEdit(categoryId: string) {
   if (!cat) return
   editingId.value = categoryId
   editingTitle.value = cat.title
+  // Never inherit a previous session's armed confirm — rename mode always opens
+  // on the trash, so the destructive second tap is always a deliberate one (#1728).
+  confirmDeleteId.value = null
 }
 
 // Template refs double as autofocus + click-outside anchors. Blur alone can't
@@ -237,10 +242,20 @@ function setDraftInput(el: unknown) {
   draftInputEl.value = input
 }
 
-onClickOutside(editInputEl, commitEdit)
+// `ignore` is REQUIRED for the delete button, not a nicety (#1728). VueUse registers
+// this handler as a CAPTURE-phase `click` listener on window, so without the ignore it
+// runs BEFORE the button's own bubble-phase handler: commitEdit would clear `editingId`
+// + `confirmDeleteId`, Vue would unmount the button, and the delete that finally ran in
+// the bubble phase would see a cleared flag and merely re-arm — so the category could
+// never be deleted, and the stale armed flag made the next rename open on a check icon.
+// The button's `@mousedown.stop.prevent` cannot help: wrong event, wrong phase.
+onClickOutside(editInputEl, commitEdit, { ignore: ['.tab-delete-btn'] })
 onClickOutside(draftInputEl, commitCreate)
 
 function commitEdit() {
+  // Clear the armed confirm FIRST: the early return below used to leave it set, so a
+  // half-finished delete leaked into the next rename as a pre-armed check icon (#1728).
+  confirmDeleteId.value = null
   // Blur fires after enter — the first commit clears editingId, so bail.
   if (!editingId.value) return
   const id = editingId.value

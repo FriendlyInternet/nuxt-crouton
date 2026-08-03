@@ -401,7 +401,8 @@ before-redeem hook re-syncs the new one into the grant); a manual **"Log out all
 the requeue-failed-jobs button (`printqueues/retry-failed`), which also refreshes the LEDs.
 Printer rows keep the POS slide-out hover affordances (pencil right; drag grip left when
 `orderField` is set). The Categories and Locations cards were **removed** — categories are
-edited inline in the kassa (create/rename/reorder; delete via the team-level categories page),
+edited inline in the kassa (create/rename/reorder, plus a two-step delete inside rename mode —
+the team-level categories page remains the fuller form),
 locations via their team-level admin page; SettingsTab still queries `salesLocations` only for
 the printer subtitles. Each printer row carries an **online LED** derived from its **most recent
 print job** (slim `printqueues/status` endpoint, latest by `completedAt ?? createdAt`): green =
