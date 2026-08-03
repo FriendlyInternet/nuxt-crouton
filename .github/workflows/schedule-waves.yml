@@ -16,15 +16,31 @@ name: Wave scheduler
 # bot-actor guard via its `allowed_bots` allow-list (see decompose-on-issue.yml). Retires the human
 # PAT. Needs Actions secrets HARNESS_APP_ID + HARNESS_APP_PRIVATE_KEY, and the App granted Issues: write.
 
+# GREEN-BRANCH GATE (#1688): "blocker closed" is not the same as "the blocker works". On
+# epic #1652, #1655 merged a DELIBERATELY failing test contract (correct — that is the
+# test-first gate) and the run that writes the implementation then died on a provider quota.
+# #1655 closed, wave 2 released, and the epic branch carried 35 red tests and a throwing
+# parser for ~an hour. So a release now also checks the epic branch is not red.
+#
+# It must never STRAND a wave, so: only an outright `failure` holds (pending/unknown still
+# release — see scripts/wave-gate.mjs), and the `workflow_run` trigger below re-runs the scan
+# when CI finishes on an `epic/*` branch, releasing anything that was held. A held wave
+# therefore resolves itself with no human action.
+
 on:
   issues:
     types: [closed]
   pull_request:
     types: [closed]
+  # Retry path: CI finishing on an epic branch is what un-holds a wave held above.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
 
 permissions:
   contents: read
   issues: read
+  checks: read
 
 jobs:
   release:
@@ -41,12 +57,106 @@ jobs:
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+      # Needed so the script can `require` the unit-tested gate decision (scripts/wave-gate.mjs).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: actions/github-script@v7
         with:
           # All calls use the App token so the addLabels event is actored as nuxt-harness[bot].
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { owner, repo } = context.repo
+            const gate = await import(`${process.env.GITHUB_WORKSPACE}/scripts/wave-gate.mjs`)
+
+            /** Collapse an epic branch's CI into success | failure | pending | unknown. */
+            async function branchStatus(ref) {
+              if (!ref) return 'unknown'
+              try {
+                const runs = await github.paginate(github.rest.checks.listForRef,
+                  { owner, repo, ref, per_page: 100 })
+                return gate.summarizeChecks(runs)
+              } catch (e) {
+                // Never let a status lookup stall the chain — an unreadable ref is `unknown`,
+                // which releases.
+                core.warning(`check lookup failed for ${ref}: ${e.message}`)
+                return 'unknown'
+              }
+            }
+
+            /** The `epic/*` branch a closed issue's PR landed on, or null. */
+            async function epicBranchOf(issue_number) {
+              try {
+                const tl = await github.paginate(github.rest.issues.listEventsForTimeline,
+                  { owner, repo, issue_number, per_page: 100 })
+                const prs = [...new Set(tl
+                  .filter(e => e.event === 'cross-referenced' && e.source?.issue?.pull_request)
+                  .map(e => e.source.issue.number))]
+                for (const n of prs) {
+                  const pr = (await github.rest.pulls.get({ owner, repo, pull_number: n })).data
+                  if (pr.merged_at && /^epic\//.test(pr.base.ref)) return pr.base.ref
+                }
+              } catch (e) { core.warning(`epic-branch lookup failed for #${issue_number}: ${e.message}`) }
+              return null
+            }
+
+            /**
+             * Release every open dependent whose blockers are all closed — gated on its epic
+             * branch not being red. Shared by the issues-closed path and the CI-green retry.
+             */
+            async function releaseReady({ onlyBlockedBy = null, branch = null } = {}) {
+              const q = `repo:${owner}/${repo} is:issue is:open in:body "Blocked-by:"`
+              const found = await github.paginate(github.rest.search.issuesAndPullRequests, { q, per_page: 100 })
+
+              for (const it of found) {
+                const blockers = gate.parseBlockers(it.body)
+                if (!blockers.length) continue
+                if (onlyBlockedBy && !blockers.includes(onlyBlockedBy)) continue
+
+                const blockerStates = []
+                for (const b of blockers) {
+                  const bi = await github.rest.issues.get({ owner, repo, issue_number: b })
+                  blockerStates.push(bi.data.state)
+                }
+
+                // Which branch does this work land on? On the retry path we already know.
+                const ref = branch ?? await epicBranchOf(blockers[blockers.length - 1])
+                const status = ref ? await branchStatus(ref) : 'unknown'
+
+                const decision = gate.shouldRelease({ blockerStates, labels: it.labels, branchStatus: status })
+                if (!decision.release) {
+                  core.info(`#${it.number}: ${decision.reason}`)
+                  if (decision.reason === 'branch-red') {
+                    const comments = await github.paginate(github.rest.issues.listComments,
+                      { owner, repo, issue_number: it.number, per_page: 100 })
+                    if (!comments.some(c => (c.body || '').includes(gate.HOLD_MARKER))) {
+                      await github.rest.issues.createComment({ owner, repo, issue_number: it.number,
+                        body: gate.formatHoldComment({ issueNumber: it.number, branch: ref, doneNumber: onlyBlockedBy ?? blockers[blockers.length - 1] }) })
+                    }
+                  }
+                  continue
+                }
+
+                await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: ['delegate'] })
+                await github.rest.issues.createComment({ owner, repo, issue_number: it.number,
+                  body: gate.formatReleaseComment({ doneNumber: onlyBlockedBy ?? blockers[blockers.length - 1], branchStatus: status }) })
+                core.info(`Released #${it.number} (${decision.reason})`)
+              }
+            }
+
+            // CI finished on an epic branch → re-scan, releasing anything held for a red branch.
+            if (context.eventName === 'workflow_run') {
+              const wr = context.payload.workflow_run
+              if (!/^epic\//.test(wr.head_branch || '')) {
+                core.info(`CI finished on '${wr.head_branch}' (not an epic branch) — nothing to retry.`); return
+              }
+              if (wr.conclusion !== 'success') {
+                core.info(`CI on ${wr.head_branch} concluded '${wr.conclusion}' — still not releasable.`); return
+              }
+              core.info(`CI green on ${wr.head_branch} — retrying held waves.`)
+              await releaseReady({ branch: wr.head_branch })
+              return
+            }
 
             // 1) What just completed?
             // On a merged PR: sub-PRs merge into the EPIC branch, so GitHub does NOT
@@ -96,35 +206,7 @@ jobs:
             if (!done) return
             core.info(`Completed workstream: #${done}`)
 
-            // 2) Candidate dependents: open issues with a Blocked-by line.
-            const q = `repo:${owner}/${repo} is:issue is:open in:body "Blocked-by:"`
-            const found = await github.paginate(github.rest.search.issuesAndPullRequests, { q, per_page: 100 })
-            const reLine = /Blocked-by:\s*([#\d,\s]+)/i
-
-            for (const it of found) {
-              const mm = (it.body || '').match(reLine)
-              if (!mm) continue
-              const blockers = [...new Set((mm[1].match(/\d+/g) || []).map(Number))]
-              if (!blockers.includes(done)) continue
-
-              // Idempotency: already dispatched / in-flight?
-              const names = it.labels.map(l => (typeof l === 'string' ? l : l.name))
-              if (names.includes('delegate') || names.includes('status:in-progress')) {
-                core.info(`#${it.number} already dispatched — skip.`); continue
-              }
-
-              // 3) Fan-in: ALL blockers closed?
-              let allClosed = true
-              for (const b of blockers) {
-                const bi = await github.rest.issues.get({ owner, repo, issue_number: b })
-                if (bi.data.state !== 'closed') { allClosed = false; break }
-              }
-              if (!allClosed) { core.info(`#${it.number} still has open blockers — wait.`); continue }
-
-              // 4) Release: apply `delegate` (as the PAT user → human-actor trigger).
-              await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: ['delegate'] })
-              await github.rest.issues.createComment({ owner, repo, issue_number: it.number,
-                body: `🟢 **Unblocked — starting this workstream now.** Its last blocker (#${done}) just closed.\n\n`
-                  + `<sub>🤖 wave scheduler (#283) · applied \`delegate\`</sub>` })
-              core.info(`Released #${it.number}`)
-            }
+            // 2–4) Candidate dependents blocked by THIS issue: fan-in (all blockers closed),
+            // idempotency (not already dispatched) and the green-branch gate all live in
+            // releaseReady() above, shared with the CI-green retry path.
+            await releaseReady({ onlyBlockedBy: done })
