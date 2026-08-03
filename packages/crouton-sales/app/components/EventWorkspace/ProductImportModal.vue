@@ -157,10 +157,14 @@ const summaryOf = (r: ImportResult) =>
 /**
  * Surface the server's own reason when it gave one — "nothing was saved" alone leaves
  * the user guessing whether to retry or fix the paste.
+ *
+ * Truthiness, not `??`: an unhandled 500 carries an EMPTY `statusMessage`, which nullish
+ * coalescing happily returns — the #1707 import failure showed as a bare "Import mislukt —"
+ * with no reason at all, hiding the one clue the user had.
  */
 function reasonOf(e: unknown): string {
   const err = (e ?? {}) as { statusMessage?: string, message?: string }
-  return err.statusMessage ?? err.message ?? t('sales.import.failedBody', 'Nothing was saved.')
+  return err.statusMessage || err.message || t('sales.import.failedBody', 'Nothing was saved.')
 }
 
 /**
