@@ -112,26 +112,6 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      # ── BOT-ACTOR GUARD (#1004 piece 2) — re-expresses claude-code-action's `allowed_bots` ──
-      # The claude flow passes `allowed_bots: "nuxt-harness[bot]"`; pi has no such built-in, so we
-      # assert it ourselves as the FIRST step (fail fast, before minting any token). DORMANT under
-      # `workflow_dispatch` — the actor is the human dispatcher, so the `if` skips it. It ARMS the
-      # moment this flow is promoted to an `issues: labeled` trigger: only the Harness App's
-      # label-add (`nuxt-harness[bot]`) may drive the pipeline; any OTHER bot actor — e.g.
-      # `claude[bot]`/`github-actions[bot]` re-firing from a worker's own `status:in-progress`
-      # label change — is rejected here, breaking the bot re-fire loop (#457/#535). Humans pass.
-      - name: Bot-actor guard
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        env:
-          ACTOR: ${{ github.actor }}
-        run: |
-          ALLOWED="nuxt-harness[bot]"
-          if [[ "$ACTOR" == *"[bot]" && "$ACTOR" != "$ALLOWED" ]]; then
-            echo "::error::Bot-actor guard: '$ACTOR' may not drive the pi pipeline (only $ALLOWED). Refusing to run."
-            exit 1
-          fi
-          echo "Bot-actor guard OK (actor: $ACTOR)."
-
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
       # downstream workflows (#572); an App-installation token does.
@@ -146,6 +126,24 @@ jobs:
         with:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
+
+      # ── BOT-ACTOR GUARD (#1004 piece 2) — re-expresses claude-code-action's `allowed_bots` ──
+      # The claude flow passes `allowed_bots: "nuxt-harness[bot]"`; pi has no such built-in, so we
+      # assert it ourselves before pi runs. DORMANT under `workflow_dispatch` — the actor is the
+      # human dispatcher, so the `if` skips it. On the `issues: labeled` path only the Harness App's
+      # label-add (`nuxt-harness[bot]`) may drive the pipeline; any OTHER bot actor — e.g.
+      # `claude[bot]`/`github-actions[bot]` re-firing from a worker's own `status:in-progress`
+      # label change — is rejected here, breaking the bot re-fire loop (#457/#535). Humans pass.
+      # This matters MORE now (#1685 WS3): the decomposer itself applies `delegate-pi`/`work-this`
+      # via the App token, so those cascading label-adds re-enter this flow as `nuxt-harness[bot]` —
+      # allowed — while every other bot actor is still refused. The decision is the pure, unit-tested
+      # `botActorAllowed` (WS4); this step is I/O only, so the SHIPPED guard IS the tested function.
+      # Contract: scripts/pipeline-loop-guard.test.mjs. (After checkout so the script is available.)
+      - name: Bot-actor guard
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        env:
+          ACTOR: ${{ github.actor }}
+        run: node scripts/pipeline-loop-guard.mjs bot-guard "$ACTOR"
 
       - uses: pnpm/action-setup@v4
         with:
@@ -184,6 +182,12 @@ jobs:
           PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-6') || 'claude-sonnet-5' }}
           PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          # WS3 (#1696), approach A — event-driven, label handoff. This flag tells the
+          # task-decomposer to hand each child off by LABELING it via the App token (already in
+          # GH_TOKEN) and STOP — not by spawning an in-process `Agent` tree (which pi-claude-cli
+          # can't drive). The claude flow (`decompose-on-issue.yml`) does NOT set this, so it keeps
+          # the proven in-process spawn. See .claude/agents/task-decomposer.md → "Event-driven mode".
+          PIPELINE_MODE: event-driven
         run: |
           set -uo pipefail
           command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent

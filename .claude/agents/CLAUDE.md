@@ -158,17 +158,25 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   **already hold its result** — read it, confirm the PR/comment actually exists, and only then
   report. If the spawn didn't deliver, you are **not done**: spawn again (and wait), or do the
   work yourself. There is no fire-and-forget.
-- **Hand off by SPAWNING, never by LABELING (the #457 root cause).** To get a child issue
-  worked you **spawn** it with the `Agent` tool (a `task-decomposer` or `task-worker`) in
-  THIS run and wait for its result. **NEVER apply the `delegate` label to a sub-issue to
-  "dispatch" it.** `delegate` is the *human* entry trigger only: applied from inside a run
-  you are `claude[bot]`, so it re-enters `decompose-on-issue.yml` as a **bot actor** → the
-  bot-actor guard rejects that child run → it produces nothing; worse, a sub-issue dispatched
-  that way runs `/task-decompose` on *itself as a fresh epic off `main`*, where the real
-  epic's scaffold doesn't exist. (This is exactly how the #457 deploy stalled: the
-  orchestrator applied `delegate` to #456/#457 instead of spawning workers — both child runs
-  were bot-rejected, no PR, no deploy.) There is no label-based hand-off: spawn the agent, or
-  do the leaf's work yourself in this run.
+- **Hand off by SPAWNING, never by LABELING — UNLESS you are in event-driven mode (#1685 WS3).**
+  In the **default (in-process / claude) mode** you get a child worked by **spawning** it with the
+  `Agent` tool (a `task-decomposer` or `task-worker`) in THIS run and waiting for its result.
+  **NEVER apply the `delegate` label to a sub-issue to "dispatch" it here:** applied from inside a
+  claude run you are `claude[bot]`, so it re-enters `decompose-on-issue.yml` as a **disallowed bot
+  actor** → the bot-actor guard rejects that child run → it produces nothing; worse, a sub-issue
+  dispatched that way runs `/task-decompose` on *itself as a fresh epic off `main`*, where the real
+  epic's scaffold doesn't exist. (This is exactly how the #457 deploy stalled: the orchestrator
+  applied `delegate` to #456/#457 instead of spawning workers — both child runs were bot-rejected,
+  no PR, no deploy.)
+  **The one sanctioned exception — event-driven mode (`PIPELINE_MODE=event-driven`, the pi harness):**
+  pi-claude-cli can't drive an in-process `Agent` tree, so there the decomposer hands off by
+  **labeling** (`work-this` / `delegate-pi`) **via the Harness App token** (`GH_TOKEN`) and STOPS —
+  a fresh single-use run works each child. That path is safe because the App token is actored as
+  `nuxt-harness[bot]` — the **one allowed bot** whose adds cascade and pass the guard — so #457 stays
+  dead for every *other* bot. Labels MUST go through the App-token `gh` (not the MCP tool, which uses
+  the human PAT and won't cascade). The invariants that keep it from looping are the pure, unit-tested
+  `scripts/pipeline-loop-guard.mjs` (bot-actor · exact-label · depth cap) — see `task-decomposer.md`
+  → “Event-driven mode”. Outside that one mode, the rule is unchanged: spawn, or do the leaf yourself.
 - **A directly-dispatched child resolves to its parent's epic branch — never a new epic off
   `main`.** When `/task-decompose` is invoked on an issue that is itself a **sub-issue** (its
   `parent_issue_url` is set / it carries a parent epic), do **NOT** mint a fresh

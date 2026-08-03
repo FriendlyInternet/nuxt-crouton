@@ -27,6 +27,24 @@ If you are handed a free-text task instead of an issue number, STOP — the
 `/task-decompose` skill is responsible for creating the epic first. Ask for the epic
 number.
 
+### Hand-off mode (`PIPELINE_MODE`) — spawn vs label (#1685 WS3)
+
+Run `echo "$PIPELINE_MODE"` (Bash) once at the start. It changes only **how you hand a child
+off** in steps 2 & 8 — the slicing, the epic branch, the foundation checkpoint are identical:
+
+- **Unset / not `event-driven` → IN-PROCESS (default, claude harness):** spawn a `task-decomposer`
+  per child via the `Agent` tool and wait (steps 2 & 8 as written).
+- **`event-driven` → LABEL (pi harness):** pi-claude-cli can't drive an in-process `Agent` tree,
+  so you **do not spawn**. Instead, for each top-level child: write the WS2 pipeline block
+  (`node scripts/pipeline-context.mjs write epic=<epic> depth=1 epic_branch=<branch>` piped through
+  the child body → `gh issue edit <child> --body-file -`), then apply its trigger label **via the
+  App-token `gh`** (`GH_TOKEN` is the Harness App, so the add is `nuxt-harness[bot]`-actored →
+  passes the bot-actor guard and cascades) — `delegate-pi` normally, or `work-this` if the child is
+  already a ready leaf. Then **STOP**; a fresh `decompose-on-issue-pidev` run works each child.
+  Apply labels through `gh`, **never** the `mcp__github__*` tools (human PAT — won't cascade). This
+  is the same reversal `task-decomposer.md` documents; the loop-guards that keep it safe are the
+  unit-tested `scripts/pipeline-loop-guard.mjs`.
+
 ## Step 0 — Package-fit check (reuse before building) (#292)
 
 **Before** you slice the epic (step 4), check whether an existing `@fyit/crouton-*` package
@@ -215,11 +233,15 @@ just what you tell workers and how the approval propagates.
 - Label every issue (exactly one `type:*`, plus the component label). Applying a label
   that doesn't exist errors — stick to the taxonomy in `.github/labels.yml`.
 - Never push code or open PRs yourself.
-- **Never apply the `delegate` label to a child to "dispatch" it.** Hand a child off ONLY by
-  spawning a `task-decomposer`/`task-worker` via the `Agent` tool (steps 2 & 8), synchronously,
-  and verifying its PR/comment exists. Labeling from inside the run is bot-actored → the
-  guard rejects it → nothing happens (and the child runs as its own epic off `main`). This was
-  the #457 deploy stall.
+- **Hand-off mode (`PIPELINE_MODE`).** In the default **in-process** mode, hand a child off ONLY
+  by spawning a `task-decomposer`/`task-worker` via the `Agent` tool (steps 2 & 8), synchronously,
+  and verifying its PR/comment exists — **never** by applying a `delegate`/`work-this` label
+  (labeling from inside a *claude* run is bot-actored → the guard rejects it → nothing happens, and
+  the child runs as its own epic off `main`; the #457 deploy stall). **The one exception is
+  event-driven mode** (`PIPELINE_MODE=event-driven`, the pi harness): there you hand off by
+  **labeling `delegate-pi`/`work-this` via the App-token `gh`** and stopping — safe because the App
+  is `nuxt-harness[bot]`, the one allowed bot (see the mode note above). #457 stays dead for every
+  other bot.
 - If anything is ambiguous about the epic's intent, write your assumption into the
   child issue bodies rather than blocking — the human can correct via the issues.
 

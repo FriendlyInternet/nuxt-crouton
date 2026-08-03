@@ -113,26 +113,6 @@ jobs:
       pull-requests: write
       issues: write
     steps:
-      # ── BOT-ACTOR GUARD (#1004 piece 2) — re-expresses claude-code-action's `allowed_bots` ──
-      # The claude flow passes `allowed_bots: "nuxt-harness[bot]"`; pi has no such built-in, so we
-      # assert it ourselves as the FIRST step (fail fast, before minting any token). DORMANT under
-      # `workflow_dispatch` — the actor is the human dispatcher, so the `if` skips it. It ARMS the
-      # moment this flow is promoted to an `issues: labeled` trigger: only the Harness App's
-      # label-add (`nuxt-harness[bot]`) may drive the pipeline; any OTHER bot actor — e.g.
-      # `claude[bot]`/`github-actions[bot]` re-firing from a worker's own `status:in-progress`
-      # label change — is rejected here, breaking the bot re-fire loop (#457/#535). Humans pass.
-      - name: Bot-actor guard
-        if: ${{ github.event_name != 'workflow_dispatch' }}
-        env:
-          ACTOR: ${{ github.actor }}
-        run: |
-          ALLOWED="nuxt-harness[bot]"
-          if [[ "$ACTOR" == *"[bot]" && "$ACTOR" != "$ALLOWED" ]]; then
-            echo "::error::Bot-actor guard: '$ACTOR' may not drive the pi pipeline (only $ALLOWED). Refusing to run."
-            exit 1
-          fi
-          echo "Bot-actor guard OK (actor: $ACTOR)."
-
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
       # downstream workflows (#572); an App-installation token does.
@@ -147,6 +127,43 @@ jobs:
         with:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
+
+      # ── BOT-ACTOR GUARD (#1004 piece 2) — re-expresses claude-code-action's `allowed_bots` ──
+      # The claude flow passes `allowed_bots: "nuxt-harness[bot]"`; pi has no such built-in, so we
+      # assert it ourselves before pi runs. DORMANT under `workflow_dispatch` — the actor is the
+      # human dispatcher, so the `if` skips it. On the `issues: labeled` path only the Harness App's
+      # label-add (`nuxt-harness[bot]`) may drive the pipeline; any OTHER bot actor — e.g.
+      # `claude[bot]`/`github-actions[bot]` re-firing from a worker's own `status:in-progress`
+      # label change — is rejected here, breaking the bot re-fire loop (#457/#535). Humans pass.
+      # The decision is the pure, unit-tested `botActorAllowed` (WS4 of #1685); this step is I/O
+      # only — so the SHIPPED guard IS the tested function. Contract: scripts/pipeline-loop-guard.test.mjs.
+      # (Placed after checkout so the script is available; the token minted above is unused if we exit.)
+      - name: Bot-actor guard
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        env:
+          ACTOR: ${{ github.actor }}
+        run: node scripts/pipeline-loop-guard.mjs bot-guard "$ACTOR"
+
+      # ── WS2 pipeline context (#1695) — read epic_branch/depth/epic OFF the issue body ──
+      # The single-use worker has no Agent-prompt channel; the parent wrote the context into a
+      # `<!-- pipeline: epic=.. depth=.. epic_branch=.. -->` block on the issue. Fetch the body via
+      # github-script (the API — these self-hosted runners don't guarantee the `gh` CLI at step
+      # level) so it works for BOTH the label trigger and a manual dispatch (where the body isn't in
+      # the event payload), write it to a file, then parse with the tested helper — exposing
+      # epic_branch as a step output so the pi prompt branches deterministically, not by grepping.
+      - name: Fetch issue body
+        id: body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
+            const { data } = await github.rest.issues.get({ ...context.repo, issue_number })
+            require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/issue-body.txt`, data.body || '')
+      - id: ctx
+        run: |
+          EPIC_BRANCH="$(node scripts/pipeline-context.mjs read epic_branch < "$RUNNER_TEMP/issue-body.txt")"
+          echo "epic_branch=${EPIC_BRANCH}" >> "$GITHUB_OUTPUT"
+          echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}'"
 
       - uses: pnpm/action-setup@v4
         with:
@@ -185,6 +202,8 @@ jobs:
           PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-6') || 'claude-sonnet-5' }}
           PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          # WS2 (#1695): the integration branch parsed off the issue's pipeline block (empty → main).
+          EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
         run: |
           set -uo pipefail
           command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
@@ -208,7 +227,15 @@ jobs:
           # SINGLE-USE WORKER (#1686): implement this ONE leaf — no decompose, no sub-issues,
           # no subagents. printf (single-quoted format, %s for ISSUE) — never backticks (they'd
           # command-substitute inside the shell).
-          printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s). If its body has a "pipeline: epic_branch=<name>" line, branch off that integration branch and target the PR there; otherwise branch off main. Make the change, run pnpm typecheck, commit via the /commit skill, and open ONE pull request whose body FIRST line is literally "Closes #%s". Then STOP (never merge). If you are genuinely blocked, hold: post a top-level comment plus add the status:blocked label. Producing no PR and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$ISSUE" >> "$PROMPT_FILE"
+          # The integration branch is parsed OFF the issue's WS2 pipeline block by the `ctx` step
+          # (#1695) and passed in as EPIC_BRANCH — the worker no longer greps the body itself. When
+          # empty, branch off main. printf uses %s for every value (single-quoted format) — never
+          # backticks (they'd command-substitute in the shell).
+          BRANCH_INSTR="branch off main and target the PR at main"
+          if [ -n "${EPIC_BRANCH:-}" ]; then
+            BRANCH_INSTR="branch off the integration branch '${EPIC_BRANCH}' and target the PR THERE (not main)"
+          fi
+          printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s), then %s. Make the change, run pnpm typecheck, commit via the /commit skill, and open ONE pull request whose body FIRST line is literally "Closes #%s". Then STOP (never merge). If you are genuinely blocked, hold: post a top-level comment plus add the status:blocked label. Producing no PR and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$BRANCH_INSTR" "$ISSUE" >> "$PROMPT_FILE"
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
           # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
           # So the instant `pi | tee` fails (pipefail), -e aborts the script BEFORE
