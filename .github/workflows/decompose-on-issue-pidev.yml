@@ -1,16 +1,28 @@
 name: Decompose on issue (pi.dev variant)
 
-# WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A dispatch-only,
-# default-OFF twin of `decompose-on-issue.yml` with ONE thing swapped: the agent
-# step (anthropics/claude-code-action → pi). It exists to prove the code-writing
-# flow can run on pi with the gates intact — it is NOT wired to auto-trigger and
-# cannot run until a funded provider key + `AGENT_HARNESS=pi` are set.
+# WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A twin of
+# `decompose-on-issue.yml` with ONE thing swapped: the agent step
+# (anthropics/claude-code-action → pi). It is LIVE: while `vars.AGENT_HARNESS == 'pi'`
+# (the current setting) THIS flow — not the claude one — works our `delegate` issues.
 #
-# DORMANT BY DESIGN (three locks):
-#   1. `workflow_dispatch` only — never fires on an `issues` event (no auto-trigger).
-#   2. AGENT_HARNESS gate — the job no-ops unless `harness: pi` is chosen or
-#      `vars.AGENT_HARNESS == 'pi'` is set. Default off.
-#   3. No funded key — runs error out until PI_PROVIDER_KEY has credit.
+# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative — if this
+# prose ever disagrees with them, they win and this comment is the thing that's wrong):
+#   • `delegate` label — added after creation, OR already present at creation. Only
+#     while `vars.AGENT_HARNESS == 'pi'`; otherwise `decompose-on-issue.yml` takes it
+#     and this flow yields (#1077 WS7 — one variable flips the harness back).
+#   • `delegate-pi` label — always, regardless of AGENT_HARNESS.
+#   • `delegate-hard` label — always; escalates to the METERED Claude lane (#1496).
+#   • `workflow_dispatch` — an explicit run on any issue number.
+#
+#   ⚠️ ASYMMETRY: only `delegate` has an `action == 'opened'` clause. `delegate-pi` and
+#   `delegate-hard` match `labeled` ONLY — so creating an issue with either one ALREADY
+#   applied fires nothing. Add those two as a separate step after the issue exists.
+#
+# HISTORY — this file was born dormant (dispatch-only, default-OFF, no funded key) and
+# every one of those locks has since been removed. Do NOT reintroduce that framing:
+# superseded by #1017 (`delegate-pi` trigger), #1077 (the AGENT_HARNESS=pi flip), and
+# #1421/#1423 (the funded zai/GLM-5.2 lane). Stale dormancy prose here cost a session
+# once — it reads as authoritative while sitting directly above code that refutes it.
 #
 # WHAT'S DIFFERENT FROM THE CLAUDE FLOW (the WS4 plumbing):
 #   • PUSH PATH (#1004 piece 1, the load-bearing change): unlike the reports-only
@@ -24,11 +36,11 @@ name: Decompose on issue (pi.dev variant)
 #     reads CLAUDE_EXEC_FILE, which pi doesn't emit yet (#1004 piece 3 / WS3) — the
 #     gate degrades to the conclusion-based message, PASS/FAIL is unaffected.
 #
-# WS4 plumbing is now COMPLETE (#1004) — all three pieces present, armed but dormant:
+# WS4 plumbing is now COMPLETE (#1004) — all three pieces present and LIVE:
 #   • Piece 1 — PUSH PATH: the Harness App token (below).
 #   • Piece 2 — BOT-ACTOR GUARD: the first job step (re-expresses claude-code-action's
-#     `allowed_bots`). It no-ops under `workflow_dispatch` and ARMS automatically the
-#     moment this flow is promoted to an `issues: labeled` trigger.
+#     `allowed_bots`). ARMED on every label-triggered run; it still no-ops under
+#     `workflow_dispatch`, where the actor is the human dispatcher.
 #   • Piece 3 — EXEC-LOG ADAPTER: the artifact-gate reads pi's plain-text run log
 #     (`steps.pi.outputs.exec_log`) and classifies the failure cause (billing / error /
 #     underspecified) — parity with the claude flow's structured-log "why".
@@ -36,7 +48,7 @@ name: Decompose on issue (pi.dev variant)
 # TWO LOAD-BEARING pi FACTS (verified on the mac-mini this WS):
 #   • NO TURN-CAP FLAG. `pi --help` exposes only model-cycling "Limit" options, not a
 #     claude-style `--max-turns`. The ONLY cost/safety bound is the job `timeout-minutes`
-#     (30) — do NOT assume a per-turn cap exists.
+#     (45, below) — do NOT assume a per-turn cap exists.
 #   • SINGLE-MODEL. pi runs the whole orchestrator→decomposer→worker pipeline on ONE
 #     `--model`; it cannot reproduce the Claude harness's per-role tiering (#824 — e.g.
 #     planning on Opus). Choose the one model deliberately via the `model` input.
