@@ -94,7 +94,7 @@
           <UFieldGroup v-else-if="quantityOf(product) > 0" size="md">
             <UButton
               icon="i-lucide-minus"
-              color="neutral"
+              color="error"
               variant="soft"
               square
               :aria-label="t('sales.cart.remove', 'Remove one')"
@@ -105,7 +105,7 @@
             </UBadge>
             <UButton
               icon="i-lucide-plus"
-              color="neutral"
+              color="success"
               variant="soft"
               square
               :aria-label="t('sales.cart.add', 'Add one')"
@@ -258,7 +258,7 @@
               <UFieldGroup size="sm">
                 <UButton
                   icon="i-lucide-minus"
-                  color="neutral"
+                  color="error"
                   variant="soft"
                   square
                   :aria-label="t('sales.cart.remove')"
@@ -269,7 +269,7 @@
                 </UBadge>
                 <UButton
                   icon="i-lucide-plus"
-                  color="neutral"
+                  color="success"
                   variant="soft"
                   square
                   :aria-label="t('sales.cart.add')"
