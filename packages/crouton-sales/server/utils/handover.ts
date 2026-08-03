@@ -26,6 +26,33 @@
  * resolve. Keeping it a parameter is what makes this behaviour testable at all.
  */
 
+export type HandoverRequest =
+  | { ok: true, eventId: string, orderId: string }
+  | { ok: false, message: string }
+
+/**
+ * Validate the request before touching the database.
+ *
+ * Pure on purpose: the handler's own branching is what fallow's CRAP score
+ * flags (complexity weighted by lack of coverage), and an endpoint is not unit
+ * tested in this package — the pure helpers are. Parsing here makes the rules
+ * testable AND leaves the handler with a single guard. Same split as
+ * `order-filters.ts` for the orders list.
+ */
+export function readHandoverRequest(input: {
+  eventId: string | undefined
+  body: unknown
+}): HandoverRequest {
+  if (!input.eventId) return { ok: false, message: 'eventId is required' }
+
+  const orderId = (input.body as { orderId?: unknown } | null | undefined)?.orderId
+  if (typeof orderId !== 'string' || !orderId) {
+    return { ok: false, message: 'orderId is required' }
+  }
+
+  return { ok: true, eventId: input.eventId, orderId }
+}
+
 export interface RecordHandoverInput {
   /** The generated `salesHandovers` table, passed by the endpoint. */
   table?: unknown

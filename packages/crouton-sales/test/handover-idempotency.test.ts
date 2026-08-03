@@ -27,7 +27,40 @@
  * handovers and the outstanding count drifts from reality.
  */
 import { describe, it, expect } from 'vitest'
-import { recordHandover } from '../server/utils/handover'
+import { readHandoverRequest, recordHandover } from '../server/utils/handover'
+
+describe('readHandoverRequest', () => {
+  it('accepts a well-formed request', () => {
+    expect(readHandoverRequest({ eventId: 'evt-1', body: { orderId: 'order-1' } }))
+      .toEqual({ ok: true, eventId: 'evt-1', orderId: 'order-1' })
+  })
+
+  it('rejects a missing eventId', () => {
+    expect(readHandoverRequest({ eventId: undefined, body: { orderId: 'order-1' } }))
+      .toEqual({ ok: false, message: 'eventId is required' })
+  })
+
+  it('rejects a missing orderId', () => {
+    expect(readHandoverRequest({ eventId: 'evt-1', body: {} }))
+      .toMatchObject({ ok: false })
+  })
+
+  it('rejects a non-string orderId rather than coercing it', () => {
+    // A number would stringify into a lookup that silently matches nothing.
+    expect(readHandoverRequest({ eventId: 'evt-1', body: { orderId: 42 } }))
+      .toMatchObject({ ok: false })
+  })
+
+  it('rejects an empty-string orderId', () => {
+    expect(readHandoverRequest({ eventId: 'evt-1', body: { orderId: '' } }))
+      .toMatchObject({ ok: false })
+  })
+
+  it('tolerates a missing or null body', () => {
+    expect(readHandoverRequest({ eventId: 'evt-1', body: null })).toMatchObject({ ok: false })
+    expect(readHandoverRequest({ eventId: 'evt-1', body: undefined })).toMatchObject({ ok: false })
+  })
+})
 
 /** A db whose insert behaves however the test needs. */
 function fakeDb(onInsert: (values: any) => any) {

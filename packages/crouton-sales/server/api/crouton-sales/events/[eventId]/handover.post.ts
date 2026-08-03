@@ -27,7 +27,7 @@
 import { and, eq } from 'drizzle-orm'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesHandovers } from '~~/layers/sales/collections/handovers/server/database/schema'
-import { recordHandover } from '../../../../utils/handover'
+import { readHandoverRequest, recordHandover } from '../../../../utils/handover'
 
 /**
  * The order anchors the handover's tenant AND confirms it belongs to this
@@ -48,16 +48,16 @@ async function requireOrderInEvent(db: any, orderId: string, eventId: string) {
 }
 
 export default defineEventHandler(async (event) => {
-  const eventId = getRouterParam(event, 'eventId')
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'eventId is required' })
+  // Request rules live in the pure `readHandoverRequest` so they are unit
+  // tested; the handler keeps one guard.
+  const parsed = readHandoverRequest({
+    eventId: getRouterParam(event, 'eventId'),
+    body: await readBody(event)
+  })
+  if (!parsed.ok) {
+    throw createError({ status: 400, statusText: parsed.message })
   }
-
-  const body = await readBody(event)
-  const orderId = typeof body?.orderId === 'string' ? body.orderId : ''
-  if (!orderId) {
-    throw createError({ status: 400, statusText: 'orderId is required' })
-  }
+  const { eventId, orderId } = parsed
 
   const db = useDB()
   const order = await requireOrderInEvent(db, orderId, eventId)
