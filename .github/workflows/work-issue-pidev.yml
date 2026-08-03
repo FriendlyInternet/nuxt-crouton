@@ -327,10 +327,13 @@ jobs:
             git add -- "$p" 2>/dev/null || echo "::warning::could not stage $p"
           done < "$LEDGER"
 
-          # 4) Commit (if anything staged) with the issue title as the subject.
+          # 4) Commit (if anything staged) on a work-<issue> branch — NEVER on the epic branch
+          #    itself (pi checks out epic/<NN>, so a bare commit there means head==base and no PR
+          #    can open — the #1764 "no commits ahead of epic on epic" failure). checkout -B keeps
+          #    the staged changes since the work branch starts at the current (epic) HEAD.
           if ! git diff --cached --quiet; then
             BR="$(git branch --show-current)"
-            if [ -z "$BR" ] || [ "$BR" = "main" ]; then BR="work-${ISSUE}"; git checkout -b "$BR"; fi
+            case "$BR" in work-*) : ;; *) BR="work-${ISSUE}"; git checkout -B "$BR" ;; esac
             TITLE="$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null)"
             [ -z "$TITLE" ] && TITLE="chore: implement #${ISSUE}"
             git commit -q -m "$TITLE" -m "🤖 Committed by the pi worker from pi's edited-file ledger (Pattern B, #1764/#1782). Refs #${ISSUE}"
