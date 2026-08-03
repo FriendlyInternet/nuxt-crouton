@@ -113,49 +113,34 @@ Spawn one `task-worker` via the `Agent` tool:
 
 Report: "issue #N is leaf-sized (or at depth cap) → worker spawned in worktree". Stop.
 
-## Event-driven mode (`PIPELINE_MODE=event-driven`) — LABEL, don't spawn (#1685 WS3)
+## Event-driven mode (`PIPELINE_MODE=event-driven`) — pi PLANS, code APPLIES (#1685 WS3 / #1696)
 
-When `PIPELINE_MODE` is `event-driven`, **replace Steps 3 and 4** with the label hand-off below.
-Everything else — Step 1 (read), Step 2 (LEAF TEST), the caps — is unchanged. You **never** call
-the `Agent` tool in this mode; a fresh workflow run works each child.
+When `PIPELINE_MODE` is `event-driven` (the **pi** harness), the mechanism is **not** this agent
+calling the `Agent` tool or `gh` — it is driven by **`decompose-on-issue-pidev.yml`**, and your job
+shrinks to **pure reasoning + writing a plan file**. This is deliberate: pi cannot drive an
+in-process `Agent` tree (it no-op'd, #1381/#1706), *and* pi hand-building `gh issue create` with rich
+bodies breaks on shell quoting (`$(cat <<EOF)`, #1001) and then fabricates success. So:
 
-**The load-bearing rule: apply labels with the App-token `gh`, NOT the MCP GitHub tool.**
-The workflow put the Harness App token in `GH_TOKEN`. A label applied via `gh issue edit … --add-label`
-is actored as **`nuxt-harness[bot]`** — the one allowed bot — so the downstream run passes the
-bot-actor guard **and** the add *cascades* (re-triggers the workflow). A label applied via the
-`mcp__github__*` tools uses the human PAT: it may not cascade the trigger and muddies provenance.
-So: **labels → `Bash` + `gh` (App token); issue bodies/creates → either, but the WS2 block must be present.**
+- **You do NOT spawn, and you do NOT run any `gh`/`git`/issue-mutating command.**
+- **Read** the target issue and apply the **LEAF TEST** (Step 2) — reading (`gh issue view`) is fine.
+- **Write `decompose-plan.json`** in the working directory (use your file-writing tool, *not* a shell
+  heredoc), as JSON:
+  - leaf → `{ "leaf": true }`
+  - split → `{ "leaf": false, "children": [ { "title", "body" (markdown, no pipeline block / no
+    Dedup line — the apply step adds them), "labels": ["type:*","<component>"], "needsSplit": <bool> } … ] }`
+    — 2–6 children, `needsSplit:true` for a child that itself needs further decomposition.
+- Then **STOP**. Writing a correct `decompose-plan.json` is the entire deliverable.
 
-Read `depth` from the issue's WS2 block first (`gh issue view <this> --json body -q .body | node scripts/pipeline-context.mjs read`);
-treat a missing `depth` as 0.
+The deterministic **apply step** (`scripts/apply-decompose-plan.mjs`) turns the plan into real
+issues — resolve/create the epic branch, inject the WS2 block at `depth+1`, sanitize labels against
+`.github/labels.yml`, `gh issue create --body-file` (execFile array-args → no shell-quoting bug),
+link via the sub-issues API, and label each `work-this` (leaf) / `delegate-pi` (needs-split) via the
+App token so it cascades. The depth cap (`labelForChild` in `scripts/pipeline-loop-guard.mjs`) forces
+`work-this` at `MAX_DEPTH`, so a `delegate-pi` chain always terminates. Because **code** creates the
+issues, there is nothing for pi to fabricate — they exist or the step fails loudly.
 
-**If this issue is a leaf (or `depth >= MAX_DEPTH`):**
-1. Ensure its body carries the WS2 block (epic, this depth, epic_branch) — upsert with
-   `node scripts/pipeline-context.mjs write epic=<e> depth=<d> epic_branch=<b>` piped through the body,
-   then `gh issue edit <this> --body-file -`.
-2. `gh issue edit <this> --add-label work-this` (App token). The single-use `work-issue-pidev`
-   worker picks it up and opens the PR. **Do not** also add `status:in-progress` — the worker
-   manages its own status, and an extra label here is noise (the exact-label gate ignores it, #535).
-3. Report "issue #N labelled `work-this` (event-driven leaf) → worker run will implement it". **Stop.**
-
-**If this issue still needs splitting (not a leaf, `depth < MAX_DEPTH`):**
-1. Derive 2–6 children exactly as Step 3 (coherent concerns, full two-audience body,
-   `## 🧪 How to test`, correct `type:*`/`pkg:*`/`app:*` labels, the `Dedup-checked: sub-issue of
-   #<this>` line). **Each child's body MUST include the WS2 block** for `depth = <this depth> + 1`,
-   same `epic`/`epic_branch` — build it with `node scripts/pipeline-context.mjs write epic=<e>
-   depth=<d+1> epic_branch=<b>` before creating. Link it under this issue with `sub_issue_write`.
-2. For **each** child, apply its trigger label via the App-token `gh` — pick with the LEAF TEST at
-   the child's depth (`d+1`):
-   - child is leaf-sized **or** `d+1 >= MAX_DEPTH` → `gh issue edit <child> --add-label work-this`
-   - child still needs splitting → `gh issue edit <child> --add-label delegate-pi` (a fresh
-     `decompose-on-issue-pidev` run recurses on it, in event-driven mode again).
-   This is the recursion, done across runs instead of in-process. The depth cap is what
-   guarantees termination: a `delegate-pi` chain always converges to `work-this` at `MAX_DEPTH`
-   (`scripts/pipeline-loop-guard.mjs` → `labelForChild` is the tested decision this mirrors).
-3. **Dependency order still holds.** If a child must land before a sibling, label only the
-   foundation child now; leave the dependents unlabelled and note them in a comment — an idempotent
-   re-dispatch (`delegate-pi` on this issue again) labels them once the foundation has merged.
-4. Report the children created + which labels were applied. **Stop** — no `Agent` spawn.
+Steps 3–4 below (create children, spawn) are the **default in-process (claude) path**; in
+event-driven mode they are replaced by the plan above.
 
 ## Guardrails
 
@@ -172,13 +157,12 @@ treat a missing `depth` as 0.
     rejects it, and it produces nothing (a sub-issue dispatched that way also runs as its own epic
     off `main`). The #457 deploy stalled exactly this way. Spawn the worker (Step 4), wait, verify
     its PR exists.
-  - **EVENT-DRIVEN mode (`PIPELINE_MODE=event-driven`, #1685 WS3):** the ban is LIFTED, but only
-    for the **App-token** path. The workflow runs you as `nuxt-harness[bot]` (the one *allowed*
-    bot — the bot-actor guard passes it and its label-adds cascade), so here you hand off by
-    **labeling via `gh` with the App token** (`work-this` / `delegate-pi`) and STOP — never by
-    spawning. This is the deliberate reversal the App token (#1004/#626) unblocked; #457 stays
-    dead because the guard still rejects every *other* bot. Do **not** apply labels via the MCP
-    tool (human PAT — won't cascade). See “Event-driven mode” above.
+  - **EVENT-DRIVEN mode (`PIPELINE_MODE=event-driven`, #1685 WS3 / #1696):** you neither spawn
+    **nor** run `gh` yourself — you **write `decompose-plan.json`** and stop (see “Event-driven
+    mode” above). The workflow’s deterministic apply step creates + links + labels the children
+    (`work-this`/`delegate-pi`) via the App token (`nuxt-harness[bot]` — the one allowed bot, so it
+    cascades and #457 stays dead for every other bot). Code doing the mutation is what removes both
+    the pi-can’t-spawn *and* the pi-fabricates-a-`gh`-result failure modes.
 - Label every issue you create. Stick to the existing taxonomy (unknown label = error).
 
 ## Asking the human (async — never block)

@@ -105,6 +105,11 @@ jobs:
       (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate'))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
+    # WS3 (#1696): this whole workflow IS the event-driven pi decompose flow, so the mode is a
+    # JOB-level constant — the pi step reads $PIPELINE_MODE (plan-only prompt) and the apply step
+    # gates on env.PIPELINE_MODE. (The claude flow lives in decompose-on-issue.yml and never sets it.)
+    env:
+      PIPELINE_MODE: event-driven
     # No `id-token` — pi uses a provider key, not OIDC. The write scopes are for the
     # Harness App token minted below, which pi uses to push/PR/comment.
     permissions:
@@ -182,12 +187,8 @@ jobs:
           PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-6') || 'claude-sonnet-5' }}
           PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
-          # WS3 (#1696), approach A — event-driven, label handoff. This flag tells the
-          # task-decomposer to hand each child off by LABELING it via the App token (already in
-          # GH_TOKEN) and STOP — not by spawning an in-process `Agent` tree (which pi-claude-cli
-          # can't drive). The claude flow (`decompose-on-issue.yml`) does NOT set this, so it keeps
-          # the proven in-process spawn. See .claude/agents/task-decomposer.md → "Event-driven mode".
-          PIPELINE_MODE: event-driven
+          # PIPELINE_MODE=event-driven is inherited from the JOB-level env (above). The pi prompt
+          # branches on it to the PLAN-ONLY directive (#1696); the apply step gates on it too.
         run: |
           set -uo pipefail
           command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
@@ -200,15 +201,37 @@ jobs:
           # Front-load a tool-agnostic NON-INTERACTIVE directive (#1019) so pi does not
           # stall-and-ask while headless (the #839 failure — pi asked "which option?" and
           # stopped). Built in a FILE via a QUOTED heredoc (never PROMPT=$(cat <<EOF) — an
-          # apostrophe breaks that substitution, #1001), then the /task-decompose command
-          # with the issue number appended.
+          # apostrophe breaks that substitution, #1001), then EITHER an inline event-driven
+          # decompose directive (PIPELINE_MODE=event-driven) OR the /task-decompose command.
           PROMPT_FILE="decompose-pidev-prompt-${{ github.run_id }}.txt"
           cat > "$PROMPT_FILE" <<'PI_PROMPT'
           You are running NON-INTERACTIVELY in CI. No human is attached and there is no terminal to read input from. NEVER pause, ask a question, or wait for confirmation, and do not invoke pi-ask-user. When a choice is ambiguous, pick the most sensible default, record the assumption in an issue or PR comment, and PROCEED. The run only succeeds if it produces a real deliverable: a PR (Closes #N), created sub-issues, or a held sign-off (status:blocked plus a review). Merely listing options or asking what to do is a FAILED run.
           OPERATING CONTRACT (non-negotiable, #1022): (1) NEVER merge a pull request — not even one you opened. Open it and stop; the automerge workflow merges epic sub-PRs after CI passes. (2) Hold any sign-off as a TOP-LEVEL issue comment plus the status:blocked label — never inside a PR review body. (3) Reuse an existing epic/NNN-* branch idempotently — never create a duplicate epic branch. (4) You CANNOT modify .github/workflows/** (the App token lacks the workflows scope, by deliberate policy #1076): commit everything else, embed the needed workflow patch verbatim in the PR body under a "## Workflow patch (human applies)" heading, mention @pmcp in an issue comment, add status:blocked, and finish — that counts as a successful deliverable. (5) EVERY PR body MUST open with a literal "Closes #<the sub-issue it implements>" line — including a PR targeting an epic/* branch, where you may reason it is pointless because GitHub only auto-closes on the default branch. Write it anyway: resume-on-comment.yml's merge-on-approval step uses that line to identify which PR the owner's lgtm approved. Wording it as "Sub-issue: #N" instead makes the owner's approval a silent no-op (#1663). The matcher now also accepts a linked-issue relation and Sub-issue/Refs lines, but "Closes #N" is the form to write.
           Given that, do the following now:
           PI_PROMPT
-          printf '/task-decompose #%s\n' "$ISSUE" >> "$PROMPT_FILE"
+          # ── The task, by mode (#1696) — pi PLANS, code APPLIES ────────────────────────
+          # EVENT-DRIVEN: two failure modes killed the earlier attempts. (1) `/task-decompose` hands
+          # off by SPAWNING an Agent tree pi can't drive → the #1381/#1706 3-min no-op. (2) Having pi
+          # hand-build `gh issue create` with rich bodies via `$(cat <<EOF)` → the #1001 shell trap
+          # (`unexpected EOF … )`, exit 2) → zero issues, then pi FABRICATED success (#1706 session
+          # log). BOTH are removed by making pi ONLY emit a PLAN (JSON, no gh/git/heredoc), which a
+          # deterministic apply step (scripts/apply-decompose-plan.mjs, execFile array-args) turns
+          # into real issues. pi cannot fabricate what code creates. The claude flow
+          # (decompose-on-issue.yml) still spawns in-process and is untouched.
+          if [ "${PIPELINE_MODE:-}" = "event-driven" ]; then
+            cat >> "$PROMPT_FILE" <<'PI_ED'
+          EVENT-DRIVEN DECOMPOSE — PLAN ONLY. You are the task-decomposer. Do NOT run `/task-decompose`, do NOT spawn any subagent, and do NOT run any `gh`, `git`, or issue-mutating command. Your ONLY output is a plan file that a deterministic step will apply. Concretely:
+          1. READ the target issue (use `gh issue view` to read only — reading is fine, mutating is not).
+          2. Apply the LEAF TEST: single coherent change, bounded file set, clear/testable acceptance, one focused run.
+          3. Using your file-writing tool (NOT a shell heredoc — bodies contain emoji/backticks and shell quoting breaks, #1001), write a file named exactly `decompose-plan.json` in the current working directory, as valid JSON:
+             - If the issue is a single leaf: {"leaf": true}
+             - If it needs splitting: {"leaf": false, "children": [ {"title": "...", "body": "...markdown with ## 👤 For humans / ## 🤖 For agents / ## 🧪 How to test...", "labels": ["type:...","<component>"], "needsSplit": false}, ... ]} — 2 to 6 children, one coherent concern each. Set needsSplit=true for a child that itself still needs decomposing (it will be re-decomposed), false for a child that is a ready leaf. Use exactly one `type:*` label plus a real component label per child (labels that do not exist are dropped by the apply step). Do NOT put a pipeline block or Dedup line in the body — the apply step adds them.
+          4. After writing decompose-plan.json, STOP. Do not create issues, branches, PRs, or labels yourself — the apply step does all of that from your plan. Writing a correct decompose-plan.json IS your entire deliverable.
+          PI_ED
+            printf 'The target issue is #%s. Read it and write decompose-plan.json now.\n' "$ISSUE" >> "$PROMPT_FILE"
+          else
+            printf '/task-decompose #%s\n' "$ISSUE" >> "$PROMPT_FILE"
+          fi
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
           # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
           # So the instant `pi | tee` fails (pipefail), -e aborts the script BEFORE
@@ -229,6 +252,51 @@ jobs:
           # Piece 3 (exec-log adapter): hand the plain-text run log to the artifact-gate so it can
           # classify WHY a run produced nothing (pi emits no structured execution_file like claude).
           echo "exec_log=$LOG" >> "$GITHUB_OUTPUT"
+
+      # ── Apply the decompose plan (#1696) — DETERMINISTIC create/link/label ──────────────
+      # pi wrote decompose-plan.json (reasoning only — no gh/git/heredoc). This step turns it into
+      # REAL issues via scripts/apply-decompose-plan.mjs, which shells out to `gh` with execFile
+      # ARRAY ARGS — the body never touches a shell parser, so the #1001/#1706 `$(cat <<EOF)` break
+      # is impossible, and because CODE creates the issues there is nothing for pi to fabricate.
+      # It resolves the epic branch here (git), injects the WS2 block, sanitizes labels against
+      # .github/labels.yml, creates + links (sub-issues API) + labels each child. A missing/empty
+      # plan is a loud, honest failure the artifact-gate then reports.
+      - name: Apply decompose plan
+        if: ${{ env.PIPELINE_MODE == 'event-driven' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          if [ ! -f decompose-plan.json ]; then
+            echo "::warning::no decompose-plan.json — pi produced no plan; the artifact-gate will fail this run."
+            exit 0
+          fi
+          echo "── decompose-plan.json ──"; cat decompose-plan.json; echo
+          # Resolve pipeline context off the target's WS2 block (epic/depth/epic_branch).
+          BODY="$(gh issue view "$ISSUE" --repo "$REPO" --json body -q .body)"
+          EPIC="$(printf '%s' "$BODY" | node scripts/pipeline-context.mjs read epic)"
+          DEPTH="$(printf '%s' "$BODY" | node scripts/pipeline-context.mjs read depth)"
+          EPIC_BRANCH="$(printf '%s' "$BODY" | node scripts/pipeline-context.mjs read epic_branch)"
+          EPIC="${EPIC:-$ISSUE}"; DEPTH="${DEPTH:-0}"
+          # No epic_branch on the issue → this is a top-level epic; resolve/create epic/<EPIC>-<slug>.
+          if [ -z "$EPIC_BRANCH" ]; then
+            git fetch origin main --quiet
+            EPIC_BRANCH="$(git ls-remote --heads origin "epic/${EPIC}-*" | sed 's#.*refs/heads/##' | head -n1)"
+            if [ -z "$EPIC_BRANCH" ]; then
+              SLUG="$(gh issue view "$ISSUE" --repo "$REPO" --json title -q .title \
+                | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//' | cut -c1-40 | sed -E 's/-+$//')"
+              EPIC_BRANCH="epic/${EPIC}-${SLUG}"
+              git push origin "origin/main:refs/heads/${EPIC_BRANCH}" && echo "created epic branch ${EPIC_BRANCH}"
+            else
+              echo "reusing epic branch ${EPIC_BRANCH}"
+            fi
+          fi
+          echo "context: epic=${EPIC} depth=${DEPTH} epic_branch=${EPIC_BRANCH}"
+          node scripts/apply-decompose-plan.mjs apply decompose-plan.json \
+            --repo "$REPO" --target "$ISSUE" --epic "$EPIC" --epic-branch "$EPIC_BRANCH" --depth "$DEPTH"
 
       # ── Artifact-gate (#461) — PASS/FAIL logic reused from decompose-on-issue.yml ────────
       # Harness-agnostic: PASS/FAIL is GitHub-state via GITHUB_TOKEN (comment / linked
