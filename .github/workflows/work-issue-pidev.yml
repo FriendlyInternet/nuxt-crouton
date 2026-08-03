@@ -188,18 +188,16 @@ jobs:
       - id: t0
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      # Baseline the tree BEFORE pi runs, so the deterministic finish step commits ONLY pi's
-      # edits — never an incidental change from install/build (#1764 safety). In practice this
-      # list is empty: checkout is clean, the install is --frozen-lockfile, and every build
-      # output dir (node_modules/.nuxt/.output/dist) is gitignored so `git add -A` skips it.
-      # Recording it anyway means a future *tracked* build artifact can't silently leak into a
-      # worker's commit — the finish step unstages every path that was already dirty here.
+      # Before pi runs: (1) record any pre-existing dirt (diagnostic), and (2) stash the
+      # edited-file-ledger parser in RUNNER_TEMP. pi checks out a work branch off the epic branch
+      # mid-run, which may not contain scripts/ — so the finish step reads the parser from the
+      # stashed copy, not the (possibly-switched) working tree. (#1764/#1782, Pattern B.)
       - id: baseline
         run: |
           SCRATCH='decompose-pidev-(prompt|exec)-[0-9]+\.(txt|log)|pi-telemetry-out'
           git status --porcelain 2>/dev/null | grep -vE "$SCRATCH" | cut -c4- > "$RUNNER_TEMP/pre-pi-dirty.txt" || true
           echo "pre-pi non-scratch dirty paths: $(wc -l < "$RUNNER_TEMP/pre-pi-dirty.txt" | tr -d ' ')"
-          cat "$RUNNER_TEMP/pre-pi-dirty.txt" || true
+          cp scripts/pi-edited-files.mjs "$RUNNER_TEMP/pi-edited-files.mjs"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
@@ -245,7 +243,7 @@ jobs:
           if [ -n "${EPIC_BRANCH:-}" ]; then
             BRANCH_INSTR="branch off the integration branch '${EPIC_BRANCH}' and target the PR THERE (not main)"
           fi
-          printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s), then %s. Make the change, run pnpm typecheck, commit via the /commit skill, and open ONE pull request whose body FIRST line is literally "Closes #%s". Then STOP (never merge). If you are genuinely blocked, hold: post a top-level comment plus add the status:blocked label. Producing no PR and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$BRANCH_INSTR" "$ISSUE" >> "$PROMPT_FILE"
+          printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s), then %s. Make the change and run pnpm typecheck to verify it. Do NOT run git commit and do NOT open a pull request — the workflow commits EXACTLY the files you edit and opens the PR for you, so you never need to. Make ALL file changes with the edit/write tools (never shell redirects or heredocs) so your work is captured in the commit. If you are genuinely blocked, do NOT guess: post a top-level comment on the issue explaining the blocker and add the status:blocked label, then stop. Making no file edits and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$BRANCH_INSTR" "$ISSUE" >> "$PROMPT_FILE"
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
           # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
           # So the instant `pi | tee` fails (pipefail), -e aborts the script BEFORE
@@ -270,19 +268,17 @@ jobs:
           # classify WHY a run produced nothing (pi emits no structured execution_file like claude).
           echo "exec_log=$LOG" >> "$GITHUB_OUTPUT"
 
-      # ── FINISH-THE-COMMIT (#1764) — persist pi's work DETERMINISTICALLY, never via pi ────
-      # pi (pi-claude-cli --print) runs one-shot with NO --max-turns. On ~10/10 real worker runs
-      # it did the edits, then ended its turn NARRATING the commit ("Committing now via /commit",
-      # "Proceeding to open the PR", "No response requested.") WITHOUT emitting the commit/PR tool
-      # calls — leaving a dirty tree, a red artifact-gate, and no PR (on-box ~/.pi/agent/sessions,
-      # #1764). Re-PROMPTING pi to just commit does NOT fix it — verified twice on-box: even a
-      # narrow "the tree is dirty, only commit + open the PR" prompt ends with pi saying "I'll
-      # commit…" and stopping, no tool call. So the workflow persists the work ITSELF: pi produces
-      # the edits, and THIS step commits + pushes + opens the PR deterministically in bash. pi is
-      # removed from the persistence path entirely.
-      # NB the workflow's OWN scratch files (decompose-pidev-{prompt,exec}-*, pi-telemetry-out/)
-      # are untracked and always present — they must NOT be committed or count as "dirty", so both
-      # the dirty check and the staging exclude them.
+      # ── FINISH — commit pi's EDITED-FILE LEDGER (Pattern B), never `git add -A` ──────────
+      # pi narrates the commit and stops without emitting it (#1764), so the HARNESS owns the
+      # commit. But NOT via `git add -A`: that blanket-adds tool/runtime junk (the #1786 `.pi/npm/`
+      # leak — the identical failure as SWE-agent/mini-swe-agent#528's env-pinned pyproject.toml
+      # and openai/codex#8548). Instead we commit EXACTLY the files pi wrote, parsed from its
+      # session log's edit/write tool-calls (scripts/pi-edited-files.mjs) — the same "commit only
+      # the agent's edited set" strategy Aider (fnames → per-file `git add`) and claude-code-action
+      # (`commit_files` with an explicit files[]) use. New needed files are IN the set (pi created
+      # them); `.pi/npm/`, node_modules, logs, lockfile churn are excluded BY CONSTRUCTION (pi
+      # never edited them) — no reliance on .gitignore foreseeing them. Files a generator wrote via
+      # `bash` (not an edit tool) are NOT in the ledger; they are REPORTED, never silently committed.
       - id: finish
         if: ${{ !cancelled() }}
         env:
@@ -290,38 +286,58 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+          SINCE: ${{ steps.t0.outputs.ts }}
         run: |
           set -uo pipefail
-          SCRATCH='decompose-pidev-(prompt|exec)-[0-9]+\.(txt|log)|pi-telemetry-out'
-          dirty() { git status --porcelain 2>/dev/null | grep -vE "$SCRATCH" | grep -q . ; }
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           git config user.name  "nuxt-harness[bot]"
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+          ROOT="$(git rev-parse --show-toplevel)"
 
-          # 1) If pi left edits uncommitted, COMMIT THEM DETERMINISTICALLY (never re-prompt pi).
-          if dirty; then
-            echo "::warning::pi left an uncommitted tree — committing it deterministically (#1764)"
-            git status --porcelain | grep -vE "$SCRATCH" || true
-            BR="$(git branch --show-current)"
-            if [ -z "$BR" ] || [ "$BR" = "main" ]; then BR="work-${ISSUE}"; git checkout -b "$BR"; fi
-            git add -A
-            git reset -q -- 'decompose-pidev-*.txt' 'decompose-pidev-*.log' pi-telemetry-out 2>/dev/null || true
-            # scope to pi's edits: unstage anything that was already dirty before pi ran
-            # (build/install noise — normally none; see the `baseline` step).
-            if [ -s "$RUNNER_TEMP/pre-pi-dirty.txt" ]; then
-              while IFS= read -r p; do [ -n "$p" ] && git reset -q -- "$p" 2>/dev/null || true; done < "$RUNNER_TEMP/pre-pi-dirty.txt"
-            fi
-            if git diff --cached --quiet; then
-              echo "nothing to commit after excluding scratch"
-            else
-              TITLE="$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null)"
-              [ -z "$TITLE" ] && TITLE="chore: finish work on #${ISSUE}"
-              git commit -q -m "$TITLE" -m "🤖 Auto-finished by the pi worker (#1764): pi edited these files but ended its turn without committing them; the workflow persisted the work. Refs #${ISSUE}"
-              echo "committed as: $TITLE"
-            fi
+          # 1) Locate THIS run's pi session log (newest .jsonl touched since run start) and build
+          #    the edited-file ledger with the parser stashed by the baseline step.
+          SESS_ROOT="$HOME/.pi/agent/sessions"
+          SESSION="$(find "$SESS_ROOT" -name '*.jsonl' -newermt "$SINCE" 2>/dev/null \
+            | while IFS= read -r f; do printf '%s %s\n' "$(stat -f '%m' "$f" 2>/dev/null || stat -c '%Y' "$f" 2>/dev/null)" "$f"; done \
+            | sort -rn | head -1 | cut -d' ' -f2-)"
+          LEDGER="$RUNNER_TEMP/pi-edited.txt"; : > "$LEDGER"
+          if [ -n "$SESSION" ] && [ -f "$SESSION" ]; then
+            echo "pi session: $SESSION"
+            node "$RUNNER_TEMP/pi-edited-files.mjs" "$SESSION" "$ROOT" > "$LEDGER" 2>/dev/null || true
+          else
+            echo "::warning::no pi session log found since $SINCE — cannot build the edit ledger (#1764)"
+          fi
+          N="$(grep -c . "$LEDGER" 2>/dev/null || echo 0)"
+          echo "Pattern B — pi wrote $N file(s):"; sed 's/^/  + /' "$LEDGER" 2>/dev/null || true
+
+          # 2) No silent gaps: report changed files NOT in the ledger (generator output via bash,
+          #    or artifacts). These are NOT committed by this step.
+          git status --porcelain 2>/dev/null | sed 's/^...//' | sort -u > "$RUNNER_TEMP/changed.txt" || true
+          NOTLEDGER="$(comm -23 "$RUNNER_TEMP/changed.txt" <(sort -u "$LEDGER") 2>/dev/null || true)"
+          if [ -n "$NOTLEDGER" ]; then
+            echo "::notice::changed but NOT in pi's edit ledger (not committed — generator output or artifacts):"
+            echo "$NOTLEDGER" | sed 's/^/  ? /'
           fi
 
-          # 2) Ensure the branch is pushed and a PR exists (pi also fails to open the PR itself).
+          # 3) Stage EXACTLY the ledger paths (Aider/claude-code-action style — never add -A/-u).
+          while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            git add -- "$p" 2>/dev/null || echo "::warning::could not stage $p"
+          done < "$LEDGER"
+
+          # 4) Commit (if anything staged) with the issue title as the subject.
+          if ! git diff --cached --quiet; then
+            BR="$(git branch --show-current)"
+            if [ -z "$BR" ] || [ "$BR" = "main" ]; then BR="work-${ISSUE}"; git checkout -b "$BR"; fi
+            TITLE="$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null)"
+            [ -z "$TITLE" ] && TITLE="chore: implement #${ISSUE}"
+            git commit -q -m "$TITLE" -m "🤖 Committed by the pi worker from pi's edited-file ledger (Pattern B, #1764/#1782). Refs #${ISSUE}"
+            echo "committed $N file(s) as: $TITLE"
+          else
+            echo "nothing staged from the ledger (pi committed already, or made no captured file changes)"
+          fi
+
+          # 5) Ensure the branch is pushed and a PR exists.
           git fetch origin "$BASE" --quiet 2>/dev/null || true
           BR="$(git branch --show-current)"
           if [ -n "$BR" ] && [ "$BR" != "main" ] && [ "$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]; then
@@ -330,18 +346,18 @@ jobs:
             if [ -z "$EXISTING" ]; then
               gh pr create --base "$BASE" --head "$BR" \
                 --title "$(git log -1 --format=%s)" \
-                --body "$(printf 'Closes #%s\n\n🤖 Auto-opened by the pi worker finish step (#1764) — pi implemented this leaf but did not open the PR itself.' "$ISSUE")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s\n\n🤖 Opened by the pi worker finish step from pi'\''s edited-file ledger (Pattern B, #1764/#1782).' "$ISSUE")" 2>&1 | tail -3
             else
               echo "PR #${EXISTING} already open for ${BR}"
             fi
           else
-            echo "no commits ahead of ${BASE} on '${BR:-<none>}' — nothing to open a PR for"
+            echo "no commits ahead of ${BASE} on '${BR:-<none>}' — no PR to open"
           fi
 
-          # 3) Verdict for the artifact-gate: a still-dirty tree here means the deterministic
-          #    commit itself failed (a git/tooling problem, not the narrate-then-stop fault).
-          if dirty; then
-            echo "::error::working tree STILL dirty after the deterministic finish (#1764)"
+          # 6) Verdict for the artifact-gate: pi wrote files but nothing landed on the branch = fail.
+          AHEAD="$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)"
+          if [ "$N" -gt 0 ] && [ "$AHEAD" -eq 0 ]; then
+            echo "::error::pi wrote $N file(s) but nothing landed on the branch (#1764)"
             echo "still_dirty=1" >> "$GITHUB_OUTPUT"
           else
             echo "still_dirty=0" >> "$GITHUB_OUTPUT"
