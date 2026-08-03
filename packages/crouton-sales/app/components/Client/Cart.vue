@@ -40,7 +40,7 @@
               <UFieldGroup size="md">
                 <UButton
                   icon="i-lucide-minus"
-                  color="neutral"
+                  color="error"
                   variant="soft"
                   square
                   @click="$emit('updateQuantity', entry.index, entry.item.quantity - 1)"
@@ -50,7 +50,7 @@
                 </UBadge>
                 <UButton
                   icon="i-lucide-plus"
-                  color="neutral"
+                  color="success"
                   variant="soft"
                   square
                   @click="$emit('updateQuantity', entry.index, entry.item.quantity + 1)"
