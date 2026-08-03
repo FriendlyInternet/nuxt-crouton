@@ -24,6 +24,18 @@ export async function validateConfig(config: Record<string, any> | null): Promis
     return { valid: false, errors, warnings }
   }
 
+  // Freshly scaffolded app: no schema configured yet. This is the documented next
+  // step after `crouton init` (add a schema, then `crouton config`), not a failure —
+  // route it to a neutral success message instead of the validation-error path (#1741).
+  const hasNoSchemaConfigured = !config.schemaPath
+    && (!Array.isArray(config.collections) || config.collections.length === 0)
+  const hasNoTargets = !Array.isArray(config.targets) || config.targets.length === 0
+  if (hasNoSchemaConfigured && hasNoTargets) {
+    console.log('✓ Scaffolded — add a schema to `schemas/`, list it in `crouton.config.js`, then run `crouton config`')
+    console.log('\n' + '─'.repeat(60) + '\n')
+    return { valid: true, errors, warnings }
+  }
+
   // Validate schema files exist
   if (config.collections && Array.isArray(config.collections)) {
     // Enhanced format with multiple schemas
