@@ -405,6 +405,31 @@ The generic redeem endpoint fires `crouton:scoped-access:before-redeem` with `{ 
 
 Grants can't FK into domain tables — call `revokeScopedGrantsForResource` when the resource is deleted.
 
+### Device pairing codes (`server/utils/pairing-code.ts`, #1661)
+
+The **app-mints** direction of device claiming — an org owner mints a one-time code, a freshly installed till types it in and claims itself. Counterpart to #1366's device-prints-code poll (`verifyScopedGrantByResource`).
+
+```typescript
+import { mintPairingCode, redeemPairingCode } from '@crouton/auth/server/utils/pairing-code'
+
+// Owner side — show `code` once; it is never stored in plaintext.
+const { code, expiresAt } = await mintPairingCode({ organizationId: team.id, eventId })
+
+// Device side — knows only the code; the grant it finds says which org it joins.
+const result = await redeemPairingCode({ code, deviceName: 'Bar till 1' })
+if (result.ok) {
+  // result.grant IS the device; result.deviceSecret is returned ONCE — persist it.
+}
+```
+
+**A device IS its `scopedAccessGrant` — there is no `devices` table.** Redeeming consumes the transient pairing grant (`resourceId: 'pairing:<sha256(code)>'`, `maxUses: 1`, deactivated on use) and inserts the device's persistent grant (`resourceId: 'device:<uuid>'`, no expiry) plus its first token.
+
+- **resourceType `till-device`** — distinct from `print-device`, so both coexist on one org.
+- **Code shape:** 8 chars from digits + A–Z minus `I`/`O` (the glyph pairs operators mistype), rejection-sampled so the alphabet stays unbiased.
+- **TTL 15 minutes**, single-use. Hashing and the exponential lockout are the same primitives as every other grant.
+- **`redeem` reasons:** `invalid` (covers *both* unknown and wrong code — no enumeration oracle) · `expired` · `locked` · `exhausted`.
+- The lookup key is an **unsalted** SHA-256 of the code so an org-less lookup is possible; verification still runs against the salted `secretHash`, and the plaintext code never reaches the database.
+
 ### Token Server Utilities
 
 ```typescript
