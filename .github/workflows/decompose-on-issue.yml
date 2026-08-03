@@ -3,6 +3,12 @@ name: Decompose on issue
 # Hand an issue to the Claude agent pipeline when it's opted in via the
 # `delegate` label (added at creation or any time after). The pipeline spawns
 # the orchestrator → decomposer → worker agents (see .claude/skills/task-decompose).
+#
+# ⚠️ THIS FLOW IS CURRENTLY YIELDING. The job `if` below opens with
+# `vars.AGENT_HARNESS != 'pi'`, and that repo var IS `pi` right now — so a `delegate`
+# label does NOT start this workflow; `decompose-on-issue-pidev.yml` picks the same
+# events up instead (#669 WS7 / #1077). Unset the var (or set it to anything else) and
+# claude is the default again. Check the var before concluding either flow is broken.
 on:
   issues:
     types: [opened, labeled]
