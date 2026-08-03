@@ -1,8 +1,17 @@
-name: Warn on Closes of a blocked issue
+name: Warn on a risky Closes
 
+# Two shapes of `Closes #NN` that fire the moment a PR merges and defeat a gate:
+#
 # (#1253, Fix B) A root-cause-fix PR that writes `Closes #<retest issue>` auto-closes a
 # `status:blocked` issue out from under the owner's pending reply — the #1233/#1234 race,
 # where the resume then ran against a closed, superseded issue.
+#
+# (#1690) An epic-integration PR that writes `Closes #<epic>` closes the epic on merge,
+# skipping the `/close-epic` gate that exists so the postmortem runs first (#856/#403).
+# Epic #1652 closed exactly this way and its retro landed after the close it was meant
+# to precede. NOTE the asymmetry: a SUB-ISSUE PR should keep `Closes #NN` — the resume
+# merge-on-approval step identifies the gate PR by it (#1663). Only the epic-level PR
+# switches to `Refs`.
 #
 # WARNING ONLY — deliberately NOT a required check. Closing a blocked issue via `Closes`
 # is the NORMAL flow for sign-off gate PRs: resume-on-comment's merge-on-approval step
@@ -40,17 +49,28 @@ jobs:
             const nums = [...new Set([...body.matchAll(re)].map(m => Number(m[1])))]
             if (!nums.length) { core.info('No closing references in the PR body.'); return }
 
+            const has = (issue, name) => (issue.labels || [])
+              .some(l => (typeof l === 'string' ? l : l.name) === name)
+
             const blocked = []
+            const epics = []
             for (const issue_number of nums) {
               try {
                 const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
                 if (issue.pull_request) continue // a PR reference, not an issue
-                const isBlocked = (issue.labels || [])
-                  .some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
-                if (issue.state === 'open' && isBlocked) blocked.push(issue_number)
+                if (issue.state !== 'open') continue
+                if (has(issue, 'status:blocked')) blocked.push(issue_number)
+                // #1690: an EPIC must not be auto-closed by its own integration PR —
+                // that fires the moment the PR merges and silently walks past the
+                // postmortem gate (`/close-epic`, gated on status:ready-to-close, #856).
+                // Epic #1652 closed this way; its retro had to be posted after the close
+                // it was meant to precede.
+                if (has(issue, 'epic')) epics.push(issue_number)
               } catch (e) { core.warning(`could not check #${issue_number}: ${e.message}`) }
             }
-            if (!blocked.length) { core.info('No open status:blocked issues referenced.'); return }
+            if (!blocked.length && !epics.length) {
+              core.info('No open status:blocked or epic issues referenced.'); return
+            }
 
             // Warn once per PR — dedupe on the marker so `edited` events don't re-post.
             const marker = '<!-- warn-closes-blocked -->'
@@ -60,10 +80,28 @@ jobs:
               core.info('Already warned on this PR.'); return
             }
 
-            const list = blocked.map(n => `#${n}`).join(', ')
-            const plural = blocked.length > 1
+            const fmt = ns => ns.map(n => `#${n}`).join(', ')
+            const sections = []
+
+            if (blocked.length) {
+              const list = fmt(blocked)
+              const plural = blocked.length > 1
+              sections.push(
+                `🚫 **On merge this PR auto-closes ${list} — but ${plural ? 'they are' : 'it is'} \`status:blocked\` (awaiting an owner reply).**\n\n`
+                + `**Fix:** if this is a root-cause fix rather than the blocked work itself, use \`Refs ${list}\` instead of \`Closes\` — so merging doesn't close ${plural ? 'them' : 'it'} out from under the pending reply (the #1233 race).`)
+            }
+
+            if (epics.length) {
+              const list = fmt(epics)
+              const plural = epics.length > 1
+              sections.push(
+                `🚫 **On merge this PR auto-closes the epic${plural ? 's' : ''} ${list} — skipping the postmortem gate.**\n\n`
+                + `An epic is meant to close via \`/close-epic\`, which is gated on \`status:ready-to-close\` so the retro runs first (#856/#403). A closing keyword fires on merge and walks straight past that.\n\n`
+                + `**Fix:** use \`Refs ${list}\` in this PR body. After merging, post the verify rollup + postmortem, then comment \`/close-epic\` on the epic.\n\n`
+                + `_Sub-issue PRs are different — they should keep \`Closes #NN\`; the resume merge-on-approval step keys on it (#1663)._`)
+            }
+
             await github.rest.issues.createComment({ ...context.repo, issue_number: pr.number,
-              body: `${marker}\n🚫 **On merge this PR auto-closes ${list} — but ${plural ? 'they are' : 'it is'} \`status:blocked\` (awaiting an owner reply).**\n\n`
-                + `**Fix:** if this is a root-cause fix rather than the blocked work itself, use \`Refs ${list}\` instead of \`Closes\` — so merging doesn't close ${plural ? 'them' : 'it'} out from under the pending reply (the #1233 race).\n\n`
-                + `<sub>🤖 agent pipeline (CI) · closes-a-blocked-issue check (#1253) · warning only, not a required check</sub>` })
-            core.warning(`PR #${pr.number} Closes blocked issue(s): ${list}`)
+              body: `${marker}\n${sections.join('\n\n---\n\n')}\n\n`
+                + `<sub>🤖 agent pipeline (CI) · risky-\`Closes\` check (#1253/#1690) · warning only, not a required check</sub>` })
+            core.warning(`PR #${pr.number} risky Closes — blocked: ${fmt(blocked) || 'none'} · epics: ${fmt(epics) || 'none'}`)
