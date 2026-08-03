@@ -349,9 +349,23 @@ jobs:
               createdSubIssues = subs.some(s => new Date(s.created_at).getTime() >= sinceMs)
             } catch (e) { core.warning(`sub-issue check skipped: ${e.message}`) }
 
+            // ── LEAF DISPATCH (#1740) ──────────────────────────────────────────────────
+            // A leaf plan ({"leaf": true}) is NOT a no-op. The deterministic apply step
+            // (scripts/apply-decompose-plan.mjs → buildActionList) labels the target `work-this`
+            // (WORKER_TRIGGER), which triggers the single-use worker (work-issue-pidev.yml) whose
+            // PR lands in a SEPARATE run with its own artifact-gate. So "dispatched the worker" is a
+            // complete, honest deliverable for THIS decompose run. Without this branch a correctly-
+            // classified leaf false-fails as "produced nothing / underspecified" (the #1713 case —
+            // an exemplary issue mis-blamed as underspecified). Same class as the #1074 child-
+            // deliverable blind spot. Signal: a `work-this` labeled event on the target since t0.
+            const leafDispatched = timeline.some(e =>
+              e.event === 'labeled' && e.label && e.label.name === 'work-this' &&
+              new Date(e.created_at).getTime() >= sinceMs
+            )
+
             const signoffHeld = blocked && newComment
-            if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues) {
-              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues}`)
+            if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues || leafDispatched) {
+              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues} leafDispatched=${leafDispatched}`)
               // Result-comment-back (#1017) — only on a label-triggered run (a human is watching the
               // issue). This comment posts as the Harness App (nuxt-harness[bot]) — an unmistakable
               // bot account — so it uses the agent-pipeline provenance header, NOT the @pmcp disclaimer.
@@ -362,6 +376,7 @@ jobs:
                 const what = freshPR
                   ? `done → PR #${freshPR}`
                   : (createdSubIssues ? 'decomposed → sub-issues created (see the tree)'
+                    : leafDispatched ? 'classified as a leaf → handed to the `work-this` worker (its PR lands in a separate run)'
                     : signoffHeld ? 'held for sign-off (`status:blocked` + a review)'
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
