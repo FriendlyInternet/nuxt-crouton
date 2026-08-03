@@ -172,9 +172,6 @@ importers:
       '@fyit/crouton-charts':
         specifier: workspace:*
         version: link:../../packages/crouton-charts
-      '@fyit/crouton-layout':
-        specifier: workspace:*
-        version: link:../../packages/crouton-layout
       '@fyit/crouton-triage':
         specifier: workspace:*
         version: link:../../packages/crouton-triage

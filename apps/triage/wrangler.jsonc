@@ -21,7 +21,7 @@
     {
       "binding": "DB",
       "database_name": "triage-db",
-      "database_id": "69f3e81b-a0c9-4a77-9527-cb1407e91bbe",
+      "database_id": "f5e2deb2-9de1-4047-8fa6-7f7697b37988",
       "migrations_dir": "server/db/migrations/sqlite"
     }
   ],
@@ -42,7 +42,7 @@
         {
           "binding": "DB",
           "database_name": "triage-staging-db",
-          "database_id": "0960ce96-b2f5-4db7-99c2-80b11f704e0e",
+          "database_id": "5e18549a-8ccb-474c-a563-9dda0dc3cc5a",
           "migrations_dir": "server/db/migrations/sqlite"
         }
       ],
