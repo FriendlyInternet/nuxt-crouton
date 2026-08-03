@@ -28,6 +28,7 @@ import {
   indexByTitle,
   readImportRequest,
   nextOrderAfter,
+  chunkForBoundParams,
   norm,
   type TitleRow,
 } from '../../../../../../../utils/plan-product-import'
@@ -46,7 +47,7 @@ async function insertAndIndex(
   index: Map<string, string>,
 ): Promise<void> {
   if (!rows.length) return
-  await db.insert(table).values(rows as never)
+  for (const chunk of chunkForBoundParams(rows)) await db.insert(table).values(chunk as never)
   for (const row of rows) index.set(norm(row.title), row.id)
 }
 
@@ -126,8 +127,12 @@ export default defineEventHandler(async (event) => {
     },
   )
 
-  if (productRows.length) {
-    await db.insert(salesProducts).values(productRows)
+  // Chunked, so a big paste can't blow D1's 100-bound-parameter cap (#1707). The chunks are
+  // not one transaction: a mid-import failure leaves the earlier rows written. That is the
+  // recoverable direction — the parser flags every written row as a duplicate, so re-running
+  // the same paste imports only what is missing.
+  for (const chunk of chunkForBoundParams(productRows)) {
+    await db.insert(salesProducts).values(chunk)
   }
 
   return {
