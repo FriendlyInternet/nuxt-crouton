@@ -23,6 +23,7 @@ export default defineNuxtConfig({
     './collections/eventsettings',
     './collections/printers',
     './collections/printqueues',
-    './collections/kdsbumps'
+    './collections/kdsbumps',
+    './collections/handovers'
   ]
 })

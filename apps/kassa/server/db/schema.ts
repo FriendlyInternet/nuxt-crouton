@@ -16,3 +16,4 @@ export { salesPrinters } from '../../layers/sales/collections/printers/server/da
 export { salesPrintqueues } from '../../layers/sales/collections/printqueues/server/database/schema'
 export { salesKdsbumps } from '../../layers/sales/collections/kdsbumps/server/database/schema'
 export { pagesPages } from '../../layers/pages/collections/pages/server/database/schema'
+export { salesHandovers } from '../../layers/sales/collections/handovers/server/database/schema'
