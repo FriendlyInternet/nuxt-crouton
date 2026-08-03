@@ -34,16 +34,13 @@ off** in steps 2 & 8 — the slicing, the epic branch, the foundation checkpoint
 
 - **Unset / not `event-driven` → IN-PROCESS (default, claude harness):** spawn a `task-decomposer`
   per child via the `Agent` tool and wait (steps 2 & 8 as written).
-- **`event-driven` → LABEL (pi harness):** pi-claude-cli can't drive an in-process `Agent` tree,
-  so you **do not spawn**. Instead, for each top-level child: write the WS2 pipeline block
-  (`node scripts/pipeline-context.mjs write epic=<epic> depth=1 epic_branch=<branch>` piped through
-  the child body → `gh issue edit <child> --body-file -`), then apply its trigger label **via the
-  App-token `gh`** (`GH_TOKEN` is the Harness App, so the add is `nuxt-harness[bot]`-actored →
-  passes the bot-actor guard and cascades) — `delegate-pi` normally, or `work-this` if the child is
-  already a ready leaf. Then **STOP**; a fresh `decompose-on-issue-pidev` run works each child.
-  Apply labels through `gh`, **never** the `mcp__github__*` tools (human PAT — won't cascade). This
-  is the same reversal `task-decomposer.md` documents; the loop-guards that keep it safe are the
-  unit-tested `scripts/pipeline-loop-guard.mjs`.
+- **`event-driven` → PLAN, don't spawn (pi harness, #1696):** pi-claude-cli can't drive an
+  in-process `Agent` tree, so the pidev workflow doesn't use this orchestrator/decomposer to *act* —
+  it has pi **write `decompose-plan.json`** (pure reasoning) which a deterministic apply step
+  (`scripts/apply-decompose-plan.mjs`) turns into created + linked + labeled children
+  (`work-this`/`delegate-pi`) via the App token. You do **not** spawn and do **not** run `gh`
+  yourself. See `task-decomposer.md` → “Event-driven mode”; the loop-guards that keep it safe are
+  the unit-tested `scripts/pipeline-loop-guard.mjs`.
 
 ## Step 0 — Package-fit check (reuse before building) (#292)
 
@@ -238,10 +235,10 @@ just what you tell workers and how the approval propagates.
   and verifying its PR/comment exists — **never** by applying a `delegate`/`work-this` label
   (labeling from inside a *claude* run is bot-actored → the guard rejects it → nothing happens, and
   the child runs as its own epic off `main`; the #457 deploy stall). **The one exception is
-  event-driven mode** (`PIPELINE_MODE=event-driven`, the pi harness): there you hand off by
-  **labeling `delegate-pi`/`work-this` via the App-token `gh`** and stopping — safe because the App
-  is `nuxt-harness[bot]`, the one allowed bot (see the mode note above). #457 stays dead for every
-  other bot.
+  event-driven mode** (`PIPELINE_MODE=event-driven`, the pi harness, #1696): there you neither spawn
+  nor run `gh` — you **write `decompose-plan.json`** and stop; a deterministic apply step creates +
+  links + labels the children (`work-this`/`delegate-pi`) via the App token (`nuxt-harness[bot]`, the
+  one allowed bot, so #457 stays dead for every other bot). See the mode note above.
 - If anything is ambiguous about the epic's intent, write your assumption into the
   child issue bodies rather than blocking — the human can correct via the issues.
 
