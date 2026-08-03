@@ -17,8 +17,12 @@ on:
       - 'e2e/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/e2e.yml'
+  # NB: deliberately NO `branches:` filter (#1698). A PR opened against a stacked
+  # epic branch and later auto-retargeted to main never re-fires `pull_request`
+  # (`base_ref_changed` is not a default activity type), so a `branches: [main]`
+  # filter silently skipped typecheck/tests on #1668 and auto-merge treated the
+  # absent checks as passing. Running on every PR regardless of base is the fix.
   pull_request:
-    branches: [main]
     paths:
       - 'packages/**'
       - 'fixtures/**'
