@@ -22,7 +22,7 @@
     {
       "binding": "DB",
       "database_name": "velo-db",
-      "database_id": "4b4a5229-618f-4cb2-81d5-d8fab689792e",
+      "database_id": "14301ff3-e068-4e60-b520-a0636b7e6f0b",
       "migrations_dir": "server/db/migrations/sqlite"
     }
   ],
@@ -41,7 +41,7 @@
         {
           "binding": "DB",
           "database_name": "velo-staging-db",
-          "database_id": "03e0df6d-c307-4b19-bbfb-debb4ad81580",
+          "database_id": "26947890-88fe-4fd7-a9e4-8aa8c811eb1a",
           "migrations_dir": "server/db/migrations/sqlite"
         }
       ],

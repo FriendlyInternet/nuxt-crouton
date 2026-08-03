@@ -1,22 +1,3 @@
-CREATE TABLE `account` (
-	`id` text PRIMARY KEY NOT NULL,
-	`userId` text NOT NULL,
-	`accountId` text NOT NULL,
-	`providerId` text NOT NULL,
-	`accessToken` text,
-	`refreshToken` text,
-	`accessTokenExpiresAt` integer,
-	`refreshTokenExpiresAt` integer,
-	`scope` text,
-	`idToken` text,
-	`password` text,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
-	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE INDEX `account_user_idx` ON `account` (`userId`);--> statement-breakpoint
-CREATE INDEX `account_provider_idx` ON `account` (`providerId`,`accountId`);--> statement-breakpoint
 CREATE TABLE `bookings_bookings` (
 	`id` text PRIMARY KEY NOT NULL,
 	`teamId` text NOT NULL,
@@ -28,6 +9,45 @@ CREATE TABLE `bookings_bookings` (
 	`group` text,
 	`quantity` integer NOT NULL,
 	`status` text NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	`createdBy` text NOT NULL,
+	`updatedBy` text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `bookings_emaillogs` (
+	`id` text PRIMARY KEY NOT NULL,
+	`teamId` text NOT NULL,
+	`owner` text NOT NULL,
+	`order` integer NOT NULL,
+	`bookingId` text,
+	`templateId` text,
+	`recipientEmail` text NOT NULL,
+	`triggerType` text NOT NULL,
+	`status` text NOT NULL,
+	`sentAt` text,
+	`error` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	`createdBy` text NOT NULL,
+	`updatedBy` text NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE `bookings_emailtemplates` (
+	`id` text PRIMARY KEY NOT NULL,
+	`teamId` text NOT NULL,
+	`owner` text NOT NULL,
+	`order` integer NOT NULL,
+	`name` text NOT NULL,
+	`subject` text NOT NULL,
+	`body` text NOT NULL,
+	`fromEmail` text NOT NULL,
+	`triggerType` text NOT NULL,
+	`recipientType` text NOT NULL,
+	`isActive` integer,
+	`daysOffset` integer,
+	`locationId` text,
+	`translations` text,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL,
 	`createdBy` text NOT NULL,
@@ -74,71 +94,93 @@ CREATE TABLE `bookings_settings` (
 	`updatedBy` text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `bikeshed_bookingrequests` (
+CREATE TABLE `crouton_assets` (
 	`id` text PRIMARY KEY NOT NULL,
 	`teamId` text NOT NULL,
 	`owner` text NOT NULL,
 	`order` integer NOT NULL,
-	`display` text,
-	`fields` text,
+	`userId` text NOT NULL,
+	`filename` text NOT NULL,
+	`pathname` text NOT NULL,
+	`contentType` text,
+	`size` integer,
+	`category` text,
+	`width` integer,
+	`height` integer,
+	`alt` text,
+	`uploadedAt` integer,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL,
 	`createdBy` text NOT NULL,
 	`updatedBy` text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `bikeshed_departments` (
+CREATE TABLE `pages_pages` (
 	`id` text PRIMARY KEY NOT NULL,
 	`teamId` text NOT NULL,
 	`owner` text NOT NULL,
+	`parentId` text,
+	`path` text NOT NULL,
+	`depth` integer NOT NULL,
 	`order` integer NOT NULL,
-	`display` text,
-	`fields` text,
+	`title` text NOT NULL,
+	`slug` text NOT NULL,
+	`pageType` text NOT NULL,
+	`content` text,
+	`config` text,
+	`status` text NOT NULL,
+	`visibility` text NOT NULL,
+	`publishedAt` integer,
+	`showInNavigation` integer,
+	`layout` text,
+	`seoTitle` text,
+	`seoDescription` text,
+	`ogImage` text,
+	`robots` text,
+	`translations` text,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL,
 	`createdBy` text NOT NULL,
 	`updatedBy` text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `bikeshed_equipments` (
+CREATE UNIQUE INDEX `pages_pages_team_slug_idx` ON `pages_pages` (`teamId`,`slug`);--> statement-breakpoint
+CREATE TABLE `account` (
 	`id` text PRIMARY KEY NOT NULL,
-	`teamId` text NOT NULL,
-	`owner` text NOT NULL,
-	`order` integer NOT NULL,
-	`display` text,
-	`fields` text,
+	`userId` text NOT NULL,
+	`accountId` text NOT NULL,
+	`providerId` text NOT NULL,
+	`accessToken` text,
+	`refreshToken` text,
+	`accessTokenExpiresAt` integer,
+	`refreshTokenExpiresAt` integer,
+	`scope` text,
+	`idToken` text,
+	`password` text,
 	`createdAt` integer NOT NULL,
 	`updatedAt` integer NOT NULL,
-	`createdBy` text NOT NULL,
-	`updatedBy` text NOT NULL
+	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
 );
 --> statement-breakpoint
-CREATE TABLE `bikeshed_members` (
+CREATE INDEX `account_user_idx` ON `account` (`userId`);--> statement-breakpoint
+CREATE INDEX `account_provider_idx` ON `account` (`providerId`,`accountId`);--> statement-breakpoint
+CREATE TABLE `auth_email_log` (
 	`id` text PRIMARY KEY NOT NULL,
-	`teamId` text NOT NULL,
-	`owner` text NOT NULL,
-	`order` integer NOT NULL,
-	`display` text,
-	`fields` text,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
-	`createdBy` text NOT NULL,
-	`updatedBy` text NOT NULL
+	`organizationId` text,
+	`emailType` text NOT NULL,
+	`recipientEmail` text NOT NULL,
+	`status` text DEFAULT 'pending' NOT NULL,
+	`error` text,
+	`sentAt` integer,
+	`metadata` text,
+	`createdAt` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE `bikeshed_roomtypes` (
-	`id` text PRIMARY KEY NOT NULL,
-	`teamId` text NOT NULL,
-	`owner` text NOT NULL,
-	`order` integer NOT NULL,
-	`display` text,
-	`fields` text,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
-	`createdBy` text NOT NULL,
-	`updatedBy` text NOT NULL
-);
---> statement-breakpoint
+CREATE INDEX `auth_email_log_org_idx` ON `auth_email_log` (`organizationId`);--> statement-breakpoint
+CREATE INDEX `auth_email_log_type_idx` ON `auth_email_log` (`emailType`);--> statement-breakpoint
+CREATE INDEX `auth_email_log_status_idx` ON `auth_email_log` (`status`);--> statement-breakpoint
+CREATE INDEX `auth_email_log_recipient_idx` ON `auth_email_log` (`recipientEmail`);--> statement-breakpoint
+CREATE INDEX `auth_email_log_created_idx` ON `auth_email_log` (`createdAt`);--> statement-breakpoint
 CREATE TABLE `domain` (
 	`id` text PRIMARY KEY NOT NULL,
 	`organizationId` text NOT NULL,
@@ -203,35 +245,6 @@ CREATE INDEX `organization_slug_idx` ON `organization` (`slug`);--> statement-br
 CREATE INDEX `organization_owner_idx` ON `organization` (`ownerId`);--> statement-breakpoint
 CREATE INDEX `organization_default_idx` ON `organization` (`isDefault`);--> statement-breakpoint
 CREATE INDEX `organization_personal_idx` ON `organization` (`personal`);--> statement-breakpoint
-CREATE TABLE `pages_pages` (
-	`id` text PRIMARY KEY NOT NULL,
-	`teamId` text NOT NULL,
-	`owner` text NOT NULL,
-	`parentId` text,
-	`path` text NOT NULL,
-	`depth` integer NOT NULL,
-	`order` integer NOT NULL,
-	`title` text NOT NULL,
-	`slug` text NOT NULL,
-	`pageType` text NOT NULL,
-	`content` text,
-	`config` text,
-	`status` text NOT NULL,
-	`visibility` text NOT NULL,
-	`publishedAt` integer,
-	`showInNavigation` integer,
-	`layout` text,
-	`seoTitle` text,
-	`seoDescription` text,
-	`ogImage` text,
-	`robots` text,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
-	`createdBy` text NOT NULL,
-	`updatedBy` text NOT NULL
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `pages_pages_slug_unique` ON `pages_pages` (`slug`);--> statement-breakpoint
 CREATE TABLE `passkey` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text,
@@ -250,6 +263,30 @@ CREATE TABLE `passkey` (
 CREATE UNIQUE INDEX `passkey_credentialID_unique` ON `passkey` (`credentialID`);--> statement-breakpoint
 CREATE INDEX `passkey_user_idx` ON `passkey` (`userId`);--> statement-breakpoint
 CREATE INDEX `passkey_credential_idx` ON `passkey` (`credentialID`);--> statement-breakpoint
+CREATE TABLE `scopedAccessGrant` (
+	`id` text PRIMARY KEY NOT NULL,
+	`organizationId` text NOT NULL,
+	`resourceType` text NOT NULL,
+	`resourceId` text NOT NULL,
+	`role` text DEFAULT 'guest' NOT NULL,
+	`credentialType` text DEFAULT 'pin' NOT NULL,
+	`secretHash` text NOT NULL,
+	`maxUses` integer,
+	`usedCount` integer DEFAULT 0 NOT NULL,
+	`failedAttempts` integer DEFAULT 0 NOT NULL,
+	`lockedUntil` integer,
+	`isActive` integer DEFAULT true NOT NULL,
+	`expiresAt` integer,
+	`tokenTtl` integer DEFAULT 28800000 NOT NULL,
+	`metadata` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`organizationId`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE INDEX `scoped_grant_resource_idx` ON `scopedAccessGrant` (`resourceType`,`resourceId`);--> statement-breakpoint
+CREATE INDEX `scoped_grant_org_idx` ON `scopedAccessGrant` (`organizationId`);--> statement-breakpoint
+CREATE INDEX `scoped_grant_active_idx` ON `scopedAccessGrant` (`isActive`,`expiresAt`);--> statement-breakpoint
 CREATE TABLE `scopedAccessToken` (
 	`id` text PRIMARY KEY NOT NULL,
 	`organizationId` text NOT NULL,
@@ -317,6 +354,9 @@ CREATE TABLE `team_settings` (
 	`translations` text,
 	`ai_settings` text,
 	`theme_settings` text,
+	`site_settings` text,
+	`email_settings` text,
+	`notion_settings` text,
 	`created_at` integer,
 	`updated_at` integer,
 	FOREIGN KEY (`team_id`) REFERENCES `organization`(`id`) ON UPDATE no action ON DELETE cascade
@@ -324,21 +364,6 @@ CREATE TABLE `team_settings` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `team_settings_team_id_unique` ON `team_settings` (`team_id`);--> statement-breakpoint
 CREATE INDEX `team_settings_team_idx` ON `team_settings` (`team_id`);--> statement-breakpoint
-CREATE TABLE `translations_ui` (
-	`id` text PRIMARY KEY NOT NULL,
-	`user_id` text NOT NULL,
-	`team_id` text,
-	`namespace` text DEFAULT 'ui' NOT NULL,
-	`key_path` text NOT NULL,
-	`category` text NOT NULL,
-	`values` text NOT NULL,
-	`description` text,
-	`is_overrideable` integer DEFAULT true NOT NULL,
-	`created_at` integer NOT NULL,
-	`updated_at` integer NOT NULL
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `translations_ui_team_id_namespace_key_path_unique` ON `translations_ui` (`team_id`,`namespace`,`key_path`);--> statement-breakpoint
 CREATE TABLE `twoFactor` (
 	`id` text PRIMARY KEY NOT NULL,
 	`userId` text NOT NULL,
@@ -363,7 +388,8 @@ CREATE TABLE `user` (
 	`superAdmin` integer DEFAULT false NOT NULL,
 	`banned` integer DEFAULT false NOT NULL,
 	`bannedReason` text,
-	`bannedUntil` integer
+	`bannedUntil` integer,
+	`role` text DEFAULT 'user'
 );
 --> statement-breakpoint
 CREATE UNIQUE INDEX `user_email_unique` ON `user` (`email`);--> statement-breakpoint
@@ -371,6 +397,16 @@ CREATE INDEX `user_email_idx` ON `user` (`email`);--> statement-breakpoint
 CREATE INDEX `user_stripe_customer_idx` ON `user` (`stripeCustomerId`);--> statement-breakpoint
 CREATE INDEX `user_super_admin_idx` ON `user` (`superAdmin`);--> statement-breakpoint
 CREATE INDEX `user_banned_idx` ON `user` (`banned`);--> statement-breakpoint
+CREATE TABLE `user_profile` (
+	`id` text PRIMARY KEY NOT NULL,
+	`userId` text NOT NULL,
+	`locale` text,
+	`updatedAt` integer NOT NULL,
+	FOREIGN KEY (`userId`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `user_profile_userId_unique` ON `user_profile` (`userId`);--> statement-breakpoint
+CREATE INDEX `user_profile_user_idx` ON `user_profile` (`userId`);--> statement-breakpoint
 CREATE TABLE `verification` (
 	`id` text PRIMARY KEY NOT NULL,
 	`identifier` text NOT NULL,
@@ -380,4 +416,34 @@ CREATE TABLE `verification` (
 	`updatedAt` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `verification_identifier_idx` ON `verification` (`identifier`);
+CREATE INDEX `verification_identifier_idx` ON `verification` (`identifier`);--> statement-breakpoint
+CREATE TABLE `translations_ui` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`team_id` text,
+	`namespace` text DEFAULT 'ui' NOT NULL,
+	`key_path` text NOT NULL,
+	`category` text NOT NULL,
+	`values` text NOT NULL,
+	`description` text,
+	`is_overrideable` integer DEFAULT true NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `translations_ui_team_id_namespace_key_path_unique` ON `translations_ui` (`team_id`,`namespace`,`key_path`);--> statement-breakpoint
+CREATE TABLE `crouton_redirects` (
+	`id` text PRIMARY KEY NOT NULL,
+	`teamId` text NOT NULL,
+	`owner` text NOT NULL,
+	`fromPath` text NOT NULL,
+	`toPath` text NOT NULL,
+	`statusCode` text NOT NULL,
+	`isActive` integer NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	`createdBy` text NOT NULL,
+	`updatedBy` text NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `crouton_redirects_team_from_path_idx` ON `crouton_redirects` (`teamId`,`fromPath`);

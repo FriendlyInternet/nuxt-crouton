@@ -5,85 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1771593987234,
-      "tag": "0000_marvelous_metal_master",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1771964921245,
-      "tag": "0001_wide_krista_starr",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1772021308947,
-      "tag": "0002_sturdy_thunderbolts",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1772030174504,
-      "tag": "0003_regular_machine_man",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1772456106355,
-      "tag": "0004_old_mystique",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1772553262048,
-      "tag": "0005_furry_ozymandias",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1772553835445,
-      "tag": "0006_moaning_genesis",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1772555928847,
-      "tag": "0007_far_bloodscream",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1773403502139,
-      "tag": "0008_chemical_jetstream",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "6",
-      "when": 1773406033517,
-      "tag": "0009_famous_stick",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "6",
-      "when": 1773676496172,
-      "tag": "0010_brainy_thena",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "6",
-      "when": 1777653774897,
-      "tag": "0011_living_puff_adder",
+      "when": 1785748994815,
+      "tag": "0000_curvy_hex",
       "breakpoints": true
     }
   ]

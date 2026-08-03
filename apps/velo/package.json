@@ -29,7 +29,6 @@
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-email": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
-    "@fyit/crouton-layout": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",
     "better-auth": "^1.5.5",
     "drizzle-orm": "catalog:",

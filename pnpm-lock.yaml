@@ -227,9 +227,6 @@ importers:
       '@fyit/crouton-i18n':
         specifier: workspace:*
         version: link:../../packages/crouton-i18n
-      '@fyit/crouton-layout':
-        specifier: workspace:*
-        version: link:../../packages/crouton-layout
       '@fyit/crouton-pages':
         specifier: workspace:*
         version: link:../../packages/crouton-pages
