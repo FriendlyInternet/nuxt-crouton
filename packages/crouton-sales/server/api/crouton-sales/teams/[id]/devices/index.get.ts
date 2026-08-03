@@ -7,7 +7,7 @@
  * older `/print-devices` endpoint stays as-is for the routers-only view.
  */
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { listTeamDevices } from '../../../../utils/device-pairing'
+import { listTeamDevices } from '../../../../../utils/device-pairing'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
