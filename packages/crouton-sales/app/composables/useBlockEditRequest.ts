@@ -15,16 +15,15 @@
  */
 import type { Ref } from 'vue'
 
-/** Walk up to the enclosing `.crouton-editor-blocks` and read its editor id. */
+/**
+ * Walk up to the enclosing `.crouton-editor-blocks` and read its editor id.
+ *
+ * `closest()` does the walk natively, so this is one query rather than a manual
+ * loop with its own null/branch handling.
+ */
 export function findEditorId(from: HTMLElement | null): string | undefined {
-  let el: HTMLElement | null = from
-  while (el) {
-    if (el.classList?.contains('crouton-editor-blocks') && el.dataset?.editorId) {
-      return el.dataset.editorId
-    }
-    el = el.parentElement
-  }
-  return undefined
+  return from?.closest<HTMLElement>('.crouton-editor-blocks[data-editor-id]')
+    ?.dataset.editorId
 }
 
 /**

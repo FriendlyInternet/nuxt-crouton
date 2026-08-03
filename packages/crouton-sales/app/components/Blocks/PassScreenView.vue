@@ -76,7 +76,14 @@ function handleOpenPanel() {
               {{ t('sales.block.noEventPicked') }}
             </UBadge>
           </div>
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <!--
+            `focus-within` as well as `group-hover`: the controls are the ONLY
+            keyboard path to the property panel (the wrapper's @dblclick is a
+            mouse shortcut), so leaving them at opacity-0 until hover meant a
+            keyboard user could focus the pencil without ever seeing it — the
+            focus-visible half of the a11y gate's finding on #1794.
+          -->
+          <div class="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"

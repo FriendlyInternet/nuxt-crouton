@@ -31,24 +31,24 @@ const { t } = useT()
 // reasons: one is a staff order, the other is short a line.
 const flagged = computed(() => props.job.isPersonnel || props.job.incomplete)
 
-// Template complexity is suppressed, not ignored. This template scores 10/10
-// (cyclomatic/cognitive); the KitchenDisplayRender board it mirrors scores
-// 15/21, and this component was already split OUT of the board to bring both
-// down. The remaining branches are the four states an order can be in — staff,
-// incomplete, has-remarks, has-client — and collapsing them further would trade
-// a readable declarative template for indirection. CRAP is inflated on top of
-// that because Vue templates carry no unit coverage in this package by design.
-// fallow-ignore-next-line complexity
+// Presentation decisions live here rather than as ternaries in the template —
+// the markup then reads as structure, and each rule has a name you can point at.
+const ringClass = computed(() => (flagged.value ? 'ring-warning/60' : ''))
+const headClass = computed(() => (flagged.value ? 'bg-warning/10' : 'bg-elevated/60'))
+const actionColor = computed(() => (props.job.incomplete ? 'warning' as const : 'success' as const))
+const actionLabel = computed(() => t(props.job.incomplete
+  ? 'sales.blocks.passScreen.ui.handOverAnyway'
+  : 'sales.blocks.passScreen.ui.handOver'))
 </script>
 
 <template>
   <div
     class="rounded-2xl bg-muted ring ring-default shadow-sm overflow-hidden flex flex-col"
-    :class="flagged ? 'ring-warning/60' : ''"
+    :class="ringClass"
   >
     <div
       class="flex items-center justify-between px-4 py-3 border-b border-default"
-      :class="flagged ? 'bg-warning/10' : 'bg-elevated/60'"
+      :class="headClass"
     >
       <div class="flex items-baseline gap-2">
         <span class="text-2xl font-extrabold text-highlighted">#{{ job.orderNumber }}</span>
@@ -95,13 +95,11 @@ const flagged = computed(() => props.job.isPersonnel || props.job.incomplete)
     />
 
     <UButton
-      :color="job.incomplete ? 'warning' : 'success'"
+      :color="actionColor"
       size="lg"
       block
       icon="i-lucide-check"
-      :label="job.incomplete
-        ? t('sales.blocks.passScreen.ui.handOverAnyway')
-        : t('sales.blocks.passScreen.ui.handOver')"
+      :label="actionLabel"
       class="rounded-none font-bold uppercase tracking-wide"
       @click="$emit('handOver', job)"
     />

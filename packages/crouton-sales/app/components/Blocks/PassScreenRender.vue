@@ -102,19 +102,21 @@ const health = computed(() => boardHealth({
   pollMs: POLL_MS
 }))
 
+// Health presentation, named rather than inlined as template branches.
+const healthLabel = computed(() => t(`sales.blocks.passScreen.ui.${health.value}`))
+const healthTextClass = computed(() => (health.value === 'stale' ? 'text-warning' : 'text-muted'))
+const healthDotClass = computed(() => ({
+  live: 'bg-success animate-pulse',
+  stale: 'bg-warning',
+  connecting: 'bg-muted animate-pulse'
+}[health.value]))
+
 function ago(iso: string) {
   const s = Math.max(0, Math.floor((now.value - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s}s`
   const m = Math.floor(s / 60)
   return `${m}m ${s % 60}s`
 }
-// Template complexity is suppressed, not ignored. This board scores 9/9
-// (cyclomatic/cognitive) — LOWER than the KitchenDisplayRender it mirrors at
-// 15/21 — after the per-order tile was extracted to PassScreenTile.vue. The
-// remaining branches are the board's genuine states: no event, event missing,
-// stale feed, empty board, and the list. CRAP is inflated on top of that
-// because Vue templates carry no unit coverage in this package by design.
-// fallow-ignore-next-line complexity
 </script>
 
 <template>
@@ -143,19 +145,9 @@ function ago(iso: string) {
           <UIcon name="i-lucide-hand-platter" class="size-6 text-primary" />
           <h2 class="text-xl font-bold tracking-tight text-highlighted">{{ t('sales.blocks.passScreen.ui.title') }}</h2>
         </div>
-        <div class="flex items-center gap-2 text-sm" :class="health === 'stale' ? 'text-warning' : 'text-muted'">
-          <span
-            class="inline-block size-2 rounded-full"
-            :class="{
-              'bg-success animate-pulse': health === 'live',
-              'bg-warning': health === 'stale',
-              'bg-muted animate-pulse': health === 'connecting'
-            }"
-          />
-          <template v-if="health === 'stale'">{{ t('sales.blocks.passScreen.ui.stale') }}</template>
-          <template v-else-if="health === 'connecting'">{{ t('sales.blocks.passScreen.ui.connecting') }}</template>
-          <template v-else>{{ t('sales.blocks.passScreen.ui.live') }}</template>
-          · {{ t('sales.blocks.passScreen.ui.ready', { count: active.length }) }}
+        <div class="flex items-center gap-2 text-sm" :class="healthTextClass">
+          <span class="inline-block size-2 rounded-full" :class="healthDotClass" />
+          {{ healthLabel }} · {{ t('sales.blocks.passScreen.ui.ready', { count: active.length }) }}
         </div>
       </header>
 
