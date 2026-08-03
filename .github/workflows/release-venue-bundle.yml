@@ -78,10 +78,35 @@ jobs:
         # Ship both so one tarball runs anywhere and install.sh stays dumb.
         run: |
           set -euo pipefail
-          OUT="apps/fanfare/.output/server/node_modules/@libsql"
-          # Derive the version from the x64 package that was actually installed,
-          # so the two architectures can never drift apart.
-          VERSION="$(node -p "require('./$OUT/linux-x64-gnu/package.json').version")"
+          ROOT="apps/fanfare/.output"
+
+          # DISCOVER the directory rather than hardcode it: where Nitro traces
+          # @libsql to inside .output is not guaranteed to be one fixed path,
+          # and a wrong guess here fails the whole release (it did once).
+          OUT="$(find "$ROOT" -type d -name '@libsql' -print -quit 2>/dev/null || true)"
+
+          if [ -z "$OUT" ]; then
+            echo "::notice::no @libsql in $ROOT — this build does not carry the native addon, nothing to patch"
+            exit 0
+          fi
+          echo "found @libsql at: $OUT"
+          ls -1 "$OUT"
+
+          if [ -d "$OUT/linux-arm64-gnu" ]; then
+            echo "arm64 addon already present — nothing to do"
+            exit 0
+          fi
+
+          # Derive the version from the x64 package that was actually installed
+          # so the two architectures can never drift apart. Read the file
+          # directly — `require()` of a relative path from `node -e` resolves
+          # against the eval module, not reliably against the workdir.
+          X64_PKG="$OUT/linux-x64-gnu/package.json"
+          if [ ! -f "$X64_PKG" ]; then
+            echo "::error::expected $X64_PKG; @libsql contains:"; ls -1 "$OUT"
+            exit 1
+          fi
+          VERSION="$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).version" "$X64_PKG")"
           echo "libsql native addon version: $VERSION"
 
           TMP="$(mktemp -d)"
