@@ -23,24 +23,44 @@ allowed-tools: Bash, Read, Grep, Glob, Edit, Write
 
 ## The pipeline (how a table reaches the DB)
 
+**Since #1445 WS2 there are two shapes.** Which one an app is on is decided by its
+`drizzle.config.ts` — check that file first, the rest follows from it.
+
+**Current (CLI-owned resolver) — no Nuxt in the loop.** New scaffolds, `apps/velo`,
+`apps/kassa`:
+
 ```
 schema.ts (app layer OR package)            ← Drizzle table definitions
-   └─ NuxtHub scans server/db/schema.ts + server/database across all layers
-        └─ writes a bundled schema entry/bundle at BUILD time:
+   └─ resolveSchemaSourcesSync(process.cwd())     ← walks the layer graph directly
+        (the same set NuxtHub globs, resolved at drizzle-kit runtime — NO build)
+   └─ drizzle-kit generate                        → server/db/migrations/sqlite/NNNN_*.sql
+                                                    + meta/_journal.json + meta/NNNN_snapshot.json
+   └─ wrangler d1 migrations apply (db:migrate*)  → applies the .sql to D1 (local/remote/staging)
+```
+
+Measured on a cold scaffold (#1457): `crouton config` 0.8s, `pnpm db:generate` 1.8s,
+`pnpm dev` boots in ~6s. No `nuxt build`, so the build-first gotcha below cannot occur.
+
+**Legacy (bundled `.mjs`) — still live on `apps/triage` until #1456.** This is the
+world the build-first recipe further down exists for:
+
+```
+schema.ts → NuxtHub scans layers → writes the bundle at BUILD time:
              .nuxt/hub/db/schema.entry.ts            (after `nuxt prepare`)
              …/.nuxt/hub/db/schema.mjs               (ONLY after `nuxt build`)
-   └─ drizzle-kit generate  (reads the .mjs bundle)  → server/db/migrations/sqlite/NNNN_*.sql
-                                                       + meta/_journal.json + meta/NNNN_snapshot.json
-   └─ wrangler d1 migrations apply (db:migrate*)     → applies the .sql to D1 (local/remote/staging)
+   └─ drizzle-kit generate  (reads the .mjs bundle)  → …/NNNN_*.sql + meta/
+   └─ wrangler d1 migrations apply (db:migrate*)     → applies to D1
 ```
 
 Both runtimes are SQLite (local better-sqlite3/libSQL via `node-server`, D1 on
 Cloudflare), so **one schema + one set of migrations serves both** — never write
 D1-only or node-only SQL in a migration.
 
-Key paths (per app, e.g. `apps/fanfare`):
-- `drizzle.config.ts` — `schema` points at the **bundled** file, trying
-  `.nuxt/hub/db/schema.mjs` then `node_modules/.cache/nuxt/.nuxt/hub/db/schema.mjs`;
+Key paths (per app, e.g. `apps/kassa`):
+- `drizzle.config.ts` — **the tell for which shape you're on.** Current apps call
+  `resolveSchemaSourcesSync(process.cwd())` (no `.nuxt`, no build). Legacy apps point
+  `schema` at the bundled file, trying `.nuxt/hub/db/schema.mjs` then
+  `node_modules/.cache/nuxt/.nuxt/hub/db/schema.mjs`. Either way
   `out: server/db/migrations/sqlite`.
 - `server/db/migrations/sqlite/` — generated `NNNN_*.sql` + `meta/` (journal +
   per-migration snapshots). **All committed.** wrangler applies the `.sql`;
@@ -89,8 +109,26 @@ migrate step below (`db:generate` auto-includes it, then `db:migrate`) — the s
 step any schema change needs. (A package may also ship its own `.sql` for direct
 apply via `wrangler d1 execute --file=node_modules/@fyit/<pkg>/server/database/migrations/<file>.sql`.)
 
-## Generate the migration — and the gotcha
+## Generate the migration
 
+**On a current app (resolver `drizzle.config.ts`) there is no gotcha** — the whole
+section below does not apply. `pnpm --filter <app> db:generate` resolves the layer
+graph itself and writes the migration in ~2s:
+
+```bash
+pnpm --filter <app> db:generate   # → server/db/migrations/sqlite/NNNN_*.sql + meta/
+pnpm --filter <app> db:migrate    # apply locally
+```
+
+One behaviour worth knowing (#1457): on a **cold scaffold** `crouton config` does not
+produce the migration in the same run — it prints
+`↻ Migration deferred — resolve the app's layers first, then re-run: pnpm db:generate`
+and exits 0. That is the designed soft-defer (`reason: 'deferred'`, see
+`packages/crouton-cli/CLAUDE.md`), not a failure. Run `db:generate` and carry on.
+
+### The build-first gotcha — LEGACY apps only (`apps/triage` until #1456)
+
+Applies **only** where `drizzle.config.ts` still points at the bundled `.mjs`.
 `pnpm --filter <app> db:generate` reads `.nuxt/hub/db/schema.mjs`. On a freshly
 cloned / prepared tree **that file does not exist yet** — `nuxt prepare` only
 writes `schema.entry.ts`; the `.mjs` bundle is emitted during **`nuxt build`**.
