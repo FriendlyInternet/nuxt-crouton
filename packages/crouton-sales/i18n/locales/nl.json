@@ -712,7 +712,10 @@
       "fieldDescription": "Omschrijving",
       "fieldActive": "Actief",
       "fieldRequiresRemark": "Opmerking vereist",
-      "fieldRemarkPrompt": "Opmerking-prompt"
+      "fieldRemarkPrompt": "Opmerking-prompt",
+      "errMissingName": "Productnaam ontbreekt",
+      "errMissingPrice": "Geen prijskolom",
+      "errBadPrice": "Prijs onleesbaar"
     }
   }
 }

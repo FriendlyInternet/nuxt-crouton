@@ -711,7 +711,10 @@
       "fieldDescription": "Description",
       "fieldActive": "Actif",
       "fieldRequiresRemark": "Remarque requise",
-      "fieldRemarkPrompt": "Invite de remarque"
+      "fieldRemarkPrompt": "Invite de remarque",
+      "errMissingName": "Nom du produit manquant",
+      "errMissingPrice": "Pas de colonne prix",
+      "errBadPrice": "Prix illisible"
     }
   }
 }

@@ -47,12 +47,30 @@ const columns = computed(() => [
 ])
 
 /**
+ * The parser is pure and locale-free, so it reports failures as stable English codes.
+ * Translate them here — rendering them raw put "Missing product name" in the middle of
+ * an otherwise Dutch table. Anything unrecognised falls back to the generic label
+ * rather than leaking an untranslated string.
+ */
+const ERROR_KEYS: Record<string, [string, string]> = {
+  'Missing product name': ['sales.import.errMissingName', 'Missing product name'],
+  'Missing price column': ['sales.import.errMissingPrice', 'No price column'],
+  'Unreadable price': ['sales.import.errBadPrice', 'Unreadable price'],
+}
+
+function errorLabel(raw?: string): string {
+  const entry = raw ? ERROR_KEYS[raw] : undefined
+  if (!entry) return t('sales.import.statusError', 'Error')
+  return t(entry[0], entry[1])
+}
+
+/**
  * Status is carried by icon + text as well as colour — colour alone would leave a
  * colour-blind user unable to tell "will import" from "will be skipped".
  */
 function badge(row: ParsedProductRow) {
   if (row.status === 'error') {
-    return { color: 'error' as const, icon: 'i-lucide-circle-x', label: row.error ?? t('sales.import.statusError', 'Error') }
+    return { color: 'error' as const, icon: 'i-lucide-circle-x', label: errorLabel(row.error) }
   }
   if (row.status === 'warn-duplicate') {
     return { color: 'warning' as const, icon: 'i-lucide-copy', label: t('sales.import.statusDuplicate', 'Already exists') }

@@ -712,7 +712,10 @@
       "fieldDescription": "Description",
       "fieldActive": "Active",
       "fieldRequiresRemark": "Requires remark",
-      "fieldRemarkPrompt": "Remark prompt"
+      "fieldRemarkPrompt": "Remark prompt",
+      "errMissingName": "Missing product name",
+      "errMissingPrice": "No price column",
+      "errBadPrice": "Unreadable price"
     }
   }
 }

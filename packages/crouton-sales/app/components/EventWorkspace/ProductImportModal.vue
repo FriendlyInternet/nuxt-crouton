@@ -206,12 +206,16 @@ async function submit() {
   <!-- `#body`/`#footer` rather than `#content`: that lets UModal render its own header
        from `title`/`description`, which is what names the dialog for a screen reader —
        `#content` replaces the header wholesale, so those props would render nothing and
-       the dialog would go unnamed. It also drops our hand-rolled header/footer chrome. -->
+       the dialog would go unnamed. It also drops our hand-rolled header/footer chrome.
+
+       The `sm:` prefix on the width is required: the default content class is
+       `sm:max-w-lg`, so a bare `max-w-*` loses to it at ≥640px — which clipped the
+       Status column off the right edge of the preview table. -->
   <UModal
     v-model:open="open"
     :title="t('sales.import.title', 'Import products')"
     :description="t('sales.import.subtitle', 'Paste rows from a spreadsheet. Nothing is saved until you press Import.')"
-    :ui="{ content: 'max-w-4xl' }"
+    :ui="{ content: 'sm:max-w-5xl' }"
   >
     <template #body>
       <div class="space-y-4">
