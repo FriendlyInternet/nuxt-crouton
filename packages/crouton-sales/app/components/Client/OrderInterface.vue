@@ -474,14 +474,21 @@ const productQuantities = computed(() => {
 })
 
 // Cart lines for configurable products (options/remark), grouped by product id
-// and carrying their cart index. Drives the "ordered variants" list inside the
-// product's expandable — each variant gets its own −/qty/+ stepper (targeting
-// its exact line by index) so it can be adjusted without opening the cart.
-// Plain lines are excluded: they already have the inline row stepper.
+// and carrying their cart index. Drives BOTH steppers inside the product's
+// expandable, each targeting an exact line by index: the one for the combo
+// currently being composed (#1757), and the "ordered variants" list of the
+// other combos.
+// A line WITHOUT options/remark is listed too when its product is configurable
+// (#1753): options can be optional, so the same product can sit in the cart both
+// with and without them — and a configurable row shows a count badge + chevron,
+// never the inline stepper, so that line would be counted but invisible. That
+// same line is where a remark product added with an EMPTY remark lands, so
+// #1757's stepper needs it here to resolve. Only a truly plain product's line is
+// excluded: its row stepper already covers it.
 const cartLinesByProduct = computed(() => {
   const map: Record<string, Array<{ index: number, selectedOptions?: string | string[], remarks?: string, quantity: number }>> = {}
   cartItems.value.forEach((item, index) => {
-    if (!item.selectedOptions && !item.remarks) return
+    if (!item.selectedOptions && !item.remarks && !isConfigurable(item.product)) return
     ;(map[item.product.id] ||= []).push({
       index,
       selectedOptions: item.selectedOptions,
@@ -491,6 +498,14 @@ const cartLinesByProduct = computed(() => {
   })
   return map
 })
+
+// A product is configurable when it expands inline for input — mirrors
+// SalesClientProductList's `isExpandable` (options with actual entries, or a
+// required remark), which decides whether the row gets a stepper or a badge.
+function isConfigurable(product: SalesProduct): boolean {
+  const hasOptions = !!product.hasOptions && Array.isArray(product.options) && product.options.length > 0
+  return hasOptions || !!product.requiresRemark
+}
 
 // Row "−" on a plain product: decrement its single cart line (no options, no
 // remark — the only line a row-level stepper can unambiguously target).

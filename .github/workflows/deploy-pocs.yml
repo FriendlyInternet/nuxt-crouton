@@ -130,7 +130,6 @@ jobs:
       workspace: pocs
       environment: staging
       staging-url: ${{ matrix.stagingUrl }}
-      layer-packages: ${{ matrix.layerPackages }}
       # PR-tied deploys wire the preview-review bridge to this PR (#607); on a manual
       # dispatch use the optional review_pr input; empty → the bridge stays off.
       review-pr: ${{ github.event.pull_request.number || github.event.inputs.review_pr }}
@@ -194,24 +193,14 @@ jobs:
       - name: Rebuild native build deps skipped by --ignore-scripts
         run: pnpm rebuild better-sqlite3 2>/dev/null || true
 
-      # Build the dist-consumed framework layers the app needs (same set + flow as
-      # deploy-app.yml; only packages WITH a build script are built).
-      - name: Build layer packages
-        env:
-          LAYER_PACKAGES: ${{ matrix.layerPackages }}
-        run: |
-          for pkg in $LAYER_PACKAGES @fyit/crouton-devtools; do
-            dir="packages/${pkg#@fyit/}"
-            if [ -d "$dir/dist" ] && [ -n "$(ls -A "$dir/dist" 2>/dev/null)" ]; then
-              echo "Skipping $pkg (already built this run)"
-              continue
-            fi
-            if node -e "process.exit(require('./$dir/package.json').scripts?.build ? 0 : 1)" 2>/dev/null; then
-              echo "Building $pkg"; pnpm --filter "$pkg" build
-            else
-              echo "Skipping $pkg (no build script / pure source layer)"
-            fi
-          done
+      # Ensure EVERY @fyit/* dist is present before the build — same action every
+      # other build path uses (#1222). This job used to hand-roll a subset build
+      # from `matrix.layerPackages`; that is exactly the per-caller subset which
+      # could miss a transitively-extended package and kill the build with
+      # "Could not load '@fyit/crouton'". It was the last caller left on the old
+      # mechanism after #1222 migrated deploy-app.yml (#1787).
+      - name: Warm @fyit package builds
+        uses: ./.github/actions/warm-packages
 
       - name: Prepare Nuxt (generate tsconfig)
         run: npx nuxt prepare

@@ -37,6 +37,7 @@
     "db:clone": "node scripts/db-clone.mjs",
     "db:counts": "node scripts/db-counts.mjs",
     "app:shots": "node scripts/app-shots.mjs",
+    "preview": "node scripts/app-preview.mjs",
     "publish:packages": "./scripts/publish-packages.sh",
     "publish:packages:dry": "./scripts/publish-packages.sh --dry-run",
     "publish:packages:skip-build": "./scripts/publish-packages.sh --skip-build",
