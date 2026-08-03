@@ -572,6 +572,20 @@ export function useSession() {
     if (authClient) {
       await authClient.signOut()
     }
+
+    // Everything below this line is keyed to WHO is signed in, so logout has to
+    // tear all of it down. kassa is a shared till: the next person signs in on
+    // the same tab with no page reload, and without this they inherit the
+    // previous user's state.
+    //
+    //  - the in-flight promises: otherwise the next login can join the previous
+    //    user's still-pending fetch and adopt whatever it resolves to.
+    //  - the repair latch: otherwise a second user with a legacy org-less
+    //    session never gets the one repair attempt, and lands on "no team found".
+    inFlightSession = null
+    inFlightActiveOrg = null
+    ctx.triedDefaultOrgState.value = false
+
     ctx.sessionState.value = null
     ctx.userState.value = null
     ctx.activeOrgState.value = null

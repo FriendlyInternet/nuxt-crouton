@@ -194,3 +194,76 @@ describe('useSession — isPending is a resolved-latch, not an in-flight flag (#
     expect(mockAuthClient.getSession).toHaveBeenCalledTimes(1)
   })
 })
+
+/**
+ * kassa is a shared till: staff sign out and the next person signs in on the
+ * SAME tab, with no page reload. Any cache keyed to "the current identity" must
+ * therefore be torn down by `clear()`, or the second user inherits the first
+ * user's state. Both caches added for #1703 are per-identity.
+ */
+describe('useSession — logout invalidates per-identity caches (#1703)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    Object.keys(mockUseStateValues).forEach(k => delete mockUseStateValues[k])
+    reemit = null
+    reemits = 0
+
+    mockAuthClient.signOut.mockResolvedValue({})
+    mockAuthClient.getSession.mockResolvedValue({
+      data: {
+        session: { id: 'session-1', userId: 'user-1', activeOrganizationId: null },
+        user: { id: 'user-1', email: 'staff-a@example.com' }
+      },
+      error: null
+    })
+    mockAuthClient.organization.getFullOrganization.mockResolvedValue({ data: null, error: null })
+    mockAuthClient.organization.list.mockResolvedValue({ data: [ORG], error: null })
+    mockAuthClient.organization.setActive.mockResolvedValue({ data: ORG, error: null })
+  })
+
+  it('lets the next user get the default-org repair after a logout', async () => {
+    const { refresh, clear } = useSession()
+
+    // Staff A: legacy org-less session, gets the one repair attempt.
+    await refresh()
+    await flush()
+    expect(mockAuthClient.organization.list).toHaveBeenCalledTimes(1)
+
+    await clear()
+    await flush()
+
+    // Staff B on the same tab, also org-less — must NOT inherit A's latch.
+    mockAuthClient.organization.list.mockClear()
+    await refresh()
+    await flush()
+
+    expect(mockAuthClient.organization.list).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not let a post-logout fetch join the previous user\'s in-flight request', async () => {
+    const { refresh, clear } = useSession()
+
+    // Staff A's fetch hangs (slow till wifi) and is still pending at logout.
+    let releaseA: (v: unknown) => void = () => {}
+    mockAuthClient.getSession.mockImplementationOnce(
+      () => new Promise((resolve) => { releaseA = resolve })
+    )
+
+    const pendingA = refresh()
+    await flush()
+
+    await clear()
+
+    // Staff B signs in before A's request comes back. B must issue their own
+    // fetch, not adopt whatever A's stale promise resolves to.
+    const callsBefore = mockAuthClient.getSession.mock.calls.length
+    const pendingB = refresh()
+    await flush()
+
+    expect(mockAuthClient.getSession.mock.calls.length).toBe(callsBefore + 1)
+
+    releaseA({ data: null, error: null })
+    await pendingA
+    await pendingB
+  })
+})

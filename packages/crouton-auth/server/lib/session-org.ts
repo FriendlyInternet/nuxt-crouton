@@ -28,6 +28,24 @@ import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import type { TeamsConfig } from '../../types/config'
 
 /**
+ * Look up an organization by slug.
+ *
+ * Lives here rather than in `auth.ts` so there is exactly one copy of this
+ * query: `auth.ts` already imports this module, so the dependency runs
+ * leaf-ward and importing it back the other way would be circular.
+ */
+export async function getOrgBySlug(
+  db: DrizzleD1Database<Record<string, unknown>>,
+  slug: string
+): Promise<{ id: string, name: string, slug: string } | null> {
+  const result = await db.all(sql`
+    SELECT id, name, slug FROM organization WHERE slug = ${slug}
+  `)
+
+  return (result[0] as { id: string, name: string, slug: string } | undefined) ?? null
+}
+
+/**
  * Resolve which organization a brand-new session should start in.
  *
  * Order of preference:
@@ -60,11 +78,8 @@ export async function resolveInitialOrgId(
   }
 
   if (teams.defaultTeamSlug) {
-    const defaultOrg = await db.all(sql`
-      SELECT id FROM organization WHERE slug = ${teams.defaultTeamSlug} LIMIT 1
-    `)
-    const id = (defaultOrg[0] as { id?: string } | undefined)?.id
-    if (id) return id
+    const defaultOrg = await getOrgBySlug(db, teams.defaultTeamSlug)
+    if (defaultOrg) return defaultOrg.id
   }
 
   // Deterministic tiebreak — see (3) above.

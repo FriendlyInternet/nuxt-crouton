@@ -20,7 +20,7 @@ import { i18n } from '@better-auth/i18n'
 import { passkey } from '@better-auth/passkey'
 import { sql } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
-import { resolveInitialOrgId } from './session-org'
+import { resolveInitialOrgId, getOrgBySlug } from './session-org'
 import type { BetterAuthOptions } from 'better-auth'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import type {
@@ -385,6 +385,12 @@ function buildSessionConfig(sessionConfig?: SessionConfig): BetterAuthOptions['s
  * was skipped unless `defaultTeamSlug` or `autoCreateOnSignup` was set, which
  * meant no app in the repo ever got it and every session started org-less.
  *
+ * Side effect of always registering: `user.create.after` now fires for apps
+ * with no `teams` config too, so they start emitting the
+ * `crouton:operation` / `auth:user:registered` event on signup where they
+ * previously emitted nothing. Its two team-creation branches still no-op
+ * without the flags, so the only new behaviour is that event.
+ *
  * @param config - @crouton/auth configuration
  * @param db - Drizzle database instance
  * @returns Database hooks configuration
@@ -467,27 +473,6 @@ function buildDatabaseHooks(
   }
 }
 
-/**
- * Get organization by slug
- *
- * @param db - Drizzle database instance
- * @param slug - Organization slug to find
- * @returns Organization object or null if not found
- */
-async function getOrgBySlug(
-  db: DrizzleD1Database<Record<string, unknown>>,
-  slug: string
-): Promise<{ id: string, name: string, slug: string } | null> {
-  const result = await db.all(sql`
-    SELECT id, name, slug FROM organization WHERE slug = ${slug}
-  `)
-
-  if (result.length === 0) {
-    return null
-  }
-
-  return result[0] as { id: string, name: string, slug: string }
-}
 
 /**
  * Ensure the default organization exists (lazy creation)
