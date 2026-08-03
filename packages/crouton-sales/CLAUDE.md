@@ -14,12 +14,17 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `server/utils/printing-reactions.ts` | **Pure** sales reactions to the crouton-printing lifecycle (#329): `onJobCreated`/`onJobCompleted`/`onJobFailed` (deps injected, unit-tested). Order auto-complete + cloud-sync outbox — replaced the deleted `print-job-complete.ts` |
 | `server/plugins/printing-subscriber.ts` | Nitro plugin wiring the reactions to `printing:job:{created,completed,failed}` hooks (filtered to `source === 'sales'`, best-effort log+swallow) |
 | `app/composables/useHelperAuth.ts` | Helper authentication (wraps nuxt-crouton-auth; PIN login via generic redeem, gate-session adoption) |
+| `app/utils/printer-led.ts` | Printer online-LED attribution pure logic (#1507): `attributePrinterStates(printers, jobs)` → per-printer `LedState` (`online`/`offline`/`printing`/`unknown`). Matches a job to a printer row by `printerId` first, else by an **unambiguous** `printerTitle` (drift-proof so a re-created printer's failures still show red, not a false grey); latest job wins by `completedAt ?? createdAt`. Behaviour contract: `test/printer-led.test.ts` |
 | `server/plugins/scoped-access.ts` | Nitro hook handlers: before-redeem helperPin→grant sync + pages derive-scope (one PIN from page gate to POS) |
-| `app/plugins/viewport-meta.ts` | Replaces the default viewport meta via useHead: `viewport-fit=cover` (safe-area env() for the phone kassa) + `maximum-scale=1` (kills iOS input-focus auto-zoom; pinch still works) |
+| `app/plugins/viewport-meta.ts` | Replaces the default viewport meta via useHead: `viewport-fit=cover` (safe-area env() for the phone kassa) + `maximum-scale=1` (kills iOS input-focus auto-zoom; pinch still works). **`maximum-scale=1` does NOT stop double-tap-to-zoom** (Safari ignores it for user gestures) — that's suppressed by `touch-action: manipulation` (`touch-manipulation`) on the tappable surfaces: the four slide-out roots in `Shell.vue` + the cart drawer content in `OrderInterface.vue` (#1610), and the **`OrderInterface` root itself** so the always-visible product grid + steppers are covered too (#1628) |
 | `app/components/Client/` | Customer-facing order interface (8 components) |
 | `app/components/Admin/` | Admin sidebar navigation |
 | `app/components/Pos/` | Order management (OrdersList) |
 | `app/components/Settings/` | Print settings modals (opt-in) |
+| `server/utils/team-event.ts` | `requireTeamEvent(event)` — shared guard for `teams/[id]/events/[eventId]/*` endpoints: membership + event-ownership in one call (400/404). Extracted in #1324 to kill the per-endpoint copies; new event-scoped endpoints start here |
+| `server/utils/require-scoped-event.ts` | `requireScopedEvent(event)` — the **helper-token** analog of `requireTeamEvent`: validates `:eventId`, requires a scoped-access token for that event, returns `{ eventId, access, db }`. Used by the helper-authed `events/[eventId]/*` endpoints (`order-data`, `orders` POST, `my-orders`); extracted to kill the same preamble clone group the fallow audit flags |
+| `server/utils/order-filters.ts` | Pure request-shaping for the team-authed orders-list endpoint (`teams/[id]/events/[eventId]/orders.get.ts`) — `printStatusBucket` (busy 0/1 · done 2 · failed 9), `parseOrderFilters`, `parsePageParams`, `parseLocationRemarks`. DB-free → unit-tested (`test/order-filters.test.ts`); keeps the endpoint a thin fetch → build-where → delegate (same split as `my-orders-shape`) |
+| `server/utils/my-orders-shape.ts` | Pure assembly for the `my-orders` endpoint — `shapeMyOrders(orders, items, jobs)` groups items per order, resolves option ids → labels (`resolveOptionLabels`), sums the order total, and buckets the combined print status (`bucketFromStatuses`: failed > busy > done, display jobs excluded). No DB/Nitro deps → unit-tested (`test/my-orders-shape.test.ts`) |
 | `server/utils/sync-outbox.ts` | Pi-side capture for the D1 live mirror (#176) — `recordOutboxEvents()` + `isCloudSyncEnabled()`; gated by `CROUTON_SALES_CLOUD_SYNC` |
 | `server/utils/sync-ingest.ts` | Cloud-side apply (#178) — `applyOutboxEvents()` idempotent upsert by nanoid |
 | `server/utils/cloud-sync-auth.ts` | Fail-closed `x-sync-key` auth for the ingest (#178) |
@@ -150,10 +155,19 @@ clears it; inactive clients are excluded from `order-data`'s client list (POS pi
 clients panel. `salesPrintqueues.orderId` is **nullable** — end-of-tab receipts belong to the whole
 tab, not one order (the complete/fail callbacks skip order auto-complete when null).
 
-**Ticket layout**: kitchen tickets print the **client name** as the big centered header (double
-width/height) — the location name is deliberately NOT printed (each kitchen printer sits at its
-location). Customer receipts keep the small `Client:` line; end-of-tab receipts (`ReceiptData.clientTab`)
-reuse the big client header and print `Orders: N` instead of `Order #x`.
+**Ticket layout** (bold hierarchy, #1427; refined #1503): kitchen tickets open with a heavy-ruled
+**call-out block** — the `#order-number` first at normal size, the client name below at double-size
+(a loose order promotes its `#N` to the big slot) — then one compact `HH:MM · helper` meta line.
+The location name is deliberately NOT printed (each kitchen printer sits at its location). **Items
+pack tight**: a blank separator line prints only around an item that carries options/notes, so runs
+of plain items sit together (#1503). Each item's **product name, options, and note lines print
+double-height** (height only — the price column still aligns) so products and comments read big at a
+glance; the HTML/preview mirror bumps the matching font sizes. A **`TOTAL` prints on any ticket that shows prices** (incl. a
+priced `*** PERSONEEL ***` staff ticket), not just customer receipts. Customer receipts keep the
+small `Client:` line, print amounts in one **right-aligned price column** (long names wrap within
+their column) and a double-height `TOTAL`; end-of-tab receipts (`ReceiptData.clientTab`) reuse the
+call-out block with `Orders: N` instead of `Order #x`. Layout lives in crouton-printing's
+`receipt-formatter.ts` (`formatReceipt` ESC/POS + `renderTicketHtml` mirror).
 
 ### Admin Pages (shipped by this package)
 
@@ -176,27 +190,41 @@ SettingsTab.
 
 The workspace **shell** itself is `EventWorkspace/Shell.vue` (auto-import `SalesEventWorkspaceShell`):
 resolves the event from a `:event-slug` prop via `useCollectionQuery('salesEvents')`, then renders
-**kassa-first — no tabs**: header + `<SalesPosPanel>` as the main surface. The header row (compact
-event switcher with a "create event" item in its `#content-top`, same pattern as
-`CroutonFormReferenceSelect`, the **Instellingen** toggle right beside it, and — only while open —
-the panel-wide **Opslaan** button at the row's right) lives **inside the settings container**: one
-bordered panel whose `UCollapsible` slides `SettingsTab` open under the header row. The Save button
-is Shell-hosted: SettingsTab gets `hide-save-bar` and exposes `{ save, dirty, saving }`
-(`defineExpose`), which Shell reads via a template ref; Duplicate/Delete live as explained rows at
-the bottom of its Event Details card. The full event form (incl. slug) is not reachable from the workspace.
-Beside the POS, up to two **side panes** open via vertical tabs stacked in a reserved gutter at
-the kassa's right edge (Shell-owned, no prop plumbing). Both panes can be open at once, each
+**kassa-first — no header row**: `<SalesPosPanel>` is the main, chrome-less surface; everything else
+is a **pane** (Bestellingen / Klanten / Data / Instellingen) toggled from vertical tabs in the right
+gutter, whose top also hosts a compact icon-only **event switcher** (create-event in its
+`#content-top`, same pattern as `CroutonFormReferenceSelect`). **Instellingen** (admin only) is the
+tabbed `SettingsTab`, opened as a splitter pane on desktop and a `USlideover` on narrow; its
+panel-wide **Opslaan** is Shell-hosted in a **fixed footer below the scroll area**, driven by the
+`{ save, dirty, saving }` API SettingsTab hands up via a `register` emit (a template ref can't carry
+it — the ref binds before an async-setup component's exposed object attaches, #1321). Duplicate/Delete
+are explained rows in the Event Details card; the full event form (incl. slug) isn't reachable here.
+Beside the POS, up to three **side panes** open via vertical tabs stacked in a reserved gutter at
+the kassa's right edge (Shell-owned, no prop plumbing). Any combination can be open at once, each
 resizable via Reka UI's Splitter (`SplitterGroup`/`Panel`/`ResizeHandle`; panels carry explicit
 `id`/`order` because the set is dynamic; ratios persist via `autoSaveId`). Pane visibility
-persists too: `useLocalStorage('sales-workspace-{orders,clients}-open')` with `initOnMounted`
+persists too: `useLocalStorage('sales-workspace-{orders,clients,data}-open')` with `initOnMounted`
 (SSR renders closed, restores after hydration); the keys are global across events, so the
-clients flag is gated per event by `requiresClient` (`clientsPaneOpen`). **Narrow screens
+clients flag is gated per event by `requiresClient` (`clientsPaneOpen`) and the data flag per
+session by `useAuth().loggedIn` (`dataPaneOpen`). **Narrow screens
 (`useMediaQuery('(max-width: 1023px)')`) drop the splitter entirely** — side-by-side panes would
 squeeze the kassa to nothing — and render the same pane headers + bodies as full-height
-`USlideover`s instead, toggled from a button row above the kassa (no gutter/vertical tabs in
-narrow mode). The slideover open state is ephemeral (`ref`s, not the persisted localStorage
-flags): an overlay auto-opening on page load would trap a phone user. An open pane's tab
-hides — the pane header (icon + title, mirroring the tab) carries the close ✕:
+`USlideover`s instead, toggled from a **segmented tab strip** above the kassa (no gutter/vertical
+tabs in narrow mode). **The right-gutter tabs are desktop-only** — on narrow a **segmented tab
+strip** above the kassa replaces them: a compact **icon-only event switcher** (same items +
+create-event `#content-top`), the **Instellingen gear** and the
+**kassa edit-mode pencil** — lifted out of the kassa's category-tabs row via
+the `editMode` defineModel that OrderInterface and PosPanel expose (`hide-edit-toggle` hides the
+inline pencil so there's never two). **Settings follow suit on narrow**: Instellingen
+opens a `USlideover` instead of the desktop splitter pane (Opslaan in the same fixed footer, driven
+by the same registered save API) — only one `SettingsTab` instance ever mounts
+(`settingsPaneOpen && !isNarrow` vs `isNarrow`). In
+the slideover SettingsTab gets its `tabbed` prop: the three cards (Eventgegevens / Printers /
+Actieve helpers) render behind a section-tab strip — a **sticky `CroutonSubBar`** styled like the
+pages editor's tabs (underline-active; #307) — one at a time via `v-show` (all stay mounted so the
+panel-wide dirty/save covers fields on every tab). The slideover open state is ephemeral (`ref`s, not the
+persisted localStorage flags): an overlay auto-opening on page load would trap a phone user. An
+open pane's tab hides — the pane header (icon + title, mirroring the tab) carries the close ✕:
 - **"Bestellingen"** opens `OrdersTab`; its pane header also carries the orders filter toggle
   (chip = active-filter count; state lifted into Shell, selects live in OrdersTab). The POS
   itself is `@container`-responsive: squeezed below `@2xl` it flips to mobile mode (cart drawer
@@ -217,6 +245,21 @@ hides — the pane header (icon + title, mirroring the tab) carries the close �
   `salesOrders`** (checkout in `usePosOrder` emits it — the kassa sits right beside the pane;
   expanded rows refetch their preview). After a successful `end-receipt` the panel emits a
   `salesClients` mutation hook so the POS client picker drops the settled client.
+- **"Data"** (admin-only: `useAuth().loggedIn` — PIN helpers hold a scoped token, not a session,
+  so they never see the tab, #1329) opens `EventWorkspace/DataPanel.vue` (auto-import
+  `SalesEventWorkspaceDataPanel`) — the pane body only, Shell owns the pane header. The event's
+  key sales numbers beside the kassa, deliberately a **composition** of the existing "data"
+  surfaces scoped to the workspace's event: `SalesDashboardSalesSummary` (revenue/orders/avg +
+  top products, polling), the revenue-by-day `CroutonChartsWidget` (via `SALES_CHART_KINDS`,
+  silently dropped when `@fyit/crouton-charts` isn't installed — `hasApp('charts')`), and
+  `SalesBlocksProductMatrixRender` (product × day pivot, reused as-is via `attrs.eventScope`).
+  The chart/matrix endpoints are team-members-only, matching the gate. The
+  **"Personeel meetellen" (include-staff) toggle is sticky** to the top of the
+  scrolling pane (`sticky -top-2`, bleeds over the host `p-4` via negative margins
+  + solid `bg-default`), so it stays reachable while the numbers below scroll (#1608).
+  `-top-2` cancels the host's `pt-2` so no content scrolls into the 8px gap above the
+  bar (the IMG_1493 bleed regression), and symmetric `py-3` keeps the toggle centered
+  both at rest and when stuck (an earlier `pt-4 pb-2` looked top-heavy at rest).
 Per-order print status lives on the order rows as LED dots. Event dates are deliberately not shown
 anywhere in the workspace (irrelevant to the POS flow; columns remain in the DB). Deleting the
 current event navigates back to the events list via a `crouton:mutation` hook (matched on
@@ -224,7 +267,13 @@ current event navigates back to the events list via a `crouton:mutation` hook (m
 `<Suspense>`.
 Props: `eventSlug` (required), `teamParam` (defaults to `route.params.team`, present in both admin
 and public CMS routes), `tabParam` (**legacy, ignored** — kept for consumer compatibility),
-`showSwitcher` / `showHeaderActions` / `showHeader` (default `true`).
+`showSwitcher` / `showHeaderActions` / `showHeader` (default `true`), and `fill` (default `false`) —
+set by the fullscreen-modal host (`EventWorkspaceRender`, narrow member) so the kassa runs
+**edge-to-edge**: the shell root flexes to the modal's height (`h-full`) and the kassa drops its
+`border rounded-xl` frame + the measured `100dvh` budget (the modal IS the budget). Without `fill`
+(admin page + wide inline shell) the kassa keeps the framed, viewport-measured card. The block's
+member modal also drops its `p-4` inset when passing `fill`, so nothing boxes the kassa inside the
+fullscreen modal.
 The `eventWorkspaceBlock` renderer mounts the shell **only for signed-in team members** and passes
 `:show-switcher="false"` (event fixed by the editor) — the header stays visible so the
 settings/orders toggles are reachable. Anonymous visitors (volunteers) get `<SalesPosPanel>`
@@ -233,13 +282,15 @@ The shell uses top-level `await`, so any non-page consumer must give it a `<Susp
 
 `ProductsTab.vue` renders products as a **drag-reorderable list** (not a table): a bespoke `<ul>`
 with `useSortable` (`@vueuse/integrations`, via crouton-core) and a `.drag-handle` grip. Drop
-persists the new visual index to each moved row's `sortOrder` via `useCollectionMutation('salesProducts').update`
-— no reorder endpoint needed (the existing PATCH accepts `sortOrder`). The list is sorted by
-`sortOrder` (nullable integer, null⇒0) then title, and reordering operates on the currently
-**visible** set (whole list, or within the selected category tab). Note: `sales_products.sortOrder`
-is an `integer` column (migration `0003_furry_lilith`); the old redundant `order` int column was
-dropped. The generic tree/sortable reorder path (`useTreeMutation`) is **not** used here because it
-re-fetches all team products un-scoped to the event. Each row also surfaces routing/flags: the
+persists the new visual index through the generated `/reorder` endpoint via
+`useTreeMutation('salesProducts').reorderSiblings` (`order = index`). The sortable position column
+is **`order`** (`integer`, null⇒0) — the one the `sortable: true` generator produces (default
+`orderField: 'order'`) and that the whole reorder chain is keyed on: the DB column, the `/reorder`
+query, `order-data`, and `useTreeMutation`'s hardwired `order` payload key. The list is sorted by
+`order` then title, and reordering operates on the currently **visible** set (whole list, or within
+the selected category tab). ⚠️ There is **no `sortOrder` column** — an earlier revision of the POS
+components read `sortOrder`, which never existed in any consumer's schema, so reorders silently
+reverted to alphabetical (#1524). Each row also surfaces routing/flags: the
 product's **location** name (📍) and the active **printer(s)** at that location (🖨️, joined —
 derived by matching `salesPrinters.locationId` to the product's `locationId`), plus **options**
 and **remark** badges (`hasOptions` / `requiresRemark`). The tab therefore also queries
@@ -252,21 +303,29 @@ badge: the printer LED conveys state. Staff orders (`isPersonnel`) carry a **war
 on the row (`border-s-2 border-s-warning`) instead of a badge. **Clicking a row toggles expand**
 (accordion-ish via an `expandedIds` Set; the chevron rotates). There is **no edit pencil** —
 orders are not editable from the workspace. Filters hide behind a **Filters toggle**
-(`UCollapsible`; a `UChip` with the active count marks a collapsed-but-filtered list). The panel
-is a `bg-elevated/60` card with a reset button (visible only while filters are active). The toggle
+(`UCollapsible`; a `UChip` with the active count marks a collapsed-but-filtered list). When open,
+the selects ride a **sticky `CroutonSubBar`** pinned under the pane header (so they stay reachable
+while the list scrolls; #307) — a responsive `@container` grid (one column on a narrow pane,
+flowing to 2–4 columns when wider) with a reset button (visible only while filters are active). The toggle
 is **header-controllable**: pass `v-model:filters-open` (+ listen to `@update:active-filter-count`
 for the chip) and OrdersTab hides its own button — Shell does this to host the toggle in the
 orders-pane header next to ✕; standalone usage without the prop keeps the internal button.
 Filters: helper,
 client (only when the event has `requiresClient` — loose orders carry no `clientId`), printer,
 and print status (busy / done / failed; printer + status selects only
-render when the event has active printers), in a container-responsive grid (1 col → 2 cols at
-`@md`). No order count, no manual refresh button: the 2s poll is the only refresh. All filters
-apply **server-side** (the list is paginated): the component sends `?owner=`, `?clientId=`,
-`?printerId=`, `?printStatus=` and the app's generated `sales-orders` GET must honor them —
-`getAllSalesOrders` matches printer filters via an EXISTS subquery on `salesPrintqueues`
-(`busy` = status 0/1, `done` = 2, `failed` = 9). Filter changes reset to page 1. It does **not**
-use `CroutonCollection`.
+render when the event has active printers), stacked **one filter per row**
+(single column) so each reads on its own line. No order count, no manual refresh button: the 2s poll is the only refresh. All filters
+apply **server-side** (the list is paginated). OrdersTab does **not** use the generated
+`salesOrders` collection GET — the helper/printer/status filters need logic the generic CRUD
+generator can't produce (printer/status match the shared crouton-printing `print_jobs` queue via a
+correlated EXISTS), which per-app generated code kept dropping (the "filters do nothing" bug). So
+it `useFetch`es the **package-owned** endpoint
+`GET /api/crouton-sales/teams/[id]/events/[eventId]/orders` (`?owner=`/`?clientId=`/`?printerId=`/
+`?printStatus=` + `?page=`/`?pageSize=`), which owns the filtered+paginated query the bookings
+`admin-bookings` way (package owns the query, app owns the tables via `~~/layers/…`). Status
+buckets: `busy` = 0/1, `done` = 2, `failed` = 9. Request-shaping is the pure, unit-tested
+`server/utils/order-filters.ts` (`test/order-filters.test.ts`); the endpoint stays a thin
+fetch → build-where → delegate. Filter changes reset to page 1.
 Each row shows **one combined printer LED** (`orderLed`): worst status across every job of the
 order — red (any failed, 9) > pulsing orange (any pending/printing, 0/1) > green (all done, 2);
 grey = no jobs at all. A hover `UPopover` on the dot breaks it down **per printer**, listing
@@ -303,12 +362,22 @@ card shows the real printer name instead of the generic fallback. The tab shows 
 tab visible). Failed lines carry an **icon-only re-print button** in the card's `#actions` slot
 (left of the LED, so the dot stays rightmost) — emits `retryJob` to OrdersTab, which POSTs
 `printqueues/retry-failed` with `{ jobId }` and refreshes the queue poll. The panel has extra
-bottom padding (`pb-6`) to separate an expanded ticket from the next row.
+bottom padding (`pb-6`) to separate an expanded ticket from the next row. The tab row also carries
+a **right-aligned whole-order Reprint button** (`UTabs` `#list-trailing` slot, `ms-auto`, #1517):
+two-step confirm (arm → fire, since it spits physical paper), emits `reprintOrder` to OrdersTab,
+which POSTs `printqueues/retry-failed` with `{ orderId }`. That resets the order's *existing* jobs
+from a terminal status (`2` done / `9` failed) back to `0` pending — no new jobs, no forced
+receipt — so the transport re-drains and reprints exactly what the order first produced. The
+button only shows while the Printers tab does (i.e. the event has printers).
 
 `SettingsTab.vue` edits the event's **core fields inline** (title, currency, client switch,
 helper PIN) **plus the receipt text settings** behind **one panel-wide Save button** (disabled
-until dirty, with an "unsaved changes" hint; rendered by the Shell's header row when mounted with
-`hide-save-bar`, otherwise as SettingsTab's own top-right row). There are no per-card
+until dirty, with an "unsaved changes" hint). When a host mounts it with `hide-save-bar` the host
+renders the Save in a **fixed footer below the scroll area** (`flex-none` bar under the
+`flex-1 overflow-y-auto` content), driven by the `{ save, dirty, saving }` API SettingsTab hands
+up via its `register` emit — the fields scroll cleanly above it, unlike a sticky-in-scroll bar
+which floats over content mid-scroll. Standalone (no `hide-save-bar`) it's SettingsTab's own
+top-right row. There are no per-card
 save buttons and the client switch no longer auto-saves on toggle — everything commits together:
 one `useCollectionMutation('salesEvents').update` for the dirty event fields and one PUT to
 `receipt-settings` when the receipt text changed (parallel; `helperPin` is a `salesEvents`
@@ -324,7 +393,11 @@ simply ignored). Block 2: the **Printers card** (`SettingsListCard.vue`, auto-im
 (special-instructions title / staff-order header / footer text, loaded from the
 `receipt-settings` GET — `SalesSettingsReceiptSettingsModal` is no longer mounted here; the file
 remains for the unmounted `PrintersTab`). Block 3: the **Helpers card**, which hosts the shared
-Helper-PIN input above the active-helpers list (scoped tokens). The printers card header carries
+Helper-PIN input above the active-helpers list (scoped tokens). **Rotating the PIN locks out old
+helpers**: when `helperPin` changed, `saveSettings` POSTs `revoke-helpers` (deactivates the
+event's active scoped tokens) — old-PIN sessions die and can't redeem the old PIN (the
+before-redeem hook re-syncs the new one into the grant); a manual **"Log out all helpers"** button
+(disabled when none active) does the same without changing the PIN. The printers card header carries
 the requeue-failed-jobs button (`printqueues/retry-failed`), which also refreshes the LEDs.
 Printer rows keep the POS slide-out hover affordances (pencil right; drag grip left when
 `orderField` is set). The Categories and Locations cards were **removed** — categories are
@@ -334,7 +407,13 @@ the printer subtitles. Each printer row carries an **online LED** derived from i
 print job** (slim `printqueues/status` endpoint, latest by `completedAt ?? createdAt`): green =
 last job completed (the spooler's DLE EOT pre-flight confirmed the printer online), red = last
 job failed, pulsing orange = job in flight, grey = never printed. There is no separate ping —
-"online" means online as of the last print attempt. `SettingsListCard` props: `title`, `collection`, `rows`
+"online" means online as of the last print attempt. Attribution is the pure
+`app/utils/printer-led.ts` (`attributePrinterStates`): a job is matched to a printer row by
+`printerId` **first, else by an unambiguous `printerTitle`** (the denormalized label every enqueue
+site writes) — so a printer whose id drifted from its jobs (deleted+recreated / regenerated
+collection) still lights red instead of a false grey (#1507); a title shared by two current rows
+is ambiguous and stays grey rather than guess. The `status` endpoint therefore also returns
+`printerTitle`. `SettingsListCard` props: `title`, `collection`, `rows`
 (`{ id, title, subtitle?, led? }` — `led: { class, label? }` renders a status dot with tooltip
 before the title), `pending?`, `emptyLabel?`, `createData?`, `orderField?`; slots
 `header-actions` and `footer` (UCard footer passthrough — the printers card uses it for the
@@ -378,18 +457,26 @@ All package endpoints live under `/api/crouton-sales/` with an explicit split:
 | Path | Auth | Purpose |
 |------|------|---------|
 | `teams/[id]/events/[eventId]/duplicate` POST | team admin | Clone an event + its categories/locations/products/printers |
+| `teams/[id]/events/[eventId]/orders` GET | team member | **Filtered + paginated orders list** for the workspace "Bestellingen" pane (`OrdersTab`). Owns the sales-specific filters the generic CRUD generator can't produce — helper (`?owner=`, matched on `salesOrders.owner`), `?clientId=`, and printer/print-status (`?printerId=`/`?printStatus=` = busy 0/1 · done 2 · failed 9) via a correlated EXISTS over the shared crouton-printing `print_jobs` queue (`source='sales'`, `refType='order'`). `?page=`/`?pageSize=` → `{ items, total, page, pageSize }`, slim projection (LEDs come from `printqueues/status`, items from the expand). The bookings `admin-bookings` pattern: package owns the query, app owns the table (`~~/layers/…`). Request-shaping is the pure, unit-tested `server/utils/order-filters.ts`. Replaced OrdersTab's old generated-collection call, which silently ignored 3 of the 4 filters |
+| `teams/[id]/events/[eventId]/orders` DELETE | team admin | **Delete all orders** (#1519): bulk-wipe one event's orders, cascading `salesOrders` → `salesOrderitems` → this event's sales-domain `print_jobs` (`source: 'sales'`), scoped strictly to `eventId` — never team-wide. Leaves `salesClients` intact (reusable; open-tab totals reset naturally). Returns `{ deleted: { orders, items, jobs } }`. Cascade sequencing is the pure `deleteAllEventOrders` (`server/utils/delete-event-orders.ts`, unit-tested); backs the typed-confirm danger-zone action in SettingsTab (admin-only, type the event name to enable) |
 | `teams/[id]/events/[eventId]/admin-helper-token` POST | team member | Issue a helper scoped-access token without PIN (displayName = user name) — lets logged-in admins open the POS directly |
 | `teams/[id]/events/[eventId]/active-helpers` GET | team admin | List currently-logged-in helpers for one event |
 | `teams/[id]/active-helpers` GET | team admin | List active helpers across all team events |
 | `sync/ingest` POST | `x-sync-key` secret (fail-closed) | Cloud D1 ingest (#178): idempotent upsert of batched outbox events from the Pi pusher. See "Cloud ingest" above. Also stamps the freshness heartbeat (#179) on every call (real batch or idle ping) |
 | `teams/[id]/sync-status` GET | team member | Mirror freshness for the live dashboard (#179): `{ lastContactAt, lastEventAt, lastBatchApplied, serverNow }` (epoch ms; `serverNow` lets the client compute age skew-free). Single global heartbeat row; backs `SalesSyncStatus` |
+| `teams/[id]/events/[eventId]/print-transport` GET/PUT | team member | Per-event **print flow** (#1324): which transport delivers this event's `network-escpos` jobs — `local-drainer` \| `router-spooler` \| `none` (no row resolves to the `router-spooler` default — always exclusive). Thin authed surface over crouton-printing's `getPrintTransport`/`upsertPrintTransport` (`print_transports` table; printing has no auth, so the domain owns the route — same seam as `enqueuePrintJob`). GET also returns the `lastSpoolerPollAt`/`lastDrainerTickAt` liveness heartbeats. Backs the **Print flow** picker (`<CroutonPrintingTransportPicker>`) in SettingsTab's printers-card footer — instant-apply, deliberately not part of the panel Save. SettingsTab also feeds the picker's per-flow **setup guides** (#1364): translated nl/en/fr checklists (keys `sales.printFlow.setup.*`) with the app-known values pre-filled — this event's id for the router's `EVENT_ID`, the app origin for `API_URL`, the `NUXT_CROUTON_SALES_PRINT_API_KEY` env-var *name* (never the secret). Content mirrors crouton-printing's `print-server/README.md` (sync note there) |
 | `teams/[id]/events/[eventId]/receipt-settings` GET/PUT | team admin | Per-event receipt text customization. Reachability: `staff_order_header` prints only on `isPersonnel` orders (Cart's Staff order switch); `special_instructions_title` heads the remark blocks on kitchen tickets — the per-location remarks from the POS and legacy whole-order notes; `footer_text` only on `type: 'receipt'` printer jobs |
+| `teams/[id]/events/[eventId]/printers/[printerId]/test-print` POST | team member | **Testprint** (#1391): enqueue a tiny test ticket for one printer through the REAL flow (`refType:'test'`, skipped by order auto-complete) — proves routing + transport + paper in one tap. 409 when the event's Print flow is `none`. Backs the Testprint button in `PrinterForm.vue` (update mode) |
+| `teams/[id]/events/[eventId]/printers/[printerId]/preview` GET | team member | **Receipt preview** (#1504): render — never queue — a representative ticket for one printer and return `{ html, printer }`. `html` is `renderTicketHtml` output (the browser-print encoder) for the modal's sandboxed iframe. Resolves receipt-text settings the SAME way real printing does (formatter defaults ⊕ saved `receipt_settings` row — NOT the settings-form GET default), so the preview shows what actually prints. Sample built by `buildPreviewReceipt` (pure, `server/utils/preview-receipt.ts`; personnel order + a note + one detailed item, so all three receipt-text settings and the #1503 spacing show). Backs the Voorbeeld button. |
 | `teams/[id]/events/[eventId]/printqueues/retry-failed` POST | team admin | Requeue missed print jobs (status 9, plus jobs stuck at status 1 "printing" for >2 min — fetched by the spooler but never confirmed) back to 0; optional body `{ printerId }` and/or `{ jobId }` (single-line retry). Backs the "Resend failed jobs" button in SettingsTab's printers card and the per-job re-print button in the expanded order |
+| `teams/[id]/events/[eventId]/revoke-helpers` POST | team member (`requireTeamEvent`) | Lock out every helper logged in to this event — `revokeScopedTokensForResource('event', eventId)` deactivates the event's active scoped tokens; returns `{ revoked }`. Called by SettingsTab's `saveSettings` when the helper PIN changed, and by the Helpers-card "Log out all helpers" button. The new PIN isn't checked here (the before-redeem hook re-syncs it into the grant on next login) |
 | `events/[eventId]/order-data` GET | helper token | All data needed by POS UI (categories are event-scoped — team-wide fetching showed duplicate tabs after event duplication) |
+| `events/[eventId]/my-orders` GET | helper token | **The active user's own orders** for this event — the volunteer/admin-facing counterpart of the team-authed workspace "Bestellingen" pane (`OrdersTab`), which a helper token can't reach. Keyed on `salesOrders.owner` (the helper displayName, stable across logins — `createdBy` is the scoped-token id and rotates every login). Returns newest-first orders (cap 100), each with its line items (product title + options joined) and a combined `printStatus` bucket (`none`/`busy`/`done`/`failed`, display/KDS jobs excluded). No filters, no reprint (volunteer reprint is deliberately out). Backs `SalesClientOrderHistory` (the POS order-history slideover) |
 | `events/[eventId]/by-slug/[slug]` GET | public | Resolve event by slug (first segment accepts the team's UUID or slug). The param is named `[eventId]` — not `[teamId]` — so it shares one name with its `events/[eventId]/…` siblings: h3 v1/radix3 keeps a single param node per position, and mixing names silently broke the deeper `orders/[orderId]/…` routes (#116) |
 | `events/[eventId]/orders` POST | helper token | Create order + generate print queues (kitchen tickets only — no customer receipt) |
 | `events/[eventId]/orders/[orderId]/print` POST | helper token | Re-queue prints for an existing order, **including the customer receipt** (`withReceipt: true` — the only per-order receipt path) |
 | `events/[eventId]/orders/[orderId]/print-status` GET | helper token | Slim per-order print job status for the POS order button's print watcher (`{ id, status, errorMessage, retryCount, printMode, printerTitle, completedAt }` — printer name joined server-side; order must belong to the event). **Excludes `display` jobs** (they're bumped on a screen, not printed — a display job stays "shown" until the kitchen acts and would hang the checkout button). Empty array = the order generated no tickets, a real answer not an error |
+| `teams/[id]/events/[eventId]/orders/[orderId]` DELETE | team **admin** | **Hard-delete** one order (#1518) — verifies the order belongs to this team + event, then cascades via `deleteOrderCascade` (`server/utils/delete-order.ts`): `sales_orderitems` → `print_jobs` (scoped `source='sales'`/`refType='order'`/`refId=orderId`, never a bare `orderId` — the queue is cross-domain) → the order row. The `cancelled` status stays the soft alternative. Backs the two-step `CroutonDeleteButton` in the expanded order row (`OrderItems.vue` → `deleteOrder` emit → `OrdersTab.vue`, which fires the `salesOrders` `crouton:mutation` so the list + POS client picker refresh) |
 | `events/[eventId]/display-jobs` GET | none (LAN) | KDS read model for the `display` driver: pending/shown `display` jobs off `salesPrintqueues` for the event, payload parsed (`{ id, orderId, stationId, orderNumber, clientName, isPersonnel, createdAt, items }`). **Flips pending → shown on read** (records the job reached a screen). Backs `kitchenDisplayBlock`. Unauthed — an unattended venue-LAN screen (tightening to a helper token is a follow-up) |
 | `events/[eventId]/display-jobs/[jobId]/bump` POST | none (LAN) | Mark a `display` job done (shown → bumped). Bumped maps onto the shared COMPLETED status (`'2'`), so admin order LEDs treat it like a printed ticket; **auto-completes the order** once no job remains open (mirrors the thermal `complete` callback — a display-only "no printer" order completes when bumped). Scoped to the event + `printMode: 'display'` so it can only ever close a display job |
 | `events/[eventId]/browser-print-jobs` GET | none (LAN) | Drainer read model for the `browser-print` (AirPrint) driver: pending (status 0) queue rows whose station is a `browser-print` printer, each **server-rendered to HTML** via `renderTicketHtml` (`{ id, orderId, stationId, stationTitle, printMode, locationId, orderNumber, html }`). `?stationId=` narrows to one station. Backs `printBridgeBlock`. Unauthed venue-LAN screen (mirrors `display-jobs`; helper-token tightening is a follow-up). An unparseable payload returns `html: null` so the bridge can fail it instead of crashing the poll |
@@ -424,7 +511,7 @@ are `real` (no cast).
 
 Separate route prefix: `/api/print-server/*`. Designed for a local LAN spooler that polls our server for jobs, sends ESC/POS bytes to thermal printers, then calls back with status. **Recovery-ready spooler + boot service + setup guide live in this package at `print-server/`** (`teltonika-simple-spooler-fast.sh`, `print_server.init`, `README.md`) — validated on a RUT956 over 5G with the printer on the router LAN. Key field notes: minimal BusyBox has no `base64` applet (spooler uses a pure-awk decoder) and only `nc IP PORT`; RutOS `curl` has working TLS; the spooler's `EVENT_ID` is per-event. The `/jobs` GET **excludes non-`network-escpos` jobs** (driver-filtered) so the spooler never receives a browser-print job.
 
-**In-process drainer (Node target, no external spooler)** — when the app runs on a Node box ON the venue LAN (a Pi/mini-PC), it can open TCP `:9100` to the printers itself instead of running the RUT spooler. `server/utils/escpos-drainer.ts` is a faithful port of the spooler (DLE-EOT pre-flight on its own connection → send ESC/POS + confirmation pass → `classifyStatus` → `completePrintJob`/`failPrintJob`, the **same** queue lifecycle/LEDs — no HTTP callback, it has direct DB access). The `server/plugins/escpos-drainer.ts` Nitro plugin runs it on a poll loop **only when `CROUTON_SALES_PRINT_DRAINER` is set** (`CROUTON_SALES_PRINT_DRAINER_EVENT`, `_POLL_MS` optional) — OFF by default, so existing deploys + Cloudflare are unchanged. `node:net` is imported **lazily** (inside `exchange`), keeping the module import-safe on Workers. Claims jobs pending → printing (recoverable by retry-failed on crash) and prints sequentially (one `:9100` connection per Epson TM). **Run EITHER the spooler OR the in-process drainer for a printer set, never both.**
+**In-process drainer (Node target, no external spooler)** — when the app runs on a Node box ON the venue LAN (a Pi/mini-PC), it can open TCP `:9100` to the printers itself instead of running the RUT spooler. `server/utils/escpos-drainer.ts` is a faithful port of the spooler (DLE-EOT pre-flight on its own connection → send ESC/POS + confirmation pass → `classifyStatus` → `completePrintJob`/`failPrintJob`, the **same** queue lifecycle/LEDs — no HTTP callback, it has direct DB access). The `server/plugins/escpos-drainer.ts` Nitro plugin runs it on a poll loop **automatically on a raw-socket-capable runtime** (a Node/venue box; `std-env` `isNode && !isWorkerd` via `crouton-printing/server/utils/drainer-gate.ts`, #1471) — never on Cloudflare Workers, so cloud deploys are unchanged; `CROUTON_PRINTING_DRAINER=1`/`0` is now an override, not a required flag. `node:net` is imported **lazily** (inside `exchange`), keeping the module import-safe on Workers. Claims jobs pending → printing (recoverable by retry-failed on crash) and prints sequentially (one `:9100` connection per Epson TM). **Run EITHER the spooler OR the in-process drainer for a printer set, never both** — since #1324 this is enforced per event by the `print_transports` row (event settings → Print flow): the drainer only serves events explicitly set to `local-drainer` (unset defaults to `router-spooler`), and the spooler's `/jobs` GET returns `[]` for events set to `local-drainer`/`none`.
 
 **Print confirmation (feedback loop)**: the spooler runs a **pre-flight status check on its own connection** (ESC/POS `DLE EOT 1`+`2`+`4`) before sending each ticket — an error-state printer stops draining its receive buffer, so queries appended after a payload would jam behind it and never answer (this is why pre-flight must be a separate connection). Pre-flight failures (`Cover open`, `Paper out`, `Printer error`, `Printer offline`, `Printer not responding - paper out, cover open, or offline?`) fail the job **without sending the ticket**, preventing ghost prints when paper is reloaded. On a healthy pre-flight it sends the payload with the same queries appended as a confirmation pass (socket held open `DRAIN_SECS`, default 2s, which also fixes the silent-loss mode where `nc` closed before the printer drained its buffer); no reply there ⇒ `Printer stopped responding while printing (paper ran out mid-ticket?)`. `/complete` is called only when the printer confirms "online, paper present" — so the UI's **Done** badge means the printer confirmed it could print, not merely "bytes sent over TCP" (old behavior restorable with `STATUS_CHECK=0` for printers that don't answer DLE EOT). The failed job's `errorMessage` is rendered inside `PrintqueuesCard.vue`'s **LED hover popover** (printer name header, status badge, 24h time, error text — same styling as the order-row LED popover); the row itself stays one calm line (printer name, location · retry count meta, time, LED rightmost, with an `#actions` slot before the LED for row buttons).
 
@@ -449,7 +536,9 @@ Auth: shared `x-api-key` header validated against `runtimeConfig.croutonSales.pr
 
 | Path | Method | Purpose |
 |------|--------|---------|
-| `print-server/events/[eventId]/jobs?mark_as_printing=true` | GET | List pending jobs joined with printer IP. With `mark_as_printing` flag, flips status pending→printing atomically. |
+| `print-server/jobs?mark_as_printing=true` | GET | **Device-scoped poll (#1366)** — the zero-SSH successor of the per-event endpoint. Auth: `x-device-id` + `x-device-code` (the router's self-generated identity; verified against its scoped-access grant via the `crouton:printing:device-auth` hook the sales scoped-access plugin answers). 200 = the same bare jobs array (all pending `network-escpos` jobs of the claimed team's `router-spooler` events, #1324-gated); 428 = `{ status: 'unclaimed', ticket }` with a server-rendered base64 pairing ticket; 401/429 = wrong code / lockout. Claim/revoke UI: `teams/[id]/print-devices` below. |
+| `print-server/events/[eventId]/jobs?mark_as_printing=true` | GET | **Legacy** (pre-#1366 script): list pending jobs for ONE event, `x-api-key` authed. Kept during migration — retire once the fleet runs the self-pairing script. |
+| `teams/[id]/print-devices` GET/POST + `[deviceId]` DELETE | team member | Router pairing (#1366): list the team's claimed devices; POST `{ deviceId, code }` claims one (creates the scoped-access grant — 409 when another team holds it); DELETE revokes (device drops to unclaimed and re-prints its pairing ticket). Backs `SalesEventWorkspaceRouterPairing` in the Print flow picker's Setup panel (`setup-extra` slot). |
 | `print-server/jobs/[jobId]/complete` | POST | Mark status=completed, set completedAt. **Also auto-completes the order**: when no remaining job for that `orderId` is in a non-completed state, sets `salesOrders.status='completed'`. A failed ticket keeps the order out of `completed` until reprinted. |
 | `print-server/jobs/[jobId]/fail` | POST | Body `{ errorMessage? }`. Set status=failed, increment retryCount. **Also flags the order** `status='print_failed'` (unless completed/cancelled) so the orders list surfaces the printer problem; once every job later completes, the complete callback flips it to `completed`. `OrderStatus` includes `print_failed`; the OrdersList reprint button shows for it. |
 
@@ -598,14 +687,19 @@ Components are auto-imported with `Sales` prefix (e.g., `SalesClientCart`, `Sale
 ### Customer-Facing (`Client/`)
 | Component | Auto-import Name | Purpose |
 |-----------|------------------|---------|
-| `Cart.vue` | `SalesClientCart` | Shopping cart display with quantity controls. Line items (`OrderLineItem.vue`) top-align price + qty controls with the product name and stack **option labels and the per-item remark** (warning-colored) underneath, each with a small bullet, no indentation; products are separated by a subtle `divide-y divide-default/60` divider (same as the workspace's expanded order). Footer is **one compact controls row** — remark toggle left (ghost button with count, plus/minus trailing icon; hidden when no cart item has a location), **Staff order** `USwitch` right — with the remarks **`UAccordion` (`type="multiple"`, one item per location that has items in the cart)** sliding open underneath via a trigger-less controlled `UCollapsible`; each accordion body is that location's textarea (→ `locationRemarks`, printed as `REMARK:` on that location's ticket only), and a filled textarea shows a primary dot next to its label. **There is no Totaal row** — the total rides the order button (`Bestel · € 20,00`, via `useSalesCurrency`), so the phone drawer spends its pixels on line items. The cart card trims UCard padding to `px-3`/`py-3`. **There is no whole-order remark UI anymore** — `usePosOrder().overallRemarks` still exists and checkout still sends it (always `null` from the POS), and OrdersTab still displays historical `overallRemarks`. Remarks + staff flag bind to `usePosOrder()` refs via props + emits in OrderInterface. Cart items snapshot the product at add-time; OrderInterface watches its products source and calls `usePosOrder().syncCartProducts(fresh)` so admin edits (location/price/title) reach items already in the cart |
-| `ProductList.vue` | `SalesClientProductList` | Product grid with inline option selection |
+| `Cart.vue` | `SalesClientCart` | Shopping cart display with quantity controls. Line items (`OrderLineItem.vue`) put the product name, price and qty controls/actions on **one `items-center` row** and stack **option labels and the per-item remark** (warning-colored) underneath, each with a small bullet, no indentation; products are separated by a subtle `divide-y divide-default/60` divider (same as the workspace's expanded order). Footer is **one compact controls row** — remark toggle left (ghost button with count, plus/minus trailing icon; hidden when no cart item has a location), **Staff order** `USwitch` right — with the remarks **`UAccordion` (`type="multiple"`, one item per location that has items in the cart)** sliding open underneath via a trigger-less controlled `UCollapsible` — **but when only ONE location has cart items, its note textarea renders directly, no accordion** (a single collapsible row is pointless chrome); each accordion body is that location's textarea (→ `locationRemarks`, printed as `REMARK:` on that location's ticket only), and a filled textarea shows a primary dot next to its label. **There is no Totaal row** — the total rides the order button (`Bestel · € 20,00`, via `useSalesCurrency`), so the phone drawer spends its pixels on line items. The cart card trims UCard padding to `px-3`/`py-3`. **There is no whole-order remark UI anymore** — `usePosOrder().overallRemarks` still exists and checkout still sends it (always `null` from the POS), and OrdersTab still displays historical `overallRemarks`. Remarks + staff flag bind to `usePosOrder()` refs via props + emits in OrderInterface. Cart items snapshot the product at add-time; OrderInterface watches its products source and calls `usePosOrder().syncCartProducts(fresh)` so admin edits (location/price/title) reach items already in the cart. **Talk-to-order (#1429) — voice ordering fully removed**: the talk-to-order/voice-recorder feature was ripped out entirely (Cart + OrderInterface UI, the `useVoiceOrder` composable, the `voice-order.ts` parser, their tests, and the `sales.voice.*` i18n keys). It's gone, not dormant — resurrect from git history (#1429) if it's wanted again. |
+| `ProductList.vue` | `SalesClientProductList` | Product grid with inline option selection. **Plain products** (no options/remark) show the **cart's `−/qty/+` stepper inline** once ≥1 sits in the cart (a plain product maps to exactly one cart line, so the row control is unambiguous — `−` at 1 removes; a single "+" shows at 0). **Configurable products** (options/remark) keep the expand-to-configure "+" flow but show a **count badge** (total across all option/remark variants) next to the chevron — removing a *specific* variant stays in the cart, which the row can't disambiguate. Driven by a `quantities: Record<productId, totalQty>` prop + a `decrement` emit, both wired from `OrderInterface` (`productQuantities` computed → `handleProductDecrement` targets the plain line). Multi-select options render as a **`UCheckboxGroup variant="card"`** (matches the single-select radio cards); single-select-no-remark stays instant-add buttons (no extra confirm tap). (#1555) **Inside the expandable, below the option picker, a configurable product also lists the variants already in the cart** (`sales.products.inCart` header) — each with its option/remark label + its own inline `−/qty/+` stepper — so a specific variant can be seen and adjusted without opening the cart. Driven by a `cartLines: Record<productId, {index, selectedOptions?, remarks?, quantity}[]>` prop + a `variantQuantity` emit (targets the exact cart line by index via `OrderInterface`'s `cartLinesByProduct` → `updateQuantity`; 0 removes). The panel stays open after "Toevoegen aan winkelwagen" (`confirmProduct` no longer auto-collapses) so the added line lands visibly. (#1607) |
 | `CategoryTabs.vue` | `SalesClientCategoryTabs` | Category navigation tabs. Both modes (UTabs + the sortable admin row) use `flex-1 min-w-fit` tabs in an `overflow-x-auto` list: tabs stretch when they fit and the row scrolls horizontally when they don't — labels never shrink to single letters on narrow screens |
 | `ProductOptionsSelect.vue` | `SalesClientProductOptionsSelect` | Product variant/option selection |
 | `CartTotal.vue` | `SalesClientCartTotal` | Order total display with item count |
-| `OrderInterface.vue` | `SalesClientOrderInterface` | Main order page combining all components. `editable` prop (admin sessions only) adds catalog editing: "+" buttons open the crouton create forms (category with eventId preset; product with eventId + active categoryId preset), and the active category tab shows a pencil (CategoryTabs `editable`) that **renames inline** — the tab label swaps for an input, enter/blur/click-outside commits (`@rename` → PATCH title), esc cancels — click-outside (VueUse `onClickOutside`) is required because the autofocus `focus()` is ignored on touch devices, so a never-focused input would otherwise never blur (same for the "+" draft tab); the full category form incl. delete stays in the settings panel's list. The category **tabs drag-reorder via a grip handle** on each tab's left (hover-revealed, always visible on touch; CategoryTabs `@reorder` + `reorder-pending` prop — dragging is disabled and the grip shows `cursor-wait` while the previous reorder's PATCHes persist, since a mid-save drag would be dropped and snap back; `useSortable` on the tablist — persists `displayOrder`, which the POS sorts tabs by). Product cards get slide-out hover edit/reorder (ProductList `editable`; persists via `useTreeMutation('salesProducts').reorderSiblings`); the list sorts by `sortOrder` then title. An admin toolbar row pinned above the product list carries "add product" and a labeled show-inactive switch — inactive products render dimmed + badged, and clicking one opens its edit form instead of the cart. The Category/Location/Product/Printer update forms put a `CroutonDeleteButton` (shared two-step pill: click arms "sure?", click again deletes; from crouton-core) left of the save button in one `flex items-stretch` footer row — no nested delete overlay. SettingsTab's "Evenement verwijderen" row uses the same pill (deletes directly; Shell's mutation hook navigates away). Single-select options with a required remark render as a `URadioGroup` (a solid selected button read too heavy); multi-select stays checkboxes. PrinterForm's footer lists the actual validation messages (schema fields without a rendered input — e.g. nullable DB columns failing `.optional()` — would otherwise surface as an opaque count) |
-| `Selector.vue` | `SalesClientSelector` | Client selector with create-on-type. **A client indication is always mandatory** at checkout: `requiresClient` events show this selector, all other events show a plain `UInput` (`sales.cart.namePlaceholder` — "Naam of tafelnummer…") bound to `selectedClientName`; OrderInterface's `hasClient` gates Betalen on id-or-name either way, and the Cart warning text comes from the `clientWarning` prop (`selectClient` vs `enterName`). Clients created inline live in a local `createdClients` bridge until the next order-data refetch confirms them (create emits the `salesClients` `crouton:mutation` hook itself; a `props.clients` watch prunes confirmed copies) — so a tab settled elsewhere drops the client from the list live, and a vanished selection auto-clears |
+| `OrderInterface.vue` | `SalesClientOrderInterface` | Main order page combining all components. `editable` prop (admin sessions only) grants catalog editing, but the affordances stay **hidden behind an edit-mode toggle** — a pencil button at the tabs row's right (solid + check icon while armed; leaving edit mode also resets the show-inactive filter). All editing surfaces below only render while edit mode is on; CategoryTabs/ProductList are remounted via `:key` on the flip because their `useSortable` init is one-time, gated on `editable` at setup. Catalog editing: "+" buttons open the crouton create forms (category with eventId preset; product with eventId + active categoryId preset), and the active category tab shows a pencil (CategoryTabs `editable`) that **renames inline** — the tab label swaps for an input, enter/blur/click-outside commits (`@rename` → PATCH title), esc cancels — click-outside (VueUse `onClickOutside`) is required because the autofocus `focus()` is ignored on touch devices, so a never-focused input would otherwise never blur (same for the "+" draft tab); the full category form incl. delete stays in the settings panel's list. The category **tabs drag-reorder via a grip handle** on each tab's left (hover-revealed, always visible on touch; CategoryTabs `@reorder` + `reorder-pending` prop — dragging is disabled and the grip shows `cursor-wait` while the previous reorder's PATCHes persist, since a mid-save drag would be dropped and snap back; `useSortable` on the tablist — persists `displayOrder`, which the POS sorts tabs by). Product cards get reorder (drag grip, hover-left) and, **in edit mode, the trailing action is a
+pencil (not the "+"/chevron) and tapping any product row opens its edit form — adding to cart is
+disabled while editing** (`ProductList` `editable`; the old right-edge slide-out hover pencil was
+dropped in favour of the persistent trailing pencil; reorder persists via
+`useTreeMutation('salesProducts').reorderSiblings`); the list sorts by `order` then title. An admin toolbar row pinned above the product list carries "add product" and a labeled show-inactive switch — inactive products render dimmed + badged. The Category/Location/Product/Printer update forms put a `CroutonDeleteButton` (shared two-step pill: click arms "sure?", click again deletes; from crouton-core) left of the save button in one `flex items-stretch` footer row — no nested delete overlay. SettingsTab's "Evenement verwijderen" row uses the same pill (deletes directly; Shell's mutation hook navigates away). Single-select options with a required remark render as a `URadioGroup` (a solid selected button read too heavy); multi-select renders as a `UCheckboxGroup variant="card"` (#1555). PrinterForm's footer lists the actual validation messages (schema fields without a rendered input — e.g. nullable DB columns failing `.optional()` — would otherwise surface as an opaque count) |
+| `Selector.vue` | `SalesClientSelector` | Client selector with create-on-type: `USelectMenu create-item` — typing an unknown name surfaces an "\"<naam>\" toevoegen" row, Enter/click creates + selects it inline (`@create` → helper-scoped POST; exact-match guard falls back to selecting the existing client). This is the **only** create path — the old `#content-top` "create new" button + modal were dropped once type-to-create landed. **A client indication is always mandatory** at checkout: `requiresClient` events show this selector, all other events show a plain `UInput` (`sales.cart.namePlaceholder` — "Naam of tafelnummer…") bound to `selectedClientName`; OrderInterface's `hasClient` gates Betalen on id-or-name either way, and the Cart warning text comes from the `clientWarning` prop (`selectClient` vs `enterName`). Clients created inline live in a local `createdClients` bridge until the next order-data refetch confirms them (create emits the `salesClients` `crouton:mutation` hook itself; a `props.clients` watch prunes confirmed copies) — so a tab settled elsewhere drops the client from the list live, and a vanished selection auto-clears |
 | `OfflineBanner.vue` | `SalesClientOfflineBanner` | Offline mode indicator |
+| `OrderHistory.vue` | `SalesClientOrderHistory` | **Order-history slideover** — the active user's own orders for the event, read from the helper-authed `events/[eventId]/my-orders` endpoint. Same expandable-rows-with-items shape as the workspace `OrdersTab`/`OrderItems` (mono `#number`, client name + time, per-order print-status LED, expand → line items with resolved option labels), but no filters and **no reprint controls** (it's already scoped to one person; volunteer reprint would ghost-print receipts). Mounted only while open (light 4s poll, paused on hidden tab). Opened from a **history-icon button in `OrderInterface`'s narrow-pane cart bar** (`@2xl:hidden`), left of the order button — the "sum-up pane closed" surface on phones. Props: `eventId` (required), `currency?` |
 
 ### Orders (`Pos/`)
 | Component | Auto-import Name | Purpose |
@@ -622,7 +716,7 @@ Components are auto-imported with `Sales` prefix (e.g., `SalesClientCart`, `Sale
 | Component | Auto-import Name | Purpose |
 |-----------|------------------|---------|
 | `ReceiptSettingsModal.vue` | `SalesSettingsReceiptSettingsModal` | Receipt text customization |
-| `PrintPreviewModal.vue` | `SalesSettingsPrintPreviewModal` | Receipt preview with test print |
+| `PrintPreviewModal.vue` | `SalesSettingsPrintPreviewModal` | **Live receipt preview (#1504)** — fetches the `printers/[printerId]/preview` endpoint and drops the server-rendered `renderTicketHtml` output into a **sandboxed iframe** (unthemed paper, #1394), so the preview is byte-faithful to what prints and reflects the printer's `showPrices`/`type` + the event's saved receipt-settings/currency. `v-model:open` + `printer-id`/`event-id`/`team-param` props. Opened by the **Voorbeeld** button in `PrinterForm.vue` (roomy actions row beside Testprint, under the toggles block; saved printers only). Replaced the old hand-drawn "PRINTER TEST" mock. |
 
 ### CMS Page Blocks (`Blocks/`) — for `@fyit/crouton-pages`
 
@@ -633,7 +727,7 @@ the event field's `propertyComponents` editor.
 
 | Block type | Editor view | Renderer | Purpose |
 |------------|-------------|----------|---------|
-| `eventWorkspaceBlock` | `SalesBlocksEventWorkspaceView` | `SalesBlocksEventWorkspaceRender` | **The single sales surface for CMS pages — one block, two faces by session.** Anonymous visitors (volunteers) get the kassa only: `<SalesPosPanel>` with inline helper PIN login (this absorbed the removed `orderInterfaceBlock`, incl. its `height` attr — compact/tall/fill, fill grows to the viewport bottom; the height applies to the volunteer kassa only, and **phones (`max-width: 639px`) ignore the attr: the kassa becomes a fixed inset-0 full-screen takeover** with `env(safe-area-inset-top/bottom)` paddings — header under the status bar, cart bar above iOS Safari's floating bottom bar. The layer's `app/plugins/viewport-meta.ts` sets `viewport-fit=cover` (env() insets) + `maximum-scale=1` (suppresses iOS input-focus auto-zoom; pinch still works) via `useHead` — a layer nuxt.config's `app.head` cannot override Nuxt's default viewport meta). Signed-in team members get the full workspace shell (`<SalesEventWorkspaceShell>` — kassa + settings/orders/clients panes; `useAuth().loggedIn` is the discriminator), switcher hidden (event fixed by the editor), header shown for the toggles — **inline only on a wide screen**. On phones/tablets (`max-width: 1023px`, matching Shell's own breakpoint) the inline shell is cramped in the scrolling CMS page, so members instead get the same "Open kassa" launcher → fullscreen modal as volunteers, but the modal hosts the **workspace shell** (with an added close button), not the POS panel (`showInlineShell = loggedIn && !isNarrow`). The shell uses top-level `await`, so the renderer wraps it in its own `<Suspense>` (inline and in the modal). Carries `providesScope: true`: on a `scoped` page the derive-scope hook gates the page behind the event's helper PIN (one login, adopted by the panel) and the page editor hides the access-code field; `EventSlugPicker` warns inline when the picked event has no `helperPin`. category `kassa`. |
+| `eventWorkspaceBlock` | `SalesBlocksEventWorkspaceView` | `SalesBlocksEventWorkspaceRender` | **The single sales surface for CMS pages — one block, two faces by session.** Anonymous visitors (volunteers) get the kassa only: `<SalesPosPanel>` with inline helper PIN login (this absorbed the removed `orderInterfaceBlock`, incl. its `height` attr — compact/tall/fill, fill grows to the viewport bottom; the height applies to the volunteer kassa only, and **phones (`max-width: 639px`) ignore the attr: the kassa becomes a fixed inset-0 full-screen takeover** with `env(safe-area-inset-top/bottom)` paddings — header under the status bar, cart bar above iOS Safari's floating bottom bar. The layer's `app/plugins/viewport-meta.ts` sets `viewport-fit=cover` (env() insets) + `maximum-scale=1` (suppresses iOS input-focus auto-zoom; pinch still works) via `useHead` — a layer nuxt.config's `app.head` cannot override Nuxt's default viewport meta). Signed-in team members get the full workspace shell (`<SalesEventWorkspaceShell>` — kassa + settings/orders/clients panes; `useAuth().loggedIn` is the discriminator), switcher hidden (event fixed by the editor), header shown for the toggles — **inline only on a wide screen**. On phones/tablets (`max-width: 1023px`, matching Shell's own breakpoint) the inline shell is cramped in the scrolling CMS page, so members instead get the same "Open kassa" launcher → fullscreen modal as volunteers, but the modal hosts the **workspace shell**, not the POS panel (`showInlineShell = loggedIn && !isNarrow`). The member launcher is a **navigation hub**: under the full-width "Open kassa" button, `EventWorkspaceLauncherCards` renders one explained card per surface (Bestellingen / Klanten / Data / Instellingen) with a live headline number (orders total via `?pageSize=1` total, active clients, revenue sum, printer count — best-effort `$fetch`es, '—' on failure). A card opens **only that pane** in its own fullscreen modal via `EventWorkspace/PaneHost.vue` (pane + h-14 header incl. orders filter chip / settings Opslaan) — the kassa is never mounted behind it. "Open kassa" hosts the shell with `show-strip=false`: the kassa runs full-bleed, the edit pencil returns to the category-tabs row and the exit ✕ sits beside it (Shell `closable` → PosPanel → OrderInterface `closable` + `@close` chain — no header/strip rows at all). The shell uses top-level `await`, so the renderer wraps it in its own `<Suspense>` (inline and in the modal). Carries `providesScope: true`: on a `scoped` page the derive-scope hook gates the page behind the event's helper PIN (one login, adopted by the panel) and the page editor hides the access-code field; `EventSlugPicker` warns inline when the picked event has no `helperPin`. category `kassa`. |
 | `salesOrdersBlock` | `SalesBlocksOrdersView` | `SalesBlocksOrdersRender` | **Standalone Orders list** — one event's live orders (the same view as the workspace's "Bestellingen" pane: filters + per-order printer LEDs) on its own CMS page, so an admin can build a dedicated orders / kitchen-status screen without the rest of the register. **Team-members-only**: the renderer gates on `useAuth().loggedIn` (orders come from team-scoped admin endpoints) — non-members get a hint, not an error. The event is resolved member-side via the shared `SalesBlocksEventResolver` (a slot component that `await`s `useCollectionQuery('salesEvents')` and hands the full `SalesEvent` to its slot), which the renderer wraps in `<Suspense>` along with the async-setup `SalesEventWorkspaceOrdersTab`. Editor fixes the event by slug (`EventSlugPicker`). `clientOnly`; category `kassa`. |
 | `salesClientsBlock` | `SalesBlocksClientsView` | `SalesBlocksClientsRender` | **Standalone Clients list** — one event's open client tabs (the same view as the workspace's "Klanten" pane: active clients with the two-step settle / print-receipt action) on its own CMS page. **Team-members-only** (renderer gates on `useAuth().loggedIn`) and only meaningful for **recurring-client events** — a member on a non-`requiresClient` event gets an explanatory note. Resolves the event member-side via the shared `SalesBlocksEventResolver` inside `<Suspense>`, then renders `SalesEventWorkspaceClientsPanel`. Editor fixes the event by slug (`EventSlugPicker`). `clientOnly`; category `kassa`. |
 | `salesLiveDashboardBlock` | `SalesBlocksLiveDashboardView` | `SalesBlocksLiveDashboardRender` | **Live Dashboard (#179, epic #175 — D1 live mirror)** — "see the venue's live data online": one event's mirror-fresh orders + sales on a CMS page, read from the Cloudflare D1 mirror. Deliberately a **composition** of existing pieces: a `SalesSyncStatus` freshness banner (the only new-to-#179 part — "synced Xs ago" / goes stale when the Pi is offline), a `SalesDashboardSalesSummary` (revenue/orders/avg + top products, on the chart endpoints), and the workspace `SalesEventWorkspaceOrdersTab` live orders list. **Team-members-only** (renderer gates on `useAuth().loggedIn` — mirror data is team-scoped); event resolved member-side via `SalesBlocksEventResolver` inside `<Suspense>`. Editor fixes event by slug + optional `title`. `clientOnly`; category `data`. |
@@ -763,6 +857,11 @@ Part of the composable seeding system (epic #82, contract in
   the event's helper PIN.
 
 Idempotent (stable ids). Run via an app's `crouton-seed` / `db:seed:*` scripts.
+**All sales demo rows are seeded `{ ifAbsent: true }`** (#1579): `db:seed:staging`
+re-runs on every staging deploy, and a plain upsert (`DO UPDATE`) would overwrite
+a user's edits (reorder/rename/reprice) on the seeded event every deploy. `ifAbsent`
+makes each row insert-once-then-belong-to-the-user (`DO NOTHING` on conflict) — a
+deleted row is still re-created, an existing one is left alone.
 
 ## Dependencies
 

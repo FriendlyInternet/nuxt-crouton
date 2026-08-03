@@ -68,10 +68,16 @@ chose a different design. Four rules now prevent that:
    runs** — the orchestrator posts the proposed tree, @mentions `@pmcp`, blocks. Plus the
    epic→`main` PR is the integration review. Low-risk epics (`review:auto`) skip the gate.
 
-4. **Block, don't improvise (#352).** A worker that finds a prerequisite missing (a
+4. **Block, don't improvise (#352, #1229).** A worker that finds a prerequisite missing (a
    package/table/symbol a sibling owns, not yet merged) **stops and waits** — it never
    scaffolds the missing thing itself, and never silently diverges from the epic's stated
-   design invariants. Missing prerequisite = blocker, not a DIY.
+   design invariants. Missing prerequisite = blocker, not a DIY. **The same rule applies when
+   the *documented* path fails unexpectedly** — a tool errors (e.g. `crouton init` → *"directory
+   already exists"*), a generator refuses, a step behaves unlike its docs: **STOP**, comment the
+   exact error + what you tried + what you'd need, `@mention @pmcp`, set `status:blocked`, stop —
+   do **NOT** improvise an alternative or hand-roll what the tool was supposed to do. Improvising
+   turned #1213's one-command scaffold into **109 turns / $4.14** of off-standard work that hid the
+   real bug. An unexpected failure of the *intended* path is a stop signal, not a puzzle to solve.
 
 ## `.github/workflows/` boundary — embed-patch, don't block (#1076)
 

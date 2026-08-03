@@ -21,15 +21,18 @@ CMS-like page management system for Nuxt Crouton. Provides:
 | `app/utils/page-path.ts` | Shared nested-URL builder (`buildSlugPath`, `buildPagePath`) — single source of truth |
 | `app/composables/usePageBlocks.ts` | Block manipulation utilities |
 | `app/composables/useFooterPage.ts` | Fetch singleton footer page for current team |
+| `app/composables/useNavPill.ts` | `useCroutonNavPill()` — the **floating-nav action slot**. A shared-state registry (`crouton:navPillActions`, same cross-layer decoupling as `crouton:themePreferenceItems`) any package pushes icon buttons into: `register(action)` → unregister fn; `visibleActions` (filtered by reactive `show`, `order`-sorted). Register **client-side** (actions carry functions — not SSR-serializable). `Nav.vue` renders them in both pills; the pages package is the first consumer (the edit-page pencil, registered in `[...slug].vue`) |
 | `app/components/Renderer.vue` | `CroutonPagesRenderer` - Renders page based on type |
 | `app/components/CollectionPageRenderer.vue` | `CroutonPagesCollectionPageRenderer` - Bridge for publishable collection pages |
 | `app/components/RegularContent.vue` | `CroutonPagesRegularContent` - Rich text content display |
 | `app/components/BlockContent.vue` | `CroutonPagesBlockContent` - Block-based content display. **Lazy-resolves every block renderer** (`getLazyBlockComponent` → `Lazy{Name}`) so each renderer is a per-block code-split chunk, loaded only when a page contains that block type; SSR markup is preserved (async components resolve server-side, so first paint/LCP is unaffected). |
 | `app/components/Footer.vue` | `CroutonPagesFooter` - Self-contained footer for layouts (uses UFooter) |
 | `app/components/FooterRenderer.vue` | `CroutonPagesFooterRenderer` - Footer page renderer (used by Renderer.vue) |
+| `app/components/Workspace/Editor.vue` | `CroutonPagesWorkspaceEditor` — the page editor. **Mobile-first tabbed layout (#307):** one consolidated toolbar (`CroutonPagesEditorToolbar`), then a **language bar** (`CroutonSubBar`: locale dropdown + Preview) whose **shared editing locale drives every tab's translatable fields**, then **Content / SEO / Settings** tabs (Settings first — carries title/slug + page setup). Title/slug + block content use `CroutonI18nInput` in **tabs layout with `active-locale` + `hide-locale-switcher`** (the language bar is the single switcher). SEO is translatable (follows the bar); SEO-title placeholder = the live page title; an AI "Generate" button (gated on `hasApp('ai')`) drafts the description via `/api/ai/generate-seo`. Emits `back` (mobile slideover dismiss). |
+| `app/components/Editor/BlockEditorWithPreview.vue` | `CroutonPagesEditorBlockEditorWithPreview` — block editor + live preview tabs. Renders **inline at every size** (hosted in the full-height Content tab, #307) with an optional fullscreen focus mode (teleports the same instance into a modal). |
 | `app/components/Editor/BlockEditor.vue` | Block-based page editor |
-| `app/components/Editor/Toolbar.vue` | `CroutonPagesEditorToolbar` - Slim editor action bar: Status + Visibility + a Settings button (emits `show-settings`) on the left, action group (AI/preview/open/delete/save) on the right. All page config moved to SettingsPanel. |
-| `app/components/Editor/SettingsPanel.vue` | `CroutonPagesEditorSettingsPanel` - Roomy page-settings slideover (built on core's `CroutonFormExpandableSlideOver`). Sections: General (page type, parent), Appearance (layout), Navigation (in-menu + chrome toggles), Access (scoped access code). Owns no state — re-emits the same `update:*` events the old toolbar popover did. |
+| `app/components/Editor/Toolbar.vue` | `CroutonPagesEditorToolbar` - **One consolidated bar** (#307 mobile redesign): `← back · ●status · visibility-icon · page name · ⋮ overflow · Save`. Back arrow (`showBack`/`@back`) shows on mobile only (folds in the workspace slideover's back affordance). Status + visibility are always-visible icon dropdowns (parent-provided `*DropdownItems` mutate state directly — no `update:*` emit). The `⋮` overflow holds only Preview / Open / (AI) / Delete — **Settings and Visibility are no longer here** (Settings is a tab, Visibility is its own icon). "Open" uses `window.open` via `onSelect` so the menu shows no external-link ↗ glyph. |
+| `app/components/Editor/SettingsPanel.vue` | `CroutonPagesEditorSettingsPanel` - Page-settings fields panel, rendered **inline in the editor's "Settings" tab** (#307 — no longer a slideover). Sections: General (page type, parent), Appearance (layout), Navigation (in-menu + chrome toggles), Access (scoped access code). Owns no state — re-emits `update:*` events for the parent to apply. |
 | `app/components/Editor/LayoutPicker.vue` | `CroutonPagesEditorLayoutPicker` - Visual layout selector: a grid of selectable cards (wireframe thumbnail + icon + label + description) over `layoutOptions`. Emits `update:modelValue` + `layout-change`. |
 | `app/components/Editor/PageTypePicker.vue` | `CroutonPagesEditorPageTypePicker` - Vertically-stacked radio selector for page type (icon + name + description). Options come from `usePageTypes()` (descriptions are package-authored i18n keys in `app.config` pageTypes). |
 | `app/components/Form.vue` | Page creation/editing form |
@@ -480,6 +483,22 @@ the access gate renders chrome-less too. On regular pages `handleSubmit`
 strips config to the page-level keys (`hideNav`, `hideAuthControls`,
 `requiredScope`) instead of nulling it — type-specific config still resets
 when the page type changes.
+
+### The floating nav pill (`Nav.vue`) — theme quick-select + action slot
+
+The right pill (bottom-left on full-screen pages) hosts the user/admin controls plus:
+
+- **Theme quick-select** — a palette `UDropdownMenu` reading the shared
+  `crouton:themePreferenceItems` state (filled by the crouton-themes base layer's
+  `themeProvider.client` plugin). Rendered only when that state is populated **and**
+  `allowUserThemes || isAdmin`, inside `<ClientOnly>` (no hard dep on crouton-themes;
+  hidden entirely when the themes layer isn't extended). Dark-mode toggle stays adjacent.
+- **Package action slot** — `useCroutonNavPill().visibleActions` render as ghost icon
+  buttons. Any layer contributes via `register()` (see the composable in Key Files). The
+  **edit-page pencil** is pages' own contribution: `[...slug].vue` registers it on mount
+  (`show: isAdmin && !isEditing && page.id`, `onSelect: startEditing`) — it **replaced the
+  old fixed bottom-right FAB**. Client-only registration, so the button appears just after
+  hydration.
 
 ## Common Tasks
 

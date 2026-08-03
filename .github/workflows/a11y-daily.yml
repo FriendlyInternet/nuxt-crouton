@@ -38,6 +38,10 @@ jobs:
 
       # The deep pass runs eslint-a11y (needs deps) and may boot a fixture for axe.
       - uses: pnpm/action-setup@v4
+        with:
+          # per-job dest — the default ~/setup-pnpm collides between the two
+          # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
+          dest: ${{ runner.temp }}/setup-pnpm
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -54,7 +58,9 @@ jobs:
           # deep sweep couldn't write its report, update the standing issue, or file a11y issues.
           # Broader than the per-PR gate's allowlist because this run also files GitHub issues
           # (MCP) + writes reports; the gate-package-edits hook still protects packages/.
-          claude_args: "--model claude-sonnet-5 --max-turns 60 --permission-mode bypassPermissions"
+          # Haiku, matching the a11y agent's small tier (#1272/#823) — the deep sweep's value is
+          # the deterministic @axe-core/playwright run, not LLM depth; Haiku drives it at ~3× less.
+          claude_args: "--model claude-haiku-4-5-20251001 --max-turns 60 --permission-mode bypassPermissions"
           prompt: |
             Run the **`/a11y`** skill (`.claude/skills/a11y/SKILL.md`) at
             **depth=deep, scope=repo**. Sweep the `vuejs-accessibility/*` eslint rules across
@@ -105,11 +111,10 @@ jobs:
           BODY_FILE=$(mktemp)
           {
             echo "$MARKER"
-            echo "> 🤖 **Claude Code** · agent pipeline (CI) · _daily a11y deep sweep, updated ${DATE}_"
-            echo ""
-            echo "_Last run: [$DATE]($RUN_URL) · this issue is updated in place each day._"
-            echo ""
             head -c 60000 "$REPORT"
+            echo ""
+            echo ""
+            echo "<sub>🤖 agent pipeline (CI) · daily a11y deep sweep · last run [$DATE]($RUN_URL) · updated in place each day</sub>"
           } > "$BODY_FILE"
 
           # Find-or-create the rolling standing issue. Key off the EXACT title among open

@@ -48,6 +48,16 @@ Build the JSON object described in **Step 3** using these calls (all `owner: pmc
    child's labels (or the `get_sub_issues` state) to set its `status`
    (`in-progress` / `blocked` from the `status:*` label) and `state`.
    Mark the epic `blocked` if it carries `status:blocked` or any child is blocked.
+   **Initiatives (super-epics).** Among the `label:epic` results, treat an issue as an
+   **initiative** if it carries `label:initiative` **or** its title starts with `Initiative:`.
+   An initiative *groups other epics*: parse its member epic numbers from the `#NN` links in
+   its body's `## Member epics` / `## …constituent epics` section (that section only — a `#NN`
+   in a prose/"consolidation" section is not a member), keep only those that are themselves
+   gathered open epics, and roll them up into an `initiatives[]` entry (`epicsTotal`,
+   `activeCount`, `blockedCount`, `childrenTotal`/`childrenDone` summed from the members, and a
+   `members[]` list of `{number,title,url,done,total,status,blocked}`). **Remove initiatives
+   from `epics[]`** so they don't render as misleading `0/0` epics. `gather.mjs` does all this
+   deterministically; the interactive flow mirrors it.
 3. **Activity in the window** (the "since yesterday" band) — use date-filtered search,
    substituting `<cutoff>` (YYYY-MM-DD):
    - Closed: `search_issues` → `repo:FriendlyInternet/nuxt-crouton is:issue is:closed closed:>=<cutoff>`
@@ -121,7 +131,18 @@ Shape (`example.data.json` next to this skill is a complete, renderable sample):
       "testSteps": ["Open Bookings…", "Each row shows a status pill", "Filter by pending → amber only"]
     }
   ],
-  "epics": [
+  "initiatives": [                        // optional — the "🎛 Initiatives" band (super-epics grouping epics)
+    {
+      "number": 1632, "url": "https://github.com/...",
+      "title": "🎨 Visual Layout & Builder",   // the "Initiative:" prefix is stripped
+      "epicsTotal": 5, "activeCount": 2, "blockedCount": 1, "blocked": true,
+      "childrenTotal": 31, "childrenDone": 14,  // summed across member epics
+      "members": [
+        { "number": 983, "title": "...", "url": "...", "done": 7, "total": 12, "status": "blocked", "blocked": true }
+      ]
+    }
+  ],
+  "epics": [                              // regular epics only — initiatives are pulled out into `initiatives`
     {
       "number": 249, "title": "...", "url": "https://github.com/...",
       "status": "in-progress",          // in-progress | blocked | open | done
@@ -162,7 +183,9 @@ node .claude/skills/epic-digest/render.mjs digest.data.json --out-dir .         
 # → email the HTML (+ text mirror) via Resend
 ```
 - **`gather.mjs`** parses `Hypothesis` (or legacy `The bet`) / `We'll know by` from each epic body and
-  **computes** `whereWeAre` from child counts — no model in the loop.
+  **computes** `whereWeAre` from child counts — no model in the loop. It also detects **initiatives**
+  (super-epics; `label:initiative` or an `Initiative:` title), rolls their member epics up into
+  `initiatives[]`, and removes them from `epics[]` — no model in the loop.
 - **Delivery is email-only, via Resend** (#551). The job emails the rendered HTML
   (+ text mirror) when `secrets.RESEND_API_KEY`, `vars.RESEND_FROM` (shared with the
   red-team daily) and `vars.DIGEST_REPORT_EMAIL` are set; unset ⇒ the step warns and

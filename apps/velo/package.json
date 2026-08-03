@@ -31,7 +31,9 @@
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-layout": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",
+    "better-auth": "^1.5.5",
     "drizzle-orm": "catalog:",
+    "nanoid": "^5.0.0",
     "nuxt": "catalog:",
     "vue": "catalog:",
     "vue-router": "catalog:"

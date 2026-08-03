@@ -74,9 +74,9 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
     const result = await generateMigrations(appDir)
     if (result.generated) {
       consola.success('Step 3/4 — Migrations generated')
-    } else if (result.reason === 'deps-missing') {
+    } else if (result.reason === 'deferred') {
       needsManualMigrations = true
-      consola.info('Step 3/4 — Migrations deferred (install deps first; see next steps)')
+      consola.info('Step 3/4 — Migrations deferred (install deps so the layers resolve; see next steps)')
     } else {
       needsManualMigrations = true
       consola.warn(`Step 3/4 — Migrations skipped (${result.reason})`)

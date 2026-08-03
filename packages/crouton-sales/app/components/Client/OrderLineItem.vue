@@ -1,10 +1,24 @@
 <template>
-  <!-- items-start: price + qty controls align with the product name line,
-       not the vertical middle of a multi-line block. py stays slim — these
-       rows repeat a lot on a phone screen. -->
-  <div class="flex items-start gap-3 py-1.5">
-    <div class="flex-1 min-w-0 space-y-0.5">
-      <p class="font-medium truncate">{{ title }}</p>
+  <!-- Title, price and actions share one items-center row so they line up on
+       the same visual line; options/remark stack underneath. py stays slim —
+       these rows repeat a lot on a phone screen. -->
+  <div class="py-1">
+    <div class="flex items-center gap-3">
+      <p class="flex-1 min-w-0 font-medium truncate">{{ title }}</p>
+
+      <span
+        :key="price"
+        class="w-16 text-right text-sm text-muted shrink-0 animate-pop"
+      >
+        {{ format(price) }}
+      </span>
+
+      <div class="flex items-center gap-1 shrink-0">
+        <slot name="actions" />
+      </div>
+    </div>
+
+    <div v-if="options?.length || remark" class="space-y-0.5">
       <p
         v-for="option in options"
         :key="option"
@@ -17,17 +31,6 @@
         <span class="size-1 rounded-full bg-current opacity-60 shrink-0" />
         {{ remark }}
       </p>
-    </div>
-
-    <span
-      :key="price"
-      class="w-16 text-right text-sm text-muted shrink-0 animate-pop"
-    >
-      {{ format(price) }}
-    </span>
-
-    <div class="flex items-center gap-1 shrink-0">
-      <slot name="actions" />
     </div>
   </div>
 </template>

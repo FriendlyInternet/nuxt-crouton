@@ -37,6 +37,7 @@ Rule of engagement: a table hit here does NOT waive the `bug-archaeology` gate f
 | `Cannot find module '@vue/compiler-sfc'` (or similar phantom type error) after a dep bump | stale/unhoisted `node_modules`, not code | `rm -rf node_modules && pnpm install` — canonical: `dependency-sweep` skill | the #424 class |
 | Code "regression" right after pulling / switching worktrees, `git log` shows nothing | stale local install (e.g. missing pnpm symlink) — non-code cause | rule out non-code causes BEFORE blaming a commit — protocol: `bug-archaeology` skill | #424; story: `crouton-failure-archaeology` §C |
 | `npx playwright install` fails → "no browser" | download host egress-blocked; chromium IS pre-installed at `/opt/pw-browsers/` | never conclude "no browser" — canonical: root `CLAUDE.md` §headless browser; `crouton-harness-observability` §5 | #629 |
+| `EMFILE: too many open files, watch` crashes `pnpm dev` — but only in a `~/.supacode` worktree | `**/node_modules/**` watch-ignores compile with picomatch `dot: false`, which never matches across the hidden `.supacode` path segment → unstorage's fs-driver watcher swallows the whole `.pnpm` store (184k+ FDs → `kern.maxfilesperproc`). NOT a ulimit problem | fixed by `patches/unstorage.patch` (`dot: true`), auto-applied on `pnpm install`; if it recurs, check the patch survived an unstorage version bump | #1273 |
 
 ### Database / migrations / seeding
 

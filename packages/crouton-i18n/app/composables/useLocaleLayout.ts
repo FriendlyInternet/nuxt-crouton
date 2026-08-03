@@ -7,6 +7,10 @@ export function useLocaleLayout(
   primaryLocaleProp: Ref<string | undefined>,
   secondaryLocaleProp: Ref<string | undefined>,
   layout: Ref<'tabs' | 'side-by-side' | undefined>,
+  // Optional externally-controlled editing locale. When set, it drives the
+  // single edited locale (tabs mode) so several inputs can share ONE language
+  // selector (e.g. the pages editor's language bar). Undefined = self-managed.
+  externalLocale?: Ref<string | undefined>,
 ) {
   // Layout mode (defaults to tabs for backwards compatibility)
   const layoutMode = computed(() => layout.value ?? 'tabs')
@@ -16,9 +20,17 @@ export function useLocaleLayout(
     locales.value.map(l => (typeof l === 'string' ? l : l.code)),
   )
 
-  // Active locale for tabs mode
+  // Active locale for tabs mode — seeds from the external control when present,
+  // else the app locale.
   const { locale } = useI18n()
-  const editingLocale = ref(locale.value)
+  const editingLocale = ref(externalLocale?.value || locale.value)
+
+  // Follow the external control when it changes (controlled mode).
+  if (externalLocale) {
+    watch(externalLocale, (loc) => {
+      if (loc && loc !== editingLocale.value) editingLocale.value = loc
+    })
+  }
 
   // Left column locale (defaults to 'en' or first available) — for side-by-side
   const primaryEditingLocale = ref(

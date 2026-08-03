@@ -89,9 +89,11 @@ jobs:
             3. Keep it terse and skimmable. RECOMMEND only — do NOT edit `CLAUDE.md`,
                skills, agents, or any product code, and do NOT open a PR.
 
-            If you POST A COMMENT (when updating), lead it with the CI provenance header:
-            `> 🤖 **Claude Code** · agent pipeline (CI) · _Loop Station advisor_`
-            (Issue bodies are already clearly agent-authored — no header needed there.)
+            If you POST A COMMENT (when updating), follow `.github/CI-MESSAGE-STYLE.md`: LEAD with the
+            single most important finding/recommendation in plain words (a status emoji is fine), and put
+            the CI provenance in a small footer at the end:
+            `<sub>🤖 agent pipeline (CI) · Loop Station advisor</sub>`
+            (Issue bodies are already clearly agent-authored — no footer needed there.)
 
       # Outage visibility (#1037): the advisor's first real run died on billing_error and
       # the actionable findings evaporated with it. When the LLM step fails, classify why
@@ -112,13 +114,15 @@ jobs:
           set -euo pipefail
           BODY_FILE=$(mktemp)
           {
-            echo "> 🤖 **Claude Code** · agent pipeline (CI) · _Loop Station advisor — deterministic fallback (#1037)_"
+            echo "⚠️ **Loop Station advisor: the LLM step failed — posting the raw findings so they still reach you.**"
             echo ""
-            echo "The advisor's LLM step failed this week, but the deterministic gate found **actionable** findings — posting them raw so they still reach you. Human-phrased recommendations will arrive whenever the LLM step recovers; the outage is classified in [the run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            echo "The deterministic gate found **actionable** findings; human-phrased recommendations will arrive whenever the LLM step recovers."
             echo ""
             echo '```json'
             cat advisor-findings.json
             echo '```'
+            echo ""
+            echo "<sub>🤖 agent pipeline (CI) · Loop Station advisor — deterministic fallback (#1037) · [run log]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)</sub>"
           } > "$BODY_FILE"
           EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --label loop-station-advisor --state open --json number --jq '.[0].number // empty')
           if [ -n "$EXISTING" ]; then

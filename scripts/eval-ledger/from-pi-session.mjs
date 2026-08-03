@@ -23,6 +23,7 @@
 //                       pi-claude-cli/subscription reports zero/unreliable usage, #938 caveat)
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, basename } from 'node:path'
+import { parseArgs } from '../lib/cli-args.mjs'
 
 const SESSIONS_DIR = join(process.env.HOME || '', '.pi', 'agent', 'sessions')
 
@@ -116,15 +117,3 @@ function topKey(map) {
 }
 function round6(n) { return Math.round(n * 1e6) / 1e6 }
 function die(msg) { process.stderr.write(`ERROR: ${msg}\n`); process.exit(1) }
-function parseArgs(argv) {
-  const out = {}
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (!a.startsWith('--')) continue
-    // a bare flag (--latest) or one whose next token is another flag → boolean true
-    const takesVal = isValue(argv[i + 1])
-    out[a.slice(2)] = takesVal ? argv[++i] : true
-  }
-  return out
-}
-function isValue(tok) { return tok !== undefined && !tok.startsWith('--') }

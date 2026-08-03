@@ -71,7 +71,9 @@ jobs:
           # bytes written. Bash covers `gh` (comment) + writing the verdict; Write/Edit for the
           # file; Read/Grep/Glob for the scan. Bump max-turns now that turns aren't wasted on
           # denied retries. NB: a11y.yml / red-team.yml share this exact latent bug.
-          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          # Haiku, not Sonnet (#1272/#823): reports-only convention review — pattern-matching v3
+          # component names / raw-HTML re-impls that Haiku handles at ~3× lower cost. Reversible.
+          claude_args: "--model claude-haiku-4-5-20251001 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **frontend-review subagent** defined in `.claude/agents/frontend-review.md`.
             Input: { scope: "diff", depth: "quick", fix: false }.
@@ -108,6 +110,26 @@ jobs:
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
       - uses: ./.github/actions/loop-station-trace
         if: always()
+      # Capture a 🔴-critical verdict as an accountability finding candidate (#1570).
+      # Report-only (continue-on-error + always) so it never affects the gate. The
+      # candidate is an artifact; the main-context rollup (loop-station-findings.yml)
+      # confirms it on PR-merge and commits — a PR-branch run never writes findings.jsonl.
+      - name: Capture finding candidate
+        if: always()
+        continue-on-error: true
+        run: |
+          node scripts/eval-ledger/capture-finding.mjs \
+            --gate frontend-review --verdict frontend-review-verdict.json \
+            --pr ${{ github.event.pull_request.number }} \
+            --author_ref https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }} \
+            --out finding-candidate.json || true
+      - name: Upload finding candidate
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loop-station-finding-${{ github.run_id }}
+          path: finding-candidate.json
+          if-no-files-found: ignore
       # Fail-open must be VISIBLE (#1037): when no verdict exists, classify why (billing /
       # max-turns / auth / silent no-write) and emit a warning annotation + step summary,
       # so a dead agent can't be mistaken for a clean scan.

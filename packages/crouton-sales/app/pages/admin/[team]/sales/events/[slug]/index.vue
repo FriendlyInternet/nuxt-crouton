@@ -2,9 +2,8 @@
 /**
  * Event Workspace page
  *
- * Thin wrapper around <SalesEventWorkspaceShell />. The shell owns the header +
- * tabs + data fetching; this page just supplies the route params and turns on
- * URL tab persistence (`?tab=`) so admin tabs are deep-linkable.
+ * Thin wrapper around <SalesEventWorkspaceShell />. The shell owns the header,
+ * panes and data fetching; this page just supplies the route params.
  *
  * @route /admin/[team]/sales/events/[slug]
  */
@@ -16,6 +15,6 @@ const eventSlug = computed(() => route.params.slug as string)
 
 <template>
   <div class="p-6">
-    <SalesEventWorkspaceShell :event-slug="eventSlug" tab-param="tab" />
+    <SalesEventWorkspaceShell :event-slug="eventSlug" />
   </div>
 </template>

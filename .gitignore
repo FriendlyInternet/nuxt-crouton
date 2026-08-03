@@ -153,3 +153,5 @@ pocs/booking-demo/.data
 .fallow/
 
 pocs/bookmark-stash/.data
+fixtures/with-sales/.data
+pocs/snippets/.data

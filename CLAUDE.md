@@ -157,6 +157,8 @@ The approval file is gitignored and session-scoped. Always clean it up after fin
 
 This applies to all agents and sub-agents.
 
+**PR-time backstop (#1611).** The PreToolUse hook only runs *in an agent session*, so it can't catch a `packages/**` change on its way to `main`. The `packages-guard` CI check (`.github/workflows/packages-guard.yml`, decision in the unit-tested `scripts/packages-guard.mjs`) is the authoritative PR-time gate: a PR touching `packages/**` **fails** unless the edit is *declared* — a **`packages:approved`** label, a **`Packages-approved: <why>`** body line, **or** a linked signed-off **`pkg:*`** issue — and it comments the blast-radius (which package files changed). It's declaration, not prohibition. (Distinct from `guard-package-approval.yml`, which only fails a *committed* `.package-edit-approved` override file.)
+
 ### Context Clearing Between Tasks
 After each task: announce completion, STOP. User runs `/clear`. Fresh agent reads the relevant GitHub issue/epic (and PROGRESS_TRACKER.md if a phase rollup exists) and continues.
 
@@ -251,8 +253,26 @@ When a POC instead **graduates into `packages/*`** (it was incubating a future p
 
 A Cloudflare build (and any whole-monorepo `pnpm install`) runs *every* workspace's `postinstall`. On a fresh install the dist-consumed `@fyit/*` workspace packages aren't built yet, so a bare `nuxt prepare` errors with `Could not load '@fyit/crouton'`, exits 1, and **aborts the entire install — failing the deploy of every other app, including the docs site.** The `2>/dev/null || true` guard always exits 0; the real prepare/build still runs in each app's own deploy pipeline. When scaffolding a new app, copy the guarded form from `apps/velo/package.json`.
 
-## MANDATORY: TypeScript Checking
-**EVERY change requires `pnpm typecheck`** (runs per-app via `pnpm -r --filter './apps/*' typecheck`). Never run `npx nuxt typecheck` from root — it has no Nuxt app context and produces thousands of false positives. Fix errors immediately. Never skip.
+## MANDATORY: Post-change checks (typecheck + fallow + a quality pass)
+
+Three cheap gates run **in-session before committing**, mirroring what CI gates — so a
+session catches what the PR would, not after:
+
+1. **Typecheck (always).** `pnpm typecheck` (runs per-app via `pnpm -r --filter './apps/*'
+   typecheck`). Never run `npx nuxt typecheck` from root — it has no Nuxt app context and
+   produces thousands of false positives. Fix errors immediately. Never skip.
+2. **Fallow audit (always, it's fast + diff-scoped).** `npx fallow audit` — the same
+   structural gate CI runs (`fallow-audit` in `ci.yml`): dead code, duplication, complexity,
+   dependency hygiene, judged on **just your diff**. Run it before pushing so the PR's fallow
+   check can't be the thing that surprises you. (`npx fallow health --score` / `npx fallow
+   dead-code` for a wider look — see the Fallow MCP row in the artifacts table.)
+3. **A quality pass on a non-trivial diff (`/simplify` or `/code-review`).** Typecheck and
+   fallow don't catch *design smells* — e.g. reaching for `nextTick()` to paper over a
+   library's async state instead of deriving from the source event, an over-engineered
+   pipeline, a workaround where a cleaner primitive exists. The CI `frontend-review` gate only
+   covers **Nuxt UI 4 conventions**, not general Vue/reactivity smells, so **you** are the
+   reviewer for those: run `/simplify` (quality-only) or `/code-review` on any non-trivial
+   change before committing. If a reviewer would raise it, raise it on yourself first.
 
 ## Core Principles
 

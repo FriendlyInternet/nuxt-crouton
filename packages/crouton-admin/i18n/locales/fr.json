@@ -26,6 +26,7 @@
       "removeCustom": "Supprimer le favicon personnalisé"
     },
     "siteInfo": {
+      "tab": "Infos du site",
       "title": "Informations du site",
       "description": "Informations générales sur votre site d'équipe",
       "contactEmail": "E-mail de contact",

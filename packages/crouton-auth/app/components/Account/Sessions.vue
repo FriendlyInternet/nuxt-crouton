@@ -37,12 +37,12 @@ async function loadSessions() {
   if (!authClient) return
   loading.value = true
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data } = await (authClient as any).listSessions()
+    const { data } = await authClient.listSessions()
     if (data) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      sessions.value = (data as any[]).map((s: any) => ({
+      sessions.value = data.map(s => ({
         ...s,
+        ipAddress: s.ipAddress ?? undefined,
+        userAgent: s.userAgent ?? undefined,
         expiresAt: new Date(s.expiresAt),
         createdAt: new Date(s.createdAt),
         updatedAt: new Date(s.updatedAt),
@@ -60,8 +60,7 @@ async function revokeSession(token: string) {
   if (!authClient) return
   revoking.value = token
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (authClient as any).revokeSession({ token })
+    await authClient.revokeSession({ token })
     sessions.value = sessions.value.filter(s => s.token !== token)
     notify.success(t('account.sessions.sessionRevoked'))
   } catch {
@@ -75,8 +74,7 @@ async function revokeOtherSessions() {
   if (!authClient) return
   revokingAll.value = true
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (authClient as any).revokeOtherSessions()
+    await authClient.revokeOtherSessions()
     sessions.value = sessions.value.filter(s => s.isCurrent)
     notify.success(t('account.sessions.otherSessionsRevoked'))
   } catch {

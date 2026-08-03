@@ -1,7 +1,0 @@
-@import "tailwindcss";
-@import "@nuxt/ui";
-
-/* Scan this app + the minimal theme layer so Tailwind keeps the utilities and
-   the theme's design-token classes (.minimal-btn, .minimal-flat, …). */
-@source "./../../**/*.{vue,ts}";
-@source "../../../../../node_modules/@fyit/crouton-themes/minimal/**/*.{css,vue,ts}";

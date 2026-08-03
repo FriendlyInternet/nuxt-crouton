@@ -1,0 +1,604 @@
+/* Game Boy LCD Theme (#1310)
+   The original DMG screen: FOUR shades of olive green — #0f380f, #306230,
+   #8bac0f, #9bbc0e — and nothing else. Square corners, chunky pixel steps,
+   error/warning map to shades via inversion, never hue.
+   No !important: built on the shared subtractive replacer.
+
+   A11y note (#1310): text always uses gb-0 (darkest) on gb-3/gb-2 (lightest)
+   or inverted — the darkest-on-lightest pair is the only body-copy combo;
+   gb-1-on-gb-2 style pairs are decorative-only. */
+
+:root {
+  --gb-0: #0f380f;   /* darkest — ink */
+  --gb-1: #306230;   /* dark — shadows, secondary */
+  --gb-2: #8bac0f;   /* light — active fills */
+  --gb-3: #9bbc0e;   /* lightest — the screen */
+  --gb-step: 3px;    /* the pixel */
+}
+
+/* ============================================
+   DATA-THEME AMBIENT — the LCD
+   ============================================ */
+
+[data-theme="gameboy"],
+.theme-gameboy {
+  background-color: var(--gb-3);
+  color: var(--gb-0);
+  --ui-bg: var(--gb-3);
+  /* Base geometry token (#1594): chunky pixel corners are square — drive Nuxt
+     UI's radius scale to 0 so calm surfaces square too, not just named variants. */
+  --ui-radius: 0;
+}
+
+/* ============================================
+   BUTTONS — chunky sprites
+   Pixel-step "corners" via layered box-shadows (cheap, no images).
+   ============================================ */
+
+.gb-btn {
+  background-color: var(--gb-2);
+  color: var(--gb-0);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: var(--gb-step) var(--gb-step) 0 var(--gb-1);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.gb-btn:hover {
+  background-color: var(--gb-3);
+}
+
+.gb-btn:active {
+  transform: translate(var(--gb-step), var(--gb-step));
+  box-shadow: none;
+}
+
+.gb-btn--dark {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
+
+.gb-btn--dark:hover {
+  background-color: var(--gb-1);
+}
+
+/* "Error" in a 4-shade world: inverted + hazard underline, not red. */
+.gb-btn--alert {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    var(--gb-1) 6px 12px
+  );
+}
+
+/* ============================================
+   OUTLINE
+   ============================================ */
+
+.gb-outline {
+  background-color: transparent;
+  color: var(--gb-0);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.gb-outline:hover {
+  background-color: var(--gb-2);
+}
+
+.gb-outline--alert {
+  border-style: dashed;
+}
+
+/* ============================================
+   SOFT — mid-shade fill
+   ============================================ */
+
+.gb-soft {
+  background-color: var(--gb-2);
+  color: var(--gb-0);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.gb-soft:hover {
+  background-color: var(--gb-1);
+  color: var(--gb-3);
+}
+
+.gb-soft--alert {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    transparent 0 6px,
+    rgba(15, 56, 15, 0.25) 6px 12px
+  );
+}
+
+/* ============================================
+   GHOST — the menu cursor
+   ============================================ */
+
+.gb-ghost {
+  background-color: transparent;
+  color: var(--gb-0);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: none;
+}
+
+.gb-ghost::before {
+  content: '▶ ';
+  visibility: hidden;
+}
+
+.gb-ghost:hover::before {
+  visibility: visible;
+}
+
+/* ============================================
+   LINK — selected menu row
+   ============================================ */
+
+.gb-link {
+  background-color: transparent;
+  color: var(--gb-0);
+  border: none;
+  box-shadow: none;
+  border-radius: 0;
+  font-weight: 700;
+  text-decoration: none;
+  transition: none;
+}
+
+.gb-link:hover {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
+
+/* ============================================
+   INPUTS — a dialog box field
+   ============================================ */
+
+.gb-input {
+  width: 100%;
+}
+
+.gb-input-base {
+  background-color: var(--gb-3);
+  color: var(--gb-0);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: inset var(--gb-step) var(--gb-step) 0 rgba(15, 56, 15, 0.15);
+  caret-color: var(--gb-0);
+  font-weight: 600;
+  transition: none;
+}
+
+.gb-input-base::placeholder {
+  color: var(--gb-1);
+}
+
+.gb-input-base:focus {
+  outline: none;
+  background-color: #a6c514;
+}
+
+.gb-input-base:disabled {
+  border-style: dashed;
+  box-shadow: none;
+  color: var(--gb-1);
+}
+
+/* ============================================
+   CARD — an RPG dialog box
+   ============================================ */
+
+.gb-card {
+  background-color: var(--gb-3);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  /* double frame, like every dialog box since 1989 */
+  outline: 1px solid var(--gb-0);
+  outline-offset: 3px;
+  box-shadow: none;
+}
+
+.gb-card-header {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.6rem 1rem;
+}
+
+.gb-card-body {
+  color: var(--gb-0);
+  padding: 1rem;
+}
+
+.gb-card-footer {
+  border-top: var(--gb-step) solid var(--gb-0);
+  padding: 0.6rem 1rem;
+}
+
+/* ============================================
+   SEPARATOR — a sprite rule
+   ============================================ */
+
+.gb-separator {
+  border-style: dotted;
+  border-color: var(--gb-0);
+  border-top-width: var(--gb-step);
+}
+
+/* ============================================
+   BADGE — an item tag
+   ============================================ */
+
+.gb-badge {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+  border: none;
+  border-radius: 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* ============================================
+   VARIANT-LESS CHROME — USwitch (#1333 pattern)
+   ============================================ */
+
+[data-theme="gameboy"] button[role="switch"],
+.theme-gameboy button[role="switch"] {
+  border-radius: 0;
+  border: 2px solid var(--gb-0);
+  background-color: var(--gb-3);
+  transition: none;
+}
+
+[data-theme="gameboy"] button[role="switch"][data-state="checked"],
+.theme-gameboy button[role="switch"][data-state="checked"] {
+  background-color: var(--gb-2);
+}
+
+[data-theme="gameboy"] button[role="switch"] > span,
+.theme-gameboy button[role="switch"] > span {
+  border-radius: 0;
+  background-color: var(--gb-0);
+  transition: none;
+}
+
+/* ============================================
+   SEMANTIC TOKENS (#1390)
+   Nuxt UI text/surface/border tokens tuned to the LCD so app surfaces
+   (muted copy, elevated panels, borders) stay in-palette and readable.
+   Scoped to body: inherited custom properties win over :root/.dark.
+   ============================================ */
+
+[data-theme="gameboy"] body,
+body.theme-gameboy {
+  --ui-text-dimmed: #3f6d3f;
+  --ui-text-muted: #2f5d2f;
+  --ui-text-toned: #1d4a1d;
+  --ui-text: #0f380f;
+  --ui-text-highlighted: #0f380f;
+  --ui-bg-muted: #a4c414;
+  --ui-bg-elevated: #a8c61e;
+  --ui-bg-accented: #8bac0f;
+  --ui-border: #306230;
+  --ui-border-muted: #558042;
+  --ui-border-accented: #0f380f;
+}
+
+/* ============================================
+   TABS (#1393) — menu row; the active entry is inked
+   ============================================ */
+
+.gb-tabs-list {
+  background-color: transparent;
+  border-bottom: var(--gb-step) solid var(--gb-0);
+  gap: 0.25rem;
+  padding: 0;
+}
+
+.gb-tabs-trigger {
+  background-color: transparent;
+  color: var(--gb-0);
+  border: var(--gb-step) solid transparent;
+  border-bottom: none;
+  border-radius: 0;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.5rem 0.9rem;
+  transition: none;
+}
+
+.gb-tabs-trigger:hover {
+  background-color: var(--gb-2);
+}
+
+.gb-tabs-trigger[data-state="active"] {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+  border-color: var(--gb-0);
+}
+
+.gb-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — 4 shades, square pixels
+   ============================================ */
+
+.gb-check-box,
+.gb-radio-box {
+  background-color: var(--gb-3);
+  border: 2px solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.gb-check-indicator {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
+
+.gb-radio-indicator {
+  background-color: var(--gb-3);
+}
+
+.gb-radio-indicator::after {
+  background-color: var(--gb-0);
+  border-radius: 0;
+  width: 50%;
+  height: 50%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a dialog box since 1989
+   ============================================ */
+
+.gb-alert {
+  background-color: var(--gb-3);
+  color: var(--gb-0);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  outline: 1px solid var(--gb-0);
+  outline-offset: 3px;
+}
+
+.gb-alert-title {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.gb-alert--primary {
+  background-color: var(--gb-2);
+}
+
+.gb-alert--warning {
+  background-color: var(--gb-2);
+}
+
+.gb-alert--error {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+  outline-color: var(--gb-1);
+}
+
+.gb-alert--neutral {
+  background-color: var(--gb-3);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths like the switch)
+   ============================================ */
+
+[data-theme="gameboy"] [role="dialog"][data-slot="content"],
+.theme-gameboy [role="dialog"][data-slot="content"] {
+  background-color: var(--gb-3);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  outline: 1px solid var(--gb-0);
+  outline-offset: 3px;
+  box-shadow: 6px 6px 0 var(--gb-1);
+}
+
+[data-theme="gameboy"] [role="dialog"] [data-slot="title"],
+.theme-gameboy [role="dialog"] [data-slot="title"] {
+  color: var(--gb-0);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+[data-theme="gameboy"] [data-slot="overlay"],
+.theme-gameboy [data-slot="overlay"] {
+  background-color: rgb(15 56 15 / 0.6);
+}
+
+[data-theme="gameboy"] li[data-slot="base"],
+.theme-gameboy li[data-slot="base"] {
+  background-color: var(--gb-3);
+  border: var(--gb-step) solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--gb-1);
+}
+
+[data-theme="gameboy"] li[data-slot="base"] [data-slot="title"],
+.theme-gameboy li[data-slot="base"] [data-slot="title"] {
+  color: var(--gb-0);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+[data-theme="gameboy"] nav[data-slot="root"] button,
+.theme-gameboy nav[data-slot="root"] button {
+  background-color: var(--gb-3);
+  color: var(--gb-0);
+  border: 2px solid var(--gb-0);
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 700;
+  transition: none;
+}
+
+[data-theme="gameboy"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-gameboy nav[data-slot="root"] button:hover:not(:disabled) {
+  background-color: var(--gb-2);
+}
+
+[data-theme="gameboy"] nav[data-slot="root"] button[data-selected],
+.theme-gameboy nav[data-slot="root"] button[data-selected] {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
+
+/* ============================================
+   CALENDAR (#1458) — an RPG menu grid, 4 shades only, states via
+   inversion never hue. Named variant (gb-cal-*); selected/today state
+   is ours to supply. No glide — the DMG doesn't animate.
+   ============================================ */
+
+.gb-cal-heading {
+  color: var(--gb-0);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.gb-cal-head {
+  color: var(--gb-1);
+  text-transform: uppercase;
+  border-radius: 0;
+}
+
+.gb-cal-cell {
+  color: var(--gb-0);
+  border: 2px solid transparent;
+  border-radius: 0;
+  transition: none;
+}
+
+.gb-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.gb-cal-cell[data-highlighted] {
+  background-color: var(--gb-2);
+  color: var(--gb-0);
+}
+
+.gb-cal-cell[data-selected] {
+  background-color: var(--gb-0);
+  color: var(--gb-3);
+}
+
+.gb-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--gb-0);
+}
+
+.gb-cal-cell[data-outside-view] {
+  color: var(--gb-1);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider (a DMG volume slider) + color picker.
+   No variant hook; scoped to both activation paths. Slider anchors on
+   [data-slider-impl] (unique to USlider). 4 shades only.
+   ============================================ */
+
+[data-theme="gameboy"] [data-slider-impl] [data-slot="track"],
+.theme-gameboy [data-slider-impl] [data-slot="track"] {
+  background-color: var(--gb-2);
+  border: 2px solid var(--gb-0);
+  border-radius: 0;
+}
+
+[data-theme="gameboy"] [data-slider-impl] [data-slot="range"],
+.theme-gameboy [data-slider-impl] [data-slot="range"] {
+  background-color: var(--gb-0);
+  border-radius: 0;
+}
+
+[data-theme="gameboy"] [data-slider-impl] [data-slot="thumb"],
+.theme-gameboy [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--gb-3);
+  border-radius: 0;
+  --tw-ring-color: var(--gb-0);
+}
+
+[data-theme="gameboy"] [data-slot="picker"] [data-slot="selector"],
+.theme-gameboy [data-slot="picker"] [data-slot="selector"],
+[data-theme="gameboy"] [data-color-picker-track],
+.theme-gameboy [data-color-picker-track] {
+  border: 2px solid var(--gb-0);
+  border-radius: 0;
+}
+
+[data-theme="gameboy"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-gameboy [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="gameboy"] [data-slot="selectorThumb"],
+.theme-gameboy [data-slot="selectorThumb"],
+[data-theme="gameboy"] [data-slot="trackThumb"],
+.theme-gameboy [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--gb-0);
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — the backlit-mod counterpart: same 4-shade
+   constraint, screen goes deep olive-black, ink goes lit green.
+   Activated by the colorMode class on <html>.
+   ============================================ */
+
+.dark {
+  --gb-0: #9fc814;   /* lit ink */
+  --gb-1: #6f9410;   /* mid glow */
+  --gb-2: #1e3d1e;   /* active fills, dark */
+  --gb-3: #0c1f0c;   /* the unlit screen */
+}
+
+/* Semantic tokens for the dark screen (counterpart of the base block). */
+[data-theme="gameboy"].dark body,
+.dark body.theme-gameboy {
+  --ui-text-dimmed: #567a2a;
+  --ui-text-muted: #6f9410;
+  --ui-text-toned: #8ab312;
+  --ui-text: #9fc814;
+  --ui-text-highlighted: #c2e63a;
+  --ui-bg-muted: #102810;
+  --ui-bg-elevated: #123012;
+  --ui-bg-accented: #1e3d1e;
+  --ui-border: #6f9410;
+  --ui-border-muted: #2c4f2c;
+  --ui-border-accented: #9fc814;
+}

@@ -21,7 +21,7 @@ CREATE TABLE `__new_sales_printers` (
 	`teamId` text NOT NULL,
 	`owner` text NOT NULL,
 	`eventId` text NOT NULL,
-	`locationId` text NOT NULL,
+	`locationId` text,
 	`title` text NOT NULL,
 	`ipAddress` text NOT NULL,
 	`port` text,

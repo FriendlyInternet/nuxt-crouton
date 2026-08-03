@@ -218,6 +218,8 @@
       "none": "Geen",
       "active": "Actief",
       "inactive": "Inactief",
+      "on": "Aan",
+      "off": "Uit",
       "confirmDelete": "Bevestig verwijderen"
     },
     "block": {
@@ -281,11 +283,18 @@
       "noProducts": "Geen producten beschikbaar",
       "outOfStock": "Uitverkocht",
       "options": "Opties",
-      "addToCart": "Toevoegen aan winkelwagen"
+      "addToCart": "Toevoegen aan winkelwagen",
+      "inCart": "Besteld"
     },
     "categories": {
       "all": "Alles",
       "title": "Categorieën"
+    },
+    "orderHistory": {
+      "title": "Mijn bestellingen",
+      "loading": "Je bestellingen laden…",
+      "empty": "Je hebt nog geen bestellingen geplaatst.",
+      "loadError": "Kan je bestellingen niet laden"
     },
     "orders": {
       "title": "Bestellingen",
@@ -306,6 +315,10 @@
       "processing": "Verwerken",
       "client": "Klant",
       "rePrint": "Opnieuw printen",
+      "rePrintOrder": "Opnieuw printen",
+      "rePrintConfirm": "Opnieuw printen?",
+      "reprintQueued": "Opnieuw printen in wachtrij",
+      "reprintError": "Kan deze bestelling niet opnieuw printen",
       "printTriggered": "Printopdracht verstuurd",
       "printFailed": "Printen mislukt",
       "printError": "Kan geen printopdracht starten voor deze bestelling",
@@ -329,7 +342,8 @@
       "createNewClient": "Nieuwe klant aanmaken",
       "clientHelp": "Selecteer een bestaande klant of maak een nieuwe aan",
       "clientRequired": "Klant vereist",
-      "clientRequiredDescription": "Dit evenement vereist een klant. Selecteer of maak er een aan."
+      "clientRequiredDescription": "Dit evenement vereist een klant. Selecteer of maak er een aan.",
+      "deleteError": "Kon bestelling niet verwijderen"
     },
     "events": {
       "title": "Evenementen",
@@ -387,7 +401,15 @@
       "driverNetwork": "Netwerkprinter",
       "driverNetworkHelp": "Thermische printer op het venuenetwerk (ESC/POS).",
       "driverBrowser": "Browser / AirPrint",
-      "driverBrowserHelp": "Afdrukken via het printvenster van het toestel, vanaf een print-bridge-scherm."
+      "driverBrowserHelp": "Afdrukken via het printvenster van het toestel, vanaf een print-bridge-scherm.",
+      "testPrint": "Testprint",
+      "testPrintQueued": "Testticket in de wachtrij — kijk naar de printer",
+      "testPrintError": "Testprint mislukt",
+      "testPrintWaiting": "Testticket wordt naar de printer gestuurd…",
+      "testPrintPrinted": "Afgedrukt — het testticket is doorgekomen",
+      "testPrintFailed": "Testprint mislukt",
+      "testPrintTimeout": "Geen antwoord — spooler offline of printer onbereikbaar?",
+      "preview": "Voorbeeld"
     },
     "helperLogin": {
       "title": "Helper-login",
@@ -438,6 +460,8 @@
       "location": "Locatie",
       "status": "Status",
       "previewTitle": "Printvoorbeeld",
+      "previewFailed": "Kon voorbeeld niet laden",
+      "previewNote": "Zoals de printer hem afdrukt · met je opgeslagen instellingen",
       "printerInformation": "Printerinformatie",
       "name": "Naam",
       "ipAddress": "IP-adres",
@@ -482,12 +506,26 @@
       "duplicateEventDesc": "Maakt een kopie van dit evenement met categorieën, locaties, producten en printers",
       "deleteEvent": "Evenement verwijderen",
       "deleteEventDesc": "Verwijdert dit evenement definitief",
+      "deleteAllOrders": "Alle bestellingen verwijderen",
+      "deleteAllOrdersAction": "Bestellingen verwijderen…",
+      "deleteAllOrdersDesc": "Wist elke bestelling, elk item en elke printtaak van dit evenement. Behoudt het evenement, de kaart en de klanten.",
+      "deleteAllOrdersTitle": "Alle bestellingen verwijderen?",
+      "deleteAllOrdersWarning": "Dit verwijdert definitief alle bestellingen van “{event}”, inclusief hun items en printtaken. Andere evenementen blijven ongemoeid. Klantrekeningen blijven bestaan maar worden leeg. Dit kan niet ongedaan worden gemaakt.",
+      "deleteAllOrdersConfirmLabel": "Typ “{event}” om te bevestigen",
+      "deleteAllOrdersConfirm": "Alle bestellingen verwijderen",
+      "deleteAllOrdersDone": "{count} bestelling(en) verwijderd",
+      "deleteAllOrdersError": "Kon de bestellingen niet verwijderen",
       "helperPin": "Helper-PIN",
       "receiptSettings": "Printinstellingen",
       "unsavedChanges": "Niet-opgeslagen wijzigingen",
       "settingsSaved": "Instellingen opgeslagen",
       "editReceiptText": "Bontekst bewerken",
       "activeHelpers": "Actieve helpers",
+      "helperPinRotateHint": "De pincode wijzigen logt elke helper met de oude pincode uit.",
+      "logoutAllHelpers": "Alle helpers uitloggen",
+      "helpersLockedOut": "{count} helper(s) uitgelogd — zij moeten de nieuwe pincode invoeren",
+      "helpersLoggedOut": "{count} helper(s) uitgelogd",
+      "helpersLogoutError": "Kon de helpers niet uitloggen",
       "add": "Toevoegen",
       "loading": "Laden...",
       "noCategories": "Geen categorieën",
@@ -499,6 +537,9 @@
       "noProducts": "Geen producten",
       "inThisCategory": " in deze categorie",
       "eventDetails": "Eventgegevens",
+      "settingsTabData": "Algemeen",
+      "settingsTabPrinters": "Printers",
+      "settingsTabHelpers": "Helpers",
       "eventName": "Eventnaam",
       "eventNamePlaceholder": "bijv. Zomermarkt 2026",
       "eventType": "Eventtype",
@@ -514,6 +555,8 @@
       "currencyEur": "Euro (€)",
       "currencyUsd": "Dollar ($)",
       "showInactive": "Inactieve producten",
+      "editCatalog": "Bewerken",
+      "doneEditing": "Klaar",
       "clientsPanel": {
         "button": "Klanten",
         "title": "Klanten",
@@ -526,6 +569,24 @@
         "printed": "Rekening afgedrukt voor {client} — afgesloten",
         "printError": "Kon de rekening niet afdrukken",
         "loadError": "Kon klanten niet laden"
+      },
+      "dataPanel": {
+        "button": "Data",
+        "title": "Data",
+        "revenueChart": "Omzet per dag",
+        "productMatrix": "Verkoop per product × dag",
+        "includePersonnel": "Personeel meetellen",
+        "personnelChart": "Personeelsbestellingen"
+      },
+      "launcher": {
+        "ordersDesc": "Alle bestellingen van dit event — status, tickets, opnieuw printen",
+        "ordersStat": "bestellingen",
+        "clientsDesc": "Openstaande rekeningen per klant bekijken en afrekenen",
+        "clientsStat": "open rekeningen",
+        "dataDesc": "Live verkoopcijfers, grafieken en de verkooptabel",
+        "dataStat": "omzet",
+        "settingsDesc": "Eventgegevens, printers, bontekst en helpers",
+        "settingsStat": "printers"
       }
     },
     "helpers": {
@@ -543,9 +604,7 @@
       "notes": "Notities",
       "label": "Klant",
       "selectOrCreate": "Selecteer of maak klant aan...",
-      "createNew": "Nieuwe klant aanmaken",
-      "nameLabel": "Klantnaam",
-      "namePlaceholder": "Voer klantnaam in"
+      "createNamed": "\"{name}\" toevoegen"
     },
     "offline": {
       "title": "Offline",
@@ -580,6 +639,49 @@
         "emptyDecode": "Lege printdata",
         "sendFailed": "Versturen naar printer mislukt",
         "generic": "Printopdracht mislukt"
+      }
+    },
+    "printFlow": {
+      "title": "Printflow",
+      "description": "Wie de tickets van dit evenement afdrukt.",
+      "localDrainer": "Lokaal toestel",
+      "localDrainerHelp": "Een toestel op locatie (Pi / mini-pc) draait de app en print rechtstreeks naar de printers — werkt volledig offline.",
+      "routerSpooler": "Via de router",
+      "routerSpoolerHelp": "De router op locatie haalt de printopdrachten op uit de cloud en stuurt ze naar de printers.",
+      "paused": "Geen fysieke prints",
+      "pausedHelp": "Er worden geen printopdrachten aangemaakt — bestellingen verschijnen gewoon op het scherm.",
+      "lastSeen": "laatst gezien",
+      "neverSeen": "nooit gezien",
+      "updated": "Printflow aangepast",
+      "updateError": "Kon de printflow niet aanpassen",
+      "setup": {
+        "toggle": "Setup",
+        "copy": "Kopieer",
+        "copied": "Gekopieerd",
+        "routerIntro": "Eenmalig: installeer de router (API_URL in /etc/init.d/print_server). Daarna stelt hij zichzelf voor — een nieuw event vraagt niets meer op de router.",
+        "routerPrinters": "Zet de printers op het eigen netwerk van de router met een vast IP, en voeg elke printer toe onder Printers met dat IP en poort 9100.",
+        "routerTicket": "De router print zelf een koppelbon (bij opstart, tot hij gekoppeld is). Geen bon? Controleer stroom, printer en of API_URL naar deze app wijst:",
+        "routerClaim": "Vul de Router-ID en code van de bon hieronder in bij \"Koppel router\".",
+        "routerLegacy": "Oudere router zonder koppelbon? Volg de EVENT_ID-stappen in print-server/README.md.",
+        "routerVerify": "Klaar wanneer dit bolletje groen wordt — de router pollt binnen ~30 seconden.",
+        "drainerIntro": "Een toestel op locatie (Pi / mini-pc) draait de app en print rechtstreeks naar de printers — automatisch, geen routerconfiguratie en niets in te schakelen.",
+        "drainerOverride": "Geavanceerd: op een toestel op locatie print de app standaard lokaal. Forceer het overal aan, of schakel het uit op een toestel dat niet mag printen, met de env-override:",
+        "drainerPrinters": "Voeg elke printer toe onder Printers met zijn LAN-IP en poort 9100 — het toestel moet de printers op zijn netwerk kunnen bereiken.",
+        "drainerFlip": "Laat deze printflow op \"Lokaal toestel\" staan — de routerflow is de standaard, en het toestel print alleen voor events die op Lokaal toestel staan.",
+        "drainerVerify": "Klaar wanneer dit bolletje groen wordt — het toestel meldt zich binnen ~30 seconden."
+      },
+      "pairing": {
+        "title": "Koppel router",
+        "description": "Een verse router print zelf een koppelbon. Vul de Router-ID en code van die bon in — daarna hoeft er voor nieuwe events niets meer op de router te gebeuren.",
+        "deviceId": "Router-ID",
+        "code": "Code",
+        "claim": "Koppel",
+        "revoke": "Ontkoppel",
+        "claimSuccess": "Router gekoppeld — hij begint binnen ~30 seconden te printen",
+        "claimConflict": "Deze router is aan een ander team gekoppeld — ontkoppel hem daar eerst",
+        "claimError": "Kon de router niet koppelen — controleer de id en code op de bon",
+        "revokeSuccess": "Router ontkoppeld — hij print een nieuwe koppelbon",
+        "revokeError": "Kon de router niet ontkoppelen"
       }
     }
   }

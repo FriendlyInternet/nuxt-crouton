@@ -1,0 +1,24 @@
+{
+  "name": "unstyled-spike",
+  "type": "module",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare 2>/dev/null || true",
+    "typecheck": "nuxt typecheck",
+    "cf:staging": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler deploy .output/server/index.mjs --assets .output/public"
+  },
+  "dependencies": {
+    "@nuxt/ui": "catalog:",
+    "eruda": "^3.4.3",
+    "nuxt": "catalog:",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "wrangler": "catalog:"
+  }
+}

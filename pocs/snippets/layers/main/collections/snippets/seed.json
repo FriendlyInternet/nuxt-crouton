@@ -1,0 +1,30 @@
+{
+  "table": "main_snippets",
+  "key": "title",
+  "rows": [
+    {
+      "title": "Sample title 1",
+      "code": "Sample code content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "language": "Sample language 1",
+      "tags": [
+        "sample"
+      ]
+    },
+    {
+      "title": "Sample title 2",
+      "code": "Sample code content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "language": "Sample language 2",
+      "tags": [
+        "sample"
+      ]
+    },
+    {
+      "title": "Sample title 3",
+      "code": "Sample code content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "language": "Sample language 3",
+      "tags": [
+        "sample"
+      ]
+    }
+  ]
+}

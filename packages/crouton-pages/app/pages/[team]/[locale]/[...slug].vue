@@ -216,6 +216,23 @@ function startEditing() {
   isEditing.value = true
 }
 
+// Contribute the "edit this page" pencil to the nav pill (replaces the old
+// floating FAB). Client-side registration — actions carry functions, so they
+// must not be serialized through SSR. Visibility tracks admin + not-editing +
+// a real page.
+const { register: registerNavAction } = useCroutonNavPill()
+let offNavAction: (() => void) | null = null
+onMounted(() => {
+  offNavAction = registerNavAction({
+    id: 'pages:edit-page',
+    icon: 'i-lucide-pencil',
+    label: t('pages.admin.editPage', 'Edit Page'),
+    order: 100,
+    onSelect: startEditing,
+    show: () => isAdmin.value && !isEditing.value && !!page.value?.id
+  })
+})
+
 // Refresh page data after save
 watch(isEditing, async (editing, wasEditing) => {
   if (!editing && wasEditing) {
@@ -226,6 +243,7 @@ watch(isEditing, async (editing, wasEditing) => {
 
 // Clean up editing state on unmount
 onBeforeUnmount(() => {
+  offNavAction?.()
   isEditing.value = false
   editingPageId.value = null
   editingTranslations.value = null
@@ -345,24 +363,7 @@ useHead({
       </div>
     </template>
 
-    <!-- Floating edit button (FAB) — admin only, hidden when editing -->
-    <ClientOnly>
-      <Transition
-        enter-active-class="transition duration-200 ease-out"
-        enter-from-class="opacity-0 scale-90"
-        enter-to-class="opacity-100 scale-100"
-        leave-active-class="transition duration-150 ease-in"
-        leave-from-class="opacity-100 scale-100"
-        leave-to-class="opacity-0 scale-90"
-      >
-        <button
-          v-if="isAdmin && !isEditing && page?.id"
-          class="fixed bottom-6 right-6 z-40 flex items-center justify-center size-12 rounded-full bg-muted/80 backdrop-blur-sm text-muted-foreground border border-default shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-200 cursor-pointer"
-          @click="startEditing"
-        >
-          <UIcon name="i-lucide-pencil" class="size-5" />
-        </button>
-      </Transition>
-    </ClientOnly>
+    <!-- The "edit this page" pencil now lives in the nav pill (registered via
+         useCroutonNavPill in the script), not a floating FAB. -->
   </div>
 </template>

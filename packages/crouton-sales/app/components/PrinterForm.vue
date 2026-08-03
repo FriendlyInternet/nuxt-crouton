@@ -25,17 +25,7 @@
     <CroutonFormLayout :navigation-items="navigationItems" v-model="activeSection">
       <template #main>
         <div class="flex flex-col gap-4 p-1">
-          <UFormField v-if="!hideEvent" :label="t('sales.form.event')" name="eventId" class="not-last:pb-4">
-            <CroutonFormReferenceSelect
-              v-model="state.eventId"
-              collection="salesEvents"
-              :label="t('sales.form.event')"
-            />
-          </UFormField>
-
-          <UFormField :label="t('sales.form.title')" name="title" class="not-last:pb-4">
-            <UInput v-model="state.title" class="w-full" size="xl" />
-          </UFormField>
+          <SalesFormEventTitleFields v-model:event-id="state.eventId" v-model:title="state.title" :hide-event="hideEvent" />
 
           <!-- Output driver: how this station prints. Thermal (network ESC/POS)
                is the default; browser-print fulfils via the OS / AirPrint dialog
@@ -131,6 +121,32 @@
               </div>
             </UFormField>
           </div>
+
+          <!-- Preview + Testprint (#1504/#1391) — their own roomy row right under
+               the toggles block. Both act on the SAVED printer, so update-only:
+               Voorbeeld renders what this station prints; Testprint pushes a real
+               ticket through the flow. -->
+          <div v-if="action === 'update' && state.id" class="grid grid-cols-2 gap-2">
+            <UButton
+              block
+              variant="outline"
+              color="primary"
+              icon="i-lucide-eye"
+              @click="previewOpen = true"
+            >
+              {{ t('sales.form.preview', 'Voorbeeld') }}
+            </UButton>
+            <UButton
+              block
+              variant="outline"
+              color="neutral"
+              icon="i-lucide-printer-check"
+              :loading="testPrinting"
+              @click="handleTestPrint"
+            >
+              {{ t('sales.form.testPrint', 'Testprint') }}
+            </UButton>
+          </div>
         </div>
       </template>
 
@@ -155,7 +171,8 @@
         </UAlert>
 
         <!-- Delete pill left, save stretches over the rest (items-stretch keeps
-             the pill the same height as the save button). -->
+             the pill the same height as the save button). Testprint + Voorbeeld
+             moved up under the toggles block (#1504). -->
         <div class="flex items-stretch gap-2">
           <CroutonDeleteButton
             v-if="action === 'update' && state.id"
@@ -172,9 +189,43 @@
             :has-validation-errors="validationErrors.length > 0"
           />
         </div>
+
+        <!-- Testprint outcome (#1506): the button proves nothing unless it
+             reports the REAL result — spinner while the job drains, then
+             printed ✓ / failed ✗ + the spooler's reason. -->
+        <div v-if="testPrinting || testPrintResult" class="mt-2">
+          <div v-if="testPrinting" class="flex items-center gap-2 text-sm text-muted">
+            <UIcon name="i-lucide-loader-circle" class="size-4 animate-spin shrink-0" />
+            {{ t('sales.form.testPrintWaiting', 'Sending test ticket to the printer…') }}
+          </div>
+          <UAlert
+            v-else-if="testPrintResult?.phase === 'printed'"
+            color="success"
+            variant="soft"
+            icon="i-lucide-printer-check"
+            :title="testPrintResult.message"
+          />
+          <UAlert
+            v-else-if="testPrintResult?.phase === 'failed'"
+            color="error"
+            variant="soft"
+            icon="i-lucide-printer-x"
+            :title="t('sales.form.testPrintFailed', 'Test print failed')"
+            :description="testPrintResult.message"
+          />
+        </div>
       </template>
     </CroutonFormLayout>
   </UForm>
+
+  <!-- Receipt preview (#1504): renders what this station actually prints. -->
+  <SalesSettingsPrintPreviewModal
+    v-if="action === 'update' && state.id && state.eventId"
+    v-model:open="previewOpen"
+    :printer-id="state.id"
+    :event-id="state.eventId"
+    :team-param="String(route.params.team)"
+  />
 </template>
 
 <script setup lang="ts">
@@ -253,14 +304,9 @@ const fieldLabels: Record<string, string> = {
 }
 const fieldLabel = (name: string) => fieldLabels[name] || name
 
-const { create, update, deleteItems } = useCollectionMutation(collection)
-const { close, loading } = useCrouton()
-
-// Merge activeItem for both create (preset eventId from the event workspace) and
-// update (the full record being edited).
-const initialValues = { ...defaultValue, ...(props.activeItem || {}) }
-
-const state = ref<Record<string, any> & { id?: string | null }>(initialValues)
+// Shared scaffold: state (activeItem-merged), submit switch, in-form delete.
+const { state, hideEvent, loading, close, submitAction, deleting, handleDelete }
+  = useSalesCollectionForm(props, { collection, defaultValue })
 
 // Pre-existing printers have no type column value — they are kitchen printers.
 if (!state.value.type) state.value.type = 'kitchen'
@@ -280,9 +326,6 @@ watch(() => state.value.type, (type) => {
   if (type === 'receipt') state.value.locationId = null
 })
 
-// Event is implied by the workspace — hide the selector when it's preset.
-const hideEvent = computed(() => !!state.value.eventId)
-
 const handleSubmit = async () => {
   // Pre-existing receipt printers may still carry a location from before the
   // field was hidden — drop it on save so routing data stays clean.
@@ -294,13 +337,7 @@ const handleSubmit = async () => {
     state.value.ipAddress = 'browser-print'
   }
   try {
-    if (props.action === 'create') {
-      await create(state.value)
-    } else if (props.action === 'update' && state.value.id) {
-      await update(state.value.id, state.value)
-    } else if (props.action === 'delete') {
-      await deleteItems(props.items as any)
-    }
+    await submitAction()
     validationErrors.value = []
     close()
   } catch (error) {
@@ -308,20 +345,93 @@ const handleSubmit = async () => {
   }
 }
 
-// Delete stays in-form (a nested overlay would leave this slideover open on a
-// deleted record); the arm→confirm step lives in CroutonDeleteButton.
-const deleting = ref(false)
+// Testprint (#1391): POST the team-authed probe endpoint; the job then rides
+// the event's Print flow like any order ticket. #1506: don't stop at "queued" —
+// poll the enqueued job and report its REAL outcome inline (printed ✓ / failed
+// ✗ + the spooler's reason), so a mistyped printer IP is a 5-second catch, not
+// an hour reading spooler logs.
+const route = useRoute()
+const testPrinting = ref(false)
+const testPrintResult = ref<{ phase: 'printed' | 'failed', message: string } | null>(null)
 
-const handleDelete = async () => {
-  if (!state.value.id) return
-  deleting.value = true
+const pollQueueId = ref<string | null>(null)
+const pollStartedAt = ref(0)
+// Same cadence as usePrintWatcher: the spooler polls every ~2s, faster buys
+// nothing; a job stuck at pending past the timeout means nobody is draining.
+const POLL_INTERVAL_MS = 2000
+const WATCH_TIMEOUT_MS = 60000
+
+function settleTestPrint(phase: 'printed' | 'failed', message: string) {
+  testPrintResult.value = { phase, message }
+  testPrinting.value = false
+}
+
+// Prefer the spooler's mapped reason; fall back to the timeout copy or the raw
+// message. Mirrors how PrintqueuesCard / OrdersTab translate job errors.
+function failureMessage(result: { reason?: 'error' | 'timeout', errorMessage?: string | null }): string {
+  if (result.reason === 'timeout') return t('sales.form.testPrintTimeout', 'No response from the printer')
+  const key = printErrorKey(result.errorMessage)
+  if (key) return t(key)
+  return result.errorMessage || t('sales.form.testPrintFailed', 'Test print failed')
+}
+
+const { pause: pausePoll, resume: resumePoll } = useIntervalFn(async () => {
+  if (!pollQueueId.value || !state.value.eventId) {
+    pausePoll()
+    return
+  }
+  let job: { status: string | null, errorMessage?: string | null } | null = null
   try {
-    await deleteItems([state.value.id])
-    close()
-  } catch (error) {
-    console.error('Delete failed:', error)
-  } finally {
-    deleting.value = false
+    // Annotate the path as `string` (erases literal narrowing) and give $fetch
+    // an explicit response generic, so the typed client can't try to resolve
+    // this dynamically-built URL against the full Nitro route union — that
+    // route-literal inference blows the TS "Excessive stack depth" limit in the
+    // with-sales fixture's typecheck (#1506). Same shape as usePrintWatcher's
+    // typed $fetch<PrintWatchJob[]>(...).
+    const url: string = `/api/crouton-sales/teams/${route.params.team}/events/${state.value.eventId}/printqueues/${pollQueueId.value}`
+    job = await $fetch<{ status: string | null, errorMessage?: string | null }>(url)
+  }
+  catch {
+    // Not visible yet / transient blip — keep waiting until the timeout fires.
+    job = null
+  }
+
+  const result = evaluateTestPrint({ job, elapsedMs: Date.now() - pollStartedAt.value, timeoutMs: WATCH_TIMEOUT_MS })
+  if (!result.settled) return
+
+  pausePoll()
+  pollQueueId.value = null
+  if (result.phase === 'printed') {
+    settleTestPrint('printed', t('sales.form.testPrintPrinted', 'Printed'))
+  }
+  else {
+    settleTestPrint('failed', failureMessage(result))
+  }
+}, POLL_INTERVAL_MS, { immediate: false })
+
+// Receipt preview modal (#1504) — renders what this saved printer prints.
+const previewOpen = ref(false)
+
+async function handleTestPrint() {
+  if (!state.value.id || !state.value.eventId) return
+  testPrinting.value = true
+  testPrintResult.value = null
+  pausePoll()
+  try {
+    const res = await $fetch<{ queueId: string }>(
+      `/api/crouton-sales/teams/${route.params.team}/events/${state.value.eventId}/printers/${state.value.id}/test-print`,
+      { method: 'POST' }
+    )
+    // First read at 2s — jobs start at pending, an immediate fetch buys nothing.
+    pollQueueId.value = res.queueId
+    pollStartedAt.value = Date.now()
+    resumePoll()
+  }
+  catch (e: unknown) {
+    // POST itself rejected (e.g. 409 'flow is none') — that IS the outcome.
+    const description = (e as { data?: { statusText?: string } })?.data?.statusText
+    settleTestPrint('failed', description || t('sales.form.testPrintFailed', 'Test print failed'))
   }
 }
+
 </script>

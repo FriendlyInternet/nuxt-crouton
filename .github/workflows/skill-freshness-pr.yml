@@ -55,7 +55,7 @@ jobs:
             const { owner, repo } = context.repo
             const issue_number = context.payload.pull_request.number
             const MARKER = '<!-- skill-freshness-advisory -->'
-            const HEADER = '> 🤖 **Claude Code** · agent pipeline (CI) · _skill-freshness advisory_'
+            const FOOTER = '<sub>🤖 agent pipeline (CI) · skill-freshness advisory · not a merge gate</sub>'
 
             const data = JSON.parse(fs.readFileSync('skill-citations.json', 'utf8'))
             const skills = data.skills || []
@@ -69,8 +69,8 @@ jobs:
             // (don't add noise to unrelated PRs).
             if (!skills.length) {
               if (existing) {
-                const body = [MARKER, HEADER, '', '### 📚 Skill freshness',
-                  '✅ The latest revision changes no files cited by a knowledge skill.'].join('\n')
+                const body = [MARKER, '### 📚 Skill freshness', '',
+                  '✅ This revision changes no files cited by a knowledge skill.', '', FOOTER].join('\n')
                 await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
               }
               core.info('No skill-cited files changed — nothing to advise.')
@@ -80,8 +80,6 @@ jobs:
             const n = skills.length
             const lines = [
               MARKER,
-              HEADER,
-              '',
               `### 📚 This PR changes files cited by ${n} knowledge skill${n === 1 ? '' : 's'}`,
               '',
               'These skills cite paths this PR touches. If the change alters what they document,',
@@ -95,7 +93,9 @@ jobs:
             }
             lines.push(
               '',
-              '_Advisory only — not a merge gate. After re-verifying, run `node scripts/skill-freshness.mjs --pretty` to confirm the skill reads clean._'
+              '_After re-verifying, run `node scripts/skill-freshness.mjs --pretty` to confirm the skill reads clean._',
+              '',
+              FOOTER
             )
             const body = lines.join('\n')
 

@@ -50,6 +50,13 @@ interface Props {
   createShortcut?: boolean
   /** Enable / keyboard shortcut for search */
   searchShortcut?: boolean
+  /**
+   * The content slot renders its OWN mobile back affordance (via the `onClose`
+   * slot prop), so the shell must NOT render its default back bar. Used by the
+   * pages workspace, which folds the back arrow into its editor toolbar. Flow
+   * leaves this false and keeps the shared back bar.
+   */
+  contentProvidesBack?: boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -62,6 +69,7 @@ const props = withDefaults(defineProps<Props>(), {
   sidebarMaxSize: 40,
   createShortcut: true,
   searchShortcut: true,
+  contentProvidesBack: false,
 })
 
 const emit = defineEmits<{
@@ -185,6 +193,14 @@ onKeyStroke('/', (e) => {
   }
 })
 
+// Close/deselect — collapses the detail (mobile: closes the slideover) and
+// returns to the sidebar list. Exposed to the content slot so a consumer can
+// render its own back affordance inside the detail (see contentProvidesBack).
+function handleClose() {
+  selectedId.value = null
+  mode.value = 'view'
+}
+
 // Slot props bundle — reused across desktop and mobile content
 const contentSlotProps = computed(() => ({
   selectedId: selectedId.value,
@@ -193,6 +209,7 @@ const contentSlotProps = computed(() => ({
   onSave: handleSave,
   onDelete: handleDelete,
   onCancel: handleCancel,
+  onClose: handleClose,
 }))
 
 const sidebarSlotProps = computed(() => ({
@@ -255,11 +272,34 @@ defineExpose({
   <ClientOnly>
     <USlideover v-if="isMobile" v-model:open="isContentPanelOpen" side="right">
       <template #content>
-        <slot
-          v-if="showContent"
-          name="content"
-          v-bind="contentSlotProps"
-        />
+        <div class="flex h-full flex-col">
+          <!-- Back bar: the full-screen slideover leaves no tappable backdrop,
+               so this is the only way to dismiss the detail and return to the
+               sidebar list. Skipped when the content renders its own back
+               affordance (contentProvidesBack) via the onClose slot prop. -->
+          <div
+            v-if="!contentProvidesBack"
+            class="flex items-center gap-1.5 shrink-0 px-2 py-1.5 border-b border-default bg-elevated/30"
+          >
+            <UButton
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-arrow-left"
+              size="sm"
+              :aria-label="$t('common.back')"
+              @click="isContentPanelOpen = false"
+            />
+            <span v-if="title" class="text-sm font-medium text-muted truncate">{{ title }}</span>
+          </div>
+
+          <div class="flex-1 min-h-0 overflow-hidden">
+            <slot
+              v-if="showContent"
+              name="content"
+              v-bind="contentSlotProps"
+            />
+          </div>
+        </div>
       </template>
     </USlideover>
   </ClientOnly>

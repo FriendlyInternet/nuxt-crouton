@@ -1,0 +1,92 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* Scan this app for Tailwind utility classes used in re-supplied styling. */
+@source "./../../**/*.{vue,ts}";
+
+/* ---- Re-supplied base styling (the whole point of this spike) ----------
+   `theme.unstyled: true` blanks every generated slot/variant class, so
+   these hand-written classes ARE the theme now. Kept here (not scattered
+   across `:ui` props) so the "what did I have to write back" surface is
+   legible in one file for the write-up. */
+
+.spike-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 2px solid black;
+  background: white;
+  color: black;
+  cursor: pointer;
+}
+.spike-btn:hover { background: black; color: white; }
+.spike-btn:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
+
+.spike-input {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  border: 2px solid #333;
+  background: white;
+  color: black;
+}
+.spike-input:focus { outline: 2px solid #2563eb; outline-offset: 1px; }
+
+.spike-card {
+  border: 2px solid black;
+  background: white;
+}
+.spike-card-header { padding: 0.75rem 1rem; border-bottom: 2px solid black; font-weight: 700; }
+.spike-card-body { padding: 1rem; }
+
+.spike-separator {
+  border-top: 1px dashed #999;
+  margin: 1rem 0;
+}
+
+/* --- Modal: structural re-supply. `unstyled` strips overlay/backdrop
+   positioning classes too, so without these the panel renders inline in
+   document flow instead of centered/fixed over a backdrop. --- */
+.spike-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.spike-modal-content {
+  background: white;
+  border: 2px solid black;
+  width: 100%;
+  max-width: 28rem;
+  padding: 1.5rem;
+}
+
+/* --- Dropdown menu: structural re-supply. Without `position`/`z-index`,
+   the menu renders in-flow under the trigger instead of floating. --- */
+.spike-dropdown-content {
+  background: white;
+  border: 2px solid black;
+  min-width: 12rem;
+  padding: 0.25rem;
+  z-index: 40;
+}
+.spike-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.spike-dropdown-item:hover, .spike-dropdown-item[data-highlighted] {
+  background: black;
+  color: white;
+}

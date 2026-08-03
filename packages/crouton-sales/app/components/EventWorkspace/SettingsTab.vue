@@ -1,11 +1,26 @@
 <script setup lang="ts">
+import type { Ref, ComputedRef } from 'vue'
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import { attributePrinterStates, type LedJob, type LedState } from '../../utils/printer-led'
 
 const props = defineProps<{
   event: SalesEvent
   /** Hide the internal save row — the host renders its own Save button
-   *  driven by the exposed { save, dirty, saving } (Shell's header row). */
+   *  driven by the API handed up via the `register` emit (Shell's header row). */
   hideSaveBar?: boolean
+  /** Render the three cards as tabbed sections instead of a grid — for the
+   *  narrow-mode slideover, where a single long scroll buries Printers and
+   *  Helpers. All sections stay mounted (v-show), so the one dirty/save API
+   *  keeps covering fields on every tab. */
+  tabbed?: boolean
+}>()
+
+const emit = defineEmits<{
+  /** Hands the panel's save API to the host once async setup has resolved.
+   *  A template ref can't carry this: the ref binds before an async-setup
+   *  component's defineExpose attaches, so the host would read the bare
+   *  public proxy forever (#1321). Emitted with null on unmount. */
+  register: [api: { save: () => Promise<void>, dirty: ComputedRef<boolean>, saving: Ref<boolean> } | null]
 }>()
 
 const { t } = useT()
@@ -24,43 +39,39 @@ const locationRows = computed(() => ((locations.value as any[] | null) || []))
 // Printer online LEDs. The spooler pre-flight-checks the printer (DLE EOT) on
 // every print job, so the most recent job's outcome is the last-known online
 // state — there is no separate ping.
-interface PrintJobRow {
-  id: string
-  printerId: string
-  status?: string | number
-  createdAt?: string | number
-  completedAt?: string | number
-}
-
-const { data: printJobs, refresh: refreshPrintJobs } = await useFetch<PrintJobRow[]>(
+const { data: printJobs, refresh: refreshPrintJobs } = await useFetch<LedJob[]>(
   () => `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/printqueues/status`,
   { default: () => [] }
 )
 
-function jobTime(job: PrintJobRow) {
-  const v = job.completedAt ?? job.createdAt
-  return v ? new Date(v).getTime() : 0
+// Attribute each job to a printer row by id, else by an unambiguous title —
+// so a printer whose failing jobs' printerId has drifted from its current row
+// (deleted+recreated / regenerated collection) still lights red, not grey (#1507).
+const printerLedStates = computed(() =>
+  attributePrinterStates(
+    (((printers.value as any[] | null) || [])).map(p => ({ id: p.id, title: p.title })),
+    printJobs.value || []
+  )
+)
+
+// class is static; label goes through t() at call time so it stays reactive to
+// a mid-session locale switch (printerRows recomputes on printers/jobs change).
+const LED_CLASS: Record<LedState, string> = {
+  online: 'bg-success',
+  offline: 'bg-error',
+  printing: 'bg-warning animate-pulse',
+  unknown: 'bg-accented'
+}
+const LED_LABEL: Record<LedState, () => string> = {
+  online: () => t('sales.workspace.printerOnline', 'Online at last print'),
+  offline: () => t('sales.workspace.printerOffline', 'Offline — last print failed'),
+  printing: () => t('sales.printQueue.statusPrinting', 'Printing'),
+  unknown: () => t('sales.workspace.printerUnknown', 'Not checked yet — no prints')
 }
 
-const lastJobByPrinter = computed(() => {
-  const map = new Map<string, PrintJobRow>()
-  for (const job of (printJobs.value || [])) {
-    const prev = map.get(job.printerId)
-    if (!prev || jobTime(job) >= jobTime(prev)) map.set(job.printerId, job)
-  }
-  return map
-})
-
 function printerLed(printerId: string) {
-  const job = lastJobByPrinter.value.get(printerId)
-  if (!job) {
-    return { class: 'bg-accented', label: t('sales.workspace.printerUnknown', 'Not checked yet — no prints') }
-  }
-  switch (String(job.status ?? '0')) {
-    case '2': return { class: 'bg-success', label: t('sales.workspace.printerOnline', 'Online at last print') }
-    case '9': return { class: 'bg-error', label: t('sales.workspace.printerOffline', 'Offline — last print failed') }
-    default: return { class: 'bg-warning animate-pulse', label: t('sales.printQueue.statusPrinting', 'Printing') }
-  }
+  const state = printerLedStates.value.get(printerId) ?? 'unknown'
+  return { class: LED_CLASS[state], label: LED_LABEL[state]() }
 }
 
 const printerRows = computed(() =>
@@ -130,11 +141,14 @@ interface ReceiptSettings {
 const receiptEndpoint = computed(() =>
   `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/receipt-settings`
 )
+// Pre-resolve fallback only — the endpoint returns crouton-printing's canonical
+// DEFAULT_RECEIPT_SETTINGS. Kept in sync with it (Dutch) so an unsaved event's
+// form matches what actually prints (#1514); client can't import the server util.
 const { data: receiptSaved } = await useFetch<ReceiptSettings>(receiptEndpoint, {
   default: () => ({
-    special_instructions_title: 'SPECIAL INSTRUCTIONS:',
-    staff_order_header: '*** STAFF ORDER ***',
-    footer_text: 'Thank you for your order!'
+    special_instructions_title: 'OPMERKING:',
+    staff_order_header: '*** PERSONEEL ***',
+    footer_text: 'Bedankt voor je bestelling!'
   })
 })
 const receiptForm = ref<ReceiptSettings>({ ...receiptSaved.value })
@@ -158,6 +172,13 @@ const eventDirty = computed(() =>
   || eventForm.value.helperPin !== (props.event.helperPin || '')
 )
 
+// UPinInput binds an array (one digit per cell); keep the joined string on
+// eventForm.helperPin so the dirty-check + save keep working. Fixed 4 digits (#1480).
+const helperPinCells = computed<number[]>({
+  get: () => (eventForm.value.helperPin || '').split('').map(Number),
+  set: cells => { eventForm.value.helperPin = cells.join('') }
+})
+
 const receiptDirty = computed(() =>
   receiptForm.value.special_instructions_title !== receiptSaved.value.special_instructions_title
   || receiptForm.value.staff_order_header !== receiptSaved.value.staff_order_header
@@ -167,8 +188,25 @@ const receiptDirty = computed(() =>
 const dirty = computed(() => eventDirty.value || receiptDirty.value)
 const saving = ref(false)
 
+// Changing the helper PIN must lock out helpers still holding a session on the
+// OLD pin — otherwise the new PIN is meaningless for anyone already logged in.
+// The revoke endpoint deactivates the event's active scoped tokens; the
+// before-redeem hook re-syncs the new pin into the grant on next login, so the
+// old pin simply stops working.
+const revokeEndpoint = computed(() =>
+  `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/revoke-helpers`
+)
+
+async function revokeHelperSessions(): Promise<number> {
+  const { revoked } = await $fetch<{ revoked: number }>(revokeEndpoint.value, { method: 'POST' })
+  await refreshActiveHelpers()
+  return revoked
+}
+
 async function saveSettings() {
   saving.value = true
+  // Capture before the update lands (props.event mutates on refetch).
+  const pinChanged = eventForm.value.helperPin !== (props.event.helperPin || '')
   try {
     const tasks: Promise<unknown>[] = []
     if (eventDirty.value) {
@@ -187,6 +225,13 @@ async function saveSettings() {
       )
     }
     await Promise.all(tasks)
+    // Lock out old-PIN helpers once the new PIN is persisted.
+    if (pinChanged) {
+      const revoked = await revokeHelperSessions()
+      if (revoked > 0) {
+        notify.info(t('sales.workspace.helpersLockedOut', { params: { count: revoked }, fallback: `Logged out ${revoked} helper(s) — they must re-enter the new PIN` }))
+      }
+    }
     notify.success(t('sales.workspace.settingsSaved'))
   }
   catch {
@@ -197,8 +242,162 @@ async function saveSettings() {
   }
 }
 
+// Manual "log out all helpers" — kick everyone without changing the PIN.
+const loggingOutHelpers = ref(false)
+async function logoutAllHelpers() {
+  loggingOutHelpers.value = true
+  try {
+    const revoked = await revokeHelperSessions()
+    notify.success(t('sales.workspace.helpersLoggedOut', { params: { count: revoked }, fallback: `Logged out ${revoked} helper(s)` }))
+  }
+  catch {
+    notify.error(t('sales.workspace.helpersLogoutError', 'Could not log out the helpers'))
+  }
+  finally {
+    loggingOutHelpers.value = false
+  }
+}
+
 // Let the Shell host the Save button in its header row (hideSaveBar).
-defineExpose({ save: saveSettings, dirty, saving })
+emit('register', { save: saveSettings, dirty, saving })
+onUnmounted(() => emit('register', null))
+
+// Tabbed mode (narrow slideover): which card is showing.
+const sections = computed(() => [
+  { key: 'event', label: t('sales.workspace.settingsTabData'), icon: 'i-lucide-ticket' },
+  { key: 'printers', label: t('sales.workspace.settingsTabPrinters'), icon: 'i-lucide-printer' },
+  { key: 'helpers', label: t('sales.workspace.settingsTabHelpers'), icon: 'i-lucide-users' }
+])
+const activeSection = ref('event')
+
+// Tabbed (narrow slideover) reads as ONE continuous card: strip each section's
+// UCard chrome (border/ring/shadow/rounded/bg) so the fields flow under the tab
+// header instead of sitting in a nested bordered box (#1556 follow-up). The
+// event section also drops its now-redundant "Eventgegevens" title (the tab
+// already says Gegevens); printers/helpers keep their header (it carries actions).
+const flushCardUi = computed(() => props.tabbed
+  ? { root: 'border-0 ring-0 shadow-none rounded-none bg-transparent divide-y-0', body: 'px-0 py-2', header: 'px-0' }
+  : undefined)
+const eventCardUi = computed(() => props.tabbed
+  ? { root: 'border-0 ring-0 shadow-none rounded-none bg-transparent divide-y-0', body: 'px-0 py-2', header: 'hidden' }
+  : undefined)
+
+// Per-event print flow (#1324): which transport delivers this event's thermal
+// jobs — the venue device's in-process drainer, the router spooler, or nobody.
+// The setting lives in crouton-printing (print_transports); this is its authed
+// UI. Instant-apply like the requeue button — an operational switch, not a
+// form field, so it deliberately doesn't ride the panel's Save.
+interface PrintTransportState {
+  transport: string
+  lastSpoolerPollAt: string | null
+  lastDrainerTickAt: string | null
+}
+
+const printTransportEndpoint = computed(() =>
+  `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/print-transport`
+)
+// The GET resolves the no-row default ('router-spooler'), so transport is
+// always a concrete value.
+const { data: printTransport, refresh: refreshPrintTransport } = await useFetch<PrintTransportState>(printTransportEndpoint, {
+  default: () => ({ transport: 'router-spooler', lastSpoolerPollAt: null, lastDrainerTickAt: null })
+})
+const printTransportSaving = ref(false)
+
+// Keep the liveness readout honest while the panel is open: heartbeats are
+// stamped at most every 30s, so a light 10s poll is plenty.
+let printTransportPoll: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  printTransportPoll = setInterval(() => { refreshPrintTransport() }, 10000)
+})
+onUnmounted(() => {
+  if (printTransportPoll) clearInterval(printTransportPoll)
+})
+
+async function setPrintTransport(transport: 'local-drainer' | 'router-spooler' | 'none') {
+  printTransportSaving.value = true
+  try {
+    await $fetch(printTransportEndpoint.value, { method: 'PUT', body: { transport } })
+    await refreshPrintTransport()
+    notify.success(t('sales.printFlow.updated', 'Print flow updated'))
+  }
+  catch {
+    notify.error(t('sales.printFlow.updateError', 'Could not update the print flow'))
+  }
+  finally {
+    printTransportSaving.value = false
+  }
+}
+
+const printTransportItems = computed(() => [
+  {
+    value: 'local-drainer' as const,
+    label: t('sales.printFlow.localDrainer', 'Local device'),
+    description: t('sales.printFlow.localDrainerHelp', 'A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — works fully offline.')
+  },
+  {
+    value: 'router-spooler' as const,
+    label: t('sales.printFlow.routerSpooler', 'Via the venue router'),
+    description: t('sales.printFlow.routerSpoolerHelp', 'The on-site router fetches print jobs from the cloud app and sends them to the printers.')
+  },
+  {
+    value: 'none' as const,
+    label: t('sales.printFlow.paused', 'No physical printing'),
+    description: t('sales.printFlow.pausedHelp', 'No print jobs are created — orders simply appear on screen.')
+  }
+])
+
+// Per-flow setup guide (#1364) — the in-app answer to "how do I set up at a
+// new venue?". The checklists MIRROR crouton-printing/print-server/README.md
+// (Install/Configuration): when either changes, update the other. The copyable
+// values are the app-known ones (this event's id for the router's EVENT_ID,
+// the app origin for API_URL, the secret's env var NAME — never its value).
+const appOrigin = useRequestURL().origin
+const printTransportSetup = computed(() => [
+  {
+    value: 'router-spooler' as const,
+    intro: t('sales.printFlow.setup.routerIntro', 'One-time: image the router (API_URL in /etc/init.d/print_server). After that it introduces itself — a new event needs nothing on the router.'),
+    steps: [
+      {
+        text: t('sales.printFlow.setup.routerPrinters', 'Put the printers on the router\'s own network with a static IP, and add each one under Printers with that IP and port 9100.')
+      },
+      {
+        text: t('sales.printFlow.setup.routerTicket', 'The router prints its own pairing ticket (on start, until it is paired). No ticket? Check power, printer, and that API_URL points at this app:'),
+        value: appOrigin,
+        valueLabel: 'API_URL'
+      },
+      {
+        text: t('sales.printFlow.setup.routerClaim', 'Enter the ticket\'s Router-ID and code below under "Pair router".')
+      },
+      {
+        text: t('sales.printFlow.setup.routerLegacy', 'Older router without a pairing ticket? Follow the EVENT_ID steps in print-server/README.md.')
+      },
+      {
+        text: t('sales.printFlow.setup.routerVerify', 'Done when this dot turns green — the router polls within ~30 seconds.'),
+        verify: true
+      }
+    ]
+  },
+  {
+    value: 'local-drainer' as const,
+    intro: t('sales.printFlow.setup.drainerIntro', 'A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — automatically, no router config and nothing to enable.'),
+    steps: [
+      {
+        text: t('sales.printFlow.setup.drainerPrinters', 'Add each printer under Printers with its LAN IP and port 9100 — the device must reach the printers on its network.')
+      },
+      {
+        text: t('sales.printFlow.setup.drainerFlip', 'Keep this Print flow on "Local device" — the router flow is the default, and the device prints for itself only for events set to Local device.')
+      },
+      {
+        text: t('sales.printFlow.setup.drainerVerify', 'Done when this dot turns green — the device ticks within ~30 seconds.'),
+        verify: true
+      },
+      {
+        text: t('sales.printFlow.setup.drainerOverride', 'Advanced: the app prints locally by default on a venue device. Force it on anywhere, or disable it on a device that must not print, with the env override:'),
+        value: 'CROUTON_PRINTING_DRAINER=1'
+      }
+    ]
+  }
+])
 
 // Event-level actions (moved out of the workspace header to declutter it).
 // Same useCollectionQuery cache as the Shell, so refresh() updates its list
@@ -238,6 +437,58 @@ async function deleteEvent() {
   }
 }
 
+// Bulk "Delete all orders" (#1519) — admin-only, typed-confirm. Wipes this
+// event's orders + items + print jobs; keeps the event, its menu and its
+// clients (their open-tab totals reset naturally). Deliberately stronger than
+// the Delete-event pill: bulk-destructive, so the admin must type the event
+// name before the destructive button enables.
+const { isAdmin } = useTeam()
+const nuxtApp = useNuxtApp()
+const deleteOrdersOpen = ref(false)
+const deleteOrdersConfirm = ref('')
+const deletingOrders = ref(false)
+const canDeleteOrders = computed(() =>
+  deleteOrdersConfirm.value.trim().length > 0
+  && deleteOrdersConfirm.value.trim() === (props.event.title || '').trim()
+)
+
+// Reset the typed confirmation whenever the modal closes so a re-open starts clean.
+watch(deleteOrdersOpen, (open) => {
+  if (!open) deleteOrdersConfirm.value = ''
+})
+
+async function deleteAllOrders() {
+  if (!canDeleteOrders.value) return
+  deletingOrders.value = true
+  try {
+    const res = await $fetch<{ deleted: { orders: number, items: number, jobs: number } }>(
+      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/orders`,
+      { method: 'DELETE' }
+    )
+    // The bulk DELETE bypasses useCollectionMutation, so emit the hook ourselves
+    // — the Orders tab and any salesOrders-watching view empty live instead of
+    // only on their next poll.
+    await nuxtApp.hooks.callHook('crouton:mutation', {
+      operation: 'delete',
+      collection: 'salesOrders',
+      data: { eventId: props.event.id },
+      correlationId: `bulk-delete-orders-${props.event.id}`,
+      timestamp: Date.now()
+    })
+    notify.success(t('sales.workspace.deleteAllOrdersDone', {
+      params: { count: res.deleted.orders },
+      fallback: `Deleted ${res.deleted.orders} order(s)`
+    }))
+    deleteOrdersOpen.value = false
+  }
+  catch {
+    notify.error(t('sales.workspace.deleteAllOrdersError', 'Could not delete the orders'))
+  }
+  finally {
+    deletingOrders.value = false
+  }
+}
+
 // Active helpers card (scoped tokens, not a collection)
 interface ActiveHelper {
   id: string
@@ -264,24 +515,57 @@ function helperExpiry(value: string): string {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <!-- One Save for the whole panel: event fields + receipt text. -->
+  <div :class="tabbed ? 'flex flex-col h-full min-h-0' : 'space-y-4'">
+    <!-- Standalone usage keeps a top Save row. When a host owns the panel
+         (hideSaveBar) it renders the Save as a fixed FOOTER below the scroll
+         area (via the `register` API), so a long tab scrolls cleanly above it —
+         a sticky bar inside the scroll floats over content mid-scroll. -->
     <div v-if="!hideSaveBar" class="flex items-center justify-end gap-3">
       <span v-if="dirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
       <UButton
         :loading="saving"
         :disabled="!dirty"
+        :color="dirty ? 'primary' : 'neutral'"
+        :variant="dirty ? 'solid' : 'soft'"
         @click="saveSettings"
       >
         {{ t('sales.common.save') }}
       </UButton>
     </div>
 
+    <!-- Scroll container (tabbed): hosts BOTH the sticky, auto-hiding section
+         strip and the cards, so the strip hides on scroll-down and reveals on
+         scroll-up. Standalone (non-tabbed) is a plain pass-through wrapper. -->
+    <div :class="tabbed ? 'flex-1 overflow-y-auto min-h-0 px-4' : ''">
+      <!-- Section picker on a shared CroutonSubBar (#307), styled like the
+           pages editor's tabs — underline active, sticky + auto-hide. `flush`
+           bleeds it out of the container's px-4 so the strip spans full width
+           while the tabs line up with the padded cards below. -->
+      <CroutonSubBar v-if="tabbed" sticky auto-hide flush>
+      <nav class="flex w-full items-center gap-0.5">
+        <UButton
+          v-for="s in sections"
+          :key="s.key"
+          :icon="s.icon"
+          size="sm"
+          :color="activeSection === s.key ? 'primary' : 'neutral'"
+          :variant="activeSection === s.key ? 'soft' : 'ghost'"
+          class="flex-1 justify-center whitespace-nowrap rounded-none border-b-2"
+          :class="activeSection === s.key ? 'border-primary' : 'border-transparent'"
+          @click="activeSection = s.key"
+        >
+          {{ s.label }}
+        </UButton>
+      </nav>
+    </CroutonSubBar>
+
     <!-- One row, three blocks: event (name + currency + client switch),
-         printers (incl. receipt text), helpers (incl. PIN). -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+         printers (incl. receipt text), helpers (incl. PIN). Tabbed mode shows
+         one at a time but keeps all mounted (v-show) so dirty state and the
+         panel-wide save cover every tab. -->
+    <div class="grid grid-cols-1 gap-4 items-start" :class="tabbed ? 'pb-3 pt-3' : 'lg:grid-cols-3'">
       <!-- Event details (inline editable) -->
-      <UCard>
+      <UCard v-show="!tabbed || activeSection === 'event'" :ui="eventCardUi">
         <template #header>
           <h3 class="font-semibold">{{ t('sales.workspace.eventDetails') }}</h3>
         </template>
@@ -295,57 +579,84 @@ function helperExpiry(value: string): string {
 
           <USeparator />
 
-          <!-- Client selection: switch row, trailing edge aligned with the label line. -->
-          <div class="flex items-start justify-between gap-3">
-            <div class="space-y-1">
-              <p class="text-sm font-medium leading-5">{{ t('sales.workspace.requiresClient') }}</p>
-              <p class="text-sm text-muted">{{ t('sales.workspace.requiresClientDesc') }}</p>
+          <!-- Explained rows: label + action share the top line, the
+               description gets the full card width underneath — a side
+               column squeezes into one-word lines in the narrow settings
+               pane. -->
+          <div class="space-y-1">
+            <div class="flex items-center justify-between gap-3">
+              <p class="min-w-0 text-sm font-medium leading-5">{{ t('sales.workspace.requiresClient') }}</p>
+              <USwitch
+                v-model="eventForm.requiresClient"
+                :aria-label="t('sales.workspace.requiresClient')"
+                class="shrink-0"
+              />
             </div>
-            <USwitch
-              v-model="eventForm.requiresClient"
-              :aria-label="t('sales.workspace.requiresClient')"
-              class="mt-0.5"
-            />
+            <p class="text-sm text-muted">{{ t('sales.workspace.requiresClientDesc') }}</p>
+          </div>
+
+          <USeparator />
+
+          <!-- Bulk "Delete all orders" (#1519) — its own section right under the
+               client setting (an operational reset, kept apart from the event
+               danger zone). Admin only; typed-confirm modal (not a one-tap pill). -->
+          <div v-if="isAdmin" class="space-y-1">
+            <div class="flex items-center justify-between gap-3">
+              <p class="text-sm font-medium leading-5">{{ t('sales.workspace.deleteAllOrders', 'Delete all orders') }}</p>
+              <UButton
+                size="xs"
+                variant="outline"
+                color="error"
+                icon="i-lucide-trash-2"
+                class="shrink-0"
+                @click="deleteOrdersOpen = true"
+              >
+                {{ t('sales.workspace.deleteAllOrdersAction', 'Delete orders…') }}
+              </UButton>
+            </div>
+            <p class="text-sm text-muted">{{ t('sales.workspace.deleteAllOrdersDesc', 'Clear every order, item and print job for this event. Keeps the event, its menu and its clients.') }}</p>
           </div>
 
           <USeparator />
 
           <!-- Event-level actions as explained rows (moved out of the header). -->
-          <div class="flex items-start justify-between gap-3">
-            <div class="space-y-1">
+          <div class="space-y-1">
+            <div class="flex items-center justify-between gap-3">
               <p class="text-sm font-medium leading-5">{{ t('sales.workspace.duplicateEvent') }}</p>
-              <p class="text-sm text-muted">{{ t('sales.workspace.duplicateEventDesc') }}</p>
+              <UButton
+                size="xs"
+                variant="outline"
+                color="neutral"
+                icon="i-lucide-copy"
+                :loading="duplicating"
+                class="shrink-0"
+                @click="duplicateEvent"
+              >
+                {{ t('sales.events.duplicate') }}
+              </UButton>
             </div>
-            <UButton
-              size="xs"
-              variant="outline"
-              color="neutral"
-              icon="i-lucide-copy"
-              :loading="duplicating"
-              class="shrink-0 mt-0.5"
-              @click="duplicateEvent"
-            >
-              {{ t('sales.events.duplicate') }}
-            </UButton>
+            <p class="text-sm text-muted">{{ t('sales.workspace.duplicateEventDesc') }}</p>
           </div>
 
-          <div class="flex items-start justify-between gap-3">
-            <div class="space-y-1">
+          <div class="space-y-1">
+            <div class="flex items-center justify-between gap-3">
               <p class="text-sm font-medium leading-5">{{ t('sales.workspace.deleteEvent') }}</p>
-              <p class="text-sm text-muted">{{ t('sales.workspace.deleteEventDesc') }}</p>
+              <CroutonDeleteButton
+                expanded
+                class="shrink-0"
+                :loading="deletingEvent"
+                @confirm="deleteEvent"
+              />
             </div>
-            <CroutonDeleteButton
-              expanded
-              class="shrink-0 mt-0.5"
-              :loading="deletingEvent"
-              @confirm="deleteEvent"
-            />
+            <p class="text-sm text-muted">{{ t('sales.workspace.deleteEventDesc') }}</p>
           </div>
         </div>
       </UCard>
 
       <!-- Printers: LED per row = last-known online state (checked on print). -->
       <SalesEventWorkspaceSettingsListCard
+        v-show="!tabbed || activeSection === 'printers'"
+        :flush="tabbed"
         :title="t('sales.sidebar.printers')"
         collection="salesPrinters"
         :rows="printerRows"
@@ -365,9 +676,40 @@ function helperExpiry(value: string): string {
           />
         </template>
 
-        <!-- Receipt text settings, inline (saved via the panel's Save button) -->
+        <!-- Print flow (instant-apply) + receipt text settings (panel Save) -->
         <template #footer>
           <div class="space-y-4">
+            <div class="space-y-1">
+              <p class="text-sm font-medium leading-5">{{ t('sales.printFlow.title', 'Print flow') }}</p>
+              <p class="text-sm text-muted">{{ t('sales.printFlow.description', 'Who delivers the printed tickets for this event.') }}</p>
+            </div>
+            <CroutonPrintingTransportPicker
+              :transport="printTransport.transport"
+              :last-spooler-poll-at="printTransport.lastSpoolerPollAt"
+              :last-drainer-tick-at="printTransport.lastDrainerTickAt"
+              :loading="printTransportSaving"
+              :items="printTransportItems"
+              :last-seen-label="t('sales.printFlow.lastSeen', 'last seen')"
+              :never-seen-label="t('sales.printFlow.neverSeen', 'never seen')"
+              :setup-guides="printTransportSetup"
+              :setup-label="t('sales.printFlow.setup.toggle', 'Setup')"
+              :copy-label="t('sales.printFlow.setup.copy', 'Copy')"
+              :copied-label="t('sales.printFlow.setup.copied', 'Copied')"
+              @update:transport="setPrintTransport"
+            >
+              <!-- Router self-pairing (#1366): claim form + coupled routers,
+                   router flow only. Team-wide — the picker stays the only
+                   per-event switch. -->
+              <template #setup-extra="{ transport: selectedFlow }">
+                <SalesEventWorkspaceRouterPairing
+                  v-if="selectedFlow === 'router-spooler'"
+                  :team-param="teamParam"
+                />
+              </template>
+            </CroutonPrintingTransportPicker>
+
+            <USeparator />
+
             <div class="space-y-1">
               <p class="text-sm font-medium leading-5">{{ t('sales.workspace.receiptSettings') }}</p>
               <p class="text-sm text-muted">{{ t('sales.receipt.customize') }}</p>
@@ -377,7 +719,7 @@ function helperExpiry(value: string): string {
                 v-model="receiptForm.special_instructions_title"
                 class="w-full"
                 size="sm"
-                placeholder="SPECIAL INSTRUCTIONS:"
+                placeholder="OPMERKING:"
               />
             </UFormField>
             <UFormField :label="t('sales.receipt.staffOrderHeader')" :help="t('sales.receipt.staffOrderHeaderHelp')">
@@ -385,7 +727,7 @@ function helperExpiry(value: string): string {
                 v-model="receiptForm.staff_order_header"
                 class="w-full"
                 size="sm"
-                placeholder="*** STAFF ORDER ***"
+                placeholder="*** PERSONEEL ***"
               />
             </UFormField>
             <UFormField :label="t('sales.receipt.footerText')" :help="t('sales.receipt.footerTextHelp')">
@@ -394,7 +736,7 @@ function helperExpiry(value: string): string {
                 class="w-full"
                 size="sm"
                 :rows="2"
-                placeholder="Thank you for your order!"
+                placeholder="Bedankt voor je bestelling!"
               />
             </UFormField>
           </div>
@@ -402,7 +744,7 @@ function helperExpiry(value: string): string {
       </SalesEventWorkspaceSettingsListCard>
 
       <!-- Helpers: shared login PIN + active sessions (scoped tokens, not a collection) -->
-      <UCard>
+      <UCard v-show="!tabbed || activeSection === 'helpers'" :ui="flushCardUi">
         <template #header>
           <div class="flex items-center justify-between">
             <h3 class="font-semibold">{{ t('sales.workspace.activeHelpers') }}</h3>
@@ -411,21 +753,38 @@ function helperExpiry(value: string): string {
               variant="ghost"
               icon="i-lucide-refresh-cw"
               :loading="activeHelpersPending"
+              :aria-label="t('sales.common.refresh')"
               @click="() => refreshActiveHelpers()"
             />
           </div>
         </template>
 
-        <UFormField :label="t('sales.workspace.helperPin')">
-          <UInput
-            v-model="eventForm.helperPin"
-            type="text"
-            :placeholder="t('sales.helperLogin.enterPin')"
+        <UFormField
+          :label="t('sales.workspace.helperPin')"
+          :help="t('sales.workspace.helperPinRotateHint', 'Changing the PIN logs out every helper still on the old one.')"
+        >
+          <UPinInput
+            v-model="helperPinCells"
+            :length="4"
+            type="number"
             size="sm"
-            :ui="{ base: 'font-mono' }"
-            class="w-full"
+            :aria-label="t('sales.workspace.helperPin')"
           />
         </UFormField>
+
+        <UButton
+          block
+          size="sm"
+          color="warning"
+          variant="soft"
+          icon="i-lucide-lock"
+          class="mt-3"
+          :loading="loggingOutHelpers"
+          :disabled="!activeHelpers || activeHelpers.length === 0"
+          @click="logoutAllHelpers"
+        >
+          {{ t('sales.workspace.logoutAllHelpers', 'Log out all helpers') }}
+        </UButton>
 
         <USeparator class="my-4" />
 
@@ -452,5 +811,58 @@ function helperExpiry(value: string): string {
         </div>
       </UCard>
     </div>
+    </div>
+
+    <!-- Bulk "Delete all orders" typed-confirm (#1519). Admin-only trigger;
+         the destructive button stays disabled until the event name is typed
+         exactly, since this can't be undone. -->
+    <UModal v-model:open="deleteOrdersOpen">
+      <template #content="{ close }">
+        <div class="p-6 space-y-4">
+          <div class="flex items-center gap-2.5">
+            <span class="flex size-8 items-center justify-center rounded-lg bg-error/10 text-error">
+              <UIcon name="i-lucide-alert-triangle" class="size-5" />
+            </span>
+            <span class="text-lg font-semibold">{{ t('sales.workspace.deleteAllOrdersTitle', 'Delete all orders?') }}</span>
+          </div>
+
+          <p class="text-sm text-muted">
+            {{ t('sales.workspace.deleteAllOrdersWarning', {
+              params: { event: event.title },
+              fallback: `This permanently deletes all orders for “${event.title}”, including their items and print jobs. Other events are untouched. Client tabs stay but reset to empty. This can't be undone.`
+            }) }}
+          </p>
+          <UFormField
+            :label="t('sales.workspace.deleteAllOrdersConfirmLabel', {
+              params: { event: event.title },
+              fallback: `Type “${event.title}” to confirm`
+            })"
+          >
+            <UInput
+              v-model="deleteOrdersConfirm"
+              class="w-full"
+              autofocus
+              :placeholder="event.title"
+              @keydown.enter="deleteAllOrders"
+            />
+          </UFormField>
+
+          <div class="flex justify-end gap-2 w-full">
+            <UButton color="neutral" variant="ghost" @click="close">
+              {{ t('sales.common.cancel') }}
+            </UButton>
+            <UButton
+              color="error"
+              icon="i-lucide-trash-2"
+              :loading="deletingOrders"
+              :disabled="!canDeleteOrders"
+              @click="deleteAllOrders"
+            >
+              {{ t('sales.workspace.deleteAllOrdersConfirm', 'Delete all orders') }}
+            </UButton>
+          </div>
+        </div>
+      </template>
+    </UModal>
   </div>
 </template>

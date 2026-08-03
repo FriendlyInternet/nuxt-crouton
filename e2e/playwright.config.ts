@@ -13,6 +13,13 @@ const storageState = join(__dirname, '.auth', 'user.json')
 // Which fixture app to boot/test (default: minimal). See e2e/helpers.ts.
 const fixture = process.env.E2E_FIXTURE || 'minimal'
 
+// Port the fixture boots on. Overridable (E2E_PORT) because webServer has
+// reuseExistingServer: true — with a fixed :3000, ANY unrelated dev server
+// already on that port (e.g. an app's `pnpm dev`) gets silently mistaken for
+// the fixture and every spec runs against the wrong app.
+const port = Number(process.env.E2E_PORT || 3000)
+const baseUrl = `http://localhost:${port}`
+
 export default defineConfig({
   testDir: '.',
   fullyParallel: false,
@@ -33,7 +40,7 @@ export default defineConfig({
   expect: { timeout: 30000 },
 
   use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
+    baseURL: process.env.BASE_URL || baseUrl,
     // Escape hatch for sandboxes that block the Playwright browser download
     // (egress allowlist) and only ship a slightly-off chromium build: point
     // PW_EXECUTABLE_PATH at an installed binary (e.g. one under /opt/pw-browsers)
@@ -69,11 +76,11 @@ export default defineConfig({
     }
   ],
 
-  // Boots the active fixture app if it isn't already running on :3000.
+  // Boots the active fixture app if it isn't already running on the port.
   webServer: {
-    command: `pnpm --filter e2e-fixture-${fixture} dev`,
+    command: `pnpm --filter e2e-fixture-${fixture} dev --port ${port}`,
     cwd: '..',
-    url: 'http://localhost:3000',
+    url: baseUrl,
     reuseExistingServer: true,
     // Self-contained auth env so the harness no longer silently depends on the
     // caller exporting BETTER_AUTH_SECRET (the #1 "why won't the fixture boot"
@@ -81,7 +88,7 @@ export default defineConfig({
     env: {
       ...process.env,
       BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || 'dev',
-      BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || 'http://localhost:3000',
+      BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || baseUrl,
       // The with-sales fixture (#355) exercises the in-process ESC/POS drainer:
       // turn it on so a placed order's print job is delivered to the in-test fake
       // :9100 printer and driven to done. Harmless for other fixtures (no

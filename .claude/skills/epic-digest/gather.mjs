@@ -157,11 +157,40 @@ async function subIssues(number) {
   }
 }
 
+// ── initiatives (super-epics grouping several epics) ─────────────────────────
+// An initiative is an epic that groups OTHER epics. It's detected by the
+// `initiative` label OR an `Initiative:` title prefix (the label was added to
+// .github/labels.yml but may not have synced to GitHub yet — the title prefix
+// makes this work in the meantime). Its member epics are the `#NN` links in its
+// body's "Member epics" / "constituent epics" section, intersected with the set
+// of gathered open epics (so closed/non-epic refs drop out automatically). (#1637)
+const isInitiativeEpic = (names, title) =>
+  names.includes('initiative') || /^\s*Initiative:/i.test(title || '')
+
+function parseMemberNumbers(body, self, initiativeNums, epicByNum) {
+  // Prefer the explicit member list so a #NN mentioned elsewhere in the body
+  // (e.g. a "moved out" note in a consolidation section) isn't miscounted.
+  const scoped = section(body, /^##\s.*(member epics|constituent epics|building blocks)/i)
+  const src = scoped || body
+  const seen = new Set()
+  const out = []
+  for (const m of String(src).matchAll(/#(\d+)/g)) {
+    const n = Number(m[1])
+    if (n === self || seen.has(n)) continue
+    if (initiativeNums.has(n)) continue // an initiative isn't a member of another
+    if (!epicByNum.has(n)) continue // must be a gathered OPEN epic
+    seen.add(n)
+    out.push(n)
+  }
+  return out
+}
+
 // ── gather ───────────────────────────────────────────────────────────────────
 const childNumbers = new Set()
 
 const epicItems = await search(`repo:${REPO} is:issue is:open label:epic`)
 const epics = []
+const bodyByNum = new Map()
 for (const e of epicItems) {
   const kids = await subIssues(e.number)
   let done = 0, anyBlocked = false, inProgress = 0, closedInWindow = 0
@@ -202,15 +231,58 @@ for (const e of epicItems) {
     : inProgress ? 'in-progress'
     : 'open'
 
+  bodyByNum.set(e.number, e.body || '')
   epics.push({
     number: e.number, title: e.title, url: e.html_url,
     status, blocked, total, done, readyToClose, needsPostmortem,
+    isInitiative: isInitiativeEpic(epicNames, e.title),
     theHypothesis: parseHypothesis(e.body),
     weWillKnowBy: parseKnowBy(e.body),
     whereWeAre,
     children
   })
 }
+
+// Split the gathered epics into initiatives (super-epics) and regular epics, and
+// roll each initiative's member epics up into an aggregate. Initiatives are
+// pulled OUT of the flat epic list so they don't render as misleading 0/0 epics.
+const epicByNum = new Map(epics.map((e) => [e.number, e]))
+const initiativeNums = new Set(epics.filter((e) => e.isInitiative).map((e) => e.number))
+const regularEpics = []
+const initiatives = []
+for (const e of epics) {
+  if (!e.isInitiative) {
+    delete e.isInitiative
+    regularEpics.push(e)
+    continue
+  }
+  const memberNums = parseMemberNumbers(bodyByNum.get(e.number), e.number, initiativeNums, epicByNum)
+  const members = memberNums.map((n) => epicByNum.get(n)).filter(Boolean)
+  const childrenTotal = members.reduce((s, m) => s + (m.total || 0), 0)
+  const childrenDone = members.reduce((s, m) => s + (m.done || 0), 0)
+  const blockedCount = members.filter((m) => m.blocked || m.status === 'blocked').length
+  const activeCount = members.filter(
+    (m) => m.blocked || m.status === 'blocked' || m.status === 'in-progress' || (m.done || 0) > 0
+  ).length
+  initiatives.push({
+    number: e.number,
+    url: e.url,
+    title: e.title.replace(/^\s*Initiative:\s*/i, ''),
+    epicsTotal: members.length,
+    activeCount,
+    blockedCount,
+    blocked: blockedCount > 0,
+    childrenTotal,
+    childrenDone,
+    members: members.map((m) => ({
+      number: m.number, title: m.title, url: m.url,
+      done: m.done, total: m.total, status: m.status,
+      blocked: !!(m.blocked || m.status === 'blocked')
+    }))
+  })
+}
+// Most-substantial / blocked initiatives first so the eye lands on what matters.
+initiatives.sort((a, b) => (b.blocked ? 1 : 0) - (a.blocked ? 1 : 0) || b.childrenTotal - a.childrenTotal)
 
 const [closed, opened, mergedPRs, openNonEpic] = await Promise.all([
   search(`repo:${REPO} is:issue is:closed closed:>=${cutoff}`),
@@ -248,7 +320,7 @@ const prDetailed = await Promise.all(
 )
 prDetailed.sort((a, b) => (b.testSteps.length ? 1 : 0) - (a.testSteps.length ? 1 : 0))
 const prActionables = prDetailed.slice(0, PR_ACTIONABLE_CAP)
-const completeEpics = epics.filter((e) => e.total > 0 && e.done >= e.total)
+const completeEpics = regularEpics.filter((e) => e.total > 0 && e.done >= e.total)
 const epicActionables = await Promise.all(
   completeEpics.map(async (e) => {
     const cmts = await issueComments(e.number)
@@ -275,7 +347,8 @@ const data = {
     mergedPRs: mergedPRs.map((i) => slim(i, 'pr'))
   },
   actionables,
-  epics,
+  initiatives,
+  epics: regularEpics,
   loose
 }
 

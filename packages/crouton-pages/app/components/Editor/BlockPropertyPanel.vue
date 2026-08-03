@@ -167,17 +167,19 @@ t
 
     <!-- Live Block Preview -->
     <div class="border-b border-default">
-      <button
-        class="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium hover:bg-muted/30 transition-colors"
-        type="button"
+      <UButton
+        color="neutral"
+        variant="ghost"
+        block
+        class="justify-between rounded-none px-4 py-2.5"
+        :trailing-icon="showPreview ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
         @click="showPreview = !showPreview"
       >
-        <span class="flex items-center gap-2 text-muted">
+        <span class="flex items-center gap-2 text-muted text-sm font-medium">
           <UIcon name="i-lucide-eye" class="size-3.5" />
           {{ t('pages.editor.livePreview') }}
         </span>
-        <UIcon :name="showPreview ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'" class="size-3.5 text-muted" />
-      </button>
+      </UButton>
       <div v-if="showPreview" class="relative overflow-hidden bg-muted/10" style="height: 200px;">
         <div style="transform: scale(0.33); transform-origin: top center; width: 303%; margin-left: -101.5%; pointer-events: none;">
           <CroutonPagesBlockContent :content="previewDoc as any" class="p-4" />

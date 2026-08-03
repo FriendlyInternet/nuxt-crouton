@@ -1,0 +1,11 @@
+{
+  "table": "sales_categories",
+  "key": "title",
+  "rows": [
+    { "eventId": "seed:sales:events:mosselconcert", "title": "Aperitief", "displayOrder": 1 },
+    { "eventId": "seed:sales:events:mosselconcert", "title": "Dranken", "displayOrder": 2 },
+    { "eventId": "seed:sales:events:mosselconcert", "title": "Hoofdgerechten", "displayOrder": 3 },
+    { "eventId": "seed:sales:events:mosselconcert", "title": "Wijnen", "displayOrder": 4 },
+    { "eventId": "seed:sales:events:mosselconcert", "title": "Nagerechten", "displayOrder": 5 }
+  ]
+}

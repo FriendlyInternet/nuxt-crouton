@@ -34,25 +34,25 @@ const teamParam = computed(() => String(route.params.team || ''))
 <template>
   <div class="sales-live-dashboard-block">
     <!-- Editor didn't pick an event -->
-    <div
+    <UAlert
       v-if="!eventSlug"
-      class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-    >
-      <UIcon name="i-lucide-layout-dashboard" class="w-6 h-6 mx-auto mb-2 text-muted" />
-      {{ t('sales.block.noEventPicked') }}
-    </div>
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-layout-dashboard"
+      :title="t('sales.block.noEventPicked')"
+    />
 
     <!-- Team-members-only: anonymous visitors don't see mirrored data. -->
-    <div
+    <UAlert
       v-else-if="!loggedIn"
-      class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-    >
-      <UIcon name="i-lucide-lock" class="w-6 h-6 mx-auto mb-2 text-muted" />
-      {{ t('sales.blocks.liveDashboard.ui.teamOnly') }}
-    </div>
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-lock"
+      :title="t('sales.blocks.liveDashboard.ui.teamOnly')"
+    />
 
     <!-- Signed-in team member → the live dashboard. -->
-    <div v-else class="rounded-3xl bg-default p-6 space-y-6">
+    <UCard :ui="{ body: 'space-y-6' }">
       <Suspense>
         <SalesBlocksEventResolver
           v-slot="{ event }"
@@ -83,6 +83,6 @@ const teamParam = computed(() => String(route.params.team || ''))
           <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
         </template>
       </Suspense>
-    </div>
+    </UCard>
   </div>
 </template>

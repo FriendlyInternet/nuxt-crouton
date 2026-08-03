@@ -386,13 +386,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 </template>
                 <template v-else>
                   {{ t('auth.dontHaveAccount') }}
-                  <button
-                    type="button"
-                    class="text-primary font-medium hover:text-primary/80"
+                  <UButton
+                    variant="link"
+                    size="md"
+                    class="p-0"
                     @click="authModal.setMode('register')"
                   >
                     {{ t('auth.signUp') }}
-                  </button>
+                  </UButton>
                 </template>
               </template>
 
@@ -400,14 +401,15 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 v-if="!showMagicLink && hasPassword"
                 #password-hint
               >
-                <button
-                  type="button"
-                  class="text-primary font-medium hover:text-primary/80"
+                <UButton
+                  variant="link"
+                  size="md"
+                  class="p-0"
                   tabindex="-1"
                   @click="authModal.setMode('forgot-password')"
                 >
                   {{ t('auth.forgotPassword') }}
-                </button>
+                </UButton>
               </template>
 
               <template
@@ -425,13 +427,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 v-if="hasMagicLink && hasPassword"
                 #footer
               >
-                <button
-                  type="button"
-                  class="text-sm text-primary font-medium hover:text-primary/80"
+                <UButton
+                  variant="link"
+                  size="md"
+                  class="p-0"
                   @click="showMagicLink = !showMagicLink; formError = null"
                 >
                   {{ showMagicLink ? t('auth.signInWithPassword') : t('auth.signInWithMagicLink') }}
-                </button>
+                </UButton>
               </template>
             </UAuthForm>
 
@@ -452,13 +455,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 </h2>
                 <p class="mt-2 text-muted">
                   {{ t('auth.dontHaveAccount') }}
-                  <button
-                    type="button"
-                    class="text-primary font-medium hover:text-primary/80"
+                  <UButton
+                    variant="link"
+                    size="md"
+                    class="p-0"
                     @click="authModal.setMode('register')"
                   >
                     {{ t('auth.signUp') }}
-                  </button>
+                  </UButton>
                 </p>
               </div>
               <div class="space-y-3">
@@ -501,13 +505,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
           >
             <template #description>
               {{ t('auth.alreadyHaveAccount') }}
-              <button
-                type="button"
-                class="text-primary font-medium hover:text-primary/80"
+              <UButton
+                variant="link"
+                size="md"
+                class="p-0"
                 @click="authModal.setMode('login')"
               >
                 {{ t('auth.signIn') }}
-              </button>
+              </UButton>
             </template>
 
             <template
@@ -556,13 +561,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
               </h2>
               <p class="mt-2 text-muted">
                 {{ t('auth.alreadyHaveAccount') }}
-                <button
-                  type="button"
-                  class="text-primary font-medium hover:text-primary/80"
+                <UButton
+                  variant="link"
+                  size="md"
+                  class="p-0"
                   @click="authModal.setMode('login')"
                 >
                   {{ t('auth.signIn') }}
-                </button>
+                </UButton>
               </p>
             </div>
             <div class="space-y-3">
@@ -643,13 +649,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
             </template>
 
             <template #footer>
-              <button
-                type="button"
-                class="text-primary font-medium hover:text-primary/80"
+              <UButton
+                variant="link"
+                size="md"
+                class="p-0"
                 @click="authModal.setMode('login')"
               >
                 {{ t('auth.backToSignIn') }}
-              </button>
+              </UButton>
             </template>
           </UAuthForm>
         </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import { bucketPrintStatuses } from '../../../shared/utils/print-status'
 
 const props = defineProps<{
   event: SalesEvent
@@ -48,29 +49,32 @@ const selectedPrinterId = ref<string | null>(null)
 const selectedPrintStatus = ref<string | null>(null)
 
 // All filters apply server-side — the list is paginated, so client-side
-// filtering would miss matches on other pages. Printer filters go through
-// an EXISTS over the order's print jobs.
-const ordersQuery = computed(() => {
-  const q: Record<string, string> = { eventId: props.event.id }
-  if (selectedHelperName.value) q.owner = selectedHelperName.value
-  if (selectedClientId.value) q.clientId = selectedClientId.value
-  if (selectedPrinterId.value) q.printerId = selectedPrinterId.value
-  if (selectedPrintStatus.value) q.printStatus = selectedPrintStatus.value
-  return q
+// filtering would miss matches on other pages. Helper/printer/status filters
+// need logic the generic CRUD generator can't produce (printer/status match the
+// shared crouton-printing queue via EXISTS), so this hits the package-owned
+// filtered-orders endpoint rather than the generated salesOrders collection —
+// that keeps the filtering correct without per-app patches (drop-in).
+const ordersPageSize = 25
+const ordersPage = ref(1)
+
+const ordersUrl = computed(() => {
+  const params = new URLSearchParams({ page: String(ordersPage.value), pageSize: String(ordersPageSize) })
+  if (selectedHelperName.value) params.set('owner', selectedHelperName.value)
+  if (selectedClientId.value) params.set('clientId', selectedClientId.value)
+  if (selectedPrinterId.value) params.set('printerId', selectedPrinterId.value)
+  if (selectedPrintStatus.value) params.set('printStatus', selectedPrintStatus.value)
+  return `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/orders?${params}`
 })
 
 // Server pagination: events run into hundreds of orders, and this view polls
-// every 2s — fetch only the newest page (server orders by createdAt desc).
-const {
-  items: orders,
-  pending: ordersPending,
-  refresh: refreshOrders,
-  page: ordersPage,
-  pageCount: ordersPageCount
-} = await useCollectionQuery(
-  'salesOrders',
-  { query: ordersQuery, watch: true, pagination: { pageSize: 25 } }
+// every 2s — fetch only the current page (server orders by createdAt desc).
+// useFetch tracks the reactive URL, so a page/filter change refetches.
+const { data: ordersData, pending: ordersPending, refresh: refreshOrders } = await useFetch<{ items: any[], total: number }>(
+  ordersUrl,
+  { default: () => ({ items: [], total: 0 }) }
 )
+const orders = computed(() => ordersData.value?.items || [])
+const ordersPageCount = computed(() => Math.max(1, Math.ceil((ordersData.value?.total ?? 0) / ordersPageSize)))
 
 // Filter change ⇒ back to page 1 (the old page may not exist in the new set).
 watch([selectedHelperName, selectedClientId, selectedPrinterId, selectedPrintStatus], () => {
@@ -179,20 +183,65 @@ async function retryPrintJob(jobId: string) {
   }
 }
 
-// Combined worst status across a set of jobs (status enum: 0=pending,
-// 1=printing, 2=done, 9=error). Red wins, then orange (busy), then green;
-// no jobs at all ⇒ grey.
+// Whole-order Reprint (OrderItems emits the orderId). Same team-authed endpoint,
+// keyed by { orderId }: it resets the order's existing done/failed jobs back to
+// pending so the transport re-drains them. Refresh flips the LEDs to Printing.
+async function reprintOrder(orderId: string) {
+  try {
+    await $fetch(
+      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/printqueues/retry-failed`,
+      { method: 'POST', body: { orderId } }
+    )
+    await refreshPrintJobs()
+    retryNotify.success(t('sales.orders.reprintQueued', 'Reprint queued'))
+  }
+  catch {
+    retryNotify.error(t('sales.orders.reprintError', 'Could not reprint this order'))
+  }
+}
+
+// Hard-delete one order (team-admin endpoint cascades to its items + print
+// jobs). Fire the salesOrders crouton:mutation so every listener refreshes —
+// notably the POS client picker's tab totals — then refresh this list + the
+// print-queue poll and drop the (now-gone) row from the expanded set.
+const nuxtApp = useNuxtApp()
+async function deleteOrder(orderId: string) {
+  try {
+    await $fetch(
+      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/orders/${orderId}`,
+      { method: 'DELETE' }
+    )
+    await nuxtApp.hooks.callHook('crouton:mutation', {
+      operation: 'delete',
+      collection: 'salesOrders',
+      itemIds: [orderId],
+      timestamp: Date.now()
+    })
+    if (expandedIds.value.has(orderId)) {
+      const next = new Set(expandedIds.value)
+      next.delete(orderId)
+      expandedIds.value = next
+    }
+    await Promise.all([refreshOrders(), refreshPrintJobs()])
+  }
+  catch {
+    retryNotify.error(t('sales.orders.deleteError', 'Could not delete order'))
+  }
+}
+
+// Map the shared worst-status bucket (failed > busy > done; none ⇒ no jobs) to
+// this row's LED dot. Red wins, then orange (busy), then green; none ⇒ grey.
 function ledFromStatuses(statuses: string[]) {
-  if (!statuses.length) {
-    return { class: 'bg-accented', label: t('sales.printQueue.noTicket', 'No ticket') }
+  switch (bucketPrintStatuses(statuses)) {
+    case 'failed':
+      return { class: 'bg-error', label: t('sales.printQueue.statusError', 'Error') }
+    case 'busy':
+      return { class: 'bg-warning animate-pulse', label: t('sales.printQueue.statusPrinting', 'Printing') }
+    case 'done':
+      return { class: 'bg-success', label: t('sales.printQueue.statusDone', 'Done') }
+    default:
+      return { class: 'bg-accented', label: t('sales.printQueue.noTicket', 'No ticket') }
   }
-  if (statuses.includes('9')) {
-    return { class: 'bg-error', label: t('sales.printQueue.statusError', 'Error') }
-  }
-  if (statuses.some(s => s === '0' || s === '1')) {
-    return { class: 'bg-warning animate-pulse', label: t('sales.printQueue.statusPrinting', 'Printing') }
-  }
-  return { class: 'bg-success', label: t('sales.printQueue.statusDone', 'Done') }
 }
 
 // One LED per order row, across every printer's jobs.
@@ -346,63 +395,67 @@ function toggleExpand(id: string) {
         />
       </UChip>
       <template #content>
-        <!-- Container-responsive: 1 column in a narrow pane, 2 side by side
-             once the resizable pane has room. -->
-        <div class="rounded-lg bg-elevated/60 border border-default p-3 space-y-2" :class="headerControlled ? '' : 'mt-2'">
-          <div class="grid grid-cols-1 @md:grid-cols-2 gap-2">
-            <USelectMenu
-              v-model="selectedHelperName"
-              :items="helperOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allHelpers')"
-              icon="i-lucide-user"
-              size="sm"
-              class="w-full"
-              :searchable="true"
-            />
-            <USelectMenu
-              v-if="clientFilterEnabled"
-              v-model="selectedClientId"
-              :items="clientOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allClients')"
-              icon="i-lucide-users"
-              size="sm"
-              class="w-full"
-              :searchable="true"
-            />
-            <USelectMenu
-              v-if="printerList.length"
-              v-model="selectedPrinterId"
-              :items="printerOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allPrinters')"
-              icon="i-lucide-printer"
-              size="sm"
-              class="w-full"
-            />
-            <USelectMenu
-              v-if="printerList.length"
-              v-model="selectedPrintStatus"
-              :items="printStatusOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allPrintStatuses')"
-              icon="i-lucide-circle-dot"
-              size="sm"
-              class="w-full"
-            />
+        <!-- Sticky filter bar (#307): the filters ride a CroutonSubBar pinned
+             under the pane header, so they stay reachable while the orders list
+             scrolls. Selects stack on a narrow pane and flow to columns when
+             there's room (@container). -->
+        <CroutonSubBar sticky auto-hide flush :class="headerControlled ? '' : 'mt-2'">
+          <div class="w-full space-y-2">
+            <div class="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-4">
+              <USelectMenu
+                v-model="selectedHelperName"
+                :items="helperOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allHelpers')"
+                icon="i-lucide-user"
+                size="sm"
+                class="w-full"
+                :searchable="true"
+              />
+              <USelectMenu
+                v-if="clientFilterEnabled"
+                v-model="selectedClientId"
+                :items="clientOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allClients')"
+                icon="i-lucide-users"
+                size="sm"
+                class="w-full"
+                :searchable="true"
+              />
+              <USelectMenu
+                v-if="printerList.length"
+                v-model="selectedPrinterId"
+                :items="printerOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allPrinters')"
+                icon="i-lucide-printer"
+                size="sm"
+                class="w-full"
+              />
+              <USelectMenu
+                v-if="printerList.length"
+                v-model="selectedPrintStatus"
+                :items="printStatusOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allPrintStatuses')"
+                icon="i-lucide-circle-dot"
+                size="sm"
+                class="w-full"
+              />
+            </div>
+            <div v-if="hasActiveFilters" class="flex justify-end">
+              <UButton
+                :label="t('sales.workspace.resetFilters')"
+                icon="i-lucide-rotate-ccw"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                @click="resetFilters"
+              />
+            </div>
           </div>
-          <div v-if="hasActiveFilters" class="flex justify-end">
-            <UButton
-              :label="t('sales.workspace.resetFilters')"
-              icon="i-lucide-rotate-ccw"
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              @click="resetFilters"
-            />
-          </div>
-        </div>
+        </CroutonSubBar>
       </template>
     </UCollapsible>
     <!-- Loading state only before first data — the 5s poll flips `pending`
@@ -509,6 +562,8 @@ function toggleExpand(id: string) {
           :print-jobs="jobsByOrder.get(order.id) || []"
           :has-printers="printerList.length > 0"
           @retry-job="retryPrintJob"
+          @reprint-order="reprintOrder"
+          @delete-order="deleteOrder"
         />
       </li>
     </ul>

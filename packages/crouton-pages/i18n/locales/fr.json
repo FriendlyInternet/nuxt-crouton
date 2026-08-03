@@ -95,6 +95,7 @@
     },
     "nav": {
       "menu": "Menu",
+      "theme": "Thème",
       "signOut": "Déconnexion"
     },
     "collection": {
@@ -116,6 +117,9 @@
       "sectionAppearance": "Apparence",
       "sectionNavigation": "Navigation",
       "sectionAccess": "Accès",
+      "tabContent": "Contenu",
+      "tabSeo": "SEO",
+      "untitledShort": "Sans titre",
       "generate": "Générer",
       "preview": "Aperçu",
       "search": "Rechercher",
@@ -178,7 +182,13 @@
       "chromeHideNav": "Masquer la navigation",
       "chromeHideNavDescription": "Masquer la pilule de navigation sur cette page",
       "chromeHideAuth": "Masquer les boutons de connexion et de compte",
-      "chromeHideAuthDescription": "Masquer les menus de connexion, de compte et d’administration sur cette page — la langue et le mode sombre restent disponibles"
+      "chromeHideAuthDescription": "Masquer les menus de connexion, de compte et d’administration sur cette page — la langue et le mode sombre restent disponibles",
+      "contentLabel": "Contenu",
+      "block": "bloc",
+      "blocks": "blocs",
+      "tapToEdit": "Toucher pour modifier",
+      "seoGenerate": "Générer avec IA",
+      "seoGenerateFailed": "Impossible de générer une description"
     },
     "sidebar": {
       "drafts": "Brouillons",
@@ -961,6 +971,7 @@
     "undo": "Annuler",
     "redo": "Rétablir",
     "ascending": "Croissant",
-    "descending": "Décroissant"
+    "descending": "Décroissant",
+    "more": "Plus"
   }
 }

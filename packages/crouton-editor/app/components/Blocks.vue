@@ -264,6 +264,23 @@ function handleEditorCreate(event: { editor: Editor }) {
   emit('create', event)
 }
 
+// UEditor declares no `create`/`update` events (only update:modelValue), and
+// its internal useEditor options clobber a consumer-passed onCreate/onUpdate —
+// so @create above never fires. Capture the instance from UEditor's exposed
+// `editor` ref instead; the :key remount (collab extensions loading) swaps the
+// template ref, so this also re-captures the recreated editor.
+const ueditorRef = ref<{ editor?: unknown } | null>(null)
+watch(() => ueditorRef.value?.editor, (ed) => {
+  // UEditor's exposed editor comes from @nuxt/ui's own tiptap type tree, which
+  // vue-tsc treats as structurally different from our @tiptap/vue-3 Editor —
+  // it's the same runtime object, so cast across the duplicate type identity.
+  const editor = ed as Editor | undefined
+  if (editor && editor !== editorInstance.value) {
+    handleEditorCreate({ editor })
+    editor.on('update', () => handleEditorUpdate({ editor }))
+  }
+})
+
 // Track selection changes to find selected block
 function handleEditorUpdate(event: { editor: Editor }) {
   const editor = event.editor
@@ -496,6 +513,7 @@ defineExpose({
     <!-- In collab mode, content syncs via Yjs, not v-model -->
     <!-- Key forces recreation when collab extensions load -->
     <UEditor
+      ref="ueditorRef"
       v-slot="{ editor, handlers }"
       :key="editorKey"
       v-model="(content as any)"

@@ -2,7 +2,8 @@
 /**
  * Look and Feel Page
  *
- * Team theme and branding settings.
+ * Team theme and appearance settings.
+ * Favicon + site information live on the sibling Site info tab (site-info.vue).
  * Only accessible by team admins/owners.
  *
  * @route /admin/[team]/team/look-and-feel
@@ -36,10 +37,6 @@ const { isAdmin } = useTeam()
 
     <div v-else class="space-y-8">
       <TeamThemeSettings />
-      <USeparator />
-      <TeamFaviconSettings />
-      <USeparator />
-      <TeamSiteInfoSettings />
     </div>
   </div>
 </template>

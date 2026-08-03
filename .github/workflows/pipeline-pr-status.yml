@@ -42,7 +42,6 @@ jobs:
             const { owner, repo } = context.repo
             const PR_STICKY = '<!-- crouton-pipeline-status -->'
             const EPIC_ROLLUP = '<!-- crouton-epic-rollup -->'
-            const HEADER = '> 🤖 **Claude Code** · agent pipeline (CI)'
             const now = new Date().toISOString().replace('T', ' ').slice(0, 16) + 'Z'
 
             // Upsert a marker-tagged comment: edit the existing one in place, else create.
@@ -93,12 +92,12 @@ jobs:
               if (st.pending) parts.push(`${st.pending} running`)
               if (st.failure) parts.push(`${st.failure} failing`)
               const body =
-                `${PR_STICKY}\n${HEADER} · _pipeline status (#337)_\n\n` +
+                `${PR_STICKY}\n` +
                 `### ${st.icon} CI ${st.word}\n` +
-                `${parts.join(' · ')}.\n\n` +
-                (fix ? `🔧 Auto-fix attempts: **${fix[1]}**\n\n` : '') +
-                `Branch \`${pr.head.ref}\` → \`${pr.base.ref}\` · ` +
-                `[checks](${pr.html_url}/checks) · _updated ${now}_`
+                `${parts.join(' · ')}.` +
+                (fix ? ` · 🔧 auto-fix ×${fix[1]}` : '') + `\n\n` +
+                `<sub>🤖 agent pipeline (#337) · \`${pr.head.ref}\` → \`${pr.base.ref}\` · ` +
+                `<a href="${pr.html_url}/checks">checks</a> · updated ${now}</sub>`
               await upsert(pr.number, PR_STICKY, body)
               const epicMatch = /^epic\/(\d+)-/.exec(pr.base.ref)
               if (epicMatch) await updateEpic(Number(epicMatch[1]))
@@ -121,9 +120,10 @@ jobs:
               const inProgress = open.filter(s => names(s).includes('status:in-progress')).length
               const queued = open.length - blocked - inProgress
               const body =
-                `${EPIC_ROLLUP}\n${HEADER} · _epic roll-up (#337)_\n\n` +
-                `**📊 ${done}/${total} done** · ▶️ ${inProgress} in progress · ` +
-                `⏸️ ${blocked} blocked · 🗒️ ${queued} queued. _Updated ${now}._`
+                `${EPIC_ROLLUP}\n` +
+                `### 📊 ${done}/${total} done\n` +
+                `▶️ ${inProgress} in progress · ⏸️ ${blocked} blocked · 🗒️ ${queued} queued.\n\n` +
+                `<sub>🤖 agent pipeline · epic roll-up (#337) · updated ${now}</sub>`
               await upsert(epicNumber, EPIC_ROLLUP, body)
             }
 

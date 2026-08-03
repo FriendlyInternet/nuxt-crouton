@@ -39,8 +39,7 @@ export function useAdmin() {
   async function banUser(userId: string, options?: { banReason?: string, banExpiresIn?: number }) {
     loading.value = true
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (authClient as any)?.admin?.banUser({ userId, ...options })
+      await authClient?.admin.banUser({ userId, ...options })
       notify.success(t('admin.userBanned'), { description: t('admin.userBannedDescription') })
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('admin.failedToBanUser')
@@ -54,8 +53,7 @@ export function useAdmin() {
   async function unbanUser(userId: string) {
     loading.value = true
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (authClient as any)?.admin?.unbanUser({ userId })
+      await authClient?.admin.unbanUser({ userId })
       notify.success(t('admin.userUnbanned'), { description: t('admin.userUnbannedDescription') })
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('admin.failedToUnbanUser')
@@ -69,8 +67,7 @@ export function useAdmin() {
   async function revokeUserSessions(userId: string) {
     loading.value = true
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (authClient as any)?.admin?.revokeUserSessions({ userId })
+      await authClient?.admin.revokeUserSessions({ userId })
       notify.success(t('admin.sessionsRevoked'), { description: t('admin.sessionsRevokedDescription') })
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('admin.failedToRevokeSessions')
@@ -84,8 +81,7 @@ export function useAdmin() {
   async function impersonateUser(userId: string) {
     loading.value = true
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (authClient as any)?.admin?.impersonateUser({ userId })
+      await authClient?.admin.impersonateUser({ userId })
       notify.success(t('admin.impersonating'), { description: t('admin.impersonatingDescription') })
       if (import.meta.client) {
         window.location.reload()
@@ -102,8 +98,7 @@ export function useAdmin() {
   async function stopImpersonating() {
     loading.value = true
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (authClient as any)?.admin?.stopImpersonating()
+      await authClient?.admin.stopImpersonating()
       notify.success(t('admin.stoppedImpersonating'))
       if (import.meta.client) {
         window.location.reload()
@@ -136,8 +131,7 @@ export function useAdmin() {
   async function bulkBanUsers(userIds: string[], options?: { banReason?: string, banExpiresIn?: number }) {
     loading.value = true
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await Promise.allSettled(userIds.map(userId => (authClient as any)?.admin?.banUser({ userId, ...options })))
+      await Promise.allSettled(userIds.map(userId => authClient?.admin.banUser({ userId, ...options })))
       notify.success(t('admin.bulkUsersBanned'), { description: t('admin.bulkUsersBannedDescription', { count: userIds.length }) })
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('admin.failedToBulkBanUsers')
@@ -151,8 +145,7 @@ export function useAdmin() {
   async function bulkUnbanUsers(userIds: string[]) {
     loading.value = true
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await Promise.allSettled(userIds.map(userId => (authClient as any)?.admin?.unbanUser({ userId })))
+      await Promise.allSettled(userIds.map(userId => authClient?.admin.unbanUser({ userId })))
       notify.success(t('admin.bulkUsersUnbanned'), { description: t('admin.bulkUsersUnbannedDescription', { count: userIds.length }) })
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('admin.failedToBulkUnbanUsers')
@@ -166,8 +159,7 @@ export function useAdmin() {
   async function bulkRevokeUserSessions(userIds: string[]) {
     loading.value = true
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await Promise.allSettled(userIds.map(userId => (authClient as any)?.admin?.revokeUserSessions({ userId })))
+      await Promise.allSettled(userIds.map(userId => authClient?.admin.revokeUserSessions({ userId })))
       notify.success(t('admin.bulkSessionsRevoked'), { description: t('admin.bulkSessionsRevokedDescription', { count: userIds.length }) })
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('admin.failedToBulkRevokeSessions')

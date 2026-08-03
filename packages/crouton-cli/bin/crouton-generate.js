@@ -289,6 +289,7 @@ const rollbackCmd = defineCommand({
     collection: { type: 'positional', description: 'Collection name', required: true },
     dryRun: { type: 'boolean', description: 'Preview what will be removed' },
     keepFiles: { type: 'boolean', description: 'Keep generated files, only clean configs' },
+    dropTable: { type: 'boolean', description: 'Also emit a DROP TABLE migration for the removed table (preview with --dry-run)' },
     force: { type: 'boolean', description: 'Skip confirmation prompts' },
   },
   async run({ args }) {
@@ -307,6 +308,7 @@ const rollbackCmd = defineCommand({
       collection: args.collection,
       dryRun: args.dryRun,
       keepFiles: args.keepFiles,
+      dropTable: args.dropTable,
       force: args.force,
     })
   }

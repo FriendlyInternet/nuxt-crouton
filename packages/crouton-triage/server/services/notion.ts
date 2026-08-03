@@ -283,6 +283,100 @@ async function getTitlePropertyName(apiKey: string, databaseId: string): Promise
 }
 
 /**
+ * Resolve the field-mapping entry for an AI field.
+ *
+ * Supports both the new format: { priority: { notionProperty, propertyType, valueMap } }
+ * and the old format: { priorityProperty: 'Priority' } (converted to the new shape).
+ */
+function resolveFieldMappingEntry(
+  fieldMapping: Record<string, any>,
+  aiField: string,
+): any {
+  let mapping = fieldMapping[aiField]
+
+  // If not found, try old format (aiField + 'Property')
+  if (!mapping) {
+    const oldKey = aiField + 'Property'
+    const oldValue = fieldMapping[oldKey]
+    if (typeof oldValue === 'string') {
+      // Convert old format to new format, default to 'select' type
+      mapping = {
+        notionProperty: oldValue,
+        propertyType: 'select', // Default assumption for legacy data
+        valueMap: {},
+      }
+      logger.warn('Using legacy field mapping format', { aiField, oldKey, oldValue })
+    }
+  }
+
+  return mapping
+}
+
+/**
+ * Resolve an assignee value to a Notion user and set it as a 'people' property.
+ *
+ * The AI value is either a Notion UUID (used directly) or a source user ID that
+ * must be mapped to a Notion user ID via userMappings. Logs and skips (no-op)
+ * when no mapping can be resolved.
+ */
+function applyPeopleProperty(
+  properties: Record<string, any>,
+  notionProperty: string,
+  value: any,
+  propertyType: string,
+  userMappings?: Map<string, string>,
+): void {
+  logger.debug('Assignee field - AI extracted value', { value })
+
+  // Check if the value is already a Notion UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+  const isNotionUuid = typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+
+  let notionUserId: string | undefined
+
+  if (isNotionUuid) {
+    // AI returned Notion UUID directly (new flow with @Name (uuid) format)
+    notionUserId = value
+    logger.debug('AI returned Notion UUID directly', { notionUserId })
+  } else {
+    // Old flow: AI returned source user ID, need to map to Notion ID
+    logger.debug('Value is not a UUID, attempting user mapping lookup', {
+      value,
+      userMappingsAvailable: userMappings ? userMappings.size : 0
+    })
+
+    if (!userMappings) {
+      logger.warn('No user mappings Map provided for assignee field', { value })
+      return
+    }
+
+    if (userMappings.size === 0) {
+      logger.warn('User mappings Map is empty - no mappings to lookup')
+    } else {
+      logger.debug('Available mapping keys', { keys: Array.from(userMappings.keys()) })
+    }
+
+    const lookupKey = String(value)
+    logger.debug('Looking up key', { lookupKey })
+    notionUserId = userMappings.get(lookupKey)
+
+    if (!notionUserId) {
+      logger.warn('No user mapping found for assignee', { value, tip: 'Ensure sourceUserId in your mapping exactly matches this value' })
+      return
+    }
+
+    logger.debug('Found mapping', { value, notionUserId })
+  }
+
+  const formattedProperty = formatNotionProperty(notionUserId, propertyType)
+  if (formattedProperty) {
+    properties[notionProperty] = formattedProperty
+    logger.debug('Successfully set assignee to property', { notionProperty, notionUserId })
+  } else {
+    logger.warn('formatNotionProperty returned null for assignee', { notionUserId })
+  }
+}
+
+/**
  * Build Notion properties from task data
  *
  * Strategy: Use the database's title property + apply field mappings for other properties.
@@ -333,25 +427,8 @@ async function buildTaskProperties(
       continue
     }
 
-    // Check if this field has a mapping
-    // Support both new format: { priority: { notionProperty, propertyType, valueMap } }
-    // And old format: { priorityProperty: 'Priority' }
-    let mapping = fieldMapping[aiField]
-
-    // If not found, try old format (aiField + 'Property')
-    if (!mapping) {
-      const oldKey = aiField + 'Property'
-      const oldValue = fieldMapping[oldKey]
-      if (typeof oldValue === 'string') {
-        // Convert old format to new format, default to 'select' type
-        mapping = {
-          notionProperty: oldValue,
-          propertyType: 'select', // Default assumption for legacy data
-          valueMap: {},
-        }
-        logger.warn('Using legacy field mapping format', { aiField, oldKey, oldValue })
-      }
-    }
+    // Check if this field has a mapping (supports new + legacy formats)
+    const mapping = resolveFieldMappingEntry(fieldMapping, aiField)
 
     if (!mapping || !mapping.notionProperty) {
       continue
@@ -373,54 +450,7 @@ async function buildTaskProperties(
 
     // Special handling for 'people' type (assignee field)
     if (propertyType === 'people') {
-      logger.debug('Assignee field - AI extracted value', { value })
-
-      // Check if the value is already a Notion UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-      const isNotionUuid = typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
-
-      let notionUserId: string | undefined
-
-      if (isNotionUuid) {
-        // AI returned Notion UUID directly (new flow with @Name (uuid) format)
-        notionUserId = value
-        logger.debug('AI returned Notion UUID directly', { notionUserId })
-      } else {
-        // Old flow: AI returned source user ID, need to map to Notion ID
-        logger.debug('Value is not a UUID, attempting user mapping lookup', {
-          value,
-          userMappingsAvailable: userMappings ? userMappings.size : 0
-        })
-
-        if (!userMappings) {
-          logger.warn('No user mappings Map provided for assignee field', { value })
-          continue
-        }
-
-        if (userMappings.size === 0) {
-          logger.warn('User mappings Map is empty - no mappings to lookup')
-        } else {
-          logger.debug('Available mapping keys', { keys: Array.from(userMappings.keys()) })
-        }
-
-        const lookupKey = String(value)
-        logger.debug('Looking up key', { lookupKey })
-        notionUserId = userMappings.get(lookupKey)
-
-        if (!notionUserId) {
-          logger.warn('No user mapping found for assignee', { value, tip: 'Ensure sourceUserId in your mapping exactly matches this value' })
-          continue
-        }
-
-        logger.debug('Found mapping', { value, notionUserId })
-      }
-
-      const formattedProperty = formatNotionProperty(notionUserId, propertyType)
-      if (formattedProperty) {
-        properties[notionProperty] = formattedProperty
-        logger.debug('Successfully set assignee to property', { notionProperty, notionUserId })
-      } else {
-        logger.warn('formatNotionProperty returned null for assignee', { notionUserId })
-      }
+      applyPeopleProperty(properties, notionProperty, value, propertyType, userMappings)
       continue
     }
 
@@ -446,215 +476,264 @@ async function buildTaskProperties(
 }
 
 /**
- * Build rich content blocks for Notion page
- *
- * Generic structure that works for any source type:
- * - AI Summary callout
- * - Action items as checkboxes
- * - Participants list with @mentions (if userMentions provided)
- * - Thread content
- * - Generic metadata section
- * - Deep link back to source
- *
- * @param userMentions - Optional map of source user IDs to Notion user IDs for @mentions
- * @param sourceMetadata - Optional metadata for building source platform links
+ * Notion limits toggle blocks to 100 children.
  */
-function buildTaskContent(
-  task: DetectedTask,
-  thread: DiscussionThread,
-  aiSummary: AISummary,
-  config: NotionTaskConfig,
-  userMentions?: Map<string, string>,
-  sourceMetadata?: SourceMetadata,
-): any[] {
-  const NOTION_MAX_TOGGLE_CHILDREN = 100
-  const blocks: any[] = []
+const NOTION_MAX_TOGGLE_CHILDREN = 100
 
-  // AI Summary callout (concise, task-focused)
-  if (aiSummary.summary) {
+/**
+ * Create a divider block
+ */
+function dividerBlock(): any {
+  return {
+    object: 'block',
+    type: 'divider',
+    divider: {},
+  }
+}
+
+/**
+ * AI Summary callout (concise, task-focused)
+ */
+function buildSummaryBlocks(aiSummary: AISummary): any[] {
+  if (!aiSummary.summary) return []
+
+  return [{
+    object: 'block',
+    type: 'callout',
+    callout: {
+      icon: { emoji: '🤖' },
+      rich_text: [
+        {
+          type: 'text',
+          text: { content: `AI Summary: ${aiSummary.summary}` },
+        },
+      ],
+    },
+  }]
+}
+
+/**
+ * Task-specific action items as a heading + unchecked to-dos
+ */
+function buildActionItemBlocks(task: DetectedTask): any[] {
+  if (!task.actionItems || task.actionItems.length === 0) return []
+
+  const blocks: any[] = [{
+    object: 'block',
+    type: 'heading_3',
+    heading_3: {
+      rich_text: [
+        {
+          type: 'text',
+          text: { content: '📋 This Task Requires' },
+        },
+      ],
+    },
+  }]
+
+  for (const item of task.actionItems) {
     blocks.push({
       object: 'block',
-      type: 'callout',
-      callout: {
-        icon: { emoji: '🤖' },
+      type: 'to_do',
+      to_do: {
+        checked: false,
         rich_text: [
           {
             type: 'text',
-            text: { content: `AI Summary: ${aiSummary.summary}` },
+            text: { content: item },
           },
         ],
       },
     })
   }
 
-  // Task-specific action items (NEW)
-  if (task.actionItems && task.actionItems.length > 0) {
-    blocks.push({
-      object: 'block',
-      type: 'heading_3',
-      heading_3: {
-        rich_text: [
-          {
-            type: 'text',
-            text: { content: '📋 This Task Requires' },
-          },
-        ],
-      },
-    })
+  return blocks
+}
 
-    for (const item of task.actionItems) {
-      blocks.push({
+/**
+ * Discussion Context (collapsible) - Global insights from discussion
+ */
+function buildDiscussionContextBlocks(aiSummary: AISummary): any[] {
+  if (!aiSummary.keyPoints || aiSummary.keyPoints.length === 0) return []
+
+  return [{
+    object: 'block',
+    type: 'toggle',
+    toggle: {
+      rich_text: [
+        {
+          type: 'text',
+          text: { content: '🔍 Discussion Context' },
+          annotations: { bold: true },
+        },
+      ],
+      children: aiSummary.keyPoints.slice(0, NOTION_MAX_TOGGLE_CHILDREN).map(point => ({
         object: 'block',
-        type: 'to_do',
-        to_do: {
-          checked: false,
+        type: 'bulleted_list_item',
+        bulleted_list_item: {
           rich_text: [
             {
               type: 'text',
-              text: { content: item },
+              text: { content: point },
             },
           ],
         },
+      })),
+    },
+  }]
+}
+
+/**
+ * Participants paragraph with @mentions (if userMentions provided)
+ */
+function buildParticipantBlocks(
+  thread: DiscussionThread,
+  userMentions?: Map<string, string>,
+): any[] {
+  if (thread.participants.length === 0) return []
+
+  logger.debug('Building participants section', {
+    participantCount: thread.participants.length,
+    userMentionsAvailable: userMentions ? userMentions.size : 0
+  })
+
+  const participantRichText: any[] = [
+    {
+      type: 'text',
+      text: { content: '👥 Participants: ' },
+    },
+  ]
+
+  // Build rich text with @mentions for each participant
+  for (let i = 0; i < thread.participants.length; i++) {
+    const participantId = thread.participants[i]
+    if (!participantId) continue
+
+    // Try to get Notion user ID for mention
+    const notionUserId = userMentions?.get(participantId)
+
+    if (notionUserId) {
+      // Add proper @mention
+      logger.debug('Creating @mention for participant', { participantId, notionUserId })
+      const mentionObject = {
+        type: 'mention',
+        mention: {
+          type: 'user',
+          user: {
+            object: 'user', // Required by Notion API
+            id: notionUserId,
+          },
+        },
+      }
+      logger.debug('Mention object structure', { mentionObject })
+      participantRichText.push(mentionObject)
+    }
+    else {
+      // Fallback to plain text if no mapping
+      logger.debug('No mention mapping for participant, using plain text', { participantId })
+      participantRichText.push({
+        type: 'text',
+        text: { content: `@${participantId}` },
+      })
+    }
+
+    // Add separator between participants (except for last one)
+    if (i < thread.participants.length - 1) {
+      participantRichText.push({
+        type: 'text',
+        text: { content: ', ' },
       })
     }
   }
 
-  // Discussion Context (collapsible) - Global insights from discussion
-  if (aiSummary.keyPoints && aiSummary.keyPoints.length > 0) {
-    blocks.push({
+  logger.debug('Complete participantRichText array', { participantRichText })
+
+  return [{
+    object: 'block',
+    type: 'paragraph',
+    paragraph: {
+      rich_text: participantRichText,
+    },
+  }]
+}
+
+/**
+ * Thread content summary (task-specific description): heading + description paragraph
+ */
+function buildThreadContentBlocks(task: DetectedTask): any[] {
+  return [
+    {
       object: 'block',
-      type: 'toggle',
-      toggle: {
+      type: 'heading_2',
+      heading_2: {
         rich_text: [
           {
             type: 'text',
-            text: { content: '🔍 Discussion Context' },
-            annotations: { bold: true },
+            text: { content: 'Thread Content' },
           },
         ],
-        children: aiSummary.keyPoints.slice(0, NOTION_MAX_TOGGLE_CHILDREN).map(point => ({
-          object: 'block',
-          type: 'bulleted_list_item',
-          bulleted_list_item: {
-            rich_text: [
-              {
-                type: 'text',
-                text: { content: point },
-              },
-            ],
-          },
-        })),
       },
-    })
-  }
-
-  // Participants with @mentions (if userMentions provided)
-  if (thread.participants.length > 0) {
-    logger.debug('Building participants section', {
-      participantCount: thread.participants.length,
-      userMentionsAvailable: userMentions ? userMentions.size : 0
-    })
-
-    const participantRichText: any[] = [
-      {
-        type: 'text',
-        text: { content: '👥 Participants: ' },
-      },
-    ]
-
-    // Build rich text with @mentions for each participant
-    for (let i = 0; i < thread.participants.length; i++) {
-      const participantId = thread.participants[i]
-      if (!participantId) continue
-
-      // Try to get Notion user ID for mention
-      const notionUserId = userMentions?.get(participantId)
-
-      if (notionUserId) {
-        // Add proper @mention
-        logger.debug('Creating @mention for participant', { participantId, notionUserId })
-        const mentionObject = {
-          type: 'mention',
-          mention: {
-            type: 'user',
-            user: {
-              object: 'user', // Required by Notion API
-              id: notionUserId,
-            },
-          },
-        }
-        logger.debug('Mention object structure', { mentionObject })
-        participantRichText.push(mentionObject)
-      }
-      else {
-        // Fallback to plain text if no mapping
-        logger.debug('No mention mapping for participant, using plain text', { participantId })
-        participantRichText.push({
-          type: 'text',
-          text: { content: `@${participantId}` },
-        })
-      }
-
-      // Add separator between participants (except for last one)
-      if (i < thread.participants.length - 1) {
-        participantRichText.push({
-          type: 'text',
-          text: { content: ', ' },
-        })
-      }
-    }
-
-    logger.debug('Complete participantRichText array', { participantRichText })
-
-    blocks.push({
+    },
+    {
       object: 'block',
       type: 'paragraph',
       paragraph: {
-        rich_text: participantRichText,
+        rich_text: [
+          {
+            type: 'text',
+            text: { content: task.description.substring(0, 2000) },
+          },
+        ],
       },
-    })
-  }
-
-  // Divider
-  blocks.push({
-    object: 'block',
-    type: 'divider',
-    divider: {},
-  })
-
-  // Thread content summary (task-specific description)
-  blocks.push({
-    object: 'block',
-    type: 'heading_2',
-    heading_2: {
-      rich_text: [
-        {
-          type: 'text',
-          text: { content: 'Thread Content' },
-        },
-      ],
     },
-  })
+  ]
+}
 
-  blocks.push({
+/**
+ * Bold author line ("@Name:"), linked to the source message when a URL is available
+ */
+function buildAuthorLineBlock(authorLabel: string, messageUrl: string | null): any {
+  return {
     object: 'block',
     type: 'paragraph',
     paragraph: {
       rich_text: [
         {
           type: 'text',
-          text: { content: task.description.substring(0, 2000) },
+          text: {
+            content: `${authorLabel}:`,
+            link: messageUrl ? { url: messageUrl } : undefined,
+          },
+          annotations: { bold: true, color: messageUrl ? 'blue' : 'default' },
         },
       ],
     },
-  })
-
-
-  // Helper to get display name (resolved name or fallback to ID)
-  const getDisplayName = (authorHandle: string, authorName?: string) => {
-    return authorName ? `@${authorName}` : authorHandle
   }
-  // Full Discussion Thread (collapsible)
+}
+
+/**
+ * Message body paragraph with mentions/links parsed (capped at Notion's 2000-char limit)
+ */
+function buildMessageBodyBlock(content: string, messageUrl: string | null): any {
+  return {
+    object: 'block',
+    type: 'paragraph',
+    paragraph: {
+      rich_text: parseContentWithMentionsAndLinks(
+        content.substring(0, 2000),
+        messageUrl || undefined,
+      ),
+    },
+  }
+}
+
+/**
+ * Flatten the root message + replies into paragraph blocks ("—" separator before each reply)
+ */
+function buildThreadMessageBlocks(
+  thread: DiscussionThread,
+  sourceMetadata?: SourceMetadata,
+): any[] {
   const threadMessages: any[] = []
 
   // Add root message
@@ -663,32 +742,8 @@ function buildTaskContent(
     : thread.rootMessage.authorHandle
   const rootMessageUrl = buildMessageUrl(thread.rootMessage.id, sourceMetadata)
 
-  threadMessages.push({
-    object: 'block',
-    type: 'paragraph',
-    paragraph: {
-      rich_text: [
-        {
-          type: 'text',
-          text: {
-            content: `${rootAuthorName}:`,
-            link: rootMessageUrl ? { url: rootMessageUrl } : undefined,
-          },
-          annotations: { bold: true, color: rootMessageUrl ? 'blue' : 'default' },
-        },
-      ],
-    },
-  })
-  threadMessages.push({
-    object: 'block',
-    type: 'paragraph',
-    paragraph: {
-      rich_text: parseContentWithMentionsAndLinks(
-        thread.rootMessage.content.substring(0, 2000),
-        rootMessageUrl || undefined,
-      ),
-    },
-  })
+  threadMessages.push(buildAuthorLineBlock(rootAuthorName, rootMessageUrl))
+  threadMessages.push(buildMessageBodyBlock(thread.rootMessage.content, rootMessageUrl))
 
   // Add replies
   for (const reply of thread.replies) {
@@ -709,36 +764,18 @@ function buildTaskContent(
         ],
       },
     })
-    threadMessages.push({
-      object: 'block',
-      type: 'paragraph',
-      paragraph: {
-        rich_text: [
-          {
-            type: 'text',
-            text: {
-              content: `${replyAuthorName}:`,
-              link: replyMessageUrl ? { url: replyMessageUrl } : undefined,
-            },
-            annotations: { bold: true, color: replyMessageUrl ? 'blue' : 'default' },
-          },
-        ],
-      },
-    })
-    threadMessages.push({
-      object: 'block',
-      type: 'paragraph',
-      paragraph: {
-        rich_text: parseContentWithMentionsAndLinks(
-          reply.content.substring(0, 2000),
-          replyMessageUrl || undefined,
-        ),
-      },
-    })
+    threadMessages.push(buildAuthorLineBlock(replyAuthorName, replyMessageUrl))
+    threadMessages.push(buildMessageBodyBlock(reply.content, replyMessageUrl))
   }
 
-  // Notion limits toggle children to 100. Truncate and add a note if needed.
-  const truncatedMessages = threadMessages.length > NOTION_MAX_TOGGLE_CHILDREN
+  return threadMessages
+}
+
+/**
+ * Notion limits toggle children to 100. Truncate and add a note if needed.
+ */
+function truncateToggleChildren(threadMessages: any[]): any[] {
+  return threadMessages.length > NOTION_MAX_TOGGLE_CHILDREN
     ? [
         ...threadMessages.slice(0, NOTION_MAX_TOGGLE_CHILDREN - 1),
         {
@@ -754,8 +791,18 @@ function buildTaskContent(
         },
       ]
     : threadMessages
+}
 
-  blocks.push({
+/**
+ * Full Discussion Thread (collapsible)
+ */
+function buildFullThreadToggleBlock(
+  thread: DiscussionThread,
+  sourceMetadata?: SourceMetadata,
+): any {
+  const truncatedMessages = truncateToggleChildren(buildThreadMessageBlocks(thread, sourceMetadata))
+
+  return {
     object: 'block',
     type: 'toggle',
     toggle: {
@@ -768,17 +815,58 @@ function buildTaskContent(
       ],
       children: truncatedMessages,
     },
-  })
+  }
+}
 
-  // Divider
-  blocks.push({
+/**
+ * Create a metadata bulleted list item with optional Notion mention
+ */
+function createMetadataItem(label: string, value: string, notionUserId?: string): any {
+  const richText: any[] = [
+    {
+      type: 'text',
+      text: { content: `${label}: ` },
+    },
+  ]
+
+  if (notionUserId) {
+    // Add Notion user mention
+    richText.push({
+      type: 'mention',
+      mention: {
+        type: 'user',
+        user: {
+          object: 'user',
+          id: notionUserId,
+        },
+      },
+    })
+  } else {
+    // Just add plain text
+    richText.push({
+      type: 'text',
+      text: { content: value },
+    })
+  }
+
+  return {
     object: 'block',
-    type: 'divider',
-    divider: {},
-  })
+    type: 'bulleted_list_item',
+    bulleted_list_item: { rich_text: richText },
+  }
+}
 
-  // Metadata section (generic for any source)
-  blocks.push({
+/**
+ * Metadata section (generic for any source): heading + bulleted metadata items
+ */
+function buildMetadataBlocks(
+  task: DetectedTask,
+  thread: DiscussionThread,
+  aiSummary: AISummary,
+  config: NotionTaskConfig,
+  userMentions?: Map<string, string>,
+): any[] {
+  const blocks: any[] = [{
     object: 'block',
     type: 'heading_2',
     heading_2: {
@@ -789,43 +877,7 @@ function buildTaskContent(
         },
       ],
     },
-  })
-
-  // Helper to create metadata item with optional Notion mention
-  const createMetadataItem = (label: string, value: string, notionUserId?: string) => {
-    const richText: any[] = [
-      {
-        type: 'text',
-        text: { content: `${label}: ` },
-      },
-    ]
-
-    if (notionUserId) {
-      // Add Notion user mention
-      richText.push({
-        type: 'mention',
-        mention: {
-          type: 'user',
-          user: {
-            object: 'user',
-            id: notionUserId,
-          },
-        },
-      })
-    } else {
-      // Just add plain text
-      richText.push({
-        type: 'text',
-        text: { content: value },
-      })
-    }
-
-    return {
-      object: 'block',
-      type: 'bulleted_list_item',
-      bulleted_list_item: { rich_text: richText },
-    }
-  }
+  }]
 
   // Get Notion user ID for the message author
   const authorHandle = thread.rootMessage.authorHandle
@@ -862,15 +914,18 @@ function buildTaskContent(
     blocks.push(createMetadataItem('Tags', task.tags.join(', ')))
   }
 
-  // Deep link back to source
-  if (config.sourceUrl) {
-    blocks.push({
-      object: 'block',
-      type: 'divider',
-      divider: {},
-    })
+  return blocks
+}
 
-    blocks.push({
+/**
+ * Deep link back to source (divider + link paragraph), when config.sourceUrl is set
+ */
+function buildSourceLinkBlocks(config: NotionTaskConfig): any[] {
+  if (!config.sourceUrl) return []
+
+  return [
+    dividerBlock(),
+    {
       object: 'block',
       type: 'paragraph',
       paragraph: {
@@ -892,8 +947,44 @@ function buildTaskContent(
           },
         ],
       },
-    })
-  }
+    },
+  ]
+}
+
+/**
+ * Build rich content blocks for Notion page
+ *
+ * Generic structure that works for any source type:
+ * - AI Summary callout
+ * - Action items as checkboxes
+ * - Participants list with @mentions (if userMentions provided)
+ * - Thread content
+ * - Generic metadata section
+ * - Deep link back to source
+ *
+ * @param userMentions - Optional map of source user IDs to Notion user IDs for @mentions
+ * @param sourceMetadata - Optional metadata for building source platform links
+ */
+function buildTaskContent(
+  task: DetectedTask,
+  thread: DiscussionThread,
+  aiSummary: AISummary,
+  config: NotionTaskConfig,
+  userMentions?: Map<string, string>,
+  sourceMetadata?: SourceMetadata,
+): any[] {
+  const blocks: any[] = [
+    ...buildSummaryBlocks(aiSummary),
+    ...buildActionItemBlocks(task),
+    ...buildDiscussionContextBlocks(aiSummary),
+    ...buildParticipantBlocks(thread, userMentions),
+    dividerBlock(),
+    ...buildThreadContentBlocks(task),
+    buildFullThreadToggleBlock(thread, sourceMetadata),
+    dividerBlock(),
+    ...buildMetadataBlocks(task, thread, aiSummary, config, userMentions),
+    ...buildSourceLinkBlocks(config),
+  ]
 
   logger.debug('Complete blocks array (children)', { blocksCount: blocks.length })
 

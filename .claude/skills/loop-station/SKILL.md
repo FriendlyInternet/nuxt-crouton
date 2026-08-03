@@ -218,3 +218,71 @@ same tokenizer** (a heuristic→anthropic switch isn't real growth).
 ```bash
 node .claude/skills/loop-station/advisor.mjs --pretty   # see findings + actionable verdict
 ```
+
+---
+
+# WS6 — accountability scoreboard (#1570)
+
+The reviewer-vs-author lens: every **confirmed defect** is a severity-weighted,
+zero-sum-ish transaction — **−w to the author flow, +w to the gate that caught it**
+— and a clean merge earns its author +1. Turns review gates and coding agents into
+opposing teams so we can see who ships clean and which gates actually earn their keep.
+
+> Boundary holds: a new *lens* over existing data, not a new pipeline. It joins the
+> **findings** ledger (`writeups/loop-station/findings.jsonl`) × the run-outcome
+> **eval-ledger** (`writeups/reports/eval-ledger.jsonl`, #883). The tally is
+> deterministic arithmetic — no LLM. Severity comes from the gate's own rating.
+
+## The asymmetric model (decided on #1570)
+
+| Event | Author | Catcher | Gate that missed it |
+|---|--:|--:|--:|
+| Defect caught in review | −w | +w | — |
+| Clean merge, stays clean | +1 | 0 | — |
+| Defect escaped, caught later | −w·2 | +w | −w |
+| Flag rejected (false-positive) | 0 | −w (noise) | — |
+
+`w` is severity-weighted (`critical 5 / high 3 / medium 2 / low 1`). A find scores
+**only once confirmed** (fix merged / reverted / `lgtm`) — unconfirmed = `pending`.
+
+**Two lanes (`class`).** `defect` (default) = a correctness/security/a11y/convention failure —
+the main board. `quality` = a preference on *correct* code (a `/simplify` cleanup) — a
+**separate low-weight lane** that never touches an author's defect Net/Rate (so it can't
+punish verbose-but-correct code or drown the defect signal). A quality gate captures on any
+change (`capture-finding.mjs --gate simplify --class quality`), not just 🔴 critical.
+
+## Files (live in `scripts/eval-ledger/` with the ledger they join)
+
+| file | role |
+|------|------|
+| `findings-schema.mjs` | finding record shape + `validate()` + `transactionsFor()` (the scoring rules — tune weights here) + `dedupKey()` |
+| `append-finding.mjs` | validate + append ONE finding to `findings.jsonl` (idempotent via `dedupKey`; `--check` / `--no-dedup`) |
+| `accountability.mjs` | join findings × ledger → two leaderboards (markdown / `--json` / `--html`); importable `tally()` |
+| `capture-finding.mjs` | gate-side: a `<gate>-verdict.json` → a pending finding **candidate** (only for 🔴 critical) |
+| `ingest-findings.mjs` | rollup-side: resolve candidates by PR-merge fact (merged → confirmed · closed → drop · open → skip); importable `resolveCandidates()` |
+| `reconcile-findings.mjs` | rollup-side: reverted eval-ledger rows → escaped-defect findings; importable `reconcile()` |
+| `accountability.test.mjs` | pins the arithmetic + reconcile + candidate resolution (19 tests) |
+
+## Capture in CI (#1570)
+
+Two deterministic sources feed `findings.jsonl` — **no LLM, no CI state machine**:
+
+1. **PR gates** (`frontend-review` / `a11y` / `red-team`) upload a finding **candidate**
+   artifact (`loop-station-finding-*`) whenever they flag a 🔴 critical. Confirmation is
+   the **durable PR-merge fact**: merged ⇒ the blocking defect was fixed ⇒ a *confirmed
+   caught* defect; closed ⇒ dropped; open ⇒ left for a later run.
+2. **Reverts** — a `reverted` run in the eval-ledger ⇒ a *confirmed escaped* defect.
+
+`.github/workflows/loop-station-findings.yml` (merge-to-`main` + weekly, mirrors
+`loop-station-usage.yml`) downloads the candidates, resolves them, runs `reconcile`, and
+commits new findings to `main`. **Only this main-context job writes the committed ledger** —
+a PR-branch gate run never does. Rendered in `pocs/loop-station` (the `AccountabilityBoard`
+panel, staged by its `prepare-data.mjs`).
+
+## Run by hand
+
+```bash
+node scripts/eval-ledger/accountability.mjs            # the two leaderboards
+node scripts/eval-ledger/append-finding.mjs --gate code-review --severity high \
+  --status confirmed --confirmed_via fix-merged --author_flow task-worker --author_ref <PR-url>
+```

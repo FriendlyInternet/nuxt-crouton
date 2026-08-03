@@ -40,12 +40,6 @@ const emit = defineEmits<{
   delete: [id: string]
 }>()
 
-// Switch to side-by-side layout on wide screens
-const isWide = useMediaQuery('(min-width: 768px)')
-const i18nLayout = computed<'tabs' | 'side-by-side'>(() =>
-  isWide.value ? 'side-by-side' : 'tabs'
-)
-
 // Shared state for live preview — the page route reads this
 const editingTranslations = useState<Record<string, any> | null>('editingTranslations', () => null)
 
@@ -93,7 +87,6 @@ onBeforeUnmount(() => {
       ref="editorRef"
       :page-id="pageId"
       :default-parent-id="defaultParentId"
-      :i18n-layout="i18nLayout"
       show-close
       @save="handleSave"
       @delete="handleDelete"

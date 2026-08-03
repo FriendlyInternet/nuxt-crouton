@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<!--
+  ui-proposal — Delete a single order from the workspace (#1518)
+  Self-contained: no JS, no external assets. Inline SVG icons only.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UI Proposal — Delete a single order</title>
+<style>
+  :root{
+    --page:#0a0e17; --ink:#e8edf6; --muted:#8b97ad;
+    --app-bg:#0b0f1a; --card:#151b27; --card-2:#11161f; --line:#222b3a; --line-soft:#1b2230;
+    --green:#34d399; --green-d:#0e3a2a; --error:#f87171; --warn:#fbbf24; --radius:16px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:radial-gradient(1100px 500px at 75% -10%, #16213c 0%, var(--page) 55%);
+    color:var(--ink); line-height:1.55; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1040px; margin:0 auto; padding:40px 20px 80px;}
+  .eyebrow{text-transform:uppercase; letter-spacing:.18em; font-size:12px; color:var(--green); font-weight:700;}
+  h1{font-size:clamp(26px,4vw,36px); margin:6px 0 6px; line-height:1.1;}
+  .lede{color:var(--muted); font-size:16px; max-width:70ch; margin:0 0 28px;}
+
+  .stage{display:flex; flex-wrap:wrap; gap:32px; justify-content:center; align-items:flex-start;}
+  .col{display:flex; flex-direction:column; align-items:center; gap:12px;}
+  .col h2{font-size:15px; margin:0; display:flex; align-items:center; gap:8px;}
+  .tag{font-size:11px; padding:2px 9px; border-radius:999px; border:1px solid var(--line); color:var(--muted);}
+  .tag.bad{color:#f6a; border-color:#5b2740;} .tag.good{color:var(--green); border-color:#1f5e47;}
+  .note{font-size:12.5px; color:var(--muted); max-width:360px; text-align:center;}
+
+  .deviceframe{width:440px; max-width:100%; border-radius:14px; overflow:hidden; border:1px solid #2b3852; box-shadow:0 24px 60px rgba(0,0,0,.5); background:var(--app-bg);}
+  .deviceframe .bar{display:flex; gap:6px; padding:10px 14px; background:#11161f; border-bottom:1px solid var(--line); align-items:center;}
+  .deviceframe .bar i{width:11px; height:11px; border-radius:50%; background:#33405a; display:inline-block;}
+  .deviceframe .bar .cap{margin-left:8px; font-size:12px; color:var(--muted);}
+
+  .ic{width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex:none;}
+
+  /* order list */
+  .olist{border-top:1px solid var(--line);}
+  .orow{display:flex; align-items:center; gap:12px; padding:10px 14px; border-bottom:1px solid var(--line-soft);}
+  .orow .num{font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:700; color:var(--muted);}
+  .orow .who{flex:1; min-width:0;}
+  .orow .who .name{font-weight:600; font-size:14px;}
+  .orow .who .owner{font-size:11.5px; color:var(--muted); display:flex; align-items:center; gap:5px; margin-top:1px;}
+  .led{width:10px;height:10px;border-radius:50%;}
+  .led.green{background:var(--green);}
+
+  /* expanded panel */
+  .expanded{background:rgba(21,27,39,.5); padding:12px 16px 16px;}
+  .tabs{display:flex; gap:16px; border-bottom:1px solid var(--line); padding-bottom:6px; margin-bottom:8px;}
+  .tabs .t{font-size:13px; color:var(--muted); padding-bottom:6px;}
+  .tabs .t.active{color:var(--ink); border-bottom:2px solid var(--green); margin-bottom:-8px; padding-bottom:6px;}
+  .items{list-style:none; margin:0; padding:0;}
+  .items li{display:flex; gap:10px; padding:7px 0; font-size:13px; border-bottom:1px solid var(--line-soft);}
+  .items .q{color:var(--muted); font-variant-numeric:tabular-nums; width:26px;}
+  .items .nm{flex:1;}
+  .items .pr{font-variant-numeric:tabular-nums; color:var(--ink);}
+  .total{display:flex; justify-content:space-between; font-weight:700; font-size:13.5px; border-top:1px solid var(--line); margin-top:6px; padding-top:8px;}
+
+  /* the proposed footer action row */
+  .actionbar{display:flex; justify-content:flex-end; margin-top:14px; padding-top:12px; border-top:1px dashed var(--line);}
+  .delpill{display:inline-flex; align-items:center; gap:6px; border-radius:8px; font-size:12.5px; font-weight:600; padding:6px 11px; border:1px solid transparent;}
+  .delpill.idle{color:var(--error); background:rgba(248,113,113,.10);}
+  .delpill.armed{color:#fff; background:rgba(248,113,113,.22); border-color:rgba(248,113,113,.5);}
+
+  .changes{margin-top:40px; background:#101725; border:1px solid var(--line); border-radius:16px; padding:20px 22px;}
+  .changes h3{margin:0 0 12px; font-size:16px;}
+  .changes ul{margin:0; padding-left:0; list-style:none; display:grid; gap:10px;}
+  .changes li{display:flex; gap:10px; align-items:flex-start; font-size:14px; color:#cdd6e6;}
+  .changes li b{color:#fff;} .check{color:var(--green); flex:none; margin-top:2px;}
+  .changes code{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.9em; background:rgba(52,211,153,.12); color:#a9f0d2; padding:1px 6px; border-radius:6px;}
+  footer.fin{margin-top:30px; color:var(--muted); font-size:12.5px; text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="eyebrow">nuxt-crouton · crouton-sales · proposal</span>
+  <h1>Delete a single order from the workspace</h1>
+  <p class="lede">A two-step <b>Delete</b> pill in the expanded order row lets staff clear a mistaken or test order — cascading to its items and print jobs — without DB surgery. Sits in its own footer action row below the tabs, clear of the Reprint action (#1517) on the tab bar.</p>
+
+  <div class="stage">
+
+    <!-- ============ BEFORE ============ -->
+    <div class="col">
+      <h2>Before <span class="tag bad">today</span></h2>
+      <div class="deviceframe">
+        <div class="bar"><i></i><i></i><i></i><span class="cap">Workspace · Orders</span></div>
+        <div class="olist">
+          <div class="orow">
+            <span class="num">#12</span>
+            <div class="who">
+              <div class="name">Tafel 4</div>
+              <div class="owner"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Lotte</div>
+            </div>
+            <span class="led green"></span>
+          </div>
+          <div class="expanded">
+            <div class="tabs"><span class="t active">Order</span><span class="t">Printers</span></div>
+            <ul class="items">
+              <li><span class="q">2×</span><span class="nm">Pintje</span><span class="pr">€ 5,00</span></li>
+              <li><span class="q">1×</span><span class="nm">Frietjes</span><span class="pr">€ 3,50</span></li>
+            </ul>
+            <div class="total"><span>Totaal</span><span>€ 8,50</span></div>
+            <!-- no way to remove this order without DB surgery -->
+          </div>
+        </div>
+      </div>
+      <p class="note">No way to remove a mistaken / test order from the register — only a DB edit.</p>
+    </div>
+
+    <!-- ============ AFTER ============ -->
+    <div class="col">
+      <h2>After <span class="tag good">proposed</span></h2>
+      <div class="deviceframe">
+        <div class="bar"><i></i><i></i><i></i><span class="cap">Workspace · Orders</span></div>
+        <div class="olist">
+          <div class="orow">
+            <span class="num">#12</span>
+            <div class="who">
+              <div class="name">Tafel 4</div>
+              <div class="owner"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>Lotte</div>
+            </div>
+            <span class="led green"></span>
+          </div>
+          <div class="expanded">
+            <div class="tabs"><span class="t active">Order</span><span class="t">Printers</span></div>
+            <ul class="items">
+              <li><span class="q">2×</span><span class="nm">Pintje</span><span class="pr">€ 5,00</span></li>
+              <li><span class="q">1×</span><span class="nm">Frietjes</span><span class="pr">€ 3,50</span></li>
+            </ul>
+            <div class="total"><span>Totaal</span><span>€ 8,50</span></div>
+            <div class="actionbar">
+              <span class="delpill idle"><svg class="ic" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>Delete</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="note">A right-aligned <b>Delete</b> pill below the totals — one tap arms it…</p>
+    </div>
+
+    <!-- ============ AFTER (armed) ============ -->
+    <div class="col">
+      <h2>Armed <span class="tag good">2nd tap</span></h2>
+      <div class="deviceframe">
+        <div class="bar"><i></i><i></i><i></i><span class="cap">confirm step</span></div>
+        <div class="olist">
+          <div class="expanded" style="padding-top:14px;">
+            <div class="total"><span>Totaal</span><span>€ 8,50</span></div>
+            <div class="actionbar">
+              <span class="delpill armed"><svg class="ic" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>Sure?</span>
+            </div>
+            <p class="note" style="text-align:right; max-width:none; margin:6px 0 0;">Second tap deletes the order + its items + print jobs.</p>
+          </div>
+        </div>
+      </div>
+      <p class="note">…the second tap deletes. Moving the pointer away disarms it (standard <code>CroutonDeleteButton</code>).</p>
+    </div>
+
+  </div>
+
+  <div class="changes">
+    <h3>What changes (and what doesn't)</h3>
+    <ul>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Delete pill in the expanded row.</b> A two-step <code>CroutonDeleteButton</code> in a new right-aligned footer action row, below the totals — placed below the tabs so it stays clear of the Reprint action (#1517) on the tab bar and keeps the merge small.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Hard delete.</b> Removes the order <b>and</b> its <code>salesOrderitems</code> <b>and</b> its <code>print_jobs</code> (<code>source='sales'</code>, <code>refType='order'</code>, <code>refId=orderId</code>). The existing <code>cancelled</code> status stays as the soft alternative for real events.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>List + POS refresh.</b> On delete, fires the <code>crouton:mutation</code> hook for <code>salesOrders</code> so the order list and the POS client picker refresh; the deleted order stops counting toward its client's tab total.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Team-admin only.</b> The DELETE endpoint requires team admin — a non-admin can't delete.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Untouched.</b> The row header, LED status, tabs, item list and totals stay exactly as they are.</span></li>
+    </ul>
+  </div>
+
+  <footer class="fin">Mockup only · pure HTML/CSS/SVG, no JS · sample data (Tafel 4 / #12)</footer>
+
+</div>
+</body>
+</html>

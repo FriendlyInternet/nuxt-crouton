@@ -153,15 +153,16 @@ function toggleMode() {
         {{ t('auth.verify') }}
       </UButton>
 
-      <!-- Toggle Mode -->
+      <!-- Toggle Mode — UButton so themes reach it (#1410) -->
       <div class="text-center">
-        <button
-          type="button"
-          class="text-sm font-medium text-primary hover:text-primary/80"
+        <UButton
+          variant="link"
+          size="md"
+          class="p-0"
           @click="toggleMode"
         >
           {{ mode === 'totp' ? $t('auth.twoFactor.useBackupCode') : $t('auth.twoFactor.useAuthenticatorApp') }}
-        </button>
+        </UButton>
       </div>
     </UForm>
   </div>

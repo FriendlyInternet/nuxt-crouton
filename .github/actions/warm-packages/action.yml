@@ -1,0 +1,37 @@
+# Warm the @fyit/* package builds (#1222).
+#
+# Restore EVERY package's `dist/` from a content-addressed cache; on a cache MISS,
+# build them all with `pnpm build:packages`. One line in any job that runs a Nuxt
+# build/deploy, after `pnpm install`:
+#
+#   - uses: ./.github/actions/warm-packages
+#
+# Why "build ALL", not a per-caller subset (the old deploy-app.yml logic):
+#   - A subset can miss a package the app transitively extends — e.g. `@fyit/crouton`
+#     itself wasn't in a POC's `layer-packages`, so the build skipped it and `nuxt build`
+#     died with "Could not load @fyit/crouton" (the quotes-POC deploy). Building all
+#     removes the guess. `pnpm build:packages` is ~31s (topological), so it's cheap.
+#
+# Why content-addressed, not `clean:false` warmth:
+#   - Keyed on all package source + the lockfile, so a source change → new key → rebuild
+#     (never stale dist), and concurrent agents can't contaminate a shared mutable dir —
+#     the exact constraint recorded on #1222 for a multi-agent fleet.
+name: warm-packages
+description: Restore all @fyit/* package dist from a content-addressed cache; build every package on a cache miss.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore package dist cache
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: packages/*/dist
+        # Source + lockfile only. dist/ is gitignored so it's absent at hash time → the
+        # key reflects inputs, not outputs. Bump the v-tag to bust the cache deliberately.
+        key: pkg-dist-v1-${{ hashFiles('packages/**/*.ts', 'packages/**/*.vue', 'pnpm-lock.yaml') }}
+
+    - name: Build all packages (cache miss)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm build:packages

@@ -141,8 +141,14 @@ jobs:
         if: runner.os == 'macOS'
         run: command -v jq >/dev/null 2>&1 || brew install jq
 
+      # dest is keyed per app+env: on the self-hosted mini several app deploys run
+      # in parallel and the default shared ~/setup-pnpm races (ENOTEMPTY rmdir,
+      # #1254/#1255). The deploy-<app>-<env> concurrency group above guarantees one
+      # writer per dest; the dest set is bounded (apps × envs), so no disk creep. (#1258)
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
+        with:
+          dest: ~/setup-pnpm-${{ inputs.app }}-${{ inputs.environment }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -211,65 +217,15 @@ jobs:
       - name: Rebuild native build deps skipped by --ignore-scripts
         run: pnpm rebuild better-sqlite3 2>/dev/null || true
 
-      # The dist-consumed framework packages (inputs.layer-packages) must be built
-      # before the app build. Pure source layers (crouton-editor/pages/charts) have
-      # no build script and are skipped.
-
-      # The layer cache is shared across ALL callers (one runner cache), but the set
-      # of dists a deploy needs varies per app (different layer-packages, + devtools
-      # below). Keying on source alone (`hashFiles('packages/**/*.ts')`) meant the
-      # first app to populate the cache decided which dists every later app got — a
-      # cache HIT could restore a set MISSING a package the current app needs, and
-      # the build step (gated on cache-miss) would skip it → `nuxt prepare` failing
-      # to load it. That's the #745 devtools crash, but it's a general cross-app
-      # collision class (e.g. an i18n-needing app hitting an i18n-less cache). So we
-      # fold the resolved build set into the cache key: different sets → different
-      # entries → no collision.
-      - name: Compute layer build-set key
-        id: layer-set
-        env:
-          LAYER_PACKAGES: ${{ inputs['layer-packages'] }}
-        run: |
-          # The EXACT set built below: caller's layer-packages + devtools (always),
-          # sorted + de-duped so key is order-independent. crouton-devtools is in the
-          # set unconditionally — scaffolded apps declare it in nuxt.config `modules`
-          # (scaffold-app.ts), so `nuxt prepare` needs its dist on every deploy (there
-          # is no review flag to gate on; building it for apps that don't list it is
-          # cheap and inert). (#745)
-          set_str=$(printf '%s\n' $LAYER_PACKAGES @fyit/crouton-devtools | sort -u | tr '\n' ' ')
-          echo "Layer build set: $set_str"
-          echo "hash=$(printf '%s' "$set_str" | sha256sum | cut -c1-12)" >> "$GITHUB_OUTPUT"
-
-      - name: Cache layer builds
-        id: layer-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/*/dist
-          key: layer-builds-${{ steps.layer-set.outputs.hash }}-${{ hashFiles('packages/**/*.ts') }}
-
-      - name: Build layer packages
-        if: steps.layer-cache.outputs.cache-hit != 'true'
-        env:
-          LAYER_PACKAGES: ${{ inputs['layer-packages'] }}
-        run: |
-          # Same set the cache key was computed from (layer-set step). de-dupe is by
-          # "dist already built this run" so an explicit devtools in layer-packages
-          # isn't built twice.
-          for pkg in $LAYER_PACKAGES @fyit/crouton-devtools; do
-            dir="packages/${pkg#@fyit/}"
-            # de-dupe: skip if this dist was already built earlier in the loop
-            if [ -d "$dir/dist" ] && [ -n "$(ls -A "$dir/dist" 2>/dev/null)" ]; then
-              echo "Skipping $pkg (already built this run)"
-              continue
-            fi
-            if node -e "process.exit(require('./$dir/package.json').scripts?.build ? 0 : 1)" 2>/dev/null; then
-              echo "Building $pkg"
-              pnpm --filter "$pkg" build
-            else
-              echo "Skipping $pkg (no build script / pure source layer)"
-            fi
-          done
+      # Ensure EVERY @fyit/* dist is present before the app build. Content-addressed
+      # cache + build-ALL-on-miss (warm-packages action, #1222) — replaces the old
+      # per-caller subset build, which could miss a package the app transitively
+      # extends (e.g. @fyit/crouton itself wasn't in a POC's layer-packages → the
+      # 0.06s "Could not load @fyit/crouton" that killed the quotes-POC deploy). It
+      # also subsumes the #745 cross-app cache-collision class: every entry contains
+      # ALL dist, so no caller can restore a set missing a package it needs.
+      - name: Warm @fyit package builds
+        uses: ./.github/actions/warm-packages
 
       - name: Cache Nuxt build artifacts
         uses: actions/cache@v4
@@ -317,8 +273,33 @@ jobs:
           else
             URL="${{ inputs['staging-url'] }}"
           fi
-          if [ -z "$URL" ]; then
-            URL=$(grep -oiE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | tail -1 || true)
+          # The workers.dev URL wrangler ACTUALLY published (empty for a real custom-domain deploy).
+          WORKERS_URL=$(grep -oiE 'https://[a-z0-9.-]+\.workers\.dev' deploy.log | tail -1 || true)
+          # #1369: a configured custom-domain URL is only REAL if wrangler bound its route. A POC
+          # scaffolded without --domain has NO route in wrangler.jsonc, so <app>.pmcp.dev never
+          # resolves (HTTP 000) even though the Worker serves fine at *.workers.dev. Trusting the
+          # configured URL blindly then advertised a dead link AND pointed the login-seed + smoke at
+          # it (they masked the failure) — a green-but-broken "Potemkin" preview. So: use the
+          # configured URL only if it RESOLVES; otherwise fall back to the workers.dev URL wrangler
+          # published. Every downstream step (comment, seed-login, smoke) reads steps.deploy.outputs.url,
+          # so this one check makes them all point at the reachable deploy.
+          if [ -n "$URL" ]; then
+            code=$(curl -s -o /dev/null -w '%{http_code}' -m 20 "$URL" 2>/dev/null || echo 000)
+            # "Reachable" = the deployed app ANSWERS: 2xx/3xx, or 401 (its auth wall). Anything
+            # else means the configured URL isn't actually serving — 000 (no DNS) OR a Cloudflare
+            # error for a domain with no bound route (404/522/530/1xxx). The earlier ==000-only
+            # check missed those CF codes, so a dead <name>.pmcp.dev alias survived (#1369, the
+            # snippets dogfood). Fall back to the workers.dev URL wrangler actually published.
+            case "$code" in
+              2??|3??|401) : ;;  # serving → keep the configured URL
+              *)
+                if [ -n "$WORKERS_URL" ]; then
+                  echo "::warning::Configured URL $URL returned HTTP $code (not serving — likely no bound route). Using the deployed $WORKERS_URL instead (#1369)."
+                  URL="$WORKERS_URL"
+                fi ;;
+            esac
+          elif [ -n "$WORKERS_URL" ]; then
+            URL="$WORKERS_URL"
           fi
           echo "url=$URL" >> "$GITHUB_OUTPUT"
           echo "Deployed: ${URL:-<url not parsed>}"
@@ -436,6 +417,23 @@ jobs:
             printf '%s' "$(openssl rand -hex 32)" | npx wrangler secret put BETTER_AUTH_SECRET $ENV_FLAG
           fi
 
+      # Seed the app's COLLECTION fixtures + package demo data into the staging D1 so the
+      # preview isn't an empty shell (#1370): the generated seed.json rows (#298) + the demo
+      # team `test1` (seed:org:test1) the review login below attaches to. Runs BEFORE the
+      # review-login step for exactly that reason — the login lands in a populated team, not a
+      # phantom one. Idempotent (crouton-seed upserts by stable id → a redeploy re-seed is a
+      # no-op); best-effort — warns, never reds the deploy. Skipped cleanly when the app doesn't
+      # depend on @fyit/crouton-cli (crouton-seed unresolvable via pnpm exec). Staging only.
+      - name: Seed collection + demo data (staging only, #1370)
+        if: ${{ inputs.environment != 'production' }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        run: |
+          if pnpm exec crouton-seed --db "${{ inputs.app }}-staging-db" --remote; then
+            echo "✓ seeded ${{ inputs.app }}-staging-db (collection fixtures + demo team)"
+          else
+            echo "::warning::content seed skipped/failed for ${{ inputs.app }} — crouton-seed unresolvable or errored; the preview may be empty (#1370)."
+          fi
+
       # Seed a throwaway, loginable test account on the (isolated, staging-only)
       # preview so a reviewer can open the URL and be inside the app in one step —
       # no register → create-team wall (#608). Drives the app's own HTTP auth on the
@@ -464,18 +462,25 @@ jobs:
           # Attach the review login to the SEEDED demo team (#832) so the advertised
           # login lands in the team the content seed populated (test1 → seed:org:test1),
           # not an empty fresh org. Staging-only step → production is untouched.
-          node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
-            --seed-team test1 --db "${APP}-staging-db" || true
-          # Surface for the PR comment + the run summary (the password is masked in logs).
-          echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
-          echo "password=$PW" >> "$GITHUB_OUTPUT"
-          {
-            echo "### 🔑 Review test login (${APP})"
-            echo "- **URL:** $DEPLOY_URL"
-            echo "- **Email:** \`$EMAIL\`"
-            echo "- **Password:** \`$PW\`"
-            echo "_Disposable account on an isolated, throwaway staging DB._"
-          } >> "$GITHUB_STEP_SUMMARY"
+          # #1369: DON'T mask the seed with `|| true` and then advertise the creds anyway — that
+          # printed a working-looking login for a user that was never created (the seed POSTed to a
+          # dead URL → failed silently → 401 on login). Only surface the creds when the seed actually
+          # succeeded; otherwise emit a loud warning and NO login (a broken preview must look broken).
+          if node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
+               --seed-team test1 --db "${APP}-staging-db"; then
+            echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
+            echo "password=$PW" >> "$GITHUB_OUTPUT"
+            {
+              echo "### 🔑 Review test login (${APP})"
+              echo "- **URL:** $DEPLOY_URL"
+              echo "- **Email:** \`$EMAIL\`"
+              echo "- **Password:** \`$PW\`"
+              echo "_Disposable account on an isolated, throwaway staging DB._"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::warning::Review-login seed FAILED for ${APP} at ${DEPLOY_URL} — not advertising a login that doesn't work (#1369)."
+            echo "### ⚠️ Review login unavailable (${APP}) — the seed step failed; no working login for this preview." >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       # Prove the DEPLOYED preview actually works — log in with the seeded account, run
       # any app-declared CRUD + public read, and screenshot it (#293). This is the
@@ -565,7 +570,7 @@ jobs:
             const login = (email && password)
               ? `\n\n🔑 **Test login** — paste straight in, no registration:\n\`\`\`\nEmail:    ${email}\nPassword: ${password}\n\`\`\`\n_Disposable account on this isolated, throwaway staging DB._`
               : ''
-            const body = `${marker}\n🚀 **${app}** staging deployed: ${url}${login}\n\n_Isolated, auto-provisioned Workers staging env (its own D1 + KV)._`
+            const body = `${marker}\n🚀 **${app}** deployed to staging: ${url}${login}\n\n<sub>🤖 isolated, auto-provisioned Workers staging env (its own D1 + KV)</sub>`
             const { owner, repo } = context.repo
             const issue_number = context.issue.number
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number })

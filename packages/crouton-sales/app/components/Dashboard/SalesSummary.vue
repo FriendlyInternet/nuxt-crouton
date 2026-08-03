@@ -24,6 +24,8 @@ const props = withDefaults(defineProps<{
   currency?: string | null
   /** Poll cadence for the summary numbers. */
   pollMs?: number
+  /** Personnel (staff) order filter: exclude / only / all (default all). */
+  personnel?: 'all' | 'exclude' | 'only'
 }>(), {
   currency: 'EUR',
   pollMs: 15000,
@@ -38,7 +40,7 @@ const productRows = ref<ProductRow[]>([])
 const loaded = ref(false)
 
 const base = computed(() => `/api/crouton-sales/teams/${props.teamParam}/charts`)
-const query = computed(() => ({ eventId: props.eventId }))
+const query = computed(() => ({ eventId: props.eventId, personnel: props.personnel }))
 
 async function fetchAll() {
   try {
@@ -75,22 +77,27 @@ onMounted(() => {
   fetchAll()
   useIntervalFn(fetchAll, props.pollMs)
 })
+
+// Refetch immediately when the personnel filter flips (don't wait for the poll).
+watch(() => props.personnel, () => fetchAll())
 </script>
 
 <template>
-  <div class="sales-dashboard-summary space-y-4">
-    <!-- Headline numbers -->
-    <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+  <div class="sales-dashboard-summary @container space-y-4">
+    <!-- Headline numbers: always one row of three; the tile TYPOGRAPHY scales
+         with the COMPONENT's width (@container), not the viewport — inside a
+         narrow workspace pane full-size text would overflow the columns. -->
+    <div class="grid grid-cols-3 gap-2 @sm:gap-3">
       <div
         v-for="s in stats"
         :key="s.key"
-        class="rounded-2xl border border-default bg-elevated/40 p-4"
+        class="min-w-0 rounded-2xl border border-default bg-elevated/40 p-2.5 @sm:p-4"
       >
-        <div class="flex items-center gap-2 text-muted text-xs font-medium uppercase tracking-wide">
-          <UIcon :name="s.icon" class="size-4" />
-          {{ s.label }}
+        <div class="flex items-center gap-1.5 text-muted text-[10px] @sm:text-xs font-medium uppercase tracking-wide">
+          <UIcon :name="s.icon" class="size-3.5 shrink-0 hidden @xs:block" />
+          <span class="truncate">{{ s.label }}</span>
         </div>
-        <div class="mt-1.5 text-2xl font-semibold tabular-nums">{{ s.value }}</div>
+        <div class="mt-1 text-base @sm:text-2xl font-semibold tabular-nums truncate">{{ s.value }}</div>
       </div>
     </div>
 

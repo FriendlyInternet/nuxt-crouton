@@ -75,25 +75,18 @@ watch(() => props.loading, (isLoading, wasLoading) => {
 </script>
 
 <template>
-  <button
-    type="button"
-    class="h-7 rounded-md flex items-center gap-1.5 justify-center shrink-0 transition-all cursor-pointer px-2.5 text-xs font-medium whitespace-nowrap"
-    :class="[
-      disabled && 'opacity-50 cursor-not-allowed',
-      confirming
-        ? 'bg-red-500/20 text-red-500'
-        : 'text-red-400/60 hover:bg-red-500/20 hover:text-red-500'
-    ]"
+  <!-- UButton (not raw) so themes reach it (#1410). Explicit error
+       ghost→soft: quiet destructive chrome that fills as it arms. -->
+  <UButton
+    color="error"
+    :variant="confirming ? 'soft' : 'ghost'"
+    size="sm"
+    :icon="confirming ? undefined : icon"
+    :loading="loading && confirming"
     :disabled="disabled"
+    class="shrink-0 whitespace-nowrap transition-all"
     @click.stop="handleClick"
   >
-    <UIcon v-if="loading && confirming" name="i-lucide-loader-2" class="size-3.5 animate-spin" />
-    <template v-else-if="confirming">
-      {{ confirmLabel }}
-    </template>
-    <template v-else>
-      <UIcon v-if="icon" :name="icon" class="size-3.5" />
-      {{ label }}
-    </template>
-  </button>
+    {{ confirming ? confirmLabel : label }}
+  </UButton>
 </template>

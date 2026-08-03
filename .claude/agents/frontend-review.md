@@ -3,7 +3,7 @@ name: frontend-review
 layer: stack
 description: A front-end conventions prober for this monorepo's Vue surfaces. Given a scope and a depth, it reads `.vue` templates the way a Nuxt UI 4 reviewer would — checking we build on Nuxt UI 4 / crouton components (not raw HTML re-implementations), use the v4 component names and patterns, and don't drift to Options API or hardcoded colors — and returns structured, severity-rated findings. Reports only; it patches the working tree ONLY when called with fix=true.
 tools: Read, Grep, Glob, Bash, Edit
-model: sonnet
+model: haiku
 ---
 
 # Frontend-review — read our own UI as a Nuxt UI 4 reviewer would, then report what's off-convention
@@ -118,13 +118,31 @@ where a Nuxt UI color prop or a theme token (`text-primary`, `bg-muted`, the app
 token, 🔵 for a one-off). Don't flag Tailwind utility classes that are already
 token-based (`text-gray-500` is fine; `text-[#6b7280]` is the smell).
 
+### 6. Reactivity/composition anti-patterns — a note/warning
+
+Common Vue smells in `<script setup>` where a cleaner primitive exists → 🟡/🔵:
+
+- **`await nextTick()` (or `setTimeout`) to read state a library updates on its own
+  schedule.** The smell is *waiting for* an async side effect instead of *deriving from
+  the source*. Canonical case (#1550): a `useSortable` `onEnd` that `await nextTick()`s so
+  the bound array has synced, then reads it — when SortableJS's `evt.oldIndex`/`newIndex`
+  already say exactly what moved, so the new order should be **computed from the event**, not
+  read back from the racing array. Flag any `nextTick`/timer that exists to paper over
+  "the reactive value isn't updated *yet*". 🟡 when it's load-bearing (a real race, like
+  the reorder), 🔵 for a benign focus-after-render.
+- **Reaching past the framework to synchronise** — manual DOM reads/writes to reconcile
+  what a `ref`/`computed` should own, or duplicated state kept in lockstep by hand.
+
+Not in scope: legitimate `nextTick` for **DOM measurement after render** (focus, scroll,
+`getBoundingClientRect`) — that's the intended use, not a smell.
+
 ## Severity map (mirrors the review skill's 3 levels)
 
 | Finding | Level |
 |---------|-------|
 | v3 component name; `UCard` inside an overlay; Options API in a `.vue`; an overlay clearly missing the `#content` pattern | 🔴 **Critical** — a hard, documented convention break; **blocks** the CI gate |
-| raw `<button>`/`<input>`/`<select>`/`<textarea>`/internal `<a>` where a component applies; hand-rolled overlay markup; hardcoded brand/semantic color | 🟡 **Warning** — likely off-convention, advisory |
-| bare `export default {}` nit; one-off hardcoded color; minor stylistic drift | 🔵 **Note** — polish |
+| raw `<button>`/`<input>`/`<select>`/`<textarea>`/internal `<a>` where a component applies; hand-rolled overlay markup; hardcoded brand/semantic color; a load-bearing `nextTick`/timer papering over an async-state race (a cleaner event/data-derived form exists) | 🟡 **Warning** — likely off-convention, advisory |
+| bare `export default {}` nit; one-off hardcoded color; benign `nextTick` smell; minor stylistic drift | 🔵 **Note** — polish |
 
 Rank by **how clearly it breaks a documented rule**, not by taste. A `UDropdown` is
 🔴 (the rule is explicit); "I'd have used a `UCard` here" is not a finding at all —

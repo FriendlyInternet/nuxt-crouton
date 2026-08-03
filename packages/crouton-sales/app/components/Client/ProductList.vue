@@ -7,9 +7,9 @@
       v-for="product in orderedProducts"
       :key="product.id"
       variant="soft"
-      class="cursor-pointer group/card relative overflow-hidden"
+      class="cursor-pointer group/card relative overflow-hidden transition-colors duration-150 hover:bg-elevated"
       :class="product.isActive === false ? 'opacity-60' : ''"
-      :ui="{ body: 'px-3 py-1.5' }"
+      :ui="{ body: 'px-3 py-2 sm:px-3 sm:py-2' }"
       @click="handleProductClick(product)"
     >
       <!-- Admin affordances slide in from the card edges on hover (bookings-card
@@ -26,24 +26,12 @@
           @click.stop
         />
       </div>
-      <button
-        v-if="editable"
-        type="button"
-        class="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-2.5
-               bg-elevated/95 hover:bg-elevated text-muted hover:text-highlighted cursor-pointer
-               transition-all duration-200 ease-out translate-x-full group-hover/card:translate-x-0
-               pointer-coarse:translate-x-0"
-        :aria-label="t('common.edit')"
-        @click.stop="emit('edit', product.id)"
-      >
-        <UIcon name="i-lucide-pencil" class="size-4" />
-      </button>
-
-      <!-- Hover pushes the content inward so the slide-out panels never cover
-           the title or price. -->
+      <!-- Hover pushes the content inward so the reorder grip never covers the
+           title. In edit mode the trailing action itself becomes a persistent
+           pencil (below), so there's no right-edge slide-out to make room for. -->
       <div
         class="transition-[padding] duration-200 ease-out"
-        :class="editable ? 'group-hover/card:ps-7 group-hover/card:pe-9 pointer-coarse:ps-7 pointer-coarse:pe-9' : ''"
+        :class="editable ? 'group-hover/card:ps-7 pointer-coarse:ps-7' : ''"
       >
       <SalesClientOrderLineItem
         :title="product.title"
@@ -61,22 +49,77 @@
           </UBadge>
           <!-- md buttons: the whole card is tappable, but these are the visible
                affordances — keep them comfortably thumb-sized for the POS. -->
+          <!-- Edit mode: the trailing action is EDIT, never add-to-cart — a
+               pencil makes clear that tapping edits the product, and the cart
+               path is disabled while editing. -->
           <UButton
-            v-if="isExpandable(product)"
+            v-if="editable"
             variant="ghost"
             color="neutral"
             size="md"
             square
-            :icon="activeProductId === product.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
-            @click.stop="toggleProduct(product)"
+            icon="i-lucide-pencil"
+            class="group-hover/card:bg-accented/50 hover:bg-accented"
+            :aria-label="t('common.edit')"
+            @click.stop="emit('edit', product.id)"
           />
+          <!-- Configurable product (options/remark): expand chevron, with a
+               count badge once any variant of it sits in the cart. Removing a
+               specific variant stays in the cart — the row can't tell the
+               variants apart, so it only reports the total. -->
+          <template v-else-if="isExpandable(product)">
+            <UBadge
+              v-if="quantityOf(product) > 0"
+              color="primary"
+              variant="soft"
+              size="sm"
+              class="tabular-nums"
+            >
+              <span :key="quantityOf(product)" class="animate-pop">{{ quantityOf(product) }}</span>
+            </UBadge>
+            <UButton
+              variant="ghost"
+              color="neutral"
+              size="md"
+              square
+              :icon="activeProductId === product.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+              class="group-hover/card:bg-accented/50 hover:bg-accented"
+              @click.stop="toggleProduct(product)"
+            />
+          </template>
+          <!-- Plain product already in the cart: the full cart stepper inline,
+               so it can be decremented/removed without opening the cart. A
+               plain product maps to exactly one cart line (no options/remark),
+               so −/qty/+ is unambiguous. -->
+          <UFieldGroup v-else-if="quantityOf(product) > 0" size="md">
+            <UButton
+              icon="i-lucide-minus"
+              color="neutral"
+              variant="soft"
+              square
+              :aria-label="t('sales.cart.remove', 'Remove one')"
+              @click.stop="emit('decrement', product)"
+            />
+            <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
+              <span :key="quantityOf(product)" class="animate-pop">{{ quantityOf(product) }}</span>
+            </UBadge>
+            <UButton
+              icon="i-lucide-plus"
+              color="neutral"
+              variant="soft"
+              square
+              :aria-label="t('sales.cart.add', 'Add one')"
+              @click.stop="addProduct(product)"
+            />
+          </UFieldGroup>
+          <!-- Plain product not yet in the cart: single add button. -->
           <UButton
             v-else
             variant="ghost"
             color="primary"
             size="md"
             square
-            class="active:scale-90 transition-transform"
+            class="active:scale-90 transition-[transform,background-color] group-hover/card:bg-primary/10 hover:bg-primary/20"
             @click.stop="addProduct(product)"
           >
             <UIcon
@@ -98,22 +141,23 @@
         >
           <!-- Options -->
           <template v-if="hasOptions(product)">
-            <!-- Multi-select: checkboxes -->
-            <template v-if="isMultiSelect(product)">
-              <UCheckbox
-                v-for="option in getOptions(product)"
-                :key="option.id"
-                :model-value="isOptionSelected(product.id, option.id)"
-                @update:model-value="toggleOption(product.id, option.id)"
-              >
-                <template #label>
-                  <span class="flex items-center justify-between w-full">
-                    <span>{{ option.label }}</span>
-                    <span v-if="option.priceModifier > 0" class="text-xs text-muted ml-2">+{{ format(option.priceModifier) }}</span>
-                  </span>
-                </template>
-              </UCheckbox>
-            </template>
+            <!-- Multi-select: card-variant checkbox group (big tap targets,
+                 matches the single-select radio cards below). -->
+            <UCheckboxGroup
+              v-if="isMultiSelect(product)"
+              variant="card"
+              :model-value="selectedOptionIds.get(product.id) || []"
+              :items="getOptions(product).map(o => ({ label: o.label, value: o.id, priceModifier: o.priceModifier }))"
+              :ui="{ fieldset: 'gap-y-2', item: 'w-full', label: 'w-full' }"
+              @update:model-value="setMultiOptions(product.id, ($event as string[]))"
+            >
+              <template #label="{ item }">
+                <span class="flex items-center justify-between w-full">
+                  <span>{{ item.label }}</span>
+                  <span v-if="item.priceModifier > 0" class="text-xs text-muted ml-2">+{{ format(item.priceModifier) }}</span>
+                </span>
+              </template>
+            </UCheckboxGroup>
 
             <!-- Single-select with a required remark: pick one, then confirm
                  below. Card-variant radios — each option is a full tappable
@@ -196,6 +240,44 @@
           >
             {{ t('sales.products.addToCart') }}
           </UButton>
+
+          <!-- Ordered variants of this product already in the cart: each line
+               (its options/remark) with its own −/qty/+ stepper, so what's been
+               ordered is visible and adjustable without opening the cart. -->
+          <div
+            v-if="linesFor(product).length"
+            class="pt-2.5 border-t border-default space-y-1.5"
+          >
+            <p class="text-xs font-medium text-muted">{{ t('sales.products.inCart') }}</p>
+            <div
+              v-for="line in linesFor(product)"
+              :key="line.index"
+              class="flex items-center gap-2"
+            >
+              <span class="flex-1 min-w-0 truncate text-sm">{{ variantLabel(product, line) }}</span>
+              <UFieldGroup size="sm">
+                <UButton
+                  icon="i-lucide-minus"
+                  color="neutral"
+                  variant="soft"
+                  square
+                  :aria-label="t('sales.cart.remove')"
+                  @click="emit('variantQuantity', line.index, line.quantity - 1)"
+                />
+                <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
+                  <span :key="line.quantity" class="animate-pop">{{ line.quantity }}</span>
+                </UBadge>
+                <UButton
+                  icon="i-lucide-plus"
+                  color="neutral"
+                  variant="soft"
+                  square
+                  :aria-label="t('sales.cart.add')"
+                  @click="emit('variantQuantity', line.index, line.quantity + 1)"
+                />
+              </UFieldGroup>
+            </div>
+          </div>
         </div>
       </Transition>
       </div>
@@ -213,14 +295,60 @@ const props = defineProps<{
   products: SalesProduct[]
   /** Admin POS: show a drag handle (reorder) and edit pencil on each card. */
   editable?: boolean
+  /**
+   * Total quantity currently in the cart per product id. Drives the inline
+   * stepper (plain products) and the count badge (products with options/remark).
+   */
+  quantities?: Record<string, number>
+  /**
+   * Cart lines for configurable products (options/remark), keyed by product id
+   * and carrying each line's cart index. Drives the "ordered variants" list
+   * inside the expandable — one −/qty/+ stepper per variant, targeting its
+   * exact line by index.
+   */
+  cartLines?: Record<string, Array<{ index: number, selectedOptions?: string | string[], remarks?: string, quantity: number }>>
 }>()
 
 const emit = defineEmits<{
   select: [product: SalesProduct, selectedOption?: string | string[], remark?: string]
   edit: [productId: string]
+  /** Decrement the plain (no options/remark) cart line for this product. */
+  decrement: [product: SalesProduct]
+  /** Set the quantity of one configurable-product cart line (by cart index);
+   *  0 removes it. Fired by the ordered-variants steppers in the expandable. */
+  variantQuantity: [index: number, quantity: number]
   /** New visual order after a drop — only the rows whose index changed. */
   reorder: [updates: Array<{ id: string, order: number }>]
 }>()
+
+// Total quantity of this product across all its cart lines (all option/remark
+// variants). For a plain product that's its single line's quantity.
+function quantityOf(product: SalesProduct): number {
+  return props.quantities?.[product.id] ?? 0
+}
+
+// The cart lines (variants) of a configurable product, for the ordered list
+// inside its expandable.
+function linesFor(product: SalesProduct) {
+  return props.cartLines?.[product.id] ?? []
+}
+
+// Human label for one ordered variant: its selected option labels (ids resolved
+// against the product's options) and any per-item remark, joined. Falls back to
+// the product title if a line somehow carries neither.
+function variantLabel(
+  product: SalesProduct,
+  line: { selectedOptions?: string | string[], remarks?: string }
+): string {
+  const parts: string[] = []
+  if (line.selectedOptions) {
+    const ids = Array.isArray(line.selectedOptions) ? line.selectedOptions : [line.selectedOptions]
+    const opts = getOptions(product)
+    parts.push(...ids.map(id => opts.find(o => o.id === id)?.label || id))
+  }
+  if (line.remarks) parts.push(line.remarks)
+  return parts.join(' · ') || product.title
+}
 
 const containerRef = ref<HTMLElement | null>(null)
 
@@ -229,26 +357,43 @@ const containerRef = ref<HTMLElement | null>(null)
 const orderedProducts = ref<SalesProduct[]>([])
 watch(() => props.products, (v) => { orderedProducts.value = [...(v || [])] }, { immediate: true })
 
-const orderOf = (p: SalesProduct) => p.sortOrder ?? 0
+const orderOf = (p: SalesProduct) => p.order ?? 0
 
-function emitNewOrder() {
+// Emit the changed rows (index-as-order) of an already-reordered list.
+function emitNewOrder(list: SalesProduct[]) {
   const updates: Array<{ id: string, order: number }> = []
-  orderedProducts.value.forEach((p, index) => {
+  list.forEach((p, index) => {
     if (orderOf(p) !== index) updates.push({ id: p.id, order: index })
   })
   if (updates.length) emit('reorder', updates)
 }
 
-// Editable is fixed for the life of the POS session (admin vs helper), so a
-// one-time init is fine — no need for a reactive `disabled` option.
+// Apply SortableJS's move (oldIndex → newIndex) to a copy of the list.
+function withMove(list: SalesProduct[], from: number, to: number): SalesProduct[] {
+  const next = [...list]
+  const [moved] = next.splice(from, 1)
+  if (moved === undefined) return next
+  next.splice(to, 0, moved)
+  return next
+}
+
+// Editable is fixed for the life of this component instance — OrderInterface
+// remounts the list (:key) when its edit mode flips — so a one-time init is
+// fine, no need for a reactive `disabled` option.
 if (import.meta.client && props.editable) {
   useSortable(containerRef, orderedProducts, {
     animation: 150,
     handle: '.drag-handle',
     ghostClass: 'opacity-50',
     chosenClass: 'bg-elevated',
+    // Derive the new order from the drag event itself — SortableJS's
+    // oldIndex/newIndex are the source of truth. (Don't read the bound array
+    // here: useSortable syncs it on nextTick, so at this point it's still the
+    // pre-drag order — which is exactly why we apply the move to it, #1550.)
     onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex !== evt.newIndex) emitNewOrder()
+      const { oldIndex, newIndex } = evt
+      if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+      emitNewOrder(withMove(orderedProducts.value, oldIndex, newIndex))
     }
   })
 }
@@ -283,19 +428,9 @@ function getOptions(product: SalesProduct): ProductOption[] {
   return (product.options || []) as ProductOption[]
 }
 
-function isOptionSelected(productId: string, optionId: string): boolean {
-  const selected = selectedOptionIds.value.get(productId)
-  return selected?.includes(optionId) ?? false
-}
-
-function toggleOption(productId: string, optionId: string) {
-  const current = selectedOptionIds.value.get(productId) || []
-  if (current.includes(optionId)) {
-    selectedOptionIds.value.set(productId, current.filter(id => id !== optionId))
-  }
-  else {
-    selectedOptionIds.value.set(productId, [...current, optionId])
-  }
+// Multi-select (checkbox group): the group emits the full selected-id array.
+function setMultiOptions(productId: string, ids: string[]) {
+  selectedOptionIds.value.set(productId, ids)
 }
 
 // Single-select (when a remark is required): pick exactly one option.
@@ -340,16 +475,18 @@ function confirmProduct(product: SalesProduct) {
   poppedId.value = product.id
   emit('select', product, options, remark)
 
+  // Clear the inputs but keep the panel open — the just-added variant appears
+  // in the "ordered" list below, and the user can compose another combo.
   selectedOptionIds.value.delete(product.id)
   remarks.value.delete(product.id)
-  activeProductId.value = null
 }
 
 function handleProductClick(product: SalesProduct) {
-  // Inactive products are only visible in the editable POS — clicking one
-  // opens its edit form (to reactivate it) instead of the cart flow.
-  if (product.isActive === false) {
-    if (props.editable) emit('edit', product.id)
+  // In edit mode the list is an editing surface, not the cart — clicking any
+  // product (active or inactive) opens its edit form. Adding to cart is
+  // deliberately impossible while editing.
+  if (props.editable) {
+    emit('edit', product.id)
     return
   }
   if (isExpandable(product)) {

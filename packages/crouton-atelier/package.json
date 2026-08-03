@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./nuxt.config.ts",
-    "./server/database/schema": "./server/database/schema.ts"
+    "./server/database/schema": "./server/database/schema.ts",
+    "./types": "./app/types/index.ts"
   },
   "main": "./nuxt.config.ts",
   "files": [

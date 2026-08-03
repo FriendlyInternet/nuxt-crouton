@@ -120,3 +120,47 @@ export async function enqueuePrintJobs(db: any, inputs: EnqueuePrintJobInput[]):
   await emitCreated(db, rows)
   return rows.map(r => r.id)
 }
+
+/**
+ * The HTTP spooler's read model (#1324 refactor): pending `network-escpos`
+ * jobs for one event, shaped for the RUT956 polling script. With `claim` the
+ * returned jobs are atomically flipped pending → printing in the same call so
+ * concurrent pollers don't duplicate work. Self-contained rows — printer
+ * ip/port/title are denormalized onto the job, no printers join.
+ */
+export async function listSpoolerJobs(db: any, eventId: string, claim: boolean): Promise<any[]> {
+  const { eq, and, inArray } = await import('drizzle-orm')
+  const { printJobs } = await import('../database/schema')
+
+  const rows = await db
+    .select({
+      id: printJobs.id,
+      printData: printJobs.payload,
+      printMode: printJobs.printMode,
+      locationId: printJobs.locationId,
+      printerId: printJobs.printerId,
+      retryCount: printJobs.retryCount,
+      printerIp: printJobs.printerIp,
+      printerPort: printJobs.printerPort,
+      printerTitle: printJobs.printerTitle
+    })
+    .from(printJobs)
+    .where(
+      and(
+        eq(printJobs.eventId, eventId),
+        eq(printJobs.status, PRINT_STATUS.PENDING),
+        // Thermal spooler only — never hand it browser-print (or other-driver)
+        // jobs, which carry no printer IP and aren't ESC/POS.
+        eq(printJobs.driver, 'network-escpos')
+      )
+    )
+
+  if (claim && rows.length > 0) {
+    await db
+      .update(printJobs)
+      .set({ status: PRINT_STATUS.PRINTING, updatedAt: new Date() })
+      .where(inArray(printJobs.id, rows.map((r: { id: string }) => r.id)))
+  }
+
+  return rows
+}

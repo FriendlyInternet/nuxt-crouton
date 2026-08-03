@@ -3,8 +3,12 @@
        squeezed beside the orders pane it flips to mobile mode (cart drawer at
        the bottom) exactly like on a phone. [contain:layout] makes this root the
        containing block for the fixed cart drawer (container-type alone does
-       not — verified in Chromium), keeping the drawer inside the POS module. -->
-  <div class="h-full flex flex-col @container [contain:layout]">
+       not — verified in Chromium), keeping the drawer inside the POS module.
+       touch-manipulation on the root disables iOS double-tap-to-zoom for the
+       WHOLE kassa surface (product grid + steppers + tabs), not just the
+       slide-outs — maximum-scale=1 can't stop it (Safari ignores it for user
+       gestures) and #1610 only covered the slide-out roots (#1628). -->
+  <div class="h-full flex flex-col @container [contain:layout] touch-manipulation">
     <SalesClientOfflineBanner />
 
     <div v-if="loading" class="flex-1 flex items-center justify-center">
@@ -20,22 +24,46 @@
                borders sit on the same line regardless of content height. -->
           <div class="h-14 px-2 border-b border-default shrink-0 flex items-center gap-2">
             <div class="flex-1 min-w-0">
+              <!-- :key remounts the tabs when edit mode flips — the sortable
+                   (tab drag-reorder) is armed once at setup, gated on editable. -->
               <SalesClientCategoryTabs
+                :key="editing ? 'edit' : 'view'"
                 v-model="selectedCategory"
                 :categories="sortedCategories"
                 :counts="cartCountsByCategory"
                 :show-all="false"
-                :editable="editable"
+                :editable="editing"
                 :reorder-pending="reorderingCategories"
                 @rename="handleCategoryRename"
                 @create="handleCategoryCreate"
+                @delete="handleCategoryDelete"
                 @reorder="handleCategoryReorder"
               />
             </div>
+            <!-- Admin: all catalog editing hides behind this one toggle -->
+            <UButton
+              v-if="editable && !hideEditToggle"
+              size="sm"
+              :color="editing ? 'primary' : 'neutral'"
+              :variant="editing ? 'solid' : 'soft'"
+              :icon="editing ? 'i-lucide-check' : 'i-lucide-pencil'"
+              :aria-label="editing ? t('sales.workspace.doneEditing') : t('sales.workspace.editCatalog')"
+              @click="editMode = !editMode"
+            />
+            <!-- Full-bleed kassa exit (closable) — no header row to host it. -->
+            <UButton
+              v-if="closable"
+              icon="i-lucide-x"
+              size="sm"
+              color="neutral"
+              variant="soft"
+              :aria-label="t('sales.common.close')"
+              @click="emit('close')"
+            />
           </div>
           <!-- Admin toolbar: add product + show-inactive, pinned above the list -->
           <div
-            v-if="editable"
+            v-if="editing"
             class="shrink-0 flex items-center justify-between gap-3 p-2 pb-0"
           >
             <UButton
@@ -56,18 +84,27 @@
             />
           </div>
           <div class="flex-1 overflow-y-auto p-2">
+            <!-- :key remounts the list when edit mode flips — its sortable
+                 (product drag-reorder) is armed once at setup, gated on editable. -->
             <SalesClientProductList
+              :key="editing ? 'edit' : 'view'"
               :products="filteredProducts"
-              :editable="editable"
+              :editable="editing"
+              :quantities="productQuantities"
+              :cart-lines="cartLinesByProduct"
               @select="handleProductSelect"
+              @decrement="handleProductDecrement"
+              @variant-quantity="updateQuantity"
               @edit="openEditProduct"
               @reorder="handleReorder"
             />
           </div>
         </div>
 
-        <!-- Cart sidebar (wide panes only) -->
-        <div class="hidden @2xl:flex w-80 border-l border-default flex-col">
+        <!-- Cart sidebar (wide panes only). bg-elevated/40 tints the whole
+             order column (name row + cart) so it reads as its own surface in
+             every theme — semantic token, so themes restyle it for free. -->
+        <div class="hidden @2xl:flex w-80 border-l border-default flex-col bg-elevated/40">
           <!-- h-14 matches the category-tabs row so both bottom borders align.
                Every order needs a client indication on the ticket: reusable
                clients when the event requires them, otherwise a plain
@@ -110,9 +147,7 @@
               :print-state="printButtonState"
               :print-warnings="printWarnings"
               @update-quantity="updateQuantity"
-              @remove="removeFromCart"
               @checkout="handleCheckout"
-              @clear="clearCart"
               @update-location-remark="setLocationRemark"
               @update:is-personnel="isPersonnel = $event"
               @dismiss-print-warning="dismissPrintWarning"
@@ -125,11 +160,24 @@
            :portal="false" keeps the drawer in the DOM under the [contain:layout]
            root, so the fixed drawer + overlay resolve against the module instead
            of the viewport. Heights are % of the module. -->
-      <div class="@2xl:hidden border-t border-default p-2">
+      <div class="@2xl:hidden border-t border-default p-2 flex items-stretch gap-2">
+        <!-- My orders: the active user's own order history, opened as a
+             slideover from the collapsed bar (sits left of the order button;
+             takes the mic's spot now that talk-to-order is removed). -->
+        <UButton
+          size="lg"
+          square
+          icon="i-lucide-history"
+          color="neutral"
+          variant="soft"
+          :aria-label="t('sales.orderHistory.title')"
+          @click="historyOpen = true"
+        />
         <UDrawer
           v-model:open="mobileCartOpen"
           direction="bottom"
           :portal="false"
+          class="flex-1 min-w-0"
           :ui="{ content: 'h-[95%]' }"
         >
           <!-- The drawer auto-closes on checkout, so this collapsed bar must
@@ -146,7 +194,7 @@
           />
 
           <template #content>
-            <div class="h-full flex flex-col">
+            <div class="h-full flex flex-col touch-manipulation">
               <div class="p-3 border-b border-default shrink-0">
                 <SalesClientSelector
                   v-if="props.requiresClient"
@@ -184,9 +232,7 @@
                   :print-state="printButtonState"
                   :print-warnings="printWarnings"
                   @update-quantity="updateQuantity"
-                  @remove="removeFromCart"
                   @checkout="handleCheckout"
-                  @clear="clearCart"
                   @update-location-remark="setLocationRemark"
                   @update:is-personnel="isPersonnel = $event"
                   @dismiss-print-warning="dismissPrintWarning"
@@ -196,6 +242,18 @@
           </template>
         </UDrawer>
       </div>
+
+      <!-- Order history slideover (narrow-pane only, opened from the bar above).
+           Mounted only while open so its poll runs only while visible. -->
+      <USlideover v-model:open="historyOpen">
+        <template #content>
+          <SalesClientOrderHistory
+            :event-id="props.eventId"
+            :currency="props.currency"
+            @close="historyOpen = false"
+          />
+        </template>
+      </USlideover>
     </template>
   </div>
 </template>
@@ -232,7 +290,21 @@ const props = defineProps<{
    * post to team-scoped CRUD endpoints that helper tokens can't reach.
    */
   editable?: boolean
+  /**
+   * Hide the inline edit-mode pencil (tabs row). Set by hosts that render the
+   * toggle themselves — e.g. the workspace Shell's narrow-mode tab strip —
+   * and drive edit mode via the `editMode` model instead.
+   */
+  hideEditToggle?: boolean
+  /**
+   * Render a close ✕ at the right of the category-tabs row (after the
+   * pencil) and emit `close` — for a full-bleed kassa with no header/strip
+   * of its own (the launcher's "Open kassa" modal).
+   */
+  closable?: boolean
 }>()
+
+const emit = defineEmits<{ close: [] }>()
 
 const isOnline = useOnline()
 const notify = useNotify()
@@ -253,10 +325,8 @@ const {
   isPersonnel,
   isCheckingOut,
   addToCart,
-  removeFromCart,
   updateQuantity,
   syncCartProducts,
-  clearCart,
   checkout,
 } = usePosOrder()
 
@@ -332,6 +402,9 @@ const clientWarning = computed(() =>
 // Mobile cart drawer open state (closed automatically after checkout)
 const mobileCartOpen = ref(false)
 
+// Order-history slideover (narrow-pane bar). The active user's own orders.
+const historyOpen = ref(false)
+
 // Collapsed cart bar (narrow panes). Mirrors the print feedback while the
 // cart is empty; with items it stays the cart summary — a pending warning
 // then only swaps the icon (the rows wait inside the drawer).
@@ -368,6 +441,48 @@ function handleProductSelect(
   addToCart(product, remark, selectedOption)
 }
 
+// Total quantity in the cart per product id (summed across every option/remark
+// variant). Drives the product row's inline stepper (plain products) and the
+// count badge (products with options/remark) in SalesClientProductList.
+const productQuantities = computed(() => {
+  const counts: Record<string, number> = {}
+  for (const item of cartItems.value) {
+    counts[item.product.id] = (counts[item.product.id] || 0) + item.quantity
+  }
+  return counts
+})
+
+// Cart lines for configurable products (options/remark), grouped by product id
+// and carrying their cart index. Drives the "ordered variants" list inside the
+// product's expandable — each variant gets its own −/qty/+ stepper (targeting
+// its exact line by index) so it can be adjusted without opening the cart.
+// Plain lines are excluded: they already have the inline row stepper.
+const cartLinesByProduct = computed(() => {
+  const map: Record<string, Array<{ index: number, selectedOptions?: string | string[], remarks?: string, quantity: number }>> = {}
+  cartItems.value.forEach((item, index) => {
+    if (!item.selectedOptions && !item.remarks) return
+    ;(map[item.product.id] ||= []).push({
+      index,
+      selectedOptions: item.selectedOptions,
+      remarks: item.remarks,
+      quantity: item.quantity
+    })
+  })
+  return map
+})
+
+// Row "−" on a plain product: decrement its single cart line (no options, no
+// remark — the only line a row-level stepper can unambiguously target).
+// updateQuantity removes the line when it hits 0.
+function handleProductDecrement(product: SalesProduct) {
+  const index = cartItems.value.findIndex(item =>
+    item.product.id === product.id && !item.selectedOptions && !item.remarks
+  )
+  if (index !== -1) {
+    updateQuantity(index, cartItems.value[index]!.quantity - 1)
+  }
+}
+
 // Categories in the admin-arranged order: displayOrder, then title. Drives
 // the tab order in the POS (and the Settings tab list mirrors it).
 const sortedCategories = computed(() =>
@@ -390,9 +505,22 @@ watch(sortedCategories, (cats) => {
   }
 }, { immediate: true })
 
+// Admin edit mode: the editable prop only grants the CAPABILITY — the actual
+// editing affordances (add/rename/reorder/inactive toggle) stay hidden until
+// the admin arms them via the pencil toggle, so the kassa reads clean by
+// default. A model so a host can lift the toggle out (Shell's mobile strip);
+// unbound it behaves as local state.
+const editMode = defineModel<boolean>('editMode', { default: false })
+const editing = computed(() => !!props.editable && editMode.value)
+
 // Admin-only: include inactive products (dimmed in the list; clicking one
 // opens its edit form instead of the cart).
 const showInactive = ref(false)
+
+// Leaving edit mode also drops the inactive products back out of the list.
+watch(editing, (on) => {
+  if (!on) showInactive.value = false
+})
 
 // Cart quantities per category — drives the count badge on each category tab so
 // it's clear how many items were added from that tab (hidden when zero).
@@ -406,12 +534,12 @@ const cartCountsByCategory = computed(() => {
 })
 
 // Filtered products based on selected category, in the same order the admin
-// arranged them (sortOrder, then title). Inactive products are hidden unless
+// arranged them (order, then title). Inactive products are hidden unless
 // the admin toggles them visible.
 const filteredProducts = computed(() => {
   const allProducts = ([...(products.value || [])] as SalesProduct[])
-    .filter(p => p.isActive !== false || (props.editable && showInactive.value))
-    .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.title.localeCompare(b.title))
+    .filter(p => p.isActive !== false || (editing.value && showInactive.value))
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.title.localeCompare(b.title))
   if (selectedCategory.value === null) return allProducts
   return allProducts.filter(p => p.categoryId === selectedCategory.value)
 })
@@ -446,10 +574,18 @@ function openCreateProduct() {
 }
 
 // Pencil on the active category tab → inline rename in the tab itself; we
-// just persist. (Full form incl. delete stays reachable via the settings
-// panel's category list.)
+// just persist. (Full form also reachable via the team-level categories page.)
 async function handleCategoryRename({ id, title }: { id: string, title: string }) {
   await updateCategory(id, { title })
+}
+
+// Two-step trash in the tab's rename mode → delete the category. Clear the
+// selection if it was the active one (falls back to "all"). Products keep their
+// (now dangling) categoryId — surface them via the show-inactive/uncategorised
+// paths or reassign on the team page; deletion here is the tab affordance only.
+async function handleCategoryDelete({ id }: { id: string }) {
+  await deleteCategory([id])
+  if (selectedCategory.value === id) selectedCategory.value = null
 }
 
 // Pencil on a product card → update form (same two-step delete).
@@ -470,7 +606,7 @@ async function handleReorder(updates: Array<{ id: string, order: number }>) {
 // Tab drag-reorder → persist into the categories' displayOrder. Sequential
 // updates (not parallel) so the panel's mutation-driven refresh lands once
 // with the final order.
-const { update: updateCategory, create: createCategory } = useCollectionMutation('salesCategories')
+const { update: updateCategory, create: createCategory, deleteItems: deleteCategory } = useCollectionMutation('salesCategories')
 const reorderingCategories = ref(false)
 
 async function handleCategoryReorder(updates: Array<{ id: string, order: number }>) {

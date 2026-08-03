@@ -2,7 +2,11 @@
   <!-- Footer stays compact (space-y-3, py-3) — in the mobile drawer every
        saved pixel goes to the scrollable line-item area above it. The total
        rides the order button; remark + staff share one row. -->
-  <UCard class="flex flex-col h-full" :ui="{ root: 'rounded-none', body: 'flex-1 overflow-y-auto px-3 sm:px-3', footer: 'space-y-3 px-3 sm:px-3 py-3 sm:py-3' }">
+  <!-- ring-0 + bg-transparent: the cart is a filled pane, not a floating
+       card — its container owns the edges and the background tint. The
+       default ring doubled every border it touched (input row above, pane
+       edge, module bottom). -->
+  <UCard class="flex flex-col h-full" :ui="{ root: 'rounded-none ring-0 bg-transparent', body: 'flex-1 overflow-y-auto px-3 sm:px-3', footer: 'space-y-3 px-3 sm:px-3 py-3 sm:py-3' }">
     <!-- Cart items -->
     <div v-if="items.length === 0" class="h-full flex flex-col items-center justify-center gap-3 text-muted">
       <UIcon name="i-lucide-shopping-cart" class="size-10 opacity-40" />
@@ -29,25 +33,29 @@
             :remark="entry.item.remarks"
           >
             <template #actions>
-              <!-- md: +/− are the most-tapped controls during an order — keep
-                   them thumb-sized on touch devices. -->
-              <UButton
-                icon="i-lucide-minus"
-                size="md"
-                color="neutral"
-                variant="soft"
-                square
-                @click="$emit('updateQuantity', entry.index, entry.item.quantity - 1)"
-              />
-              <span :key="entry.item.quantity" class="w-6 text-center text-sm animate-pop">{{ entry.item.quantity }}</span>
-              <UButton
-                icon="i-lucide-plus"
-                size="md"
-                color="neutral"
-                variant="soft"
-                square
-                @click="$emit('updateQuantity', entry.index, entry.item.quantity + 1)"
-              />
+              <!-- One grouped stepper (#1407): UFieldGroup joins −/qty/+ so
+                   themes style it as a single control. md: +/− are the
+                   most-tapped controls during an order — keep them thumb-sized
+                   on touch devices. -->
+              <UFieldGroup size="md">
+                <UButton
+                  icon="i-lucide-minus"
+                  color="neutral"
+                  variant="soft"
+                  square
+                  @click="$emit('updateQuantity', entry.index, entry.item.quantity - 1)"
+                />
+                <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
+                  <span :key="entry.item.quantity" class="animate-pop">{{ entry.item.quantity }}</span>
+                </UBadge>
+                <UButton
+                  icon="i-lucide-plus"
+                  color="neutral"
+                  variant="soft"
+                  square
+                  @click="$emit('updateQuantity', entry.index, entry.item.quantity + 1)"
+                />
+              </UFieldGroup>
             </template>
           </SalesClientOrderLineItem>
         </div>
@@ -73,26 +81,46 @@
             @click="remarksOpen = !remarksOpen"
           />
           <span v-else />
-          <!-- Staff order: prints the staff banner on tickets (receipt settings) -->
+          <!-- Staff order: prints the staff banner on tickets (receipt settings).
+               Icon, not text (#1508): the translated label ("Personeelsbestelling")
+               overflowed the compact one-line controls row on narrow phone panes.
+               The name stays reachable — tooltip on the icon + aria-label on the
+               switch — and the icon takes the warning tint while active. -->
           <label class="flex items-center gap-2 cursor-pointer">
-            <span class="text-sm" :class="isPersonnel ? 'text-warning font-medium' : 'text-muted'">
-              {{ t('sales.cart.staffOrder') }}
-            </span>
+            <UTooltip :text="t('sales.cart.staffOrder')">
+              <UIcon
+                name="i-lucide-chef-hat"
+                class="size-5"
+                :class="isPersonnel ? 'text-warning' : 'text-muted'"
+              />
+            </UTooltip>
             <USwitch
               :model-value="isPersonnel ?? false"
               color="warning"
+              :aria-label="t('sales.cart.staffOrder')"
               @update:model-value="$emit('update:isPersonnel', $event)"
             />
           </label>
         </div>
 
-        <!-- Remarks accordion: one item per location with items in the cart,
-             each body its own note. Controlled by the toggle above (the
-             collapsible has no trigger of its own). -->
+        <!-- Remarks: one note per location with items in the cart. Controlled
+             by the toggle above (the collapsible has no trigger of its own).
+             A single location needs no accordion — its note shows directly. -->
         <UCollapsible v-if="remarkLocations.length > 0" v-model:open="remarksOpen">
           <template #content>
             <div class="mt-2 px-2 pb-1 rounded-lg bg-elevated/60">
-              <UAccordion type="multiple" :items="remarkAccordionItems" :ui="{ trigger: 'text-toned font-normal' }">
+              <div v-if="remarkLocations.length === 1" class="py-2">
+                <UTextarea
+                  :model-value="locationRemark(remarkLocations[0]?.id)"
+                  :placeholder="t('sales.cart.remarkPlaceholder')"
+                  :rows="2"
+                  autoresize
+                  variant="soft"
+                  class="w-full"
+                  @update:model-value="emitLocationRemark(remarkLocations[0]?.id, String($event))"
+                />
+              </div>
+              <UAccordion v-else type="multiple" :items="remarkAccordionItems" :ui="{ trigger: 'text-toned font-normal' }">
                 <template #default="{ item }">
                   <span class="flex items-center gap-2 text-sm">
                     {{ item.label }}
@@ -119,36 +147,32 @@
         </UCollapsible>
       </div>
 
-      <div v-if="clientRequired && !hasClient && items.length > 0" class="flex items-center gap-2 p-3 rounded-lg bg-warning/10 border border-warning">
-        <UIcon name="i-lucide-alert-triangle" class="text-warning shrink-0" />
-        <span class="text-sm text-warning font-medium">{{ clientWarning || t('sales.cart.selectClient') }}</span>
-      </div>
+      <!-- UAlert (not a raw warning div) so themes reach this chrome (#1392):
+           variant-less usage follows the active theme's alert variant. -->
+      <UAlert
+        v-if="clientRequired && !hasClient && items.length > 0"
+        color="warning"
+        icon="i-lucide-alert-triangle"
+        :title="clientWarning || t('sales.cart.selectClient')"
+      />
 
       <!-- Print failures persist as rows (one per order) so a busy event keeps
            ordering while a previous order's printer problem stays visible. -->
-      <div
+      <UAlert
         v-for="warning in printWarnings || []"
         :key="warning.orderId"
-        class="flex items-start gap-2 p-3 rounded-lg bg-warning/10 border border-warning"
+        color="warning"
+        icon="i-lucide-printer"
+        :title="`#${warning.orderNumber} — ${warning.timedOut ? t('sales.cart.printTimeout') : t('sales.cart.printFailed')}`"
+        close
+        @update:open="$emit('dismissPrintWarning', warning.orderId)"
       >
-        <UIcon name="i-lucide-printer" class="text-warning shrink-0 mt-0.5" />
-        <div class="flex-1 min-w-0 text-sm text-warning">
-          <p class="font-medium">
-            #{{ warning.orderNumber }} — {{ warning.timedOut ? t('sales.cart.printTimeout') : t('sales.cart.printFailed') }}
-          </p>
-          <p v-for="failure in warning.failures" :key="failure.printerTitle" class="text-xs">
+        <template #description>
+          <span v-for="failure in warning.failures" :key="failure.printerTitle" class="block text-xs">
             {{ failure.printerTitle }}<template v-if="failure.errorMessage">: {{ failure.errorMessage }}</template>
-          </p>
-        </div>
-        <UButton
-          icon="i-lucide-x"
-          size="xs"
-          color="warning"
-          variant="ghost"
-          square
-          @click="$emit('dismissPrintWarning', warning.orderId)"
-        />
-      </div>
+          </span>
+        </template>
+      </UAlert>
 
       <!-- The order button is the print feedback: it spins while the kitchen
            tickets print and confirms green when every ticket is done. A new
@@ -276,9 +300,7 @@ const groupedItems = computed<CartGroup[]>(() => {
 
 const emit = defineEmits<{
   updateQuantity: [index: number, quantity: number]
-  remove: [index: number]
   checkout: []
-  clear: []
   updateLocationRemark: [locationId: string, value: string]
   'update:isPersonnel': [value: boolean]
   dismissPrintWarning: [orderId: string]

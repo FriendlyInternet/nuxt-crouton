@@ -40,7 +40,7 @@ const props = withDefaults(defineProps<Props>(), {
 // Try to use theme variant if available (from nuxt-crouton-themes)
 const themeHelpers = computed(() => {
   try {
-    // @ts-expect-error - composable may not exist when themes not installed
+    // @ts-ignore - composable only exists when the crouton-themes layer is extended
     const switcher = useThemeSwitcher?.()
     if (switcher) {
       return {
@@ -212,6 +212,12 @@ const teamItem = computed<NavigationMenuItem | null>(() => {
         icon: 'i-lucide-palette',
         to: `${teamPath}/look-and-feel`,
         active: route.path === `${teamPath}/look-and-feel` || route.path === `${teamPath}/look-and-feel/`
+      },
+      {
+        label: t('teams.siteInfo.tab') || 'Site info',
+        icon: 'i-lucide-info',
+        to: `${teamPath}/site-info`,
+        active: route.path === `${teamPath}/site-info` || route.path === `${teamPath}/site-info/`
       },
       {
         label: t('navigation.translations') || 'Translations',

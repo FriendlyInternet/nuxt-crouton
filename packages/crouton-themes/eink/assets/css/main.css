@@ -1,0 +1,567 @@
+/* E-ink Theme (#1311)
+   A reading device: pure greyscale, ZERO motion (state changes flip, they
+   never animate — like a page refresh), newspaper typography for headers,
+   generous hairlines. The calmest theme in the set.
+   No !important: built on the shared subtractive replacer. */
+
+:root {
+  --eink-paper: #f4f2ee;
+  --eink-ink: #1c1c1c;
+  --eink-gray: #6b6b6b;
+  --eink-hairline: #cfccc6;
+  --eink-serif: Georgia, 'Times New Roman', serif;
+}
+
+/* ============================================
+   AMBIENT — the display
+   ============================================ */
+
+[data-theme="eink"],
+.theme-eink {
+  background-color: var(--eink-paper);
+  --ui-bg: var(--eink-paper);
+  /* Base geometry token (#1594): newspaper geometry is square — drive Nuxt UI's
+     radius scale to 0 so calm surfaces square too, not just named variants. */
+  --ui-radius: 0;
+}
+
+/* ============================================
+   BUTTONS — no motion, states FLIP
+   ============================================ */
+
+.eink-btn {
+  background-color: var(--eink-paper);
+  color: var(--eink-ink);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 600;
+  transition: none;
+}
+
+.eink-btn:hover {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+
+.eink-btn--primary {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+
+.eink-btn--primary:hover {
+  background-color: var(--eink-paper);
+  color: var(--eink-ink);
+}
+
+.eink-btn--alert {
+  border-width: 1px;
+  border-bottom-width: 4px;
+  border-bottom-style: double;
+}
+
+/* ============================================
+   OUTLINE / SOFT / GHOST / LINK
+   ============================================ */
+
+.eink-outline {
+  background-color: transparent;
+  color: var(--eink-ink);
+  border: 1px solid var(--eink-gray);
+  border-radius: 0;
+  font-weight: 600;
+  transition: none;
+}
+
+.eink-outline:hover {
+  border-color: var(--eink-ink);
+}
+
+.eink-outline--alert {
+  border-style: dashed;
+}
+
+.eink-soft {
+  background-color: rgba(28, 28, 28, 0.07);
+  color: var(--eink-ink);
+  border: none;
+  border-radius: 0;
+  font-weight: 600;
+  transition: none;
+}
+
+.eink-soft:hover {
+  background-color: rgba(28, 28, 28, 0.14);
+}
+
+.eink-soft--alert {
+  background-image: repeating-linear-gradient(-45deg, transparent 0 6px, rgba(28, 28, 28, 0.08) 6px 12px);
+}
+
+.eink-ghost {
+  background-color: transparent;
+  color: var(--eink-gray);
+  border: none;
+  font-weight: 600;
+  transition: none;
+}
+
+.eink-ghost:hover {
+  color: var(--eink-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.eink-link {
+  background-color: transparent;
+  color: var(--eink-ink);
+  border: none;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: none;
+}
+
+.eink-link:hover {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+  text-decoration: none;
+}
+
+/* ============================================
+   INPUTS — a form on paper
+   ============================================ */
+
+.eink-input {
+  width: 100%;
+}
+
+.eink-input-base {
+  background-color: transparent;
+  color: var(--eink-ink);
+  border: none;
+  border-bottom: 1px solid var(--eink-ink);
+  border-radius: 0;
+  caret-color: var(--eink-ink);
+  transition: none;
+}
+
+.eink-input-base::placeholder {
+  color: var(--eink-gray);
+  font-style: italic;
+}
+
+.eink-input-base:focus {
+  outline: none;
+  border-bottom-width: 2px;
+}
+
+.eink-input-base:disabled {
+  border-bottom-style: dotted;
+  color: var(--eink-gray);
+}
+
+/* ============================================
+   CARD — a newspaper clipping
+   ============================================ */
+
+.eink-card {
+  background-color: var(--eink-paper);
+  border-top: 3px double var(--eink-ink);
+  border-bottom: 3px double var(--eink-ink);
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.eink-card-header {
+  font-family: var(--eink-serif);
+  color: var(--eink-ink);
+  border-bottom: 1px solid var(--eink-hairline);
+  font-weight: 700;
+  font-size: 1.05rem;
+  padding: 0.75rem 1rem;
+}
+
+.eink-card-body {
+  color: var(--eink-ink);
+  padding: 1rem;
+}
+
+.eink-card-footer {
+  border-top: 1px solid var(--eink-hairline);
+  color: var(--eink-gray);
+  padding: 0.6rem 1rem;
+}
+
+/* ============================================
+   SEPARATOR + BADGE
+   ============================================ */
+
+.eink-separator {
+  border-color: var(--eink-ink);
+  border-top-width: 3px;
+  border-style: double;
+}
+
+.eink-badge {
+  background-color: transparent;
+  color: var(--eink-ink);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  font-weight: 600;
+  font-variant: small-caps;
+}
+
+/* ============================================
+   VARIANT-LESS CHROME — USwitch (flips, no glide)
+   ============================================ */
+
+[data-theme="eink"] button[role="switch"],
+.theme-eink button[role="switch"] {
+  border-radius: 0;
+  border: 1px solid var(--eink-ink);
+  background-color: var(--eink-paper);
+  transition: none;
+}
+
+[data-theme="eink"] button[role="switch"][data-state="checked"],
+.theme-eink button[role="switch"][data-state="checked"] {
+  background-color: var(--eink-ink);
+}
+
+[data-theme="eink"] button[role="switch"] > span,
+.theme-eink button[role="switch"] > span {
+  border-radius: 0;
+  background-color: var(--eink-ink);
+  transition: none;
+}
+
+[data-theme="eink"] button[role="switch"][data-state="checked"] > span,
+.theme-eink button[role="switch"][data-state="checked"] > span {
+  background-color: var(--eink-paper);
+}
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the display.
+   ============================================ */
+
+[data-theme="eink"] body,
+body.theme-eink {
+  --ui-text-dimmed: #8a8a8a;
+  --ui-text-muted: #6b6b6b;
+  --ui-text-toned: #3d3d3d;
+  --ui-text: #1c1c1c;
+  --ui-text-highlighted: #1c1c1c;
+  --ui-bg-muted: #eeece7;
+  --ui-bg-elevated: #ecebe6;
+  --ui-bg-accented: #e2e0da;
+  --ui-border: #cfccc6;
+  --ui-border-muted: #dedbd4;
+  --ui-border-accented: #1c1c1c;
+}
+
+/* ============================================
+   TABS (#1393) — chapter heads; the open one is underlined in ink
+   ============================================ */
+
+.eink-tabs-list {
+  background-color: transparent;
+  border-bottom: 1px solid var(--eink-hairline);
+  gap: 1rem;
+  padding: 0;
+}
+
+.eink-tabs-trigger {
+  font-family: var(--eink-serif);
+  background-color: transparent;
+  color: var(--eink-gray);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.5rem 0.25rem;
+  transition: none;
+}
+
+.eink-tabs-trigger:hover {
+  color: var(--eink-ink);
+}
+
+.eink-tabs-trigger[data-state="active"] {
+  color: var(--eink-ink);
+  border-bottom-color: var(--eink-ink);
+  font-weight: 700;
+}
+
+.eink-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — ballot boxes
+   ============================================ */
+
+.eink-check-box,
+.eink-radio-box {
+  background-color: var(--eink-paper);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.eink-radio-box {
+  border-radius: 9999px;
+}
+
+.eink-check-indicator {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+
+.eink-radio-indicator {
+  background-color: var(--eink-paper);
+  border-radius: 9999px;
+}
+
+.eink-radio-indicator::after {
+  background-color: var(--eink-ink);
+  border-radius: 9999px;
+  width: 55%;
+  height: 55%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a printed notice; errors are inverse
+   ============================================ */
+
+.eink-alert {
+  background-color: var(--eink-paper);
+  color: var(--eink-ink);
+  border-top: 3px double var(--eink-ink);
+  border-bottom: 3px double var(--eink-ink);
+  border-left: none;
+  border-right: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.eink-alert-title {
+  font-family: var(--eink-serif);
+  font-weight: 700;
+}
+
+.eink-alert--primary {
+  background-color: var(--eink-paper);
+}
+
+.eink-alert--warning {
+  border-top-style: solid;
+  border-bottom-style: solid;
+  border-top-width: 1px;
+  border-bottom-width: 4px;
+  border-bottom-style: double;
+}
+
+.eink-alert--error {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+
+.eink-alert--neutral {
+  border-top: 1px solid var(--eink-hairline);
+  border-bottom: 1px solid var(--eink-hairline);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths like the switch)
+   ============================================ */
+
+[data-theme="eink"] [role="dialog"][data-slot="content"],
+.theme-eink [role="dialog"][data-slot="content"] {
+  background-color: var(--eink-paper);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  box-shadow: none;
+  outline: 1px solid var(--eink-hairline);
+  outline-offset: 4px;
+}
+
+[data-theme="eink"] [role="dialog"] [data-slot="title"],
+.theme-eink [role="dialog"] [data-slot="title"] {
+  font-family: var(--eink-serif);
+  color: var(--eink-ink);
+  font-weight: 700;
+}
+
+[data-theme="eink"] [data-slot="overlay"],
+.theme-eink [data-slot="overlay"] {
+  background-color: rgb(28 28 28 / 0.3);
+  backdrop-filter: none;
+}
+
+[data-theme="eink"] li[data-slot="base"],
+.theme-eink li[data-slot="base"] {
+  background-color: var(--eink-paper);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-theme="eink"] li[data-slot="base"] [data-slot="title"],
+.theme-eink li[data-slot="base"] [data-slot="title"] {
+  font-family: var(--eink-serif);
+  color: var(--eink-ink);
+  font-weight: 700;
+}
+
+[data-theme="eink"] nav[data-slot="root"] button,
+.theme-eink nav[data-slot="root"] button {
+  background-color: var(--eink-paper);
+  color: var(--eink-ink);
+  border: 1px solid var(--eink-hairline);
+  border-radius: 0;
+  box-shadow: none;
+  transition: none;
+}
+
+[data-theme="eink"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-eink nav[data-slot="root"] button:hover:not(:disabled) {
+  border-color: var(--eink-ink);
+}
+
+[data-theme="eink"] nav[data-slot="root"] button[data-selected],
+.theme-eink nav[data-slot="root"] button[data-selected] {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+  border-color: var(--eink-ink);
+}
+
+/* ============================================
+   CALENDAR (#1458) — an almanac page: small-caps heads, a double-rule
+   frame for today, solid ink for the selected day. Named variant
+   (eink-cal-*); selected/today state is ours to supply. Zero motion.
+   ============================================ */
+
+.eink-cal-heading {
+  font-family: var(--eink-serif);
+  color: var(--eink-ink);
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
+}
+
+.eink-cal-head {
+  color: var(--eink-gray);
+  font-variant: small-caps;
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+}
+
+.eink-cal-cell {
+  color: var(--eink-ink);
+  border: 1px solid transparent;
+  border-radius: 0;
+  transition: none;
+}
+
+.eink-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.eink-cal-cell[data-highlighted] {
+  background-color: var(--eink-hairline);
+}
+
+.eink-cal-cell[data-selected] {
+  background-color: var(--eink-ink);
+  color: var(--eink-paper);
+}
+
+.eink-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--eink-ink);
+  outline: 1px solid var(--eink-ink);
+  outline-offset: 2px;
+}
+
+.eink-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker. No variant hook;
+   scoped to both activation paths. Slider anchors on [data-slider-impl]
+   (unique to USlider). Ink line-work, zero motion.
+   ============================================ */
+
+[data-theme="eink"] [data-slider-impl] [data-slot="track"],
+.theme-eink [data-slider-impl] [data-slot="track"] {
+  background-color: var(--eink-paper);
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+}
+
+[data-theme="eink"] [data-slider-impl] [data-slot="range"],
+.theme-eink [data-slider-impl] [data-slot="range"] {
+  background-color: var(--eink-ink);
+  border-radius: 0;
+}
+
+[data-theme="eink"] [data-slider-impl] [data-slot="thumb"],
+.theme-eink [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--eink-ink);
+  border-radius: 0;
+  transition: none;
+  --tw-ring-color: var(--eink-paper);
+}
+
+[data-theme="eink"] [data-slot="picker"] [data-slot="selector"],
+.theme-eink [data-slot="picker"] [data-slot="selector"],
+[data-theme="eink"] [data-color-picker-track],
+.theme-eink [data-color-picker-track] {
+  border: 1px solid var(--eink-ink);
+  border-radius: 0;
+}
+
+[data-theme="eink"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-eink [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="eink"] [data-slot="selectorThumb"],
+.theme-eink [data-slot="selectorThumb"],
+[data-theme="eink"] [data-slot="trackThumb"],
+.theme-eink [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--eink-ink);
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — night reading mode, DESIGNED not inverted:
+   soft light ink on matte near-black (an e-reader at night; still
+   zero motion, hairlines stay hairlines). Activated by the colorMode
+   class on <html>.
+   ============================================ */
+
+.dark {
+  --eink-paper: #161616;
+  --eink-ink: #d8d8d2;
+  --eink-gray: #8a8a85;
+  --eink-hairline: #383836;
+}
+
+/* Semantic tokens for the night page (counterpart of the #1390 block). */
+[data-theme="eink"].dark body,
+.dark body.theme-eink {
+  --ui-text-dimmed: #6e6e69;
+  --ui-text-muted: #8a8a85;
+  --ui-text-toned: #b4b4ae;
+  --ui-text: #d8d8d2;
+  --ui-text-highlighted: #efefe9;
+  --ui-bg-muted: #1c1c1b;
+  --ui-bg-elevated: #202020;
+  --ui-bg-accented: #292928;
+  --ui-border: #383836;
+  --ui-border-muted: #2a2a29;
+  --ui-border-accented: #d8d8d2;
+}

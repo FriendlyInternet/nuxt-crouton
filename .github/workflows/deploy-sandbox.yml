@@ -1,34 +1,38 @@
 name: Deploy Sandbox (manual, Cloudflare Workers)
 
-# On-demand preview deploys for sandboxes/* (throwaway, human-eyeball apps).
+# On-demand preview deploys for sandboxes/* AND in-package playgrounds
+# (packages/*/playground/) — throwaway/human-eyeball apps with no
+# auth/D1/KV or custom domain.
 #
-# Deliberately NOT the reusable deploy-app.yml: sandboxes have no auth/D1/KV and
+# Deliberately NOT the reusable deploy-app.yml: these have no auth/D1/KV and
 # no custom domain, so the app pipeline's layer-package builds, auto-provisioning,
 # BETTER_AUTH_SECRET and --env staging injection are all irrelevant. This is the
 # stripped-down path — build with the cloudflare_module preset and `wrangler deploy`
 # to the zero-config *.workers.dev subdomain. Staging-only by nature; there is no
-# production target for a sandbox (root CLAUDE.md standing rule).
+# production target for these surfaces (root CLAUDE.md standing rule).
 #
-# Manual only (workflow_dispatch): you deploy a sandbox when you actually want to
-# look at it, not on every push. The deployed URL is written to the run summary.
+# Manual only (workflow_dispatch): you deploy one of these when you actually want
+# to look at it, not on every push. The deployed URL is written to the run summary.
 
 on:
   workflow_dispatch:
     inputs:
-      sandbox:
-        description: Sandbox directory name under sandboxes/ (e.g. minimal-theme-demo)
+      path:
+        description: >-
+          Directory (relative to repo root) to deploy — e.g.
+          sandboxes/minimal-theme-demo or packages/crouton-themes/playground
         required: true
         type: string
 
 jobs:
   deploy:
-    name: Deploy sandbox ${{ inputs.sandbox }}
+    name: Deploy ${{ inputs.path }}
     runs-on: ubuntu-latest
     environment: staging
     permissions:
       contents: read
     concurrency:
-      group: deploy-sandbox-${{ inputs.sandbox }}
+      group: deploy-sandbox-${{ inputs.path }}
       cancel-in-progress: false
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -46,26 +50,33 @@ jobs:
           node-version: '22'
           cache: 'pnpm'
 
-      - name: Guard — sandbox exists
+      - name: Guard — path exists and is a sandbox or playground
         run: |
-          if [ ! -d "sandboxes/${{ inputs.sandbox }}" ]; then
-            echo "::error::sandboxes/${{ inputs.sandbox }} not found"
+          case "${{ inputs.path }}" in
+            sandboxes/*|packages/*/playground) ;;
+            *)
+              echo "::error::${{ inputs.path }} must be under sandboxes/ or packages/*/playground"
+              exit 1
+              ;;
+          esac
+          if [ ! -d "${{ inputs.path }}" ]; then
+            echo "::error::${{ inputs.path }} not found"
             exit 1
           fi
 
       # --ignore-scripts: skip every workspace postinstall during the monorepo
-      # install; the sandbox's own prepare runs below.
+      # install; the target's own prepare runs below.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       # Rolldown's tsconfig generation needs an explicit prepare before build.
       - name: Prepare Nuxt (generate tsconfig)
         run: npx nuxt prepare
-        working-directory: sandboxes/${{ inputs.sandbox }}
+        working-directory: ${{ inputs.path }}
 
       - name: Deploy to Workers (staging, *.workers.dev)
         id: deploy
-        working-directory: sandboxes/${{ inputs.sandbox }}
+        working-directory: ${{ inputs.path }}
         run: |
           set -o pipefail
           pnpm run cf:staging | tee deploy.log
@@ -76,7 +87,7 @@ jobs:
         if: always()
         run: |
           {
-            echo "### 🧪 Sandbox preview — ${{ inputs.sandbox }}"
+            echo "### 🧪 Preview — ${{ inputs.path }}"
             echo ""
             if [ -n "${{ steps.deploy.outputs.url }}" ]; then
               echo "🚀 ${{ steps.deploy.outputs.url }}"

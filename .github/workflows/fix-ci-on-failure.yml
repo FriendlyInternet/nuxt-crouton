@@ -47,7 +47,9 @@ jobs:
             const MAX = 3
             const { owner, repo } = context.repo
             const run = context.payload.workflow_run
-            const HEADER = '> 🤖 **Claude Code** · agent pipeline (CI) · _fix-bot (#338)_\n\n'
+            // Readable-on-mobile (epic #1336): messages lead with the problem + fix; this
+            // provenance/mechanism + run link is the footer.
+            const FOOTER = (url) => `\n\n<sub>🤖 Claude Code · fix-bot (#338) · <a href="${url}">failing run</a></sub>`
 
             // Resolve the open PR for this head branch.
             let pr = (run.pull_requests || [])[0]
@@ -76,14 +78,16 @@ jobs:
             const issueNumber = m ? Number(m[1]) : null
 
             if (attempts >= MAX) {
-              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: HEADER +
-                `🛑 **Auto-fix gave up after ${attempts} attempts.** \`${run.name}\` is still failing on ` +
-                `\`${full.head.sha.slice(0, 7)}\`. @pmcp — this needs a human. [Failing run](${run.html_url}).` })
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body:
+                `🔴 **@pmcp — auto-fix gave up after ${attempts} tries; \`${run.name}\` is still failing** on \`${full.head.sha.slice(0, 7)}\`.\n\n` +
+                `**Fix:** this one needs a human — take a look, then push a fix or reply to resume.` +
+                FOOTER(run.html_url) })
               if (issueNumber) {
                 try { await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['status:blocked'] }) } catch (e) { core.warning(`block #${issueNumber}: ${e.message}`) }
-                await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body: HEADER +
-                  `🛑 The fix-bot tried ${attempts} times to get CI green on PR #${pr.number} and couldn't. ` +
-                  `@pmcp — reply here when you've had a look and the pipeline will resume. [Failing run](${run.html_url}).` })
+                await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body:
+                  `🔴 **@pmcp — auto-fix couldn't get CI green on PR #${pr.number} after ${attempts} tries.**\n\n` +
+                  `**Fix:** take a look, then reply here and the pipeline resumes.` +
+                  FOOTER(run.html_url) })
               }
               core.setOutput('proceed', 'false'); return
             }

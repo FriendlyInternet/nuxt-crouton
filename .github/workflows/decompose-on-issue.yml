@@ -200,8 +200,9 @@ jobs:
             // chasing the wrong thing when the real cause was a billing_error (#660). Read the
             // agent's execution log + step conclusion and name the actual cause + the fix.
             const fs = require('fs')
-            let why = ''      // human-readable cause
-            let action = ''   // what to do about it
+            let why = ''      // human-readable cause (leads the comment)
+            let action = ''   // the one fix
+            let detail = ''   // depth (agent's final message / error) → collapsed into <details>
             try {
               const execFile = process.env.CLAUDE_EXEC_FILE
               if (execFile && fs.existsSync(execFile)) {
@@ -210,31 +211,27 @@ jobs:
                 const text = result ? String(result.result || '') : ''
                 if (result && result.is_error) {
                   if (/credit balance|billing/i.test(text)) {
-                    why = `the Claude API call failed — **${text}**`
-                    action = 'The Anthropic account behind the `ANTHROPIC_API_KEY` secret is out of credit. '
-                      + 'Top it up (Console → Billing; enable auto-reload), then re-apply `delegate`.'
+                    why = 'the Anthropic key (`ANTHROPIC_API_KEY`) is out of credit'
+                    action = 'top up the account, then re-apply `delegate`' // not "enable auto-reload" — owner declined it (#1327)
                   } else {
-                    why = `the agent run errored — **${text || 'see the run log'}**`
-                    action = 'Check the run log for the SDK/tooling error, fix the cause, then re-apply `delegate`.'
+                    why = 'the agent run errored'
+                    action = 'check the run log for the SDK/tooling error, fix it, then re-apply `delegate`'
+                    if (text.trim()) detail = text.trim()
                   }
                 } else if (result) {
-                  // Ran to completion but produced nothing on the issue. DIAGNOSE the cause from the
-                  // agent's own final message — don't guess "underspecified" (#1210: that misdiagnosis
-                  // sent a human down the wrong path when the real cause was fire-and-forget).
+                  // Ran to completion but produced nothing. DIAGNOSE the cause from the agent's own
+                  // final message — don't guess "underspecified" (#1210: that misdiagnosis sent a
+                  // human down the wrong path when the real cause was fire-and-forget).
                   const snippet = text.length > 600 ? text.slice(0, 600) + '…' : text
-                  why = 'the agent finished its turn without opening a PR, creating sub-issues, or holding for sign-off'
                   const backgrounded = /in the background|i['’]?ll be notified|running in the background|notified when (it|the) .*complet/i.test(text)
                   if (backgrounded) {
-                    why = 'the agent **backgrounded its orchestration and exited** — in a one-shot CI job a '
-                      + 'backgrounded agent is killed when the job ends, so nothing persisted (fire-and-forget, #1210)'
-                    action = 'This is NOT an underspecified issue — it is a fire-and-forget bug. Spawned agents '
-                      + 'must run SYNCHRONOUSLY (`run_in_background: false`; see the `task-decompose` skill / #1210). '
-                      + 'Re-apply `delegate` once the pipeline fix is merged.'
+                    why = 'the agent backgrounded its work and exited — a one-shot CI job kills a backgrounded agent, so nothing persisted (fire-and-forget, #1210)'
+                    action = 'this is a fire-and-forget bug, NOT an underspecified issue — spawned agents must run synchronously (`run_in_background: false`; see the `task-decompose` skill / #1210); re-apply `delegate` once the pipeline fix is merged'
                   } else {
-                    action = 'This usually means the issue is underspecified — add a concrete description + '
-                      + 'acceptance criteria so there is something to build, then re-apply `delegate`.'
+                    why = 'the agent finished without opening a PR, creating sub-issues, or holding for sign-off'
+                    action = 'the issue is likely underspecified — add a concrete description + acceptance criteria, then re-apply `delegate`'
                   }
-                  if (snippet) why += `. Its final message was:\n\n> ${snippet.replace(/\n/g, '\n> ')}`
+                  if (snippet.trim()) detail = snippet.trim()
                 }
               }
             } catch (e) { core.warning(`artifact-gate: could not parse execution log: ${e.message}`) }
@@ -242,23 +239,18 @@ jobs:
             // Fallback when the log is unreadable but the agent step itself failed (e.g. a hard
             // billing/API error that aborts before writing the log) — still point at the likely cause.
             if (!why && process.env.CLAUDE_CONCLUSION === 'failure') {
-              why = 'the agent step **failed before producing anything** (often a billing/credit, API, or tooling error)'
-              action = 'Open the run log. If it says "Credit balance is too low", top up the Anthropic account '
-                + 'behind `ANTHROPIC_API_KEY` (enable auto-reload). Otherwise fix the logged error, then re-apply `delegate`.'
+              why = 'the agent step failed before producing anything (likely out of credit, or an API/tooling error)'
+              action = 'open the run log — if it says "credit balance is too low", top up `ANTHROPIC_API_KEY`; otherwise fix the logged error, then re-apply `delegate`'
             }
 
+            // Readable-on-mobile (epic #1336, .github/CI-MESSAGE-STYLE.md): lead with the problem
+            // + the one fix; the gate name / #461 / run link live in the footer; depth collapses.
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const foot = `\n\n<sub>🤖 Claude Code · agent pipeline (CI) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
+            const det = detail ? `\n\n<details><summary>agent's final message</summary>\n\n> ${detail.replace(/\n/g, '\n> ')}\n</details>` : ''
             const body = why
-              ? `⚠️ **Artifact-gate failed (#461).** @pmcp — this run produced no deliverable: ${why}\n\n`
-                + `**What to do:** ${action}\n\n`
-                + `🔗 **Run log:** ${runUrl}`
-              : '⚠️ **Artifact-gate failed (#461).** @pmcp — this run produced no real deliverable on '
-                + 'this issue: no PR was opened, and it is not held for sign-off (`status:blocked` + a review). '
-                + 'A bare progress comment ("spawning the worker…") does not count — the '
-                + '"narrate-the-plan-then-stop" no-op. The run is marked **failed** so it is not mistaken '
-                + 'for done.\n\n'
-                + `🔗 **Run log:** ${runUrl}\n`
-                + '↻ Re-apply the `delegate` label to retry.'
+              ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${det}${foot}`
+              : `🔴 **@pmcp — this run produced nothing** — no PR, no sign-off hold (a bare "spawning the worker…" progress comment doesn't count).\n\n**Fix:** re-apply \`delegate\` to retry; if it recurs the issue is underspecified — add a description + acceptance criteria.${foot}`
 
             await github.rest.issues.createComment({ ...context.repo, issue_number, body })
             core.setFailed(`Artifact-gate: run on #${issue_number} produced no deliverable (no PR, not held for sign-off).`)

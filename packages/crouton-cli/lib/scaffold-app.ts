@@ -2,10 +2,18 @@
 import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { readFileSync } from 'node:fs'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import consola from 'consola'
 import { loadModules } from './module-registry.ts'
 import { getFrameworkPackages } from './utils/framework-packages.ts'
+
+// crouton-cli version, stamped into each scaffolded app's .crouton.json (provenance, #1233).
+const CROUTON_CLI_VERSION = (() => {
+  try {
+    return JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8')).version
+  } catch { return 'unknown' }
+})()
 
 // Wrangler helper scripts are shipped as raw templates (they're app-name-agnostic —
 // they read the app's own wrangler.jsonc at runtime) and copied verbatim into the
@@ -22,6 +30,7 @@ async function readTemplate(name: string): Promise<string> {
  * Resolve features list against module registry, validating each one
  * and resolving transitive dependencies.
  */
+// fallow-ignore-next-line complexity — pre-existing (unchanged by this PR); flagged only by diff-by-file scope
 function resolveFeatures(featureNames: string[], modules: Record<string, any>): string[] {
   const resolved = new Set<string>()
   const errors: string[] = []
@@ -171,15 +180,10 @@ function tmplPackageJson(vars: ScaffoldVars): string {
   }, null, 2) + '\n'
 }
 
-function tmplNuxtConfig(vars: ScaffoldVars): string {
-  const extendsArr = vars.extends.map(p => `    '${p}'`).join(',\n')
-
-  // Build nitro alias block for CF stubs. The Workers preset is supplied at build
-  // time via `NITRO_PRESET=cloudflare_module` (in the cf:deploy/cf:staging scripts),
-  // so it's intentionally NOT pinned here — keeping `pnpm dev`/`build` preset-free.
-  let nitroBlock = ''
-  if (vars.cf) {
-    nitroBlock = `
+// CF Workers nitro alias block — stubs passkey/webauthn packages incompatible with workerd
+// (static text; extracted so tmplNuxtConfig stays under the unit-size threshold). The Workers
+// preset is supplied at build time via NITRO_PRESET, so it's intentionally not pinned here.
+const CF_NITRO_BLOCK = `
   // Cloudflare Workers deployment — stub passkey/webauthn packages (tsyringe is
   // incompatible with workerd). Preset comes from NITRO_PRESET at build time.
   nitro: {
@@ -193,7 +197,10 @@ function tmplNuxtConfig(vars: ScaffoldVars): string {
       'papaparse': cfStubs
     }
   }`
-  }
+
+function tmplNuxtConfig(vars: ScaffoldVars): string {
+  const extendsArr = vars.extends.map(p => `    '${p}'`).join(',\n')
+  const nitroBlock = vars.cf ? CF_NITRO_BLOCK : ''
 
   // Build optional config sections
   let emailBlock = ''
@@ -270,16 +277,30 @@ ${featuresStr ? featuresStr + '\n' : ''}  },
 `
 }
 
+// deploy.config.json — the opt-in the generic "Deploy Apps/POCs" pipeline reads (#481/#638).
+// #1367/#1371: emit CORRECT URLs so nobody hand-guesses them (the dead-preview bug: an agent
+// wrote `stagingUrl: <name>.pmcp.dev` with no matching route → HTTP 000). stagingUrl/productionUrl
+// are set ONLY when `--domain` was passed — which is exactly when tmplWranglerJsonc also writes the
+// matching custom-domain ROUTES (`<name>-staging.<zone>` / `<name>.<zone>`). Without `--domain`
+// there is no route, so the Worker serves at *.workers.dev: we leave stagingUrl EMPTY and the
+// deploy resolves the real published URL (#1369) instead of advertising an alias that was never
+// bound. Note the staging subdomain is `<name>-staging.<zone>` (matches the route), NOT `<name>`.
+export function tmplDeployConfig(vars: ScaffoldVars): string {
+  const config: Record<string, string> = {}
+  if (vars.domain) {
+    config.stagingUrl = `https://${vars.name}-staging.${vars.domain}`
+    config.productionUrl = `https://${vars.name}.${vars.domain}`
+  } else {
+    config.stagingUrl = ''
+  }
+  config.layerPackages = vars.extends.join(' ')
+  return JSON.stringify(config, null, 2) + '\n'
+}
+
 function tmplWranglerJsonc(vars: ScaffoldVars): string {
-  // Workers (static-assets) config, id-LESS so the first `pnpm cf:deploy`
-  // auto-provisions the D1 + KV (wrangler 4.45+). `sync-wrangler-ids.mjs` then
-  // writes the provisioned ids back here (bootstrap → committed), which remote
-  // `d1 migrations apply` needs (workers-sdk#13632). Same flow for env.staging.
-  //
-  // With --domain <zone>, custom-domain routes are emitted so `wrangler deploy`
-  // auto-binds <name>.<zone> (prod) / <name>-staging.<zone> (staging), creating
-  // the DNS record + cert (the zone must live in this Cloudflare account). Nitro
-  // preserves top-level routes; inject-wrangler-env carries the env.staging ones.
+  // Workers (static-assets), id-LESS so the first `pnpm cf:deploy` auto-provisions D1+KV;
+  // `sync-wrangler-ids.mjs` writes the ids back (bootstrap → committed). With `--domain`,
+  // custom-domain routes auto-bind `<name>.<zone>` / `<name>-staging.<zone>` on deploy.
   const prodRoute = vars.domain
     ? `\n  "routes": [{ "pattern": "${vars.name}.${vars.domain}", "custom_domain": true }],\n`
     : ''
@@ -332,22 +353,20 @@ ${prodRoute}
 `
 }
 
-function tmplDrizzleConfig(): string {
-  // schema path resolves whichever buildDir NuxtHub wrote the bundled schema to
-  // (.nuxt for some apps, node_modules/.cache/nuxt/.nuxt when the cache buildDir
-  // is used), so `pnpm db:generate` works without hand-editing the path.
-  return `import { existsSync } from 'node:fs'
+export function tmplDrizzleConfig(): string {
+  // Resolves the schema list at RUNTIME from the app's layer graph (the same set
+  // NuxtHub globs), so `drizzle-kit generate` needs no Nuxt build (#1445 WS2).
+  // NB: the resolver import carries an explicit `.ts` extension (drizzle-kit's
+  // esbuild config loader needs it), the call is SYNC (its CJS loader rejects
+  // top-level await), and `out` stays relative (0.31.10 re-reads meta/ via a ./
+  // join — an absolute out ENOENTs on the second run).
+  return `// Regenerated by crouton — do not hand-edit.
 import { defineConfig } from 'drizzle-kit'
-
-const schemaCandidates = [
-  '.nuxt/hub/db/schema.mjs',
-  'node_modules/.cache/nuxt/.nuxt/hub/db/schema.mjs',
-]
-const schema = schemaCandidates.find(p => existsSync(p)) ?? schemaCandidates[0]
+import { resolveSchemaSourcesSync } from '@fyit/crouton-cli/lib/utils/schema-sources.ts'
 
 export default defineConfig({
   dialect: 'sqlite',
-  schema,
+  schema: resolveSchemaSourcesSync(process.cwd()),
   out: 'server/db/migrations/sqlite',
 })
 `
@@ -563,59 +582,62 @@ export const passkeyClient = () => ({
 
 export async function scaffoldApp(
   name: string,
-  options: { features?: string[]; theme?: string; dialect?: string; cf?: boolean; domain?: string; dryRun?: boolean; outDir?: string } = {}
-): Promise<{ files: ScaffoldFile[]; appDir: string }> {
-  const {
-    features: featureNames = [],
-    theme,
-    dialect = 'sqlite',
-    cf = true,
-    domain,
-    dryRun = false,
-    outDir
-  } = options
+  options: { features?: string[], theme?: string, dialect?: string, cf?: boolean, domain?: string, dryRun?: boolean, outDir?: string } = {}
+): Promise<{ files: ScaffoldFile[], appDir: string }> {
+  const { cf = true, dryRun = false, outDir } = options
+  const ctx = await resolveScaffoldContext(name, options)
+  const files = await buildScaffoldFiles(ctx, outDir, cf)
+  const appDir = outDir || join('apps', name)
 
-  // Validate name
+  if (dryRun) {
+    printScaffoldDryRun(name, appDir, ctx, files)
+    return { files, appDir }
+  }
+
+  await writeScaffoldFiles(appDir, files)
+  printScaffoldNextSteps(appDir, files.length, cf)
+  return { files, appDir }
+}
+
+interface ScaffoldContext { vars: ScaffoldVars, frameworkPackages: string[], features: string[], authSecret: string }
+
+// Resolve name/features/extends/theme/i18n → the scaffold context (vars + framework packages).
+// fallow-ignore-next-line complexity — linear setup (features/extends/theme/i18n); untested helper inflates CRAP
+async function resolveScaffoldContext(
+  name: string,
+  options: { features?: string[], theme?: string, dialect?: string, cf?: boolean, domain?: string }
+): Promise<ScaffoldContext> {
+  const { features: featureNames = [], theme, dialect = 'sqlite', cf = true, domain } = options
   if (!/^[a-z][a-z0-9-]*$/.test(name)) {
     throw new Error(`Invalid app name "${name}". Use lowercase letters, numbers, and hyphens.`)
   }
-
-  // Load module registry from manifests
   const modules = await loadModules()
-
-  // Resolve features and their dependencies
   const features = resolveFeatures(featureNames, modules)
-
-  // Build extends array via framework-packages.ts
   const featuresConfig: Record<string, boolean> = {}
-  for (const f of features) {
-    featuresConfig[f] = true
-  }
+  for (const f of features) featuresConfig[f] = true
   const frameworkPackages = getFrameworkPackages(featuresConfig)
-
-  // Add theme to extends if specified
-  if (theme) {
-    frameworkPackages.push(`@fyit/crouton-themes/${theme}`)
-  }
-
-  // Add i18n to extends (it's bundled but bike-sheds adds it explicitly for i18n features)
-  // Actually, framework-packages.ts doesn't add bundled packages, which is correct.
-  // But bike-sheds adds @fyit/crouton-i18n explicitly. Let's match that pattern
-  // since i18n is always needed for translations-ui.
+  if (theme) frameworkPackages.push(`@fyit/crouton-themes/${theme}`)
+  // i18n is bundled but listed explicitly (it's always needed for translations-ui) — insert after core.
   if (!frameworkPackages.includes('@fyit/crouton-i18n')) {
-    // Insert after crouton-core
-    const coreIdx = frameworkPackages.indexOf('@fyit/crouton-core')
-    frameworkPackages.splice(coreIdx + 1, 0, '@fyit/crouton-i18n')
+    frameworkPackages.splice(frameworkPackages.indexOf('@fyit/crouton-core') + 1, 0, '@fyit/crouton-i18n')
   }
-
   const vars: ScaffoldVars = { name, features, extends: frameworkPackages, theme, dialect, cf, domain, modules }
-  const authSecret = randomBytes(32).toString('hex')
+  return { vars, frameworkPackages, features, authSecret: randomBytes(32).toString('hex') }
+}
 
-  // Build file list
+// The full file list: core + (optionally) Cloudflare + the .crouton.json identifier (#1233).
+async function buildScaffoldFiles(ctx: ScaffoldContext, outDir: string | undefined, cf: boolean): Promise<ScaffoldFile[]> {
+  const { vars, authSecret } = ctx
+  const identifier = JSON.stringify({
+    crouton: true, name: vars.name,
+    kind: (outDir || '').startsWith('pocs/') ? 'poc' : 'app',
+    cliVersion: CROUTON_CLI_VERSION, scaffoldedAt: new Date().toISOString()
+  }, null, 2) + '\n'
   const files: ScaffoldFile[] = [
     { path: 'package.json', content: tmplPackageJson(vars) },
     { path: 'nuxt.config.ts', content: tmplNuxtConfig(vars) },
     { path: 'crouton.config.js', content: tmplCroutonConfig(vars) },
+    { path: '.crouton.json', content: identifier },
     { path: '.env', content: tmplEnv(authSecret) },
     { path: '.env.example', content: tmplEnvExample() },
     { path: '.gitignore', content: tmplGitignore() },
@@ -626,59 +648,67 @@ export async function scaffoldApp(
     { path: 'vitest.config.ts', content: tmplVitestConfig() },
     { path: 'schemas/.gitkeep', content: '' }
   ]
+  if (!cf) return files
+  const [injectScript, syncScript] = await Promise.all([
+    readTemplate('inject-wrangler-env.mjs'),
+    readTemplate('sync-wrangler-ids.mjs')
+  ])
+  files.push(
+    { path: 'wrangler.jsonc', content: tmplWranglerJsonc(vars) },
+    { path: 'deploy.config.json', content: tmplDeployConfig(vars) },
+    { path: 'drizzle.config.ts', content: tmplDrizzleConfig() },
+    { path: 'scripts/inject-wrangler-env.mjs', content: injectScript },
+    { path: 'scripts/sync-wrangler-ids.mjs', content: syncScript },
+    { path: 'server/utils/_cf-stubs/index.ts', content: tmplCfStubsIndex() },
+    { path: 'server/utils/_cf-stubs/client.ts', content: tmplCfStubsClient() }
+  )
+  return files
+}
 
-  // Add Cloudflare-specific files
-  if (cf) {
-    const [injectScript, syncScript] = await Promise.all([
-      readTemplate('inject-wrangler-env.mjs'),
-      readTemplate('sync-wrangler-ids.mjs'),
-    ])
-    files.push(
-      { path: 'wrangler.jsonc', content: tmplWranglerJsonc(vars) },
-      { path: 'drizzle.config.ts', content: tmplDrizzleConfig() },
-      { path: 'scripts/inject-wrangler-env.mjs', content: injectScript },
-      { path: 'scripts/sync-wrangler-ids.mjs', content: syncScript },
-      { path: 'server/utils/_cf-stubs/index.ts', content: tmplCfStubsIndex() },
-      { path: 'server/utils/_cf-stubs/client.ts', content: tmplCfStubsClient() }
-    )
+// fallow-ignore-next-line complexity — pure console output, no logic; CRAP inflated by 0 coverage
+function printScaffoldDryRun(name: string, appDir: string, ctx: ScaffoldContext, files: ScaffoldFile[]) {
+  const { vars, features, frameworkPackages } = ctx
+  consola.info(`\n  Scaffold preview for ${name}\n`)
+  console.log(`  Directory: ${appDir}/\n`)
+  console.log('  Features:', features.length > 0 ? features.join(', ') : '(none)')
+  console.log('  Extends:', frameworkPackages.join(', '))
+  console.log('  Dialect:', vars.dialect)
+  console.log('  Cloudflare:', vars.cf ? 'yes' : 'no')
+  if (vars.theme) console.log('  Theme:', vars.theme)
+  console.log()
+  for (const file of files) console.log('  + ' + file.path)
+  console.log(`\n  ${files.length} files would be created.\n`)
+}
+
+// Refuse a dir that's ALREADY a scaffolded crouton app (`.crouton.json`) or another project
+// (`package.json`) — but scaffold INTO a config-only dir (just `crouton.config.js`, e.g. the
+// schema-sign-off step's output), preserving that reviewed config. Makes the schema-first
+// pipeline a single `crouton init` command instead of an improvised workaround (#1233).
+// fallow-ignore-next-line complexity — mechanical scaffold write (guard + copy loop); untested CLI helper inflates CRAP
+async function writeScaffoldFiles(appDir: string, files: ScaffoldFile[]) {
+  const exists = (f: string) => access(join(appDir, f)).then(() => true).catch(() => false)
+  if (await exists('.crouton.json')) {
+    throw new Error(`"${appDir}" is already a scaffolded crouton app (.crouton.json present). Remove it or choose a different name.`)
   }
-
-  const appDir = outDir || join('apps', name)
-
-  // Dry run — just print what would be created
-  if (dryRun) {
-    consola.info(`\n  Scaffold preview for ${name}\n`)
-    console.log(`  Directory: ${appDir}/\n`)
-    console.log('  Features:', features.length > 0 ? features.join(', ') : '(none)')
-    console.log('  Extends:', frameworkPackages.join(', '))
-    console.log('  Dialect:', dialect)
-    console.log('  Cloudflare:', cf ? 'yes' : 'no')
-    if (theme) console.log('  Theme:', theme)
-    console.log()
-    for (const file of files) {
-      console.log('  + ' + file.path)
-    }
-    console.log(`\n  ${files.length} files would be created.\n`)
-    return { files, appDir }
+  if (await exists('package.json')) {
+    throw new Error(`"${appDir}" already exists and looks like a project (has package.json). Remove it or choose a different name.`)
   }
-
-  // Check if directory already exists
-  if (await access(appDir).then(() => true).catch(() => false)) {
-    throw new Error(`Directory "${appDir}" already exists. Remove it first or choose a different name.`)
-  }
-
-  // Write all files
-  consola.info(`\n  Scaffolding ${name}...\n`)
-
+  const hadConfig = await exists('crouton.config.js')
+  consola.info(`\n  Scaffolding${hadConfig ? ' (into existing config-only dir)' : ''}...\n`)
   for (const file of files) {
+    if (file.path === 'crouton.config.js' && hadConfig) {
+      consola.info('  • crouton.config.js exists — preserving the reviewed config')
+      continue
+    }
     const filePath = join(appDir, file.path)
     await mkdir(join(filePath, '..'), { recursive: true })
     await writeFile(filePath, file.content)
     consola.success('  + ' + file.path)
   }
+}
 
-  // Print next steps
-  consola.info(`\n  Done! ${files.length} files created in ${appDir}/\n`)
+function printScaffoldNextSteps(appDir: string, fileCount: number, cf: boolean) {
+  consola.info(`\n  Done! ${fileCount} files created in ${appDir}/\n`)
   consola.warn('  Next steps:\n')
   console.log('  1.', `cd ${appDir}`)
   console.log('  2.', 'pnpm install')
@@ -690,6 +720,4 @@ export async function scaffoldApp(
     console.log('  7.', 'pnpm cf:staging   (deploys an isolated, auto-provisioned staging env)')
   }
   console.log()
-
-  return { files, appDir }
 }

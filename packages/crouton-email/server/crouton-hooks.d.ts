@@ -19,7 +19,20 @@ declare module 'nitropack' {
     }) => void | Promise<void>
 
     'crouton:auth:email': (payload: CroutonAuthEmailPayload) => void | Promise<void>
+
+    'crouton:auth:email:result': (payload: CroutonAuthEmailResultPayload) => void | Promise<void>
   }
+}
+
+/**
+ * Result of an actual send attempt, emitted back to crouton-auth's email logger
+ * so it can flip the `pending` row to `sent` / `failed` (issue #1542).
+ */
+export interface CroutonAuthEmailResultPayload {
+  to: string
+  type: 'verification' | 'password-reset' | 'invitation' | 'magic-link'
+  ok: boolean
+  error?: string
 }
 
 export type CroutonAuthEmailPayload = {

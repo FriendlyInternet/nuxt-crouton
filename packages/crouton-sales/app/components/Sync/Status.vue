@@ -86,16 +86,17 @@ function relativeLabel(ms: number | null): string {
 const ui = computed(() => {
   switch (state.value) {
     case 'live':
-      return { dot: 'bg-emerald-500', pulse: true, color: 'text-emerald-600 dark:text-emerald-400',
+      return { dot: 'bg-success', pulse: true, color: 'text-success',
         label: t('sales.sync.live'), detail: t('sales.sync.syncedAgo', { ago: relativeLabel(ageMs.value) }) }
     case 'stale':
-      return { dot: 'bg-amber-500', pulse: false, color: 'text-amber-600 dark:text-amber-400',
+      return { dot: 'bg-warning', pulse: false, color: 'text-warning',
         label: t('sales.sync.stale'), detail: t('sales.sync.staleDetail', { ago: relativeLabel(ageMs.value) }) }
     case 'never':
-      return { dot: 'bg-gray-400', pulse: false, color: 'text-muted',
+      // Neutral (not a semantic status) — kept muted rather than a status token.
+      return { dot: 'bg-muted', pulse: false, color: 'text-muted',
         label: t('sales.sync.waiting'), detail: t('sales.sync.waitingDetail') }
     default:
-      return { dot: 'bg-red-500', pulse: false, color: 'text-red-600 dark:text-red-400',
+      return { dot: 'bg-error', pulse: false, color: 'text-error',
         label: t('sales.sync.unavailable'), detail: t('sales.sync.unavailableDetail') }
   }
 })

@@ -20,6 +20,13 @@ on:
       - 'scripts/gen-skills-doc.mjs'
       - 'scripts/harness-layers.mjs'
 
+# Cancel superseded PR runs when a new commit is pushed; each PR is its own group
+# (ref in the key). cancel-in-progress is event-conditional so a push→main run is
+# NEVER cancelled mid-flight. (#1523)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   check:
     runs-on: ubuntu-latest

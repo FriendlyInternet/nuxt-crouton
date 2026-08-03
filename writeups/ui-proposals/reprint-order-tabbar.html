@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<!-- ui-proposal: reprint-order-tabbar — Reprint button on the expanded order's tab bar (#1517) -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UI Proposal — Reprint on the order tab bar</title>
+<style>
+  :root{
+    --page:#0a0e17; --ink:#e8edf6; --muted:#8b97ad;
+    --app-bg:#0b0f1a; --card:#151b27; --card-2:#11161f; --line:#222b3a; --line-soft:#1b2230;
+    --green:#34d399; --green-d:#0e3a2a; --amber:#fbbf24; --amber-d:#3a2c0e; --radius:16px;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:radial-gradient(1100px 500px at 75% -10%, #16213c 0%, var(--page) 55%);
+    color:var(--ink); line-height:1.55; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:980px; margin:0 auto; padding:40px 20px 80px;}
+  .eyebrow{text-transform:uppercase; letter-spacing:.18em; font-size:12px; color:var(--green); font-weight:700;}
+  h1{font-size:clamp(26px,4vw,38px); margin:6px 0 6px; line-height:1.1;}
+  .lede{color:var(--muted); font-size:16px; max-width:64ch; margin:0 0 28px;}
+
+  .stage{display:flex; flex-wrap:wrap; gap:32px; justify-content:center; align-items:flex-start;}
+  .col{display:flex; flex-direction:column; align-items:center; gap:12px;}
+  .col h2{font-size:15px; margin:0; display:flex; align-items:center; gap:8px;}
+  .tag{font-size:11px; padding:2px 9px; border-radius:999px; border:1px solid var(--line); color:var(--muted);}
+  .tag.bad{color:#f6a; border-color:#5b2740;} .tag.good{color:var(--green); border-color:#1f5e47;}
+  .note{font-size:12.5px; color:var(--muted); max-width:340px; text-align:center;}
+
+  .deviceframe{width:440px; max-width:100%; border-radius:14px; overflow:hidden; border:1px solid #2b3852; box-shadow:0 24px 60px rgba(0,0,0,.5); background:var(--app-bg);}
+  .deviceframe .bar{display:flex; gap:6px; padding:10px 14px; background:#11161f; border-bottom:1px solid var(--line);}
+  .deviceframe .bar i{width:11px; height:11px; border-radius:50%; background:#33405a; display:inline-block;}
+
+  /* expanded-order panel (bg-elevated/30 px-4 pt-3 pb-10 in the real component) */
+  .panel{background:#0e1420; padding:12px 16px 20px;}
+
+  /* the UTabs "list" row — variant=link, size=sm */
+  .tabrow{display:flex; align-items:center; border-bottom:1px solid var(--line); gap:2px;}
+  .tabs{display:flex; gap:18px;}
+  .tab{font-size:13px; padding:6px 2px 9px; color:var(--muted); position:relative;}
+  .tab.active{color:var(--ink); font-weight:600;}
+  .tab.active::after{content:""; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:var(--green);}
+  .spacer{flex:1;}
+
+  .ic{width:15px; height:15px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex:none;}
+  /* right-aligned reprint control (mirrors the per-job warning-soft pill) */
+  .reprint{display:inline-flex; align-items:center; gap:6px; font-size:12px; padding:4px 9px; border-radius:8px;
+    color:var(--amber); background:rgba(251,191,36,.12); border:1px solid rgba(251,191,36,.35); margin-bottom:6px;}
+  .reprint.confirm{color:#04231a; background:var(--amber); border-color:var(--amber); font-weight:700;}
+
+  .lines{margin-top:12px; display:grid; gap:8px;}
+  .line{display:flex; align-items:flex-start; gap:12px; font-size:13px; padding-bottom:8px; border-bottom:1px solid var(--line-soft);}
+  .qty{color:var(--muted); font-variant-numeric:tabular-nums; font-weight:600; width:26px; flex:none;}
+  .nm{flex:1;} .price{color:var(--muted); font-variant-numeric:tabular-nums;}
+  .total{display:flex; justify-content:space-between; font-weight:700; font-size:13px; margin-top:10px; padding-top:8px; border-top:1px solid var(--line);}
+
+  .changes{margin-top:40px; background:#101725; border:1px solid var(--line); border-radius:16px; padding:20px 22px;}
+  .changes h3{margin:0 0 12px; font-size:16px;}
+  .changes ul{margin:0; padding-left:0; list-style:none; display:grid; gap:10px;}
+  .changes li{display:flex; gap:10px; align-items:flex-start; font-size:14px; color:#cdd6e6;}
+  .changes li b{color:#fff;} .check{color:var(--green); flex:none; margin-top:2px;}
+  .changes code{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.9em; background:rgba(52,211,153,.12); color:#a9f0d2; padding:1px 6px; border-radius:6px;}
+  footer.fin{margin-top:30px; color:var(--muted); font-size:12.5px; text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <span class="eyebrow">nuxt-crouton · crouton-sales · proposal</span>
+  <h1>Reprint on the expanded order's tab bar</h1>
+  <p class="lede">A right-aligned <b>Reprint</b> action on the Bestelling / Printers tab row re-fires the whole
+  order's tickets in one tap (paper lost / torn / printer was down). Two-step confirm, because it spits physical paper.</p>
+
+  <div class="stage">
+
+    <!-- ============ BEFORE ============ -->
+    <div class="col">
+      <h2>Before <span class="tag bad">today</span></h2>
+      <div class="deviceframe">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="panel">
+          <div class="tabrow">
+            <div class="tabs">
+              <span class="tab active">Bestelling</span>
+              <span class="tab">Printers</span>
+            </div>
+            <span class="spacer"></span>
+          </div>
+          <div class="lines">
+            <div class="line"><span class="qty">2×</span><span class="nm">Pils</span><span class="price">€ 5,00</span></div>
+            <div class="line"><span class="qty">1×</span><span class="nm">Frietjes</span><span class="price">€ 3,50</span></div>
+          </div>
+          <div class="total"><span>Totaal</span><span>€ 8,50</span></div>
+        </div>
+      </div>
+      <p class="note">No whole-order reprint. Staff must open the Printers tab and reprint each ticket per-job, or re-place the order.</p>
+    </div>
+
+    <!-- ============ AFTER ============ -->
+    <div class="col">
+      <h2>After <span class="tag good">proposed</span></h2>
+      <div class="deviceframe">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="panel">
+          <div class="tabrow">
+            <div class="tabs">
+              <span class="tab active">Bestelling</span>
+              <span class="tab">Printers</span>
+            </div>
+            <span class="spacer"></span>
+            <span class="reprint">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+              Reprint
+            </span>
+          </div>
+          <div class="lines">
+            <div class="line"><span class="qty">2×</span><span class="nm">Pils</span><span class="price">€ 5,00</span></div>
+            <div class="line"><span class="qty">1×</span><span class="nm">Frietjes</span><span class="price">€ 3,50</span></div>
+          </div>
+          <div class="total"><span>Totaal</span><span>€ 8,50</span></div>
+        </div>
+      </div>
+      <p class="note">Reprint sits at the right end of the tab row, beside (above) the per-job reprint that already lives in the Printers tab.</p>
+    </div>
+
+    <!-- ============ AFTER — confirm state ============ -->
+    <div class="col">
+      <h2>After <span class="tag good">confirm</span></h2>
+      <div class="deviceframe">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="panel">
+          <div class="tabrow">
+            <div class="tabs">
+              <span class="tab active">Bestelling</span>
+              <span class="tab">Printers</span>
+            </div>
+            <span class="spacer"></span>
+            <span class="reprint confirm">
+              <svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
+              Confirm reprint?
+            </span>
+          </div>
+          <div class="lines">
+            <div class="line"><span class="qty">2×</span><span class="nm">Pils</span><span class="price">€ 5,00</span></div>
+            <div class="line"><span class="qty">1×</span><span class="nm">Frietjes</span><span class="price">€ 3,50</span></div>
+          </div>
+          <div class="total"><span>Totaal</span><span>€ 8,50</span></div>
+        </div>
+      </div>
+      <p class="note">First tap arms; second tap fires. Same two-step pattern as CroutonDeleteButton, since an accidental tap wastes a ticket.</p>
+    </div>
+
+  </div>
+
+  <div class="changes">
+    <h3>What changes (and what doesn't)</h3>
+    <ul>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>New Reprint action.</b> Right-aligned on the <code>UTabs</code> tab row in <code>OrderItems.vue</code>, two-step confirm. Emits <code>reprintOrder</code> up to <code>OrdersTab.vue</code>.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Re-fires the order's OWN tickets.</b> Resets the order's existing <code>print_jobs</code> from terminal status (done / failed) back to pending — no new jobs, no forced customer receipt.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>LEDs update.</b> After firing, the existing 2s queue poll refreshes, so the order/printer dots cycle busy → done.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Untouched.</b> The per-failed-job reprint inside the Printers tab, the order lines, totals, LEDs, and every other tab-bar element stay exactly as they are.</span></li>
+    </ul>
+  </div>
+
+  <footer class="fin">Mockup only · pure HTML/CSS/SVG, no JS · placement + confirm-state approximation of the real Nuxt UI 4 tab row</footer>
+
+</div>
+</body>
+</html>

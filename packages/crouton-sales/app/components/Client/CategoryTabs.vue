@@ -60,6 +60,20 @@
       >
       <span v-else class="truncate">{{ withCount(cat.title, counts?.[cat.id] || 0) }}</span>
 
+      <!-- Delete (rename mode only): two-step — first tap arms, second deletes.
+           mousedown.prevent keeps the input focused so the click lands. -->
+      <span
+        v-if="editingId === cat.id"
+        role="button"
+        :aria-label="confirmDeleteId === cat.id ? t('sales.common.remove') : t('common.delete')"
+        class="inline-flex items-center justify-center size-6 rounded-full shrink-0 active:scale-95 transition-all"
+        :class="confirmDeleteId === cat.id ? 'bg-error text-inverted' : 'bg-black/15 hover:bg-black/30'"
+        @mousedown.stop.prevent
+        @click.stop="onDeleteClick(cat.id)"
+      >
+        <UIcon :name="confirmDeleteId === cat.id ? 'i-lucide-check' : 'i-lucide-trash-2'" class="size-3.5" />
+      </span>
+
       <!-- Rename pencil (right, active tab only) -->
       <span
         v-if="isActive(cat.id) && editingId !== cat.id"
@@ -95,15 +109,16 @@
 
     <!-- Add category: starts a draft tab instead of opening a form -->
     <li role="presentation" class="shrink-0">
-      <button
-        type="button"
-        class="flex items-center justify-center size-8 rounded-md cursor-pointer
-               text-muted hover:text-highlighted hover:bg-elevated/60 transition-colors"
+      <!-- UButton, not a raw button, so themes reach it (#1410) -->
+      <UButton
+        color="neutral"
+        variant="ghost"
+        icon="i-lucide-plus"
+        square
+        class="size-8 justify-center text-muted hover:text-highlighted"
         :aria-label="t('sales.workspace.add')"
         @click="startCreate"
-      >
-        <UIcon name="i-lucide-plus" class="size-4" />
-      </button>
+      />
     </li>
   </ul>
 </template>
@@ -137,6 +152,7 @@ const emit = defineEmits<{
   'update:modelValue': [value: string | null]
   'rename': [payload: { id: string, title: string }]
   'create': [payload: { title: string }]
+  'delete': [payload: { id: string }]
   'reorder': [updates: Array<{ id: string, order: number }>]
 }>()
 
@@ -231,6 +247,7 @@ function commitEdit() {
   const title = editingTitle.value.trim()
   const original = orderedCategories.value.find(c => c.id === id)?.title
   editingId.value = null
+  confirmDeleteId.value = null
   if (title && title !== original) {
     emit('rename', { id, title })
   }
@@ -238,6 +255,23 @@ function commitEdit() {
 
 function cancelEdit() {
   editingId.value = null
+  confirmDeleteId.value = null
+}
+
+// Inline delete (two-step) — the trash in rename mode arms a confirm on the
+// first tap, deletes on the second. `@mousedown.prevent` on the button keeps
+// the rename input focused so its blur/click-outside doesn't exit edit mode
+// before the click lands (same touch-focus reality the rename input handles).
+const confirmDeleteId = ref<string | null>(null)
+function onDeleteClick(id: string) {
+  if (confirmDeleteId.value === id) {
+    confirmDeleteId.value = null
+    editingId.value = null
+    emit('delete', { id })
+  }
+  else {
+    confirmDeleteId.value = id
+  }
 }
 
 // --- Inline create (editable POS) -------------------------------------------
@@ -269,12 +303,22 @@ const listEl = ref<HTMLElement | null>(null)
 
 const orderOf = (c: SalesCategory) => (c as any).displayOrder ?? 0
 
-function emitNewOrder() {
+// Emit the changed rows (index-as-order) of an already-reordered list.
+function emitNewOrder(list: SalesCategory[]) {
   const updates: Array<{ id: string, order: number }> = []
-  orderedCategories.value.forEach((c, index) => {
+  list.forEach((c, index) => {
     if (orderOf(c) !== index) updates.push({ id: c.id, order: index })
   })
   if (updates.length) emit('reorder', updates)
+}
+
+// Apply SortableJS's move (oldIndex → newIndex) to a copy of the list.
+function withMove(list: SalesCategory[], from: number, to: number): SalesCategory[] {
+  const next = [...list]
+  const [moved] = next.splice(from, 1)
+  if (moved === undefined) return next
+  next.splice(to, 0, moved)
+  return next
 }
 
 if (import.meta.client && props.editable) {
@@ -286,8 +330,14 @@ if (import.meta.client && props.editable) {
     draggable: '[role="tab"]',
     ghostClass: 'opacity-50',
     disabled: props.reorderPending,
+    // Derive the new order from the drag event itself — SortableJS's
+    // oldIndex/newIndex are the source of truth. (Don't read the bound array
+    // here: useSortable syncs it on nextTick, so at this point it's still the
+    // pre-drag order — which is exactly why we apply the move to it, #1550.)
     onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex !== evt.newIndex) emitNewOrder()
+      const { oldIndex, newIndex } = evt
+      if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+      emitNewOrder(withMove(orderedCategories.value, oldIndex, newIndex))
     }
   })
   watch(() => props.reorderPending, (pending) => {

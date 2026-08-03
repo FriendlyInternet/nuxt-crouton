@@ -23,6 +23,8 @@ const props = withDefaults(defineProps<{
   teamParam?: string
   /** Allow admin editing affordances (only applies to team-member sessions). */
   editable?: boolean
+  /** Pass-through to OrderInterface: hide the inline edit pencil (host renders its own). */
+  hideEditToggle?: boolean
   /** Show the event title / logged-in-as header row. */
   showHeader?: boolean
   /** Render a close button on the header's right — set when the panel runs
@@ -34,6 +36,10 @@ const props = withDefaults(defineProps<{
 })
 
 const emit = defineEmits<{ close: [] }>()
+
+// Pass-through model so a host (workspace Shell) can drive the kassa's edit
+// mode from outside; unbound it stays OrderInterface-local.
+const editMode = defineModel<boolean>('editMode', { default: false })
 
 const { t } = useT()
 const route = useRoute()
@@ -93,6 +99,12 @@ const sessionMatchesEvent = computed(() =>
 
 // Login form state (helper PIN fallback)
 const formState = reactive({ helperName: '', pin: '' })
+// UPinInput binds an array (one digit per cell); keep the joined string as the
+// source of truth so onLoginSubmit / login() stay unchanged. Fixed 4 digits (#1480).
+const pinCells = computed<number[]>({
+  get: () => formState.pin.split('').map(Number),
+  set: cells => { formState.pin = cells.join('') }
+})
 const loginError = ref('')
 const submitting = ref(false)
 
@@ -107,17 +119,29 @@ async function loadEvent() {
   }
 }
 
+// Monotonic request id so out-of-order refetches can't clobber. A catalog
+// reorder fires one mutation per moved row (a loop of PATCHes), each triggering
+// a refetch below; without this guard an EARLY refetch (reading the DB before
+// the later writes land) can resolve LAST and overwrite the fresh result with a
+// stale snapshot — the "drag snaps back on save" bug. Only the newest-issued
+// refetch is allowed to apply; the last one is issued after every write, so it
+// reads the fully-updated catalog.
+let orderDataReq = 0
 async function loadOrderData() {
   if (!publicEvent.value || !sessionMatchesEvent.value) return
+  const req = ++orderDataReq
   loadError.value = null
   try {
-    orderData.value = await $fetch<OrderData>(
+    const data = await $fetch<OrderData>(
       `/api/crouton-sales/events/${publicEvent.value.id}/order-data`,
       { headers: { 'x-scoped-token': token.value } }
     )
+    if (req === orderDataReq) orderData.value = data
   }
   catch (err: any) {
-    loadError.value = err?.data?.message || err?.statusMessage || t('sales.helperLogin.loadDataError')
+    if (req === orderDataReq) {
+      loadError.value = err?.data?.message || err?.statusMessage || t('sales.helperLogin.loadDataError')
+    }
   }
 }
 
@@ -240,6 +264,10 @@ onUnmounted(unhookMutation)
           :requires-client="orderData.event.requiresClient"
           :currency="orderData.event.currency"
           :editable="editable"
+          :hide-edit-toggle="hideEditToggle"
+          :closable="closable && !showHeader"
+          v-model:edit-mode="editMode"
+          @close="emit('close')"
         />
       </div>
     </template>
@@ -276,15 +304,13 @@ onUnmounted(unhookMutation)
             />
           </UFormField>
           <UFormField :label="t('sales.helperLogin.pin')" name="pin">
-            <UInput
-              v-model="formState.pin"
-              type="password"
-              :placeholder="t('sales.helperLogin.enterPin')"
+            <UPinInput
+              v-model="pinCells"
+              :length="4"
+              type="number"
+              mask
               size="lg"
-              class="w-full"
-              :ui="{ base: 'font-mono text-center tracking-widest' }"
-              inputmode="numeric"
-              pattern="[0-9]*"
+              :aria-label="t('sales.helperLogin.pin')"
             />
           </UFormField>
           <UButton

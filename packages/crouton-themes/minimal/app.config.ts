@@ -1,24 +1,7 @@
 // Minimal Theme Configuration
 // Super clean, black lines, white background, minimal aesthetic
 
-// Subtractive-theming helper (Nuxt UI >= 4.9, PR #6562).
-// A slot value that is a `(defaults) => classes` function REPLACES the resolved
-// default classes instead of merging onto them. We keep Nuxt UI's layout/sizing
-// and remove only the decorative utilities (rounded-* / shadow-* / ring-*, incl.
-// variant-prefixed ones like `focus-visible:ring-2`), then tag the element with
-// `minimal-flat`. Pure + deterministic, so SSR and client compute the identical
-// class string -> no hydration mismatch.
-const isDecorative = (cls: string): boolean => {
-  const util = cls.split(':').pop() ?? cls // drop variant prefixes (hover:, focus-visible:, dark:)
-  return /^-?(rounded|shadow|ring)(-|$)/.test(util)
-}
-
-const stripDecorative = (defaults: string): string =>
-  defaults
-    .split(/\s+/)
-    .filter(c => c && !isDecorative(c))
-    .concat('minimal-flat')
-    .join(' ')
+import { subtractThemeDefaults } from '../lib/subtractive'
 
 export default defineAppConfig({
   ui: {
@@ -28,14 +11,14 @@ export default defineAppConfig({
     },
 
     button: {
-      // Subtractive base via a slot-class replacer (see stripDecorative above).
-      // NOTE: this is GLOBAL to every <UButton> in an app that extends this
-      // theme -- it is NOT scoped to `variant="minimal"`. Replacers are only read
-      // at the top-level base/slots or the per-instance :ui prop, never inside
-      // variants/compoundVariants, so a theme that wants to *subtract* defaults
-      // does it here, while the named `minimal*` variants below stay additive.
+      // Subtractive base via the SHARED marker-gated replacer (#1304, was an
+      // inline stripDecorative from #364). Same subtraction set as before
+      // (rounded/shadow/ring + the minimal-flat tag), with one refinement: it
+      // now fires only when a minimal-* marker is in the resolved classes
+      // (i.e. the minimal variants below are in play), so in multi-theme apps
+      // like the playground it no longer flattens the other themes' buttons.
       slots: {
-        base: stripDecorative
+        base: subtractThemeDefaults
       },
       variants: {
         variant: {
@@ -119,6 +102,146 @@ export default defineAppConfig({
           }
         }
       }
+    },
+
+    // #1333-deferred coverage, landed with #1393: selects + textarea reuse the
+    // minimal-input chrome.
+    select: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: "minimal-input-base"
+        }
+      }
+    },
+
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: "minimal-input-base"
+        }
+      }
+    },
+
+    textarea: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            root: "minimal-input",
+            base: "minimal-input-base"
+          }
+        }
+      }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (the pill/link positioning compounds never fire for a named
+    // variant, and instant state changes fit the theme anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            list: "minimal-tabs-list",
+            trigger: "minimal-tabs-trigger",
+            indicator: "minimal-tabs-indicator"
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            base: "minimal-check-box",
+            indicator: "minimal-check-indicator"
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            base: "minimal-radio-box",
+            indicator: "minimal-radio-indicator"
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            root: "minimal-alert",
+            title: "minimal-alert-title"
+          }
+        }
+      },
+      compoundVariants: [
+        { color: "primary", variant: "minimal", class: { root: "minimal-alert--primary" } },
+        { color: "warning", variant: "minimal", class: { root: "minimal-alert--warning" } },
+        { color: "error", variant: "minimal", class: { root: "minimal-alert--error" } },
+        { color: "neutral", variant: "minimal", class: { root: "minimal-alert--neutral" } }
+      ]
+    },
+
+    // #1458 second-tier coverage. Calendar: the color dimension fires on
+    // headCell/cellTrigger regardless of variant (like checkbox), so both
+    // carry markers + the replacer; selected/today state lives entirely in
+    // the theme CSS via [data-selected]/[data-today].
+    calendar: {
+      slots: {
+        headCell: subtractThemeDefaults,
+        cellTrigger: subtractThemeDefaults,
+        headingLabel: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          minimal: {
+            headingLabel: "minimal-cal-heading",
+            headCell: "minimal-cal-head",
+            cellTrigger: "minimal-cal-cell"
+          }
+        }
+      }
+    },
+
+    // #1482: UPinInput reuses this theme's input treatment on each cell
+    // (border/bg/focus); the size variant keeps the square geometry.
+    pinInput: {
+      slots: { base: subtractThemeDefaults },
+      variants: { variant: { minimal: { base: "minimal-input-base" } } }
     }
   }
 })

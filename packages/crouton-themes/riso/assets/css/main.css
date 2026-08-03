@@ -1,0 +1,591 @@
+/* Risograph Theme (#1311)
+   A two-color riso print: fluoro pink + teal on warm paper, deliberate
+   misregistration (each ink layer slightly off), grain in the fills.
+   No !important: built on the shared subtractive replacer. */
+
+:root {
+  --riso-paper: #f7f3e8;
+  --riso-ink: #2f2b27;
+  --riso-pink: #ff48b0;
+  --riso-teal: #00887a;
+  --riso-pink-soft: rgba(255, 72, 176, 0.18);
+  --riso-teal-soft: rgba(0, 136, 122, 0.16);
+  /* Raised print stock + text-on-fluoro constant (#1395). */
+  --riso-surface: #fffdf6;
+  --riso-on-pink: #fff8f0;
+  /* Grain: tiny SVG turbulence tile, self-contained (CSP-safe data URI). */
+  --riso-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ============================================
+   AMBIENT — the paper
+   ============================================ */
+
+[data-theme="riso"],
+.theme-riso {
+  background-color: var(--riso-paper);
+  background-image: var(--riso-grain);
+  --ui-bg: var(--riso-paper);
+}
+
+/* Base geometry token (#1594): riso print has a tiny 2px radius — drive Nuxt
+   UI's radius scale so calm surfaces (unmarked cards/rows) match, not just the
+   theme's named variants (card = --ui-radius * 2 = 2px). Both activation paths. */
+[data-theme="riso"],
+.theme-riso {
+  --ui-radius: 1px;
+}
+
+/* ============================================
+   BUTTONS — misregistered ink blocks
+   The second color prints slightly OFF — that's the whole charm.
+   ============================================ */
+
+.riso-btn {
+  background-color: var(--riso-teal);
+  background-image: var(--riso-grain);
+  color: var(--riso-paper);
+  border: none;
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 var(--riso-pink-soft), -2px -2px 0 var(--riso-teal-soft);
+  font-weight: 700;
+  transition: box-shadow 100ms ease;
+}
+
+.riso-btn:hover {
+  box-shadow: 5px 5px 0 var(--riso-pink-soft), -3px -3px 0 var(--riso-teal-soft);
+}
+
+.riso-btn:active {
+  box-shadow: 1px 1px 0 var(--riso-pink-soft);
+}
+
+.riso-btn--primary {
+  background-color: var(--riso-pink);
+  color: var(--riso-ink);
+  box-shadow: 3px 3px 0 var(--riso-teal-soft), -2px -2px 0 var(--riso-pink-soft);
+}
+
+.riso-btn--primary:hover {
+  box-shadow: 5px 5px 0 var(--riso-teal-soft), -3px -3px 0 var(--riso-pink-soft);
+}
+
+/* Overprint alert: both inks at once. */
+.riso-btn--alert {
+  background-color: var(--riso-pink);
+  color: var(--riso-on-pink);
+  background-image: var(--riso-grain), linear-gradient(var(--riso-teal-soft), var(--riso-teal-soft));
+}
+
+/* ============================================
+   OUTLINE — a keyline pass
+   ============================================ */
+
+.riso-outline {
+  background-color: transparent;
+  color: var(--riso-teal);
+  border: 2px solid var(--riso-teal);
+  border-radius: 2px;
+  box-shadow: 2px 2px 0 var(--riso-pink-soft);
+  font-weight: 700;
+  transition: background-color 100ms ease;
+}
+
+.riso-outline:hover {
+  background-color: var(--riso-teal-soft);
+}
+
+.riso-outline--primary {
+  color: var(--riso-pink);
+  border-color: var(--riso-pink);
+  box-shadow: 2px 2px 0 var(--riso-teal-soft);
+}
+
+.riso-outline--primary:hover {
+  background-color: var(--riso-pink-soft);
+}
+
+.riso-outline--alert {
+  border-style: dashed;
+}
+
+/* ============================================
+   SOFT — a light ink wash
+   ============================================ */
+
+.riso-soft {
+  background-color: var(--riso-pink-soft);
+  background-image: var(--riso-grain);
+  color: var(--riso-ink);
+  border: none;
+  border-radius: 2px;
+  font-weight: 700;
+  transition: background-color 100ms ease;
+}
+
+.riso-soft:hover {
+  background-color: rgba(255, 72, 176, 0.28);
+}
+
+.riso-soft--primary {
+  background-color: var(--riso-teal-soft);
+}
+
+.riso-soft--alert {
+  background-image: var(--riso-grain), repeating-linear-gradient(-45deg, transparent 0 8px, var(--riso-teal-soft) 8px 16px);
+}
+
+/* ============================================
+   GHOST + LINK
+   ============================================ */
+
+.riso-ghost {
+  background-color: transparent;
+  color: var(--riso-ink);
+  border: none;
+  font-weight: 700;
+  transition: color 100ms ease, text-shadow 100ms ease;
+}
+
+.riso-ghost:hover {
+  color: var(--riso-pink);
+  text-shadow: 1px 1px 0 var(--riso-teal-soft);
+}
+
+.riso-ghost--primary:hover {
+  color: var(--riso-teal);
+  text-shadow: 1px 1px 0 var(--riso-pink-soft);
+}
+
+.riso-link {
+  background-color: transparent;
+  color: var(--riso-ink);
+  border: none;
+  font-weight: 700;
+  text-decoration: underline wavy var(--riso-pink);
+  text-underline-offset: 4px;
+  transition: color 100ms ease;
+}
+
+.riso-link:hover {
+  color: var(--riso-teal);
+  text-decoration-color: var(--riso-teal);
+}
+
+.riso-link--primary {
+  color: var(--riso-pink);
+  text-decoration-color: var(--riso-teal);
+}
+
+/* ============================================
+   INPUTS — a printed field
+   ============================================ */
+
+.riso-input {
+  width: 100%;
+}
+
+.riso-input-base {
+  background-color: var(--riso-surface);
+  color: var(--riso-ink);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: 3px 3px 0 var(--riso-pink-soft);
+  caret-color: var(--riso-pink);
+  transition: box-shadow 100ms ease;
+}
+
+.riso-input-base::placeholder {
+  color: rgba(47, 43, 39, 0.45);
+}
+
+.riso-input-base:focus {
+  outline: none;
+  box-shadow: 3px 3px 0 var(--riso-teal-soft), -2px -2px 0 var(--riso-pink-soft);
+}
+
+.riso-input-base:disabled {
+  border-style: dashed;
+  box-shadow: none;
+  background-color: transparent;
+}
+
+/* ============================================
+   CARD — a zine page
+   ============================================ */
+
+.riso-card {
+  background-color: var(--riso-surface);
+  background-image: var(--riso-grain);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: 6px 6px 0 var(--riso-pink-soft), -3px -3px 0 var(--riso-teal-soft);
+}
+
+.riso-card-header {
+  background-color: var(--riso-pink);
+  background-image: var(--riso-grain);
+  color: var(--riso-ink);
+  border-bottom: 2px solid var(--riso-ink);
+  font-weight: 800;
+  padding: 0.75rem 1rem;
+}
+
+.riso-card-body {
+  color: var(--riso-ink);
+  padding: 1rem;
+}
+
+.riso-card-footer {
+  border-top: 2px dashed var(--riso-teal);
+  padding: 0.75rem 1rem;
+}
+
+/* ============================================
+   SEPARATOR + BADGE
+   ============================================ */
+
+.riso-separator {
+  border-color: var(--riso-pink);
+  border-top-width: 2px;
+  border-style: dotted;
+}
+
+.riso-badge {
+  background-color: var(--riso-teal);
+  background-image: var(--riso-grain);
+  color: var(--riso-paper);
+  border: none;
+  border-radius: 2px;
+  box-shadow: 2px 2px 0 var(--riso-pink-soft);
+  font-weight: 700;
+}
+
+/* ============================================
+   VARIANT-LESS CHROME — USwitch
+   ============================================ */
+
+[data-theme="riso"] button[role="switch"],
+.theme-riso button[role="switch"] {
+  border: 2px solid var(--riso-ink);
+  background-color: var(--riso-surface);
+  box-shadow: 2px 2px 0 var(--riso-teal-soft);
+  transition: background-color 100ms ease;
+}
+
+[data-theme="riso"] button[role="switch"][data-state="checked"],
+.theme-riso button[role="switch"][data-state="checked"] {
+  background-color: var(--riso-pink);
+}
+
+[data-theme="riso"] button[role="switch"] > span,
+.theme-riso button[role="switch"] > span {
+  background-color: var(--riso-ink);
+}
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the paper.
+   ============================================ */
+
+[data-theme="riso"] body,
+body.theme-riso {
+  --ui-text-dimmed: #857c6d;
+  --ui-text-muted: #6d6558;
+  --ui-text-toned: #4a443b;
+  --ui-text: #2f2b27;
+  --ui-text-highlighted: #2f2b27;
+  --ui-bg-muted: #f1ecdf;
+  --ui-bg-elevated: #efe9db;
+  --ui-bg-accented: #e7e0cf;
+  --ui-border: #d8d0bf;
+  --ui-border-muted: #e2dbcc;
+  --ui-border-accented: #b5ab96;
+}
+
+/* ============================================
+   TABS (#1393) — an overprinted index; active gets the pink pass
+   ============================================ */
+
+.riso-tabs-list {
+  background-color: transparent;
+  border-bottom: 2px solid var(--riso-ink);
+  gap: 0.375rem;
+  padding: 0;
+}
+
+.riso-tabs-trigger {
+  background-color: transparent;
+  color: var(--riso-ink);
+  border: 2px solid transparent;
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
+  font-weight: 700;
+  padding: 0.5rem 1rem;
+  transition: background-color 100ms ease;
+}
+
+.riso-tabs-trigger:hover {
+  background-color: var(--riso-teal-soft);
+}
+
+.riso-tabs-trigger[data-state="active"] {
+  background-color: var(--riso-pink-soft);
+  background-image: var(--riso-grain);
+  color: var(--riso-ink);
+  border-color: var(--riso-ink);
+}
+
+.riso-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — registration marks
+   ============================================ */
+
+.riso-check-box,
+.riso-radio-box {
+  background-color: var(--riso-surface);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: 2px 2px 0 var(--riso-pink-soft);
+}
+
+.riso-check-indicator {
+  background-color: var(--riso-pink);
+  color: var(--riso-on-pink);
+}
+
+.riso-radio-indicator {
+  background-color: var(--riso-surface);
+}
+
+.riso-radio-indicator::after {
+  background-color: var(--riso-teal);
+  border-radius: 9999px;
+  width: 55%;
+  height: 55%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a misregistered notice card
+   ============================================ */
+
+.riso-alert {
+  background-color: var(--riso-surface);
+  background-image: var(--riso-grain);
+  color: var(--riso-ink);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: 5px 5px 0 var(--riso-pink-soft), -3px -3px 0 var(--riso-teal-soft);
+}
+
+.riso-alert-title {
+  font-weight: 800;
+}
+
+.riso-alert--primary {
+  background-image: var(--riso-grain), linear-gradient(var(--riso-pink-soft), var(--riso-pink-soft));
+}
+
+.riso-alert--warning {
+  background-image: var(--riso-grain), linear-gradient(var(--riso-pink-soft), var(--riso-pink-soft));
+}
+
+.riso-alert--error {
+  background-color: var(--riso-pink);
+  color: var(--riso-on-pink);
+  box-shadow: 5px 5px 0 var(--riso-teal-soft);
+}
+
+.riso-alert--neutral {
+  background-image: var(--riso-grain), linear-gradient(var(--riso-teal-soft), var(--riso-teal-soft));
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths like the switch)
+   ============================================ */
+
+[data-theme="riso"] [role="dialog"][data-slot="content"],
+.theme-riso [role="dialog"][data-slot="content"] {
+  background-color: var(--riso-surface);
+  background-image: var(--riso-grain);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: 8px 8px 0 var(--riso-pink-soft), -4px -4px 0 var(--riso-teal-soft);
+}
+
+[data-theme="riso"] [role="dialog"] [data-slot="title"],
+.theme-riso [role="dialog"] [data-slot="title"] {
+  color: var(--riso-ink);
+  font-weight: 800;
+}
+
+[data-theme="riso"] [data-slot="overlay"],
+.theme-riso [data-slot="overlay"] {
+  background-color: rgb(47 43 39 / 0.45);
+}
+
+[data-theme="riso"] li[data-slot="base"],
+.theme-riso li[data-slot="base"] {
+  background-color: var(--riso-surface);
+  background-image: var(--riso-grain);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: 4px 4px 0 var(--riso-pink-soft);
+}
+
+[data-theme="riso"] li[data-slot="base"] [data-slot="title"],
+.theme-riso li[data-slot="base"] [data-slot="title"] {
+  color: var(--riso-ink);
+  font-weight: 800;
+}
+
+[data-theme="riso"] nav[data-slot="root"] button,
+.theme-riso nav[data-slot="root"] button {
+  background-color: var(--riso-surface);
+  color: var(--riso-ink);
+  border: 2px solid var(--riso-ink);
+  border-radius: 2px;
+  box-shadow: none;
+  font-weight: 700;
+  transition: background-color 100ms ease;
+}
+
+[data-theme="riso"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-riso nav[data-slot="root"] button:hover:not(:disabled) {
+  background-color: var(--riso-teal-soft);
+}
+
+[data-theme="riso"] nav[data-slot="root"] button[data-selected],
+.theme-riso nav[data-slot="root"] button[data-selected] {
+  background-color: var(--riso-pink);
+  color: var(--riso-on-pink);
+  box-shadow: 2px 2px 0 var(--riso-teal-soft);
+}
+
+/* ============================================
+   CALENDAR (#1458) — a printed almanac grid: teal weekday heads, the
+   pink-with-teal-misregistration block for the selected day. Named
+   variant (riso-cal-*); selected/today state is ours to supply.
+   ============================================ */
+
+.riso-cal-heading {
+  color: var(--riso-ink);
+  letter-spacing: 0.02em;
+}
+
+.riso-cal-head {
+  color: var(--riso-teal);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+
+.riso-cal-cell {
+  color: var(--riso-ink);
+  border: 1px solid transparent;
+  border-radius: 2px;
+  transition: background-color 120ms ease;
+}
+
+.riso-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.riso-cal-cell[data-highlighted] {
+  background-color: var(--riso-pink-soft);
+  background-image: var(--riso-grain);
+}
+
+.riso-cal-cell[data-selected] {
+  background-color: var(--riso-pink);
+  color: var(--riso-on-pink);
+  box-shadow: 2px 2px 0 var(--riso-teal-soft);
+}
+
+.riso-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--riso-teal);
+  box-shadow: 1.5px 1.5px 0 var(--riso-teal-soft);
+}
+
+.riso-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker. No variant hook;
+   scoped to both activation paths. Slider anchors on [data-slider-impl]
+   (unique to USlider). Pink ink pass with teal misregistration.
+   ============================================ */
+
+[data-theme="riso"] [data-slider-impl] [data-slot="track"],
+.theme-riso [data-slider-impl] [data-slot="track"] {
+  background-color: var(--riso-surface);
+  border: 1px solid var(--riso-ink);
+  border-radius: 999px;
+}
+
+[data-theme="riso"] [data-slider-impl] [data-slot="range"],
+.theme-riso [data-slider-impl] [data-slot="range"] {
+  background-color: var(--riso-pink);
+}
+
+[data-theme="riso"] [data-slider-impl] [data-slot="thumb"],
+.theme-riso [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--riso-pink);
+  box-shadow: 2px 2px 0 var(--riso-teal-soft);
+  --tw-ring-color: var(--riso-ink);
+}
+
+[data-theme="riso"] [data-slot="picker"] [data-slot="selector"],
+.theme-riso [data-slot="picker"] [data-slot="selector"],
+[data-theme="riso"] [data-color-picker-track],
+.theme-riso [data-color-picker-track] {
+  border: 1px solid var(--riso-ink);
+  border-radius: 2px;
+}
+
+[data-theme="riso"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-riso [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 2px;
+}
+
+[data-theme="riso"] [data-slot="selectorThumb"],
+.theme-riso [data-slot="selectorThumb"],
+[data-theme="riso"] [data-slot="trackThumb"],
+.theme-riso [data-slot="trackThumb"] {
+  --tw-ring-color: var(--riso-ink);
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — fluoro on black card, DESIGNED not inverted:
+   the pink/teal passes stay fluoro, the stock goes black (a night-mode
+   riso zine). Activated by the colorMode class on <html>.
+   ============================================ */
+
+.dark {
+  --riso-paper: #1b1815;
+  --riso-ink: #f0ebe0;
+  --riso-surface: #262220;
+  --riso-pink-soft: rgba(255, 72, 176, 0.24);
+  --riso-teal-soft: rgba(0, 176, 158, 0.22);
+  --riso-teal: #17b09e;
+}
+
+/* Semantic tokens for the black card (counterpart of the #1390 block). */
+[data-theme="riso"].dark body,
+.dark body.theme-riso {
+  --ui-text-dimmed: #8f887b;
+  --ui-text-muted: #a69e8f;
+  --ui-text-toned: #cfc7b8;
+  --ui-text: #f0ebe0;
+  --ui-text-highlighted: #fff8ec;
+  --ui-bg-muted: #221e1b;
+  --ui-bg-elevated: #262220;
+  --ui-bg-accented: #302b27;
+  --ui-border: #45403a;
+  --ui-border-muted: #332f2a;
+  --ui-border-accented: #f0ebe0;
+}

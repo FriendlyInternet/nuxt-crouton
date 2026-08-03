@@ -1,49 +1,57 @@
 // Generator for database queries
 import { toKebabCase, pascal } from '../utils/helpers.ts'
 
-// Helper to generate tree-specific queries when hierarchy is enabled
-function generateTreeQueries(data: Record<string, any>, tableName: string, prefixedPascalCase: string, prefixedPascalCasePlural: string, camelCasePlural: string): string {
-  const hierarchy = data.hierarchy
-  if (!hierarchy || !hierarchy.enabled) {
-    return ''
-  }
+// Shared context for the tree-query template builders below
+interface TreeQueryContext {
+  tableName: string
+  prefixedPascalCase: string
+  prefixedPascalCasePlural: string
+  camelCasePlural: string
+  parentField: string
+  pathField: string
+  depthField: string
+  orderField: string
+}
 
-  // Get field names with defaults
-  const parentField = hierarchy.parentField || 'parentId'
-  const pathField = hierarchy.pathField || 'path'
-  const depthField = hierarchy.depthField || 'depth'
-  const orderField = hierarchy.orderField || 'order'
-
-  // Note: Type assertions (as any) are used throughout to handle drizzle-orm version mismatches
-  // that can occur in monorepo setups. This is a pragmatic solution that allows the generated
-  // code to work across different drizzle-orm versions.
-
+// Section banner + the TreeItem interface shared by the tree query templates
+function buildTreeQueriesHeader(ctx: TreeQueryContext): string {
   return `
 
 // Tree hierarchy queries (auto-generated when hierarchy: true)
-// Type: ${prefixedPascalCase} with hierarchy fields
+// Type: ${ctx.prefixedPascalCase} with hierarchy fields
 
 interface TreeItem {
   id: string
-  ${pathField}: string
-  ${depthField}: number
-  ${orderField}: number
+  ${ctx.pathField}: string
+  ${ctx.depthField}: number
+  ${ctx.orderField}: number
   [key: string]: any
+}`
 }
 
-export async function getTreeData${prefixedPascalCasePlural}(teamId: string) {
+// getTreeData* — fetch the whole team-scoped tree ordered by path + order
+function buildTreeGetDataQuery(ctx: TreeQueryContext): string {
+  return `
+
+export async function getTreeData${ctx.prefixedPascalCasePlural}(teamId: string) {
   const db = useDB()
 
-  const ${camelCasePlural} = await (db as any)
+  const ${ctx.camelCasePlural} = await (db as any)
     .select()
-    .from(tables.${tableName})
-    .where(eq(tables.${tableName}.teamId, teamId))
-    .orderBy(tables.${tableName}.${pathField}, tables.${tableName}.${orderField})
+    .from(tables.${ctx.tableName})
+    .where(eq(tables.${ctx.tableName}.teamId, teamId))
+    .orderBy(tables.${ctx.tableName}.${ctx.pathField}, tables.${ctx.tableName}.${ctx.orderField})
 
-  return ${camelCasePlural} as TreeItem[]
+  return ${ctx.camelCasePlural} as TreeItem[]
+}`
 }
 
-export async function updatePosition${prefixedPascalCase}(
+// updatePosition* — move a node to a new parent/order, recomputing path + depth
+// for the node and all of its descendants
+function buildTreeUpdatePositionQuery(ctx: TreeQueryContext): string {
+  return `
+
+export async function updatePosition${ctx.prefixedPascalCase}(
   teamId: string,
   id: string,
   newParentId: string | null,
@@ -54,18 +62,18 @@ export async function updatePosition${prefixedPascalCase}(
   // Get the current item to find its path
   const [current] = await (db as any)
     .select()
-    .from(tables.${tableName})
+    .from(tables.${ctx.tableName})
     .where(
       and(
-        eq(tables.${tableName}.id, id),
-        eq(tables.${tableName}.teamId, teamId)
+        eq(tables.${ctx.tableName}.id, id),
+        eq(tables.${ctx.tableName}.teamId, teamId)
       )
     ) as TreeItem[]
 
   if (!current) {
     throw createError({
       status: 404,
-      statusText: '${prefixedPascalCase} not found'
+      statusText: '${ctx.prefixedPascalCase} not found'
     })
   }
 
@@ -76,51 +84,51 @@ export async function updatePosition${prefixedPascalCase}(
   if (newParentId) {
     const [parent] = await (db as any)
       .select()
-      .from(tables.${tableName})
+      .from(tables.${ctx.tableName})
       .where(
         and(
-          eq(tables.${tableName}.id, newParentId),
-          eq(tables.${tableName}.teamId, teamId)
+          eq(tables.${ctx.tableName}.id, newParentId),
+          eq(tables.${ctx.tableName}.teamId, teamId)
         )
       ) as TreeItem[]
 
     if (!parent) {
       throw createError({
         status: 400,
-        statusText: 'Parent ${prefixedPascalCase} not found'
+        statusText: 'Parent ${ctx.prefixedPascalCase} not found'
       })
     }
 
     // Prevent moving item to its own descendant
-    if (parent.${pathField}.startsWith(current.${pathField})) {
+    if (parent.${ctx.pathField}.startsWith(current.${ctx.pathField})) {
       throw createError({
         status: 400,
         statusText: 'Cannot move item to its own descendant'
       })
     }
 
-    newPath = \`\${parent.${pathField}}\${id}/\`
-    newDepth = parent.${depthField} + 1
+    newPath = \`\${parent.${ctx.pathField}}\${id}/\`
+    newDepth = parent.${ctx.depthField} + 1
   } else {
     newPath = \`/\${id}/\`
     newDepth = 0
   }
 
-  const oldPath = current.${pathField}
+  const oldPath = current.${ctx.pathField}
 
   // Update the item itself
   const [updated] = await (db as any)
-    .update(tables.${tableName})
+    .update(tables.${ctx.tableName})
     .set({
-      ${parentField}: newParentId,
-      ${pathField}: newPath,
-      ${depthField}: newDepth,
-      ${orderField}: newOrder
+      ${ctx.parentField}: newParentId,
+      ${ctx.pathField}: newPath,
+      ${ctx.depthField}: newDepth,
+      ${ctx.orderField}: newOrder
     })
     .where(
       and(
-        eq(tables.${tableName}.id, id),
-        eq(tables.${tableName}.teamId, teamId)
+        eq(tables.${ctx.tableName}.id, id),
+        eq(tables.${ctx.tableName}.teamId, teamId)
       )
     )
     .returning()
@@ -130,35 +138,40 @@ export async function updatePosition${prefixedPascalCase}(
     // Get all descendants
     const descendants = await (db as any)
       .select()
-      .from(tables.${tableName})
+      .from(tables.${ctx.tableName})
       .where(
         and(
-          eq(tables.${tableName}.teamId, teamId),
-          sql\`\${tables.${tableName}.${pathField}} LIKE \${oldPath + '%'} AND \${tables.${tableName}.id} != \${id}\`
+          eq(tables.${ctx.tableName}.teamId, teamId),
+          sql\`\${tables.${ctx.tableName}.${ctx.pathField}} LIKE \${oldPath + '%'} AND \${tables.${ctx.tableName}.id} != \${id}\`
         )
       ) as TreeItem[]
 
     // Update each descendant's path and depth
     for (const descendant of descendants) {
-      const descendantNewPath = descendant.${pathField}.replace(oldPath, newPath)
-      const depthDiff = newDepth - current.${depthField}
+      const descendantNewPath = descendant.${ctx.pathField}.replace(oldPath, newPath)
+      const depthDiff = newDepth - current.${ctx.depthField}
 
       await (db as any)
-        .update(tables.${tableName})
+        .update(tables.${ctx.tableName})
         .set({
-          ${pathField}: descendantNewPath,
-          ${depthField}: descendant.${depthField} + depthDiff
+          ${ctx.pathField}: descendantNewPath,
+          ${ctx.depthField}: descendant.${ctx.depthField} + depthDiff
         })
-        .where(eq(tables.${tableName}.id, descendant.id))
+        .where(eq(tables.${ctx.tableName}.id, descendant.id))
     }
   }
 
   return updated
+}`
 }
 
-export async function reorderSiblings${prefixedPascalCasePlural}(
+// reorderSiblings* — sequential per-row order updates (hierarchy variant)
+function buildTreeReorderSiblingsQuery(ctx: TreeQueryContext): string {
+  return `
+
+export async function reorderSiblings${ctx.prefixedPascalCasePlural}(
   teamId: string,
-  updates: { id: string; ${orderField}: number }[]
+  updates: { id: string; ${ctx.orderField}: number }[]
 ) {
   const db = useDB()
 
@@ -166,12 +179,12 @@ export async function reorderSiblings${prefixedPascalCasePlural}(
 
   for (const update of updates) {
     const [updated] = await (db as any)
-      .update(tables.${tableName})
-      .set({ ${orderField}: update.${orderField} })
+      .update(tables.${ctx.tableName})
+      .set({ ${ctx.orderField}: update.${ctx.orderField} })
       .where(
         and(
-          eq(tables.${tableName}.id, update.id),
-          eq(tables.${tableName}.teamId, teamId)
+          eq(tables.${ctx.tableName}.id, update.id),
+          eq(tables.${ctx.tableName}.teamId, teamId)
         )
       )
       .returning()
@@ -183,6 +196,35 @@ export async function reorderSiblings${prefixedPascalCasePlural}(
 
   return results
 }`
+}
+
+// Helper to generate tree-specific queries when hierarchy is enabled
+function generateTreeQueries(data: Record<string, any>, tableName: string, prefixedPascalCase: string, prefixedPascalCasePlural: string, camelCasePlural: string): string {
+  const hierarchy = data.hierarchy
+  if (!hierarchy || !hierarchy.enabled) {
+    return ''
+  }
+
+  // Get field names with defaults
+  const ctx: TreeQueryContext = {
+    tableName,
+    prefixedPascalCase,
+    prefixedPascalCasePlural,
+    camelCasePlural,
+    parentField: hierarchy.parentField || 'parentId',
+    pathField: hierarchy.pathField || 'path',
+    depthField: hierarchy.depthField || 'depth',
+    orderField: hierarchy.orderField || 'order'
+  }
+
+  // Note: Type assertions (as any) are used throughout to handle drizzle-orm version mismatches
+  // that can occur in monorepo setups. This is a pragmatic solution that allows the generated
+  // code to work across different drizzle-orm versions.
+
+  return buildTreeQueriesHeader(ctx)
+    + buildTreeGetDataQuery(ctx)
+    + buildTreeUpdatePositionQuery(ctx)
+    + buildTreeReorderSiblingsQuery(ctx)
 }
 
 // Helper to generate reorder-only queries when sortable is enabled (without full hierarchy)
@@ -302,40 +344,22 @@ function detectReferenceFields(data: Record<string, any>, config: Record<string,
   return { singleReferences, arrayReferences }
 }
 
-export function generateQueries(data: Record<string, any>, config: Record<string, any> | null = null, currentLayer: string = '', collectionLayerMap: Map<string, string> = new Map()): string {
-  const { singular, camelCase, camelCasePlural, plural, pascalCase, pascalCasePlural, layer, layerPascalCase } = data
-  // Use layer-prefixed table name to match schema export
-  // Convert layer to camelCase to ensure valid JavaScript identifier
-  const layerCamelCase = layer
+// Convert a layer name to camelCase to ensure a valid JavaScript identifier
+// (e.g. my-app_core -> myAppCore)
+function toLayerCamelCase(layer: string): string {
+  return layer
     .split(/[-_]/)
     .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
     .join('')
+}
 
-  // Resolve target layer camelCase for a collection — uses collectionLayerMap so cross-layer
-  // refs (e.g. contacts in people layer) produce the correct table name (peopleContacts, not
-  // projectsContacts). Falls back to current layer for unresolved collections.
-  const getTargetLayerCamelCase = (collectionName: string): string => {
-    const targetLayer = collectionLayerMap.get(collectionName.toLowerCase())
-    if (!targetLayer) return layerCamelCase
-    return targetLayer
-      .split(/[-_]/)
-      .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-      .join('')
-  }
-  // Use pascalCasePlural which properly handles hyphens (e.g., email-templates -> EmailTemplates)
-  const tableName = `${layerCamelCase}${pascalCasePlural}`
-  const prefixedPascalCase = `${layerPascalCase}${pascalCase}`
-  const prefixedPascalCasePlural = `${layerPascalCase}${pascalCasePlural}`
-  const typesPath = '../../types'
-
-  // Detect reference fields for LEFT JOINs and post-query processing
-  const { singleReferences, arrayReferences } = detectReferenceFields(data, config)
-
-  // Foreign-key fields usable to scope getAll* (e.g. ?eventId=...). Excludes the
-  // owner/createdBy/updatedBy user refs — only real FK columns (eventId, categoryId, …).
-  const filterFields = singleReferences.filter(r => !r.isUserReference).map(r => r.fieldName)
-
-  // Generate imports for referenced schemas
+// Generate imports for referenced schemas (external, cross-layer, or same-layer)
+function buildSchemaImports(
+  singleReferences: Record<string, any>[],
+  arrayReferences: Record<string, any>[],
+  currentLayer: string,
+  collectionLayerMap: Map<string, string>
+): string {
   let schemaImports = ''
   const allReferences = [...singleReferences, ...arrayReferences]
   const uniqueCollections = [...new Set(allReferences.map(r => r.targetCollection))]
@@ -366,7 +390,15 @@ export function generateQueries(data: Record<string, any>, config: Record<string
     }
   })
 
-  // Build SELECT clause with joins (only for single references)
+  return schemaImports
+}
+
+// Build SELECT clause with joins (only for single references)
+function buildSelectJoins(
+  singleReferences: Record<string, any>[],
+  tableName: string,
+  getTargetLayerCamelCase: (collectionName: string) => string
+): { selectClause: string; leftJoins: string; aliasDefinitions: string } {
   let selectClause = ''
   let leftJoins = ''
   let aliasDefinitions = ''
@@ -431,11 +463,15 @@ export function generateQueries(data: Record<string, any>, config: Record<string
     }`
   }
 
-  // Detect JSON/repeater fields that need parsing
-  const jsonFields = detectJsonFields(data)
+  return { selectClause, leftJoins, aliasDefinitions }
+}
 
-  // Generate post-query processing code for JSON fields (repeater, json types)
-  // These fields come back as strings from SQLite and need to be parsed
+// Generate post-query processing code for JSON fields (repeater, json types)
+// These fields come back as strings from SQLite and need to be parsed
+function buildJsonFieldProcessing(
+  jsonFields: { fieldName: string; fieldType: string; defaultValue: string }[],
+  camelCasePlural: string
+): string {
   let jsonFieldProcessing = ''
   if (jsonFields.length > 0) {
     const fieldParsers = jsonFields.map(field => `
@@ -458,8 +494,15 @@ export function generateQueries(data: Record<string, any>, config: Record<string
   })
 `
   }
+  return jsonFieldProcessing
+}
 
-  // Generate post-query processing code for array references
+// Generate post-query processing code for array references
+function buildArrayRefProcessing(
+  arrayReferences: Record<string, any>[],
+  camelCasePlural: string,
+  getTargetLayerCamelCase: (collectionName: string) => string
+): string {
   let postQueryProcessing = ''
   if (arrayReferences.length > 0) {
     // Group array references by target collection for efficient querying
@@ -539,13 +582,252 @@ export function generateQueries(data: Record<string, any>, config: Record<string
   }
 `
   }
+  return postQueryProcessing
+}
+
+// getAll* options bag: optional FK filters (e.g. ?eventId=) + optional limit/offset
+// pagination. When `limit` is provided the function returns { items, total }
+// (total via a parallel count(*)); otherwise it returns the bare array — so
+// existing non-paginated callers are unaffected (enforced by the overloads).
+function buildGetAllOpts(filterFields: string[], tableName: string): { overload1Opts: string; overload2Opts: string; implOpts: string; filterConditions: string } {
+  const fkTypeFields = filterFields.map(f => `${f}?: string`).join('; ')
+  return {
+    overload1Opts: `opts?: {${fkTypeFields ? ` ${fkTypeFields} ` : ''}}`,
+    overload2Opts: `opts: {${fkTypeFields ? ` ${fkTypeFields};` : ''} limit: number; offset?: number }`,
+    implOpts: `opts: {${fkTypeFields ? ` ${fkTypeFields};` : ''} limit?: number; offset?: number } = {}`,
+    filterConditions: filterFields
+      .map(f => `\n  if (opts.${f}) conditions.push(eq(tables.${tableName}.${f}, opts.${f}))`)
+      .join('')
+  }
+}
+
+// Shared context for the CRUD query template builders below
+interface QueryTemplateContext {
+  tableName: string
+  prefixedPascalCase: string
+  prefixedPascalCasePlural: string
+  camelCase: string
+  camelCasePlural: string
+  useMetadata: boolean
+  typesPath: string
+  ascImport: string
+  schemaImports: string
+  aliasDefinitions: string
+  selectExpr: string
+  leftJoins: string
+  orderByClause: string
+  jsonFieldProcessing: string
+  postQueryProcessing: string
+  overload1Opts: string
+  overload2Opts: string
+  implOpts: string
+  filterConditions: string
+}
+
+// Imports + schema imports header of the generated queries file
+function buildFileHeader(ctx: QueryTemplateContext): string {
+  // `sql` is always needed now — getAll* runs a count(*) for pagination totals.
+  const sqlImport = ', sql'
+  return `// Generated with JSON field post-processing support (v2025-01-11)
+import { eq, and${ctx.useMetadata ? ', desc' : ''}${ctx.ascImport}, inArray${sqlImport} } from 'drizzle-orm'
+import { alias } from 'drizzle-orm/sqlite-core'
+import * as tables from './schema'
+import type { ${ctx.prefixedPascalCase}, New${ctx.prefixedPascalCase} } from '${ctx.typesPath}'
+${ctx.schemaImports}`
+}
+
+// getAll* — team-scoped list with FK filters, joins, post-processing, and the
+// opt-in pagination overloads ({ items, total } when `limit` is passed)
+function buildGetAllQuery(ctx: QueryTemplateContext): string {
+  return `
+// Overload order matters: the paginated signature (required \`limit\`) must come
+// first so non-paginated calls fall through to the array overload.
+export async function getAll${ctx.prefixedPascalCasePlural}(teamId: string, ${ctx.overload2Opts}): Promise<{ items: any[]; total: number }>
+export async function getAll${ctx.prefixedPascalCasePlural}(teamId: string, ${ctx.overload1Opts}): Promise<any[]>
+export async function getAll${ctx.prefixedPascalCasePlural}(teamId: string, ${ctx.implOpts}) {
+  const db = useDB()
+${ctx.aliasDefinitions}  const conditions = [eq(tables.${ctx.tableName}.teamId, teamId)]${ctx.filterConditions}
+  const whereExpr = and(...conditions)
+
+  let listQuery = (db as any)
+    .select(${ctx.selectExpr})
+    .from(tables.${ctx.tableName})${ctx.leftJoins}
+    .where(whereExpr)${ctx.orderByClause ? `
+    .orderBy(${ctx.orderByClause})` : ''}
+
+  if (opts.limit != null) {
+    listQuery = listQuery.limit(opts.limit).offset(opts.offset ?? 0)
+  }
+
+  const ${ctx.camelCasePlural} = await listQuery
+${ctx.jsonFieldProcessing}${ctx.postQueryProcessing}
+  if (opts.limit != null) {
+    const [countRow] = await (db as any)
+      .select({ count: sql\`count(*)\` })
+      .from(tables.${ctx.tableName})
+      .where(whereExpr)
+    return { items: ${ctx.camelCasePlural}, total: Number(countRow?.count ?? 0) }
+  }
+
+  return ${ctx.camelCasePlural}
+}`
+}
+
+// get*ByIds — team-scoped bulk fetch by id list (same joins/post-processing)
+function buildGetByIdsQuery(ctx: QueryTemplateContext): string {
+  return `
+
+export async function get${ctx.prefixedPascalCasePlural}ByIds(teamId: string, ${ctx.camelCase}Ids: string[]) {
+  const db = useDB()
+${ctx.aliasDefinitions}
+  const ${ctx.camelCasePlural} = await (db as any)
+    .select(${ctx.selectExpr})
+    .from(tables.${ctx.tableName})${ctx.leftJoins}
+    .where(
+      and(
+        eq(tables.${ctx.tableName}.teamId, teamId),
+        inArray(tables.${ctx.tableName}.id, ${ctx.camelCase}Ids)
+      )
+    )${ctx.orderByClause ? `
+    .orderBy(${ctx.orderByClause})` : ''}
+${ctx.jsonFieldProcessing}${ctx.postQueryProcessing}
+  return ${ctx.camelCasePlural}
+}`
+}
+
+// create* — plain insert returning the created row
+function buildCreateQuery(ctx: QueryTemplateContext): string {
+  return `
+
+export async function create${ctx.prefixedPascalCase}(data: New${ctx.prefixedPascalCase}) {
+  const db = useDB()
+
+  const [${ctx.camelCase}] = await (db as any)
+    .insert(tables.${ctx.tableName})
+    .values(data)
+    .returning()
+
+  return ${ctx.camelCase}
+}`
+}
+
+// update* — team-scoped update with owner check (admins bypass) + 404 guard
+function buildUpdateQuery(ctx: QueryTemplateContext): string {
+  return `
+
+export async function update${ctx.prefixedPascalCase}(
+  recordId: string,
+  teamId: string,
+  userId: string,
+  updates: Partial<${ctx.prefixedPascalCase}>,
+  options?: { role?: string }
+) {
+  const db = useDB()
+  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+
+  const conditions = [
+    eq(tables.${ctx.tableName}.id, recordId),
+    eq(tables.${ctx.tableName}.teamId, teamId),
+  ]
+  if (!isAdmin) {
+    conditions.push(eq(tables.${ctx.tableName}.owner, userId))
+  }
+
+  const [${ctx.camelCase}] = await (db as any)
+    .update(tables.${ctx.tableName})
+    .set({
+      ...updates,${ctx.useMetadata ? `
+      updatedBy: userId` : ''}
+    })
+    .where(and(...conditions))
+    .returning()
+
+  if (!${ctx.camelCase}) {
+    throw createError({
+      status: 404,
+      statusText: '${ctx.prefixedPascalCase} not found or unauthorized'
+    })
+  }
+
+  return ${ctx.camelCase}
+}`
+}
+
+// delete* — team-scoped delete with owner check (admins bypass) + 404 guard
+function buildDeleteQuery(ctx: QueryTemplateContext): string {
+  return `
+
+export async function delete${ctx.prefixedPascalCase}(
+  recordId: string,
+  teamId: string,
+  userId: string,
+  options?: { role?: string }
+) {
+  const db = useDB()
+  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
+
+  const conditions = [
+    eq(tables.${ctx.tableName}.id, recordId),
+    eq(tables.${ctx.tableName}.teamId, teamId),
+  ]
+  if (!isAdmin) {
+    conditions.push(eq(tables.${ctx.tableName}.owner, userId))
+  }
+
+  const [deleted] = await (db as any)
+    .delete(tables.${ctx.tableName})
+    .where(and(...conditions))
+    .returning()
+
+  if (!deleted) {
+    throw createError({
+      status: 404,
+      statusText: '${ctx.prefixedPascalCase} not found or unauthorized'
+    })
+  }
+
+  return { success: true }
+}`
+}
+
+export function generateQueries(data: Record<string, any>, config: Record<string, any> | null = null, currentLayer: string = '', collectionLayerMap: Map<string, string> = new Map()): string {
+  const { singular, camelCase, camelCasePlural, plural, pascalCase, pascalCasePlural, layer, layerPascalCase } = data
+  // Use layer-prefixed table name to match schema export
+  // Convert layer to camelCase to ensure valid JavaScript identifier
+  const layerCamelCase = toLayerCamelCase(layer)
+
+  // Resolve target layer camelCase for a collection — uses collectionLayerMap so cross-layer
+  // refs (e.g. contacts in people layer) produce the correct table name (peopleContacts, not
+  // projectsContacts). Falls back to current layer for unresolved collections.
+  const getTargetLayerCamelCase = (collectionName: string): string => {
+    const targetLayer = collectionLayerMap.get(collectionName.toLowerCase())
+    if (!targetLayer) return layerCamelCase
+    return toLayerCamelCase(targetLayer)
+  }
+  // Use pascalCasePlural which properly handles hyphens (e.g., email-templates -> EmailTemplates)
+  const tableName = `${layerCamelCase}${pascalCasePlural}`
+  const prefixedPascalCase = `${layerPascalCase}${pascalCase}`
+  const prefixedPascalCasePlural = `${layerPascalCase}${pascalCasePlural}`
+  const typesPath = '../../types'
+
+  // Detect reference fields for LEFT JOINs and post-query processing
+  const { singleReferences, arrayReferences } = detectReferenceFields(data, config)
+
+  // Foreign-key fields usable to scope getAll* (e.g. ?eventId=...). Excludes the
+  // owner/createdBy/updatedBy user refs — only real FK columns (eventId, categoryId, …).
+  const filterFields = singleReferences.filter(r => !r.isUserReference).map(r => r.fieldName)
+
+  const schemaImports = buildSchemaImports(singleReferences, arrayReferences, currentLayer, collectionLayerMap)
+  const { selectClause, leftJoins, aliasDefinitions } = buildSelectJoins(singleReferences, tableName, getTargetLayerCamelCase)
+
+  // Post-query processing for JSON/repeater fields and array references
+  const jsonFieldProcessing = buildJsonFieldProcessing(detectJsonFields(data), camelCasePlural)
+  const postQueryProcessing = buildArrayRefProcessing(arrayReferences, camelCasePlural, getTargetLayerCamelCase)
 
   // Check if hierarchy or sortable is enabled for import modifications
   const hasHierarchy = data.hierarchy && data.hierarchy.enabled
   const hasSortable = data.sortable && data.sortable.enabled
   const useMetadata = config?.flags?.useMetadata ?? true
-  // `sql` is always needed now — getAll* runs a count(*) for pagination totals.
-  const sqlImport = ', sql'
   const ascImport = (hasHierarchy || hasSortable) ? ', asc' : ''
   const orderField = hasSortable ? (data.sortable.orderField || 'order') : 'order'
   const orderByClause = hasSortable
@@ -563,151 +845,36 @@ export function generateQueries(data: Record<string, any>, config: Record<string
   // (hierarchy already includes reorderSiblings, so we skip to avoid duplicate exports)
   const sortableQueries = hasHierarchy ? '' : generateSortableQueries(data, tableName, prefixedPascalCasePlural)
 
-  // getAll* options bag: optional FK filters (e.g. ?eventId=) + optional limit/offset
-  // pagination. When `limit` is provided the function returns { items, total }
-  // (total via a parallel count(*)); otherwise it returns the bare array — so
-  // existing non-paginated callers are unaffected (enforced by the overloads below).
-  const fkTypeFields = filterFields.map(f => `${f}?: string`).join('; ')
-  const overload1Opts = `opts?: {${fkTypeFields ? ` ${fkTypeFields} ` : ''}}`
-  const overload2Opts = `opts: {${fkTypeFields ? ` ${fkTypeFields};` : ''} limit: number; offset?: number }`
-  const implOpts = `opts: {${fkTypeFields ? ` ${fkTypeFields};` : ''} limit?: number; offset?: number } = {}`
-  const filterConditions = filterFields
-    .map(f => `\n  if (opts.${f}) conditions.push(eq(tables.${tableName}.${f}, opts.${f}))`)
-    .join('')
-  const selectExpr = selectClause ? `${selectClause} as any` : '()'
+  const { overload1Opts, overload2Opts, implOpts, filterConditions } = buildGetAllOpts(filterFields, tableName)
 
-  return `// Generated with JSON field post-processing support (v2025-01-11)
-import { eq, and${useMetadata ? ', desc' : ''}${ascImport}, inArray${sqlImport} } from 'drizzle-orm'
-import { alias } from 'drizzle-orm/sqlite-core'
-import * as tables from './schema'
-import type { ${prefixedPascalCase}, New${prefixedPascalCase} } from '${typesPath}'
-${schemaImports}
-// Overload order matters: the paginated signature (required \`limit\`) must come
-// first so non-paginated calls fall through to the array overload.
-export async function getAll${prefixedPascalCasePlural}(teamId: string, ${overload2Opts}): Promise<{ items: any[]; total: number }>
-export async function getAll${prefixedPascalCasePlural}(teamId: string, ${overload1Opts}): Promise<any[]>
-export async function getAll${prefixedPascalCasePlural}(teamId: string, ${implOpts}) {
-  const db = useDB()
-${aliasDefinitions}  const conditions = [eq(tables.${tableName}.teamId, teamId)]${filterConditions}
-  const whereExpr = and(...conditions)
-
-  let listQuery = (db as any)
-    .select(${selectExpr})
-    .from(tables.${tableName})${leftJoins}
-    .where(whereExpr)${orderByClause ? `
-    .orderBy(${orderByClause})` : ''}
-
-  if (opts.limit != null) {
-    listQuery = listQuery.limit(opts.limit).offset(opts.offset ?? 0)
+  const ctx: QueryTemplateContext = {
+    tableName,
+    prefixedPascalCase,
+    prefixedPascalCasePlural,
+    camelCase,
+    camelCasePlural,
+    useMetadata,
+    typesPath,
+    ascImport,
+    schemaImports,
+    aliasDefinitions,
+    selectExpr: selectClause ? `${selectClause} as any` : '()',
+    leftJoins,
+    orderByClause,
+    jsonFieldProcessing,
+    postQueryProcessing,
+    overload1Opts,
+    overload2Opts,
+    implOpts,
+    filterConditions
   }
 
-  const ${camelCasePlural} = await listQuery
-${jsonFieldProcessing}${postQueryProcessing}
-  if (opts.limit != null) {
-    const [countRow] = await (db as any)
-      .select({ count: sql\`count(*)\` })
-      .from(tables.${tableName})
-      .where(whereExpr)
-    return { items: ${camelCasePlural}, total: Number(countRow?.count ?? 0) }
-  }
-
-  return ${camelCasePlural}
-}
-
-export async function get${prefixedPascalCasePlural}ByIds(teamId: string, ${camelCase}Ids: string[]) {
-  const db = useDB()
-${aliasDefinitions}
-  const ${camelCasePlural} = await (db as any)
-    .select(${selectClause ? `${selectClause} as any` : '()'})
-    .from(tables.${tableName})${leftJoins}
-    .where(
-      and(
-        eq(tables.${tableName}.teamId, teamId),
-        inArray(tables.${tableName}.id, ${camelCase}Ids)
-      )
-    )${orderByClause ? `
-    .orderBy(${orderByClause})` : ''}
-${jsonFieldProcessing}${postQueryProcessing}
-  return ${camelCasePlural}
-}
-
-export async function create${prefixedPascalCase}(data: New${prefixedPascalCase}) {
-  const db = useDB()
-
-  const [${camelCase}] = await (db as any)
-    .insert(tables.${tableName})
-    .values(data)
-    .returning()
-
-  return ${camelCase}
-}
-
-export async function update${prefixedPascalCase}(
-  recordId: string,
-  teamId: string,
-  userId: string,
-  updates: Partial<${prefixedPascalCase}>,
-  options?: { role?: string }
-) {
-  const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
-
-  const conditions = [
-    eq(tables.${tableName}.id, recordId),
-    eq(tables.${tableName}.teamId, teamId),
-  ]
-  if (!isAdmin) {
-    conditions.push(eq(tables.${tableName}.owner, userId))
-  }
-
-  const [${camelCase}] = await (db as any)
-    .update(tables.${tableName})
-    .set({
-      ...updates,${useMetadata ? `
-      updatedBy: userId` : ''}
-    })
-    .where(and(...conditions))
-    .returning()
-
-  if (!${camelCase}) {
-    throw createError({
-      status: 404,
-      statusText: '${prefixedPascalCase} not found or unauthorized'
-    })
-  }
-
-  return ${camelCase}
-}
-
-export async function delete${prefixedPascalCase}(
-  recordId: string,
-  teamId: string,
-  userId: string,
-  options?: { role?: string }
-) {
-  const db = useDB()
-  const isAdmin = options?.role === 'admin' || options?.role === 'owner'
-
-  const conditions = [
-    eq(tables.${tableName}.id, recordId),
-    eq(tables.${tableName}.teamId, teamId),
-  ]
-  if (!isAdmin) {
-    conditions.push(eq(tables.${tableName}.owner, userId))
-  }
-
-  const [deleted] = await (db as any)
-    .delete(tables.${tableName})
-    .where(and(...conditions))
-    .returning()
-
-  if (!deleted) {
-    throw createError({
-      status: 404,
-      statusText: '${prefixedPascalCase} not found or unauthorized'
-    })
-  }
-
-  return { success: true }
-}${treeQueries}${sortableQueries}`
+  return buildFileHeader(ctx)
+    + buildGetAllQuery(ctx)
+    + buildGetByIdsQuery(ctx)
+    + buildCreateQuery(ctx)
+    + buildUpdateQuery(ctx)
+    + buildDeleteQuery(ctx)
+    + treeQueries
+    + sortableQueries
 }

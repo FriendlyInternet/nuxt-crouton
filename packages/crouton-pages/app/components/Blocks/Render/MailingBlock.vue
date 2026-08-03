@@ -67,14 +67,15 @@ const submitted = ref(false)
         class="flex gap-2"
         @submit="submitted = true"
       >
-        <input
+        <!-- UInput (not a raw input) so themes reach this public form (#1410) -->
+        <UInput
           v-model="email"
           type="email"
           :name="attrs.emailFieldName || 'EMAIL'"
           :placeholder="attrs.placeholder || 'Enter your email'"
           required
-          class="flex-1 min-w-0 rounded-[var(--ui-radius)] border border-[var(--ui-border)] bg-[var(--ui-bg)] px-3 py-2 text-sm text-[var(--ui-text)] placeholder:text-[var(--ui-text-dimmed)] focus:outline-none focus:ring-2 focus:ring-[var(--ui-primary)] focus:border-transparent transition-colors"
-        >
+          class="flex-1 min-w-0"
+        />
         <UButton type="submit" color="primary">
           {{ attrs.buttonLabel || 'Subscribe' }}
         </UButton>

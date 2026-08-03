@@ -59,6 +59,7 @@ export default defineNuxtConfig({
 | `app/components/Collection.vue` | Multi-layout display (table, list, grid, tree, kanban) |
 | `app/components/CollectionSkeleton.vue` | `CroutonCollectionSkeleton` — layout-aware shimmer (table/list/grid) used as the `<Suspense>` fallback in `CollectionViewer` so the viewer reveals the populated result at once instead of flashing a loader + filling in row-by-row |
 | `app/components/Form.vue` | Main CRUD form handler with nested modal support |
+| `app/utils/init-form-state.ts` | `initFormState(defaultValue, activeItem)` — builds an edit form's initial state, coercing a nullable column's loaded `null` back to the form default so it never reaches the narrow client schema and silently blocks submit (#1498; the hand-written form analog of the generator's #1415 coercion). Used by `RedirectsForm` + `crouton-sales`'s `useSalesCollectionForm`. |
 | `app/components/Detail.vue` | `CroutonDetail` — Generic detail view using display config and runtime field metadata |
 | `app/components/DefaultCard.vue` | `CroutonDefaultCard` — Display-aware card (title/image/badge from display config) |
 | `app/components/ItemCardMini.vue` | `CroutonItemCardMini` — Display-aware mini card for references and lists |
@@ -66,7 +67,8 @@ export default defineNuxtConfig({
 | `app/components/ExportButton.vue` | Ready-to-use export dropdown button |
 | `app/components/ImportButton.vue` | Ready-to-use import button with file picker |
 | `app/components/ImportPreviewModal.vue` | Multi-step import preview with mapping, validation, and progress |
-| `app/components/WorkspaceLayout.vue` | `CroutonWorkspaceLayout` — Reusable split-panel workspace shell (resizable sidebar + content, state machine, URL sync, mobile slideover, keyboard shortcuts). Used by crouton-pages and crouton-flow. |
+| `app/components/SubBar.vue` | `CroutonSubBar` — Thin **presentational** secondary bar that sits under a primary toolbar/header: a bordered, padded horizontal strip with `#leading` / default / `#trailing` slots, optionally `sticky` over a scrolling container (`bordered` prop, default true). **`auto-hide`** (implies sticky) slides it up on scroll-down and reveals it on scroll-up — a capture-phase scroll listener tracks whichever ancestor actually scrolls, so the bar must live INSIDE that scroll container. Owns ONLY layout (spacing, divider, bg, horizontal-overflow scroll, sticky) — **never** the tabs/filter/dropdown logic it hosts (that's slot content; a `mode="tabs\|filters"` prop would be the smell to stop). Consumers (#307): pages editor language bar (leading=language dropdown, trailing=Preview), and — planned — sales settings tabs + the orders filter bar. |
+| `app/components/WorkspaceLayout.vue` | `CroutonWorkspaceLayout` — Reusable split-panel workspace shell (resizable sidebar + content, state machine, URL sync, mobile slideover, keyboard shortcuts). Used by crouton-pages and crouton-flow. On mobile the detail opens in a full-screen `USlideover`; the shell renders a **back bar** to dismiss it (there's no tappable backdrop). A consumer that folds its own back affordance into the detail (pages' editor toolbar) sets **`content-provides-back`** to suppress that bar and uses the **`onClose`** content-slot prop to deselect. |
 | `app/composables/useTeamContext.ts` | Team context access (teamId, teamSlug from route or auth) |
 | `app/composables/useImageCrop.ts` | Cropperjs v2 composable for image cropping |
 | `app/components/ImageCropper.vue` | Reusable image crop modal with rotate/zoom/aspect ratio |
@@ -74,7 +76,7 @@ export default defineNuxtConfig({
 | `app/components/UsersAvatarUpload.vue` | Avatar upload with 1:1 circular crop |
 | `app/components/DropZone.vue` | Drag-and-drop file upload zone (VueUse) |
 | `app/components/QrCode.vue` | `CroutonQrCode` — renders any string (usually a URL) as an inline SVG QR code via `uqr` (zero-dep, SSR-safe). Props: `data`, `size?` (px). |
-| `app/components/DeleteButton.vue` | `CroutonDeleteButton` — two-step pill delete (click arms "sure?", click again emits `confirm`; mouseleave disarms). Props: `loading?`, `expanded?` (always show the label; collapsed mode is an icon pill that expands on hover — pointer-only, so forms/touch surfaces pass `expanded`). Parent performs the delete. `rounded-md`, `min-h-7`: stretches to match neighbors in a `flex items-stretch` row (sales form footers pair it with `CroutonFormActionButton class="flex-1"`). |
+| `app/components/DeleteButton.vue` | `CroutonDeleteButton` — two-step pill delete (click arms "sure?", click again emits `confirm`; mouseleave disarms). Props: `loading?`, `expanded?` (always show the label; collapsed mode is an icon pill that expands on hover — pointer-only, so forms/touch surfaces pass `expanded`). Parent performs the delete. A `UButton` (soft, neutral→error) so themes reach it (#1410); free height + `min-h-7`: stretches to match neighbors in a `flex items-stretch` row (sales form footers pair it with `CroutonFormActionButton class="flex-1"`). |
 | `server/api/upload-image.post.ts` | Authenticated file upload to blob storage |
 | `server/api/upload-image.delete.ts` | Authenticated file deletion from blob storage |
 | `server/routes/images/[pathname].get.ts` | Image serving with cache headers |
@@ -118,17 +120,33 @@ runtime), exported at `@fyit/crouton-core/shared/seed`:
 - `SeedProvider` (`{ id, dependsOn?, seed(ctx) }`) + `SeedContext` (`teamId`,
   `teamSlug`, `locale`, `upsert(table, byId, values)`, `now`, optional
   `createPageWithBlocks`). Each package ships a provider at `<pkg>/seed`.
-- `buildUpsert(table, byId, values)` → idempotent `INSERT … ON CONFLICT(byId)
-  DO UPDATE SET …` SQL (identifiers double-quoted so `order` is safe;
-  `createdAt` held immutable on update). `seedId(...parts)` / `seedOrgId(slug)`
-  derive stable ids so re-runs upsert instead of duplicating.
+- `buildUpsert(table, byId, values, options?)` → idempotent `INSERT … ON
+  CONFLICT(byId) DO UPDATE SET …` SQL (identifiers double-quoted so `order` is
+  safe; `createdAt` held immutable on update). `options.insertOnly: true` forces
+  `ON CONFLICT DO NOTHING` — seed the row once, never overwrite it on a re-run;
+  surfaced on `ctx.upsert(table, byId, values, { ifAbsent: true })` for demo rows
+  a user may edit so a redeploy's re-seed doesn't clobber their changes (#1579).
+  `seedId(...parts)` / `seedOrgId(slug)` derive stable ids so re-runs upsert
+  instead of duplicating.
 - `topoSort(providers)` + `collectSeedSql({ providers, teamSlug, teamId, locale,
   withStaff, createPageWithBlocks })` order providers by `dependsOn` and return
   the combined SQL. The CLI `crouton-seed` command wraps this with discovery +
   `wrangler d1 execute` transport (see crouton-cli CLAUDE.md).
+- `runSeedSql(execute, options)` (#797) — the **dev-only executor** for a
+  *booted* app: same options as `collectSeedSql`, but runs each statement
+  sequentially (dependency order) through the injected
+  `execute: (statement: string) => Promise<unknown>` — typically
+  `stmt => db.run(sql.raw(stmt))` with the app's live `useDB()`. Use it in a
+  dev seed route when the app must see the rows (the CLI writes the
+  wrangler-D1 store, but a booted app reads NuxtHub's `.data/db/sqlite.db` — a
+  different database). The db call is injected because shared/seed stays
+  dependency-free (crouton-core does not declare drizzle-orm). Throws in a
+  production bundle (`import.meta.dev === false`). Reference consumer:
+  `fixtures/with-sales/server/api/_seed.post.ts`.
 
-Seeding generates SQL executed via `wrangler d1`, so it runs identically against
-local SQLite and remote D1 with no live DB connection.
+Seeding generates SQL executed via `wrangler d1` (CLI path) or via the live
+connection (`runSeedSql`), so it runs identically against local SQLite and
+remote D1.
 
 ## Encryption Utility (server/utils/encryption.ts)
 

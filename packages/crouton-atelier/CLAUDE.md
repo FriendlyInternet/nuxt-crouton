@@ -10,7 +10,7 @@ Visual app builder for Nuxt Crouton. Users compose apps from pre-defined blocks 
 
 | File | Purpose |
 |------|---------|
-| `app/types/blocks.ts` | Core types: Block, Template, AppComposition, SelectedBlock, Visibility |
+| `app/types/blocks.ts` | Core types: Block, Template, AppComposition, SelectedBlock, Visibility (importable via `@fyit/crouton-atelier/types`) |
 | `app/data/blocks.ts` | Static block declarations (Phase A — bookings, pages, auth) |
 | `app/data/templates.ts` | Pre-configured templates (Yoga Studio, Sports Club, Charity, Blank) |
 | `app/composables/useBlockRegistry.ts` | Block lookup + filtering (byCategory, byPackage, byVisibility) |

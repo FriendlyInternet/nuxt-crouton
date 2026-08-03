@@ -19,6 +19,7 @@ AI integration layer for Nuxt applications using Vercel AI SDK. Provides composa
 | `server/utils/providers/index.ts` | Provider registry and helpers |
 | `server/api/ai/translate.post.ts` | Translation API endpoint |
 | `server/api/ai/generate-page.post.ts` | AI page generation endpoint |
+| `server/api/ai/generate-seo.post.ts` | Draft an SEO meta description from a page's `{ title, content, language }` → `{ description }`. Flattens TipTap JSON / HTML / text to feed the model. Used by the pages editor's SEO tab "Generate with AI" button (gated on `hasApp('ai')`). |
 | `app/components/AIPageGenerator.vue` | AI page generator modal (overrides stub in crouton-pages) |
 | `app/types/index.ts` | All TypeScript types |
 | `app/types/translation.ts` | Translation-specific types |

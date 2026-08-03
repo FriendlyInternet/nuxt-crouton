@@ -13,7 +13,9 @@ crouton add <modules...>                     # Add Crouton modules to project
 crouton add --list                           # List available modules
 crouton install                              # Install required modules
 crouton init <name> [options]                 # Full pipeline: scaffold → generate → doctor
-crouton rollback <layer> <collection>        # Remove collection
+crouton rollback <layer> <collection>        # Remove collection (code-only)
+crouton rollback <layer> <collection> --drop-table          # …and emit a DROP TABLE migration
+crouton rollback <layer> <collection> --drop-table --dry-run # …preview that DROP, write nothing
 crouton rollback-interactive                 # Interactive removal UI
 crouton seed-translations                    # Seed i18n data
 crouton db-pull                              # Pull remote D1 → local dev
@@ -24,14 +26,21 @@ crouton-seed --db <name> [--remote]          # Seed an app DB from its packages'
 ## App Seeding (`crouton-seed`)
 
 `crouton-seed` (separate bin, `bin/crouton-seed.mjs` → `lib/seed-app.ts`) fills an
-app's D1 with the demo data its extended packages ship (epic #82). It mirrors the
-`db:migrate` local/remote split via `wrangler d1 execute`:
+app's D1 with the demo data its extended packages ship (epic #82):
 
 ```bash
-crouton-seed --db fanfare-db            # local  (→ wrangler d1 execute --local)
+crouton-seed --db fanfare-db            # local  (→ .data/db/sqlite.db — what nuxt dev reads, #1612)
 crouton-seed --db fanfare-db --remote   # remote (→ wrangler d1 execute --remote)
 crouton-seed --db fanfare-db --dry-run  # print the generated SQL, don't execute
 ```
+
+**Local seeds land where `nuxt dev` reads (#1612).** A local seed writes straight into
+`<app>/.data/db/sqlite.db` (the NuxtHub `hub: { db: 'sqlite' }` dev DB) via `better-sqlite3` —
+NOT the miniflare `.wrangler` DB that `wrangler d1 execute --local` writes and that dev never
+opens (the split that used to make locally-seeded data "disappear"). If `.data/db/sqlite.db`
+doesn't exist yet, the seed fails with a recipe (run `pnpm dev` once to create + migrate it).
+`--remote` is unchanged (`wrangler d1 execute --remote`). Routing lives in `resolveSeedTarget` /
+`runLocalSeed` (`lib/seed-app.ts`); contract: `tests/unit/seed-local-{target,write}.test.ts`.
 
 | Flag | Default | Purpose |
 |------|---------|---------|
@@ -49,8 +58,18 @@ loads each package's `./seed` export via **jiti** (no build step), topo-sorts th
 providers by `dependsOn` (`auth → sales → pages`), then calls
 `collectSeedSql()` from `@fyit/crouton-core/shared/seed` to turn their declarative
 `ctx.upsert(...)` calls into idempotent `INSERT … ON CONFLICT(id) DO UPDATE` SQL,
-which it pipes to `wrangler d1 execute --file`. Stable, namespace-derived ids
+which it executes against the local `.data/db/sqlite.db` (#1612) or, with `--remote`,
+via `wrangler d1 execute --command`. Stable, namespace-derived ids
 (`seed:org:test1`, `seed:event:test1:vlaamsekermis`) make re-runs upsert in place.
+
+**Resilient per-chunk execution (#1370):** the seed runs as INDEPENDENT chunks — one
+`--command` per provider, plus the collection fixtures and the default layout — not one
+atomic batch. Why: `@fyit/crouton` (the kitchen-sink meta package) bundles *every* crouton
+package as a dep, so the BFS discovers a provider even for a package the app **doesn't
+extend** (e.g. `crouton-bookings` in a minimal app that never migrated `bookings_settings`).
+As one batch, that single missing table aborted the WHOLE seed → an empty preview. Now a
+failing chunk **warns + is skipped** (`runSeedChunks`, unit-tested) and the auth team + the
+app's own rows + layout still seed. `crouton-seed` throws only if **every** chunk fails.
 
 The contract (`SeedProvider`, `SeedContext`, `createPageWithBlocks`) lives in
 `@fyit/crouton-core/shared/seed`; each package ships its provider at `<pkg>/seed`.
@@ -133,25 +152,33 @@ and SSR errors like `$setup.t is not a function`.
 2. **Installs** package via detected package manager (pnpm/yarn/npm)
 3. **Updates** `nuxt.config.ts` - adds to `extends` array
 4. **Updates** `server/db/schema.ts` - adds schema export (if applicable)
-5. **Generates** migrations **build-first** (if applicable) — see below
+5. **Generates** migrations **directly** — drizzle-kit, no Nuxt build (see below)
 6. **Applies** migrations with `npx nuxt db:migrate` (if applicable)
 
-#### Build-first migration generation (the schema.mjs gotcha, #523)
+#### Direct migration generation — no Nuxt round trip (#1445 WS2)
 
-`drizzle-kit generate` (the app's `db:generate` script) reads the **bundled**
-schema at `.nuxt/hub/db/schema.mjs`, which NuxtHub only writes during
-**`nuxt build`** — `nuxt prepare` emits `schema.entry.ts`, NOT the `.mjs`. So
-running `db:generate` on a fresh tree finds no schema and emits **zero**
-migrations; the first deploy then fails the remote-migrate step with *"No
-migrations present"* (the #457 library-catalog failure).
+`lib/utils/generate-migrations.ts` (`generateMigrations(appDir)`) resolves the
+app's schema graph directly (`resolveSchemaGraph`, from `schema-sources.ts` — the
+same set NuxtHub globs), gates it for duplicate tables (`findDuplicateTables`,
+`duplicate-tables.ts`), then runs the app's own `db:generate` (drizzle-kit reads
+the runtime-resolving `drizzle.config.ts` and is resolved from the app dir). **No
+`nuxt build`, no `nuxt db generate`** — the old build-first dance (build →
+poll for `.nuxt/hub/db/schema.mjs` → kill) is gone. Used by `crouton config`,
+`crouton add` (step 5), and `crouton init` (step 3).
 
-`lib/utils/generate-migrations.ts` (`generateMigrations(cwd)`) fixes this: it
-starts `NITRO_PRESET=node-server nuxt build`, waits for the bundle to appear
-(written early, before the slow Nitro stage), stops the build, then runs the
-app's own `db:generate`. Used by both `crouton add` (step 5) and `crouton init`
-(step 3). It **requires installed deps** (it builds); on a bare tree with no
-`node_modules` it returns `deps-missing` and the caller prints the exact manual
-sequence (`manualMigrationSteps()`) instead of silently shipping no migrations.
+Failure contract (strengthens #1302 / #1286, fixes #1357's exit-0 disease):
+- **Duplicate table** (two DISTINCT defs share a name) → throws `DuplicateTableError`
+  naming both files → the CLI exits **non-zero**.
+- **Unresolvable `extends`** (e.g. an out-of-monorepo scaffold whose deps aren't
+  installed, so a layer can't resolve) → **defers** softly: `{ generated: false,
+  reason: 'deferred', recipe }`, the caller prints `manualMigrationSteps()`.
+- **drizzle-kit error** → `{ reason: 'generate-failed', detail }` → non-zero.
+
+The scaffolded `drizzle.config.ts` (`tmplDrizzleConfig`) calls
+`resolveSchemaSourcesSync(process.cwd())` at runtime — a **sync** resolver
+(drizzle-kit's esbuild config loader is CJS and rejects top-level await), imported
+with an explicit `.ts` extension, with a **relative** `out` (0.31.10 re-reads
+`meta/` via a `./` join; an absolute out ENOENTs on the second run).
 
 ## Init Command (Full Pipeline)
 
@@ -181,15 +208,48 @@ crouton init my-app --dry-run
 
 ### What `crouton init` Does
 
-1. **scaffold-app** — Creates the app skeleton (nuxt.config, package.json, schemas/, etc.)
+1. **scaffold-app** — Creates the app skeleton (nuxt.config, package.json, schemas/, etc.) and
+   writes a **`.crouton.json`** identifier (`{ name, kind: poc|app, cliVersion, scaffoldedAt }`) —
+   provenance + the marker the guard reads. **It refuses only a dir that's already scaffolded**
+   (has `.crouton.json` or `package.json`); it **scaffolds *into* a config-only dir** (one that has
+   just `crouton.config.js`, e.g. the schema-sign-off step's output) and **preserves that reviewed
+   config** — so the schema-first pipeline is a single `crouton init` command, not a manual
+   workaround (#1233).
 2. **generate** — Generates collections from `crouton.config.js` (if collections are defined)
-3. **migrations** — Generates the initial D1 migrations **build-first** (see the
-   `crouton add` section). Runs only when deps are already installed; on a bare
-   scaffold (no `node_modules`) it defers and the summary prints the exact
-   `pnpm install` → build → `db:generate` sequence — so a fresh app is never
-   silently shipped without its migrations (#523).
+3. **migrations** — Generates the initial D1 migrations **directly** (drizzle-kit,
+   no Nuxt build — see the `crouton add` section). On an out-of-monorepo scaffold
+   whose deps aren't installed (so a layer can't resolve) it **defers** and the
+   summary prints the exact `pnpm install` → `db:generate` sequence — so a fresh
+   app is never silently shipped without its migrations (#523, #1445 WS2).
 4. **doctor** — Validates everything is wired correctly
 5. **Summary** — Prints next steps (dev server, deploy)
+
+## Rollback Command (`crouton rollback`)
+
+Removes a generated collection — files, schema-index re-export, `app.config.ts`
+entry, and layer/root `extends`. Two things WS4 (#1445) got right:
+
+- **Barrel path is resolved, not hardcoded.** Both rollback's `cleanSchemaIndex`
+  and the generator's `buildSchemaExportNames` route the schema barrel through
+  `getSchemaPath` (`update-schema-index.ts`, modern `server/db/schema.ts` → legacy
+  `server/database/schema.ts` → `server/database/schema/index.ts`). Before this,
+  rollback only cleaned the legacy `index.ts`, so on a modern app it **no-op'd and
+  left a dangling re-export that crashed the next generate.** (The magicast finders
+  in `update-schema-index.ts` also had to learn that `$ast` can be the `Program`
+  node itself, not a `File` — otherwise they scanned an empty body and matched
+  nothing.)
+- **The table story.** A default (code-only) rollback removes the collection from
+  the schema *view* but the table still lives in the DB + drizzle's `meta/`
+  snapshot — so it **names the orphaned table and warns that the next `crouton
+  config` will emit its `DROP TABLE`**, bundled into an unrelated migration.
+  - `--drop-table` emits that `DROP TABLE` **now**, as its own migration (via the
+    WS2 machinery — `generateMigrations`, drizzle-kit, no Nuxt).
+  - `--drop-table --dry-run` **previews** the DROP and writes nothing: drizzle-kit's
+    CLI has no dry-run flag, so it saves the barrel → removes the export → generates
+    into a temp `out` seeded with a copy of `meta/` → prints the SQL → restores the
+    barrel byte-for-byte. NB the temp `out` lives **inside the app with a relative
+    path** — drizzle-kit 0.31 re-reads `meta/` via a `./`-join, so an absolute out
+    ENOENTs on the snapshot (and exits 0 anyway).
 
 ## Deploy Scaffolding — Cloudflare Workers (the crouton standard)
 
@@ -200,6 +260,7 @@ NOT Cloudflare Pages. Generated artifacts:
 | File | Purpose |
 |------|---------|
 | `wrangler.jsonc` | Workers config, **id-less** D1+KV (top-level + `env.staging`) so the first deploy auto-provisions them; `name`/`assets`/`main` injected by the `cloudflare_module` preset at build |
+| `deploy.config.json` | The opt-in the generic **Deploy Apps/POCs** pipeline reads (#481/#638) — `layerPackages` + the deploy URLs. #1367/#1371: `stagingUrl`/`productionUrl` are emitted **only with `--domain`** (= exactly when the matching custom-domain routes are written), so staging is `https://<name>-staging.<zone>` (NOT the prod pattern). **Without `--domain` → `stagingUrl: ""`**, and the deploy resolves the real `*.workers.dev` URL (#1369) rather than advertising an alias that was never bound (the dead-preview bug). `tmplDeployConfig` in `lib/scaffold-app.ts` |
 | `scripts/sync-wrangler-ids.mjs` | After provisioning, queries `wrangler d1 list`/`kv namespace list` and writes the ids back into `wrangler.jsonc` (D1 by `database_name`, KV by the deterministic `<worker>-<binding>` title). Idempotent, comment-preserving |
 | `scripts/inject-wrangler-env.mjs` | Re-injects the `env` block Nitro strips from `.output/server/wrangler.json` (nitro#3429) + drops the redirect so `--env staging` deploys work |
 | `drizzle.config.ts` | Resolves the bundled schema path (`.nuxt/` or the cache buildDir) so `db:generate` works unedited |
@@ -266,7 +327,7 @@ crouton db-pull --config ./custom-wrangler.jsonc
 | Option | Description |
 |--------|-------------|
 | `--fields-file <path>` | Schema JSON file |
-| `--dialect <pg\|sqlite>` | Database dialect (default: sqlite for the direct command; `crouton config` has no flag — it reads the config file's `dialect`, falling back to `pg` when omitted, so always set `dialect: 'sqlite'` explicitly) |
+| `--dialect <pg\|sqlite>` | Database dialect (default: sqlite for the direct command; `crouton config` has no flag — it reads the config file's `dialect`, falling back to `sqlite` when omitted or empty) |
 | `--hierarchy` | Enable tree structure |
 | `--seed` | Generate seed data file (drizzle-seed) |
 | `--count <number>` | Number of seed records (default: 25) |
@@ -274,6 +335,18 @@ crouton db-pull --config ./custom-wrangler.jsonc
 | `--no-translations` | Skip i18n fields |
 | `--no-tests` | Skip the per-collection tests — schema-smoke (#785) + API route handler test (#791); both emitted by default |
 | `--dry-run` | Preview without writing |
+
+### Regeneration is non-destructive (#1260)
+
+Re-running the generator over an existing collection **preserves files that already exist**
+by default — it never silently clobbers hand-edits — and reports what it skipped
+(`⏭ preserved N existing file(s) — use --force to overwrite`). Files that don't exist yet are
+always written, so a schema change still scaffolds new artifacts. Pass **`--force`** to overwrite
+existing scaffold files (this is what the generated files' *"regeneration requires --force flag"*
+note refers to). Only the per-collection scaffold files are guarded this way; derived
+machine-owned files (the schema index, type/query registries, `app.config.ts` entries) are
+rewritten every run regardless. Guarded by the write loop in `writeScaffold`
+(`lib/generate-collection.ts`); contract test: `tests/integration/regenerate-preserve.test.ts`.
 
 ## Key Files
 
@@ -291,12 +364,15 @@ crouton db-pull --config ./custom-wrangler.jsonc
 | `lib/db-pull.ts` | Remote D1 → local dev pull |
 | `lib/module-registry.ts` | Module definitions for `crouton add` |
 | `lib/add-module.ts` | Module installation implementation |
-| `lib/utils/generate-migrations.ts` | Build-first migration generation (`generateMigrations`) — emits the `.nuxt/hub/db/schema.mjs` bundle, then `db:generate`; used by `add`+`init` (#523) |
+| `lib/rollback-collection.ts` | Remove a collection — files, schema barrel, `app.config`, `extends`. Barrel via `getSchemaPath` (modern→legacy). `orphanTableName`/`dropTableWarning` (the code-only-rollback warning) + `generateDropMigration` (`--drop-table` emit / `--dry-run` temp-out preview) — #1445 WS4 |
+| `lib/utils/generate-migrations.ts` | Direct migration generation (`generateMigrations`, `prepareSchemaForMigration`, `DuplicateTableError`) — resolve graph → duplicate gate → app's `db:generate` (drizzle-kit, no Nuxt). Deferral/throw failure contract. Used by config/`add`/`init` (#1445 WS2) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/dialects.ts` | PostgreSQL/SQLite configs |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
 | `lib/utils/update-nuxt-config.ts` | Update nuxt.config.ts extends |
-| `lib/utils/update-schema-index.ts` | Update schema exports |
+| `lib/utils/update-schema-index.ts` | Update schema exports (`add`/`removeSchemaExport`) + `getSchemaPath` (resolve the barrel modern→legacy). NB the magicast finders handle `$ast` being the `Program` node itself, not only a `File` (#1445 WS4) |
+| `lib/utils/schema-sources.ts` | `resolveSchemaSources(appDir, {dialect})` — reproduces NuxtHub's per-layer `server/db/schema*` glob over the recursive `extends` graph (app root + auto-scanned `layers/*` + `@fyit/*`/subpath extends, realpath-deduped, magicast static parse), WITHOUT a Nuxt process. Feeds drizzle-kit directly; parity-verified vs NuxtHub (epic #1445 WS1a). Duplicate-table gate over its output is WS1b |
+| `lib/utils/duplicate-tables.ts` | `findDuplicateTables(resolvedPaths)` — identity-aware gate over the resolver's output: jiti-imports each file through ONE instance, and fails only when a table name maps to ≥2 DISTINCT drizzle objects (benign same-object re-exports pass; catches distinct dups arriving via `export * from` that a regex misses). drizzle-kit otherwise silently last-wins. Epic #1445 WS1b |
 
 ## Generators Structure
 
@@ -346,7 +422,7 @@ lib/generators/
 | `optionsCollection` | string | Collection name for database-driven options |
 | `optionsField` | string | Field in options collection containing values |
 | `creatable` | boolean | Allow creating new options (default: true) |
-| `nullable` | boolean | Allow null values (generates `.nullish()` instead of `.optional()`) |
+| `nullable` | boolean | Legacy no-op since #1403: every non-required field already validates `.nullish()` (nullable columns round-trip `null`, and `null` is how a client clears a field) and types as `T \| null` |
 | `component` | string | Custom component name override |
 | `translatableProperties` | string[] | (Repeater) Properties to support per-item translations |
 | `properties` | object | (Repeater) Typed property definitions for repeater items |

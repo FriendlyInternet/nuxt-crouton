@@ -33,14 +33,15 @@ const requestSchema = z.object({
   })).min(1),
 })
 
-export default defineEventHandler(async (event) => {
-  await requireAuth(event)
+type CategorizeRequest = z.infer<typeof requestSchema>
 
-  const teamId = getRouterParam(event, 'id')
-  if (!teamId) {
-    throw createError({ status: 422, statusText: 'Missing team ID' })
-  }
+interface AssignmentResult {
+  pageId: string
+  success: boolean
+  error?: string
+}
 
+async function readCategorizeRequest(event: any): Promise<CategorizeRequest> {
   const body = await readBody(event)
   const parsed = requestSchema.safeParse(body)
 
@@ -52,44 +53,73 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const { accountId, notionToken, propertyName, propertyType, assignments } = parsed.data
+  return parsed.data
+}
+
+function buildPropertyValue(propertyType: CategorizeRequest['propertyType'], category: string) {
+  return propertyType === 'multi_select'
+    ? { multi_select: [{ name: category }] }
+    : { [propertyType]: { name: category } }
+}
+
+function extractUpdateErrorMessage(error: any): string {
+  const notionError = error.data?.message || error.data?.object === 'error' && error.data?.message
+  return notionError || error.message || 'Failed to update page'
+}
+
+async function applyAssignment(
+  token: string,
+  propertyName: string,
+  propertyType: CategorizeRequest['propertyType'],
+  pageId: string,
+  category: string,
+): Promise<AssignmentResult> {
+  try {
+    await $fetch(`https://api.notion.com/v1/pages/${pageId}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Notion-Version': NOTION_API_VERSION,
+        'Content-Type': 'application/json',
+      },
+      body: {
+        properties: {
+          [propertyName]: buildPropertyValue(propertyType, category),
+        },
+      },
+    })
+
+    return { pageId, success: true }
+  }
+  catch (error: any) {
+    const errorMessage = extractUpdateErrorMessage(error)
+    console.error(`[categorize] Failed to update page ${pageId}:`, errorMessage, error.data || '')
+    return {
+      pageId,
+      success: false,
+      error: errorMessage,
+    }
+  }
+}
+
+export default defineEventHandler(async (event) => {
+  await requireAuth(event)
+
+  const teamId = getRouterParam(event, 'id')
+  if (!teamId) {
+    throw createError({ status: 422, statusText: 'Missing team ID' })
+  }
+
+  const { accountId, notionToken, propertyName, propertyType, assignments } = await readCategorizeRequest(event)
 
   const token = await resolveNotionToken({ accountId, notionToken, teamId })
 
-  const results: { pageId: string; success: boolean; error?: string }[] = []
+  const results: AssignmentResult[] = []
 
   for (let i = 0; i < assignments.length; i++) {
     const { pageId, category } = assignments[i]!
 
-    try {
-      await $fetch(`https://api.notion.com/v1/pages/${pageId}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Notion-Version': NOTION_API_VERSION,
-          'Content-Type': 'application/json',
-        },
-        body: {
-          properties: {
-            [propertyName]: propertyType === 'multi_select'
-              ? { multi_select: [{ name: category }] }
-              : { [propertyType]: { name: category } },
-          },
-        },
-      })
-
-      results.push({ pageId, success: true })
-    }
-    catch (error: any) {
-      const notionError = error.data?.message || error.data?.object === 'error' && error.data?.message
-      const errorMessage = notionError || error.message || 'Failed to update page'
-      console.error(`[categorize] Failed to update page ${pageId}:`, errorMessage, error.data || '')
-      results.push({
-        pageId,
-        success: false,
-        error: errorMessage,
-      })
-    }
+    results.push(await applyAssignment(token, propertyName, propertyType, pageId, category))
 
     // Rate limiting: 200ms between requests
     if (i < assignments.length - 1) {

@@ -1,16 +1,27 @@
 #!/bin/sh
 
-# Crouton-sales print spooler for Teltonika RUT-series routers (BusyBox/RutOS).
+# Crouton print spooler for Teltonika RUT-series routers (BusyBox/RutOS).
 #
 # Polls the hosted app for pending print jobs, decodes the base64 ESC/POS
 # payload, streams it to the thermal printer's raw TCP port (9100), then calls
 # back to mark the job complete/failed. Outbound-only — no inbound exposure.
 #
+# Self-pairing (#1366): the router generates a persistent device id + pairing
+# code on first boot and authenticates every request with them. While nobody
+# has claimed the device in the app, the poll answers HTTP 428 with a
+# server-rendered pairing ticket, which this script prints on the attached
+# thermal printer (throttled) — read the ticket, type the code into the app
+# (event settings → Print flow → Setup → "Koppel router"), done. No per-event
+# EVENT_ID, no shared API key, zero SSH after first imaging.
+#
 # Config is via environment variables (set them in the procd init service,
 # /etc/init.d/print_server — see print_server.init):
-#   API_URL   - base URL of the hosted app, e.g. https://your-app.pages.dev
-#   API_KEY   - must match the app's NUXT_CROUTON_SALES_PRINT_API_KEY secret
-#   EVENT_ID  - the sales event to poll jobs for
+#   API_URL     - base URL of the hosted app, e.g. https://your-app.example
+#   PRINTER_IP  - printer used for the pairing/diagnostic tickets ONLY
+#                 (job tickets carry their own printer ip). Default the
+#                 documented static: 192.168.1.72
+#   DEVICE_FILE - where the persistent identity lives (default
+#                 /etc/print_server_device — /etc persists across reboots)
 #
 # Notes:
 # - Uses a pure-awk base64 decoder because the minimal BusyBox build on RutOS
@@ -20,28 +31,113 @@
 # - A job is only marked complete after the printer confirms it is online with
 #   paper present (ESC/POS DLE EOT status queries appended to the payload).
 #   Set STATUS_CHECK=0 for the legacy "TCP send = done" behavior.
+# - Ticket reprint throttling counts POLLS, not wall-clock time — the RUT's
+#   clock freezes without NTP, but the 2s poll cadence never does.
 
 # Configuration - can be overridden with environment variables
 API_URL="${API_URL:-http://192.168.1.214:3000}"
-API_KEY="${API_KEY:-1234}"
-EVENT_ID="${EVENT_ID:-CHANGE_ME}"
+PRINTER_IP="${PRINTER_IP:-192.168.1.72}"
+DEVICE_FILE="${DEVICE_FILE:-/etc/print_server_device}"
 PRINTER_PORT="9100"
+# Reprint the pairing/diagnostic ticket at most every N polls (~2s each;
+# 1800 ≈ hourly) — and always once on service start.
+TICKET_EVERY="${TICKET_EVERY:-1800}"
 # STATUS_CHECK=1 (default): after sending the ticket, query the printer with
 # ESC/POS DLE EOT and only mark the job complete when the printer answers
 # "online, paper present". STATUS_CHECK=0 restores the legacy fire-and-forget
 # behavior (complete as soon as the TCP send succeeds) for printers that don't
 # answer DLE EOT.
 STATUS_CHECK="${STATUS_CHECK:-1}"
-# Seconds to hold the socket open after sending — lets the printer drain its
-# receive buffer and answer the status queries on the same connection.
+# Post-send status-read CAP in seconds (#1539) — NOT a fixed wait. With the
+# early-return read a printer that answers sooner is confirmed sooner, so the
+# cap never slows a fast printer regardless of its value. Default is
+# OPTIMISTICALLY LOW (field-test the fast path first); if the slow printer (Bar)
+# turns out to need longer, bump it on the router with no rebuild: DRAIN_SECS=3.
 DRAIN_SECS="${DRAIN_SECS:-2}"
+# Pre-flight status-read CAP (seconds) — same early-return semantics as
+# DRAIN_SECS: a fast printer clears in a fraction of this; a slow one gets the
+# full window; the read returns on first reply regardless. Kept optimistically
+# low; one-line override on the router if the field test needs it: PREFLIGHT_SECS=3.
+PREFLIGHT_SECS="${PREFLIGHT_SECS:-1}"
+# Parallel per-printer drain (#1539). 1 (default): different printers drain
+# concurrently (one background worker per printer IP), jobs to the SAME printer
+# stay strictly serial (Epson TM = one :9100 connection at a time). Set to 0 to
+# force the legacy fully-sequential path (clean fallback, never worse).
+PARALLEL_DRAIN="${PARALLEL_DRAIN:-1}"
 
-# Add Google DNS if not present
-grep -q "8.8.8.8" /etc/resolv.conf || echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+# A complete DLE-EOT status reply is three bytes (status / offline cause /
+# paper); once we've collected that many the read may return early instead of
+# waiting out the fixed window (#1539).
+NEEDED_STATUS_BYTES=3
 
-echo "$(date '+%H:%M:%S') Crouton print spooler started"
-echo "  API_URL: $API_URL"
-echo "  EVENT_ID: $EVENT_ID"
+# Sub-second poll primitive for the early-return reads. Prefer usleep (0.1s
+# granularity → a fast printer clears in <1s); fall back to whole-second sleep
+# on a BusyBox build without usleep (still correctly bounded by the cap, just
+# 1s granularity). Detected once here so the cap arithmetic stays consistent.
+if usleep 1000 2>/dev/null; then
+    POLL_CMD="usleep 100000"
+    POLLS_PER_SEC=10
+else
+    POLL_CMD="sleep 1"
+    POLLS_PER_SEC=1
+fi
+
+# Stream file $1 to printer $2:9100, holding the socket open until the DLE-EOT
+# reply lands in $4 (>= NEEDED_STATUS_BYTES bytes) or $3 seconds elapse —
+# whichever first. Early-return (#1539): only changes WHEN we stop waiting, not
+# WHAT we later conclude from the bytes. `timeout` is a hard safety net a few
+# seconds past the cap so a wedged nc can never hang the drain.
+send_and_wait_reply() {
+    _SEND_FILE="$1"; _IP="$2"; _CAP="$3"; _RESP="$4"
+    : > "$_RESP"
+    _MAX=$(( _CAP * POLLS_PER_SEC ))
+    [ "$_MAX" -lt 1 ] && _MAX=1
+    (
+        cat "$_SEND_FILE"
+        # Hold stdin (and thus the socket) open, polling for the reply. Break
+        # the instant the full status reply has arrived so nc gets EOF and
+        # closes early; otherwise fall through at the cap.
+        _n=0
+        while [ "$_n" -lt "$_MAX" ]; do
+            _b=$(wc -c < "$_RESP" 2>/dev/null | tr -d ' ')
+            { [ -n "$_b" ] && [ "$_b" -ge "$NEEDED_STATUS_BYTES" ]; } && break
+            $POLL_CMD
+            _n=$(( _n + 1 ))
+        done
+    ) | timeout $(( _CAP + 6 )) nc "$_IP" "$PRINTER_PORT" > "$_RESP" 2>/dev/null
+}
+
+# Runtime side effects (DNS, device identity, startup banner) are skipped when
+# the script is SOURCED as a library (SPOOLER_LIB=1) so tests can load the
+# functions without touching /etc or /proc. The main loop is likewise guarded
+# just before it below.
+if [ -z "$SPOOLER_LIB" ]; then
+    # Add Google DNS if not present
+    grep -q "8.8.8.8" /etc/resolv.conf || echo "nameserver 8.8.8.8" >> /etc/resolv.conf
+
+    # --- Persistent device identity (#1366) ----------------------------------
+    # Generated once from the kernel's uuid (no clock dependency), then reused
+    # forever. The printed pairing code is what the operator types into the app.
+    if [ ! -f "$DEVICE_FILE" ]; then
+        UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null | tr -d '-')
+        if [ -z "$UUID" ]; then
+            echo "$(date '+%H:%M:%S') FATAL: cannot read /proc/sys/kernel/random/uuid"
+            exit 1
+        fi
+        # 6-digit code from a second uuid's digits (uuid hex alone can be light
+        # on digits; two reads always yield enough).
+        DIGITS=$(cat /proc/sys/kernel/random/uuid /proc/sys/kernel/random/uuid | tr -cd '0-9')
+        {
+            echo "DEVICE_ID=rut-$(echo "$UUID" | cut -c1-8)"
+            echo "DEVICE_CODE=$(echo "$DIGITS" | cut -c1-6)"
+        } > "$DEVICE_FILE"
+    fi
+    . "$DEVICE_FILE"
+
+    echo "$(date '+%H:%M:%S') Crouton print spooler started"
+    echo "  API_URL: $API_URL"
+    echo "  DEVICE_ID: $DEVICE_ID"
+fi
 
 # Faster base64 decoder - simplified version
 decode_base64() {
@@ -118,7 +214,8 @@ classify_status() {
 report_complete() {
     for _ in 1 2 3; do
         curl -s -f -m 10 -X POST \
-            -H "x-api-key: $API_KEY" \
+            -H "x-device-id: $DEVICE_ID" \
+            -H "x-device-code: $DEVICE_CODE" \
             -H "Content-Type: application/json" \
             "$API_URL/api/print-server/jobs/$1/complete" >/dev/null 2>&1 && return 0
         sleep 2
@@ -130,13 +227,60 @@ report_complete() {
 report_fail() {
     for _ in 1 2 3; do
         curl -s -f -m 10 -X POST \
-            -H "x-api-key: $API_KEY" \
+            -H "x-device-id: $DEVICE_ID" \
+            -H "x-device-code: $DEVICE_CODE" \
             -H "Content-Type: application/json" \
             -d "{\"errorMessage\":\"$2\"}" \
             "$API_URL/api/print-server/jobs/$1/fail" >/dev/null 2>&1 && return 0
         sleep 2
     done
     echo "$(date '+%H:%M:%S') WARNING: could not report job $1 failed"
+}
+
+# --- Pairing / diagnostic tickets (#1366) ------------------------------------
+# Both are throttled by POLL COUNT (clock-freeze-safe): printed when the
+# counter hits 0 (service start) and then every TICKET_EVERY polls while the
+# condition persists. Printing resets the shared counter.
+TICKET_COUNTDOWN=0
+
+ticket_due() {
+    [ "$TICKET_COUNTDOWN" -le 0 ]
+}
+
+ticket_printed() {
+    TICKET_COUNTDOWN=$TICKET_EVERY
+}
+
+# Print the server-rendered pairing ticket ($1 = base64 ESC/POS).
+print_pairing_ticket() {
+    TMPFILE="/tmp/pairing_ticket.bin"
+    echo "$1" | decode_base64 > "$TMPFILE"
+    if [ -s "$TMPFILE" ]; then
+        ( cat "$TMPFILE"; sleep "$DRAIN_SECS" ) | timeout 15 nc "$PRINTER_IP" "$PRINTER_PORT" >/dev/null 2>&1 \
+            && echo "$(date '+%H:%M:%S') Pairing ticket printed on $PRINTER_IP (device $DEVICE_ID)"
+    fi
+    rm -f "$TMPFILE"
+}
+
+# The app is unreachable — print a minimal English diagnostic from our own
+# strings (the server can't render anything for us now). Doubles as a printer
+# self-test: if this sheet prints, the printer leg works and the problem is
+# the uplink; if nothing prints, look at the printer/power.
+print_diagnostic_ticket() {
+    {
+        # ESC @ init, ESC t 19 (CP858)
+        printf '\033@\033t\023'
+        printf 'PRINT SERVER: CANNOT REACH APP\n\n'
+        printf 'Device:  %s\n' "$DEVICE_ID"
+        printf 'API_URL: %s\n' "$API_URL"
+        printf 'Error:   %s\n\n' "$1"
+        printf 'This sheet printing means the printer\n'
+        printf 'works - check the internet uplink or\n'
+        printf 'the API_URL in /etc/init.d/print_server\n\n\n'
+        # GS V 0 — full cut
+        printf '\035V\000'
+    } | timeout 15 nc "$PRINTER_IP" "$PRINTER_PORT" >/dev/null 2>&1 \
+        && echo "$(date '+%H:%M:%S') Diagnostic ticket printed on $PRINTER_IP"
 }
 
 # Process one job, start to finish (pre-flight → send → confirm → callback)
@@ -168,8 +312,10 @@ process_job() {
         # empty connection a live ESC/POS printer always answers, even while
         # offline. This also avoids dumping the ticket into a jammed buffer,
         # which would print as a ghost ticket once paper is reloaded.
-        : > "$RESPFILE"
-        ( printf "$STATUS_QUERIES"; sleep 1 ) | timeout 8 nc "$JOB_PRINTER_IP" "$PRINTER_PORT" > "$RESPFILE" 2>/dev/null
+        QUERYFILE="/tmp/printquery_$JOB_ID.bin"
+        printf "$STATUS_QUERIES" > "$QUERYFILE"
+        send_and_wait_reply "$QUERYFILE" "$JOB_PRINTER_IP" "$PREFLIGHT_SECS" "$RESPFILE"
+        rm -f "$QUERYFILE"
 
         set -- $(read_status_bytes "$RESPFILE")
         # In the field, a printer that accepts nothing / answers nothing is
@@ -186,13 +332,13 @@ process_job() {
         fi
 
         # Printer is healthy — send the ticket with the same status queries
-        # appended as a confirmation pass. The trailing sleep keeps stdin (and
-        # thus the socket) open so the printer can drain its buffer and reply
-        # before nc closes — abrupt close right after send is how tickets used
-        # to vanish silently.
+        # appended as a confirmation pass. The read holds stdin (and thus the
+        # socket) open so the printer can drain its buffer and reply before nc
+        # closes — abrupt close right after send is how tickets used to vanish
+        # silently — but now returns the instant the reply lands (capped at
+        # DRAIN_SECS) instead of always waiting the full window.
         printf "$STATUS_QUERIES" >> "$TMPFILE"
-        : > "$RESPFILE"
-        ( cat "$TMPFILE"; sleep "$DRAIN_SECS" ) | timeout 15 nc "$JOB_PRINTER_IP" "$PRINTER_PORT" > "$RESPFILE" 2>/dev/null
+        send_and_wait_reply "$TMPFILE" "$JOB_PRINTER_IP" "$DRAIN_SECS" "$RESPFILE"
 
         set -- $(read_status_bytes "$RESPFILE")
         classify_status "${1:-}" "${2:-}" "${3:-}" \
@@ -222,50 +368,147 @@ process_job() {
     rm -f "$TMPFILE" "$RESPFILE"
 }
 
+# --- Parallel per-printer drain (#1539) --------------------------------------
+# Split into top-level functions so a local test (SPOOLER_LIB=1) can drive the
+# real grouping + fan-out with stubbed nc/curl and measure actual concurrency.
+# Shared globals: RESPONSE (poll body), JOBLIST (one job id per line),
+# GROUP_PREFIX / GROUP_IPS (temp paths), PARALLEL_DRAIN.
+GROUP_PREFIX="/tmp/pjgroup_$$"
+GROUP_IPS="/tmp/pjips_$$.txt"
+
+# Read $JOBLIST + $RESPONSE and bucket job ids into one group file per printer
+# IP. Different printers become different groups (drained in parallel); jobs to
+# the SAME printer stay in one group (drained serially — Epson TM accepts one
+# :9100 connection at a time). No local dedup by design: the server flips jobs
+# to status=printing on fetch (the real dedup), and a requeued job MUST reprint.
+group_jobs_by_printer() {
+    rm -f "$GROUP_PREFIX"_* "$GROUP_IPS" 2>/dev/null
+    : > "$GROUP_IPS"
+    while IFS= read -r JOB_ID; do
+        [ -z "$JOB_ID" ] && continue
+        JOB_PRINTER_IP=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$JOB_ID\"[^}]*\"printerIp\": *\"\([^\"]*\)\".*/\1/p")
+        if [ -z "$JOB_PRINTER_IP" ]; then
+            # No routable printer — fail fast so it doesn't sit at printing.
+            echo "$(date '+%H:%M:%S') Job $JOB_ID: could not parse printer IP from poll response"
+            report_fail "$JOB_ID" "Spooler could not parse job from poll response"
+            continue
+        fi
+        SAFE_IP=$(echo "$JOB_PRINTER_IP" | tr -c '0-9A-Za-z' '_')
+        GF="${GROUP_PREFIX}_${SAFE_IP}"
+        # First job for this printer? Record "IP groupfile" once.
+        [ -f "$GF" ] || echo "$JOB_PRINTER_IP $GF" >> "$GROUP_IPS"
+        echo "$JOB_ID" >> "$GF"
+    done < "$JOBLIST"
+}
+
+# Drain one printer's group SERIALLY: extract each job's payload and print it in
+# order (single :9100 connection at a time).
+drain_printer_group() {
+    _GIP="$1"; _GFILE="$2"
+    while IFS= read -r _JID; do
+        [ -z "$_JID" ] && continue
+        _PDATA=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$_JID\"[^}]*\"printData\": *\"\([^\"]*\)\".*/\1/p")
+        if [ -z "$_PDATA" ]; then
+            echo "$(date '+%H:%M:%S') Job $_JID: could not parse job data from poll response"
+            report_fail "$_JID" "Spooler could not parse job from poll response"
+            continue
+        fi
+        echo "$(date '+%H:%M:%S') Processing job $_JID to $_GIP"
+        process_job "$_JID" "$_PDATA" "$_GIP"
+    done < "$_GFILE"
+}
+
+# Fan out one worker per printer group. PARALLEL_DRAIN=1 (default) backgrounds
+# each group in its OWN subshell so different printers overlap; PARALLEL_DRAIN=0
+# runs them one at a time (clean fallback, never worse than before). The
+# subshell is spawned explicitly — `( … ) &` — rather than `func &`, so the
+# whole group loop (incl. its `while … done < file` redirection) runs in a
+# forked child and the groups genuinely overlap under BusyBox ash.
+fan_out_drain() {
+    _bg=0
+    while IFS= read -r GLINE; do
+        [ -z "$GLINE" ] && continue
+        GIP=${GLINE%% *}
+        GFILE=${GLINE#* }
+        if [ "$PARALLEL_DRAIN" = "1" ]; then
+            ( drain_printer_group "$GIP" "$GFILE" ) &
+            _bg=1
+        else
+            drain_printer_group "$GIP" "$GFILE"
+        fi
+    done < "$GROUP_IPS"
+    # Wait for every printer's worker before returning (no-op when sequential).
+    [ "$_bg" = "1" ] && wait
+}
+
+# Sourced as a library (tests): stop here — everything above is defined, the
+# runtime loop below is skipped.
+if [ -n "$SPOOLER_LIB" ]; then return 0 2>/dev/null || exit 0; fi
+
 while true; do
-    # Poll API. Generous timeout: a bulk requeue ("Resend failed jobs") returns
-    # every ticket's base64 in one response — with -m 5 that truncated over 5G,
-    # leaving jobs flipped to status=printing but never parsed (stuck forever).
+    [ "$TICKET_COUNTDOWN" -gt 0 ] && TICKET_COUNTDOWN=$((TICKET_COUNTDOWN - 1))
+
+    # Poll the device-scoped endpoint (#1366) — the claim in the app decides
+    # which events we serve; no EVENT_ID here. Generous timeout: a bulk
+    # requeue ("Resend failed jobs") returns every ticket's base64 in one
+    # response — with -m 5 that truncated over 5G, leaving jobs flipped to
+    # status=printing but never parsed (stuck forever).
+    BODYFILE="/tmp/poll_body.$$"
+    HTTP_CODE=$(curl -s -m 30 -o "$BODYFILE" -w '%{http_code}' \
+        -H "x-device-id: $DEVICE_ID" \
+        -H "x-device-code: $DEVICE_CODE" \
+        "$API_URL/api/print-server/jobs?mark_as_printing=true" 2>/dev/null)
+    CURL_EXIT=$?
     # Remove newlines from JSON response for grep/sed parsing.
-    RESPONSE=$(curl -s -m 30 -H "x-api-key: $API_KEY" "$API_URL/api/print-server/events/$EVENT_ID/jobs?mark_as_printing=true" 2>/dev/null)
-    RESPONSE=$(echo "$RESPONSE" | tr -d '\n\r' | tr -s ' ')
+    RESPONSE=$(tr -d '\n\r' < "$BODYFILE" 2>/dev/null | tr -s ' ')
+    rm -f "$BODYFILE"
+
+    if [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP_CODE" = "000" ]; then
+        # App unreachable — one diagnostic sheet per throttle window.
+        if ticket_due; then
+            print_diagnostic_ticket "curl exit $CURL_EXIT (no HTTP response)"
+            ticket_printed
+        fi
+        sleep 2
+        continue
+    fi
+
+    if [ "$HTTP_CODE" = "428" ]; then
+        # Unclaimed: the body carries a server-rendered pairing ticket.
+        if ticket_due; then
+            TICKET_B64=$(echo "$RESPONSE" | sed -n 's/.*"ticket": *"\([^"]*\)".*/\1/p')
+            [ -n "$TICKET_B64" ] && print_pairing_ticket "$TICKET_B64"
+            ticket_printed
+        fi
+        sleep 2
+        continue
+    fi
+
+    if [ "$HTTP_CODE" != "200" ]; then
+        # 401/429/5xx: wrong code, lockout, or server trouble — log, never
+        # print (a lockout printing sheets every poll would drain the roll).
+        echo "$(date '+%H:%M:%S') Poll answered HTTP $HTTP_CODE"
+        sleep 2
+        continue
+    fi
 
     if [ ! -z "$RESPONSE" ] && echo "$RESPONSE" | grep -q '"printData"'; then
         # Extract all job data in one pass (handle space after colon in JSON)
         JOBLIST="/tmp/jobs_$$.txt"
         echo "$RESPONSE" | grep -o '"id": *"[^"]*"' | sed 's/"id": *"\([^"]*\)"/\1/g' > "$JOBLIST"
 
-        # Process jobs SEQUENTIALLY. Two reasons:
-        # - Epson TM printers accept one connection on port 9100 at a time, so
-        #   parallel jobs to the same printer starve each other into timeouts.
-        # - There is deliberately no local "already processed" dedup: the server
-        #   flips jobs to status=printing on fetch, which is the real dedup, and
-        #   a requeued job ("Resend failed jobs") MUST print again even if this
-        #   spooler printed it before.
-        while IFS= read -r JOB_ID; do
-            if [ ! -z "$JOB_ID" ]; then
-                # Extract job data (camelCase field names for crouton-sales, handle spaces in JSON)
-                PRINT_DATA=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$JOB_ID\"[^}]*\"printData\": *\"\([^\"]*\)\".*/\1/p")
-                JOB_PRINTER_IP=$(echo "$RESPONSE" | sed -n "s/.*\"id\": *\"$JOB_ID\"[^}]*\"printerIp\": *\"\([^\"]*\)\".*/\1/p")
+        # Group by printer, then fan out one worker per printer (see the
+        # group_jobs_by_printer / fan_out_drain functions above). Both read the
+        # current $RESPONSE and $JOBLIST.
+        group_jobs_by_printer
+        fan_out_drain
 
-                if [ ! -z "$PRINT_DATA" ] && [ ! -z "$JOB_PRINTER_IP" ]; then
-                    echo "$(date '+%H:%M:%S') Processing job $JOB_ID to $JOB_PRINTER_IP"
-                    process_job "$JOB_ID" "$PRINT_DATA" "$JOB_PRINTER_IP"
-                else
-                    # We saw the id but couldn't parse its data (truncated
-                    # response?) — fail it so it doesn't sit at status=printing.
-                    echo "$(date '+%H:%M:%S') Job $JOB_ID: could not parse job data from poll response"
-                    report_fail "$JOB_ID" "Spooler could not parse job from poll response"
-                fi
-            fi
-        done < "$JOBLIST"
-
-        rm -f "$JOBLIST"
+        rm -f "$JOBLIST" "$GROUP_IPS" "$GROUP_PREFIX"_*
 
         # Short sleep when jobs found
         sleep 1
     else
-        # Longer sleep when no jobs
-        sleep 2
+        # Tighter idle poll (#1539) — cheap ~1s pickup win when no jobs pending.
+        sleep 1
     fi
 done

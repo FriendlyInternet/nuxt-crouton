@@ -19,12 +19,38 @@ export default defineNuxtConfig({
   devServer: { port: 3007 },
   extends: [
     '@fyit/crouton-core',
+    // Email sender (Resend) — provides the crouton:auth:email listener that
+    // actually delivers team invites / verification mail. Without this layer the
+    // hook fires and gets logged, but nothing sends (fanfare had no sender at
+    // all before this). API key comes from the NUXT_EMAIL_RESEND_API_KEY worker
+    // secret; from/brand are configured below.
+    '@fyit/crouton-email',
     '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-charts',
     '@fyit/crouton-pages',
     '@fyit/crouton-printing',
     '@fyit/crouton-sales',
+    // Base themes layer: ships the runtime switcher (useThemeSwitcher +
+    // themeProvider plugin), which populates the pill's theme quick-select and
+    // the CV-menu Theme submenu. The preset layers below are CSS/variants only.
+    // (It also re-pulls ko/minimal/kr11, which dedupe against the entries below.)
+    '@fyit/crouton-themes/themes',
+    // Theme layers under test (#1303/#1332): the team Look-and-Feel presets
+    // inject ko-*/bw-* classes at runtime, but without these layers the CSS
+    // behind those classes never ships — presets were palette-only before.
+    '@fyit/crouton-themes/ko',
+    '@fyit/crouton-themes/blackandwhite',
+    '@fyit/crouton-themes/minimal',
+    '@fyit/crouton-themes/kr11',
+    '@fyit/crouton-themes/brutalist',
+    '@fyit/crouton-themes/mtv',
+    '@fyit/crouton-themes/terminal',
+    '@fyit/crouton-themes/braun',
+    '@fyit/crouton-themes/gameboy',
+    '@fyit/crouton-themes/riso',
+    '@fyit/crouton-themes/eink',
+    '@fyit/crouton-themes/blueprint',
     './layers/sales',
     './layers/pages'
   ],
@@ -71,6 +97,13 @@ export default defineNuxtConfig({
       printApiKey: '1234',
       cloudSyncSecret: '',
       print: { enabled: true }
+    },
+    // Transactional email (crouton-email → Resend). The API key is injected at
+    // runtime from the NUXT_EMAIL_RESEND_API_KEY worker secret; the sender is a
+    // verified Resend domain (messages.friendlyinter.net).
+    email: {
+      from: 'noreply@messages.friendlyinter.net',
+      fromName: 'Fanfare'
     }
   },
 

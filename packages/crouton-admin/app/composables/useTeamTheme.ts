@@ -17,7 +17,8 @@
  * ```
  */
 import { computed, watch, readonly } from 'vue'
-import { updateAppConfig } from '#imports'
+import { updateAppConfig, useAppConfig } from '#imports'
+import { THEME_PRESET_REGISTRY, type ThemePresetName, type ThemePresetEntry } from '@fyit/crouton-themes/presets'
 
 /**
  * Primary color options (Tailwind CSS colors)
@@ -38,9 +39,10 @@ export type ThemeNeutralColor = 'slate' | 'gray' | 'zinc' | 'neutral' | 'stone'
 export type ThemeRadius = 0 | 0.125 | 0.25 | 0.375 | 0.5
 
 /**
- * Named theme presets
+ * Named theme presets: 'custom' plus every theme in crouton-themes'
+ * THEME_PRESET_REGISTRY (#1332 — single source, no more hand-copied configs).
  */
-export type ThemePreset = 'custom' | 'blackandwhite' | 'ko'
+export type ThemePreset = 'custom' | ThemePresetName
 
 /**
  * Team theme settings
@@ -65,7 +67,7 @@ export interface ThemePresetConfig {
   /** Hex color for the neutral preview swatch */
   previewNeutral: string
   /** Config passed to updateAppConfig({ ui: ... }) */
-  ui: Record<string, unknown>
+  ui: Record<string, unknown> | ThemePresetEntry['ui']
 }
 
 /**
@@ -128,104 +130,58 @@ export const THEME_PRESETS: Record<ThemePreset, ThemePresetConfig> = {
     previewNeutral: '#64748b', // slate-500
     ui: {} // handled via individual color/radius settings
   },
-  blackandwhite: {
-    label: 'Black & White',
-    description: 'Compact, monochrome dashboard with subtle form variants',
-    previewPrimary: '#171717', // neutral-900
-    previewNeutral: '#737373', // neutral-500
-    ui: {
-      colors: { primary: 'neutral', neutral: 'neutral' },
-      theme: { defaultVariants: { size: 'sm' } },
-      // Override button variant base classes to inject bw-* CSS classes.
-      // The blackandwhite layer bundles main.css which defines these with
-      // !important to reliably override Nuxt UI's CSS-variable-based defaults
-      // and ensure proper contrast in both light and dark modes.
-      button: {
-        defaultVariants: { variant: 'solid' },
-        variants: {
-          variant: {
-            solid: 'bw-solid',
-            outline: 'bw-outline',
-            soft: 'bw-soft',
-            ghost: 'bw-ghost',
-            link: 'bw-link'
-          }
-        }
-      },
-      input: { defaultVariants: { variant: 'subtle' } },
-      select: { defaultVariants: { variant: 'subtle' } },
-      card: { defaultVariants: { variant: 'outline' } },
-      alert: { defaultVariants: { variant: 'subtle' } },
-      textarea: { defaultVariants: { variant: 'subtle' } }
-    }
-  },
+  // Every crouton theme, derived from the themes package (label, swatches and
+  // a scalars-only `ui` payload — see THEME_PRESET_REGISTRY for why arrays
+  // must never be written through updateAppConfig).
+  ...THEME_PRESET_REGISTRY
+}
 
-  ko: {
-    label: 'KO',
-    description: 'Hardware-inspired with tactile bezels and orange accents',
-    previewPrimary: '#FA5F28', // ko-accent-orange
-    previewNeutral: '#78716c', // stone-500
-    ui: {
-      colors: { primary: 'orange', neutral: 'stone' },
-      theme: { defaultVariants: { size: 'md' } },
-      button: {
-        defaultVariants: { variant: 'ko' },
-        variants: {
-          variant: {
-            ko: '',
-            'ko-solid': '',
-            'ko-outline': '',
-            'ko-soft': '',
-            'ko-ghost': '',
-            'ko-link': ''
-          }
-        },
-        compoundVariants: [
-          { color: 'primary', variant: 'ko', class: 'ko-bezel ko-bezel--orange' },
-          { color: 'neutral', variant: 'ko', class: 'ko-bezel ko-bezel--dark' },
-          { color: 'error', variant: 'ko', class: 'ko-bezel ko-bezel--red' },
-          { color: 'secondary', variant: 'ko', class: 'ko-bezel ko-bezel--pink' },
-          { color: 'info', variant: 'ko', class: 'ko-bezel ko-bezel--blue' },
-          { variant: 'ko', class: 'ko-bezel' },
-          { variant: 'ko-solid', color: 'primary', class: 'ko-bezel ko-bezel--orange' },
-          { variant: 'ko-solid', color: 'neutral', class: 'ko-bezel ko-bezel--dark' },
-          { variant: 'ko-solid', class: 'ko-bezel' },
-          { variant: 'ko-outline', color: 'primary', class: 'ko-outline ko-outline--orange' },
-          { variant: 'ko-outline', color: 'neutral', class: 'ko-outline ko-outline--dark' },
-          { variant: 'ko-outline', class: 'ko-outline' },
-          { variant: 'ko-soft', color: 'primary', class: 'ko-soft ko-soft--orange' },
-          { variant: 'ko-soft', color: 'neutral', class: 'ko-soft ko-soft--dark' },
-          { variant: 'ko-soft', class: 'ko-soft' },
-          { variant: 'ko-ghost', color: 'primary', class: 'ko-ghost ko-ghost--orange' },
-          { variant: 'ko-ghost', color: 'neutral', class: 'ko-ghost ko-ghost--dark' },
-          { variant: 'ko-ghost', class: 'ko-ghost' },
-          { variant: 'ko-link', color: 'primary', class: 'ko-link ko-link--orange' },
-          { variant: 'ko-link', color: 'neutral', class: 'ko-link ko-link--dark' },
-          { variant: 'ko-link', class: 'ko-link' }
-        ]
-      },
-      input: {
-        defaultVariants: { variant: 'ko' },
-        variants: { variant: { ko: { root: 'ko-input', base: 'ko-input-base' } } }
-      },
-      card: {
-        defaultVariants: { variant: 'ko' },
-        variants: { variant: { ko: { root: 'ko-card', header: 'ko-card-header', body: 'ko-card-body', footer: 'ko-card-footer' } } }
-      }
-    }
-  }
+/**
+ * Presets actually USABLE in this app: a theme's classes/CSS ship only when
+ * its layer is extended (build-time), so filter by whether the theme's named
+ * variant exists in the built app config. 'custom' is always available.
+ */
+export function useAvailableThemePresets() {
+  const appConfig = useAppConfig()
+  return computed<Partial<Record<ThemePreset, ThemePresetConfig>>>(() => {
+    const registered = (appConfig as any)?.ui?.button?.variants?.variant ?? {}
+    const entries = Object.entries(THEME_PRESETS).filter(([name, preset]) => {
+      if (name === 'custom') return true
+      const check = THEME_PRESET_REGISTRY[name as ThemePresetName]?.checkVariant
+      return !!check && check in registered
+    })
+    return Object.fromEntries(entries)
+  })
 }
 
 /**
  * Apply theme settings to Nuxt UI via updateAppConfig.
  * Exported as a standalone function so the plugin can use it too.
  */
-export function applyThemeSettings(settings: TeamThemeSettings) {
+// `colorMode` is passed in by callers that captured it in setup scope
+// (watch/refresh callbacks lose the Nuxt context, #1387).
+export function applyThemeSettings(settings: TeamThemeSettings, colorMode?: { preference: string }) {
   const preset = settings.preset ?? 'custom'
   const radius = settings.radius ?? DEFAULT_THEME.radius
 
   if (preset !== 'custom') {
-    updateAppConfig({ ui: THEME_PRESETS[preset].ui })
+    const entry = THEME_PRESETS[preset]
+    if (!entry) {
+      // Persisted preset whose layer is no longer extended — fall back to
+      // structural defaults rather than crashing or half-applying.
+      updateAppConfig({ ui: { ...NUXT_UI_STRUCTURAL_DEFAULTS } as any })
+    }
+    else {
+      updateAppConfig({ ui: entry.ui as any })
+      // The theme's designed scheme is a DEFAULT, not a lock (#1395 relaxed
+      // the #1387 pin): applied only while the visitor has no explicit
+      // preference ('system'). Themes carry designed counterpart palettes
+      // for both schemes, so an explicit light/dark choice always wins.
+      const scheme = THEME_PRESET_REGISTRY[preset as ThemePresetName]?.colorMode
+      if (scheme && colorMode && colorMode.preference === 'system') {
+        colorMode.preference = scheme
+      }
+    }
   }
   else {
     const primary = settings.primary ?? DEFAULT_THEME.primary
@@ -241,12 +197,18 @@ export function applyThemeSettings(settings: TeamThemeSettings) {
   }
 
   if (import.meta.client) {
-    document.documentElement.style.setProperty('--ui-radius', `${radius}rem`)
-    // Set data-theme for ambient CSS (e.g. background colors, global font overrides)
+    // Set data-theme for ambient CSS (background, fonts) — and let radius follow
+    // the right owner (#1595). A preset theme declares its own --ui-radius base
+    // token in CSS (#1594); an inline style would BEAT that stylesheet rule, so
+    // for a preset we must NOT set radius inline — clear any left by a prior
+    // custom selection so the theme's token wins. Only "custom" (the slider)
+    // owns radius inline.
     if (preset === 'custom') {
+      document.documentElement.style.setProperty('--ui-radius', `${radius}rem`)
       document.documentElement.removeAttribute('data-theme')
     }
     else {
+      document.documentElement.style.removeProperty('--ui-radius')
       document.documentElement.dataset.theme = preset
     }
   }
@@ -254,6 +216,7 @@ export function applyThemeSettings(settings: TeamThemeSettings) {
 
 export function useTeamTheme() {
   const { teamId } = useTeamContext()
+  const colorMode = useColorMode()
 
   // Shared state with the plugin (populated during SSR)
   const themeData = useState<TeamThemeSettings>('team-theme-data', () => ({}))
@@ -273,7 +236,7 @@ export function useTeamTheme() {
 
   // Watch for live theme changes (e.g. admin editing theme settings)
   watch(theme, (newTheme) => {
-    applyThemeSettings(newTheme)
+    applyThemeSettings(newTheme, colorMode)
   })
 
   // Refresh theme from API
@@ -285,7 +248,7 @@ export function useTeamTheme() {
       )
       themeData.value = data ?? {}
       themeFetched.value = true
-      applyThemeSettings(theme.value)
+      applyThemeSettings(theme.value, colorMode)
     }
     catch {
       themeFetched.value = true
@@ -328,6 +291,6 @@ export function useTeamTheme() {
     resetTheme,
     refresh,
     /** Apply theme settings immediately (for live preview) */
-    applyTheme: applyThemeSettings
+    applyTheme: (settings: TeamThemeSettings) => applyThemeSettings(settings, colorMode)
   }
 }

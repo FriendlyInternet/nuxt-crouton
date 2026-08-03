@@ -82,9 +82,9 @@ function clearAll() {
     </p>
     <p v-else class="text-xs text-muted">
       {{ t('bookings.schedule.openDaysCount', { count: selectedDays.length }) }}
-      <button type="button" class="text-primary hover:underline" @click="clearAll">
+      <UButton variant="link" size="xs" class="p-0" @click="clearAll">
         {{ t('bookings.schedule.resetAllDays') }}
-      </button>
+      </UButton>
     </p>
   </div>
 </template>
