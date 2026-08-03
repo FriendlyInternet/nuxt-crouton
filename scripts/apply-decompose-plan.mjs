@@ -135,6 +135,11 @@ const ACTION_HANDLERS = {
     exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--body-file', f])
   },
   'add-label'(a, { repo, exec, labelled }) {
+    // Force a FRESH labeled event (#1764): the leaf target may already carry work-this from a
+    // prior run, and a plain --add-label is then a silent no-op that fires NO `labeled` event —
+    // so the single-use worker never triggers and the decompose gate sees no `leafDispatched`
+    // (exactly the #1741 failure). Remove-then-add guarantees the event fires.
+    try { exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--remove-label', a.label]) } catch { /* wasn't present */ }
     exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--add-label', a.label])
     labelled.push({ issue: a.issue, label: a.label })
   },
