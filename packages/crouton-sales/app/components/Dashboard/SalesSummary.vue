@@ -35,12 +35,33 @@ const { t } = useT()
 const { format } = useSalesCurrency(() => props.currency)
 
 const revenueRows = ref<RevenueRow[]>([])
+const outstanding = ref(0)
 const statusRows = ref<StatusRow[]>([])
 const productRows = ref<ProductRow[]>([])
 const loaded = ref(false)
 
 const base = computed(() => `/api/crouton-sales/teams/${props.teamParam}/charts`)
 const query = computed(() => ({ eventId: props.eventId, personnel: props.personnel }))
+
+/**
+ * The backlog (#1763). Read from the orders endpoint rather than a chart
+ * aggregate, so this tile and the orders pane below it can never disagree —
+ * both render the same server-computed number. `pageSize=1` because we want the
+ * count, not the rows.
+ *
+ * Best-effort on purpose: a failure here keeps the last value and must not
+ * blank the revenue figures beside it.
+ */
+async function refreshOutstanding() {
+  try {
+    const orders = await $fetch<{ outstanding?: number }>(
+      `/api/crouton-sales/teams/${props.teamParam}/events/${props.eventId}/orders`,
+      { query: { pageSize: 1 } }
+    )
+    outstanding.value = Number(orders?.outstanding ?? 0)
+  }
+  catch { /* keep the last value */ }
+}
 
 async function fetchAll() {
   try {
@@ -51,6 +72,8 @@ async function fetchAll() {
     ])
     revenueRows.value = rev.items ?? []
     statusRows.value = status.items ?? []
+
+    await refreshOutstanding()
     productRows.value = top.items ?? []
   }
   catch {
@@ -71,6 +94,12 @@ const stats = computed(() => [
   { key: 'revenue', label: t('sales.dashboard.revenue'), value: format(totalRevenue.value), icon: 'i-lucide-banknote' },
   { key: 'orders', label: t('sales.dashboard.orders'), value: String(totalOrders.value), icon: 'i-lucide-receipt' },
   { key: 'avg', label: t('sales.dashboard.avgOrder'), value: format(avgOrder.value), icon: 'i-lucide-trending-up' },
+  {
+    key: 'outstanding',
+    label: t('sales.dashboard.outstanding'),
+    value: String(outstanding.value),
+    icon: outstanding.value > 0 ? 'i-lucide-hourglass' : 'i-lucide-check-check'
+  },
 ])
 
 onMounted(() => {
@@ -87,7 +116,7 @@ watch(() => props.personnel, () => fetchAll())
     <!-- Headline numbers: always one row of three; the tile TYPOGRAPHY scales
          with the COMPONENT's width (@container), not the viewport — inside a
          narrow workspace pane full-size text would overflow the columns. -->
-    <div class="grid grid-cols-3 gap-2 @sm:gap-3">
+    <div class="grid grid-cols-2 @sm:grid-cols-4 gap-2 @sm:gap-3">
       <div
         v-for="s in stats"
         :key="s.key"

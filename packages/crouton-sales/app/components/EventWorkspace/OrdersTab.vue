@@ -69,11 +69,16 @@ const ordersUrl = computed(() => {
 // Server pagination: events run into hundreds of orders, and this view polls
 // every 2s — fetch only the current page (server orders by createdAt desc).
 // useFetch tracks the reactive URL, so a page/filter change refetches.
-const { data: ordersData, pending: ordersPending, refresh: refreshOrders } = await useFetch<{ items: any[], total: number }>(
+const { data: ordersData, pending: ordersPending, refresh: refreshOrders } = await useFetch<{ items: any[], total: number, outstanding: number }>(
   ordersUrl,
-  { default: () => ({ items: [], total: 0 }) }
+  { default: () => ({ items: [], total: 0, outstanding: 0 }) }
 )
 const orders = computed(() => ordersData.value?.items || [])
+// "Still waiting" (#1763): orders not cancelled and not yet handed over. The
+// server computes it OUTSIDE the list filters, so it stays the event's real
+// backlog even while the table below is filtered down to one helper.
+const outstanding = computed(() => ordersData.value?.outstanding ?? 0)
+
 const ordersPageCount = computed(() => Math.max(1, Math.ceil((ordersData.value?.total ?? 0) / ordersPageSize)))
 
 // Filter change ⇒ back to page 1 (the old page may not exist in the new set).
@@ -379,6 +384,21 @@ function toggleExpand(id: string) {
 
 <template>
   <div class="space-y-4 @container">
+    <!-- The backlog, stated plainly. Deliberately ABOVE the filters: it is the
+         one number that does NOT follow them, and putting it below would imply
+         it did. Zero is worth showing too — "nothing waiting" is the answer
+         someone walked over to get. -->
+    <div class="flex items-center gap-2 text-sm">
+      <UIcon
+        :name="outstanding > 0 ? 'i-lucide-hourglass' : 'i-lucide-check-check'"
+        class="size-4"
+        :class="outstanding > 0 ? 'text-warning' : 'text-success'"
+      />
+      <span :class="outstanding > 0 ? 'text-highlighted font-medium' : 'text-muted'">
+        {{ outstanding > 0 ? t('sales.workspace.outstanding', { count: outstanding }) : t('sales.workspace.outstandingNone') }}
+      </span>
+    </div>
+
     <!-- Filters live behind a toggle (in the pane header when the parent
          controls it); the chip marks a collapsed-but-active filter so a
          filtered list is never mistaken for the full one. When header-

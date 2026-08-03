@@ -230,7 +230,8 @@
       "orders": "Commandes",
       "avgOrder": "Commande moy.",
       "topProducts": "Meilleurs produits",
-      "noSalesYet": "Pas encore de ventes"
+      "noSalesYet": "Pas encore de ventes",
+      "outstanding": "En attente"
     },
     "common": {
       "save": "Enregistrer",
@@ -615,7 +616,9 @@
         "dataStat": "chiffre d'affaires",
         "settingsDesc": "Détails de l'événement, imprimantes, texte des tickets et aides",
         "settingsStat": "imprimantes"
-      }
+      },
+      "outstanding": "{count} en attente",
+      "outstandingNone": "Rien en attente"
     },
     "helpers": {
       "title": "Bénévoles actifs",
