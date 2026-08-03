@@ -188,6 +188,19 @@ jobs:
       - id: t0
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # Baseline the tree BEFORE pi runs, so the deterministic finish step commits ONLY pi's
+      # edits — never an incidental change from install/build (#1764 safety). In practice this
+      # list is empty: checkout is clean, the install is --frozen-lockfile, and every build
+      # output dir (node_modules/.nuxt/.output/dist) is gitignored so `git add -A` skips it.
+      # Recording it anyway means a future *tracked* build artifact can't silently leak into a
+      # worker's commit — the finish step unstages every path that was already dirty here.
+      - id: baseline
+        run: |
+          SCRATCH='decompose-pidev-(prompt|exec)-[0-9]+\.(txt|log)|pi-telemetry-out'
+          git status --porcelain 2>/dev/null | grep -vE "$SCRATCH" | cut -c4- > "$RUNNER_TEMP/pre-pi-dirty.txt" || true
+          echo "pre-pi non-scratch dirty paths: $(wc -l < "$RUNNER_TEMP/pre-pi-dirty.txt" | tr -d ' ')"
+          cat "$RUNNER_TEMP/pre-pi-dirty.txt" || true
+
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
       # the worker PR) act as the Harness App and cascade. ANTHROPIC_API_KEY = the
@@ -243,7 +256,10 @@ jobs:
           # runs `true` as its own pipeline, clobbering PIPESTATUS[0] to 0 and masking the
           # failure as success. Verified empirically, #1299.)
           set +e
-          pi --print --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
+          # --approve: trust the project so pi loads the lean .pi/settings.json CI profile AND the
+          # .pi/extensions/ completion-enforcer (#1782/#1764). Without it the untrusted runner path
+          # silently falls back to the global 28-extension profile (incl pi-ask-user) + ~2min startup.
+          pi --print --approve --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
@@ -253,6 +269,83 @@ jobs:
           # Piece 3 (exec-log adapter): hand the plain-text run log to the artifact-gate so it can
           # classify WHY a run produced nothing (pi emits no structured execution_file like claude).
           echo "exec_log=$LOG" >> "$GITHUB_OUTPUT"
+
+      # ── FINISH-THE-COMMIT (#1764) — persist pi's work DETERMINISTICALLY, never via pi ────
+      # pi (pi-claude-cli --print) runs one-shot with NO --max-turns. On ~10/10 real worker runs
+      # it did the edits, then ended its turn NARRATING the commit ("Committing now via /commit",
+      # "Proceeding to open the PR", "No response requested.") WITHOUT emitting the commit/PR tool
+      # calls — leaving a dirty tree, a red artifact-gate, and no PR (on-box ~/.pi/agent/sessions,
+      # #1764). Re-PROMPTING pi to just commit does NOT fix it — verified twice on-box: even a
+      # narrow "the tree is dirty, only commit + open the PR" prompt ends with pi saying "I'll
+      # commit…" and stopping, no tool call. So the workflow persists the work ITSELF: pi produces
+      # the edits, and THIS step commits + pushes + opens the PR deterministically in bash. pi is
+      # removed from the persistence path entirely.
+      # NB the workflow's OWN scratch files (decompose-pidev-{prompt,exec}-*, pi-telemetry-out/)
+      # are untracked and always present — they must NOT be committed or count as "dirty", so both
+      # the dirty check and the staging exclude them.
+      - id: finish
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+          EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+        run: |
+          set -uo pipefail
+          SCRATCH='decompose-pidev-(prompt|exec)-[0-9]+\.(txt|log)|pi-telemetry-out'
+          dirty() { git status --porcelain 2>/dev/null | grep -vE "$SCRATCH" | grep -q . ; }
+          BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
+          git config user.name  "nuxt-harness[bot]"
+          git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+
+          # 1) If pi left edits uncommitted, COMMIT THEM DETERMINISTICALLY (never re-prompt pi).
+          if dirty; then
+            echo "::warning::pi left an uncommitted tree — committing it deterministically (#1764)"
+            git status --porcelain | grep -vE "$SCRATCH" || true
+            BR="$(git branch --show-current)"
+            if [ -z "$BR" ] || [ "$BR" = "main" ]; then BR="work-${ISSUE}"; git checkout -b "$BR"; fi
+            git add -A
+            git reset -q -- 'decompose-pidev-*.txt' 'decompose-pidev-*.log' pi-telemetry-out 2>/dev/null || true
+            # scope to pi's edits: unstage anything that was already dirty before pi ran
+            # (build/install noise — normally none; see the `baseline` step).
+            if [ -s "$RUNNER_TEMP/pre-pi-dirty.txt" ]; then
+              while IFS= read -r p; do [ -n "$p" ] && git reset -q -- "$p" 2>/dev/null || true; done < "$RUNNER_TEMP/pre-pi-dirty.txt"
+            fi
+            if git diff --cached --quiet; then
+              echo "nothing to commit after excluding scratch"
+            else
+              TITLE="$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null)"
+              [ -z "$TITLE" ] && TITLE="chore: finish work on #${ISSUE}"
+              git commit -q -m "$TITLE" -m "🤖 Auto-finished by the pi worker (#1764): pi edited these files but ended its turn without committing them; the workflow persisted the work. Refs #${ISSUE}"
+              echo "committed as: $TITLE"
+            fi
+          fi
+
+          # 2) Ensure the branch is pushed and a PR exists (pi also fails to open the PR itself).
+          git fetch origin "$BASE" --quiet 2>/dev/null || true
+          BR="$(git branch --show-current)"
+          if [ -n "$BR" ] && [ "$BR" != "main" ] && [ "$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]; then
+            git push -u origin "HEAD:${BR}" 2>&1 | tail -2
+            EXISTING="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
+            if [ -z "$EXISTING" ]; then
+              gh pr create --base "$BASE" --head "$BR" \
+                --title "$(git log -1 --format=%s)" \
+                --body "$(printf 'Closes #%s\n\n🤖 Auto-opened by the pi worker finish step (#1764) — pi implemented this leaf but did not open the PR itself.' "$ISSUE")" 2>&1 | tail -3
+            else
+              echo "PR #${EXISTING} already open for ${BR}"
+            fi
+          else
+            echo "no commits ahead of ${BASE} on '${BR:-<none>}' — nothing to open a PR for"
+          fi
+
+          # 3) Verdict for the artifact-gate: a still-dirty tree here means the deterministic
+          #    commit itself failed (a git/tooling problem, not the narrate-then-stop fault).
+          if dirty; then
+            echo "::error::working tree STILL dirty after the deterministic finish (#1764)"
+            echo "still_dirty=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "still_dirty=0" >> "$GITHUB_OUTPUT"
+          fi
 
       # ── Artifact-gate (#461) — PASS/FAIL logic reused from decompose-on-issue.yml ────────
       # Harness-agnostic: PASS/FAIL is GitHub-state via GITHUB_TOKEN (comment / linked
@@ -266,6 +359,9 @@ jobs:
         env:
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}
           CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
+          # #1764: '1' only when the deterministic finish step could NOT persist pi's edits
+          # (a git/tooling failure) — lets the gate name that cause instead of "underspecified".
+          PI_LEFT_DIRTY: ${{ steps.finish.outputs.still_dirty }}
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           TRIGGER: ${{ github.event_name }}
         with:
@@ -399,6 +495,12 @@ jobs:
                 } else if (/credit balance is too low|insufficient.*(credit|balance|quota)|billing/i.test(log)) {
                   why = 'the Anthropic key (`PI_PROVIDER_KEY`) is out of credit'
                   action = 'top up the account, then re-dispatch' // NB: not "enable auto-reload" — owner declined it (#1327); the pi-key-canary workflow tracks key health
+                } else if (process.env.PI_LEFT_DIRTY === '1') {
+                  // #1764: pi edited files but the DETERMINISTIC finish step still could not
+                  // persist them — a git/tooling failure, not the narrate-then-stop fault (which
+                  // the finish step handles). Name it accurately, not "underspecified".
+                  why = 'the deterministic finish step could not persist pi\'s edits (a git/tooling failure, not the narrate-then-stop fault) — the working tree is still dirty (#1764)'
+                  action = 'open the run log — the finish step logged the git error; this is NOT an underspecified issue (see #1764)'
                 } else if (failed) {
                   why = 'the pi agent step errored before it built anything'
                   action = 'open the run log, fix the SDK/tooling error, then re-dispatch'
@@ -409,6 +511,12 @@ jobs:
                 }
               }
             } catch (e) { core.warning(`artifact-gate: could not read pi run log: ${e.message}`) }
+
+            // #1764 fallback — an uncommitted tree is a definite cause even if the log is unreadable.
+            if (!why && process.env.PI_LEFT_DIRTY === '1') {
+              why = 'the deterministic finish step could not persist pi\'s edits — the working tree is still dirty (#1764)'
+              action = 'open the run log for the finish step git error; not an underspecified issue (see #1764)'
+            }
 
             // Fallback when the log is unreadable but the step itself failed.
             if (!why && failed) {

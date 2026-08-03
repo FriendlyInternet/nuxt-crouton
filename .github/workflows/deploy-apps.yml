@@ -126,7 +126,6 @@ jobs:
       environment: ${{ matrix.environment }}
       staging-url: ${{ matrix.stagingUrl }}
       production-url: ${{ matrix.productionUrl }}
-      layer-packages: ${{ matrix.layerPackages }}
       # PR-tied deploys wire the preview-review bridge to this PR (#607); on a manual
       # dispatch use the optional review_pr input; empty → the bridge stays off.
       review-pr: ${{ github.event.pull_request.number || github.event.inputs.review_pr }}

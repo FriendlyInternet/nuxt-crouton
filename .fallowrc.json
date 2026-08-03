@@ -121,6 +121,33 @@
     "maxCrap": 30,
     "thresholdOverrides": [
       {
+        // CRAP is UNDEFINED for a Vue template, not merely strict (#1794).
+        // Two of its premises fail at once: (1) a template's cyclomatic count
+        // counts DISPLAY variations (v-if/v-for), not independent logic paths,
+        // so it is not the quantity the formula was calibrated on; and (2) the
+        // coverage term is a proxy for "has anyone checked this", but templates
+        // in packages/* are verified by the e2e fixture harness, which emits no
+        // Istanbul coverage — so cov=0 is a measurement artifact, not a finding.
+        // Squaring an ill-fitting complexity by a false coverage amplifies the
+        // error, not the risk: a 6-branch template scores 42 while SubBar.vue
+        // sits in the baseline at 12 (CRAP 156).
+        //
+        // Scoped to CRAP ONLY. cyclomatic / cognitive / unit-size still gate
+        // these files, because "is this template doing too much" is a real
+        // question that does not depend on a coverage signal.
+        //
+        // Same principle already accepted twice in this file: the zero-coverage
+        // override below, and health.ignore's `**/layers/**/app/components/**`
+        // ("the CRAP is in the template"). This is the unenumerated third case.
+        //
+        // The RIGHT long-term fix is a real coverage signal for components
+        // (component/e2e tests), which would make CRAP valid here again rather
+        // than exempt — tracked separately.
+        "files": ["packages/**/app/components/**/*.vue"],
+        "maxCrap": 420,
+        "reason": "Vue templates carry no unit coverage by design (verified via the e2e fixture harness), so CRAP degenerates to cyc²+cyc and flags every new cyc≥5 component; cyclomatic/cognitive/unit-size gates still apply (#1794)"
+      },
+      {
         "files": [
           "apps/**",
           "pocs/**",

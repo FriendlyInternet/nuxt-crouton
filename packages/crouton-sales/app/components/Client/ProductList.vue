@@ -10,7 +10,12 @@
       class="cursor-pointer group/card relative overflow-hidden transition-colors duration-150 hover:bg-elevated"
       :class="product.isActive === false ? 'opacity-60' : ''"
       :ui="{ body: 'px-3 py-2 sm:px-3 sm:py-2' }"
+      role="button"
+      tabindex="0"
+      :aria-label="product.title"
       @click="handleProductClick(product)"
+      @keydown.enter.self.prevent="handleProductClick(product)"
+      @keydown.space.self.prevent="handleProductClick(product)"
     >
       <!-- Admin affordances slide in from the card edges on hover (bookings-card
            pattern): reorder grip on the left, edit pencil on the right. -->
@@ -84,6 +89,8 @@
               square
               :icon="activeProductId === product.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
               class="group-hover/card:bg-accented/50 hover:bg-accented"
+              :aria-label="product.title"
+              :aria-expanded="activeProductId === product.id"
               @click.stop="toggleProduct(product)"
             />
           </template>
@@ -94,7 +101,7 @@
           <UFieldGroup v-else-if="quantityOf(product) > 0" size="md">
             <UButton
               icon="i-lucide-minus"
-              color="neutral"
+              color="error"
               variant="soft"
               square
               :aria-label="t('sales.cart.remove', 'Remove one')"
@@ -105,21 +112,27 @@
             </UBadge>
             <UButton
               icon="i-lucide-plus"
-              color="neutral"
+              color="success"
               variant="soft"
               square
               :aria-label="t('sales.cart.add', 'Add one')"
               @click.stop="addProduct(product)"
             />
           </UFieldGroup>
-          <!-- Plain product not yet in the cart: single add button. -->
+          <!-- Plain product not yet in the cart: single add button. Success, not
+               primary — it's the qty-0 face of the stepper above, and a `+` that
+               changed colour the moment you tapped it would read as two different
+               controls (#1733). `soft` for the same reason: it carries the same
+               tinted chip as the stepper it turns into, and as every other add
+               button in the panel below. -->
           <UButton
             v-else
-            variant="ghost"
-            color="primary"
+            variant="soft"
+            color="success"
             size="md"
             square
-            class="active:scale-90 transition-[transform,background-color] group-hover/card:bg-primary/10 hover:bg-primary/20"
+            class="active:scale-90 transition-transform"
+            :aria-label="t('sales.cart.add', 'Add one')"
             @click.stop="addProduct(product)"
           >
             <UIcon
@@ -139,6 +152,50 @@
           class="mt-2 pt-2.5 pb-1.5 border-t border-default space-y-2.5"
           @click.stop
         >
+          <!-- Ordered lines of this product already in the cart: each line (its
+               options/remark, or the plain product) with its own −/qty/+
+               stepper, so what's been ordered is visible and adjustable without
+               opening the cart. Deliberately ABOVE the picker: on a busy kassa
+               the running order is what a volunteer checks most, and it keeps
+               the add button at the card's bottom edge, nearest the thumb.
+               The combo composed in the picker below is left out — its own
+               stepper sits with its inputs, so listing it here too would show
+               the same line twice (#1757). -->
+          <div
+            v-if="variantLinesFor(product).length"
+            class="pb-2.5 border-b border-default space-y-1.5"
+          >
+            <p class="text-xs font-medium text-muted">{{ t('sales.products.inCart') }}</p>
+            <div
+              v-for="line in variantLinesFor(product)"
+              :key="line.index"
+              class="flex items-center gap-2"
+            >
+              <span class="flex-1 min-w-0 truncate text-sm">{{ variantLabel(product, line) }}</span>
+              <UFieldGroup size="sm">
+                <UButton
+                  icon="i-lucide-minus"
+                  color="error"
+                  variant="soft"
+                  square
+                  :aria-label="t('sales.cart.remove')"
+                  @click="emit('variantQuantity', line.index, line.quantity - 1)"
+                />
+                <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
+                  <span :key="line.quantity" class="animate-pop">{{ line.quantity }}</span>
+                </UBadge>
+                <UButton
+                  icon="i-lucide-plus"
+                  color="success"
+                  variant="soft"
+                  square
+                  :aria-label="t('sales.cart.add')"
+                  @click="emit('variantQuantity', line.index, line.quantity + 1)"
+                />
+              </UFieldGroup>
+            </div>
+          </div>
+
           <!-- Options -->
           <template v-if="hasOptions(product)">
             <!-- Multi-select: card-variant checkbox group (big tap targets,
@@ -178,45 +235,80 @@
               </template>
             </URadioGroup>
 
-            <!-- Single-select, no remark: each option adds immediately -->
-            <div v-else class="space-y-2">
-              <UButton
+            <!-- Single-select, no remark: one row per option, each stepping its
+                 own cart line. This is the only branch where an option maps 1:1
+                 to a line, so the row can own the quantity — which is why the
+                 option isn't ALSO repeated in the list above (#1732). Same shape
+                 as those rows on purpose: for this product they are those rows. -->
+            <div v-else class="space-y-1.5">
+              <div
                 v-for="option in getOptions(product)"
                 :key="option.id"
-                :label="option.label"
-                block
-                size="md"
-                color="neutral"
-                variant="ghost"
-                class="active:scale-[0.98] transition-transform"
-                @click="selectOption(product, option.id)"
+                class="flex items-center gap-2"
               >
-                <template #trailing>
-                  <span v-if="option.priceModifier > 0" class="text-xs text-muted ms-auto">+{{ format(option.priceModifier) }}</span>
-                  <UIcon
-                    name="i-lucide-plus"
-                    class="size-4 text-primary transition-transform"
-                    :class="[{ 'ms-auto': !option.priceModifier }, poppedId === option.id ? 'animate-pop' : '']"
-                    @animationend="poppedId = null"
+                <span class="flex-1 min-w-0 truncate text-sm">{{ option.label }}</span>
+                <span v-if="option.priceModifier > 0" class="shrink-0 text-xs text-muted">
+                  +{{ format(option.priceModifier) }}
+                </span>
+                <UFieldGroup v-if="lineForOption(product, option.id)" size="sm">
+                  <UButton
+                    icon="i-lucide-minus"
+                    color="error"
+                    variant="soft"
+                    square
+                    :aria-label="t('sales.cart.remove')"
+                    @click="emit('variantQuantity', lineForOption(product, option.id)!.index, lineForOption(product, option.id)!.quantity - 1)"
                   />
-                </template>
-              </UButton>
+                  <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
+                    <span :key="lineForOption(product, option.id)!.quantity" class="animate-pop">
+                      {{ lineForOption(product, option.id)!.quantity }}
+                    </span>
+                  </UBadge>
+                  <UButton
+                    icon="i-lucide-plus"
+                    color="success"
+                    variant="soft"
+                    square
+                    :aria-label="t('sales.cart.add')"
+                    @click="emit('variantQuantity', lineForOption(product, option.id)!.index, lineForOption(product, option.id)!.quantity + 1)"
+                  />
+                </UFieldGroup>
+                <UButton
+                  v-else
+                  size="sm"
+                  color="success"
+                  variant="soft"
+                  square
+                  icon="i-lucide-plus"
+                  class="active:scale-90 transition-transform"
+                  :aria-label="`${option.label} — ${t('sales.cart.add', 'Add one')}`"
+                  @click="selectOption(product, option.id)"
+                />
+              </div>
             </div>
           </template>
 
           <!-- Required per-item remark: inline textarea, beneath options or alone.
-               Header matches the cart's remark section (icon + singular label);
-               the prompt lives in the field description only — no placeholder or
-               textarea icon, they doubled the same text inside the box. -->
+               The label IS the operator's own prompt ("Aantal glazen") when the
+               product sets one — the generic "Opmerking" is only the fallback,
+               and showing both stacked the same instruction twice. No
+               placeholder or textarea icon either, for the same reason. -->
           <UFormField
             v-if="product.requiresRemark"
-            :description="product.remarkPrompt || undefined"
             :class="hasOptions(product) ? 'pt-2' : ''"
           >
             <template #label>
               <span class="flex items-center gap-2">
-                <UIcon name="i-lucide-message-square-text" class="size-4" />
-                {{ t('sales.cart.remark') }}
+                <!-- The icon belongs to the generic "Opmerking" fallback, which it
+                     was drawn for (it mirrors the cart's remark section). A product
+                     that supplies its own prompt gets that sentence as the heading,
+                     where a speech bubble in front of arbitrary text says nothing. -->
+                <UIcon
+                  v-if="!product.remarkPrompt"
+                  name="i-lucide-message-square-text"
+                  class="size-4 shrink-0"
+                />
+                {{ product.remarkPrompt || t('sales.cart.remark') }}
               </span>
             </template>
             <UTextarea
@@ -228,56 +320,46 @@
             />
           </UFormField>
 
-          <!-- One confirm button for multi-select and/or remark products. Remark
-               and multi-select options are optional; single-select is required. -->
-          <UButton
-            v-if="needsConfirm(product)"
-            block
-            size="lg"
-            color="primary"
-            :disabled="confirmDisabled(product)"
-            @click="confirmProduct(product)"
-          >
-            {{ t('sales.products.addToCart') }}
-          </UButton>
-
-          <!-- Ordered variants of this product already in the cart: each line
-               (its options/remark) with its own −/qty/+ stepper, so what's been
-               ordered is visible and adjustable without opening the cart. -->
-          <div
-            v-if="linesFor(product).length"
-            class="pt-2.5 border-t border-default space-y-1.5"
-          >
-            <p class="text-xs font-medium text-muted">{{ t('sales.products.inCart') }}</p>
-            <div
-              v-for="line in linesFor(product)"
-              :key="line.index"
-              class="flex items-center gap-2"
-            >
-              <span class="flex-1 min-w-0 truncate text-sm">{{ variantLabel(product, line) }}</span>
-              <UFieldGroup size="sm">
-                <UButton
-                  icon="i-lucide-minus"
-                  color="neutral"
-                  variant="soft"
-                  square
-                  :aria-label="t('sales.cart.remove')"
-                  @click="emit('variantQuantity', line.index, line.quantity - 1)"
-                />
-                <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
-                  <span :key="line.quantity" class="animate-pop">{{ line.quantity }}</span>
-                </UBadge>
-                <UButton
-                  icon="i-lucide-plus"
-                  color="neutral"
-                  variant="soft"
-                  square
-                  :aria-label="t('sales.cart.add')"
-                  @click="emit('variantQuantity', line.index, line.quantity + 1)"
-                />
-              </UFieldGroup>
-            </div>
+          <!-- Quantity for multi-select and/or remark products: the same −/qty/+
+               a plain product gets on its row, targeting the cart line for the
+               combo composed above. There is no separate "add to cart" button —
+               a `+` says it. At 0 it's the lone `+`; single-select still gates
+               it until an option is picked. -->
+          <div v-if="needsConfirm(product)" class="flex justify-end">
+            <UFieldGroup v-if="activePendingLine" size="lg">
+              <UButton
+                icon="i-lucide-minus"
+                color="error"
+                variant="soft"
+                square
+                :aria-label="t('sales.cart.remove', 'Remove one')"
+                @click="emit('variantQuantity', activePendingLine.index, activePendingLine.quantity - 1)"
+              />
+              <UBadge color="neutral" variant="soft" class="w-12 justify-center tabular-nums">
+                <span :key="activePendingLine.quantity" class="animate-pop">{{ activePendingLine.quantity }}</span>
+              </UBadge>
+              <UButton
+                icon="i-lucide-plus"
+                color="success"
+                variant="soft"
+                square
+                :aria-label="t('sales.cart.add', 'Add one')"
+                @click="emit('variantQuantity', activePendingLine.index, activePendingLine.quantity + 1)"
+              />
+            </UFieldGroup>
+            <UButton
+              v-else
+              size="lg"
+              color="success"
+              square
+              icon="i-lucide-plus"
+              class="active:scale-90 transition-transform"
+              :disabled="confirmDisabled(product)"
+              :aria-label="t('sales.products.addToCart')"
+              @click="confirmProduct(product)"
+            />
           </div>
+
         </div>
       </Transition>
       </div>
@@ -301,10 +383,11 @@ const props = defineProps<{
    */
   quantities?: Record<string, number>
   /**
-   * Cart lines for configurable products (options/remark), keyed by product id
-   * and carrying each line's cart index. Drives the "ordered variants" list
-   * inside the expandable — one −/qty/+ stepper per variant, targeting its
-   * exact line by index.
+   * Cart lines of a configurable product, keyed by product id and carrying each
+   * line's cart index. Drives the "ordered variants" list inside the expandable
+   * — one −/qty/+ stepper per variant, targeting its exact line by index.
+   * Includes the line added WITHOUT options (options can be optional), which
+   * `variantLabel` renders as the plain product title.
    */
   cartLines?: Record<string, Array<{ index: number, selectedOptions?: string | string[], remarks?: string, quantity: number }>>
 }>()
@@ -327,10 +410,51 @@ function quantityOf(product: SalesProduct): number {
   return props.quantities?.[product.id] ?? 0
 }
 
-// The cart lines (variants) of a configurable product, for the ordered list
-// inside its expandable.
+// Every cart line of a product, keyed by cart index.
 function linesFor(product: SalesProduct) {
   return props.cartLines?.[product.id] ?? []
+}
+
+// The lines listed under "in cart" inside the expandable: the ones no OTHER
+// control in this panel already steps. Two are excluded — the combo the panel's
+// own stepper targets, and (single-select) the lines their option rows step —
+// because either would otherwise render as the same line twice.
+// Which lines belong to a configurable product at all stays `cartLinesByProduct`'s
+// call: an options-less line belongs when options are optional (#1753), and this
+// is deliberately NOT the place to re-filter that.
+function variantLinesFor(product: SalesProduct) {
+  const stepped = inlineOptionLineIndexes(product)
+  return linesFor(product).filter(line =>
+    line.index !== activePendingLine.value?.index && !stepped.has(line.index)
+  )
+}
+
+// Only the single-select-no-remark branch renders a stepper per option: there one
+// option maps to exactly one cart line, so the row can target it unambiguously.
+// Multi-select lines are combinations of options, and a remark product's lines
+// differ by free text — neither has a row that means one line.
+function hasInlineOptionSteppers(product: SalesProduct): boolean {
+  return hasOptions(product) && !isMultiSelect(product) && !product.requiresRemark
+}
+
+// The cart line one option row steps, if that option is in the cart.
+function lineForOption(product: SalesProduct, optionId: string) {
+  return linesFor(product).find(line =>
+    !line.remarks && sameOptions(line.selectedOptions, optionId)
+  ) ?? null
+}
+
+// Cart indexes already covered by an option row. Derived from the rows that
+// actually render — so a line whose option was since deleted from the product
+// has no row, isn't in this set, and keeps its place in the list below.
+function inlineOptionLineIndexes(product: SalesProduct): Set<number> {
+  const indexes = new Set<number>()
+  if (!hasInlineOptionSteppers(product)) return indexes
+  for (const option of getOptions(product)) {
+    const line = lineForOption(product, option.id)
+    if (line) indexes.add(line.index)
+  }
+  return indexes
 }
 
 // Human label for one ordered variant: its selected option labels (ids resolved
@@ -461,24 +585,65 @@ function confirmDisabled(product: SalesProduct): boolean {
   return false
 }
 
-// Gather inline options + remark and add to cart. The remark is optional.
+// The ticked multi-select combo, shaped the way the cart stores it: nothing
+// ticked is `undefined`, not an empty array (`addToCart` normalizes the same).
+function pendingMultiOptions(productId: string): string[] | undefined {
+  const selected = selectedOptionIds.value.get(productId) || []
+  return selected.length > 0 ? selected : undefined
+}
+
+// The options the panel would add right now (undefined when the product has
+// none).
+function pendingOptions(product: SalesProduct): string | string[] | undefined {
+  if (!hasOptions(product)) return undefined
+  return isMultiSelect(product)
+    ? pendingMultiOptions(product.id)
+    : selectedSingleOption(product.id)
+}
+
+// ...and its remark. An untyped remark is `undefined`, not '', so a line added
+// without one merges with the plain line the cart already keeps for it.
+function pendingRemark(product: SalesProduct): string | undefined {
+  if (!product.requiresRemark) return undefined
+  return remarkFor(product.id).trim() || undefined
+}
+
+// A cart line's options as one comparable, order-insensitive list (a
+// single-select is stored as a bare string, a multi-select as an array).
+function optionList(value?: string | string[]): string[] {
+  if (value == null) return []
+  return (Array.isArray(value) ? [...value] : [value]).sort()
+}
+
+// Same order-insensitive comparison the cart merges lines on
+// (`areOptionsEqual` in usePosOrder) — the panel stepper has to resolve the
+// exact line `addToCart` would hit, or it'd step someone else's combo.
+function sameOptions(a?: string | string[], b?: string | string[]): boolean {
+  const arrA = optionList(a)
+  const arrB = optionList(b)
+  return arrA.length === arrB.length && arrA.every((v, i) => v === arrB[i])
+}
+
+// The cart line for the combo currently composed in the open panel, if it's
+// already in the cart. This is what the panel's −/qty/+ steps. Only the
+// expanded product can have one, so it's a single computed rather than a map.
+const activePendingLine = computed(() => {
+  const product = orderedProducts.value.find(p => p.id === activeProductId.value)
+  if (!product || !needsConfirm(product)) return null
+  const remark = pendingRemark(product)
+  const options = pendingOptions(product)
+  return linesFor(product).find(line =>
+    (line.remarks || undefined) === remark && sameOptions(line.selectedOptions, options)
+  ) ?? null
+})
+
+// Add one of the composed combo. The inputs deliberately stay put: the button
+// has become a stepper, so clearing them here would reset its count to 0 on
+// every tap. Composing a different combo (edit the remark, change the options)
+// is what starts a new line — the old one keeps its stepper in the list below.
 function confirmProduct(product: SalesProduct) {
-  const selected = selectedOptionIds.value.get(product.id) || []
-  let options: string | string[] | undefined
-  if (hasOptions(product)) {
-    options = isMultiSelect(product)
-      ? (selected.length > 0 ? selected : undefined)
-      : selected[0]
-  }
-  const remark = product.requiresRemark ? remarkFor(product.id).trim() : undefined
-
   poppedId.value = product.id
-  emit('select', product, options, remark)
-
-  // Clear the inputs but keep the panel open — the just-added variant appears
-  // in the "ordered" list below, and the user can compose another combo.
-  selectedOptionIds.value.delete(product.id)
-  remarks.value.delete(product.id)
+  emit('select', product, pendingOptions(product), pendingRemark(product))
 }
 
 function handleProductClick(product: SalesProduct) {
