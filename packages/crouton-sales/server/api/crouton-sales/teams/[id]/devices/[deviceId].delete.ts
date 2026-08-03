@@ -7,7 +7,7 @@
  * does not exist (404), so this is not a cross-team probe.
  */
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { revokeTeamDevice } from '../../../../utils/device-pairing'
+import { revokeTeamDevice } from '../../../../../utils/device-pairing'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)

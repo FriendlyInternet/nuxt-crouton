@@ -152,7 +152,15 @@ export async function listTeamDevices(organizationId: string): Promise<TeamDevic
     )
     .limit(500)
 
-  return rows.map(r => ({
+  // `useDB()` is an untyped global here, so the row shape must be stated —
+  // otherwise `r` is an implicit any and typecheck fails in consuming apps.
+  const selected = rows as Array<{
+    deviceId: string
+    resourceType: string
+    claimedAt: Date | null
+  }>
+
+  return selected.map(r => ({
     deviceId: r.deviceId,
     type: r.resourceType,
     claimedAt: r.claimedAt ?? null

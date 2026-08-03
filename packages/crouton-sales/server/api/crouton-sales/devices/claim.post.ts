@@ -33,7 +33,8 @@ export default defineEventHandler(async (event) => {
 
   if (!result.ok) {
     if (result.retryAfterSeconds) {
-      setHeader(event, 'Retry-After', String(result.retryAfterSeconds))
+      // h3 types Retry-After as numeric seconds — do not stringify it.
+      setHeader(event, 'Retry-After', result.retryAfterSeconds)
     }
     throw createError({
       status: result.status,
