@@ -2,7 +2,7 @@
 // URL builder. Run: node --test scripts/app-preview.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { resolveApp, readLanding, findDevUrl } from './app-preview.mjs'
+import { resolveApp, readLanding, findDevUrl, waitFor } from './app-preview.mjs'
 import { buildLoginUrl } from './seed-review-login.mjs'
 
 test('resolveApp finds an app in either workspace, apps/ first', () => {
@@ -38,6 +38,26 @@ test('buildLoginUrl encodes the credentials — a bare + would decode as a space
   assert.equal(q.get('email'), 'review+kassa-pr12@example.com')
   assert.equal(q.get('password'), 'a+b c')
   assert.equal(q.get('redirect'), '/admin/test1/sales/events/vlaamsekermis')
+})
+
+test('waitFor returns as soon as the check passes', async () => {
+  let calls = 0
+  const value = await waitFor(() => (++calls >= 3 ? 'ready' : null), { timeoutMs: 1000, intervalMs: 0 })
+  assert.equal(value, 'ready')
+  assert.equal(calls, 3)
+})
+
+test('waitFor gives up at the deadline and hands back the falsy value', async () => {
+  // Injected clock: no real waiting, and the deadline is deterministic.
+  let t = 0
+  const value = await waitFor(() => false, {
+    timeoutMs: 500,
+    intervalMs: 100,
+    now: () => t,
+    sleep: async (ms) => { t += ms }
+  })
+  assert.equal(value, false)
+  assert.ok(t >= 500, 'must not return before the timeout elapsed')
 })
 
 test('buildLoginUrl omits redirect when there is no landing path', () => {

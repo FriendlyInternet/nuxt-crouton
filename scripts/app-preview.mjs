@@ -39,6 +39,9 @@ const DEFAULT_EMAIL = 'review+local@example.com'
 const DEFAULT_PASSWORD = 'ReviewLocal2026'
 const SEED_TEAM = 'test1'
 const BOOT_TIMEOUT_MS = 180_000
+// Nuxt prints its URL before the first route is compiled, so the port can refuse
+// a moment longer — the seed + login steps need it answering.
+const READY_TIMEOUT_MS = 20_000
 
 function parseArgs(argv) {
   const out = { app: null, seed: true, login: true }
@@ -71,6 +74,21 @@ export function readLanding(dir, read = p => readFileSync(p, 'utf8')) {
     return JSON.parse(read(`${dir}/deploy.config.json`)).reviewLogin?.landing || ''
   } catch {
     return ''
+  }
+}
+
+/**
+ * Poll `check` until it returns something truthy or the timeout elapses; resolves
+ * to the last value either way, so the caller decides what a timeout means.
+ * (One helper for both waits here — waiting for the printed URL, then for the
+ * port to actually answer.)
+ */
+export async function waitFor(check, { timeoutMs, intervalMs, now = Date.now, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
+  const deadline = now() + timeoutMs
+  for (;;) {
+    const value = await check()
+    if (value || now() >= deadline) return value
+    await sleep(intervalMs)
   }
 }
 
@@ -113,19 +131,16 @@ async function main() {
   })
   dev.on('exit', code => process.exit(code ?? 0))
 
-  const started = Date.now()
-  while (!devUrl && Date.now() - started < BOOT_TIMEOUT_MS) {
-    await new Promise(r => setTimeout(r, 250))
-  }
+  await waitFor(() => devUrl, { timeoutMs: BOOT_TIMEOUT_MS, intervalMs: 250 })
   if (!devUrl) {
     warn(`no dev URL after ${BOOT_TIMEOUT_MS / 1000}s — leaving the server running, skipping seed + login.`)
   }
   else {
     // The route handler isn't necessarily ready the instant the URL is printed.
-    for (let i = 0; i < 40 && !booted; i++) {
-      booted = await fetch(devUrl, { redirect: 'manual' }).then(() => true).catch(() => false)
-      if (!booted) await new Promise(r => setTimeout(r, 500))
-    }
+    booted = await waitFor(
+      () => fetch(devUrl, { redirect: 'manual' }).then(() => true).catch(() => false),
+      { timeoutMs: READY_TIMEOUT_MS, intervalMs: 500 }
+    )
 
     // ── 2. Seed the demo content (crouton-seed → .data/db/sqlite.db) ───────────
     // AFTER boot on purpose: the local seed needs the DB dev creates + migrates on
