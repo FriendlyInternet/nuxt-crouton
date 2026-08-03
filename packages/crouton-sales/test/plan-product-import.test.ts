@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseProductPaste } from '../app/utils/parse-product-paste'
-import { planProductImport, buildProductValues, indexByTitle, readImportRequest, nextOrderAfter, chunkForBoundParams } from '../server/utils/plan-product-import'
+import { planProductImport, buildProductValues, indexByTitle, readImportRequest, nextOrderAfter } from '../server/utils/plan-product-import'
 
 /**
  * Pure planning for the bulk product import (#1656, epic #1652).
@@ -176,63 +176,4 @@ describe('nextOrderAfter', () => {
   it('starts an empty event at 0', () => expect(nextOrderAfter([])).toBe(0))
   it('appends after the highest existing order', () => expect(nextOrderAfter([{ maxOrder: 12 }])).toBe(13))
   it('treats a null order as unset', () => expect(nextOrderAfter([{ maxOrder: null }])).toBe(0))
-})
-
-/**
- * The #1707 regression: D1 caps a query at 100 BOUND PARAMETERS, and a multi-row INSERT
- * binds one per column per row. The endpoint wrote every product in a single statement, so
- * a 43-row paste bound 731 parameters and the whole import 500'd on staging — while passing
- * locally, where SQLite allows 32 766. These cases pin the ceiling, not the chunk size:
- * what matters is that no statement we hand to D1 can ever exceed the cap.
- */
-describe('chunkForBoundParams — the D1 100-parameter cap (#1707)', () => {
-  const now = new Date('2026-08-03T10:00:00Z')
-  const ctx = {
-    eventId: 'e1',
-    stamp: { teamId: 't1', owner: 'u1', createdBy: 'u1', updatedBy: 'u1' },
-    now,
-    startOrder: 0,
-    newId: (() => { let n = 0; return () => `id${++n}` })(),
-  }
-
-  /** A product row as `buildProductValues` really emits it: 17 columns. */
-  const productRows = (n: number) => {
-    const p = plan(['Name\tPrice\tCategory\tLocation', ...Array.from({ length: n }, (_, i) => `P${i}\t3\tDrank\tBar`)].join('\n'))
-    return buildProductValues(p.toCreate, { categories: new Map(), locations: new Map() }, ctx)
-  }
-
-  const boundParams = (chunk: Record<string, unknown>[]) => chunk.length * Object.keys(chunk[0] ?? {}).length
-
-  it('never emits a chunk over the cap for the 43-row paste that broke staging', () => {
-    const rows = productRows(43)
-    expect(Object.keys(rows[0]!)).toHaveLength(17) // guard: the shape this ceiling is computed from
-    expect(rows.length * 17).toBeGreaterThan(100) // guard: one statement really would have blown it
-
-    for (const chunk of chunkForBoundParams(rows)) expect(boundParams(chunk)).toBeLessThanOrEqual(100)
-  })
-
-  it('writes every row exactly once, in order', () => {
-    const rows = productRows(43)
-    expect(chunkForBoundParams(rows).flat()).toEqual(rows)
-  })
-
-  it('issues no statement at all for an empty plan', () => {
-    expect(chunkForBoundParams([])).toEqual([])
-  })
-
-  it('holds the cap for the narrower relation rows too', () => {
-    const categories = Array.from({ length: 30 }, (_, i) => ({
-      id: `c${i}`, eventId: 'e1', title: `C${i}`, displayOrder: 0,
-      teamId: 't1', owner: 'u1', createdBy: 'u1', updatedBy: 'u1', createdAt: now, updatedAt: now,
-    }))
-    for (const chunk of chunkForBoundParams(categories)) expect(boundParams(chunk)).toBeLessThanOrEqual(100)
-  })
-
-  it('still makes progress on a row too wide to ever fit — one row per statement, never a zero-size chunk', () => {
-    const wide = Array.from({ length: 3 }, () => Object.fromEntries(
-      Array.from({ length: 120 }, (_, c) => [`col${c}`, c]),
-    ))
-    expect(chunkForBoundParams(wide)).toHaveLength(3)
-    expect(chunkForBoundParams(wide).every(c => c.length === 1)).toBe(true)
-  })
 })

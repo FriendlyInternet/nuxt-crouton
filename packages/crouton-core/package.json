@@ -10,6 +10,7 @@
     "./shared/seed": "./shared/seed/index.ts",
     "./shared/utils/date": "./shared/utils/date.ts",
     "./shared/utils/fs": "./shared/utils/fs.ts",
+    "./shared/utils/d1": "./shared/utils/d1.ts",
     "./shared/types/scaffold": "./shared/types/scaffold.ts",
     "./shared/utils/scaffold": "./shared/utils/scaffold.ts",
     "./app/types/app": "./app/types/app.ts",
