@@ -153,11 +153,13 @@ jobs:
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
-      # the worker PR) act as the Harness App and cascade. ANTHROPIC_API_KEY = the
-      # funded metered key (NOT a subscription — subscription OAuth must not back CI).
+      # the worker PR) act as the Harness App and cascade. NO ANTHROPIC_API_KEY: this
+      # runs on the mac-mini (`AGENT_RUNNER=mac-mini`) where `claude` is logged in, so
+      # `--provider pi-claude-cli` drives the Claude SUBSCRIPTION directly (no metered
+      # key). REVERSES the old #652/#823 "subscription must not back CI" rule on the
+      # owner's instruction that Anthropic now permits it (#1669; source pending there).
       - id: pi
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.PI_PROVIDER_KEY }}
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           PI_MODEL: ${{ inputs.model || 'claude-sonnet-5' }}
@@ -193,7 +195,7 @@ jobs:
           # runs `true` as its own pipeline, clobbering PIPESTATUS[0] to 0 and masking the
           # failure as success. Verified empirically, #1299.)
           set +e
-          pi --print --provider anthropic --model "$PI_MODEL" --skill .claude/skills \
+          pi --print --provider pi-claude-cli --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
