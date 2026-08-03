@@ -18,7 +18,7 @@
  * (same split as `order-filters.ts` / `my-orders-shape.ts`); this handler is the
  * fetch → plan → insert delegate.
  */
-import { desc, eq } from 'drizzle-orm'
+import { desc, eq, getTableColumns } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { requireTeamEvent } from '../../../../../../../utils/team-event'
 import { parseProductPaste } from '../../../../../../../../app/utils/parse-product-paste'
@@ -28,10 +28,10 @@ import {
   indexByTitle,
   readImportRequest,
   nextOrderAfter,
-  chunkForBoundParams,
   norm,
   type TitleRow,
 } from '../../../../../../../utils/plan-product-import'
+import { chunkRowsForTable } from '@fyit/crouton-core/shared/utils/d1'
 import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
 import { salesCategories } from '~~/layers/sales/collections/categories/server/database/schema'
 import { salesLocations } from '~~/layers/sales/collections/locations/server/database/schema'
@@ -47,7 +47,7 @@ async function insertAndIndex(
   index: Map<string, string>,
 ): Promise<void> {
   if (!rows.length) return
-  for (const chunk of chunkForBoundParams(rows)) await db.insert(table).values(chunk as never)
+  for (const batch of chunkRowsForTable(rows, getTableColumns(table))) await db.insert(table).values(batch as never)
   for (const row of rows) index.set(norm(row.title), row.id)
 }
 
@@ -131,8 +131,8 @@ export default defineEventHandler(async (event) => {
   // not one transaction: a mid-import failure leaves the earlier rows written. That is the
   // recoverable direction — the parser flags every written row as a duplicate, so re-running
   // the same paste imports only what is missing.
-  for (const chunk of chunkForBoundParams(productRows)) {
-    await db.insert(salesProducts).values(chunk)
+  for (const batch of chunkRowsForTable(productRows, getTableColumns(salesProducts))) {
+    await db.insert(salesProducts).values(batch)
   }
 
   return {
