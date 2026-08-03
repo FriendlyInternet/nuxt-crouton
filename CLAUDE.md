@@ -346,7 +346,12 @@ Slideover and Drawer follow the same pattern: `v-model` + `#content="{ close }"`
 ## Development Commands
 
 ```bash
-pnpm dev / pnpm build / pnpm preview
+pnpm --filter <app> dev   # There is NO root `dev` script — always filter to an app
+pnpm build / pnpm build:packages
+pnpm preview <app>    # LOOK AT a change: boots the app, seeds it, mints a disposable
+                      # review login and prints a PREFILLED one-click URL (#1777).
+                      # The answer to "a packages change has no preview" — a
+                      # packages-only PR gets no deploy preview by design.
 pnpm typecheck        # Runs per-app typecheck (NEVER npx nuxt typecheck from root)
 npx nuxt db generate  # Database migrations
 pnpm test / pnpm test:unit / pnpm test:e2e
