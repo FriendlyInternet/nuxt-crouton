@@ -82,7 +82,19 @@ const modalTitle = computed(() => {
   }
 })
 
-// Close modal, restore URL, refresh teams, then navigate
+// Close modal, restore URL, load the team list, then navigate.
+//
+// This is the ONLY thing that moves the user after a successful sign-in, so it
+// has to be deterministic (#1703). Two things used to make it not be:
+//
+//  1. `refreshTeams()` was fire-and-forget, so we navigated with an empty team
+//     list and left the destination page to race the fetch. Now awaited — the
+//     landing route middleware can resolve a team synchronously.
+//  2. `navigateTo(redirectTo)` was a silent no-op whenever `redirectTo` matched
+//     the router's current route, which is EVERY plain login: the router plugin
+//     cancels the navigation to /auth/login and only pushState's the URL, so
+//     vue-router still thinks it is at '/'. `force: true` bypasses that
+//     same-route dedupe so the guard chain actually re-runs.
 async function handleSuccess() {
   const redirectTo = state.value.redirectTo
   state.value.open = false
@@ -92,9 +104,18 @@ async function handleSuccess() {
   if (import.meta.client) {
     window.history.replaceState(null, '', redirectTo)
   }
-  // Refresh teams list now that we're authenticated (nanostore doesn't auto-populate)
-  useTeam().refreshTeams()
-  await navigateTo(redirectTo, { replace: true })
+  // Populate the team list before navigating — a failure here must not strand
+  // the user on the modal, the destination can still recover.
+  await useTeam().refreshTeams().catch(() => {})
+
+  // `force` lives on the route LOCATION (vue-router's RouteLocationOptions),
+  // not on navigateTo's options. Resolve first so a redirectTo carrying a query
+  // or hash survives the round-trip.
+  const target = useRouter().resolve(redirectTo)
+  await navigateTo(
+    { path: target.path, query: target.query, hash: target.hash, force: true },
+    { replace: true }
+  )
 }
 
 // ── OAuth / passkey providers (shared across login & register) ────────────────

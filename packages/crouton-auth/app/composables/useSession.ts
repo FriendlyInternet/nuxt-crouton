@@ -46,7 +46,20 @@ interface SessionContext {
   isPendingState: Ref<boolean>
   errorState: Ref<Error | null>
   isListening: Ref<boolean>
+  triedDefaultOrgState: Ref<boolean>
 }
+
+// Client-side single-flight guards (#1703). Login drives three concurrent
+// resolution paths — useAuth.login()'s own refresh, the $sessionSignal
+// listener, and the initial fetch — which used to fire duplicate requests and
+// clobber each other's results.
+//
+// Deliberately gated on `!import.meta.server`, never touched during SSR: module
+// scope on the server is shared across concurrent requests, so caching a promise
+// there would leak one visitor's session fetch into another's. On the client one
+// module instance == one browser tab, and `callOnce` already dedupes SSR.
+let inFlightSession: Promise<void> | null = null
+let inFlightActiveOrg: Promise<void> | null = null
 
 // Shared state using useState (works in components, middleware, plugins)
 function createSessionState() {
@@ -60,6 +73,11 @@ function createSessionState() {
   // Track if we've set up the signal listener (once per app)
   const isListening = useState('crouton-auth-listening', () => false)
 
+  // Whether we've already attempted to repair a session that arrived with no
+  // active organization (#1703). One attempt per client lifecycle: an account
+  // that genuinely has no team must not retry forever.
+  const triedDefaultOrgState = useState('crouton-auth-tried-default-org', () => false)
+
   return {
     sessionState,
     userState,
@@ -67,7 +85,8 @@ function createSessionState() {
     userProfileState,
     isPendingState,
     errorState,
-    isListening
+    isListening,
+    triedDefaultOrgState
   }
 }
 
@@ -122,36 +141,80 @@ async function fetchSessionOnClient(ctx: SessionContext): Promise<void> {
   }
 }
 
-// Fetch session from Better Auth
+// Fetch session from Better Auth.
+//
+// `isPending` is a RESOLVED-LATCH, not an in-flight flag (#1703): it starts
+// true and goes false the first time the session resolves, then never returns
+// to true. Every consumer already reads it that way — the auth/guest/team-context
+// middleware, crouton-admin's guards, AuthGuard.vue, and the app landing pages
+// all use it as "do we know who the user is yet?". Flipping it back to true on
+// every background revalidation re-armed all of them at once, which is what let
+// a background refetch restart an in-flight navigation.
 async function fetchSession(ctx: SessionContext): Promise<void> {
   const { debug, sessionState, userState, isPendingState, errorState } = ctx
+
+  // Single-flight on the client: concurrent callers share one request.
+  if (!import.meta.server && inFlightSession) {
+    if (debug) {
+      console.log('[@crouton/auth] useSession: joining in-flight session fetch')
+    }
+    return inFlightSession
+  }
 
   if (debug) {
     console.log('[@crouton/auth] useSession: fetching session...')
   }
 
-  isPendingState.value = true
   errorState.value = null
 
-  try {
-    if (import.meta.server) {
-      await fetchSessionOnServer(ctx)
-    } else {
-      await fetchSessionOnClient(ctx)
+  const run = (async () => {
+    try {
+      if (import.meta.server) {
+        await fetchSessionOnServer(ctx)
+      } else {
+        await fetchSessionOnClient(ctx)
+      }
+    } catch (err) {
+      console.error('[@crouton/auth] useSession: fetch failed', err)
+      errorState.value = err instanceof Error ? err : new Error('Session fetch failed')
+      sessionState.value = null
+      userState.value = null
+    } finally {
+      isPendingState.value = false
     }
-  } catch (err) {
-    console.error('[@crouton/auth] useSession: fetch failed', err)
-    errorState.value = err instanceof Error ? err : new Error('Session fetch failed')
-    sessionState.value = null
-    userState.value = null
+  })()
+
+  if (import.meta.server) return run
+
+  inFlightSession = run
+  try {
+    await run
   } finally {
-    isPendingState.value = false
+    inFlightSession = null
   }
 }
 
 // Fetch active organization
-// If no active org is set (400 error), try to find and set one automatically
+// If no active org is set, try to find and set one automatically.
+//
+// NOTE: better-auth answers `getFullOrganization` with HTTP 200 and `data: null`
+// when no org is active — not an error — so the `!data` branch below is the
+// normal path for an org-less session, not an exceptional one.
 async function fetchActiveOrg(ctx: SessionContext): Promise<void> {
+  if (!import.meta.server && inFlightActiveOrg) return inFlightActiveOrg
+
+  const run = fetchActiveOrgImpl(ctx)
+  if (import.meta.server) return run
+
+  inFlightActiveOrg = run
+  try {
+    await run
+  } finally {
+    inFlightActiveOrg = null
+  }
+}
+
+async function fetchActiveOrgImpl(ctx: SessionContext): Promise<void> {
   const { authClient, debug, headers, userState, activeOrgState } = ctx
 
   // Don't fetch org data if user is not authenticated (prevents 401 console errors)
@@ -188,13 +251,32 @@ async function fetchActiveOrg(ctx: SessionContext): Promise<void> {
   }
 }
 
-// Try to find and set a default organization (for personal/single-tenant modes)
+// Try to find and set a default organization.
+//
+// This is a client-side REPAIR for a session that arrived without an active
+// organization. Since #1703 the server sets one on `session.create.before`, so
+// this should now only fire for sessions created before that fix (they keep a
+// null org for up to their 7-day lifetime).
+//
+// Two hard rules here, both learned from the kassa forever-spinner:
+//   1. `setActive` MUST pass `disableSignal` — better-auth re-emits
+//      `$sessionSignal` on /organization/set-active, and this function is
+//      reached FROM that signal's handler, so without it we re-enter ourselves.
+//   2. It runs at most once per client lifecycle — an account that genuinely
+//      has no team must not retry on every signal.
 async function trySetDefaultOrg(ctx: SessionContext): Promise<void> {
-  const { authClient, debug, headers, userState, activeOrgState } = ctx
+  const { authClient, debug, headers, userState, activeOrgState, triedDefaultOrgState } = ctx
 
   // Don't try to set org if user is not authenticated (prevents 401 console errors)
   if (!userState.value) return
   if (!authClient?.organization) return
+  if (triedDefaultOrgState.value) {
+    if (debug) {
+      console.log('[@crouton/auth] useSession: default-org repair already attempted, skipping')
+    }
+    return
+  }
+  triedDefaultOrgState.value = true
 
   try {
     // List user's organizations
@@ -207,10 +289,14 @@ async function trySetDefaultOrg(ctx: SessionContext): Promise<void> {
     }
 
     if (orgs && orgs.length > 0) {
-      // Set the first org as active
+      // Set the first org as active.
+      // `disableSignal` is better-auth's own opt-out (see rule 1 above): without
+      // it, this write re-emits $sessionSignal and re-enters the handler that
+      // called us.
       const firstOrg = orgs[0]!
       await authClient.organization.setActive({
-        organizationId: firstOrg.id
+        organizationId: firstOrg.id,
+        fetchOptions: { disableSignal: true }
       })
 
       if (debug) {
@@ -486,6 +572,20 @@ export function useSession() {
     if (authClient) {
       await authClient.signOut()
     }
+
+    // Everything below this line is keyed to WHO is signed in, so logout has to
+    // tear all of it down. kassa is a shared till: the next person signs in on
+    // the same tab with no page reload, and without this they inherit the
+    // previous user's state.
+    //
+    //  - the in-flight promises: otherwise the next login can join the previous
+    //    user's still-pending fetch and adopt whatever it resolves to.
+    //  - the repair latch: otherwise a second user with a legacy org-less
+    //    session never gets the one repair attempt, and lands on "no team found".
+    inFlightSession = null
+    inFlightActiveOrg = null
+    ctx.triedDefaultOrgState.value = false
+
     ctx.sessionState.value = null
     ctx.userState.value = null
     ctx.activeOrgState.value = null

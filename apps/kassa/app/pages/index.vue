@@ -1,68 +1,70 @@
 <script setup lang="ts">
-// Root redirect: send users straight to the sales events page for their team.
-// Auth is client-driven (nanostore), so we resolve the team reactively and
-// redirect once it's known; signed-out users go to login.
-definePageMeta({ layout: false })
+// Root dispatcher: send users straight to the sales events page for their team.
+//
+// The redirect lives in ROUTE MIDDLEWARE, not a watchEffect (#1703). A
+// watchEffect re-runs on every reactive change and re-issues navigateTo, which
+// cancels its own in-flight navigation — and since the team middleware calls
+// setActive (which used to re-emit better-auth's $sessionSignal), each redirect
+// attempt retriggered the effect that started it. The router never settled and
+// the page sat on its spinner until a manual reload.
+//
+// Route middleware runs once per navigation, on the server as well as the
+// client, can await its data, and returns a single navigateTo. It cannot
+// restart itself.
+definePageMeta({
+  layout: false,
+  middleware: [
+    async () => {
+      const { loggedIn } = useAuth()
+      if (!loggedIn.value) return navigateTo('/auth/login')
 
-const auth = tryUseAuth()
-const team = tryUseTeam()
-const session = tryUseSession()
+      const slug = await resolveTeamSlug(useTeam())
+      // No slug: fall through and render the team-less message. Never spin.
+      if (!slug) return
 
-function tryUseAuth() {
-  try { return useAuth() } catch { return null }
-}
-function tryUseTeam() {
-  try { return useTeam() } catch { return null }
-}
-function tryUseSession() {
-  try { return useSession() } catch { return null }
-}
-
-const loggedIn = computed(() => auth?.loggedIn?.value ?? false)
-const isPending = computed(() => session?.isPending?.value ?? false)
-const teamSlug = computed(() => {
-  const t = team?.currentTeam?.value ?? team?.teams?.value?.[0]
-  return t?.slug ?? null
+      return navigateTo(`/admin/${slug}/sales/events`, { replace: true })
+    }
+  ]
 })
 
-// The auth modal's after-login refreshTeams() is fire-and-forget and can race
-// the session cookie (seen on iOS Safari: teams stay empty → this page used to
-// spin forever). Re-fetch here once auth resolves; if the account really has
-// no team, say so instead of spinning.
-const teamsRefreshed = ref(false)
-const refreshingTeams = ref(false)
+/**
+ * The team this account should land in.
+ *
+ * On a cold load `team-context.global.ts` (a global middleware, so it always
+ * runs first) has already populated the team list during SSR, so the refresh
+ * below rarely fires. It matters after a client-side login, where nothing has
+ * fetched yet.
+ */
+async function resolveTeamSlug(team: ReturnType<typeof useTeam>): Promise<string | null> {
+  const pick = () => {
+    const active = team.currentTeam.value ?? team.teams.value[0]
+    return active?.slug ?? null
+  }
 
-const noTeam = computed(() =>
-  !isPending.value && loggedIn.value && teamsRefreshed.value && !refreshingTeams.value && !teamSlug.value
-)
+  const known = pick()
+  if (known || import.meta.server) return known
 
-watchEffect(() => {
-  // Wait until auth has resolved (avoids a premature login bounce on hydration)
-  if (isPending.value) return
-  if (!loggedIn.value) {
-    navigateTo('/auth/login')
-    return
-  }
-  if (teamSlug.value) {
-    navigateTo(`/admin/${teamSlug.value}/sales/events`)
-    return
-  }
-  if (!teamsRefreshed.value && team && import.meta.client) {
-    teamsRefreshed.value = true
-    refreshingTeams.value = true
-    team.refreshTeams().finally(() => { refreshingTeams.value = false })
-  }
-})
+  await team.refreshTeams().catch(() => {})
+  return pick()
+}
+
+const { logout } = useAuth()
 
 async function signOut() {
-  await auth?.logout?.()
+  await logout()
   navigateTo('/auth/login')
 }
 </script>
 
 <template>
+  <!--
+    Reaching this template means the middleware ran and found no team — the
+    account genuinely belongs to none. That is a terminal, actionable state, not
+    a loading state, so there is deliberately no spinner here: if this page
+    renders at all, waiting cannot help.
+  -->
   <div class="min-h-screen flex items-center justify-center bg-(--ui-bg)">
-    <div v-if="noTeam" class="text-center space-y-3 px-6">
+    <div class="text-center space-y-3 px-6">
       <UIcon name="i-lucide-users" class="size-8 text-(--ui-text-dimmed)" />
       <p class="text-(--ui-text-muted)">
         Geen team gevonden voor dit account. Vraag een uitnodiging aan je teambeheerder.
@@ -71,10 +73,5 @@ async function signOut() {
         Uitloggen
       </UButton>
     </div>
-    <UIcon
-      v-else
-      name="i-lucide-loader-2"
-      class="size-6 animate-spin text-(--ui-text-dimmed)"
-    />
   </div>
 </template>
