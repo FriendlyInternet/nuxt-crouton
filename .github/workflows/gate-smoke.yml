@@ -78,7 +78,7 @@ jobs:
       - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         continue-on-error: true
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
           claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |

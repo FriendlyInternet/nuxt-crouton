@@ -73,13 +73,15 @@ jobs:
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
       # Pinned to the same SHA as claude.yml — keep these in sync when bumping.
-      # AUTH: this is headless/unattended, so it MUST use an API key. Do NOT swap in a
-      # subscription CLAUDE_CODE_OAUTH_TOKEN — subscription OAuth is for interactive
-      # Claude Code use only, not CI automation (Anthropic Legal & Compliance terms).
+      # AUTH: uses the subscription CLAUDE_CODE_OAUTH_TOKEN (not a metered API key).
+      # This REVERSES the old "OAuth is interactive-only, never in CI" rule (#652/#823)
+      # on the owner's instruction that Anthropic now permits subscription auth for
+      # unattended automation (#1669; supporting source pending on that issue — if it
+      # does not cover automation, revert). Runs on the mac-mini runner.
       - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         id: claude
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "/task-decompose #${{ github.event.issue.number }}"
           claude_args: "--model claude-sonnet-5 --max-turns 30"
           show_full_output: true
