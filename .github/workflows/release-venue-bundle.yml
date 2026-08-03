@@ -70,6 +70,53 @@ jobs:
           # Build-time prerender needs a secret present; value is irrelevant.
           BETTER_AUTH_SECRET: ci-placeholder
 
+      - name: Add the arm64 native addon (#1680)
+        # libsql ships its native addon as per-platform optional packages, so a
+        # build on this x64 runner installs ONLY linux-x64-gnu. A Raspberry Pi —
+        # the canonical venue till — would then die at boot on
+        # "Cannot find module '@libsql/linux-arm64-gnu'".
+        # Ship both so one tarball runs anywhere and install.sh stays dumb.
+        run: |
+          set -euo pipefail
+          OUT="apps/fanfare/.output/server/node_modules/@libsql"
+          # Derive the version from the x64 package that was actually installed,
+          # so the two architectures can never drift apart.
+          VERSION="$(node -p "require('./$OUT/linux-x64-gnu/package.json').version")"
+          echo "libsql native addon version: $VERSION"
+
+          TMP="$(mktemp -d)"
+          ( cd "$TMP" && npm pack "@libsql/linux-arm64-gnu@$VERSION" >/dev/null )
+          tar -xzf "$TMP"/*.tgz -C "$TMP"
+          mkdir -p "$OUT/linux-arm64-gnu"
+          cp -R "$TMP/package/." "$OUT/linux-arm64-gnu/"
+
+          echo "platform packages now bundled:"
+          ls -1 "$OUT"
+          # Prove the arm64 binary really is arm64 — a same-arch copy would
+          # silently reintroduce the bug this step exists to fix.
+          file "$OUT/linux-arm64-gnu/index.node"
+          file "$OUT/linux-arm64-gnu/index.node" | grep -q -i "aarch64\|arm64" \
+            || { echo "::error::bundled arm64 addon is not an aarch64 binary"; exit 1; }
+
+      - name: Smoke the bundle (it must actually boot)
+        # The bug in #1680 shipped green: nothing in this pipeline ever STARTED
+        # the artifact. Booting it here is what turns "it built" into "it runs".
+        run: |
+          set -euo pipefail
+          cd apps/fanfare/.output
+          BETTER_AUTH_SECRET=smoke NITRO_PORT=3999 node server/index.mjs & PID=$!
+          for _ in $(seq 1 30); do
+            if curl -fsS -o /dev/null "http://127.0.0.1:3999/" 2>/dev/null; then
+              echo "bundle booted and served a response"
+              kill $PID 2>/dev/null || true
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the built bundle did not serve a response within 30s"
+          kill $PID 2>/dev/null || true
+          exit 1
+
       - name: Assemble the bundle
         id: bundle
         run: |
