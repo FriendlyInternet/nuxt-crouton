@@ -176,9 +176,14 @@ export function useT() {
       translatedValue = fallback || placeholder || `[${key}]`
     }
 
-    // Apply parameter substitution
+    // Apply parameter substitution.
+    // `??`, never `||`: a count of 0 (or `false`) is a REAL value, and `||` blanked it —
+    // "{count} orders deleted" rendered as " orders deleted" (#1756). A genuinely absent
+    // param is still `undefined` and still renders empty, so nothing else changes.
+    // Mostly a no-op on the vue-i18n path (it has already substituted by here); this is
+    // the ONLY substitution for a team-overridden string, which skips vue-i18n entirely.
     if (params && translatedValue) {
-      translatedValue = translatedValue.replace(/\{(\w+)\}/g, (_, k) => params[k] || '')
+      translatedValue = translatedValue.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? ''))
     }
 
     return translatedValue
@@ -239,9 +244,9 @@ export function useT() {
       value = fallback || placeholder || `[${key}]`
     }
 
-    // Apply parameter substitution
+    // Apply parameter substitution — same `??`-not-`||` rule as translate() (#1756).
     if (params && value) {
-      value = value.replace(/\{(\w+)\}/g, (_, k) => params[k] || '')
+      value = value.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? ''))
     }
 
     return value

@@ -301,10 +301,11 @@ const props = defineProps<{
    */
   quantities?: Record<string, number>
   /**
-   * Cart lines for configurable products (options/remark), keyed by product id
-   * and carrying each line's cart index. Drives the "ordered variants" list
-   * inside the expandable — one −/qty/+ stepper per variant, targeting its
-   * exact line by index.
+   * Cart lines of a configurable product, keyed by product id and carrying each
+   * line's cart index. Drives the "ordered variants" list inside the expandable
+   * — one −/qty/+ stepper per variant, targeting its exact line by index.
+   * Includes the line added WITHOUT options (options can be optional), which
+   * `variantLabel` renders as the plain product title.
    */
   cartLines?: Record<string, Array<{ index: number, selectedOptions?: string | string[], remarks?: string, quantity: number }>>
 }>()
