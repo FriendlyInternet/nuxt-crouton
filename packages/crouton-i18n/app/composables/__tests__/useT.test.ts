@@ -161,6 +161,39 @@ describe('useT', () => {
       expect(result).toBe('Welcome Bob to Dashboard')
     })
 
+    // #1756: `||` treats 0 / false / '' as absent, so a count of zero rendered as a
+    // BLANK. Reachable on the team-override path, which skips vue-i18n's own
+    // interpolation and relies solely on this substitution.
+    it('renders a count of 0 rather than blanking it', () => {
+      mockI18nT.mockImplementation((key: string) => {
+        if (key === 'items.count') return '{count} items'
+        return key
+      })
+
+      const { t } = useT()
+
+      expect(t('items.count', { params: { count: 0 } })).toBe('0 items')
+    })
+
+    it('renders a false parameter rather than blanking it', () => {
+      mockI18nT.mockImplementation((key: string) => {
+        if (key === 'flag.state') return 'enabled: {enabled}'
+        return key
+      })
+
+      const { t } = useT()
+
+      expect(t('flag.state', { params: { enabled: false } })).toBe('enabled: false')
+    })
+
+    it('renders zero on the TEAM-OVERRIDE path — the one that skips vue-i18n', () => {
+      const { t } = useT()
+      stateStore['teamTranslations'].value = { 'orders.deleted': '{count} bestelling(en) verwijderd' }
+      stateStore['teamTranslationsLoaded'].value = true
+
+      expect(t('orders.deleted', { params: { count: 0 } })).toBe('0 bestelling(en) verwijderd')
+    })
+
     it('handles missing parameters gracefully', () => {
       mockI18nT.mockImplementation((key: string) => {
         if (key === 'greeting') return 'Hello {name}'
@@ -258,6 +291,16 @@ describe('useT', () => {
       const result = tString('missing.key')
 
       expect(result).toBe('[missing.key]')
+    })
+  })
+
+  describe('tString() - zero-valued parameters (#1756)', () => {
+    it('renders a count of 0 rather than blanking it', () => {
+      const { tString } = useT()
+      stateStore['teamTranslations'].value = { 'items.count': '{count} items' }
+      stateStore['teamTranslationsLoaded'].value = true
+
+      expect(tString('items.count', { params: { count: 0 } })).toBe('0 items')
     })
   })
 
