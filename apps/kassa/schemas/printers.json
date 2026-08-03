@@ -4,10 +4,10 @@
   "locationId": { "type": "uuid", "refTarget": "locations", "meta": { "label": "Location", "helpText": "Routing key for kitchen printers only — receipt printers ignore it (PrinterForm requires it for type kitchen)" } },
   "title": { "type": "string", "meta": { "required": true, "label": "Printer Name", "maxLength": 100 } },
   "ipAddress": { "type": "string", "meta": { "required": true, "label": "IP Address" } },
-  "port": { "type": "string", "meta": { "label": "Port", "default": "9100", "helpText": "ESC/POS raw TCP port. 9100 is universal." } },
-  "status": { "type": "string", "meta": { "label": "Status", "default": "idle", "helpText": "Last-known printer state. Not updated by the spooler." } },
+  "port": { "type": "string", "meta": { "label": "Port", "default": "9100", "helpText": "ESC/POS raw TCP port. 9100 is universal. Stored as TEXT on purpose — every consumer coerces with Number(printer.port) (generate-print-queues.ts, end-receipt, test-print), so integer would mean migrating deployed tables for no gain (#1769)." } },
+  "status": { "type": "string", "meta": { "label": "Status", "default": "idle", "helpText": "VESTIGIAL — nothing reads this. The printer LED comes from the printer's most recent print job (app/utils/printer-led.ts reads job.status, not this column); the only consumer is duplicate.post.ts, which copies it verbatim. Do not wire logic to it (#1769)." } },
   "type": { "type": "string", "meta": { "label": "Printer Type", "default": "kitchen", "helpText": "kitchen = per-location tickets, receipt = combined customer receipt with footer text" } },
-  "driver": { "type": "string", "meta": { "label": "Driver", "default": "network-escpos", "helpText": "Print transport: network-escpos (drained on-site) or browser-print." } },
+  "driver": { "type": "string", "meta": { "label": "Driver", "default": "network-escpos", "helpText": "Print transport: network-escpos (drained on-site) or browser-print. Load-bearing — encodeTicket() picks the encoder from it, and generatePrintJobsForOrder emits no jobs for an unknown driver." } },
   "config": { "type": "json", "meta": { "label": "Config", "helpText": "Printer-specific configuration (driver options)." } },
   "showPrices": { "type": "boolean", "meta": { "label": "Show Prices on Receipt", "default": true } },
   "isActive": { "type": "boolean", "meta": { "label": "Active", "default": true } }

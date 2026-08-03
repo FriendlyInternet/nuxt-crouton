@@ -10,7 +10,7 @@
   "isCurrent": { "type": "boolean", "meta": { "label": "Current Event", "default": false } },
   "requiresClient": { "type": "boolean", "meta": { "label": "Requires Client", "default": true, "helpText": "When enabled, orders must be linked to a client. Disable for loose orders." } },
   "helperPin": { "type": "string", "meta": { "label": "Helper PIN", "maxLength": 6, "helpText": "PIN for volunteer login" } },
-  "currency": { "type": "string", "meta": { "label": "Currency", "default": "EUR", "helpText": "ISO currency code used for order totals and receipts." } },
+  "currency": { "type": "string", "meta": { "label": "Currency", "default": "EUR", "helpText": "Currency used to display prices for this event (EUR or USD)." } },
   "metadata": { "type": "json", "meta": { "label": "Metadata" } },
   "archivedAt": { "type": "date", "meta": { "label": "Archived At" } }
 }
