@@ -15,44 +15,43 @@ definePageMeta({
   layout: false,
   middleware: [
     async () => {
-      const auth = tryUse(() => useAuth())
-      const team = tryUse(() => useTeam())
+      const { loggedIn } = useAuth()
+      if (!loggedIn.value) return navigateTo('/auth/login')
 
-      if (!auth?.loggedIn?.value) {
-        return navigateTo('/auth/login')
-      }
+      const slug = await resolveTeamSlug(useTeam())
+      // No slug: fall through and render the team-less message. Never spin.
+      if (!slug) return
 
-      let slug = resolveSlug(team)
-
-      // On a cold load `team-context.global.ts` has already populated the team
-      // list during SSR, so this rarely runs. It matters after a client-side
-      // login, where nothing has fetched yet.
-      if (!slug && team && import.meta.client) {
-        await team.refreshTeams().catch(() => {})
-        slug = resolveSlug(team)
-      }
-
-      // No slug: fall through and render the team-less message below. Never spin.
-      if (slug) {
-        return navigateTo(`/admin/${slug}/sales/events`, { replace: true })
-      }
+      return navigateTo(`/admin/${slug}/sales/events`, { replace: true })
     }
   ]
 })
 
-function tryUse<T>(fn: () => T): T | null {
-  try { return fn() } catch { return null }
+/**
+ * The team this account should land in.
+ *
+ * On a cold load `team-context.global.ts` (a global middleware, so it always
+ * runs first) has already populated the team list during SSR, so the refresh
+ * below rarely fires. It matters after a client-side login, where nothing has
+ * fetched yet.
+ */
+async function resolveTeamSlug(team: ReturnType<typeof useTeam>): Promise<string | null> {
+  const pick = () => {
+    const active = team.currentTeam.value ?? team.teams.value[0]
+    return active?.slug ?? null
+  }
+
+  const known = pick()
+  if (known || import.meta.server) return known
+
+  await team.refreshTeams().catch(() => {})
+  return pick()
 }
 
-function resolveSlug(team: ReturnType<typeof useTeam> | null): string | null {
-  const t = team?.currentTeam?.value ?? team?.teams?.value?.[0]
-  return t?.slug ?? null
-}
-
-const auth = tryUse(() => useAuth())
+const { logout } = useAuth()
 
 async function signOut() {
-  await auth?.logout?.()
+  await logout()
   navigateTo('/auth/login')
 }
 </script>
