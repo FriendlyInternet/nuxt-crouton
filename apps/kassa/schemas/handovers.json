@@ -1,0 +1,5 @@
+{
+  "id": { "type": "uuid", "meta": { "primaryKey": true } },
+  "eventId": { "type": "uuid", "refTarget": "events", "meta": { "required": true, "label": "Event", "helpText": "Scopes the pass feed to one event, matching kdsBumps." } },
+  "orderId": { "type": "uuid", "refTarget": "orders", "meta": { "required": true, "unique": true, "label": "Order", "helpText": "The order handed to the customer. At most ONE row per order — a double-tap at the pass must not create a second. Who and when come free from createdBy/createdAt." } }
+}

@@ -10,6 +10,7 @@ import eventSettingsSchema from './schemas/eventSettings.json'
 import printersSchema from './schemas/printers.json'
 import printQueuesSchema from './schemas/printQueues.json'
 import kdsBumpsSchema from './schemas/kdsBumps.json'
+import handoversSchema from './schemas/handovers.json'
 
 export default defineCroutonManifest({
   id: 'crouton-sales',
@@ -112,6 +113,13 @@ export default defineCroutonManifest({
       description: 'Kitchen-display bump records — one per (order × location) cleared off a screen, so kitchen and bar screens bump the same order independently.',
       schema: kdsBumpsSchema,
       schemaPath: './schemas/kdsBumps.json'
+    },
+    {
+      name: 'handover',
+      tableName: 'salesHandovers',
+      description: 'Order handover records — one per order handed to the customer at the pass. The order-level sibling of kdsBump: a bump means a station finished its part, a handover means the assembled order actually reached the client. Outstanding orders are those with no handover row.',
+      schema: handoversSchema,
+      schemaPath: './schemas/handovers.json'
     }
   ],
 
