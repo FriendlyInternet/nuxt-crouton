@@ -64,6 +64,9 @@ async function resolveEvent() {
 // Locations this screen shows, as a query param; empty = the whole event.
 const locationsParam = computed(() => (props.attrs.locations || []).filter(Boolean).join(','))
 
+/** When the feed last answered. Drives the staleness indicator (#1766). */
+const lastOkAt = ref<number | null>(null)
+
 async function refresh() {
   if (!eventId.value) return
   try {
@@ -72,9 +75,12 @@ async function refresh() {
       { query: locationsParam.value ? { locations: locationsParam.value } : undefined }
     )
     jobs.value = res.jobs
+    lastOkAt.value = Date.now()
   }
   catch {
-    // Transient blip — keep the last board until the next poll.
+    // Keep the last board — a single dropped poll is genuinely transient. But
+    // `lastOkAt` deliberately does NOT advance, so a feed that stays broken
+    // stops presenting itself as live (#1766).
   }
 }
 
@@ -99,13 +105,14 @@ async function bump(job: KdsJob) {
 const active = computed(() => jobs.value.filter(j => !bumping.value.has(j.id)))
 
 // Poll every 2s; pause when the tab is hidden.
+const POLL_MS = 2000
 let timer: ReturnType<typeof setInterval> | null = null
 function tick() { if (document.visibilityState !== 'hidden') refresh() }
 
 onMounted(async () => {
   await resolveEvent()
   await refresh()
-  timer = setInterval(tick, 2000)
+  timer = setInterval(tick, POLL_MS)
   document.addEventListener('visibilitychange', tick)
 })
 onUnmounted(() => {
@@ -119,6 +126,14 @@ onMounted(() => {
   const t2 = setInterval(() => (now.value = Date.now()), 1000)
   onUnmounted(() => clearInterval(t2))
 })
+// Is the board still telling the truth? `now` already ticks every second, so
+// this re-evaluates on its own without a second timer (#1766).
+const health = computed(() => boardHealth({
+  now: now.value,
+  lastOkAt: lastOkAt.value,
+  pollMs: POLL_MS
+}))
+
 function ago(iso: string) {
   const s = Math.max(0, Math.floor((now.value - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s}s`
@@ -154,11 +169,36 @@ function ago(iso: string) {
           <UIcon name="i-lucide-chef-hat" class="size-6 text-primary" />
           <h2 class="text-xl font-bold tracking-tight text-highlighted">{{ t('sales.blocks.kitchenDisplay.ui.title') }}</h2>
         </div>
-        <div class="flex items-center gap-2 text-sm text-muted">
-          <span class="inline-block size-2 rounded-full bg-success animate-pulse" />
-          {{ t('sales.blocks.kitchenDisplay.ui.live') }} · {{ t('sales.blocks.kitchenDisplay.ui.active', { count: active.length }) }}
+        <div class="flex items-center gap-2 text-sm" :class="health === 'stale' ? 'text-warning' : 'text-muted'">
+          <span
+            class="inline-block size-2 rounded-full"
+            :class="{
+              'bg-success animate-pulse': health === 'live',
+              'bg-warning': health === 'stale',
+              'bg-muted animate-pulse': health === 'connecting'
+            }"
+          />
+          <template v-if="health === 'stale'">{{ t('sales.blocks.kitchenDisplay.ui.stale') }}</template>
+          <template v-else-if="health === 'connecting'">{{ t('sales.blocks.kitchenDisplay.ui.connecting') }}</template>
+          <template v-else>{{ t('sales.blocks.kitchenDisplay.ui.live') }}</template>
+          · {{ t('sales.blocks.kitchenDisplay.ui.active', { count: active.length }) }}
         </div>
       </header>
+
+      <!--
+        A frozen board is worse than an empty one: staff work from tickets that
+        stopped being true. Say so loudly rather than letting the tiles imply
+        they are current (#1766).
+      -->
+      <UAlert
+        v-if="health === 'stale'"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-wifi-off"
+        class="mb-4"
+        :title="t('sales.blocks.kitchenDisplay.ui.stale')"
+        :description="t('sales.blocks.kitchenDisplay.ui.staleHint')"
+      />
 
       <div v-if="active.length === 0" class="flex flex-col items-center justify-center text-center text-dimmed py-32">
         <UIcon name="i-lucide-check-check" class="size-12 mb-3 text-success" />

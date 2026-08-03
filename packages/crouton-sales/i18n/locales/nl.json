@@ -126,7 +126,10 @@
           "allCaughtUp": "Alles bijgewerkt — geen open bestellingen.",
           "bump": "Klaar",
           "staff": "personeel",
-          "eventNotFound": "Evenement niet gevonden"
+          "eventNotFound": "Evenement niet gevonden",
+          "stale": "Wordt niet bijgewerkt",
+          "staleHint": "Dit scherm heeft geen verbinding meer met de server — de getoonde bestellingen kunnen verouderd zijn. Controleer de verbinding.",
+          "connecting": "verbinden"
         }
       },
       "salesOrders": {

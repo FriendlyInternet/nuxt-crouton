@@ -9,25 +9,40 @@
  *
  * A ticket is keyed by `(order × location)` so the kitchen and bar screens clear
  * the same order independently; "done" lives in `salesKdsbumps`, one row per
- * cleared `(order, location)`. This endpoint returns every `(order, location)`
- * that isn't bumped yet. Bumping never changes the order's own status — order
- * lifecycle is separate from what a screen shows.
+ * cleared `(order, location)`. Bumping never changes the order's own status —
+ * order lifecycle is separate from what a screen shows.
  *
  * Query: `?locations=locA,locB` scopes to the block's configured locations
  * (empty = every location in the event). Auth: none — an unattended screen on
  * the trusted venue LAN (the page gate guards access); a helper-scoped token is
  * a follow-up.
  *
+ * ## One query, bounded parameters (#1766)
+ *
+ * This used to fetch EVERY non-cancelled order in the event and then discard the
+ * bumped ones in JavaScript, binding one parameter per order id via `inArray`.
+ * D1 rejects a query over 100 bound parameters, so the board broke — silently,
+ * permanently — once an event passed ~100 orders. Local SQLite allows 32 766, so
+ * it could only ever fail in production.
+ *
+ * The bump exclusion now lives in SQL (`LEFT JOIN … WHERE bump IS NULL`), so the
+ * read is O(open tickets) rather than O(event) and carries no order-id list at
+ * all. What it binds is fixed by the operator's configuration, not by how long
+ * the night has been. Plan + shaper: `server/utils/kds-tickets.ts`.
+ *
  * Reads the consuming app's generated `sales` layer schemas (the package ships
  * the logic; the app owns the tables).
  */
-import { and, asc, eq, inArray, ne } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, ne } from 'drizzle-orm'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
 import { salesKdsbumps } from '~~/layers/sales/collections/kdsbumps/server/database/schema'
-
-interface DisplayJobItem { title: string, quantity: number, remarks?: string }
+import {
+  planDisplayJobsQuery,
+  shapeDisplayTickets,
+  type TicketRow
+} from '../../../../../utils/kds-tickets'
 
 export default defineEventHandler(async (event) => {
   const eventId = getRouterParam(event, 'eventId')
@@ -35,95 +50,67 @@ export default defineEventHandler(async (event) => {
     throw createError({ status: 400, statusText: 'eventId is required' })
   }
 
-  // Block-configured locations to show; empty/absent = every location.
-  const locationFilter = (getQuery(event).locations as string | undefined)
+  const requested = (getQuery(event).locations as string | undefined)
     ?.split(',').map(s => s.trim()).filter(Boolean) ?? []
-  const wants = (locationId: string | null): locationId is string =>
-    !!locationId && (locationFilter.length === 0 || locationFilter.includes(locationId))
+
+  let plan
+  try {
+    plan = planDisplayJobsQuery({ eventId, locations: requested })
+  }
+  catch (error: any) {
+    // A misconfigured block fails here with a real message, rather than as an
+    // opaque 500 from D1 that the board would silently swallow (#1766).
+    throw createError({ status: 400, statusText: error?.message ?? 'Invalid display query' })
+  }
 
   const db = useDB()
 
-  // Open orders, oldest first — a kitchen works orders in arrival order.
-  const orders = await db
+  // Item-driven, so location routing is a column rather than a second pass. The
+  // bump LEFT JOIN is what keeps this to open tickets only; the products join is
+  // LEFT so a deleted product surfaces as unroutable instead of vanishing. The
+  // row limit bounds one runaway event.
+  const rows = await db
     .select({
-      id: salesOrders.id,
-      orderNumber: salesOrders.eventOrderNumber,
+      orderId: salesOrders.id,
+      productId: salesOrderitems.productId,
+      eventOrderNumber: salesOrders.eventOrderNumber,
       clientName: salesOrders.clientName,
       isPersonnel: salesOrders.isPersonnel,
-      createdAt: salesOrders.createdAt
-    })
-    .from(salesOrders)
-    .where(and(
-      eq(salesOrders.eventId, eventId),
-      ne(salesOrders.status, 'cancelled')
-    ))
-    .orderBy(asc(salesOrders.createdAt))
-
-  if (orders.length === 0) return { jobs: [] }
-  // useDB() is loosely typed, so drizzle rows come back as `any` — annotate the
-  // callbacks (matches the rest of this package's server code).
-  const orderIds = orders.map((o: any) => o.id)
-
-  // Items + their product (for location routing + title), and the bump set.
-  const [items, products, bumps] = await Promise.all([
-    db.select({
-      orderId: salesOrderitems.orderId,
-      productId: salesOrderitems.productId,
+      createdAt: salesOrders.createdAt,
+      locationId: salesProducts.locationId,
+      productTitle: salesProducts.title,
       quantity: salesOrderitems.quantity,
       remarks: salesOrderitems.remarks
-    }).from(salesOrderitems).where(inArray(salesOrderitems.orderId, orderIds)),
-    db.select({
-      id: salesProducts.id,
-      title: salesProducts.title,
-      locationId: salesProducts.locationId
-    }).from(salesProducts).where(eq(salesProducts.eventId, eventId)),
-    db.select({
-      orderId: salesKdsbumps.orderId,
-      locationId: salesKdsbumps.locationId
-    }).from(salesKdsbumps).where(eq(salesKdsbumps.eventId, eventId))
-  ])
+    })
+    .from(salesOrderitems)
+    .innerJoin(salesOrders, eq(salesOrders.id, salesOrderitems.orderId))
+    .leftJoin(salesProducts, eq(salesProducts.id, salesOrderitems.productId))
+    .leftJoin(salesKdsbumps, and(
+      eq(salesKdsbumps.orderId, salesOrderitems.orderId),
+      eq(salesKdsbumps.locationId, salesProducts.locationId)
+    ))
+    .where(and(
+      eq(salesOrders.eventId, eventId),
+      ne(salesOrders.status, 'cancelled'),
+      isNull(salesKdsbumps.id),
+      // Bounded by MAX_CONFIGURABLE_LOCATIONS, which the plan already enforced.
+      plan.locations.length ? inArray(salesProducts.locationId, plan.locations) : undefined
+    ))
+    .orderBy(asc(salesOrders.createdAt))
+    .limit(plan.limit)
 
-  const productById = new Map<string, any>(products.map((p: any) => [p.id, p]))
-  const bumped = new Set(bumps.map((b: any) => `${b.orderId}:${b.locationId}`))
-  const itemsByOrder = new Map<string, typeof items>()
-  for (const it of items) {
-    const list = itemsByOrder.get(it.orderId) ?? []
-    list.push(it)
-    itemsByOrder.set(it.orderId, list)
+  const { tickets, unroutable } = shapeDisplayTickets(rows as TicketRow[])
+
+  if (unroutable.length > 0) {
+    // An item with no prep location reaches no station — malformed data, not a
+    // kitchen's problem (kassa's products schema never marked `locationId`
+    // required, #1769). It must not vanish without a trace, so it is logged and
+    // counted rather than dropped on the floor as it used to be.
+    console.warn(
+      `[kds] ${unroutable.length} item(s) in event ${eventId} have no prep location and reach no screen`,
+      unroutable
+    )
   }
 
-  // One ticket per (order × location): group the order's items by their
-  // product's location, keep only wanted + not-yet-bumped locations.
-  const jobs: Array<{
-    id: string, orderId: string, locationId: string, orderNumber: string,
-    clientName: string | null, isPersonnel: boolean, createdAt: string,
-    items: DisplayJobItem[]
-  }> = []
-
-  for (const order of orders) {
-    const byLocation = new Map<string, DisplayJobItem[]>()
-    for (const it of itemsByOrder.get(order.id) ?? []) {
-      const product = productById.get(it.productId)
-      if (!wants(product?.locationId ?? null)) continue
-      const locationId = product!.locationId!
-      const list = byLocation.get(locationId) ?? []
-      list.push({ title: product!.title, quantity: it.quantity, remarks: it.remarks ?? undefined })
-      byLocation.set(locationId, list)
-    }
-    for (const [locationId, ticketItems] of byLocation) {
-      if (bumped.has(`${order.id}:${locationId}`)) continue
-      jobs.push({
-        id: `${order.id}~${locationId}`,
-        orderId: order.id,
-        locationId,
-        orderNumber: order.orderNumber != null ? String(order.orderNumber) : '—',
-        clientName: order.clientName ?? null,
-        isPersonnel: order.isPersonnel ?? false,
-        createdAt: new Date(order.createdAt).toISOString(),
-        items: ticketItems
-      })
-    }
-  }
-
-  return { jobs }
+  return { jobs: tickets, unroutableCount: unroutable.length }
 })

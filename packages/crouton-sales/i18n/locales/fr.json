@@ -125,7 +125,10 @@
           "allCaughtUp": "Tout est à jour — aucune commande en cours.",
           "bump": "Validé",
           "staff": "personnel",
-          "eventNotFound": "Événement introuvable"
+          "eventNotFound": "Événement introuvable",
+          "stale": "Non actualisé",
+          "staleHint": "Cet écran a perdu le contact avec le serveur — les commandes affichées peuvent être obsolètes. Vérifiez la connexion.",
+          "connecting": "connexion"
         }
       },
       "salesOrders": {
