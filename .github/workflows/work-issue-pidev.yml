@@ -294,12 +294,18 @@ jobs:
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           ROOT="$(git rev-parse --show-toplevel)"
 
-          # 1) Locate THIS run's pi session log (newest .jsonl touched since run start) and build
-          #    the edited-file ledger with the parser stashed by the baseline step.
+          # 1) Locate THIS run's pi session log and build the edited-file ledger (parser stashed
+          #    by the baseline step). CRITICAL: ~/.pi/agent/sessions is SHARED across all
+          #    self-hosted runners, so "newest .jsonl" grabs a CONCURRENT runner's session under
+          #    load. Scope to ours: newest .jsonl touched since t0 that references THIS checkout
+          #    (ROOT) — pi records absolute paths under ROOT, so grep -F uniquely selects ours.
           SESS_ROOT="$HOME/.pi/agent/sessions"
-          SESSION="$(find "$SESS_ROOT" -name '*.jsonl' -newermt "$SINCE" 2>/dev/null \
-            | while IFS= read -r f; do printf '%s %s\n' "$(stat -f '%m' "$f" 2>/dev/null || stat -c '%Y' "$f" 2>/dev/null)" "$f"; done \
-            | sort -rn | head -1 | cut -d' ' -f2-)"
+          SESSION=""
+          while IFS= read -r f; do
+            grep -qF -- "$ROOT" "$f" 2>/dev/null && { SESSION="$f"; break; }
+          done < <(find "$SESS_ROOT" -name '*.jsonl' -newermt "$SINCE" 2>/dev/null \
+            | while IFS= read -r x; do printf '%s %s\n' "$(stat -f '%m' "$x" 2>/dev/null || stat -c '%Y' "$x" 2>/dev/null)" "$x"; done \
+            | sort -rn | cut -d' ' -f2-)
           LEDGER="$RUNNER_TEMP/pi-edited.txt"; : > "$LEDGER"
           if [ -n "$SESSION" ] && [ -f "$SESSION" ]; then
             echo "pi session: $SESSION"
