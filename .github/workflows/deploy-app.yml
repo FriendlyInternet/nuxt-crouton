@@ -46,14 +46,6 @@ on:
         required: false
         default: '22'
         type: string
-      layer-packages:
-        description: >-
-          Space-separated pnpm filter names of dist-consumed framework packages
-          to build before the app (only those WITH a build script are built;
-          pure source layers like crouton-editor/pages/charts are skipped).
-        required: false
-        default: '@fyit/crouton-auth @fyit/crouton-core @fyit/crouton'
-        type: string
       review-pr:
         description: >-
           PR number to wire the preview-review bridge to (staging only, #607).
@@ -224,6 +216,8 @@ jobs:
       # 0.06s "Could not load @fyit/crouton" that killed the quotes-POC deploy). It
       # also subsumes the #745 cross-app cache-collision class: every entry contains
       # ALL dist, so no caller can restore a set missing a package it needs.
+      # The `layer-packages` input that fed that old subset build is gone (#1787) —
+      # it outlived its reader by 500-odd commits. Nothing selects packages anymore.
       - name: Warm @fyit package builds
         uses: ./.github/actions/warm-packages
 
