@@ -9,18 +9,19 @@ on:
       - 'scripts/**'
       - 'pnpm-lock.yaml'
       - '.github/workflows/ci.yml'
-  # NB: deliberately NO `branches:` filter (#1698). A PR opened against a stacked
-  # epic branch and later auto-retargeted to main never re-fires `pull_request`
-  # (`base_ref_changed` is not a default activity type), so a `branches: [main]`
-  # filter silently skipped typecheck/tests on #1668 and auto-merge treated the
-  # absent checks as passing. Running on every PR regardless of base is the fix.
+  # Deliberately NO `branches:` and NO `paths:` filter on pull_request (#1698).
+  #
+  # `branches: [main]` silently skipped typecheck/tests on #1668: the PR was opened
+  # against a stacked epic branch and GitHub auto-retargeted it to main when the
+  # parent merged — `base_ref_changed` is not a default `pull_request` activity type,
+  # so nothing re-triggered. It was then merged BY HAND (auto_merge: null) with no
+  # check having run, because `main` carries no required checks.
+  #
+  # `paths:` is off because a REQUIRED check must always report. If the workflow is
+  # filtered out, the `gate` job never runs and the PR sits on "Expected — waiting"
+  # forever. The `changes` job below keeps the expensive jobs off irrelevant PRs
+  # instead; the gate always reports.
   pull_request:
-    paths:
-      - 'packages/**'
-      - 'apps/**'
-      - 'scripts/**'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/ci.yml'
 
 # Cancel superseded PR runs when a new commit is pushed; each PR is its own group
 # (ref in the key). cancel-in-progress is event-conditional so a push→main run is
@@ -30,11 +31,45 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Which paths changed? Replaces the workflow-level `paths:` filter (#1698) so the
+  # workflow — and therefore the `gate` below — always runs and always reports, while
+  # the expensive jobs still skip on irrelevant PRs. Same path set the old filter used.
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+            base="$(git merge-base "origin/$BASE_REF" HEAD)"
+            files="$(git diff --name-only "$base" HEAD)"
+          else
+            files="$(git show --name-only --pretty=format: HEAD)"
+          fi
+          echo "changed files:"; echo "$files" | sed 's/^/  /'
+          if echo "$files" | grep -qE '^(packages/|apps/|scripts/|pnpm-lock\.yaml$|\.github/workflows/ci\.yml$)'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false  (no code paths touched — heavy jobs will skip)" >&2
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Was `lint-and-typecheck` — renamed under #1097: the job never ran eslint and
   # only typechecks the MCP server, so the old name overclaimed. App typecheck
   # is the separate `typecheck-apps` job below.
   typecheck-mcp:
     name: Type Check MCP Server
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +93,8 @@ jobs:
         run: pnpm --filter @fyit/crouton-mcp typecheck
 
   typecheck-apps:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     # The CI backing for CLAUDE.md's "EVERY change requires pnpm typecheck"
     # (#1097) — runs the exact local sweep (`pnpm typecheck` =
     # `pnpm -r --filter './apps/*' typecheck`) so a type regression in an app
@@ -109,6 +146,8 @@ jobs:
           NODE_OPTIONS: '--max-old-space-size=8192'
 
   build-kassa:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     # Dual-target smoke test: kassa must build for both the Cloudflare
     # (cloud) and node-server (venue/Pi) presets, or the unused path silently
     # rots. The build itself is the smoke test — node-server boot was proven in
@@ -157,6 +196,8 @@ jobs:
 
   docs-check:
     name: Documentation Check
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -171,6 +212,8 @@ jobs:
 
   sync-validation:
     name: Sync Validation
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -185,6 +228,8 @@ jobs:
 
   mcp-server-tests:
     name: MCP Server Tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -209,6 +254,8 @@ jobs:
 
   test:
     name: Test Suite
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -265,7 +312,8 @@ jobs:
 
   changeset-check:
     name: Changeset Check
-    if: github.event_name == 'pull_request'
+    needs: changes
+    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -295,6 +343,8 @@ jobs:
 
   package-check:
     name: Package Validation
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -327,6 +377,8 @@ jobs:
   # No pnpm install: the tests use only Node core + the local .mjs modules.
   scripts-tests:
     name: Scripts unit tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -337,6 +389,7 @@ jobs:
         run: node --test scripts/*.test.mjs
 
   fallow-audit:
+    if: needs.changes.outputs.code == 'true'
     # Rung 1 of the check ladder (#632): the codebase-intelligence gate (#1145).
     # `fallow audit` is diff-scoped — it judges only the changed code
     # (pass/warn/fail) and excludes inherited findings by default, so the
@@ -347,7 +400,8 @@ jobs:
     runs-on: ubuntu-latest
     # Waits on the test job for its coverage artifact (#1256): real per-function
     # coverage makes the restored maxCrap 30 measure untested-complex code.
-    needs: test
+    # `changes` added for #1698 — the per-job path gate.
+    needs: [changes, test]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -376,3 +430,26 @@ jobs:
         # --coverage-root strips the generating checkout's prefix so per-function
         # matching survives any root mismatch between the two jobs (#1256).
         run: npx fallow audit --coverage coverage/coverage-final.json --coverage-root "$GITHUB_WORKSPACE"
+
+  # THE required check (#1698). Everything above may legitimately skip; this never does,
+  # so branch protection has one status that always reports. It fails when any job
+  # failed/was cancelled, and passes when every job either succeeded or was skipped.
+  # Requiring the path-filtered jobs directly would wedge any PR that doesn't touch
+  # code — they'd sit on "Expected" forever.
+  gate:
+    name: CI Gate
+    if: always()
+    needs: [changes, typecheck-mcp, typecheck-apps, build-kassa, docs-check, sync-validation,
+            mcp-server-tests, test, changeset-check, package-check, scripts-tests, fallow-audit]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every needed job succeeded or was legitimately skipped
+        run: |
+          echo '${{ toJSON(needs) }}' > needs.json
+          cat needs.json
+          bad="$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key)=\(.value.result)"' needs.json)"
+          if [ -n "$bad" ]; then
+            echo "::error::CI Gate FAILED — not every job succeeded or skipped:"; echo "$bad"
+            exit 1
+          fi
+          echo "CI Gate PASSED"
