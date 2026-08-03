@@ -447,6 +447,7 @@ jobs:
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
           APP: ${{ inputs.app }}
+          WORKSPACE: ${{ inputs.workspace }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REF_NAME: ${{ github.ref_name }}
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
@@ -470,8 +471,17 @@ jobs:
                --seed-team test1 --db "${APP}-staging-db"; then
             echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
             echo "password=$PW" >> "$GITHUB_OUTPUT"
+            # One-click link: crouton-auth prefills the login form from ?email=&password=
+            # and never auto-submits (#1153 made the prefill actually apply). Optional
+            # per-app landing path so the link drops the reviewer on the surface worth
+            # reviewing instead of '/': `reviewLogin.landing` in deploy.config.json
+            # (same config block #1185 proposes for a fixed email/password).
+            LANDING="$(node -p "(require('./$WORKSPACE/$APP/deploy.config.json').reviewLogin||{}).landing||''" 2>/dev/null || echo '')"
+            LOGIN_URL="$(node -e 'const [u,e,p,l]=process.argv.slice(1); const q=new URLSearchParams({email:e,password:p}); if(l) q.set("redirect",l); process.stdout.write(`${u}/auth/login?${q}`)' "$DEPLOY_URL" "$EMAIL" "$PW" "$LANDING")"
+            echo "login_url=$LOGIN_URL" >> "$GITHUB_OUTPUT"
             {
               echo "### 🔑 Review test login (${APP})"
+              echo "- **One-click:** [open ${APP} signed-in]($LOGIN_URL) — the form arrives prefilled; click Sign in."
               echo "- **URL:** $DEPLOY_URL"
               echo "- **Email:** \`$EMAIL\`"
               echo "- **Password:** \`$PW\`"
@@ -565,10 +575,14 @@ jobs:
             const app = '${{ inputs.app }}'
             const email = `${{ steps.seed.outputs.email }}`
             const password = `${{ steps.seed.outputs.password }}`
+            const loginUrl = `${{ steps.seed.outputs.login_url }}`
             const marker = `<!-- deploy-staging:${app} -->`
             // Disposable test login (#608) — only present when the seed step ran + produced creds.
+            // Leads with the one-click link (the form arrives prefilled — #1153 fixed the apply,
+            // it never auto-submits) and keeps the raw creds as the paste-in fallback.
+            const oneClick = loginUrl ? `\n\n🔑 **[Open ${app} signed-in](${loginUrl})** — prefilled login, one click on Sign in.` : ''
             const login = (email && password)
-              ? `\n\n🔑 **Test login** — paste straight in, no registration:\n\`\`\`\nEmail:    ${email}\nPassword: ${password}\n\`\`\`\n_Disposable account on this isolated, throwaway staging DB._`
+              ? `${oneClick}\n\n<details><summary>…or paste the creds</summary>\n\n\`\`\`\nEmail:    ${email}\nPassword: ${password}\n\`\`\`\n</details>\n_Disposable account on this isolated, throwaway staging DB._`
               : ''
             const body = `${marker}\n🚀 **${app}** deployed to staging: ${url}${login}\n\n<sub>🤖 isolated, auto-provisioned Workers staging env (its own D1 + KV)</sub>`
             const { owner, repo } = context.repo

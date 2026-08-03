@@ -2,6 +2,9 @@
   "stagingUrl": "https://kassa.pmcp.dev",
   "productionUrl": "https://kassa.friendlyinter.net",
   "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-email @fyit/crouton",
+  "reviewLogin": {
+    "landing": "/admin/test1/sales/events/vlaamsekermis"
+  },
   "watchPaths": [
     "apps/kassa/**",
     "packages/crouton/**",
