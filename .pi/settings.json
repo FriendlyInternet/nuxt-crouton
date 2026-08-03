@@ -1,6 +1,6 @@
 {
-  "$comment": "Headless CI profile (#1019/#1004) — only pipeline-critical + telemetry extensions. pi merges this project file OVER ~/.pi/agent/settings.json, and `packages` (an array) REPLACES the global list, so CI loads exactly these 8 — notably WITHOUT pi-ask-user / pi-interactive-shell, so a headless run can't stall-and-ask (the #839 failure). pi-ralph-wiggum gives the persistence loop. In CI, ANTHROPIC_API_KEY activates the 'anthropic' provider; locally, pi-claude-cli reads auth.json.",
-  "defaultProvider": "anthropic",
+  "$comment": "Headless CI profile (#1019/#1004) — only pipeline-critical + telemetry extensions. pi merges this project file OVER ~/.pi/agent/settings.json, and `packages` (an array) REPLACES the global list, so CI loads exactly these 8 — notably WITHOUT pi-ask-user / pi-interactive-shell, so a headless run can't stall-and-ask (the #839 failure). pi-ralph-wiggum gives the persistence loop. defaultProvider is 'pi-claude-cli' — on the mac-mini runner headless runs drive the Claude SUBSCRIPTION via the logged-in `claude` CLI (#1669, everything-on-the-subscription). WARNING: only works where `claude` is logged in — a GitHub-hosted run (ubuntu-latest) has none and must pass its own --provider/key.",
+  "defaultProvider": "pi-claude-cli",
   "defaultThinkingLevel": "medium",
   "quietStartup": true,
   "enableInstallTelemetry": false,
