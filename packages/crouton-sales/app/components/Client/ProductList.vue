@@ -7,12 +7,15 @@
       v-for="product in orderedProducts"
       :key="product.id"
       variant="soft"
-      class="cursor-pointer group/card relative overflow-hidden transition-colors duration-150 hover:bg-elevated"
-      :class="product.isActive === false ? 'opacity-60' : ''"
+      class="group/card relative overflow-hidden transition-colors duration-150 hover:bg-elevated"
+      :class="[
+        product.isActive === false ? 'opacity-60' : '',
+        isRowTappable(product) ? 'cursor-pointer' : ''
+      ]"
       :ui="{ body: 'px-3 py-2 sm:px-3 sm:py-2' }"
-      role="button"
-      tabindex="0"
-      :aria-label="product.title"
+      :role="isRowTappable(product) ? 'button' : undefined"
+      :tabindex="isRowTappable(product) ? 0 : undefined"
+      :aria-label="isRowTappable(product) ? product.title : undefined"
       @click="handleProductClick(product)"
       @keydown.enter.self.prevent="handleProductClick(product)"
       @keydown.space.self.prevent="handleProductClick(product)"
@@ -646,6 +649,21 @@ function confirmProduct(product: SalesProduct) {
   emit('select', product, pendingOptions(product), pendingRemark(product))
 }
 
+// Does tapping the row itself do anything? Drives the click handler AND the
+// affordances (cursor, role, focusability) — a row that does nothing must not
+// advertise itself as a button or take keyboard focus.
+function isRowTappable(product: SalesProduct): boolean {
+  if (props.editable) return true
+  if (isExpandable(product)) return true
+  // A plain product already in the cart shows a −/qty/+ on this very row. The
+  // buttons stop propagation, but the space AROUND them doesn't — so a near-miss
+  // on `−` would fall through to the card and ADD one, the exact opposite of the
+  // intent, silently (#1798). The risk is one-sided: missing `+` still adds,
+  // which is what you wanted. So once a `−` is on screen the stepper owns the
+  // quantity outright. At qty 0 there's no `−` to miss and tap-to-add is safe.
+  return quantityOf(product) === 0
+}
+
 function handleProductClick(product: SalesProduct) {
   // In edit mode the list is an editing surface, not the cart — clicking any
   // product (active or inactive) opens its edit form. Adding to cart is
@@ -657,7 +675,7 @@ function handleProductClick(product: SalesProduct) {
   if (isExpandable(product)) {
     toggleProduct(product)
   }
-  else {
+  else if (isRowTappable(product)) {
     addProduct(product)
   }
 }
