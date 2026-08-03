@@ -230,29 +230,56 @@
               </template>
             </URadioGroup>
 
-            <!-- Single-select, no remark: each option adds immediately -->
-            <div v-else class="space-y-2">
-              <UButton
+            <!-- Single-select, no remark: one row per option, each stepping its
+                 own cart line. This is the only branch where an option maps 1:1
+                 to a line, so the row can own the quantity — which is why the
+                 option isn't ALSO repeated in the list above (#1732). Same shape
+                 as those rows on purpose: for this product they are those rows. -->
+            <div v-else class="space-y-1.5">
+              <div
                 v-for="option in getOptions(product)"
                 :key="option.id"
-                :label="option.label"
-                block
-                size="md"
-                color="neutral"
-                variant="ghost"
-                class="active:scale-[0.98] transition-transform"
-                @click="selectOption(product, option.id)"
+                class="flex items-center gap-2"
               >
-                <template #trailing>
-                  <span v-if="option.priceModifier > 0" class="text-xs text-muted ms-auto">+{{ format(option.priceModifier) }}</span>
-                  <UIcon
-                    name="i-lucide-plus"
-                    class="size-4 text-primary transition-transform"
-                    :class="[{ 'ms-auto': !option.priceModifier }, poppedId === option.id ? 'animate-pop' : '']"
-                    @animationend="poppedId = null"
+                <span class="flex-1 min-w-0 truncate text-sm">{{ option.label }}</span>
+                <span v-if="option.priceModifier > 0" class="shrink-0 text-xs text-muted">
+                  +{{ format(option.priceModifier) }}
+                </span>
+                <UFieldGroup v-if="lineForOption(product, option.id)" size="sm">
+                  <UButton
+                    icon="i-lucide-minus"
+                    color="neutral"
+                    variant="soft"
+                    square
+                    :aria-label="t('sales.cart.remove')"
+                    @click="emit('variantQuantity', lineForOption(product, option.id)!.index, lineForOption(product, option.id)!.quantity - 1)"
                   />
-                </template>
-              </UButton>
+                  <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
+                    <span :key="lineForOption(product, option.id)!.quantity" class="animate-pop">
+                      {{ lineForOption(product, option.id)!.quantity }}
+                    </span>
+                  </UBadge>
+                  <UButton
+                    icon="i-lucide-plus"
+                    color="neutral"
+                    variant="soft"
+                    square
+                    :aria-label="t('sales.cart.add')"
+                    @click="emit('variantQuantity', lineForOption(product, option.id)!.index, lineForOption(product, option.id)!.quantity + 1)"
+                  />
+                </UFieldGroup>
+                <UButton
+                  v-else
+                  size="sm"
+                  color="primary"
+                  variant="soft"
+                  square
+                  icon="i-lucide-plus"
+                  class="active:scale-90 transition-transform"
+                  :aria-label="`${option.label} — ${t('sales.cart.add', 'Add one')}`"
+                  @click="selectOption(product, option.id)"
+                />
+              </div>
             </div>
           </template>
 
@@ -383,13 +410,46 @@ function linesFor(product: SalesProduct) {
   return props.cartLines?.[product.id] ?? []
 }
 
-// The lines listed under "in cart" inside the expandable: the product's OTHER
-// combos. Only the line the panel's own stepper already targets is left out —
-// it'd be the same row twice. Nothing else is filtered here: which lines belong
-// to a configurable product is `cartLinesByProduct`'s call (an options-less line
-// belongs when options are optional, #1753), and re-filtering would hide it.
+// The lines listed under "in cart" inside the expandable: the ones no OTHER
+// control in this panel already steps. Two are excluded — the combo the panel's
+// own stepper targets, and (single-select) the lines their option rows step —
+// because either would otherwise render as the same line twice.
+// Which lines belong to a configurable product at all stays `cartLinesByProduct`'s
+// call: an options-less line belongs when options are optional (#1753), and this
+// is deliberately NOT the place to re-filter that.
 function variantLinesFor(product: SalesProduct) {
-  return linesFor(product).filter(line => line.index !== activePendingLine.value?.index)
+  const stepped = inlineOptionLineIndexes(product)
+  return linesFor(product).filter(line =>
+    line.index !== activePendingLine.value?.index && !stepped.has(line.index)
+  )
+}
+
+// Only the single-select-no-remark branch renders a stepper per option: there one
+// option maps to exactly one cart line, so the row can target it unambiguously.
+// Multi-select lines are combinations of options, and a remark product's lines
+// differ by free text — neither has a row that means one line.
+function hasInlineOptionSteppers(product: SalesProduct): boolean {
+  return hasOptions(product) && !isMultiSelect(product) && !product.requiresRemark
+}
+
+// The cart line one option row steps, if that option is in the cart.
+function lineForOption(product: SalesProduct, optionId: string) {
+  return linesFor(product).find(line =>
+    !line.remarks && sameOptions(line.selectedOptions, optionId)
+  ) ?? null
+}
+
+// Cart indexes already covered by an option row. Derived from the rows that
+// actually render — so a line whose option was since deleted from the product
+// has no row, isn't in this set, and keeps its place in the list below.
+function inlineOptionLineIndexes(product: SalesProduct): Set<number> {
+  const indexes = new Set<number>()
+  if (!hasInlineOptionSteppers(product)) return indexes
+  for (const option of getOptions(product)) {
+    const line = lineForOption(product, option.id)
+    if (line) indexes.add(line.index)
+  }
+  return indexes
 }
 
 // Human label for one ordered variant: its selected option labels (ids resolved
