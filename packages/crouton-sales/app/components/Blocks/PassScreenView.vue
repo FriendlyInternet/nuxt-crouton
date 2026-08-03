@@ -42,11 +42,18 @@ function handleOpenPanel() {
 </script>
 
 <template>
+  <!--
+    No `@dblclick="handleOpenPanel"` here, unlike the other 8 block views. A
+    double-click cannot be produced from a keyboard, and the a11y gate treats a
+    mouse-only handler on a non-interactive wrapper as a WCAG 2.1.1 break even
+    when the same action has a button (#1794). The pencil is the single way in,
+    and it is now visible on focus as well as hover. #1791 carries the same
+    change for the other 8.
+  -->
   <NodeViewWrapper
-    class="block-wrapper my-1 cursor-pointer"
+    class="block-wrapper my-1"
     :class="{ 'border-l-2 border-l-primary/50': selected }"
     data-type="pass-screen-block"
-    @dblclick="handleOpenPanel"
   >
     <div ref="innerRef" class="relative group rounded border border-transparent hover:border-default transition-colors">
       <div class="p-3">
