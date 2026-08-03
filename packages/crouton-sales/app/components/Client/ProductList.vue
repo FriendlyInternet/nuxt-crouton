@@ -267,7 +267,15 @@
           >
             <template #label>
               <span class="flex items-center gap-2">
-                <UIcon name="i-lucide-message-square-text" class="size-4 shrink-0" />
+                <!-- The icon belongs to the generic "Opmerking" fallback, which it
+                     was drawn for (it mirrors the cart's remark section). A product
+                     that supplies its own prompt gets that sentence as the heading,
+                     where a speech bubble in front of arbitrary text says nothing. -->
+                <UIcon
+                  v-if="!product.remarkPrompt"
+                  name="i-lucide-message-square-text"
+                  class="size-4 shrink-0"
+                />
                 {{ product.remarkPrompt || t('sales.cart.remark') }}
               </span>
             </template>
