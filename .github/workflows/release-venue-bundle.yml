@@ -1,0 +1,132 @@
+# Publish the venue (node-server) bundle as a release asset (#804).
+#
+# The generic installer (`apps/fanfare/deploy/install.sh`) turns a bare Linux
+# box into a running till by *downloading* this tarball — it does NOT clone and
+# build. Building Nuxt on-site needs multiple GB of heap (the Pi rig sets
+# --max-old-space-size=6144), which a 4GB Pi cannot do without swapping for
+# many minutes. Shipping a prebuilt bundle is what makes "bare box → till in
+# one command" actually true.
+#
+# CI's `build-fanfare` job already proves this preset builds on every PR; this
+# workflow is the same build, kept and published.
+name: Release venue bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create/update (e.g. venue-2026.08.03)."
+        required: true
+        type: string
+      prerelease:
+        description: "Mark the release as a prerelease."
+        required: false
+        default: true
+        type: boolean
+  push:
+    tags:
+      - 'venue-*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-venue-bundle-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    name: Build + publish venue bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build fanfare's workspace dependencies
+        # Dist-consumed, so they must be built before the app (mirrors ci.yml).
+        run: pnpm --filter "fanfare^..." build
+
+      - name: Prepare Nuxt
+        run: npx nuxt prepare
+        working-directory: apps/fanfare
+
+      - name: Build fanfare (node-server)
+        run: npx nuxt build
+        working-directory: apps/fanfare
+        env:
+          NITRO_PRESET: node-server
+          NODE_OPTIONS: '--max-old-space-size=8192'
+          # Build-time prerender needs a secret present; value is irrelevant.
+          BETTER_AUTH_SECRET: ci-placeholder
+
+      - name: Assemble the bundle
+        id: bundle
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          STAGE="$(mktemp -d)/fanfare-venue"
+          mkdir -p "$STAGE"
+
+          # The runnable server, plus the deploy assets the installer wires up
+          # (systemd unit, health check, network config, env example).
+          cp -R apps/fanfare/.output "$STAGE/output"
+          cp -R apps/fanfare/deploy "$STAGE/deploy"
+
+          # Stamp provenance so a box can report exactly what it runs.
+          cat > "$STAGE/BUNDLE.json" <<JSON
+          {
+            "tag": "$TAG",
+            "commit": "${{ github.sha }}",
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "preset": "node-server",
+            "node": "20"
+          }
+          JSON
+
+          TARBALL="fanfare-venue.tar.gz"
+          tar -czf "$TARBALL" -C "$(dirname "$STAGE")" fanfare-venue
+          sha256sum "$TARBALL" > "$TARBALL.sha256"
+
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          ls -lh "$TARBALL"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.bundle.outputs.tag }}"
+          TARBALL="${{ steps.bundle.outputs.tarball }}"
+          PRERELEASE=""
+          if [ "${{ github.event.inputs.prerelease || 'true' }}" = "true" ]; then
+            PRERELEASE="--prerelease"
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$TARBALL" "$TARBALL.sha256" --clobber
+          else
+            gh release create "$TAG" "$TARBALL" "$TARBALL.sha256" \
+              --title "Venue bundle $TAG" \
+              --notes "Prebuilt node-server bundle for the venue till installer (#804).
+
+Install on a bare Linux box:
+
+\`\`\`bash
+curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/apps/fanfare/deploy/install.sh | sudo bash -s -- --release $TAG
+\`\`\`
+
+Built from \`${{ github.sha }}\`." \
+              $PRERELEASE
+          fi
