@@ -10,7 +10,12 @@
       class="cursor-pointer group/card relative overflow-hidden transition-colors duration-150 hover:bg-elevated"
       :class="product.isActive === false ? 'opacity-60' : ''"
       :ui="{ body: 'px-3 py-2 sm:px-3 sm:py-2' }"
+      role="button"
+      tabindex="0"
+      :aria-label="product.title"
       @click="handleProductClick(product)"
+      @keydown.enter.self.prevent="handleProductClick(product)"
+      @keydown.space.self.prevent="handleProductClick(product)"
     >
       <!-- Admin affordances slide in from the card edges on hover (bookings-card
            pattern): reorder grip on the left, edit pencil on the right. -->
@@ -84,6 +89,8 @@
               square
               :icon="activeProductId === product.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
               class="group-hover/card:bg-accented/50 hover:bg-accented"
+              :aria-label="product.title"
+              :aria-expanded="activeProductId === product.id"
               @click.stop="toggleProduct(product)"
             />
           </template>
@@ -120,6 +127,7 @@
             size="md"
             square
             class="active:scale-90 transition-[transform,background-color] group-hover/card:bg-primary/10 hover:bg-primary/20"
+            :aria-label="t('sales.cart.add', 'Add one')"
             @click.stop="addProduct(product)"
           >
             <UIcon
