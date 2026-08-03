@@ -1514,6 +1514,9 @@ importers:
       '@nuxtjs/i18n':
         specifier: ^9.0.0 || ^10.0.0
         version: 9.5.6(@vue/compiler-dom@3.5.38)(eslint@9.39.2(jiti@2.7.0))(magicast@0.5.2)(rollup@4.62.0)(vue@3.5.38(typescript@5.9.3))
+      '@vueuse/integrations':
+        specifier: ^13.3.0
+        version: 13.9.0(change-case@5.4.4)(fuse.js@7.4.2)(sortablejs@1.15.6)(vue@3.5.38(typescript@5.9.3))
       nanoid:
         specifier: ^5.0.0
         version: 5.1.6

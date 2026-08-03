@@ -61,6 +61,7 @@
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-printing": "workspace:*",
     "@nuxt/ui": "catalog:",
+    "@vueuse/integrations": "^13.3.0",
     "nanoid": "^5.0.0",
     "reka-ui": "^2.9.0"
   },
