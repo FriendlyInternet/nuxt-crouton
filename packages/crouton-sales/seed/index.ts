@@ -27,6 +27,14 @@ interface SeedProduct {
   price: number
   category: 'drinks' | 'food'
   order: number
+  /**
+   * Multi-select options, i.e. OPTIONAL ones — the product can be ordered with
+   * them AND without. Every other seeded product is plain, which left the whole
+   * options-optional path (two cart lines for one product, the "Besteld" list,
+   * the count badge) unreproducible on a seeded app: #1753 had to be verified
+   * against a hand-inserted row. One such product keeps it testable.
+   */
+  options?: Array<{ id: string, label: string, priceModifier: number }>
 }
 
 const PRODUCTS: SeedProduct[] = [
@@ -34,7 +42,18 @@ const PRODUCTS: SeedProduct[] = [
   { slug: 'frisdrank', title: 'Frisdrank', price: 2.0, category: 'drinks', order: 2 },
   { slug: 'koffie', title: 'Koffie', price: 1.8, category: 'drinks', order: 3 },
   { slug: 'frietjes', title: 'Frietjes', price: 3.5, category: 'food', order: 4 },
-  { slug: 'hamburger', title: 'Hamburger', price: 5.0, category: 'food', order: 5 }
+  { slug: 'hamburger', title: 'Hamburger', price: 5.0, category: 'food', order: 5 },
+  {
+    slug: 'ijsje',
+    title: 'IJsje',
+    price: 3.0,
+    category: 'food',
+    order: 6,
+    options: [
+      { id: 'slagroom', label: 'Met slagroom', priceModifier: 0.5 },
+      { id: 'zonder-slagroom', label: 'Zonder slagroom', priceModifier: 0 }
+    ]
+  }
 ]
 
 function seedCatalog(ctx: SeedContext) {
@@ -103,8 +122,13 @@ function seedCatalog(ctx: SeedContext) {
       price: product.price,
       isActive: true,
       requiresRemark: false,
-      hasOptions: false,
-      multipleOptionsAllowed: false,
+      // multipleOptionsAllowed mirrors hasOptions here: a seeded product with
+      // options is deliberately the MULTI-select kind, so its options stay
+      // optional (single-select forces a choice and can never produce the
+      // plain, option-less cart line — #1753).
+      hasOptions: !!product.options,
+      multipleOptionsAllowed: !!product.options,
+      options: product.options ?? null,
       createdAt: ctx.now,
       updatedAt: ctx.now,
       createdBy: 'seed',
