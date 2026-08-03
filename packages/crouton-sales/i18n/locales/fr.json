@@ -277,7 +277,8 @@
       "locationRemarkPlaceholder": "Ajouter une remarque pour ce lieu…",
       "remark": "Remarque",
       "remarkPlaceholder": "Saisissez la remarque…",
-      "staffOrder": "Commande du personnel"
+      "staffOrder": "Commande du personnel",
+      "staffOrderShort": "Personnel"
     },
     "products": {
       "title": "Produits",

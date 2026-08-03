@@ -81,26 +81,31 @@
             @click="remarksOpen = !remarksOpen"
           />
           <span v-else />
-          <!-- Staff order: prints the staff banner on tickets (receipt settings).
-               Icon, not text (#1508): the translated label ("Personeelsbestelling")
-               overflowed the compact one-line controls row on narrow phone panes.
-               The name stays reachable — tooltip on the icon + aria-label on the
-               switch — and the icon takes the warning tint while active. -->
-          <label class="flex items-center gap-2 cursor-pointer">
-            <UTooltip :text="t('sales.cart.staffOrder')">
-              <UIcon
-                name="i-lucide-chef-hat"
-                class="size-5"
-                :class="isPersonnel ? 'text-warning' : 'text-muted'"
-              />
-            </UTooltip>
-            <USwitch
-              :model-value="isPersonnel ?? false"
-              color="warning"
+          <!-- Staff order: prints the staff banner on tickets (receipt settings)
+               and drops the order out of revenue unless "Personeel meetellen".
+               A labelled toggle button, not an icon + bare switch (#1802): the
+               chef hat read as "send to the kitchen", which is the one thing this
+               does NOT do — and flipping it by mistake mislabels the ticket and
+               loses the revenue silently.
+               #1508 removed the visible text because "Personeelsbestelling"
+               overflowed this one-line row on phone panes. That still holds, so
+               the label is the SHORT form ("Personeel"); the full translated name
+               stays as the tooltip + accessible name, which is what matches the
+               printed banner.
+               No icon at all: the word already says it, and every icon tried here
+               has meant something else to the reader (a chef hat said "kitchen",
+               a person says "customer" about as easily as "staff"). -->
+          <UTooltip :text="t('sales.cart.staffOrder')">
+            <UButton
+              size="sm"
+              :label="t('sales.cart.staffOrderShort')"
+              :color="isPersonnel ? 'warning' : 'neutral'"
+              :variant="isPersonnel ? 'solid' : 'soft'"
               :aria-label="t('sales.cart.staffOrder')"
-              @update:model-value="$emit('update:isPersonnel', $event)"
+              :aria-pressed="isPersonnel ?? false"
+              @click="$emit('update:isPersonnel', !isPersonnel)"
             />
-          </label>
+          </UTooltip>
         </div>
 
         <!-- Remarks: one note per location with items in the cart. Controlled

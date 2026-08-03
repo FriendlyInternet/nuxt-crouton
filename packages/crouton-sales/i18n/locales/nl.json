@@ -278,7 +278,8 @@
       "locationRemarkPlaceholder": "Voeg een opmerking toe voor deze locatie…",
       "remark": "Opmerking",
       "remarkPlaceholder": "Typ de opmerking…",
-      "staffOrder": "Personeelsbestelling"
+      "staffOrder": "Personeelsbestelling",
+      "staffOrderShort": "Personeel"
     },
     "products": {
       "title": "Producten",

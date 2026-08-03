@@ -278,7 +278,8 @@
       "locationRemarkPlaceholder": "Add a remark for this location…",
       "remark": "Remark",
       "remarkPlaceholder": "Type the remark…",
-      "staffOrder": "Staff order"
+      "staffOrder": "Staff order",
+      "staffOrderShort": "Staff"
     },
     "products": {
       "title": "Products",
