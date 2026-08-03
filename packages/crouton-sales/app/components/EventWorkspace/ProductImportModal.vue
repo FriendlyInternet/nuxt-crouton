@@ -148,11 +148,17 @@ interface ImportResult {
   createdLocations: string[]
 }
 
+/**
+ * Interpolate through `t()`, never by hand afterwards: vue-i18n compiles `{created}` as a
+ * named placeholder and renders it as an EMPTY STRING when `t()` is called without params —
+ * so a post-hoc `.replace('{created}', …)` finds nothing left to replace and the toast reads
+ * "aangemaakt, overgeslagen, mislukt" with every number missing (#1722).
+ */
 const summaryOf = (r: ImportResult) =>
-  t('sales.import.doneBody', '{created} created, {skipped} skipped, {errors} failed')
-    .replace('{created}', String(r.created))
-    .replace('{skipped}', String(r.skipped))
-    .replace('{errors}', String(r.errors.length))
+  t('sales.import.doneBody', {
+    params: { created: r.created, skipped: r.skipped, errors: r.errors.length },
+    fallback: '{created} created, {skipped} skipped, {errors} failed',
+  })
 
 /**
  * Surface the server's own reason when it gave one — "nothing was saved" alone leaves
