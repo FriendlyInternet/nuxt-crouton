@@ -70,6 +70,45 @@ Key paths (per app, e.g. `apps/kassa`):
   `--local`), `db:migrate:prod` / `db:migrate:staging` (`--remote`),
   `db:seed*` (crouton-seed). NB: never run `npx nuxt db generate` from repo root.
 
+## Squashing a migration history — run the schema diff FIRST (required)
+
+A squash regenerates the baseline **from the schema source**. A hand-written corrective
+migration that fixed the *database* but was never reflected back into that source is
+therefore **silently reverted**.
+
+This is not hypothetical. kassa's `0019_nullable_printer_location` made
+`sales_printers.locationId` nullable, healing a `0016` regression. The schema source
+still said `.notNull()`, so the #1455 squash brought the bug straight back — caught only
+when the production restore died on real rows:
+
+```
+NOT NULL constraint failed: sales_printers.locationId
+```
+
+**A table-NAME diff cannot see this** — the table exists on both sides. Compare columns:
+
+```bash
+# concatenate the OLD history in order, then diff against the regenerated baseline
+for f in $(git show HEAD:apps/<app>/server/db/migrations/sqlite | grep '\.sql$'); do
+  git show HEAD:apps/<app>/server/db/migrations/sqlite/$f
+done > /tmp/old_history.sql
+
+node scripts/schema-diff.mjs /tmp/old_history.sql \
+  apps/<app>/server/db/migrations/sqlite/0000_*.sql \
+  --live <the wrangler d1 export dump>
+```
+
+Exit 0 = a data-only restore should load cleanly. Exit 1 = it will fail; fix the schema
+source and regenerate **before** touching any database.
+
+**Always pass `--live`.** The migration files can have drifted from the database that
+actually exists; the live dump is what governs the restore. Without it the script can
+only flag the *shape* of the problem, not confirm it.
+
+**Restoring afterwards:** data only — never the old `d1_migrations` rows (that silently
+un-does the squash) — and insert in **foreign-key order**, because D1's export is
+alphabetical, so `account` precedes `user` and a naive reload dies on a constraint.
+
 ## Adding an APP collection (the common case)
 
 Use the **crouton** skill / CLI — don't hand-write the table. Edit the schema
