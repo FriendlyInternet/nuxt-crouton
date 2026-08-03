@@ -34,25 +34,39 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // Get session state
   const { isAuthenticated, activeOrganization, isPending } = useSession()
 
-  // Wait for session to load (important for initial navigation)
+  // Wait for the session to resolve (important for initial navigation).
+  //
+  // `isPending` is a resolved-latch (#1703): true until the session first
+  // resolves, then never true again — so this waits at most once per app.
+  //
+  // `unwatch` MUST be declared before watch() (#1712). With `immediate: true`
+  // the callback runs synchronously during the watch() call, i.e. before a
+  // `const unwatch = watch(...)` binding would be initialised — so if isPending
+  // were already false at that moment, calling unwatch() there threw a
+  // ReferenceError from the temporal dead zone. The `if` above happened to make
+  // that unreachable, which is exactly the kind of guard that quietly stops
+  // holding.
   if (isPending.value) {
-    // Wait for session to load (max 5 seconds)
     await new Promise<void>((resolve) => {
-      const unwatch = watch(
+      let unwatch: (() => void) | undefined
+      let timer: ReturnType<typeof setTimeout> | undefined
+
+      const finish = () => {
+        unwatch?.()
+        if (timer) clearTimeout(timer)
+        resolve()
+      }
+
+      unwatch = watch(
         () => isPending.value,
         (pending) => {
-          if (!pending) {
-            unwatch()
-            resolve()
-          }
+          if (!pending) finish()
         },
         { immediate: true }
       )
-      // Timeout after 5 seconds
-      setTimeout(() => {
-        unwatch()
-        resolve()
-      }, 5000)
+
+      // Don't block navigation forever if the session never resolves.
+      timer = setTimeout(finish, 5000)
     })
   }
 
