@@ -1,1 +1,0 @@
-ALTER TABLE `sales_events` ADD `requiresClient` integer;
