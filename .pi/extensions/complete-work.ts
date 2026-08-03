@@ -18,6 +18,10 @@
 // also what makes the lean `.pi/settings.json` CI profile apply.
 const DONE = "PI_TASK_COMPLETE_NOTHING_LEFT";
 const MAX = Number(process.env.PI_COMPLETE_MAX_NUDGES || 4);
+// A tool-less turn that is actually a PROVIDER/BACKEND error (the pi-claude-cli subprocess timing
+// out under load, a rate/usage limit, etc.) must NOT be nudged — re-driving just fires another
+// doomed backend call and amplifies load. Let those fall through to the workflow's finish backstop.
+const BACKEND_ERR = /subprocess timed out|no output for \d+ seconds|rate.?limit|overloaded|usage limit reached|\b429\b/i;
 
 export default function (pi: any) {
   let nudges = 0;
@@ -31,6 +35,10 @@ export default function (pi: any) {
     if (event.toolResults && event.toolResults.length > 0) { nudges = 0; return; }
     const text = textOf(event.message);
     if (text.includes(DONE)) return;                       // model declared genuine completion
+    if (BACKEND_ERR.test(text)) {                          // backend/provider error — don't hammer it
+      console.error(`[complete-work] backend-error turn — NOT nudging, deferring to the finish backstop (#1764)`);
+      return;
+    }
     if (nudges >= MAX) {
       console.error(`[complete-work] cap ${MAX} reached — letting the run end (#1764)`);
       return;                                              // hand off to the workflow's deterministic finish backstop
