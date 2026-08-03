@@ -41,16 +41,16 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi. Default glm-5.2 (flat-rate GLM Coding Plan — beat the Haiku baseline on fidelity at $0 marginal, #1409). For provider=anthropic use e.g. claude-haiku-4-5-20251001."
+        description: "Model for pi. Default claude-haiku-4-5 on the Claude SUBSCRIPTION (provider=pi-claude-cli). glm-5.2 available via provider=zai if you want the GLM plan."
         required: false
-        default: "glm-5.2"
+        default: "claude-haiku-4-5"
         type: string
       provider:
-        description: "pi provider. Default zai = GLM Coding Plan via the runner box's pi auth store (#1409, self-hosted runner only); anthropic = funded PI_PROVIDER_KEY (metered baseline lane)."
+        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the mini's `claude` login (#1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
         required: false
-        default: "zai"
+        default: "pi-claude-cli"
         type: choice
-        options: ["zai", "anthropic"]
+        options: ["pi-claude-cli", "zai", "anthropic"]
 
 concurrency:
   group: a11y-daily-pidev
@@ -89,21 +89,19 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # ── The agent: pi.dev, REPORTS-ONLY, scoped to the model key only ──────────────
-      # env carries ONLY the provider key — no GH_TOKEN/GITHUB_TOKEN. Two provider lanes:
-      # `anthropic` (default) uses a FUNDED API key (PI_PROVIDER_KEY) — NOT a Claude
-      # subscription (subscription OAuth must never back unattended CI — Anthropic terms;
-      # the box's interactive `pi-claude-cli`/subscription path stays interactive-only).
-      # `zai` (#1409) uses the GLM Coding Plan via pi's auth store on the runner box —
-      # z.ai's plan officially whitelists pi, and the flat-rate key is model-scoped.
+      # ── The agent: pi.dev, REPORTS-ONLY ────────────────────────────────────────────
+      # env carries NO GH_TOKEN/GITHUB_TOKEN (reports-only) and NO metered key. Provider
+      # lanes: `pi-claude-cli` (DEFAULT, #1669) = Claude SUBSCRIPTION via the mini's
+      # `claude` login — this REVERSES the old "OAuth must not back CI" rule on the owner's
+      # instruction Anthropic now permits it. `zai` = GLM Coding Plan (flat-rate); `anthropic`
+      # = metered PI_PROVIDER_KEY. Only `pi-claude-cli`/`zai` work on the mac-mini runner.
       # Invocation + skills confirmed on the mac-mini (#888): the `.pi/skills` symlink
       # bridge does NOT load — pi's discovery ignores it — so skills are passed via the
       # explicit `--skill .claude/skills` flag (our SKILL.md format is drop-in portable).
       - id: pi
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.PI_PROVIDER_KEY }}
-          PI_MODEL: ${{ inputs.model }}
-          PI_PROVIDER: ${{ inputs.provider || 'zai' }}
+          PI_MODEL: ${{ inputs.model || 'claude-haiku-4-5' }}
+          PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
         run: |
           set -uo pipefail
           command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
