@@ -854,9 +854,15 @@ Part of the composable seeding system (epic #82, contract in
 `@fyit/crouton-core/shared/seed`). Provider id `sales`, `dependsOn: ['auth']`:
 
 - **Domain seed:** event `vlaamsekermis` (`helperPin: '1234'`, `requiresClient: false`,
-  `status: 'active'`), two categories (Dranken/Eten) and five products. No grant
+  `status: 'active'`), two categories (Dranken/Eten) and six products. No grant
   seeding — the `crouton:scoped-access:before-redeem` hook lazily syncs `helperPin`
   into the event grant on the first PIN login.
+  **One product (`IJsje`) deliberately carries MULTI-select options** (Met/Zonder
+  slagroom) — i.e. *optional* ones, so it can be ordered both with and without.
+  Single-select options force a choice, so a catalogue of only those made the whole
+  options-optional path (two cart lines for one product, the "Besteld" list, the
+  count badge) unreproducible on a seeded app — #1753 had to be verified against a
+  hand-inserted row (#1777). Keep at least one multi-select product here.
 - **Block demo (only when crouton-pages is present):** via `ctx.createPageWithBlocks`,
   a `scoped` page (slug `vlaamsekermis`, locale `nl`) embedding an
   `eventWorkspaceBlock` with `eventSlug: 'vlaamsekermis'`. The block stores the
