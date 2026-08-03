@@ -10,7 +10,12 @@
       class="cursor-pointer group/card relative overflow-hidden transition-colors duration-150 hover:bg-elevated"
       :class="product.isActive === false ? 'opacity-60' : ''"
       :ui="{ body: 'px-3 py-2 sm:px-3 sm:py-2' }"
+      role="button"
+      tabindex="0"
+      :aria-label="product.title"
       @click="handleProductClick(product)"
+      @keydown.enter.self.prevent="handleProductClick(product)"
+      @keydown.space.self.prevent="handleProductClick(product)"
     >
       <!-- Admin affordances slide in from the card edges on hover (bookings-card
            pattern): reorder grip on the left, edit pencil on the right. -->
@@ -84,6 +89,8 @@
               square
               :icon="activeProductId === product.id ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
               class="group-hover/card:bg-accented/50 hover:bg-accented"
+              :aria-label="product.title"
+              :aria-expanded="activeProductId === product.id"
               @click.stop="toggleProduct(product)"
             />
           </template>
@@ -120,6 +127,7 @@
             size="md"
             square
             class="active:scale-90 transition-[transform,background-color] group-hover/card:bg-primary/10 hover:bg-primary/20"
+            :aria-label="t('sales.cart.add', 'Add one')"
             @click.stop="addProduct(product)"
           >
             <UIcon
@@ -139,6 +147,47 @@
           class="mt-2 pt-2.5 pb-1.5 border-t border-default space-y-2.5"
           @click.stop
         >
+          <!-- Ordered lines of this product already in the cart: each line (its
+               options/remark, or the plain product) with its own −/qty/+
+               stepper, so what's been ordered is visible and adjustable without
+               opening the cart. Deliberately ABOVE the picker: on a busy kassa
+               the running order is what a volunteer checks most, and it keeps
+               the add button at the card's bottom edge, nearest the thumb. -->
+          <div
+            v-if="linesFor(product).length"
+            class="pb-2.5 border-b border-default space-y-1.5"
+          >
+            <p class="text-xs font-medium text-muted">{{ t('sales.products.inCart') }}</p>
+            <div
+              v-for="line in linesFor(product)"
+              :key="line.index"
+              class="flex items-center gap-2"
+            >
+              <span class="flex-1 min-w-0 truncate text-sm">{{ variantLabel(product, line) }}</span>
+              <UFieldGroup size="sm">
+                <UButton
+                  icon="i-lucide-minus"
+                  color="neutral"
+                  variant="soft"
+                  square
+                  :aria-label="t('sales.cart.remove')"
+                  @click="emit('variantQuantity', line.index, line.quantity - 1)"
+                />
+                <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
+                  <span :key="line.quantity" class="animate-pop">{{ line.quantity }}</span>
+                </UBadge>
+                <UButton
+                  icon="i-lucide-plus"
+                  color="neutral"
+                  variant="soft"
+                  square
+                  :aria-label="t('sales.cart.add')"
+                  @click="emit('variantQuantity', line.index, line.quantity + 1)"
+                />
+              </UFieldGroup>
+            </div>
+          </div>
+
           <!-- Options -->
           <template v-if="hasOptions(product)">
             <!-- Multi-select: card-variant checkbox group (big tap targets,
@@ -241,43 +290,6 @@
             {{ t('sales.products.addToCart') }}
           </UButton>
 
-          <!-- Ordered variants of this product already in the cart: each line
-               (its options/remark) with its own −/qty/+ stepper, so what's been
-               ordered is visible and adjustable without opening the cart. -->
-          <div
-            v-if="linesFor(product).length"
-            class="pt-2.5 border-t border-default space-y-1.5"
-          >
-            <p class="text-xs font-medium text-muted">{{ t('sales.products.inCart') }}</p>
-            <div
-              v-for="line in linesFor(product)"
-              :key="line.index"
-              class="flex items-center gap-2"
-            >
-              <span class="flex-1 min-w-0 truncate text-sm">{{ variantLabel(product, line) }}</span>
-              <UFieldGroup size="sm">
-                <UButton
-                  icon="i-lucide-minus"
-                  color="neutral"
-                  variant="soft"
-                  square
-                  :aria-label="t('sales.cart.remove')"
-                  @click="emit('variantQuantity', line.index, line.quantity - 1)"
-                />
-                <UBadge color="neutral" variant="soft" class="w-8 justify-center text-sm tabular-nums">
-                  <span :key="line.quantity" class="animate-pop">{{ line.quantity }}</span>
-                </UBadge>
-                <UButton
-                  icon="i-lucide-plus"
-                  color="neutral"
-                  variant="soft"
-                  square
-                  :aria-label="t('sales.cart.add')"
-                  @click="emit('variantQuantity', line.index, line.quantity + 1)"
-                />
-              </UFieldGroup>
-            </div>
-          </div>
         </div>
       </Transition>
       </div>
