@@ -55,7 +55,7 @@ jobs:
         # the whole point of this workflow is that actionable findings reach a human (#1037).
         continue-on-error: true
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
           # bypassPermissions REQUIRED (#834/#1036): this prompt has the top-level agent
           # create/update issues via tool calls directly; headless CI denies un-allowlisted

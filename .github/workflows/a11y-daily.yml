@@ -52,7 +52,7 @@ jobs:
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
       - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
           # bypassPermissions REQUIRED (#834): headless CI denies un-allowlisted tools, so the
           # deep sweep couldn't write its report, update the standing issue, or file a11y issues.
