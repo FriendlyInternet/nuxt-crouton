@@ -231,7 +231,8 @@
       "orders": "Bestellingen",
       "avgOrder": "Gem. bestelling",
       "topProducts": "Topproducten",
-      "noSalesYet": "Nog geen verkoop"
+      "noSalesYet": "Nog geen verkoop",
+      "outstanding": "Wachten nog"
     },
     "common": {
       "save": "Opslaan",
@@ -617,7 +618,9 @@
         "dataStat": "omzet",
         "settingsDesc": "Eventgegevens, printers, bontekst en helpers",
         "settingsStat": "printers"
-      }
+      },
+      "outstanding": "{count} wachten nog",
+      "outstandingNone": "Niets in wachtrij"
     },
     "helpers": {
       "title": "Actieve helpers",

@@ -231,7 +231,8 @@
       "orders": "Orders",
       "avgOrder": "Avg. order",
       "topProducts": "Top products",
-      "noSalesYet": "No sales yet"
+      "noSalesYet": "No sales yet",
+      "outstanding": "Still waiting"
     },
     "common": {
       "save": "Save",
@@ -617,7 +618,9 @@
         "dataStat": "revenue",
         "settingsDesc": "Event details, printers, receipt text and helpers",
         "settingsStat": "printers"
-      }
+      },
+      "outstanding": "{count} still waiting",
+      "outstandingNone": "Nothing waiting"
     },
     "helpers": {
       "title": "Active Helpers",

@@ -73,6 +73,40 @@ export interface PassTicketsResult {
   unroutable: UnroutableItem[]
 }
 
+export interface OutstandingCountPlan {
+  teamId: string
+  eventId: string
+  /** Exactly the two scoping values. Nothing else can reach this query. */
+  params: unknown[]
+  excludesCancelled: true
+  excludesHandedOver: true
+}
+
+/**
+ * Plan the "how many orders are people still waiting for?" count (#1763).
+ *
+ * Takes ONLY the tenant and the event — deliberately no filters, and not as an
+ * omission that a later change might quietly correct.
+ *
+ * The orders list endpoint shares one `buildWhere` between its rows and its
+ * total, so a filtered page and its total agree; that is right for a paginated
+ * table. Reusing it here would be silently wrong: picking a helper from the
+ * filter dropdown would change the backlog from 40 to 3. A number that moves
+ * when you filter the table is worse than no number, because it still looks
+ * authoritative. So this plan cannot receive a filter at all.
+ */
+export function planOutstandingCount(input: {
+  teamId: string
+  eventId: string
+}): OutstandingCountPlan {
+  return {
+    teamId: input.teamId,
+    eventId: input.eventId,
+    params: [input.teamId, input.eventId],
+    ...OUTSTANDING_DEFINITION
+  }
+}
+
 export interface PassJobsQueryPlan {
   eventId: string
   limit: number

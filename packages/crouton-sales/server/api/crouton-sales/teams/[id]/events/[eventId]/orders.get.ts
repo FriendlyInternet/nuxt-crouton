@@ -15,9 +15,10 @@
  * items and the row LEDs come from the `printqueues/status` poll, so the heavy
  * joins the generated collection GET does aren't needed here.
  */
-import { and, desc, eq, exists, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, exists, inArray, isNull, ne, sql } from 'drizzle-orm'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { requireTeamEvent } from '../../../../../../utils/team-event'
+import { planOutstandingCount } from '../../../../../../utils/pass-tickets'
 import {
   parseLocationRemarks,
   parseOrderFilters,
@@ -65,6 +66,33 @@ function buildWhere(db: any, salesOrders: any, teamId: string, eventId: string, 
   )
 }
 
+/**
+ * "Still waiting" — orders not cancelled and not yet handed to a customer (#1763).
+ *
+ * NOTE the separate scope: this deliberately does NOT reuse `buildWhere`. That
+ * one is filter-aware so a page and its total agree; a backlog figure that
+ * shrank when you picked a helper from the dropdown would be
+ * authoritative-looking and wrong. `planOutstandingCount` cannot receive a
+ * filter, which is what keeps the two apart.
+ */
+async function countOutstanding(db: any, salesOrders: any, teamId: string, eventId: string) {
+  const plan = planOutstandingCount({ teamId, eventId })
+  const { salesHandovers } = await import('~~/layers/sales/collections/handovers/server/database/schema')
+
+  const [row] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(salesOrders)
+    .leftJoin(salesHandovers, eq(salesHandovers.orderId, salesOrders.id))
+    .where(and(
+      eq(salesOrders.teamId, plan.teamId),
+      eq(salesOrders.eventId, plan.eventId),
+      ne(salesOrders.status, 'cancelled'),
+      isNull(salesHandovers.id)
+    ))
+
+  return Number(row?.count ?? 0)
+}
+
 export default defineEventHandler(async (event) => {
   const { team, db, eventId } = await requireTeamEvent(event)
   const { salesOrders } = await import('~~/layers/sales/collections/orders/server/database/schema')
@@ -98,5 +126,11 @@ export default defineEventHandler(async (event) => {
     .from(salesOrders)
     .where(whereExpr)
 
-  return { items: parseLocationRemarks(rows), total: Number(countRow?.count ?? 0), page, pageSize }
+  return {
+    items: parseLocationRemarks(rows),
+    total: Number(countRow?.count ?? 0),
+    outstanding: await countOutstanding(db, salesOrders, team.id, eventId),
+    page,
+    pageSize
+  }
 })
