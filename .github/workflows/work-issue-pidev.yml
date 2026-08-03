@@ -1,0 +1,447 @@
+name: Work issue (pi.dev · single-use worker)
+
+# WS1 of epic #1685 (issue #1686) — the SINGLE-USE worker half of the event-driven pipeline.
+# Derived from decompose-on-issue-pidev.yml: the App-token push path (#1004), the pi step, the
+# artifact-gate (#461) and the telemetry capture are preserved VERBATIM. What differs:
+#   • Trigger — the `work-this` label on a LEAF issue (not `delegate*`), applied by a human or,
+#     later, by the decomposer via the Harness App token (nuxt-harness[bot] → passes the guard).
+#   • Task — the prompt IMPLEMENTS that one leaf and opens a PR; NO /task-decompose, NO in-process
+#     subagent tree. Each run is one-shot — which is what pi-claude-cli can actually drive.
+# ⚠️ CLEANUP PENDING (#1686): many inherited comments/vars below still say "decompose"/"decompose-pi"
+#   and describe the tree flow — they are stale here. Functional edits (trigger, if, prompt) are done;
+#   the comment sweep + on-box test (label a leaf → PR on pi-claude-cli) are the remaining WS1 items.
+# ── original decompose-flow header follows (context for the shared machinery) ──
+
+# WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A twin of
+# `decompose-on-issue.yml` with ONE thing swapped: the agent step
+# (anthropics/claude-code-action → pi). It is LIVE: while `vars.AGENT_HARNESS == 'pi'`
+# (the current setting) THIS flow — not the claude one — works our `delegate` issues.
+#
+# HOW A RUN STARTS (the `on:` block and the job `if` below are authoritative — if this
+# prose ever disagrees with them, they win and this comment is the thing that's wrong):
+#   • `delegate` label — added after creation, OR already present at creation. Only
+#     while `vars.AGENT_HARNESS == 'pi'`; otherwise `decompose-on-issue.yml` takes it
+#     and this flow yields (#1077 WS7 — one variable flips the harness back).
+#   • `delegate-pi` label — always, regardless of AGENT_HARNESS.
+#   • `delegate-hard` label — always; escalates to the METERED Claude lane (#1496).
+#   • `workflow_dispatch` — an explicit run on any issue number.
+#
+#   ⚠️ ASYMMETRY: only `delegate` has an `action == 'opened'` clause. `delegate-pi` and
+#   `delegate-hard` match `labeled` ONLY — so creating an issue with either one ALREADY
+#   applied fires nothing. Add those two as a separate step after the issue exists.
+#
+# HISTORY — this file was born dormant (dispatch-only, default-OFF, no funded key) and
+# every one of those locks has since been removed. Do NOT reintroduce that framing:
+# superseded by #1017 (`delegate-pi` trigger), #1077 (the AGENT_HARNESS=pi flip), and
+# #1421/#1423 (the funded zai/GLM-5.2 lane). Stale dormancy prose here cost a session
+# once — it reads as authoritative while sitting directly above code that refutes it.
+#
+# WHAT'S DIFFERENT FROM THE CLAUDE FLOW (the WS4 plumbing):
+#   • PUSH PATH (#1004 piece 1, the load-bearing change): unlike the reports-only
+#     a11y flow (which gets NO git creds), a code-writing run MUST push (epic branch
+#     + sub-issues + the worker's PR). Those pushes have to CASCADE — re-trigger the
+#     downstream wave/automerge CI — which a GITHUB_TOKEN push does NOT (#572/#626).
+#     So we mint a Harness App token and hand it to pi as GH_TOKEN + the git remote.
+#   • NO id-token — pi auths via a provider key, not OIDC (drop `id-token: write`).
+#   • ARTIFACT-GATE reused VERBATIM — it is harness-agnostic (GITHUB_TOKEN-based
+#     PASS/FAIL); we just feed it pi's conclusion. The rich "why" classification
+#     reads CLAUDE_EXEC_FILE, which pi doesn't emit yet (#1004 piece 3 / WS3) — the
+#     gate degrades to the conclusion-based message, PASS/FAIL is unaffected.
+#
+# WS4 plumbing is now COMPLETE (#1004) — all three pieces present and LIVE:
+#   • Piece 1 — PUSH PATH: the Harness App token (below).
+#   • Piece 2 — BOT-ACTOR GUARD: the first job step (re-expresses claude-code-action's
+#     `allowed_bots`). ARMED on every label-triggered run; it still no-ops under
+#     `workflow_dispatch`, where the actor is the human dispatcher.
+#   • Piece 3 — EXEC-LOG ADAPTER: the artifact-gate reads pi's plain-text run log
+#     (`steps.pi.outputs.exec_log`) and classifies the failure cause (billing / error /
+#     underspecified) — parity with the claude flow's structured-log "why".
+#
+# TWO LOAD-BEARING pi FACTS (verified on the mac-mini this WS):
+#   • NO TURN-CAP FLAG. `pi --help` exposes only model-cycling "Limit" options, not a
+#     claude-style `--max-turns`. The ONLY cost/safety bound is the job `timeout-minutes`
+#     (45, below) — do NOT assume a per-turn cap exists.
+#   • SINGLE-MODEL. pi runs the whole orchestrator→decomposer→worker pipeline on ONE
+#     `--model`; it cannot reproduce the Claude harness's per-role tiering (#824 — e.g.
+#     planning on Opus). Choose the one model deliberately via the `model` input.
+#
+# PROMOTED past dispatch-only (#1017): now also fires when a human applies the `delegate-pi`
+# label to an issue (mirrors the claude `delegate` flow). The bot-actor guard below is now LIVE
+# on that path; on success the run posts a `🤖 pi: done → PR #N` breadcrumb back on the issue.
+# Manual `workflow_dispatch` (harness=pi) still works for an explicit run on any issue number.
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        description: "Leaf issue number to implement (e.g. 660)."
+        required: true
+        type: string
+      model:
+        description: "Model for pi. Default claude-sonnet-5 on the Claude SUBSCRIPTION (provider=pi-claude-cli)."
+        required: false
+        default: "claude-sonnet-5"
+        type: string
+      provider:
+        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the mini's `claude` login. zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
+        required: false
+        default: "pi-claude-cli"
+        type: choice
+        options: ["pi-claude-cli", "zai", "anthropic"]
+  # Single-use trigger (#1685/#1686): a human OR the decomposer (via the Harness App token, so
+  # it's nuxt-harness[bot]-actored and passes the bot-actor guard + cascades) applies `work-this`
+  # to a LEAF issue → this one-shot worker implements it and opens a PR. We fire on EVERY labeled
+  # event but the job `if` gates to the EXACT `work-this` label, so a worker later adding
+  # `status:in-progress` does NOT re-fire this workflow (the #535 lesson).
+  issues:
+    types: [labeled]
+
+jobs:
+  work-pi:
+    # Fire on: a manual dispatch, OR the EXACT `work-this` label freshly applied to a leaf
+    # issue. The exact-label check is what stops a re-fire loop when the worker adds its own
+    # labels (status:in-progress) mid-run (#535). Anything else → no run.
+    if: |
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this')
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    # No `id-token` — pi uses a provider key, not OIDC. The write scopes are for the
+    # Harness App token minted below, which pi uses to push/PR/comment.
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      # ── BOT-ACTOR GUARD (#1004 piece 2) — re-expresses claude-code-action's `allowed_bots` ──
+      # The claude flow passes `allowed_bots: "nuxt-harness[bot]"`; pi has no such built-in, so we
+      # assert it ourselves as the FIRST step (fail fast, before minting any token). DORMANT under
+      # `workflow_dispatch` — the actor is the human dispatcher, so the `if` skips it. It ARMS the
+      # moment this flow is promoted to an `issues: labeled` trigger: only the Harness App's
+      # label-add (`nuxt-harness[bot]`) may drive the pipeline; any OTHER bot actor — e.g.
+      # `claude[bot]`/`github-actions[bot]` re-firing from a worker's own `status:in-progress`
+      # label change — is rejected here, breaking the bot re-fire loop (#457/#535). Humans pass.
+      - name: Bot-actor guard
+        if: ${{ github.event_name != 'workflow_dispatch' }}
+        env:
+          ACTOR: ${{ github.actor }}
+        run: |
+          ALLOWED="nuxt-harness[bot]"
+          if [[ "$ACTOR" == *"[bot]" && "$ACTOR" != "$ALLOWED" ]]; then
+            echo "::error::Bot-actor guard: '$ACTOR' may not drive the pi pipeline (only $ALLOWED). Refusing to run."
+            exit 1
+          fi
+          echo "Bot-actor guard OK (actor: $ACTOR)."
+
+      # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
+      # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
+      # downstream workflows (#572); an App-installation token does.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
+
+      - uses: pnpm/action-setup@v4
+        with:
+          # per-job dest — the default ~/setup-pnpm collides between the two
+          # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
+          dest: ${{ runner.temp }}/setup-pnpm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Warm @fyit/* dist so the agent's `crouton init`/generate/migrate doesn't cold-build
+      # ~30 packages one-at-a-time mid-run (the #1213/#1247 tax — ~15-20 min). Content-addressed
+      # cache + build-all on miss; a warm cache makes this ~seconds. (#1222)
+      - name: Warm @fyit package builds
+        uses: ./.github/actions/warm-packages
+
+      # Timestamp the run start so the artifact-gate distinguishes "produced this run"
+      # from pre-existing comments/PRs.
+      - id: t0
+        run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
+      # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
+      # the worker PR) act as the Harness App and cascade. ANTHROPIC_API_KEY = the
+      # funded metered key (NOT a subscription — subscription OAuth must not back CI).
+      - id: pi
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          # Everything on the Claude SUBSCRIPTION (#1669). delegate-hard still escalates,
+          # but now by MODEL (sonnet → opus) on the same subscription provider — no metered
+          # lane. NO ANTHROPIC_API_KEY: pi-claude-cli uses the mini's `claude` login.
+          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-6') || 'claude-sonnet-5' }}
+          PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
+          ISSUE: ${{ inputs.issue || github.event.issue.number }}
+        run: |
+          set -uo pipefail
+          command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
+          # The Harness App identity for any commits pi makes (so they're attributable
+          # and not a masquerading human — the #862 lesson).
+          git config user.name  "nuxt-harness[bot]"
+          git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+          LOG="decompose-pidev-exec-${{ github.run_id }}.log"
+          START=$(date +%s)
+          # Front-load a tool-agnostic NON-INTERACTIVE directive (#1019) so pi does not
+          # stall-and-ask while headless (the #839 failure — pi asked "which option?" and
+          # stopped). Built in a FILE via a QUOTED heredoc (never PROMPT=$(cat <<EOF) — an
+          # apostrophe breaks that substitution, #1001), then the /task-decompose command
+          # with the issue number appended.
+          PROMPT_FILE="decompose-pidev-prompt-${{ github.run_id }}.txt"
+          cat > "$PROMPT_FILE" <<'PI_PROMPT'
+          You are running NON-INTERACTIVELY in CI. No human is attached and there is no terminal to read input from. NEVER pause, ask a question, or wait for confirmation, and do not invoke pi-ask-user. When a choice is ambiguous, pick the most sensible default, record the assumption in an issue or PR comment, and PROCEED. The run only succeeds if it produces a real deliverable: a PR (Closes #N), created sub-issues, or a held sign-off (status:blocked plus a review). Merely listing options or asking what to do is a FAILED run.
+          OPERATING CONTRACT (non-negotiable, #1022): (1) NEVER merge a pull request — not even one you opened. Open it and stop; the automerge workflow merges epic sub-PRs after CI passes. (2) Hold any sign-off as a TOP-LEVEL issue comment plus the status:blocked label — never inside a PR review body. (3) Reuse an existing epic/NNN-* branch idempotently — never create a duplicate epic branch. (4) You CANNOT modify .github/workflows/** (the App token lacks the workflows scope, by deliberate policy #1076): commit everything else, embed the needed workflow patch verbatim in the PR body under a "## Workflow patch (human applies)" heading, mention @pmcp in an issue comment, add status:blocked, and finish — that counts as a successful deliverable. (5) EVERY PR body MUST open with a literal "Closes #<the sub-issue it implements>" line — including a PR targeting an epic/* branch, where you may reason it is pointless because GitHub only auto-closes on the default branch. Write it anyway: resume-on-comment.yml's merge-on-approval step uses that line to identify which PR the owner's lgtm approved. Wording it as "Sub-issue: #N" instead makes the owner's approval a silent no-op (#1663). The matcher now also accepts a linked-issue relation and Sub-issue/Refs lines, but "Closes #N" is the form to write.
+          Given that, do the following now:
+          PI_PROMPT
+          # SINGLE-USE WORKER (#1686): implement this ONE leaf — no decompose, no sub-issues,
+          # no subagents. printf (single-quoted format, %s for ISSUE) — never backticks (they'd
+          # command-substitute inside the shell).
+          printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s). If its body has a "pipeline: epic_branch=<name>" line, branch off that integration branch and target the PR there; otherwise branch off main. Make the change, run pnpm typecheck, commit via the /commit skill, and open ONE pull request whose body FIRST line is literally "Closes #%s". Then STOP (never merge). If you are genuinely blocked, hold: post a top-level comment plus add the status:blocked label. Producing no PR and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$ISSUE" >> "$PROMPT_FILE"
+          # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
+          # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
+          # So the instant `pi | tee` fails (pipefail), -e aborts the script BEFORE
+          # RC/conclusion/exec_log are written — the artifact-gate then has no exec_log to
+          # read and posts the generic "no deliverable" instead of naming the cause (the
+          # #1299 billing case). Disable errexit around JUST this pipeline; PIPESTATUS[0]
+          # still carries pi's real exit code. (NB: a trailing `|| true` does NOT work — it
+          # runs `true` as its own pipeline, clobbering PIPESTATUS[0] to 0 and masking the
+          # failure as success. Verified empirically, #1299.)
+          set +e
+          pi --print --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
+            "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
+          RC=${PIPESTATUS[0]}
+          set -e
+          END=$(date +%s)
+          echo "wall=$((END-START))" >> "$GITHUB_OUTPUT"
+          echo "conclusion=$([ "$RC" -eq 0 ] && echo success || echo failure)" >> "$GITHUB_OUTPUT"
+          # Piece 3 (exec-log adapter): hand the plain-text run log to the artifact-gate so it can
+          # classify WHY a run produced nothing (pi emits no structured execution_file like claude).
+          echo "exec_log=$LOG" >> "$GITHUB_OUTPUT"
+
+      # ── Artifact-gate (#461) — PASS/FAIL logic reused from decompose-on-issue.yml ────────
+      # Harness-agnostic: PASS/FAIL is GitHub-state via GITHUB_TOKEN (comment / linked
+      # PR / sub-issues / status:blocked). Piece 3 (#1004) feeds it pi's PLAIN-TEXT run
+      # log (`PI_EXEC_LOG`) instead of claude's structured execution_file, so the failure
+      # "why" is cause-aware (billing / error / underspecified) — parity with the claude
+      # flow. PASS/FAIL is unchanged either way.
+      - name: Artifact-gate — fail if the agent produced nothing
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}
+          CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
+          ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
+          TRIGGER: ${{ github.event_name }}
+        with:
+          script: |
+            const issue_number = Number(process.env.ISSUE_NUMBER)
+            const since = '${{ steps.t0.outputs.ts }}'
+            const sinceMs = new Date(since).getTime()
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo, issue_number, since,
+            })
+            const newComment = comments.length > 0
+
+            const timeline = await github.paginate(github.rest.issues.listEventsForTimeline, {
+              ...context.repo, issue_number,
+            })
+            const prRefs = timeline.filter(e =>
+              e.event === 'cross-referenced' &&
+              e.source && e.source.issue && e.source.issue.pull_request
+            )
+            const linkedPR = prRefs.some(e => new Date(e.created_at).getTime() >= sinceMs)
+            // NOTE (#1019): we deliberately do NOT treat a pre-existing cross-referenced PR as
+            // a pass. On #839 an UNRELATED epic PR (#846) merely cross-referenced the issue and
+            // false-greened a no-op run. A fresh-work run must yield a FRESH deliverable (a PR
+            // opened this run / sub-issues created this run / a sign-off held this run) or a
+            // genuinely closed issue — not a stale link. `alreadyLinkedPR` is intentionally unused.
+
+            const issue = await github.rest.issues.get({ ...context.repo, issue_number })
+            const blocked = issue.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+            const alreadyClosed = issue.data.state === 'closed'
+
+            let createdSubIssues = false
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+                ...context.repo, issue_number, per_page: 100,
+              })
+              createdSubIssues = subs.some(s => new Date(s.created_at).getTime() >= sinceMs)
+            } catch (e) { core.warning(`sub-issue check skipped: ${e.message}`) }
+
+            const signoffHeld = blocked && newComment
+            if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues) {
+              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues}`)
+              // Result-comment-back (#1017) — only on a label-triggered run (a human is watching the
+              // issue). This comment posts as the Harness App (nuxt-harness[bot]) — an unmistakable
+              // bot account — so it uses the agent-pipeline provenance header, NOT the @pmcp disclaimer.
+              if (process.env.TRIGGER === 'issues') {
+                const freshPR = prRefs
+                  .filter(e => new Date(e.created_at).getTime() >= sinceMs)
+                  .map(e => e.source.issue.number)[0]
+                const what = freshPR
+                  ? `done → PR #${freshPR}`
+                  : (createdSubIssues ? 'decomposed → sub-issues created (see the tree)'
+                    : signoffHeld ? 'held for sign-off (`status:blocked` + a review)'
+                    : 'produced a deliverable — see the run')
+                await github.rest.issues.createComment({
+                  ...context.repo, issue_number,
+                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
+                })
+              }
+              return
+            }
+
+            // ── CHILD deliverables (#1074) ─────────────────────────────────────────────
+            // When the labeled issue is ALREADY decomposed, the correct behaviour is
+            // "resume the tree, work the remaining open leaf" — the fresh deliverable
+            // lands on a CHILD issue, invisible to the checks above (the #1050 false-fail:
+            // pi merged a real PR on child #1053 and this gate still went red). Scan the
+            // sub-issue tree for the same fresh-since-t0 signals. Only runs when the
+            // primary checks found nothing. Kept in sync with decompose-on-issue.yml.
+            let childDeliverable = ''
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', {
+                ...context.repo, issue_number, per_page: 100,
+              })
+              for (const s of subs) {
+                if (s.state === 'closed' && s.closed_at && new Date(s.closed_at).getTime() >= sinceMs) {
+                  childDeliverable = `child #${s.number} closed this run`; break
+                }
+                const tl = await github.paginate(github.rest.issues.listEventsForTimeline, {
+                  ...context.repo, issue_number: s.number,
+                })
+                if (tl.some(e => e.event === 'cross-referenced' && e.source && e.source.issue &&
+                    e.source.issue.pull_request && new Date(e.created_at).getTime() >= sinceMs)) {
+                  childDeliverable = `PR linked to child #${s.number} this run`; break
+                }
+                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+                if (childBlocked) {
+                  const cc = await github.paginate(github.rest.issues.listComments, {
+                    ...context.repo, issue_number: s.number, since,
+                  })
+                  if (cc.length > 0) { childDeliverable = `child #${s.number} held for sign-off this run`; break }
+                }
+              }
+            } catch (e) { core.warning(`child-deliverable check skipped: ${e.message}`) }
+            if (childDeliverable) {
+              core.info(`Artifact-gate OK for #${issue_number} via child deliverable: ${childDeliverable}`)
+              if (process.env.TRIGGER === 'issues') {
+                await github.rest.issues.createComment({
+                  ...context.repo, issue_number,
+                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
+                })
+              }
+              return
+            }
+
+            // ── Classify WHY there was no deliverable (#1004 piece 3) ──────────────────
+            // pi emits no structured execution_file like claude-code-action — it emits the
+            // plain-text run log we tee'd to PI_EXEC_LOG. Grep it for the known causes so the
+            // failure comment names the actual problem + fix (mirrors decompose-on-issue.yml's
+            // billing/error/underspecified buckets). The most likely first-run cause is an
+            // out-of-credit PI_PROVIDER_KEY, so detect that explicitly.
+            const fs = require('fs')
+            let why = '', action = '', detail = ''
+            const failed = process.env.CLAUDE_CONCLUSION === 'failure'
+            try {
+              const logFile = process.env.PI_EXEC_LOG
+              if (logFile && fs.existsSync(logFile)) {
+                const log = fs.readFileSync(logFile, 'utf8')
+                const tail = log.length > 600 ? log.slice(-600) : log
+                // GLM Coding Plan quota (z.ai) — checked FIRST: its 429 is distinct from an
+                // Anthropic billing failure and must not fall through to the generic SDK-error
+                // bucket (the #1451/#1492 misdiagnosis). z.ai emits `429 {"code":"1308",
+                // "message":"Usage limit reached for 5 hour. Your limit will reset at <ts>"}`.
+                const glmReset = (log.match(/reset at ([0-9]{4}-[0-9]{2}-[0-9]{2}[ T][0-9:]+)/i) || [])[1]
+                if (/\b1308\b|usage limit reached/i.test(log)) {
+                  why = 'the GLM Coding Plan quota was reached mid-run'
+                    + (glmReset ? ` (the plan window resets at ${glmReset})` : ' (z.ai 5-hour / weekly window)')
+                  action = 'wait for that window to reset then re-dispatch on GLM (free), '
+                    + 'or escalate this one leaf to the metered `provider=anthropic` lane to unblock now — '
+                    + 'this is NOT a code/SDK bug, nothing is broken'
+                } else if (/credit balance is too low|insufficient.*(credit|balance|quota)|billing/i.test(log)) {
+                  why = 'the Anthropic key (`PI_PROVIDER_KEY`) is out of credit'
+                  action = 'top up the account, then re-dispatch' // NB: not "enable auto-reload" — owner declined it (#1327); the pi-key-canary workflow tracks key health
+                } else if (failed) {
+                  why = 'the pi agent step errored before it built anything'
+                  action = 'open the run log, fix the SDK/tooling error, then re-dispatch'
+                  if (tail.trim()) detail = tail.trim()
+                } else {
+                  why = 'pi finished without opening a PR, creating sub-issues, or holding for sign-off'
+                  action = 'the issue is likely underspecified — add a concrete description + acceptance criteria, then re-dispatch'
+                }
+              }
+            } catch (e) { core.warning(`artifact-gate: could not read pi run log: ${e.message}`) }
+
+            // Fallback when the log is unreadable but the step itself failed.
+            if (!why && failed) {
+              why = 'the pi agent step failed before producing anything (likely out of credit, or an API/tooling error)'
+              action = 'open the run log — if it says "credit balance is too low", top up `PI_PROVIDER_KEY`; otherwise fix the logged error, then re-dispatch'
+            }
+
+            // Readable-on-mobile (epic #1336, .github/CI-MESSAGE-STYLE.md): lead with the problem
+            // + the one fix; the gate name / #461 / run link live in the footer; depth collapses.
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const foot = `\n\n<sub>🤖 pi.dev harness (CI · mac-mini) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
+            const det = detail ? `\n\n<details><summary>log tail</summary>\n\n\`\`\`\n${detail}\n\`\`\`\n</details>` : ''
+            const body = why
+              ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${det}${foot}`
+              : `🔴 **@pmcp — this run produced nothing** — no PR, no sub-issues, no sign-off hold.\n\n**Fix:** re-dispatch; if it recurs the issue is underspecified — add a description + acceptance criteria.${foot}`
+
+            await github.rest.issues.createComment({ ...context.repo, issue_number, body })
+            core.setFailed(`Artifact-gate: pi.dev run on #${issue_number} produced no deliverable.`)
+
+      # ── Telemetry convergence capture (#944) — REAL data from this pi run ──────────
+      # Proves the "one feed → both consumers" loop on a live run: locate this run's pi
+      # subagent telemetry (~/.pi/agent/sessions/.../subagent-artifacts) and run the
+      # adapter to emit BOTH a Loop Station WS2 trace AND the #883 ledger-row slice.
+      # Non-fatal + artifact-only on purpose: it must never fail the headline code-writing
+      # proof, and committing rows to the ledger file from CI is a separate follow-up — here
+      # we surface them as an artifact + in the log so the convergence is verifiable.
+      - name: Capture pi telemetry → WS2 trace + #883 ledger slice (artifacts; non-fatal)
+        if: always()
+        env:
+          SINCE: ${{ steps.t0.outputs.ts }}
+        run: |
+          set +e
+          mkdir -p pi-telemetry-out
+          SESS_ROOT="$HOME/.pi/agent/sessions"
+          # The most-recently-modified subagent-artifacts dir MODIFIED DURING THIS RUN (#1019):
+          # `-newermt "$SINCE"` scopes to dirs touched at/after the run-start timestamp, so we
+          # never mis-attribute a PRIOR run's telemetry (the #839 stale-row bug). `-newermt`
+          # works on both BSD find (the mac-mini) and GNU find (ubuntu fallback).
+          TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" 2>/dev/null \
+            | xargs -I{} stat -f '%m {}' {} 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          if [ -z "$TELE_DIR" ]; then
+            TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
+          fi
+          if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then
+            echo "pi telemetry dir: $TELE_DIR"
+            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR"          > pi-telemetry-out/pi-trace.jsonl  2>/dev/null
+            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
+            echo "── #883 ledger-row slice from THIS pi run (model · cost · turns · wall) ──"
+            cat pi-telemetry-out/ledger-rows.jsonl || true
+          else
+            echo "no pi subagent telemetry found — a decompose-only run (sub-issues, no worker) writes none. Skipping."
+          fi
+
+      - name: Upload pi telemetry artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pi-telemetry-${{ github.run_id }}
+          path: pi-telemetry-out/
+          if-no-files-found: ignore
