@@ -20,6 +20,7 @@ import { i18n } from '@better-auth/i18n'
 import { passkey } from '@better-auth/passkey'
 import { sql } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
+import { resolveInitialOrgId } from './session-org'
 import type { BetterAuthOptions } from 'better-auth'
 import type { DrizzleD1Database } from 'drizzle-orm/d1'
 import type {
@@ -378,9 +379,15 @@ function buildSessionConfig(sessionConfig?: SessionConfig): BetterAuthOptions['s
  * 2. Make the user the owner of their personal organization
  * 3. Set the personal organization as active for new sessions
  *
+ * **Always (no `teams` config required, #1703):**
+ * Every new session gets an `activeOrganizationId` via `session.create.before`
+ * — falling back to the user's first membership. Previously this whole block
+ * was skipped unless `defaultTeamSlug` or `autoCreateOnSignup` was set, which
+ * meant no app in the repo ever got it and every session started org-less.
+ *
  * @param config - @crouton/auth configuration
  * @param db - Drizzle database instance
- * @returns Database hooks configuration or undefined if no auto-creation enabled
+ * @returns Database hooks configuration
  */
 function buildDatabaseHooks(
   config: CroutonAuthConfig,
@@ -389,11 +396,6 @@ function buildDatabaseHooks(
   const teams = config.teams ?? {}
   const hasDefaultTeam = !!teams.defaultTeamSlug
   const hasAutoCreate = !!teams.autoCreateOnSignup
-
-  // No hooks needed if neither auto-creation feature is enabled
-  if (!hasDefaultTeam && !hasAutoCreate) {
-    return undefined
-  }
 
   const appName = config.appName ?? 'Default Workspace'
 
@@ -437,35 +439,28 @@ function buildDatabaseHooks(
     },
     session: {
       create: {
-        after: async (session) => {
-          // Priority: personal workspace > default team
-          // This ensures users land in their own workspace first if both are enabled
-          if (hasAutoCreate) {
-            const personalOrgId = await getUserPersonalOrgId(db, session.userId)
-            if (personalOrgId) {
-              await setSessionActiveOrg(db, session.id, personalOrgId)
+        // MUST be `before`, not `after` (#1703). better-auth runs `create.after`
+        // through queueAfterTransactionHook — deferred — so the in-memory session
+        // handed to setSessionCookie would still carry activeOrganizationId: null,
+        // and the cookie cache (buildSessionConfig, maxAge 300) would then serve
+        // that null for up to five minutes. `before` merges its returned `data`
+        // into the record actually created, so it lands in the cookie too.
+        before: async (session) => {
+          const orgId = await resolveInitialOrgId(db, session.userId, teams)
 
-              if (config.debug) {
-                console.log(`[crouton/auth] Session ${session.id} set to personal org ${personalOrgId}`)
-              }
-              return
-            } else if (config.debug) {
-              console.warn(`[crouton/auth] No personal org found for user ${session.userId}`)
+          if (!orgId) {
+            if (config.debug) {
+              console.warn(`[crouton/auth] No organization to activate for user ${session.userId}`)
             }
+            // Leave the field alone rather than writing an explicit null.
+            return
           }
 
-          // Fall back to default team
-          if (hasDefaultTeam) {
-            // Get the org ID by slug
-            const defaultOrg = await getOrgBySlug(db, teams.defaultTeamSlug!)
-            if (defaultOrg) {
-              await setSessionActiveOrg(db, session.id, defaultOrg.id)
-
-              if (config.debug) {
-                console.log(`[crouton/auth] Session ${session.id} set to default org (slug: ${teams.defaultTeamSlug})`)
-              }
-            }
+          if (config.debug) {
+            console.log(`[crouton/auth] New session for ${session.userId} starts in org ${orgId}`)
           }
+
+          return { data: { ...session, activeOrganizationId: orgId } }
         }
       }
     }
@@ -567,25 +562,6 @@ async function addUserToDefaultOrg(
   }
 }
 
-/**
- * Set the active organization for a session
- *
- * Updates the session record to set the active organization.
- *
- * @param db - Drizzle database instance
- * @param sessionId - Session ID to update
- * @param orgId - Organization ID to set as active
- */
-async function setSessionActiveOrg(
-  db: DrizzleD1Database<Record<string, unknown>>,
-  sessionId: string,
-  orgId: string
-): Promise<void> {
-  await db.run(sql`
-    UPDATE session SET activeOrganizationId = ${orgId} WHERE id = ${sessionId}
-  `)
-}
-
 // ============================================================================
 // Personal Mode: Helper Functions
 // ============================================================================
@@ -638,34 +614,6 @@ async function createPersonalOrg(
   console.log(`[crouton/auth] Created personal organization "${orgName}" for user (personal mode)`)
 
   return orgId
-}
-
-/**
- * Get the user's personal organization ID
- *
- * In personal mode, each user has exactly one organization where they are the owner.
- * Uses the ownerId column for efficient lookup (Task 6.2).
- *
- * @param db - Drizzle database instance
- * @param userId - User ID to find personal org for
- * @returns Organization ID or null if not found
- */
-async function getUserPersonalOrgId(
-  db: DrizzleD1Database<Record<string, unknown>>,
-  userId: string
-): Promise<string | null> {
-  // Find personal organization by ownerId (Task 6.2 - indexed column)
-  const result = await db.all(sql`
-    SELECT id FROM organization
-    WHERE personal = 1 AND ownerId = ${userId}
-    LIMIT 1
-  `)
-
-  if (result.length === 0) {
-    return null
-  }
-
-  return (result[0] as { id: string }).id
 }
 
 // ============================================================================
