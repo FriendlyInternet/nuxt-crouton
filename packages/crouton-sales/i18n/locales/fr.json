@@ -682,6 +682,39 @@
         "revokeSuccess": "Routeur découplé — il imprimera un nouveau ticket de couplage",
         "revokeError": "Impossible de découpler le routeur"
       }
+    },
+    "import": {
+      "action": "Importer",
+      "title": "Importer des produits",
+      "subtitle": "Collez des lignes depuis un tableur. Rien n'est enregistré avant de cliquer sur Importer.",
+      "pasteLabel": "Lignes collées",
+      "pasteHint": "Incluez la ligne d'en-tête (Nom, Prix, Catégorie, Emplacement).",
+      "mappingLabel": "Colonnes",
+      "mapColumn": "Associer la colonne",
+      "willCreateTitle": "Sera également créé",
+      "listSeparator": ", ",
+      "statusHeader": "Statut",
+      "statusNew": "Nouveau",
+      "statusDuplicate": "Existe déjà",
+      "statusError": "Erreur",
+      "createAnyway": "Créer quand même",
+      "confirm": "Importer",
+      "doneTitle": "Import terminé",
+      "doneBody": "{created} créés, {skipped} ignorés, {errors} en échec",
+      "failedTitle": "Échec de l'import",
+      "failedBody": "Rien n'a été enregistré.",
+      "fieldIgnore": "Ignorer",
+      "fieldTitle": "Nom du produit",
+      "fieldPrice": "Prix",
+      "fieldCategory": "Catégorie",
+      "fieldLocation": "Emplacement",
+      "fieldDescription": "Description",
+      "fieldActive": "Actif",
+      "fieldRequiresRemark": "Remarque requise",
+      "fieldRemarkPrompt": "Invite de remarque",
+      "errMissingName": "Nom du produit manquant",
+      "errMissingPrice": "Pas de colonne prix",
+      "errBadPrice": "Prix illisible"
     }
   }
 }

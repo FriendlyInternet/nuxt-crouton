@@ -17,6 +17,9 @@ const { items: printers } = await useCollectionQuery('salesPrinters', { query: e
 
 const selectedCategoryId = ref<string | null>(null)
 
+// Paste-import (#1657) — mounted lazily so its queries fire only when opened.
+const importOpen = ref(false)
+
 // Admin products view has no "All" tab — default to the first category once loaded.
 watch(categories, (cats) => {
   const list = (cats as { id: string }[] | null) || []
@@ -125,9 +128,20 @@ function openEditProduct(id: string) {
         :counts="productCountsByCategory"
         :show-all="false"
       />
-      <UButton color="primary" size="sm" icon="i-lucide-plus" @click="openCreateProduct">
-        {{ t('sales.workspace.addProduct') }}
-      </UButton>
+      <div class="flex items-center gap-2">
+        <UButton
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-clipboard-paste"
+          @click="importOpen = true"
+        >
+          {{ t('sales.import.action', 'Import') }}
+        </UButton>
+        <UButton color="primary" size="sm" icon="i-lucide-plus" @click="openCreateProduct">
+          {{ t('sales.workspace.addProduct') }}
+        </UButton>
+      </div>
     </div>
 
     <div v-if="productsPending" class="p-6 text-center text-muted">
@@ -190,9 +204,23 @@ function openEditProduct(id: string) {
     <div v-else class="p-12 text-center text-muted">
       <UIcon name="i-lucide-package" class="text-4xl mb-2" />
       <p>{{ t('sales.workspace.noProducts') }}{{ selectedCategoryId ? t('sales.workspace.inThisCategory') : '' }}</p>
-      <UButton size="sm" variant="outline" class="mt-3" @click="openCreateProduct">
-        {{ t('sales.workspace.addProduct') }}
-      </UButton>
+      <div class="flex items-center justify-center gap-2 mt-3">
+        <UButton size="sm" variant="outline" @click="openCreateProduct">
+          {{ t('sales.workspace.addProduct') }}
+        </UButton>
+        <UButton size="sm" variant="outline" icon="i-lucide-clipboard-paste" @click="importOpen = true">
+          {{ t('sales.import.action', 'Import') }}
+        </UButton>
+      </div>
     </div>
+
+    <!-- Async setup (queries products/categories/locations) → own Suspense;
+         `v-if` keeps those queries off this tab's initial load. -->
+    <Suspense v-if="importOpen">
+      <SalesEventWorkspaceProductImportModal
+        v-model:open="importOpen"
+        :event-id="props.event.id"
+      />
+    </Suspense>
   </div>
 </template>

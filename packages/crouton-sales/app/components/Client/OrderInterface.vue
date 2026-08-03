@@ -66,14 +66,25 @@
             v-if="editing"
             class="shrink-0 flex items-center justify-between gap-3 p-2 pb-0"
           >
-            <UButton
-              size="sm"
-              color="neutral"
-              variant="soft"
-              icon="i-lucide-plus"
-              :label="t('sales.workspace.addProduct')"
-              @click="openCreateProduct"
-            />
+            <div class="flex items-center gap-2">
+              <UButton
+                size="sm"
+                color="neutral"
+                variant="soft"
+                icon="i-lucide-plus"
+                :label="t('sales.workspace.addProduct')"
+                @click="openCreateProduct"
+              />
+              <!-- Paste a whole list instead of one modal per product (#1657). -->
+              <UButton
+                size="sm"
+                color="neutral"
+                variant="soft"
+                icon="i-lucide-clipboard-paste"
+                :label="t('sales.import.action', 'Import')"
+                @click="importOpen = true"
+              />
+            </div>
             <UButton
               size="sm"
               color="neutral"
@@ -254,6 +265,16 @@
           />
         </template>
       </USlideover>
+
+      <!-- Paste-import (#1657). Async setup (it queries products/categories/
+           locations), so it needs its own Suspense; `v-if` keeps those queries
+           off the boot path for volunteer sessions that never open it. -->
+      <Suspense v-if="importOpen">
+        <SalesEventWorkspaceProductImportModal
+          v-model:open="importOpen"
+          :event-id="props.eventId"
+        />
+      </Suspense>
     </template>
   </div>
 </template>
@@ -572,6 +593,10 @@ function openCreateProduct() {
     ...(selectedCategory.value ? { categoryId: selectedCategory.value } : {})
   })
 }
+
+// Paste-import (#1657). Mounted lazily (`v-if`) so its three collection queries
+// only fire when an admin actually opens it — the kassa boots for volunteers too.
+const importOpen = ref(false)
 
 // Pencil on the active category tab → inline rename in the tab itself; we
 // just persist. (Full form also reachable via the team-level categories page.)
