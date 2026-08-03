@@ -16,6 +16,7 @@
     "./app/types/block-definition": "./app/types/block-definition.ts",
     "./app/types/layout": "./app/types/layout.ts",
     "./app/types/layout-block": "./app/types/layout-block.ts",
+    "./app/utils/layout-tree": "./app/utils/layout-tree.ts",
     "./app/composables/*": {
       "types": "./dist/app/composables/*.d.ts",
       "import": "./dist/app/composables/*.mjs"
