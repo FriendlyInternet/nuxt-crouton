@@ -114,19 +114,29 @@ jobs:
             PRERELEASE="--prerelease"
           fi
 
+          # Build the notes in a FILE, not as an inline multi-line argument.
+          # The previous version's continuation lines sat at column 0, which
+          # ends the YAML block scalar — the whole workflow then failed to
+          # parse, so GitHub never registered workflow_dispatch (no "Run
+          # workflow" button) and logged a failed run on every push.
+          # Everything here must stay indented inside this block.
+          {
+            echo "Prebuilt node-server bundle for the venue till installer (#804)."
+            echo
+            echo "Install on a bare Linux box:"
+            echo
+            echo '```bash'
+            echo "curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/apps/fanfare/deploy/install.sh | sudo bash -s -- --release $TAG"
+            echo '```'
+            echo
+            echo "Built from commit ${{ github.sha }}."
+          } > release-notes.md
+
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "$TARBALL" "$TARBALL.sha256" --clobber
           else
             gh release create "$TAG" "$TARBALL" "$TARBALL.sha256" \
               --title "Venue bundle $TAG" \
-              --notes "Prebuilt node-server bundle for the venue till installer (#804).
-
-Install on a bare Linux box:
-
-\`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/apps/fanfare/deploy/install.sh | sudo bash -s -- --release $TAG
-\`\`\`
-
-Built from \`${{ github.sha }}\`." \
+              --notes-file release-notes.md \
               $PRERELEASE
           fi
