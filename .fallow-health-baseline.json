@@ -3320,7 +3320,7 @@
         "count": 1
       }
     },
-    "packages/crouton-layout/app/utils/layout-tree.ts": {
+    "packages/crouton-core/app/utils/layout-tree.ts": {
       "complexity_critical": {
         "count": 1
       },
@@ -5467,7 +5467,7 @@
     "scripts/lib/wrangler-d1.mjs:high impact",
     "packages/crouton-i18n/app/components/ListCards.vue:untested risk",
     "packages/crouton-pages/app/composables/useFooterPage.ts:untested risk",
-    "packages/crouton-layout/app/utils/layout-tree.ts:high impact",
+    "packages/crouton-core/app/utils/layout-tree.ts:high impact",
     "packages/crouton-core/app/composables/useCrouton.ts:complexity",
     "packages/crouton-designer/app/composables/useSchemaValidation.ts:complexity",
     "packages/crouton-sales/app/components/EventWorkspace/ProductsTab.vue:untested risk",
