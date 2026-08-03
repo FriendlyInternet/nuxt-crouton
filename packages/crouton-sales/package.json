@@ -70,7 +70,9 @@
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-auth": "workspace:*",
     "@nuxtjs/i18n": "^9.0.0 || ^10.0.0",
-    "zod": "^3.0.0"
+    "zod": "^3.0.0",
+    "@tiptap/vue-3": "^3.0.0",
+    "vue-i18n": "^10.0.0 || ^11.0.0"
   },
   "devDependencies": {
     "unbuild": "^3.6.1",

@@ -1514,6 +1514,9 @@ importers:
       '@nuxtjs/i18n':
         specifier: ^9.0.0 || ^10.0.0
         version: 9.5.6(@vue/compiler-dom@3.5.38)(eslint@9.39.2(jiti@2.7.0))(magicast@0.5.2)(rollup@4.62.0)(vue@3.5.38(typescript@5.9.3))
+      '@tiptap/vue-3':
+        specifier: 3.27.0
+        version: 3.27.0(@floating-ui/dom@1.7.6)(@tiptap/core@3.27.0(@tiptap/pm@3.27.0))(@tiptap/pm@3.27.0)(vue@3.5.38(typescript@5.9.3))
       '@vueuse/integrations':
         specifier: ^13.3.0
         version: 13.9.0(change-case@5.4.4)(fuse.js@7.4.2)(sortablejs@1.15.6)(vue@3.5.38(typescript@5.9.3))
@@ -1526,6 +1529,9 @@ importers:
       reka-ui:
         specifier: ^2.9.0
         version: 2.9.10(vue@3.5.38(typescript@5.9.3))
+      vue-i18n:
+        specifier: ^10.0.0 || ^11.0.0
+        version: 10.0.8(vue@3.5.38(typescript@5.9.3))
       zod:
         specifier: 4.2.1
         version: 4.2.1
