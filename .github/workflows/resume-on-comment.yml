@@ -153,6 +153,7 @@ jobs:
       # `pull_request: closed` event TRIGGERS schedule-waves → close issue → release the
       # next workstream (a GITHUB_TOKEN merge does NOT cascade — #572).
       - name: Merge the gate PR on approval
+        id: mergegate
         if: always()
         uses: actions/github-script@v7
         with:
@@ -164,21 +165,64 @@ jobs:
             if (!/\b(approve|approved|lgtm)\b/i.test(body)) {
               core.info('Comment is not an approval — nothing to merge.'); return
             }
-            // Find the PR(s) that close THIS issue, via the issue timeline cross-references.
+
+            // ── Which PR is "the gate PR" for this issue? (#1663) ────────────────────
+            // This used to grep the body for the literal `Closes #NN`. That string was
+            // load-bearing, NOT semantic: a PR into `epic/*` never auto-closes anything
+            // (GitHub honours closing keywords only on merges to the default branch). So
+            // the whole gate hung on one wording — and when an agent wrote `Sub-issue: #NN`
+            // instead (equally correct, arguably more so) the result was a SILENT no-op:
+            // approval seen, block cleared, PR left open, wave chain stalled, and the
+            // artifact-gate told the owner to retry, which reproduced it.
+            // Now: ask GitHub for the STRUCTURED link first, fall back to prose second —
+            // and anchor the prose to line start so a passing mention deep in a body can't
+            // hijack the merge. Keep the `epic/*` base guard: that, not the wording, is
+            // what stops an unrelated PR being merged.
+            const LINK_RE = new RegExp(
+              String.raw`^[\s>*_-]*(closes?d?|fix(e[sd])?|resolves?d?|sub-?issue|refs?)\b[\s:*_-]*#${issue_number}\b`,
+              'im')
+
+            async function linkReason(pr) {
+              // (1) GitHub's own linked-issue relation — populated by a closing keyword OR
+              //     by hand via the PR's Development sidebar. Structured; wording-proof.
+              try {
+                const q = await github.graphql(
+                  `query($owner:String!,$repo:String!,$n:Int!){
+                     repository(owner:$owner,name:$repo){
+                       pullRequest(number:$n){
+                         closingIssuesReferences(first:20){ nodes{ number } } } } }`,
+                  { owner: context.repo.owner, repo: context.repo.repo, n: pr.number })
+                const linked = (q.repository.pullRequest.closingIssuesReferences.nodes || []).map(x => x.number)
+                if (linked.includes(issue_number)) return 'linked-issue relation'
+              } catch (e) { core.warning(`closingIssuesReferences #${pr.number}: ${e.message}`) }
+              // (2) Prose fallback — Closes/Fixes/Resolves/Sub-issue/Refs at line start.
+              if (LINK_RE.test(pr.body || '')) return 'body reference'
+              return null
+            }
+
+            // Candidate PRs = everything cross-referenced from this issue's timeline.
             const timeline = await github.paginate(github.rest.issues.listEventsForTimeline, {
               ...context.repo, issue_number,
             })
             const prNums = [...new Set(timeline
               .filter(e => e.event === 'cross-referenced' && e.source && e.source.issue && e.source.issue.pull_request)
               .map(e => e.source.issue.number))]
+
             let merged = false
+            // Why each candidate was passed over — surfaced to the artifact-gate so a
+            // failure names the PR and the reason instead of saying "retry" (#1663).
+            const skipped = []
             for (const n of prNums) {
               let pr
               try { pr = (await github.rest.pulls.get({ ...context.repo, pull_number: n })).data } catch { continue }
               if (pr.state !== 'open' || pr.merged) continue
-              // Only the gate PR: it says "Closes #<issue>" and targets an epic branch.
-              if (!new RegExp(`\\bcloses\\s+#${issue_number}\\b`, 'i').test(pr.body || '')) continue
+              const how = await linkReason(pr)
+              if (!how) {
+                skipped.push(`#${n} — no link to this issue (no linked-issue relation, and no \`Closes/Fixes/Resolves/Sub-issue/Refs #${issue_number}\` line)`)
+                continue
+              }
               if (!/^epic\//.test(pr.base.ref)) {
+                skipped.push(`#${n} — base \`${pr.base.ref}\` is not an \`epic/*\` branch`)
                 core.info(`PR #${n} base ${pr.base.ref} is not an epic branch — skipping.`); continue
               }
               // Mark ready (REST can't flip draft→ready; GraphQL can), then merge.
@@ -192,9 +236,14 @@ jobs:
               try {
                 await github.rest.pulls.merge({ ...context.repo, pull_number: n, merge_method: 'merge' })
                 merged = true
-                core.info(`Merged gate PR #${n} into ${pr.base.ref}.`)
-              } catch (e) { core.warning(`merge #${n} failed: ${e.message}`) }
+                core.info(`Merged gate PR #${n} into ${pr.base.ref} (matched via ${how}).`)
+              } catch (e) {
+                skipped.push(`#${n} — matched via ${how}, but the merge failed: ${e.message}`)
+                core.warning(`merge #${n} failed: ${e.message}`)
+              }
             }
+            core.setOutput('merged', String(merged))
+            core.setOutput('skipped', skipped.join('\n'))
             // Clear the block defensively so the issue can close cleanly.
             try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
             core.info(merged ? 'Gate PR merged — schedule-waves will advance the chain.' : 'No gate PR merged (none matched / already merged).')
@@ -213,6 +262,11 @@ jobs:
         id: gate
         if: always() && steps.state.outputs.open == 'true'
         uses: actions/github-script@v7
+        env:
+          # Why the merge step passed over each candidate PR, if it did (#1663). Passed via
+          # env, not `${{ }}` inside the script — the value is multi-line and interpolating
+          # it into JS source would break the script.
+          MERGE_SKIPPED: ${{ steps.mergegate.outputs.skipped }}
         with:
           script: |
             const issue_number = context.payload.issue.number
@@ -261,11 +315,23 @@ jobs:
               core.info(`Resume artifact OK: subIssues=${createdSubIssues} mergedPR=${mergedPR} closed=${closed} newComment=${newComment} stillBlocked=${stillBlocked}`)
               return
             }
+            // A blanket "re-dispatch to retry" is the RIGHT remedy for a genuine no-op, but
+            // the WRONG one when the merge step found a gate PR and passed over it — a retry
+            // reproduces it verbatim (#1663). If we have skip reasons, name them instead.
+            const skipped = (process.env.MERGE_SKIPPED || '').trim()
+            const remedy = skipped
+              ? '**A gate PR was found but not merged — retrying will NOT help.** The merge step passed over:\n\n'
+                + skipped.split('\n').map(s => `- ${s}`).join('\n') + '\n\n'
+                + 'Fix the PR itself (link it to this issue, or retarget it at the `epic/*` branch), then re-approve. '
+                + 'If the link looks correct to you, the matcher is at fault — see #1663.'
+              : '**Fix:** re-dispatch with `/delegate` to retry.'
             await github.rest.issues.createComment({ ...context.repo, issue_number,
               body: '🔴 **The resume ran but produced nothing** — no sub-issues, no merged PR, no new comment, and the block was cleared (a silent no-op).\n\n'
-                + '**Fix:** re-dispatch with `/delegate` to retry.\n\n'
+                + remedy + '\n\n'
                 + '<sub>🤖 Claude Code · agent pipeline (CI) · resume artifact-gate (#603/#590)</sub>' })
-            core.setFailed(`Resume on #${issue_number} produced no artifact — likely a no-op; re-dispatch.`)
+            core.setFailed(skipped
+              ? `Resume on #${issue_number}: gate PR found but not merged — see the comment; a retry will not fix it.`
+              : `Resume on #${issue_number} produced no artifact — likely a no-op; re-dispatch.`)
 
       # Final feedback on the trigger comment: clear the 👀 and stamp the outcome — 🚀 done /
       # 😕 failed (GitHub reactions have no ✅/❌). Comment ONLY on a hard agent error; a no-op
