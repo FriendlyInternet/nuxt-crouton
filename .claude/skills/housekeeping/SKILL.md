@@ -40,6 +40,7 @@ the only thing it writes.
   LLM): a cited path that **vanished** (🔴), a cited file with commits **newer than the stamp**
   (🟡 possibly-stale), or a stamp **> 90d old** (🔵 re-verify due). Report-only — a re-verified,
   re-stamped skill drops off next run (#1100 WS3). Section dropped if the checker can't run.
+- **🗑 Retired projects** — `retired/` dirs with a `.retired.json` stamp, showing age and flagging entries past 60 days for full deletion via `/retire-delete`.
 
 ## Pipeline (deterministic — no LLM, no secrets)
 
