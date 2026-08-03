@@ -7,9 +7,9 @@
   //
   // Migrated in place: PRODUCTION reuses the EXISTING provisioned D1 + KV (same ids
   // the Pages deploy used), so there is NO data migration — the Worker binds the
-  // same fanfare-db. The production domain moves to kassa.friendlyinter.net (pmcp.dev is a
+  // same kassa-db. The production domain moves to kassa.friendlyinter.net (pmcp.dev is a
   // CF zone, so the custom domain + DNS + cert are bound automatically on deploy).
-  "name": "fanfare",
+  "name": "kassa",
   "compatibility_date": "2024-09-02",
   "compatibility_flags": ["nodejs_compat"],
 
@@ -20,8 +20,8 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "fanfare-db",
-      "database_id": "adf00808-3c47-49d3-832c-49cf57f6e3f7",
+      "database_name": "kassa-db",
+      "database_id": "a7ab3e64-7cda-4ef4-9c06-a4eae6be8b22",
       "migrations_dir": "server/db/migrations/sqlite"
     }
   ],
@@ -43,9 +43,9 @@
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "fanfare-staging-db",
+          "database_name": "kassa-staging-db",
           "migrations_dir": "server/db/migrations/sqlite",
-          "database_id": "4e673287-c505-4bde-9af2-c36902386db6"
+          "database_id": "52766d1f-a86a-444f-9d1c-7bb5e3c3a04d"
         }
       ],
       "kv_namespaces": [

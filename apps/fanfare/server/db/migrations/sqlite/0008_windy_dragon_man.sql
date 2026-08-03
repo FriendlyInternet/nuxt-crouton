@@ -1,1 +1,0 @@
-ALTER TABLE `sales_printers` ADD `type` text;

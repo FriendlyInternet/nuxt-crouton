@@ -25,7 +25,6 @@ export default defineNuxtConfig({
     // all before this). API key comes from the NUXT_EMAIL_RESEND_API_KEY worker
     // secret; from/brand are configured below.
     '@fyit/crouton-email',
-    '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-charts',
     '@fyit/crouton-pages',

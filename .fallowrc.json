@@ -14,6 +14,11 @@
     // Generated collection composables + column defs: Nuxt auto-imported, used without an
     // explicit import (useMainNotes / mainNotesColumns) — invisible statically (#1252)
     "**/layers/**/app/composables/**/*.ts",
+    // Generated per-collection types (FormData/FormProps): emitted by the generator for
+    // every collection and consumed structurally by the generated Form/List, so a static
+    // graph reads them as unused. Same generated-code category as the two entries above
+    // (28 such findings across 8 apps before this entry) — #1455.
+    "**/layers/**/collections/**/types.ts",
     // Loaded by crouton-core's nuxt.config at build time (join(process.cwd(), ...))
     "**/crouton.config.js",
     // Referenced from nuxt.config `css:` arrays, not imports
