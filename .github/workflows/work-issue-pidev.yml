@@ -257,7 +257,11 @@ jobs:
           # --approve: trust the project so pi loads the lean .pi/settings.json CI profile AND the
           # .pi/extensions/ completion-enforcer (#1782/#1764). Without it the untrusted runner path
           # silently falls back to the global 28-extension profile (incl pi-ask-user) + ~2min startup.
-          pi --print --approve --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
+          # --session-dir: write pi's session to a PER-RUN isolated dir so the finish step reads it
+          # deterministically. ~/.pi/agent/sessions is shared across all 5 self-hosted runners, so a
+          # "find the newest session" heuristic grabs the wrong run's session under concurrency (#1764).
+          PI_SESSION_DIR="$RUNNER_TEMP/pi-session"; mkdir -p "$PI_SESSION_DIR"
+          pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
@@ -294,24 +298,16 @@ jobs:
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           ROOT="$(git rev-parse --show-toplevel)"
 
-          # 1) Locate THIS run's pi session log and build the edited-file ledger (parser stashed
-          #    by the baseline step). CRITICAL: ~/.pi/agent/sessions is SHARED across all
-          #    self-hosted runners, so "newest .jsonl" grabs a CONCURRENT runner's session under
-          #    load. Scope to ours: newest .jsonl touched since t0 that references THIS checkout
-          #    (ROOT) — pi records absolute paths under ROOT, so grep -F uniquely selects ours.
-          SESS_ROOT="$HOME/.pi/agent/sessions"
-          SESSION=""
-          while IFS= read -r f; do
-            grep -qF -- "$ROOT" "$f" 2>/dev/null && { SESSION="$f"; break; }
-          done < <(find "$SESS_ROOT" -name '*.jsonl' -newermt "$SINCE" 2>/dev/null \
-            | while IFS= read -r x; do printf '%s %s\n' "$(stat -f '%m' "$x" 2>/dev/null || stat -c '%Y' "$x" 2>/dev/null)" "$x"; done \
-            | sort -rn | cut -d' ' -f2-)
+          # 1) Read THIS run's pi session — written to a PER-RUN dir by `--session-dir` on the pi
+          #    step. Deterministic: no scanning the shared ~/.pi/agent/sessions (contaminated by
+          #    other runners), no -newermt/$HOME fragility. Just the one .jsonl pi wrote here.
+          SESSION="$(ls -t "$RUNNER_TEMP/pi-session"/*.jsonl 2>/dev/null | head -1)"
           LEDGER="$RUNNER_TEMP/pi-edited.txt"; : > "$LEDGER"
           if [ -n "$SESSION" ] && [ -f "$SESSION" ]; then
             echo "pi session: $SESSION"
             node "$RUNNER_TEMP/pi-edited-files.mjs" "$SESSION" "$ROOT" > "$LEDGER" 2>/dev/null || true
           else
-            echo "::warning::no pi session log found since $SINCE — cannot build the edit ledger (#1764)"
+            echo "::warning::no pi session in $RUNNER_TEMP/pi-session — cannot build the edit ledger (#1764)"
           fi
           N="$(grep -c . "$LEDGER" 2>/dev/null || echo 0)"
           echo "Pattern B — pi wrote $N file(s):"; sed 's/^/  + /' "$LEDGER" 2>/dev/null || true
