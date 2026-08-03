@@ -291,7 +291,7 @@ const {
   user,                    // Ref<User | null>
   loading,                 // Ref<boolean>
   error,                   // Ref<string | null>
-  isPending,               // From session
+  isPending,               // From session — a resolved-latch, see useSession()
   sessionError,            // Session error
 
   // Computed
@@ -388,7 +388,7 @@ const {
   activeOrganization,      // Ref<Team | null>
 
   // Status
-  isPending,               // Ref<boolean>
+  isPending,               // Ref<boolean> — see below
   error,                   // Ref<Error | null>
   isAuthenticated,         // ComputedRef<boolean>
 
@@ -397,6 +397,24 @@ const {
   clear,                   // () => Promise<void>
 } = useSession()
 ```
+
+#### `isPending` is a resolved-latch, not an in-flight flag
+
+It starts `true` and flips to `false` the first time the session resolves — then **never
+returns to `true`**. Read it as *"do we know who the user is yet?"*, not *"is a request in
+flight right now?"*.
+
+Use it to hold a decision until auth is known (route guards, redirects). Do **not** use it
+to drive a loading spinner on a refresh — it will not go back to `true` for background
+revalidation, and a UI that waits for that will wait forever.
+
+This changed in #1703. Previously it flipped on every fetch, including background
+revalidation triggered by better-auth's `$sessionSignal`. Because every consumer in the
+monorepo already treated it as a latch, that churn re-armed all of them at once — enough to
+restart an in-flight navigation and strand a user on a spinner.
+
+`clear()` (logout) tears down the session state, the in-flight request caches and the
+default-org repair latch, so the next user on a shared device starts clean.
 
 ---
 
@@ -408,7 +426,8 @@ Team (organization) management with mode-aware behavior.
 const {
   // State
   currentTeam,             // ComputedRef<Team | null>
-  teams,                   // ComputedRef<Team[]>
+  teams,                   // ComputedRef<Team[]> — populated by refreshTeams() / SSR, NOT
+                           // by better-auth's useListOrganizations atom (#1703)
   members,                 // ComputedRef<Member[]>
   currentRole,             // ComputedRef<MemberRole | null>
   loading,                 // Ref<boolean>
