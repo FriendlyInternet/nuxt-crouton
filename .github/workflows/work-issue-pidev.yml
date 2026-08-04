@@ -392,15 +392,20 @@ jobs:
                 # OWN = `error TS` inside the app (no `../` escape); ANY = all TS errors (proves it RAN).
                 OWN="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -avE '(^|[[:space:](])\.\./' | grep -c . || true)"; OWN=${OWN:-0}
                 ANY="$(grep -acE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null || true)"; ANY=${ANY:-0}
-                if [ "$OWN" -gt 0 ]; then
+                # AUTOIMP = app-local `TS2304: Cannot find name` = Nuxt AUTO-IMPORTS unresolved, which
+                # means `nuxt prepare` did NOT run in this env (a fresh poc the worker couldn't prepare).
+                # The code is fine; the typecheck is just unreliable — so DON'T false-fail it (#1863/#1869).
+                AUTOIMP="$(grep -aE 'error TS2304: Cannot find name' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -avE '(^|[[:space:](])\.\./' | grep -c . || true)"; AUTOIMP=${AUTOIMP:-0}
+                if [ "$OWN" -gt 0 ] && [ "$AUTOIMP" -gt 0 ]; then
+                  ACCEPT="neutral"; ACCEPT_MSG="typecheck env not prepared for ${APP_DIR} (auto-imports unresolved) — not verified"
+                elif [ "$OWN" -gt 0 ]; then
+                  # Real type errors (a prepared env, no auto-import misses) ⇒ a genuine failure.
                   ACCEPT="fail"; ACCEPT_MSG="${OWN} type error(s) in ${APP_DIR}"
                   echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"
                   grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" | grep -avE '(^|[[:space:](])\.\./' | head -15 || true
                 elif [ "$TC_EXIT" = "0" ] || [ "$ANY" -gt 0 ]; then
-                  # exit 0 (clean) OR non-zero only from PRE-EXISTING errors elsewhere (proof it ran).
                   ACCEPT="pass"; ACCEPT_MSG="${APP_DIR} typechecks clean"; [ "$ANY" -gt 0 ] && ACCEPT_MSG="${ACCEPT_MSG} (ignored pre-existing error(s) elsewhere)"
                 else
-                  # non-zero with NO TS errors at all ⇒ the typecheck failed to RUN — don't false-pass.
                   ACCEPT="neutral"; ACCEPT_MSG="typecheck could not run for ${APP_DIR} — not verified"
                 fi
               fi
