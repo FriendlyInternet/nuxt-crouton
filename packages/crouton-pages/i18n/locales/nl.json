@@ -338,6 +338,26 @@
         "linkUrl": "Aangepaste URL",
         "selectPage": "Kies een pagina…",
         "searchPages": "Zoek pagina’s…"
+      },
+      "visibility": {
+        "title": "Zichtbaarheid",
+        "restricted": "Beperkt",
+        "audience": "Tonen aan",
+        "audienceHelp": "Wie dit blok op de publieke pagina ziet.",
+        "audienceAll": "Iedereen",
+        "audienceAnonymous": "Alleen uitgelogde bezoekers",
+        "audienceAuthenticated": "Alleen ingelogde bezoekers",
+        "roles": "Rollen",
+        "rolesHelp": "Beperk tot deze teamrollen. Eigenaars zien altijd wat beheerders zien.",
+        "roleOwner": "Eigenaar",
+        "roleAdmin": "Beheerder",
+        "roleMember": "Lid",
+        "viewports": "Schermen",
+        "viewportsHelp": "Schermformaten waarop dit blok verschijnt.",
+        "viewportMobile": "Mobiel",
+        "viewportTablet": "Tablet",
+        "viewportDesktop": "Desktop",
+        "notSecurityNotice": "Een verborgen blok staat nog steeds in de paginabron — dit bepaalt wat er getoond wordt, niet wat er toegankelijk is. Stel de zichtbaarheid van de pagina zelf in voor inhoud die privé moet blijven."
       }
     },
     "fieldGroups": {
