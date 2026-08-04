@@ -1,0 +1,15 @@
+[
+  {
+    "collection": "widgets",
+    "fields": [
+      "name",
+      "quantity",
+      "active",
+      "notes"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-04T14:31:17.933Z",
+    "layer": "main",
+    "gitSha": "07de9917d"
+  }
+]

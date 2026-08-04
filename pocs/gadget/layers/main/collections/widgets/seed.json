@@ -1,0 +1,24 @@
+{
+  "table": "main_widgets",
+  "key": "name",
+  "rows": [
+    {
+      "name": "Sample name 1",
+      "quantity": 1,
+      "active": true,
+      "notes": "Sample notes content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "name": "Sample name 2",
+      "quantity": 2,
+      "active": false,
+      "notes": "Sample notes content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "name": "Sample name 3",
+      "quantity": 3,
+      "active": true,
+      "notes": "Sample notes content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    }
+  ]
+}
