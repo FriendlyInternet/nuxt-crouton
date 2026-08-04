@@ -18,7 +18,6 @@
  * - salesClients: SalesClient
  * - salesEvents: SalesEvent
  * - salesEventsettings: SalesEventsetting
- * - salesHandovers: SalesHandover
  * - salesKdsbumps: SalesKdsbump
  * - salesLocations: SalesLocation
  * - salesOrderitems: SalesOrderitem
@@ -33,7 +32,6 @@ import type { SalesCategory, SalesCategoryFormData, NewSalesCategory } from './l
 import type { SalesClient, SalesClientFormData, NewSalesClient } from './layers/sales/collections/clients/types'
 import type { SalesEvent, SalesEventFormData, NewSalesEvent } from './layers/sales/collections/events/types'
 import type { SalesEventsetting, SalesEventsettingFormData, NewSalesEventsetting } from './layers/sales/collections/eventsettings/types'
-import type { SalesHandover, SalesHandoverFormData, NewSalesHandover } from './layers/sales/collections/handovers/types'
 import type { SalesKdsbump, SalesKdsbumpFormData, NewSalesKdsbump } from './layers/sales/collections/kdsbumps/types'
 import type { SalesLocation, SalesLocationFormData, NewSalesLocation } from './layers/sales/collections/locations/types'
 import type { SalesOrderitem, SalesOrderitemFormData, NewSalesOrderitem } from './layers/sales/collections/orderitems/types'
@@ -68,11 +66,6 @@ declare module '#crouton/types' {
       Item: SalesEventsetting
       FormData: SalesEventsettingFormData
       NewItem: NewSalesEventsetting
-    }
-    salesHandovers: {
-      Item: SalesHandover
-      FormData: SalesHandoverFormData
-      NewItem: NewSalesHandover
     }
     salesKdsbumps: {
       Item: SalesKdsbump

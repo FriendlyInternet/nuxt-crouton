@@ -24,7 +24,6 @@ export default {
     { name: 'eventsettings', fieldsFile: './schemas/eventSettings.json' },
     { name: 'printers', fieldsFile: './schemas/printers.json' },
     { name: 'printqueues', fieldsFile: './schemas/printQueues.json' },
-    { name: 'handovers', fieldsFile: './schemas/handovers.json' },
     { name: 'pages', fieldsFile: './schemas/pages.json', formComponent: 'CroutonPagesForm', hierarchy: { enabled: true, parentField: 'parentId', orderField: 'order', pathField: 'path', depthField: 'depth' } }
   ],
 
@@ -34,7 +33,7 @@ export default {
       collections: [
         'events', 'products', 'categories', 'orders',
         'orderitems', 'locations', 'clients', 'eventsettings',
-        'printers', 'printqueues', 'handovers'
+        'printers', 'printqueues'
       ]
     },
     {

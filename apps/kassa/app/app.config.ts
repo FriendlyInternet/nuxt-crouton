@@ -15,7 +15,6 @@ import {pagesPagesConfig} from '../layers/pages/collections/pages/app/composable
 
 import {salesKdsbumpsConfig} from '../layers/sales/collections/kdsbumps/app/composables/useSalesKdsbumps';
 
-import {salesHandoversConfig} from '../layers/sales/collections/handovers/app/composables/useSalesHandovers';
 
 export default defineAppConfig({
   croutonCollections: {
@@ -31,7 +30,6 @@ export default defineAppConfig({
     salesPrinters: salesPrintersConfig,
     salesPrintqueues: salesPrintqueuesConfig,
     pagesPages: pagesPagesConfig,
-    salesKdsbumps: salesKdsbumpsConfig,
-    salesHandovers: salesHandoversConfig
+    salesKdsbumps: salesKdsbumpsConfig
   }
 })
