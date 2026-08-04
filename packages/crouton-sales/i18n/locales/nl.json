@@ -207,7 +207,15 @@
       "avgOrder": "Gem. bestelling",
       "topProducts": "Topproducten",
       "noSalesYet": "Nog geen verkoop",
-      "outstanding": "Wachten nog"
+      "outstanding": "Wachten nog",
+      "perProduct": {
+        "title": "Per product",
+        "sold": "Verkocht",
+        "outstanding": "Nog uit",
+        "allLocations": "Alles",
+        "stillOut": "{count} nog uit",
+        "directHandover": "Deze locatie geeft direct mee — hier kan niets blijven staan"
+      }
     },
     "common": {
       "save": "Opslaan",

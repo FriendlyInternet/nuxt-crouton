@@ -206,7 +206,15 @@
       "avgOrder": "Commande moy.",
       "topProducts": "Meilleurs produits",
       "noSalesYet": "Pas encore de ventes",
-      "outstanding": "En attente"
+      "outstanding": "En attente",
+      "perProduct": {
+        "title": "Par produit",
+        "sold": "Vendu",
+        "outstanding": "À livrer",
+        "allLocations": "Tout",
+        "stillOut": "{count} à livrer",
+        "directHandover": "Cet emplacement sert directement — rien ne peut rester en attente ici"
+      }
     },
     "common": {
       "save": "Enregistrer",
