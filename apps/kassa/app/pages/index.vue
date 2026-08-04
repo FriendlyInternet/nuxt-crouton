@@ -82,7 +82,7 @@ async function signOut() {
   -->
   <div class="min-h-screen flex items-center justify-center bg-(--ui-bg)">
     <div class="text-center space-y-3 px-6">
-      <UIcon name="i-lucide-users" class="size-8 text-(--ui-text-dimmed)" />
+      <UIcon name="i-lucide-users" class="size-8 text-(--ui-text-dimmed)" aria-hidden="true" />
       <p class="text-(--ui-text-muted)">
         Geen team gevonden voor dit account. Vraag een uitnodiging aan je teambeheerder.
       </p>
