@@ -305,7 +305,10 @@ jobs:
           # A design sign-off hold (#1821) renders artifacts (schema table / diagram / mockup) into
           # writeups/**; commit them to the epic branch so the raw URLs referenced in the posted
           # comment resolve. Uses the App token remote so the push is authenticated.
-          ARTIFACTS="$(grep '^SIGNOFF_ARTIFACTS ' "$APPLY_OUT" | head -1 | cut -d' ' -f2-)"
+          # `|| true`: a split/leaf plan has no SIGNOFF_ARTIFACTS line, so grep exits 1 — under
+          # pipefail + the GHA `bash -e` shell that would abort the step AFTER the children were
+          # already created, reddening every non-signoff decompose run (#1821 regression).
+          ARTIFACTS="$(grep '^SIGNOFF_ARTIFACTS ' "$APPLY_OUT" | head -1 | cut -d' ' -f2- || true)"
           if [ -n "$ARTIFACTS" ]; then
             echo "committing signoff artifacts to ${EPIC_BRANCH}: $ARTIFACTS"
             # BEST-EFFORT — the sign-off hold (comment + status:blocked + the inline schema table) is
