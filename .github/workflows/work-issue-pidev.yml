@@ -316,8 +316,8 @@ jobs:
           git status --porcelain -uall 2>/dev/null | sed 's/^...//; s/^.* -> //' | sort -u > "$RUNNER_TEMP/changed.txt" || true
           PLAN="$(node "$RUNNER_TEMP/pi-commit-plan.mjs" "${SESSION:-/nonexistent}" "$ROOT" "$RUNNER_TEMP/changed.txt" 2>/dev/null || echo '{"inputs":[],"generated":[]}')"
           printf '%s' "$PLAN" | node -e 'const p=JSON.parse(require("fs").readFileSync(0,"utf8"));const t=process.env.RUNNER_TEMP;require("fs").writeFileSync(t+"/inputs.txt",(p.inputs||[]).join("\n"));require("fs").writeFileSync(t+"/generated.txt",(p.generated||[]).join("\n"))'
-          NIN="$(grep -c . "$RUNNER_TEMP/inputs.txt" 2>/dev/null || echo 0)"
-          NGEN="$(grep -c . "$RUNNER_TEMP/generated.txt" 2>/dev/null || echo 0)"
+          NIN="$(grep -c . "$RUNNER_TEMP/inputs.txt" 2>/dev/null || true)"; NIN=${NIN:-0}
+          NGEN="$(grep -c . "$RUNNER_TEMP/generated.txt" 2>/dev/null || true)"; NGEN=${NGEN:-0}
           echo "commit plan (#1849) — inputs=$NIN generated=$NGEN"
           [ "$NIN"  -gt 0 ] && grep . "$RUNNER_TEMP/inputs.txt"    | sed 's/^/  input:     /'
           [ "$NGEN" -gt 0 ] && grep . "$RUNNER_TEMP/generated.txt" | sed 's/^/  generated: /'
@@ -380,8 +380,8 @@ jobs:
                 echo "acceptance: pnpm --filter $PKG typecheck ($APP_DIR)"
                 pnpm --filter "$PKG" typecheck > "$RUNNER_TEMP/acc.log" 2>&1 || true
                 # OWN = `error TS` lines whose path stays INSIDE the app (no `../` escape to another package).
-                OWN="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -avE '(^|[[:space:](])\.\./' | grep -c . || echo 0)"
-                EXT="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -aE '(^|[[:space:](])\.\./' | grep -c . || echo 0)"
+                OWN="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -avE '(^|[[:space:](])\.\./' | grep -c . || true)"
+                EXT="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -aE '(^|[[:space:](])\.\./' | grep -c . || true)"
                 if [ "$OWN" -gt 0 ]; then
                   ACCEPT="fail"; ACCEPT_MSG="${OWN} type error(s) in ${APP_DIR}"
                   echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"
@@ -416,7 +416,7 @@ jobs:
           PRNUM="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
           if [ -n "$PRNUM" ]; then
             cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sort -u | grep . > "$RUNNER_TEMP/committed.txt" || true
-            EXCL="$(comm -23 <(sort -u "$RUNNER_TEMP/changed.txt" | grep .) "$RUNNER_TEMP/committed.txt" 2>/dev/null | grep -c . || echo 0)"
+            EXCL="$(comm -23 <(sort -u "$RUNNER_TEMP/changed.txt" | grep .) "$RUNNER_TEMP/committed.txt" 2>/dev/null | grep -c . || true)"
             case "$ACCEPT" in
               pass) ACC_LINE="✅ **acceptance: passed** — ${ACCEPT_MSG}" ;;
               fail) ACC_LINE="🔴 **acceptance: FAILED** — ${ACCEPT_MSG}. Held: automerge won't land a red result — fix, then re-dispatch." ;;
