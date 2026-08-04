@@ -11,7 +11,9 @@
  * `filtersOpen` / `activeFilterCount` are passed straight through, because each
  * host owns its own header and hosts the filter toggle there.
  */
-defineProps<{ event: Record<string, any> }>()
+import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+
+defineProps<{ event: SalesEvent }>()
 
 const filtersOpen = defineModel<boolean>('filtersOpen', { default: false })
 const emit = defineEmits<{ 'update:activeFilterCount': [count: number] }>()
