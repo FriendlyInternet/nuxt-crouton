@@ -1,0 +1,10 @@
+{
+  "fields": [
+    { "name": "itemName", "type": "string", "required": true },
+    { "name": "borrowerName", "type": "string", "required": true },
+    { "name": "lentDate", "type": "date", "required": true },
+    { "name": "expectedBackDate", "type": "date", "required": false },
+    { "name": "returned", "type": "boolean", "required": true, "default": false },
+    { "name": "notes", "type": "text", "required": false }
+  ]
+}
