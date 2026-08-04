@@ -75,6 +75,9 @@
     "vue-i18n": "^10.0.0 || ^11.0.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "better-sqlite3": "^12.4.1",
+    "drizzle-orm": "catalog:",
     "unbuild": "^3.6.1",
     "vitest": "^4.0.0"
   }
