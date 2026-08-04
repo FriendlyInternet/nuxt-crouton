@@ -330,6 +330,7 @@ defineExpose({
               <div :style="previewZoomStyle">
                 <CroutonPagesBlockContent
                   :content="previewContent as any"
+                  ignore-visibility
                   class="p-4"
                 />
               </div>

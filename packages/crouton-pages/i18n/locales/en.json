@@ -338,6 +338,26 @@
         "linkUrl": "Custom URL",
         "selectPage": "Select a page…",
         "searchPages": "Search pages…"
+      },
+      "visibility": {
+        "title": "Visibility",
+        "restricted": "Limited",
+        "audience": "Show to",
+        "audienceHelp": "Who sees this block on the public page.",
+        "audienceAll": "Anyone",
+        "audienceAnonymous": "Logged-out visitors only",
+        "audienceAuthenticated": "Logged-in visitors only",
+        "roles": "Roles",
+        "rolesHelp": "Limit to these team roles. Owners always see what admins see.",
+        "roleOwner": "Owner",
+        "roleAdmin": "Admin",
+        "roleMember": "Member",
+        "viewports": "Screens",
+        "viewportsHelp": "Screen sizes this block appears on.",
+        "viewportMobile": "Mobile",
+        "viewportTablet": "Tablet",
+        "viewportDesktop": "Desktop",
+        "notSecurityNotice": "A hidden block is still present in the page source — this controls what is shown, not what is accessible. For content that must stay private, set the visibility of the page itself."
       }
     },
     "fieldGroups": {

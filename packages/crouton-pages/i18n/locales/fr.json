@@ -338,6 +338,26 @@
         "linkUrl": "URL personnalisée",
         "selectPage": "Choisir une page…",
         "searchPages": "Rechercher des pages…"
+      },
+      "visibility": {
+        "title": "Visibilité",
+        "restricted": "Limité",
+        "audience": "Afficher pour",
+        "audienceHelp": "Qui voit ce bloc sur la page publique.",
+        "audienceAll": "Tout le monde",
+        "audienceAnonymous": "Visiteurs déconnectés uniquement",
+        "audienceAuthenticated": "Visiteurs connectés uniquement",
+        "roles": "Rôles",
+        "rolesHelp": "Limiter à ces rôles d'équipe. Les propriétaires voient toujours ce que voient les administrateurs.",
+        "roleOwner": "Propriétaire",
+        "roleAdmin": "Administrateur",
+        "roleMember": "Membre",
+        "viewports": "Écrans",
+        "viewportsHelp": "Tailles d'écran sur lesquelles ce bloc apparaît.",
+        "viewportMobile": "Mobile",
+        "viewportTablet": "Tablette",
+        "viewportDesktop": "Bureau",
+        "notSecurityNotice": "Un bloc masqué reste présent dans le source de la page — ceci contrôle ce qui est affiché, pas ce qui est accessible. Pour un contenu qui doit rester privé, définissez la visibilité de la page elle-même."
       }
     },
     "fieldGroups": {

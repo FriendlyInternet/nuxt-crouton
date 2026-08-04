@@ -9,7 +9,7 @@
 import { Node, mergeAttributes } from '@tiptap/core'
 import { VueNodeViewRenderer } from '@tiptap/vue-3'
 import type { CroutonBlockDefinition, CroutonBlockTipTapAttribute } from '@fyit/crouton-core/app/types/block-definition'
-import { generateBlockId, blockIdAttribute, blockSizeAttribute } from './block-utils'
+import { generateBlockId, blockIdAttribute, blockSizeAttribute, blockVisibilityAttribute } from './block-utils'
 import AddonBlockView from '../../components/Blocks/Views/AddonBlockView.vue'
 
 /**
@@ -24,7 +24,7 @@ function pascalCase(str: string): string {
  * Build TipTap attribute config from declarative definition.
  */
 function buildAttributes(attrs: Record<string, CroutonBlockTipTapAttribute>) {
-  const result: Record<string, any> = { ...blockIdAttribute, ...blockSizeAttribute }
+  const result: Record<string, any> = { ...blockIdAttribute, ...blockSizeAttribute, ...blockVisibilityAttribute }
 
   for (const [name, config] of Object.entries(attrs)) {
     const attrDef: any = {

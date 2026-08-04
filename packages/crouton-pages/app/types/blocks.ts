@@ -520,6 +520,58 @@ export interface PageBlockContent {
 }
 
 // ============================================================================
+// Block Visibility (universal attr, like blockSize)
+// ============================================================================
+
+/**
+ * Screen sizes a block can be limited to. The boundaries are 768px and 1024px,
+ * matching the breakpoints the public surfaces already use (`Nav.vue`,
+ * `layouts/public.vue`).
+ */
+export type BlockViewport = 'mobile' | 'tablet' | 'desktop'
+
+/**
+ * Team roles a block can be limited to.
+ *
+ * Deliberately declared here rather than imported from `@fyit/crouton-auth`:
+ * crouton-pages does not depend on the auth package (it may not be installed),
+ * and the visibility matcher must degrade gracefully when it isn't. Kept in
+ * step with `MemberRole` in `@fyit/crouton-auth/types/auth.ts`.
+ */
+export type BlockAudienceRole = 'owner' | 'admin' | 'member'
+
+/**
+ * Per-block display conditions, stored on the universal `blockVisibility` attr.
+ *
+ * Sparse by design — an absent key means "no restriction", so a block that has
+ * never been configured carries nothing and renders exactly as it always did.
+ *
+ * NOT a security boundary: a hidden block is still present in the page payload,
+ * it simply isn't displayed. Gate genuinely sensitive content with the
+ * page-level `visibility` field, which is enforced server-side.
+ */
+export interface BlockVisibility {
+  /** Limit to logged-out or logged-in readers. Absent = anyone. */
+  audience?: 'anonymous' | 'authenticated'
+  /** Limit to these team roles. Naming any role implies `authenticated`. */
+  roles?: BlockAudienceRole[]
+  /** Limit to these screen sizes. Absent or empty = all. */
+  viewports?: BlockViewport[]
+}
+
+/**
+ * What the renderer knows about the current reader.
+ *
+ * `null` means "not knowable" — crouton-auth isn't installed, or the session
+ * hasn't resolved yet. The matcher shows the block in that case rather than
+ * hiding it, so a missing auth package can never blank a page.
+ */
+export interface BlockAudienceContext {
+  authenticated: boolean | null
+  role: BlockAudienceRole | null
+}
+
+// ============================================================================
 // Block Registry Types
 // ============================================================================
 
