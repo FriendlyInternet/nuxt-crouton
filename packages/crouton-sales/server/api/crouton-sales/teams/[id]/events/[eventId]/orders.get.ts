@@ -15,7 +15,7 @@
  * items and the row LEDs come from the `printqueues/status` poll, so the heavy
  * joins the generated collection GET does aren't needed here.
  */
-import { and, desc, eq, exists, inArray, isNull, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, exists, inArray, isNull, ne, or, sql } from 'drizzle-orm'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { requireTeamEvent } from '../../../../../../utils/team-event'
 import { planOutstandingCount } from '../../../../../../utils/pass-tickets'
@@ -53,12 +53,10 @@ function jobFilterConditions(db: any, salesOrders: any, f: OrderFilters) {
 // Backlog-only (#1846): the same rule the count uses, applied to the LIST.
 // A correlated NOT EXISTS rather than a join, so it composes with the other
 // filters without changing the row shape or duplicating rows.
-function outstandingConditions(salesOrders: any, f: OrderFilters, salesHandovers?: any) {
-  if (!f.outstanding || !salesHandovers) return []
-  return [
-    ne(salesOrders.status, 'cancelled'),
-    sql`not exists (select 1 from ${salesHandovers} where ${salesHandovers.orderId} = ${salesOrders.id})`
-  ]
+function outstandingConditions(_salesOrders: any, _f: OrderFilters, _h?: any) {
+  // Superseded by #1851 — the backlog rule now lives in countOutstanding and the
+  // list filter below, both keyed on bumps rather than a handovers table.
+  return []
 }
 
 // Shared WHERE for both the list and the count so a filtered page and its total
@@ -89,17 +87,30 @@ function buildWhere(db: any, salesOrders: any, teamId: string, eventId: string, 
  */
 async function countOutstanding(db: any, salesOrders: any, teamId: string, eventId: string) {
   const plan = planOutstandingCount({ teamId, eventId })
-  const { salesHandovers } = await import('~~/layers/sales/collections/handovers/server/database/schema')
+  const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
+  const { salesProducts } = await import('~~/layers/sales/collections/products/server/database/schema')
+  const { salesLocations } = await import('~~/layers/sales/collections/locations/server/database/schema')
+  const { salesKdsbumps } = await import('~~/layers/sales/collections/kdsbumps/server/database/schema')
 
+  // Still to deliver = at least one location that REQUIRES confirmation has no
+  // bump (#1851). A location that opted out can never hold an order open, and
+  // NULL predates the migration so it counts as requiring.
   const [row] = await db
-    .select({ count: sql<number>`count(*)` })
+    .select({ count: sql<number>`count(distinct ${salesOrders.id})` })
     .from(salesOrders)
-    .leftJoin(salesHandovers, eq(salesHandovers.orderId, salesOrders.id))
+    .innerJoin(salesOrderitems, eq(salesOrderitems.orderId, salesOrders.id))
+    .innerJoin(salesProducts, eq(salesProducts.id, salesOrderitems.productId))
+    .innerJoin(salesLocations, eq(salesLocations.id, salesProducts.locationId))
+    .leftJoin(salesKdsbumps, and(
+      eq(salesKdsbumps.orderId, salesOrders.id),
+      eq(salesKdsbumps.locationId, salesProducts.locationId)
+    ))
     .where(and(
       eq(salesOrders.teamId, plan.teamId),
       eq(salesOrders.eventId, plan.eventId),
       ne(salesOrders.status, 'cancelled'),
-      isNull(salesHandovers.id)
+      isNull(salesKdsbumps.id),
+      or(isNull(salesLocations.requiresHandover), eq(salesLocations.requiresHandover, true))
     ))
 
   return Number(row?.count ?? 0)
