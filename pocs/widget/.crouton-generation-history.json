@@ -1,0 +1,13 @@
+[
+  {
+    "collection": "parts",
+    "fields": [
+      "title",
+      "qty"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-04T15:10:02.585Z",
+    "layer": "widget",
+    "gitSha": "44ad152"
+  }
+]

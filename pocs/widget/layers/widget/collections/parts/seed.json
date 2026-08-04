@@ -1,0 +1,18 @@
+{
+  "table": "widget_parts",
+  "key": "title",
+  "rows": [
+    {
+      "title": "Sample title 1",
+      "qty": 1
+    },
+    {
+      "title": "Sample title 2",
+      "qty": 2
+    },
+    {
+      "title": "Sample title 3",
+      "qty": 3
+    }
+  ]
+}
