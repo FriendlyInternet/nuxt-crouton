@@ -226,6 +226,13 @@ jobs:
       - name: Validate field types sync
         run: node scripts/validate-field-types-sync.mjs
 
+      # #1845: an async function inside the ARRAY form of definePageMeta({ middleware })
+      # never gets unctx's await-restore shim, so the Nuxt context is lost across the
+      # await and navigateTo() throws during SSR (#1839). Invisible to typecheck, to the
+      # build, and to eslint (which this workflow doesn't run) — hence a dedicated check.
+      - name: Check page middleware async context
+        run: node scripts/check-page-middleware.mjs
+
   mcp-server-tests:
     name: MCP Server Tests
     needs: changes
