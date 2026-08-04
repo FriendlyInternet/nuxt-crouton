@@ -86,6 +86,50 @@ jobs:
         if: steps.state.outputs.open == 'true'
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # ── pi DESIGN-HOLD re-dispatch (#1828) ───────────────────────────────────────
+      # A pi decompose sign-off hold (Option C, #1821) is NOT a gate PR — it holds the EPIC
+      # with a "🎨 Design sign-off" comment and no children. The generic claude `/task-decompose`
+      # resume below does not build from it (it just re-blocks and says "still iterating"). So for
+      # that shape we instead re-run the PI decomposer: on any owner reply, remove status:blocked
+      # and re-apply `delegate-pi` (remove-then-add → a fresh `labeled` event) so decompose-on-issue-
+      # pidev re-runs — and with #1828's prompt change it now SPLITS into build children (it reads the
+      # approval/answers in the thread). The label MUST be applied with the App token, or the
+      # `labeled` event won't cascade to the decompose workflow (GITHUB_TOKEN events are suppressed,
+      # #572). When we take this path we set `redispatch=true` and the claude agent step below skips.
+      - uses: actions/create-github-app-token@v1
+        id: app-token-early
+        if: steps.state.outputs.open == 'true'
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - name: Re-dispatch a pi design-hold to the pi decomposer
+        id: piredispatch
+        if: steps.state.outputs.open == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token-early.outputs.token }}
+          script: |
+            const issue_number = context.payload.issue.number
+            // A pi design-hold = a "🎨 Design sign-off" comment exists AND the epic has no children yet.
+            const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 })
+            const hasHold = comments.some(c => (c.body || '').includes('🎨 Design sign-off needed before building'))
+            let noChildren = true
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', { ...context.repo, issue_number, per_page: 100 })
+              noChildren = subs.length === 0
+            } catch (e) { core.warning(`sub-issue check: ${e.message}`) }
+            if (!(hasHold && noChildren)) { core.setOutput('redispatch', 'false'); core.info('Not a pi design-hold — the claude resume path handles it.'); return }
+            // Re-dispatch: clear the block, then remove-then-add delegate-pi for a fresh labeled event.
+            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
+            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'delegate-pi' }) } catch (e) {}
+            await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['delegate-pi'] })
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1828)_\n\n'
+                + '🔨 **Approved — rebuilding.** Re-running the pi decomposer on your reply; it will split this epic into build children now (not another design hold). Watch for the sub-issues + their PRs.' })
+            core.setOutput('redispatch', 'true')
+            core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
+
       # ── Collect the answer payload across media (WS5, #1191) ─────────────────────
       # The owner may answer in the medium the question came in — a top-level reply, an
       # inline PR *review* comment (e.g. on a schema `.md`), a `🎯 Preview feedback`
@@ -110,7 +154,9 @@ jobs:
       # unattended automation (#1669; supporting source pending on that issue — if it
       # does not cover automation, revert). Runs on the mac-mini runner.
       - id: agent
-        if: steps.state.outputs.open == 'true'
+        # Skip when we re-dispatched a pi design-hold above (#1828) — the pi decomposer builds it,
+        # not this generic claude resume (which would just re-block and double-decompose).
+        if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true'
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
