@@ -1,0 +1,18 @@
+{
+  "table": "main_awards",
+  "key": "name",
+  "rows": [
+    {
+      "name": "Sample name 1",
+      "points": 1
+    },
+    {
+      "name": "Sample name 2",
+      "points": 2
+    },
+    {
+      "name": "Sample name 3",
+      "points": 3
+    }
+  ]
+}

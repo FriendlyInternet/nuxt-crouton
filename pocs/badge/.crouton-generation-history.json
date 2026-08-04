@@ -1,0 +1,13 @@
+[
+  {
+    "collection": "awards",
+    "fields": [
+      "name",
+      "points"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-04T16:41:35.111Z",
+    "layer": "main",
+    "gitSha": "3005239b8"
+  }
+]
