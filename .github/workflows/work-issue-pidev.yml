@@ -377,14 +377,16 @@ jobs:
               PKG="$(node -p "require('./$APP_DIR/package.json').name || ''" 2>/dev/null || true)"
               HAS_TC="$(node -e "process.exit(require('./$APP_DIR/package.json').scripts?.typecheck?0:1)" 2>/dev/null && echo 1 || echo 0)"
               TC_EXIT=""; : > "$RUNNER_TEMP/acc.log"
-              # Prefer the app's own typecheck script; else fall back to `nuxt typecheck` (any Nuxt app
-              # can run it even without a package script — the #1859 case: a scaffolded poc had none).
+              # Use the app's OWN typecheck script only — it runs `nuxt prepare` first, so Nuxt
+              # auto-imports (ref/defineEventHandler/useCrouton/…) resolve. A raw `npx nuxt typecheck`
+              # WITHOUT prepare flags every auto-import as undefined — 37 false errors on a clean
+              # generated poc (#1863). So no script ⇒ NEUTRAL (safe, non-blocking), never a false fail.
+              # (Reliably typechecking a scriptless fresh poc needs a prepare step — tracked follow-up.)
               if [ "$HAS_TC" = "1" ] && [ -n "$PKG" ]; then
                 echo "acceptance: pnpm --filter $PKG typecheck ($APP_DIR)"
                 if pnpm --filter "$PKG" typecheck > "$RUNNER_TEMP/acc.log" 2>&1; then TC_EXIT=0; else TC_EXIT=$?; fi
-              elif [ -f "$APP_DIR/nuxt.config.ts" ] || [ -f "$APP_DIR/nuxt.config.js" ]; then
-                echo "acceptance: nuxt typecheck ($APP_DIR) [no typecheck script — fallback]"
-                if ( cd "$APP_DIR" && npx nuxt typecheck ) > "$RUNNER_TEMP/acc.log" 2>&1; then TC_EXIT=0; else TC_EXIT=$?; fi
+              else
+                echo "acceptance: NEUTRAL — $APP_DIR has no typecheck script (raw nuxt typecheck would false-fail on auto-imports)"
               fi
               if [ -n "$TC_EXIT" ]; then
                 # OWN = `error TS` inside the app (no `../` escape); ANY = all TS errors (proves it RAN).
