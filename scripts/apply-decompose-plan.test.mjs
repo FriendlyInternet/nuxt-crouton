@@ -126,4 +126,8 @@ test('runActions on a leaf edits the target body and labels it (mock exec)', () 
   const written = calls.find(c => c[0] === 'BODY')[1]
   assert.match(written, /existing body/)
   assert.match(written, /<!-- pipeline: epic=1706 depth=0 epic_branch=/)
+  // #1764: work-this is applied as remove-then-add so a stale label still fires a fresh event
+  const labelCalls = calls.filter(c => Array.isArray(c) && c.includes('work-this'))
+  assert.ok(labelCalls.some(c => c.includes('--remove-label')), 'must remove work-this first')
+  assert.ok(labelCalls.some(c => c.includes('--add-label')), 'then re-add work-this')
 })

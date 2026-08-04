@@ -321,32 +321,42 @@ jobs:
             echo "$NOTLEDGER" | sed 's/^/  ? /'
           fi
 
-          # 3) Stage EXACTLY the ledger paths (Aider/claude-code-action style — never add -A/-u).
+          # 3) Persist pi's edits DETERMINISTICALLY onto the CORRECT base. Capture the ledger
+          #    files' content, then recreate work-<issue> off origin/$BASE (the epic branch) and
+          #    restore ONLY those files onto it. This never depends on which branch pi left the tree
+          #    on — pi's own checkout of the epic branch is unreliable (#1741 committed against main
+          #    → the PR leaked 56 of main's commits vs the stale epic branch; #1733 happened to be
+          #    on the epic branch → clean). Re-basing here makes the PR diff EXACTLY pi's files
+          #    against the epic branch, every time.
+          CONTENT="$RUNNER_TEMP/ledger-content"; rm -rf "$CONTENT"; mkdir -p "$CONTENT"
           while IFS= read -r p; do
             [ -z "$p" ] && continue
-            git add -- "$p" 2>/dev/null || echo "::warning::could not stage $p"
+            [ -f "$p" ] && { mkdir -p "$CONTENT/$(dirname "$p")"; cp "$p" "$CONTENT/$p"; }
           done < "$LEDGER"
 
-          # 4) Commit (if anything staged) on a work-<issue> branch — NEVER on the epic branch
-          #    itself (pi checks out epic/<NN>, so a bare commit there means head==base and no PR
-          #    can open — the #1764 "no commits ahead of epic on epic" failure). checkout -B keeps
-          #    the staged changes since the work branch starts at the current (epic) HEAD.
-          if ! git diff --cached --quiet; then
-            BR="$(git branch --show-current)"
-            case "$BR" in work-*) : ;; *) BR="work-${ISSUE}"; git checkout -B "$BR" ;; esac
+          git fetch origin "$BASE" --quiet 2>/dev/null || true
+          git checkout -f -B "work-${ISSUE}" "origin/${BASE}" 2>&1 | tail -1
+          BR="work-${ISSUE}"
+
+          while IFS= read -r p; do
+            [ -z "$p" ] && continue
+            [ -f "$CONTENT/$p" ] && { mkdir -p "$(dirname "$p")"; cp "$CONTENT/$p" "$p"; git add -- "$p"; }
+          done < "$LEDGER"
+
+          # 4) Commit only what the ledger changed vs the base.
+          if [ "$N" -gt 0 ] && ! git diff --cached --quiet; then
             TITLE="$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null)"
             [ -z "$TITLE" ] && TITLE="chore: implement #${ISSUE}"
             git commit -q -m "$TITLE" -m "🤖 Committed by the pi worker from pi's edited-file ledger (Pattern B, #1764/#1782). Refs #${ISSUE}"
-            echo "committed $N file(s) as: $TITLE"
+            echo "committed $N file(s) onto ${BR} (based on ${BASE}): $TITLE"
           else
-            echo "nothing staged from the ledger (pi committed already, or made no captured file changes)"
+            echo "nothing to commit (ledger empty, or no change vs ${BASE})"
           fi
 
-          # 5) Ensure the branch is pushed and a PR exists.
-          git fetch origin "$BASE" --quiet 2>/dev/null || true
-          BR="$(git branch --show-current)"
-          if [ -n "$BR" ] && [ "$BR" != "main" ] && [ "$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]; then
-            git push -u origin "HEAD:${BR}" 2>&1 | tail -2
+          # 5) Push + open the PR (base = the epic branch, head = work-<issue>). Force-push so a
+          #    re-dispatch idempotently re-bases the branch instead of failing non-fast-forward.
+          if [ "$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]; then
+            git push -u --force origin "HEAD:${BR}" 2>&1 | tail -2
             EXISTING="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
             if [ -z "$EXISTING" ]; then
               gh pr create --base "$BASE" --head "$BR" \
@@ -356,7 +366,7 @@ jobs:
               echo "PR #${EXISTING} already open for ${BR}"
             fi
           else
-            echo "no commits ahead of ${BASE} on '${BR:-<none>}' — no PR to open"
+            echo "no commits ahead of ${BASE} — no PR to open"
           fi
 
           # 6) Verdict for the artifact-gate: pi wrote files but nothing landed on the branch = fail.
