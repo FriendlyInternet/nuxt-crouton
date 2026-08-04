@@ -15,6 +15,14 @@ definePageMeta({
   layout: false,
   middleware: [
     async () => {
+      // Captured BEFORE the await below (#1839). Nuxt binds the middleware's
+      // instance with callWithNuxt, which only spans the synchronous portion —
+      // and this app doesn't enable experimental.asyncContext. So on the server
+      // the first `await` unbinds it, and a bare navigateTo() after it throws
+      // "[nuxt] instance unavailable" → a 500 on every signed-in load of '/'.
+      // runWithContext re-binds the instance for the post-await navigation.
+      const nuxtApp = useNuxtApp()
+
       const { loggedIn } = useAuth()
       if (!loggedIn.value) return navigateTo('/auth/login')
 
@@ -22,7 +30,9 @@ definePageMeta({
       // No slug: fall through and render the team-less message. Never spin.
       if (!slug) return
 
-      return navigateTo(`/admin/${slug}/sales/events`, { replace: true })
+      return nuxtApp.runWithContext(() =>
+        navigateTo(`/admin/${slug}/sales/events`, { replace: true })
+      )
     }
   ]
 })
