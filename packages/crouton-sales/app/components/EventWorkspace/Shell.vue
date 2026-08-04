@@ -404,7 +404,7 @@ const kassaHeightStyle = computed(() =>
                 />
               </UChip>
             </SalesEventWorkspacePaneHeader>
-            <div class="flex-1 overflow-y-auto p-4 pt-2">
+            <div class="flex-1 overflow-y-auto">
               <Suspense>
                 <SalesEventWorkspaceOrdersTab
                   v-model:filters-open="ordersFiltersOpen"
@@ -443,7 +443,7 @@ const kassaHeightStyle = computed(() =>
               :title="t('sales.workspace.dataPanel.title')"
               @close="dataOpen = false"
             />
-            <div class="flex-1 overflow-y-auto p-4 pt-2">
+            <div class="flex-1 overflow-y-auto min-w-0 flex flex-col">
               <SalesEventWorkspaceDataPanel :event="event" :team-param="teamParam" />
             </div>
           </SplitterPanel>
