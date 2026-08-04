@@ -198,6 +198,8 @@ jobs:
           git status --porcelain 2>/dev/null | grep -vE "$SCRATCH" | cut -c4- > "$RUNNER_TEMP/pre-pi-dirty.txt" || true
           echo "pre-pi non-scratch dirty paths: $(wc -l < "$RUNNER_TEMP/pre-pi-dirty.txt" | tr -d ' ')"
           cp scripts/pi-edited-files.mjs "$RUNNER_TEMP/pi-edited-files.mjs"
+          # pi-commit-plan.mjs imports ./pi-edited-files.mjs relatively, so stash it alongside (#1849).
+          cp scripts/pi-commit-plan.mjs "$RUNNER_TEMP/pi-commit-plan.mjs"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
@@ -298,60 +300,59 @@ jobs:
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
           ROOT="$(git rev-parse --show-toplevel)"
 
-          # 1) Read THIS run's pi session — written to a PER-RUN dir by `--session-dir` on the pi
-          #    step. Deterministic: no scanning the shared ~/.pi/agent/sessions (contaminated by
-          #    other runners), no -newermt/$HOME fragility. Just the one .jsonl pi wrote here.
+          # 1) Read THIS run's pi session (per-run --session-dir). The ledger = files pi HAND-EDITED
+          #    (edit/write tools). Generator output (crouton config/generate_collection, produced via
+          #    a bash/MCP tool) is NOT a write-tool path, so it never appears in the ledger — which is
+          #    exactly why the old "commit only the ledger" DROPPED the generated collection (#1830).
           SESSION="$(ls -t "$RUNNER_TEMP/pi-session"/*.jsonl 2>/dev/null | head -1)"
-          LEDGER="$RUNNER_TEMP/pi-edited.txt"; : > "$LEDGER"
-          if [ -n "$SESSION" ] && [ -f "$SESSION" ]; then
-            echo "pi session: $SESSION"
-            node "$RUNNER_TEMP/pi-edited-files.mjs" "$SESSION" "$ROOT" > "$LEDGER" 2>/dev/null || true
-          else
-            echo "::warning::no pi session in $RUNNER_TEMP/pi-session — cannot build the edit ledger (#1764)"
-          fi
-          N="$(grep -c . "$LEDGER" 2>/dev/null || echo 0)"
-          echo "Pattern B — pi wrote $N file(s):"; sed 's/^/  + /' "$LEDGER" 2>/dev/null || true
+          if [ -n "$SESSION" ] && [ -f "$SESSION" ]; then echo "pi session: $SESSION"
+          else echo "::warning::no pi session in $RUNNER_TEMP/pi-session (#1764)"; fi
 
-          # 2) No silent gaps: report changed files NOT in the ledger (generator output via bash,
-          #    or artifacts). These are NOT committed by this step.
-          git status --porcelain 2>/dev/null | sed 's/^...//' | sort -u > "$RUNNER_TEMP/changed.txt" || true
-          NOTLEDGER="$(comm -23 "$RUNNER_TEMP/changed.txt" <(sort -u "$LEDGER") 2>/dev/null || true)"
-          if [ -n "$NOTLEDGER" ]; then
-            echo "::notice::changed but NOT in pi's edit ledger (not committed — generator output or artifacts):"
-            echo "$NOTLEDGER" | sed 's/^/  ? /'
-          fi
+          # 2) CLASSIFY the working tree into two buckets (#1849): inputs = the ledger (schema/config
+          #    pi authored), generated = every OTHER real change (the collection the CLI produced),
+          #    MINUS the shared junk denylist. Both are committed — as two commits, so history stays
+          #    granular (blame→schema, bisect→generator). `-uall` expands untracked DIRECTORIES to
+          #    files, or the generated collection would be an invisible collapsed `dir/` entry.
+          git status --porcelain -uall 2>/dev/null | sed 's/^...//; s/^.* -> //' | sort -u > "$RUNNER_TEMP/changed.txt" || true
+          PLAN="$(node "$RUNNER_TEMP/pi-commit-plan.mjs" "${SESSION:-/nonexistent}" "$ROOT" "$RUNNER_TEMP/changed.txt" 2>/dev/null || echo '{"inputs":[],"generated":[]}')"
+          printf '%s' "$PLAN" | node -e 'const p=JSON.parse(require("fs").readFileSync(0,"utf8"));const t=process.env.RUNNER_TEMP;require("fs").writeFileSync(t+"/inputs.txt",(p.inputs||[]).join("\n"));require("fs").writeFileSync(t+"/generated.txt",(p.generated||[]).join("\n"))'
+          NIN="$(grep -c . "$RUNNER_TEMP/inputs.txt" 2>/dev/null || echo 0)"
+          NGEN="$(grep -c . "$RUNNER_TEMP/generated.txt" 2>/dev/null || echo 0)"
+          echo "commit plan (#1849) — inputs=$NIN generated=$NGEN"
+          [ "$NIN"  -gt 0 ] && grep . "$RUNNER_TEMP/inputs.txt"    | sed 's/^/  input:     /'
+          [ "$NGEN" -gt 0 ] && grep . "$RUNNER_TEMP/generated.txt" | sed 's/^/  generated: /'
 
-          # 3) Persist pi's edits DETERMINISTICALLY onto the CORRECT base. Capture the ledger
-          #    files' content, then recreate work-<issue> off origin/$BASE (the epic branch) and
-          #    restore ONLY those files onto it. This never depends on which branch pi left the tree
-          #    on — pi's own checkout of the epic branch is unreliable (#1741 committed against main
-          #    → the PR leaked 56 of main's commits vs the stale epic branch; #1733 happened to be
-          #    on the epic branch → clean). Re-basing here makes the PR diff EXACTLY pi's files
-          #    against the epic branch, every time.
-          CONTENT="$RUNNER_TEMP/ledger-content"; rm -rf "$CONTENT"; mkdir -p "$CONTENT"
-          while IFS= read -r p; do
+          # 3) Capture BOTH buckets' content before the re-base checkout (which discards the working
+          #    tree), then recreate work-<issue> off origin/$BASE — never depends on which branch pi
+          #    left the tree on (#1741).
+          CONTENT="$RUNNER_TEMP/commit-content"; rm -rf "$CONTENT"; mkdir -p "$CONTENT"
+          cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | while IFS= read -r p; do
             [ -z "$p" ] && continue
             [ -f "$p" ] && { mkdir -p "$CONTENT/$(dirname "$p")"; cp "$p" "$CONTENT/$p"; }
-          done < "$LEDGER"
+          done
 
           git fetch origin "$BASE" --quiet 2>/dev/null || true
           git checkout -f -B "work-${ISSUE}" "origin/${BASE}" 2>&1 | tail -1
           BR="work-${ISSUE}"
+          TITLE="$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null)"; [ -z "$TITLE" ] && TITLE="chore: implement #${ISSUE}"
 
-          while IFS= read -r p; do
-            [ -z "$p" ] && continue
-            [ -f "$CONTENT/$p" ] && { mkdir -p "$(dirname "$p")"; cp "$CONTENT/$p" "$p"; git add -- "$p"; }
-          done < "$LEDGER"
+          stage_bucket() { while IFS= read -r p; do [ -z "$p" ] && continue; [ -f "$CONTENT/$p" ] && { mkdir -p "$(dirname "$p")"; cp "$CONTENT/$p" "$p"; git add -- "$p"; }; done < "$1"; }
 
-          # 4) Commit only what the ledger changed vs the base.
-          if [ "$N" -gt 0 ] && ! git diff --cached --quiet; then
-            TITLE="$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null)"
-            [ -z "$TITLE" ] && TITLE="chore: implement #${ISSUE}"
-            git commit -q -m "$TITLE" -m "🤖 Committed by the pi worker from pi's edited-file ledger (Pattern B, #1764/#1782). Refs #${ISSUE}"
-            echo "committed $N file(s) onto ${BR} (based on ${BASE}): $TITLE"
-          else
-            echo "nothing to commit (ledger empty, or no change vs ${BASE})"
+          # 4a) Commit 1 — the inputs pi authored (the "why": schema/config). Blame-able, small.
+          stage_bucket "$RUNNER_TEMP/inputs.txt"
+          if [ "$NIN" -gt 0 ] && ! git diff --cached --quiet; then
+            git commit -q -m "$TITLE" -m "🤖 pi worker — hand-authored inputs (schema/config). Refs #${ISSUE} (#1764/#1849)"
+            echo "commit 1: $NIN input file(s) — $TITLE"
           fi
+          # 4b) Commit 2 — the generated/derived output (the "what the machine produced"). Separate
+          #     commit so a generator regression bisects cleanly and doesn't drown the decision.
+          stage_bucket "$RUNNER_TEMP/generated.txt"
+          if [ "$NGEN" -gt 0 ] && ! git diff --cached --quiet; then
+            git commit -q -m "generate: derived output for #${ISSUE}" -m "🤖 pi worker — generator/CLI output (e.g. crouton generate), committed separately from the inputs (#1849). Refs #${ISSUE}"
+            echo "commit 2: $NGEN generated file(s)"
+          fi
+          N=$((NIN + NGEN))
+          [ "$N" -eq 0 ] && echo "nothing to commit (no real changes vs ${BASE})"
 
           # 5) Push + open the PR (base = the epic branch, head = work-<issue>). Force-push so a
           #    re-dispatch idempotently re-bases the branch instead of failing non-fast-forward.
@@ -369,7 +370,32 @@ jobs:
             echo "no commits ahead of ${BASE} — no PR to open"
           fi
 
-          # 6) Verdict for the artifact-gate: pi wrote files but nothing landed on the branch = fail.
+          # 6) RUN RECORD (#1849) — a FACTUAL note on the PR: what landed, split by bucket, and what
+          #    changed but was excluded (junk). Derived from the commit plan + git, NOT pi's
+          #    narration — so it can't claim work it didn't do. This is the signal that would have
+          #    made #1830 (config committed, collection silently dropped) obvious at a glance.
+          PRNUM="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
+          if [ -n "$PRNUM" ]; then
+            cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sort -u | grep . > "$RUNNER_TEMP/committed.txt" || true
+            EXCL="$(comm -23 <(sort -u "$RUNNER_TEMP/changed.txt" | grep .) "$RUNNER_TEMP/committed.txt" 2>/dev/null | grep -c . || echo 0)"
+            REC="$RUNNER_TEMP/run-record.md"
+            {
+              echo "> 🤖 **pi worker — run record** · _facts from the commit + git, not pi's narration (#1849)_"
+              echo
+              echo "**Committed ${N} file(s)** onto \`${BR}\` → \`${BASE}\`:"
+              echo "- 📝 inputs (hand-authored — schema/config): **${NIN}**"
+              [ "$NIN" -gt 0 ] && grep . "$RUNNER_TEMP/inputs.txt" | head -20 | sed 's#^#  - `#; s#$#`#'
+              echo "- ⚙️ generated (CLI/MCP output — e.g. \`crouton generate\`): **${NGEN}**"
+              [ "$NGEN" -gt 0 ] && grep . "$RUNNER_TEMP/generated.txt" | head -20 | sed 's#^#  - `#; s#$#`#'
+              [ "$NGEN" -gt 20 ] && echo "  - …and $((NGEN-20)) more"
+              echo "- 🗑️ changed but excluded as junk (node_modules/.nuxt/.pi/…): **${EXCL}**"
+              echo
+              echo "<sub>Acceptance (typecheck/boot) is a separate gate — this record only states what landed.</sub>"
+            } > "$REC"
+            gh pr comment "$PRNUM" --body-file "$REC" 2>&1 | tail -1 || true
+          fi
+
+          # 7) Verdict for the artifact-gate: pi wrote files but nothing landed on the branch = fail.
           AHEAD="$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)"
           if [ "$N" -gt 0 ] && [ "$AHEAD" -eq 0 ]; then
             echo "::error::pi wrote $N file(s) but nothing landed on the branch (#1764)"
