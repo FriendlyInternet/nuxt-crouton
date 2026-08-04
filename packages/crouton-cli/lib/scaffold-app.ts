@@ -141,6 +141,10 @@ function tmplPackageJson(vars: ScaffoldVars): string {
     dev: 'nuxt dev',
     generate: 'nuxt generate',
     preview: 'nuxt preview',
+    // A scaffolded app is verifiable out of the box — the worker acceptance gate (#1849/#1866)
+    // runs `pnpm --filter <app> typecheck`, and `nuxt typecheck` runs `nuxt prepare` first so
+    // auto-imports resolve (a raw `npx nuxt typecheck` without prepare false-fails on them).
+    typecheck: 'nuxt typecheck',
     // Runs the per-collection schema-smoke tests the generator emits (#785).
     test: 'vitest run',
     // Guarded: a whole-monorepo `pnpm install` (e.g. on Cloudflare) runs every
