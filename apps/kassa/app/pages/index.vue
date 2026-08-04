@@ -15,12 +15,19 @@ definePageMeta({
   layout: false,
   middleware: [
     async () => {
-      // Captured BEFORE the await below (#1839). Nuxt binds the middleware's
-      // instance with callWithNuxt, which only spans the synchronous portion —
-      // and this app doesn't enable experimental.asyncContext. So on the server
-      // the first `await` unbinds it, and a bare navigateTo() after it throws
-      // "[nuxt] instance unavailable" → a 500 on every signed-in load of '/'.
-      // runWithContext re-binds the instance for the post-await navigation.
+      // Captured BEFORE the await below (#1839).
+      //
+      // Nuxt's context is only bound for the SYNCHRONOUS part of a middleware;
+      // normally its build-time unctx transform patches every `await` to re-bind
+      // afterwards. That transform does not reach this callback: it descends into
+      // `definePageMeta.middleware` only when the value is directly a function,
+      // and skips it when the value is an ARRAY (unctx `transformFunctionBody`
+      // early-returns on anything that isn't a Function/Arrow expression).
+      //
+      // So here the context really is gone after `await`, and a bare navigateTo()
+      // threw "[nuxt] instance unavailable" — a 500 on every signed-in load of
+      // '/'. runWithContext re-binds it explicitly, which also means this keeps
+      // working regardless of the array form or the transform's coverage.
       const nuxtApp = useNuxtApp()
 
       const { loggedIn } = useAuth()
