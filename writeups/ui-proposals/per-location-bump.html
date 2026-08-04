@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<title>Bevestiging per locatie</title>
+<style>
+  :root{--page:#0a0e17;--ink:#e8edf6;--muted:#8b97ad;--card:#151b27;--card2:#11161f;
+        --line:#222b3a;--green:#34d399;--amber:#fbbf24}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;line-height:1.5}
+  .wrap{max-width:1120px;margin:0 auto;padding:30px 22px 50px}
+  h1{font-size:27px;margin:0 0 4px}
+  .lede{color:var(--muted);margin:0 0 24px;font-size:14.5px}
+  h3{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 9px}
+  .row{display:grid;grid-template-columns:280px 1fr;gap:20px;align-items:start}
+  .panel{background:#101725;border:1px solid var(--line);border-radius:14px;padding:15px}
+
+  .loc{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;background:var(--card);border:1px solid var(--line);border-radius:9px;margin-bottom:7px;font-size:13.5px}
+  .sw{width:34px;height:19px;border-radius:99px;position:relative;flex:none;background:#2b3547}
+  .sw.on{background:var(--green)}
+  .sw i{position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#fff}
+  .sw.on i{left:17px}
+  .hint{font-size:11.5px;color:var(--muted);margin-top:2px}
+
+  .ord{background:var(--card2);border:1px solid var(--line);border-radius:11px;padding:12px 13px;margin-bottom:12px}
+  .ord .h{font-weight:800;font-size:15px;margin-bottom:7px}
+  .line{display:flex;align-items:center;gap:9px;font-size:13px;padding:4px 0;border-bottom:1px solid #1b2230}
+  .line:last-child{border:0}
+  .line .q{color:var(--green);font-weight:800;min-width:20px}
+  .line .nm{flex:1}
+  .pill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
+  .pill.k{color:var(--amber);border-color:#5c4a13}
+  .pill.b{color:var(--green);border-color:#1f5e47}
+
+  .scr{background:var(--card2);border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-top:4px}
+  .scr .sh{padding:7px 11px;background:#0d1220;border-bottom:1px solid var(--line);font-size:12px;font-weight:700;display:flex;justify-content:space-between}
+  .tk{padding:9px 11px}
+  .tk .n{font-weight:800;font-size:14px}
+  .tk ul{list-style:none;margin:4px 0 8px;padding:0;font-size:12px;color:#cdd6e6}
+  .btn{display:block;text-align:center;font-size:10.5px;font-weight:800;letter-spacing:.05em;padding:7px;text-transform:uppercase;background:var(--green);color:#04231a;border-radius:7px}
+  .none{padding:16px;text-align:center;color:var(--muted);font-size:12px}
+  .note{margin-top:11px;padding:9px 11px;border-radius:9px;font-size:12.5px;background:rgba(52,211,153,.07);border:1px solid #1f5e47;color:#a9f0d2}
+  .arrow{color:var(--muted);font-size:12.5px;margin:9px 0 4px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bevestiging per locatie</h1>
+  <p class="lede">Elke locatie krijgt een schakelaar: moet iemand bevestigen dat het buiten is, of gaat het meteen mee?</p>
+
+  <div class="row">
+    <div class="panel">
+      <h3>Instellingen · locaties</h3>
+      <div class="loc"><span>🍳 Keuken</span><span class="sw on"><i></i></span></div>
+      <div class="hint" style="margin:-3px 0 10px 2px">moet bevestigd worden</div>
+      <div class="loc"><span>🍺 Bar</span><span class="sw"><i></i></span></div>
+      <div class="hint" style="margin:-3px 0 10px 2px">gaat meteen mee — geen scherm</div>
+      <div class="loc"><span>🍰 Dessert</span><span class="sw"><i></i></span></div>
+      <div class="hint" style="margin:-3px 0 0 2px">gaat meteen mee — geen scherm</div>
+    </div>
+
+    <div class="panel">
+      <h3>Wat er dan gebeurt</h3>
+
+      <div class="ord">
+        <div class="h">Bestelling #17</div>
+        <div class="line"><span class="q">2×</span><span class="nm">Frieten</span><span class="pill k">keuken · bevestigen</span></div>
+        <div class="line"><span class="q">1×</span><span class="nm">Pils</span><span class="pill b">bar · meteen mee</span></div>
+      </div>
+
+      <div class="arrow">↓ alleen het keukendeel komt op een scherm</div>
+
+      <div class="scr">
+        <div class="sh"><span>🍳 Keukenscherm</span><span style="font-weight:500;color:var(--muted)">1 te leveren</span></div>
+        <div class="tk">
+          <div class="n">#17</div>
+          <ul><li><b style="color:var(--green)">2×</b> Frieten</li></ul>
+          <div class="btn">Afgegeven</div>
+        </div>
+      </div>
+
+      <div class="scr">
+        <div class="sh"><span>🍺 Barscherm</span><span style="font-weight:500;color:var(--muted)">—</span></div>
+        <div class="none">geen scherm nodig · pils telt meteen als afgegeven</div>
+      </div>
+
+      <div class="note">#17 is volledig geleverd zodra de <b>keuken</b> tikt. De pils vroeg nooit om bevestiging.</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

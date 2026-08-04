@@ -122,8 +122,8 @@
           "title": "Écran cuisine",
           "live": "en direct",
           "active": "{count} actives",
-          "allCaughtUp": "Tout est à jour — aucune commande en cours.",
-          "bump": "Validé",
+          "allCaughtUp": "Rien à remettre — tout est parti.",
+          "bump": "Remis",
           "staff": "personnel",
           "eventNotFound": "Événement introuvable",
           "stale": "Non actualisé",
@@ -179,31 +179,6 @@
           "discard": "Supprimer",
           "ticket": "Ticket",
           "receipt": "Reçu"
-        }
-      },
-      "passScreen": {
-        "name": "Passe",
-        "description": "Commandes terminées par tous les postes, prêtes à remettre au client. Une pression enregistre la remise.",
-        "fields": {
-          "eventSlug": {
-            "label": "Événement",
-            "description": "Quel événement cette passe affiche."
-          }
-        },
-        "ui": {
-          "title": "Passe",
-          "live": "en direct",
-          "stale": "Non actualisé",
-          "connecting": "connexion",
-          "staleHint": "Cet écran a perdu le contact avec le serveur — les commandes affichées peuvent être obsolètes. Vérifiez la connexion.",
-          "ready": "{count} prêtes à remettre",
-          "allHandedOut": "Rien en attente — toutes les commandes terminées ont été remises.",
-          "handOver": "Remise",
-          "handOverAnyway": "Remettre quand même",
-          "staff": "personnel",
-          "incomplete": "Article sans poste",
-          "incompleteHint": "Un article n'a pas de lieu de préparation, donc aucun poste ne peut le faire. Vérifiez le produit.",
-          "eventNotFound": "Événement introuvable"
         }
       }
     },
@@ -279,8 +254,7 @@
       "kitchenDisplay": "Écran cuisine",
       "orders": "Commandes",
       "clients": "Clients",
-      "printBridge": "Passerelle d’impression",
-      "passScreen": "Passe"
+      "printBridge": "Passerelle d’impression"
     },
     "cart": {
       "title": "Panier",

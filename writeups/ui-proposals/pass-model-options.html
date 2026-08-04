@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<title>Doorgeefluik — één scherm of twee?</title>
+<style>
+  :root{ --page:#0a0e17; --ink:#e8edf6; --muted:#8b97ad; --card:#151b27; --card2:#11161f;
+         --line:#222b3a; --green:#34d399; --amber:#fbbf24; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--page);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;line-height:1.5}
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 22px 60px}
+  h1{font-size:30px;margin:0 0 4px}
+  .lede{color:var(--muted);margin:0 0 26px;font-size:15px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+  .opt{background:#101725;border:1px solid var(--line);border-radius:16px;padding:18px}
+  .opt h2{margin:0 0 2px;font-size:17px;display:flex;align-items:center;gap:8px}
+  .tag{font-size:11px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-weight:600}
+  .tag.now{color:var(--amber);border-color:#5c4a13}
+  .tag.new{color:var(--green);border-color:#1f5e47}
+  .sub{color:var(--muted);font-size:13px;margin:0 0 16px}
+
+  .screen{background:var(--card2);border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-bottom:10px}
+  .shead{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#0d1220;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:700}
+  .shead .cnt{font-weight:500;color:var(--muted);font-size:11.5px}
+  .tickets{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px}
+  .t{background:var(--card);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .t .n{font-weight:800;font-size:16px;padding:7px 9px 3px}
+  .t ul{list-style:none;margin:0;padding:0 9px 8px;font-size:11.5px;color:#cdd6e6}
+  .t li{display:flex;gap:6px}
+  .t li b{color:var(--green);min-width:16px}
+  .btn{display:block;text-align:center;font-size:10.5px;font-weight:800;letter-spacing:.05em;padding:7px;text-transform:uppercase}
+  .btn.g{background:var(--green);color:#04231a}
+  .btn.a{background:var(--amber);color:#2a1f03}
+  .empty{padding:22px;text-align:center;color:var(--muted);font-size:12.5px}
+
+  .arrow{text-align:center;color:var(--muted);font-size:19px;margin:2px 0 8px}
+  .flow{background:#0d1220;border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:12.5px;color:#cdd6e6;margin-top:12px}
+  .flow b{color:#fff}
+  .flow .step{display:flex;gap:8px;padding:2px 0}
+  .flow .num{color:var(--green);font-weight:800;min-width:15px}
+  .verdict{margin-top:12px;padding:10px 12px;border-radius:9px;font-size:12.5px;background:rgba(52,211,153,.07);border:1px solid #1f5e47;color:#a9f0d2}
+  .verdict.warn{background:rgba(251,191,36,.07);border-color:#5c4a13;color:#f4d58d}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Doorgeefluik — één scherm of twee?</h1>
+  <p class="lede">Je hebt nu 17 bestellingen. Waarom staat het doorgeefluik leeg? Dit is het verschil.</p>
+
+  <div class="cols">
+
+    <!-- ============ A: what exists now ============ -->
+    <div class="opt">
+      <h2>A <span class="tag now">nu gebouwd</span></h2>
+      <p class="sub">Twee stappen: eerst meldt elke post "klaar", pas dan mag het weg.</p>
+
+      <div class="screen">
+        <div class="shead"><span>🍳 Keukenscherm</span><span class="cnt">17 open</span></div>
+        <div class="tickets">
+          <div class="t"><div class="n">#17</div><ul><li><b>2×</b> Frieten</li></ul><div class="btn a">Klaar</div></div>
+          <div class="t"><div class="n">#16</div><ul><li><b>1×</b> Pils</li></ul><div class="btn a">Klaar</div></div>
+        </div>
+      </div>
+      <div class="arrow">↓ pas nadat élke post "klaar" tikte</div>
+      <div class="screen">
+        <div class="shead"><span>🤝 Doorgeefluik</span><span class="cnt">0 klaar</span></div>
+        <div class="empty">✓✓ Niets in wachtrij</div>
+      </div>
+
+      <div class="verdict warn">Dit is precies wat je nu ziet: 17 bestellingen, maar niemand tikte "klaar" op het keukenscherm — dus het doorgeefluik blijft leeg.</div>
+    </div>
+
+    <!-- ============ B: what you described ============ -->
+    <div class="opt">
+      <h2>B <span class="tag new">wat jij beschrijft</span></h2>
+      <p class="sub">Eén stap: de bestelling verschijnt, en wordt afgevinkt zodra ze buiten is.</p>
+
+      <div class="screen">
+        <div class="shead"><span>🤝 Doorgeefluik</span><span class="cnt">17 nog te leveren</span></div>
+        <div class="tickets">
+          <div class="t"><div class="n">#17</div><ul><li><b>2×</b> Frieten</li><li><b>1×</b> Pils</li></ul><div class="btn g">Afgegeven</div></div>
+          <div class="t"><div class="n">#16</div><ul><li><b>1×</b> Burger</li></ul><div class="btn g">Afgegeven</div></div>
+          <div class="t"><div class="n">#15</div><ul><li><b>3×</b> Koffie</li></ul><div class="btn g">Afgegeven</div></div>
+          <div class="t"><div class="n">#14</div><ul><li><b>1×</b> Frieten</li></ul><div class="btn g">Afgegeven</div></div>
+        </div>
+      </div>
+
+      <div class="flow">
+        <div class="step"><span class="num">1</span><span>Bestelling komt binnen → <b>staat er meteen op</b></span></div>
+        <div class="step"><span class="num">2</span><span>Klaar én buiten → <b>één tik</b></span></div>
+        <div class="step"><span class="num">3</span><span>Weg van het scherm, teller zakt</span></div>
+      </div>
+
+      <div class="verdict">Alles wat je ziet = nog te leveren. Geen tussenstap, geen tweede scherm.</div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

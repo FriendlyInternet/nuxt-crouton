@@ -6,7 +6,8 @@ import { z } from 'zod'
 
 const bodySchema = z.object({
   eventId: z.string().min(1, 'eventId is required'),
-  title: z.string().min(1, 'title is required')
+  title: z.string().min(1, 'title is required'),
+  requiresHandover: z.boolean().nullish()
 }).partial().strip()
 
 export default defineEventHandler(async (event) => {

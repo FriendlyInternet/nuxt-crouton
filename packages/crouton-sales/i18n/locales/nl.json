@@ -123,8 +123,8 @@
           "title": "Keukenscherm",
           "live": "live",
           "active": "{count} actief",
-          "allCaughtUp": "Alles bijgewerkt — geen open bestellingen.",
-          "bump": "Klaar",
+          "allCaughtUp": "Niets af te geven — alles is buiten.",
+          "bump": "Afgegeven",
           "staff": "personeel",
           "eventNotFound": "Evenement niet gevonden",
           "stale": "Wordt niet bijgewerkt",
@@ -180,31 +180,6 @@
           "discard": "Verwijderen",
           "ticket": "Ticket",
           "receipt": "Bon"
-        }
-      },
-      "passScreen": {
-        "name": "Doorgeefluik",
-        "description": "Bestellingen die elke post afgewerkt heeft, klaar om aan de klant te geven. Eén tik registreert de afgifte.",
-        "fields": {
-          "eventSlug": {
-            "label": "Evenement",
-            "description": "Welk evenement dit doorgeefluik toont."
-          }
-        },
-        "ui": {
-          "title": "Doorgeefluik",
-          "live": "live",
-          "stale": "Wordt niet bijgewerkt",
-          "connecting": "verbinden",
-          "staleHint": "Dit scherm heeft geen verbinding meer met de server — de getoonde bestellingen kunnen verouderd zijn. Controleer de verbinding.",
-          "ready": "{count} klaar om af te geven",
-          "allHandedOut": "Niets in wachtrij — alle afgewerkte bestellingen zijn afgegeven.",
-          "handOver": "Afgegeven",
-          "handOverAnyway": "Toch afgegeven",
-          "staff": "personeel",
-          "incomplete": "Item zonder post",
-          "incompleteHint": "Eén item heeft geen bereidingslocatie, dus geen enkele post kan het maken. Controleer het product.",
-          "eventNotFound": "Evenement niet gevonden"
         }
       }
     },
@@ -280,8 +255,7 @@
       "kitchenDisplay": "Keukenscherm",
       "orders": "Bestellingen",
       "clients": "Klanten",
-      "printBridge": "Printbrug",
-      "passScreen": "Doorgeefluik"
+      "printBridge": "Printbrug"
     },
     "cart": {
       "title": "Winkelwagen",

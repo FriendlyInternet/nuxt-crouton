@@ -123,8 +123,8 @@
           "title": "Kitchen Display",
           "live": "live",
           "active": "{count} active",
-          "allCaughtUp": "All caught up — no open orders.",
-          "bump": "Bump",
+          "allCaughtUp": "Nothing to send out — everything has gone out.",
+          "bump": "Sent out",
           "staff": "staff",
           "eventNotFound": "Event not found",
           "stale": "Not updating",
@@ -180,31 +180,6 @@
           "discard": "Discard",
           "ticket": "Ticket",
           "receipt": "Receipt"
-        }
-      },
-      "passScreen": {
-        "name": "Pass Screen",
-        "description": "Orders every station has finished, ready to hand to the customer. One tap records the handover.",
-        "fields": {
-          "eventSlug": {
-            "label": "Event",
-            "description": "Which event this pass screen shows."
-          }
-        },
-        "ui": {
-          "title": "Pass",
-          "live": "live",
-          "stale": "Not updating",
-          "connecting": "connecting",
-          "staleHint": "This board has lost contact with the server — the orders shown may be out of date. Check the connection.",
-          "ready": "{count} ready to hand out",
-          "allHandedOut": "Nothing waiting — every finished order has gone out.",
-          "handOver": "Handed over",
-          "handOverAnyway": "Hand over anyway",
-          "staff": "staff",
-          "incomplete": "Item without a station",
-          "incompleteHint": "One item has no prep location, so no station can make it. Check the product.",
-          "eventNotFound": "Event not found"
         }
       }
     },
@@ -280,8 +255,7 @@
       "kitchenDisplay": "Kitchen Display",
       "orders": "Orders",
       "clients": "Clients",
-      "printBridge": "Print Bridge",
-      "passScreen": "Pass Screen"
+      "printBridge": "Print Bridge"
     },
     "cart": {
       "title": "Cart",

@@ -1,5 +1,17 @@
 [
   {
+    "collection": "locations",
+    "fields": [
+      "eventId",
+      "title",
+      "requiresHandover"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-04T14:13:17.490Z",
+    "layer": "sales",
+    "gitSha": "36da62c64"
+  },
+  {
     "collection": "pages",
     "fields": [
       "title",
@@ -1619,19 +1631,6 @@
     ],
     "generator": "crouton-cli",
     "timestamp": "2026-06-09T14:22:26.615Z",
-    "layer": "sales",
-    "gitSha": "195d15f8"
-  },
-  {
-    "collection": "eventsettings",
-    "fields": [
-      "eventId",
-      "settingKey",
-      "settingValue",
-      "description"
-    ],
-    "generator": "crouton-cli",
-    "timestamp": "2026-06-09T14:22:26.593Z",
     "layer": "sales",
     "gitSha": "195d15f8"
   }

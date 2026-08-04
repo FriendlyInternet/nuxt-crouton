@@ -2,7 +2,7 @@
  * @crouton-generated
  * @collection locations
  * @layer sales
- * @generated 2026-06-16
+ * @generated 2026-08-04
  *
  * ## AI Context
  * - Composable: useSalesLocations
@@ -10,7 +10,7 @@
  * - API endpoint: /api/teams/[id]/sales-locations
  * - Form component: SalesLocationsForm
  * - List component: SalesLocationsList
- * - Fields: id, eventId, title
+ * - Fields: id, eventId, title, requiresHandover
  *
  * ## Common Modifications
  * - Add field: Add to schema object and defaultValues
@@ -28,13 +28,15 @@ import { z } from 'zod'
 // Keep schema outside of objects that might be serialized/cloned during SSR
 export const salesLocationSchema = z.object({
   eventId: z.string().min(1, 'eventId is required'),
-  title: z.string().min(1, 'title is required')
+  title: z.string().min(1, 'title is required'),
+  requiresHandover: z.boolean().optional()
 })
 
 export const salesLocationsColumns = [
   { accessorKey: 'id', header: 'Id' },
   { accessorKey: 'eventId', header: 'EventId' },
-  { accessorKey: 'title', header: 'Title' }
+  { accessorKey: 'title', header: 'Title' },
+  { accessorKey: 'requiresHandover', header: 'RequiresHandover' }
 ]
 
 // Config object WITHOUT schema - safe for SSR serialization
@@ -45,7 +47,8 @@ const _salesLocationsConfig = {
   componentName: 'SalesLocationForm',
   defaultValues: {
     eventId: '',
-    title: ''
+    title: '',
+    requiresHandover: false
   },
   columns: salesLocationsColumns,
   fields: [
@@ -59,6 +62,12 @@ const _salesLocationsConfig = {
           "name": "title",
           "type": "string",
           "label": "Location Name",
+          "area": "main"
+      },
+      {
+          "name": "requiresHandover",
+          "type": "boolean",
+          "label": "Moet bevestigd worden",
           "area": "main"
       }
   ],

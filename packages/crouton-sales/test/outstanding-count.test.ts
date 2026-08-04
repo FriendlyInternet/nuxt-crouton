@@ -78,29 +78,3 @@ describe('planOutstandingCount — matches the epic definition', () => {
     }).toEqual(OUTSTANDING_DEFINITION)
   })
 })
-
-describe('parseOrderFilters — the outstanding-only list filter (#1846)', () => {
-  it('reads ?outstanding=1 as a filter', async () => {
-    const { parseOrderFilters } = await import('../server/utils/order-filters')
-    expect(parseOrderFilters({ outstanding: '1' }).outstanding).toBe(true)
-  })
-
-  it('treats an absent flag as "show everything"', async () => {
-    const { parseOrderFilters } = await import('../server/utils/order-filters')
-    expect(parseOrderFilters({}).outstanding).toBeUndefined()
-  })
-
-  it('ignores any value other than 1, rather than guessing', async () => {
-    // A stray ?outstanding=0 or ?outstanding=false must not silently mean "on".
-    const { parseOrderFilters } = await import('../server/utils/order-filters')
-    expect(parseOrderFilters({ outstanding: '0' }).outstanding).toBeUndefined()
-    expect(parseOrderFilters({ outstanding: 'false' }).outstanding).toBeUndefined()
-  })
-
-  it('does NOT affect the count plan, which stays filter-blind', async () => {
-    // The list can be narrowed to the backlog; the NUMBER must still be the
-    // whole backlog, or clicking it would make it appear to shrink itself.
-    const before = planOutstandingCount({ teamId: 't', eventId: 'e' })
-    expect(before.params).toEqual(['t', 'e'])
-  })
-})

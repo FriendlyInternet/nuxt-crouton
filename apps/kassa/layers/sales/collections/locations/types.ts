@@ -2,14 +2,14 @@
  * @crouton-generated
  * @collection locations
  * @layer sales
- * @generated 2026-06-16
+ * @generated 2026-08-04
  *
  * ## AI Context
  * - Main interface: SalesLocation
  * - Form data type: SalesLocationFormData
  * - New item type: NewSalesLocation
  * - Form props: SalesLocationFormProps
- * - Fields: id, eventId, title
+ * - Fields: id, eventId, title, requiresHandover
  *
  * ## Common Modifications
  * - Add field: Add to interface and ensure schema matches
@@ -29,6 +29,7 @@ export interface SalesLocation {
   owner: string
   eventId: string
   title: string
+  requiresHandover?: boolean
   createdAt: Date
   updatedAt: Date
   createdBy: string
@@ -38,9 +39,15 @@ export interface SalesLocation {
 }
 
 export type SalesLocationFormData = z.infer<typeof salesLocationSchema>
+// Optional (undefined-including) props also accept null on the WRITE path: the
+// server body schema validates non-required fields as .nullish() (#1403 — a
+// nullable column round-trips null, and null is how a client clears a field),
+// so the create input must admit the validated body. The read interface above
+// deliberately stays narrow (form bindings/consumers never want null).
+type NullableOptionals<T> = { [K in keyof T]: undefined extends T[K] ? T[K] | null : T[K] }
 // New* allows the server-set fields (id, createdBy, updatedBy) as optional — the
 // generated POST endpoint provides them; other callers (e.g. seed) may omit them.
-export type NewSalesLocation = Omit<SalesLocation, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'> & { id?: string; createdBy?: string; updatedBy?: string }
+export type NewSalesLocation = NullableOptionals<Omit<SalesLocation, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'>> & { id?: string; createdBy?: string; updatedBy?: string }
 
 // Props type for the Form component
 export interface SalesLocationFormProps {

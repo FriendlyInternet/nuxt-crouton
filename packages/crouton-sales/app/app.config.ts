@@ -382,44 +382,6 @@ const kitchenDisplayBlock: CroutonBlockDefinition = {
   }
 }
 
-// Pass Screen — the second stage of the KDS loop (#1762, epic #1755). Shows
-// only orders where EVERY station has finished, one tile per ORDER (not per
-// order × location like the kitchen display — the runner carries the whole
-// order out), each with one wide button that records the handover. No location
-// filter: a pass is not a station, it sees the whole event.
-const passScreenBlock: CroutonBlockDefinition = {
-  type: 'passScreenBlock',
-  name: 'sales.blocks.passScreen.name',
-  description: 'sales.blocks.passScreen.description',
-  icon: 'i-lucide-hand-platter',
-  category: 'kassa',
-  clientOnly: true,
-  defaultAttrs: {
-    eventSlug: ''
-  },
-  components: {
-    editorView: 'SalesBlocksPassScreenView',
-    renderer: 'SalesBlocksPassScreenRender'
-  },
-  propertyComponents: {
-    eventSlug: 'SalesBlocksPropertiesEventSlugPicker'
-  },
-  schema: [
-    {
-      name: 'eventSlug',
-      type: 'eventSlug',
-      label: 'sales.blocks.passScreen.fields.eventSlug.label',
-      description: 'sales.blocks.passScreen.fields.eventSlug.description'
-    }
-  ],
-  tiptap: {
-    parseHTMLTag: 'div[data-type="pass-screen-block"]',
-    attributes: {
-      eventSlug: { default: '' }
-    }
-  }
-}
-
 // Print Bridge — the browser-side drainer for the `browser-print` (AirPrint)
 // output driver. A drop-on-a-page screen near the printer that prints pending
 // tickets via the OS print dialog. The editor fixes the event by slug.
@@ -527,7 +489,6 @@ export default defineAppConfig({
     salesOrdersBlock,
     salesClientsBlock,
     kitchenDisplayBlock,
-    passScreenBlock,
     printBridgeBlock,
     salesChartBlock,
     salesProductMatrixBlock

@@ -33,11 +33,12 @@
  * Reads the consuming app's generated `sales` layer schemas (the package ships
  * the logic; the app owns the tables).
  */
-import { and, asc, eq, inArray, isNull, ne } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, ne, or } from 'drizzle-orm'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
 import { salesKdsbumps } from '~~/layers/sales/collections/kdsbumps/server/database/schema'
+import { salesLocations } from '~~/layers/sales/collections/locations/server/database/schema'
 import {
   planDisplayJobsQuery,
   shapeDisplayTickets,
@@ -85,6 +86,7 @@ export default defineEventHandler(async (event) => {
     .from(salesOrderitems)
     .innerJoin(salesOrders, eq(salesOrders.id, salesOrderitems.orderId))
     .leftJoin(salesProducts, eq(salesProducts.id, salesOrderitems.productId))
+    .leftJoin(salesLocations, eq(salesLocations.id, salesProducts.locationId))
     .leftJoin(salesKdsbumps, and(
       eq(salesKdsbumps.orderId, salesOrderitems.orderId),
       eq(salesKdsbumps.locationId, salesProducts.locationId)
@@ -93,6 +95,10 @@ export default defineEventHandler(async (event) => {
       eq(salesOrders.eventId, eventId),
       ne(salesOrders.status, 'cancelled'),
       isNull(salesKdsbumps.id),
+      // A location that opted out of confirmation never reaches a screen — its
+      // part is handed straight over (#1851). NULL predates the migration and
+      // counts as requiring, so historical rows keep appearing.
+      or(isNull(salesLocations.requiresHandover), eq(salesLocations.requiresHandover, true)),
       // Bounded by MAX_CONFIGURABLE_LOCATIONS, which the plan already enforced.
       plan.locations.length ? inArray(salesProducts.locationId, plan.locations) : undefined
     ))
