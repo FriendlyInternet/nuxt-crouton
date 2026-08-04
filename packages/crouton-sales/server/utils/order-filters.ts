@@ -11,6 +11,16 @@ export interface OrderFilters {
   clientId?: string
   printerId?: string
   printStatus?: string
+  /**
+   * Narrow the LIST to the backlog (not cancelled, not handed over) — the
+   * click-through on the outstanding counter (#1846). Deliberately absent
+   * rather than `false` when off, so it drops out of the WHERE like the others.
+   *
+   * NB this filters the list only. The outstanding NUMBER is computed outside
+   * every filter (`planOutstandingCount`), so clicking it never makes it appear
+   * to shrink itself.
+   */
+  outstanding?: true
 }
 
 // Print-status buckets (crouton-printing job status is TEXT '0'|'1'|'2'|'9'):
@@ -38,7 +48,10 @@ export function parseOrderFilters(query: Record<string, unknown>): OrderFilters 
     owner: trimmed(query.owner),
     clientId: trimmed(query.clientId),
     printerId: trimmed(query.printerId),
-    printStatus: trimmed(query.printStatus)
+    printStatus: trimmed(query.printStatus),
+    // Only the literal '1' turns it on — a stray ?outstanding=0 or =false must
+    // not read as truthy, which a plain presence check would do.
+    outstanding: trimmed(query.outstanding) === '1' ? true : undefined
   }
 }
 

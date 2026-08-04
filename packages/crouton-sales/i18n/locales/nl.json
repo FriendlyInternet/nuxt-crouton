@@ -619,8 +619,10 @@
         "settingsDesc": "Eventgegevens, printers, bontekst en helpers",
         "settingsStat": "printers"
       },
-      "outstanding": "{count} wachten nog",
-      "outstandingNone": "Niets in wachtrij"
+      "outstanding": "{count} in bereiding",
+      "outstandingNone": "Niets in bereiding",
+      "outstandingFilter": "Toon alleen deze",
+      "outstandingFilterClear": "Toon alle bestellingen"
     },
     "helpers": {
       "title": "Actieve helpers",

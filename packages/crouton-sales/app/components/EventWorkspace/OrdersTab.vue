@@ -57,12 +57,16 @@ const selectedPrintStatus = ref<string | null>(null)
 const ordersPageSize = 25
 const ordersPage = ref(1)
 
+// Narrow the list to the backlog. Declared here because `ordersUrl` reads it.
+const outstandingOnly = ref(false)
+
 const ordersUrl = computed(() => {
   const params = new URLSearchParams({ page: String(ordersPage.value), pageSize: String(ordersPageSize) })
   if (selectedHelperName.value) params.set('owner', selectedHelperName.value)
   if (selectedClientId.value) params.set('clientId', selectedClientId.value)
   if (selectedPrinterId.value) params.set('printerId', selectedPrinterId.value)
   if (selectedPrintStatus.value) params.set('printStatus', selectedPrintStatus.value)
+  if (outstandingOnly.value) params.set('outstanding', '1')
   return `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/orders?${params}`
 })
 
@@ -78,6 +82,16 @@ const orders = computed(() => ordersData.value?.items || [])
 // server computes it OUTSIDE the list filters, so it stays the event's real
 // backlog even while the table below is filtered down to one helper.
 const outstanding = computed(() => ordersData.value?.outstanding ?? 0)
+
+// Click the backlog to narrow the list to exactly those orders. This rides the
+// normal filter path (server-side, resets to page 1), so it composes with the
+// helper/client/printer filters rather than fighting them. The NUMBER itself
+// stays put — it is computed outside every filter by design (#1763), so it
+// keeps reading the true backlog while the list shows a slice of it.
+function toggleOutstandingOnly() {
+  outstandingOnly.value = !outstandingOnly.value
+  ordersPage.value = 1
+}
 
 const ordersPageCount = computed(() => Math.max(1, Math.ceil((ordersData.value?.total ?? 0) / ordersPageSize)))
 
@@ -388,15 +402,29 @@ function toggleExpand(id: string) {
          one number that does NOT follow them, and putting it below would imply
          it did. Zero is worth showing too — "nothing waiting" is the answer
          someone walked over to get. -->
-    <div class="flex items-center gap-2 text-sm">
-      <UIcon
-        :name="outstanding > 0 ? 'i-lucide-hourglass' : 'i-lucide-check-check'"
-        class="size-4"
-        :class="outstanding > 0 ? 'text-warning' : 'text-success'"
-      />
-      <span :class="outstanding > 0 ? 'text-highlighted font-medium' : 'text-muted'">
-        {{ outstanding > 0 ? t('sales.workspace.outstanding', { count: outstanding }) : t('sales.workspace.outstandingNone') }}
-      </span>
+    <UButton
+      v-if="outstanding > 0"
+      :color="outstandingOnly ? 'warning' : 'neutral'"
+      :variant="outstandingOnly ? 'subtle' : 'ghost'"
+      size="sm"
+      icon="i-lucide-hourglass"
+      :label="t('sales.workspace.outstanding', { count: outstanding })"
+      :aria-pressed="outstandingOnly"
+      :title="outstandingOnly ? t('sales.workspace.outstandingFilterClear') : t('sales.workspace.outstandingFilter')"
+      class="-ms-2"
+      :ui="{ leadingIcon: outstandingOnly ? '' : 'text-warning' }"
+      @click="toggleOutstandingOnly"
+    >
+      <template #trailing>
+        <UIcon v-if="outstandingOnly" name="i-lucide-x" class="size-3.5 opacity-70" />
+      </template>
+    </UButton>
+
+    <!-- Nothing outstanding: a statement, not a control — there is no slice to
+         filter to, so offering a button would be a dead end. -->
+    <div v-else class="flex items-center gap-2 text-sm text-muted">
+      <UIcon name="i-lucide-check-check" class="size-4 text-success" />
+      {{ t('sales.workspace.outstandingNone') }}
     </div>
 
     <!-- Filters live behind a toggle (in the pane header when the parent

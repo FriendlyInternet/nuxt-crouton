@@ -619,8 +619,10 @@
         "settingsDesc": "Event details, printers, receipt text and helpers",
         "settingsStat": "printers"
       },
-      "outstanding": "{count} still waiting",
-      "outstandingNone": "Nothing waiting"
+      "outstanding": "{count} in progress",
+      "outstandingNone": "Nothing in progress",
+      "outstandingFilter": "Show only these",
+      "outstandingFilterClear": "Show all orders"
     },
     "helpers": {
       "title": "Active Helpers",
