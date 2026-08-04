@@ -37,9 +37,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/github-script@v7
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           script: |
             const { owner, repo } = context.repo
+            const OWNER = process.env.OWNER_LOGIN || 'pmcp'
             const PR_STICKY = '<!-- crouton-pipeline-status -->'
             const EPIC_ROLLUP = '<!-- crouton-epic-rollup -->'
             const now = new Date().toISOString().replace('T', ' ').slice(0, 16) + 'Z'
@@ -99,8 +102,30 @@ jobs:
                 `<sub>🤖 agent pipeline (#337) · \`${pr.head.ref}\` → \`${pr.base.ref}\` · ` +
                 `<a href="${pr.html_url}/checks">checks</a> · updated ${now}</sub>`
               await upsert(pr.number, PR_STICKY, body)
+              if (st.word === 'failing') await pingOnRed(pr, st)
               const epicMatch = /^epic\/(\d+)-/.exec(pr.base.ref)
               if (epicMatch) await updateEpic(Number(epicMatch[1]))
+            }
+
+            // One-shot @mention on a fresh failure — the ONLY loud signal (#1815). A red pipeline
+            // PR won't auto-merge into its epic (automerge-epic-subpr.yml leaves it open), so it
+            // needs the owner. Keyed by head SHA so a re-fired check_suite for the SAME commit
+            // never re-pings; a new failing commit (new SHA) does. Mentions don't fire on comment
+            // EDITS, so this is a distinct create guarded by the SHA marker (never the sticky).
+            async function pingOnRed(pr, st) {
+              const marker = `<!-- ci-fail-ping:${pr.head.sha} -->`
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: pr.number, per_page: 100 })
+              if (comments.some(c => (c.body || '').includes(marker))) return // already pinged this SHA
+              const body =
+                `${marker}\n` +
+                `🔴 **@${OWNER} — CI failed on this pipeline PR** (${st.failure} failing ` +
+                `check${st.failure === 1 ? '' : 's'}).\n\n` +
+                `A red sub-PR won't auto-merge into its epic — it needs you. ` +
+                `[Checks](${pr.html_url}/checks) · \`${pr.head.ref}\` → \`${pr.base.ref}\`.\n\n` +
+                `<sub>🤖 agent pipeline (CI) · failure notify (#1815)</sub>`
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body })
+              core.info(`Pinged @${OWNER} on red #${pr.number} (${pr.head.sha.slice(0, 7)}).`)
             }
 
             // One roll-up line on the parent epic, computed from sub-issue state + labels
@@ -146,7 +171,11 @@ jobs:
               let pr
               try { pr = (await github.rest.pulls.get({ owner, repo, pull_number })).data } catch { continue }
               if (pr.state !== 'open') continue
-              if (!pr.head.ref.startsWith('claude/issue-')) {
+              // Pipeline-authored branches: the old claude pipeline (`claude/issue-*`) AND the pi
+              // pipeline (`work-*`). The pi branches were silently skipped before #1815, so no pi
+              // worker PR ever got a status note — the main reason the owner saw no signal at all.
+              const isPipeline = pr.head.ref.startsWith('claude/issue-') || pr.head.ref.startsWith('work-')
+              if (!isPipeline) {
                 core.info(`#${pull_number} head ${pr.head.ref} is not a pipeline branch — skipping.`); continue
               }
               await updatePr(pr)
