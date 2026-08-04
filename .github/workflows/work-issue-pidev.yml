@@ -370,24 +370,36 @@ jobs:
           #    pocs). A real broken deliverable (app-local errors) FAILS, and the PR opens as a DRAFT,
           #    which automerge already skips (#339) — no commit-status scope needed. NEUTRAL (non-block)
           #    when the app has no typecheck to run.
-          ACCEPT="neutral"; ACCEPT_MSG="touched app has no typecheck script — not verified"
+          ACCEPT="neutral"; ACCEPT_MSG="could not typecheck the touched app — not verified"
           if [ "$HAVE_COMMITS" = "1" ]; then
             APP_DIR="$(grep -hE '^(apps|pocs)/[^/]+/' "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sed -E 's#^((apps|pocs)/[^/]+)/.*#\1#' | sort -u | head -1)"
             if [ -n "$APP_DIR" ] && [ -f "$APP_DIR/package.json" ]; then
               PKG="$(node -p "require('./$APP_DIR/package.json').name || ''" 2>/dev/null || true)"
               HAS_TC="$(node -e "process.exit(require('./$APP_DIR/package.json').scripts?.typecheck?0:1)" 2>/dev/null && echo 1 || echo 0)"
+              TC_EXIT=""; : > "$RUNNER_TEMP/acc.log"
+              # Prefer the app's own typecheck script; else fall back to `nuxt typecheck` (any Nuxt app
+              # can run it even without a package script — the #1859 case: a scaffolded poc had none).
               if [ "$HAS_TC" = "1" ] && [ -n "$PKG" ]; then
                 echo "acceptance: pnpm --filter $PKG typecheck ($APP_DIR)"
-                pnpm --filter "$PKG" typecheck > "$RUNNER_TEMP/acc.log" 2>&1 || true
-                # OWN = `error TS` lines whose path stays INSIDE the app (no `../` escape to another package).
-                OWN="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -avE '(^|[[:space:](])\.\./' | grep -c . || true)"
-                EXT="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -aE '(^|[[:space:](])\.\./' | grep -c . || true)"
+                if pnpm --filter "$PKG" typecheck > "$RUNNER_TEMP/acc.log" 2>&1; then TC_EXIT=0; else TC_EXIT=$?; fi
+              elif [ -f "$APP_DIR/nuxt.config.ts" ] || [ -f "$APP_DIR/nuxt.config.js" ]; then
+                echo "acceptance: nuxt typecheck ($APP_DIR) [no typecheck script — fallback]"
+                if ( cd "$APP_DIR" && npx nuxt typecheck ) > "$RUNNER_TEMP/acc.log" 2>&1; then TC_EXIT=0; else TC_EXIT=$?; fi
+              fi
+              if [ -n "$TC_EXIT" ]; then
+                # OWN = `error TS` inside the app (no `../` escape); ANY = all TS errors (proves it RAN).
+                OWN="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -avE '(^|[[:space:](])\.\./' | grep -c . || true)"; OWN=${OWN:-0}
+                ANY="$(grep -acE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null || true)"; ANY=${ANY:-0}
                 if [ "$OWN" -gt 0 ]; then
                   ACCEPT="fail"; ACCEPT_MSG="${OWN} type error(s) in ${APP_DIR}"
                   echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"
                   grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" | grep -avE '(^|[[:space:](])\.\./' | head -15 || true
+                elif [ "$TC_EXIT" = "0" ] || [ "$ANY" -gt 0 ]; then
+                  # exit 0 (clean) OR non-zero only from PRE-EXISTING errors elsewhere (proof it ran).
+                  ACCEPT="pass"; ACCEPT_MSG="${APP_DIR} typechecks clean"; [ "$ANY" -gt 0 ] && ACCEPT_MSG="${ACCEPT_MSG} (ignored pre-existing error(s) elsewhere)"
                 else
-                  ACCEPT="pass"; ACCEPT_MSG="${APP_DIR} typechecks clean"; [ "$EXT" -gt 0 ] && ACCEPT_MSG="${ACCEPT_MSG} (ignored ${EXT} pre-existing error(s) elsewhere)"
+                  # non-zero with NO TS errors at all ⇒ the typecheck failed to RUN — don't false-pass.
+                  ACCEPT="neutral"; ACCEPT_MSG="typecheck could not run for ${APP_DIR} — not verified"
                 fi
               fi
             fi
