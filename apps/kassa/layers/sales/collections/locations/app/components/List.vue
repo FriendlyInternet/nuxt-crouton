@@ -2,14 +2,14 @@
   @crouton-generated
   @collection locations
   @layer sales
-  @generated 2026-06-16
+  @generated 2026-08-04
 
   ## AI Context
   - List component for locations collection
   - Collection name: salesLocations
   - API endpoint: /api/teams/[id]/sales-locations
   - Columns composable: useSalesLocations()
-  - Column fields: eventId, title
+  - Column fields: eventId, title, requiresHandover
 
   ## Common Modifications
   - Add column: Update columns array in composable
@@ -42,6 +42,9 @@
         :id="row.original.eventId"
         collection="salesEvents"
       />
+    </template>
+    <template #requiresHandover-cell="{ row }">
+      <CroutonBoolean :value="row.original.requiresHandover" />
     </template>
   </CroutonCollection>
 </template>

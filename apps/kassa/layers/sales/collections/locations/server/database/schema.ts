@@ -28,6 +28,7 @@ export const salesLocations = sqliteTable('sales_locations', {
   owner: text('owner').notNull(),
   eventId: text('eventId').notNull(),
   title: text('title').notNull(),
+  requiresHandover: integer('requiresHandover', { mode: 'boolean' }).$default(() => true),
 
   createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
   updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date()),
