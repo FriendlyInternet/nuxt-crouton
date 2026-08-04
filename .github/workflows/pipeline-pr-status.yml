@@ -19,17 +19,22 @@ on:
   status: {}
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review]
+  # Refresh the epic's live card on the build-progress transitions PR/check events miss —
+  # a child issue closing (schedule-waves closes it when its sub-PR merges) advances the
+  # done/total count (#1838). Scoped to closed/reopened so we don't fire on every repo label change.
+  issues:
+    types: [closed, reopened]
 
 permissions:
   contents: read
   pull-requests: write
   issues: write
 
-# Key by head SHA so concurrent check_suite completions for the SAME commit collapse to
-# one refresh (each run recomputes full state, so the latest wins); distinct PRs (distinct
-# SHAs) never cancel each other.
+# Key by head SHA (PR/check events) or issue number (issues events) so concurrent refreshes for
+# the SAME target collapse to one (each run recomputes full state, so the latest wins); distinct
+# targets never cancel each other.
 concurrency:
-  group: pipeline-status-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.sha }}
+  group: pipeline-status-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.event.issue.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -128,28 +133,95 @@ jobs:
               core.info(`Pinged @${OWNER} on red #${pr.number} (${pr.head.sha.slice(0, 7)}).`)
             }
 
-            // One roll-up line on the parent epic, computed from sub-issue state + labels
-            // (cheap, deterministic). Per-PR red/green lives on each PR's own sticky note.
+            // A live flow-status CARD on the epic (#1838) — stage + child tree + current activity,
+            // computed deterministically from sub-issue state + each child's work-<n> PR. Replaces
+            // the old thin count line. Renders even with 0 children (the sign-off / decompose stages).
             async function updateEpic(epicNumber) {
-              let subs
+              let subs = []
               try {
                 subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
                   { owner, repo, issue_number: epicNumber, per_page: 100 })
-              } catch (e) { core.warning(`sub-issues for #${epicNumber}: ${e.message}`); return }
-              if (!subs.length) return
-              const names = s => (s.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+              } catch (e) { core.warning(`sub-issues for #${epicNumber}: ${e.message}`) }
+
+              let epic
+              try { epic = (await github.rest.issues.get({ owner, repo, issue_number: epicNumber })).data }
+              catch (e) { core.warning(`epic #${epicNumber}: ${e.message}`); return }
+              const names = x => (x.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+              const epicBlocked = names(epic).includes('status:blocked')
+              const title = (epic.title || '').replace(/^(Epic|Initiative):\s*/i, '').trim()
+
               const total = subs.length
               const done = subs.filter(s => s.state === 'closed').length
-              const open = subs.filter(s => s.state === 'open')
-              const blocked = open.filter(s => names(s).includes('status:blocked')).length
-              const inProgress = open.filter(s => names(s).includes('status:in-progress')).length
-              const queued = open.length - blocked - inProgress
+
+              // Newest work-<n> PR for a child (bounded — a handful of children per epic).
+              async function childPr(n) {
+                try {
+                  const prs = await github.paginate(github.rest.pulls.list,
+                    { owner, repo, state: 'all', head: `${owner}:work-${n}`, per_page: 10 })
+                  return prs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] || null
+                } catch { return null }
+              }
+
+              // Child tree lines.
+              const lines = []
+              for (const s of subs) {
+                let icon = '⏳', note = 'queued'
+                if (s.state === 'closed') { icon = '✅'; note = '' }
+                else if (names(s).includes('status:blocked')) { icon = '⏸️'; note = 'held' }
+                else {
+                  const pr = await childPr(s.number)
+                  if (pr && pr.merged_at) { icon = '✅'; note = `PR #${pr.number} merged` }
+                  else if (pr && pr.state === 'open') { icon = '🔨'; note = `PR #${pr.number}` }
+                }
+                lines.push(`- ${icon} #${s.number} ${s.title}${note ? ` — ${note}` : ''}`)
+              }
+
+              // Stage: 0 children + blocked ⇒ sign-off · 0 + open ⇒ decomposing · some open ⇒ build ·
+              // all closed ⇒ assembled/review.
+              const stages = ['sign-off', 'build', 'assemble', 'review']
+              const curIdx = total === 0 ? (epicBlocked ? 0 : 0) : (done < total ? 1 : 2)
+              const bar = stages.map((s, i) => i === curIdx ? `**${s}** ◀` : i < curIdx ? `${s} ✓` : s).join(' → ')
+
+              let head, activity
+              if (total === 0) {
+                head = epicBlocked ? `## 🎨 Awaiting your sign-off — ${title}` : `## ⏳ Decomposing — ${title}`
+                activity = epicBlocked ? '_now: waiting for your `lgtm` / answer on the design_' : '_now: the decomposer is planning this epic_'
+              } else if (done < total) {
+                head = `## 🔨 Building — ${title}  (${done}/${total})`
+                activity = `_now: ${total - done} of ${total} in flight — reply here or on a PR to steer_`
+              } else {
+                head = `## ✅ Assembled — ${title}  (${total}/${total})`
+                activity = '_now: all children merged — the epic→main PR opens for your review next_'
+              }
+
               const body =
                 `${EPIC_ROLLUP}\n` +
-                `### 📊 ${done}/${total} done\n` +
-                `▶️ ${inProgress} in progress · ⏸️ ${blocked} blocked · 🗒️ ${queued} queued.\n\n` +
-                `<sub>🤖 agent pipeline · epic roll-up (#337) · updated ${now}</sub>`
+                `${head}\n\n` +
+                `\`${bar}\`\n\n` +
+                (lines.length ? lines.join('\n') + '\n\n' : '') +
+                `${activity}\n\n` +
+                `<sub>🤖 agent pipeline · live status (#1838) · updated ${now}</sub>`
               await upsert(epicNumber, EPIC_ROLLUP, body)
+            }
+
+            // ── issues event (#1838): a child closed/reopened → refresh its epic's card ──
+            // Resolve the epic: the issue itself if it has sub-issues, else its parent via the
+            // WS2 pipeline block (`<!-- pipeline: epic=N … -->`) in the body.
+            if (context.eventName === 'issues') {
+              const issue = context.payload.issue
+              let epicNum = null
+              try {
+                const own = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
+                  { owner, repo, issue_number: issue.number, per_page: 1 })
+                if (own.length) epicNum = issue.number
+              } catch (e) { /* not an epic */ }
+              if (!epicNum) {
+                const m = /epic=(\d+)/.exec(issue.body || '')
+                if (m) epicNum = Number(m[1])
+              }
+              if (epicNum) { await updateEpic(epicNum); core.info(`Refreshed epic card #${epicNum} (issues:${context.payload.action}).`) }
+              else core.info(`#${issue.number} is not a pipeline epic/child — nothing to do.`)
+              return
             }
 
             // Resolve candidate PR numbers from whatever event fired.
