@@ -8,45 +8,57 @@
 //
 // Usage: node scripts/pi-edited-files.mjs <session.jsonl> <repoRoot>
 //   → prints repo-relative paths (one per line) of files pi wrote to, deduped, existing only.
+// Also EXPORTS `DENY` and `ledgerFromSession()` so the commit-plan splitter (pi-commit-plan.mjs,
+// #1849) reuses the exact same junk-denylist and edit-tool parsing instead of duplicating them.
 import fs from 'node:fs';
 import path from 'node:path';
-
-const [, , sessionPath, repoRootArg] = process.argv;
-if (!sessionPath || !repoRootArg) {
-  console.error('usage: pi-edited-files.mjs <session.jsonl> <repoRoot>');
-  process.exit(2);
-}
-const repoRoot = path.resolve(repoRootArg);
+import { fileURLToPath } from 'node:url';
 
 // pi's file-writing tools. `edit` is confirmed (args: path/oldText/newText); the rest are
 // defensive so a new-file `write` or a rename can't silently slip the ledger.
-const WRITE_TOOLS = new Set(['edit', 'write', 'create', 'str_replace', 'multiedit', 'apply_patch']);
+export const WRITE_TOOLS = new Set(['edit', 'write', 'create', 'str_replace', 'multiedit', 'apply_patch']);
 // Never commit pi's own runtime/scratch, dependency installs, or build output — even if a tool
-// happened to touch them.
-const DENY = /(^|\/)(\.pi|node_modules|\.nuxt|\.output|dist)(\/|$)|decompose-pidev-(prompt|exec)-\d+\.(txt|log)|(^|\/)pi-telemetry-out(\/|$)/;
+// happened to touch them. Shared by the commit-plan splitter for the GENERATED bucket too (#1849).
+export const DENY = /(^|\/)(\.pi|node_modules|\.nuxt|\.output|dist)(\/|$)|decompose-pidev-(prompt|exec)-\d+\.(txt|log)|(^|\/)pi-telemetry-out(\/|$)/;
 
-const out = new Set();
-for (const line of fs.readFileSync(sessionPath, 'utf8').split('\n')) {
-  if (!line.trim()) continue;
-  let rec;
-  try { rec = JSON.parse(line); } catch { continue; }
-  const content = rec?.message?.content;
-  if (!Array.isArray(content)) continue;
-  for (const c of content) {
-    if (c?.type !== 'toolCall' || !WRITE_TOOLS.has(c.name)) continue;
-    const a = c.arguments || {};
-    for (const p of [a.path, a.file_path, a.filename, a.file, a.newPath, a.new_path]) {
-      if (typeof p !== 'string' || !p) continue;
-      const abs = path.resolve(repoRoot, p);
-      if (abs !== repoRoot && !abs.startsWith(repoRoot + path.sep)) continue; // outside the repo
-      const rel = path.relative(repoRoot, abs);
-      if (!rel || rel.startsWith('..')) continue;
-      if (DENY.test(rel)) continue;
-      out.add(rel);
+// The set of repo-relative paths pi WROTE via its edit/write tools (deduped, in-repo, non-deny,
+// existing). This is the "inputs / hand-authored" bucket — NOT generator output (which pi produced
+// via a bash/MCP tool, so it never appears as a write-tool path). Pure given (session, repoRoot).
+export function ledgerFromSession(sessionPath, repoRootArg) {
+  const repoRoot = path.resolve(repoRootArg);
+  const out = new Set();
+  for (const line of fs.readFileSync(sessionPath, 'utf8').split('\n')) {
+    if (!line.trim()) continue;
+    let rec;
+    try { rec = JSON.parse(line); } catch { continue; }
+    const content = rec?.message?.content;
+    if (!Array.isArray(content)) continue;
+    for (const c of content) {
+      if (c?.type !== 'toolCall' || !WRITE_TOOLS.has(c.name)) continue;
+      const a = c.arguments || {};
+      for (const p of [a.path, a.file_path, a.filename, a.file, a.newPath, a.new_path]) {
+        if (typeof p !== 'string' || !p) continue;
+        const abs = path.resolve(repoRoot, p);
+        if (abs !== repoRoot && !abs.startsWith(repoRoot + path.sep)) continue; // outside the repo
+        const rel = path.relative(repoRoot, abs);
+        if (!rel || rel.startsWith('..')) continue;
+        if (DENY.test(rel)) continue;
+        out.add(rel);
+      }
     }
   }
+  // Only keep paths that still exist (a file pi created then deleted shouldn't be staged as add).
+  return new Set([...out].filter(rel => fs.existsSync(path.join(repoRoot, rel))));
 }
-// Only emit paths that still exist (a file pi created then deleted shouldn't be staged as add).
-for (const rel of [...out].sort()) {
-  if (fs.existsSync(path.join(repoRoot, rel))) process.stdout.write(rel + '\n');
+
+// CLI (unchanged behaviour): print the ledger, one path per line.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const [, , sessionPath, repoRootArg] = process.argv;
+  if (!sessionPath || !repoRootArg) {
+    console.error('usage: pi-edited-files.mjs <session.jsonl> <repoRoot>');
+    process.exit(2);
+  }
+  for (const rel of [...ledgerFromSession(sessionPath, repoRootArg)].sort()) {
+    process.stdout.write(rel + '\n');
+  }
 }
