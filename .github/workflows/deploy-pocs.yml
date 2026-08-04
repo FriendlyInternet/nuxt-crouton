@@ -183,14 +183,25 @@ jobs:
       # a hand-wired POC can simply lack — and pnpm's own error for that is
       # "Missing script: cf:version. Did you mean cf:deploy?", which names the
       # symptom and suggests the wrong fix.
+      # The dispatch input reaches the shell through `env:`, never through a
+      # `${{ }}` interpolation inside `run:` — GitHub substitutes those as raw
+      # text before bash parses the script, so a quote in the input executes as
+      # code, in a job whose env carries CLOUDFLARE_API_TOKEN. `detect` above
+      # uses the same env indirection. The node check reads process.env too, so
+      # nothing untrusted is ever spliced into a JS string either.
       - name: Check the POC has a cf:version script
+        env:
+          APP: ${{ github.event.inputs.app }}
         run: |
-          APP='${{ github.event.inputs.app }}'
-          PKG="pocs/$APP/package.json"
+          case "$APP" in
+            ''|*[!a-z0-9-]*|-*)
+              echo "::error::Invalid POC name: '$APP' (expected lowercase kebab-case)"; exit 1 ;;
+          esac
+          export PKG="pocs/$APP/package.json"
           if [ ! -f "$PKG" ]; then
             echo "::error::No such POC: pocs/$APP"; exit 1
           fi
-          if ! node -e "process.exit(require('./$PKG').scripts?.['cf:version'] ? 0 : 1)"; then
+          if ! node -e 'process.exit(require("./" + process.env.PKG).scripts?.["cf:version"] ? 0 : 1)'; then
             echo "::error::pocs/$APP has no \"cf:version\" script, which mode=version needs."
             echo "::error::Add one to $PKG mirroring its own cf:staging, with 'wrangler versions upload' in place of 'wrangler deploy'."
             exit 1
