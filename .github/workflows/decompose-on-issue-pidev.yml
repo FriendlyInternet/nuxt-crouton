@@ -321,7 +321,11 @@ jobs:
               git fetch origin "$EPIC_BRANCH" --quiet 2>/dev/null \
                 && git checkout -B "$EPIC_BRANCH" FETCH_HEAD 2>/dev/null \
                 || git checkout -B "$EPIC_BRANCH" 2>/dev/null
-              for f in $ARTIFACTS; do [ -f "$f" ] && git add -- "$f"; done
+              # -f: the rendered PNGs live under writeups/schema-reviews (and ui-mockups), which the
+              # global `*.png` .gitignore rule covers (only writeups/diagrams + ui-proposals are
+              # allowlisted). These are an explicit, known-safe sign-off artifact list, so force past
+              # the ignore — without -f `git add` silently skips the PNG and the comment's image 404s.
+              for f in $ARTIFACTS; do [ -f "$f" ] && git add -f -- "$f"; done
               if git diff --cached --quiet; then
                 echo "no artifact changes to commit"
               else
