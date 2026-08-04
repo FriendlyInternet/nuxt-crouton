@@ -1,0 +1,21 @@
+{
+  "table": "trinket_items",
+  "key": null,
+  "rows": [
+    {
+      "label": "Sample label 1",
+      "count": 1,
+      "done": true
+    },
+    {
+      "label": "Sample label 2",
+      "count": 2,
+      "done": false
+    },
+    {
+      "label": "Sample label 3",
+      "count": 3,
+      "done": true
+    }
+  ]
+}

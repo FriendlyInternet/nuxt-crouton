@@ -1,0 +1,14 @@
+[
+  {
+    "collection": "items",
+    "fields": [
+      "label",
+      "count",
+      "done"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-04T14:58:18.641Z",
+    "layer": "trinket",
+    "gitSha": "2121751"
+  }
+]
