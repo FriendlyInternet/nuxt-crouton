@@ -24,6 +24,18 @@ export async function validateConfig(config: Record<string, any> | null): Promis
     return { valid: false, errors, warnings }
   }
 
+  // A freshly scaffolded app has no schema/collections yet — that's the
+  // documented next step, not a validation failure. Route it to a neutral
+  // success message instead of the "Validation failed" ❌ path (#1741).
+  const isEmptyScaffold = !config.schemaPath
+    && Array.isArray(config.collections) && config.collections.length === 0
+    && (!config.targets || config.targets.length === 0)
+  if (isEmptyScaffold) {
+    console.log('  ✓ Scaffolded — add a schema to `schemas/`, list it in `crouton.config.js`, then run `crouton config`')
+    console.log('\n' + '─'.repeat(60) + '\n')
+    return { valid: true, errors, warnings }
+  }
+
   // Validate schema files exist
   if (config.collections && Array.isArray(config.collections)) {
     // Enhanced format with multiple schemas
