@@ -25,7 +25,6 @@
  * - salesClients (sales/clients)
  * - salesEvents (sales/events)
  * - salesEventsettings (sales/eventsettings)
- * - salesHandovers (sales/handovers)
  * - salesKdsbumps (sales/kdsbumps)
  * - salesLocations (sales/locations)
  * - salesOrderitems (sales/orderitems)
@@ -68,12 +67,6 @@ export const queryRegistry: Record<string, {
       .then(m => m.getAllSalesEventsettings),
     getByIds: () => import('~~/layers/sales/collections/eventsettings/server/database/queries')
       .then(m => m.getSalesEventsettingsByIds),
-  },
-  salesHandovers: {
-    getAll: () => import('~~/layers/sales/collections/handovers/server/database/queries')
-      .then(m => m.getAllSalesHandovers),
-    getByIds: () => import('~~/layers/sales/collections/handovers/server/database/queries')
-      .then(m => m.getSalesHandoversByIds),
   },
   salesKdsbumps: {
     getAll: () => import('~~/layers/sales/collections/kdsbumps/server/database/queries')
