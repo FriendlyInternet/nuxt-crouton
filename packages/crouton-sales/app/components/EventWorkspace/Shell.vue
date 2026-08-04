@@ -404,17 +404,12 @@ const kassaHeightStyle = computed(() =>
                 />
               </UChip>
             </SalesEventWorkspacePaneHeader>
-            <div class="flex-1 overflow-y-auto p-4 pt-2">
-              <Suspense>
-                <SalesEventWorkspaceOrdersTab
-                  v-model:filters-open="ordersFiltersOpen"
-                  :event="event"
-                  @update:active-filter-count="ordersFilterCount = $event"
-                />
-                <template #fallback>
-                  <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
-                </template>
-              </Suspense>
+            <div class="flex-1 overflow-y-auto">
+              <SalesEventWorkspaceOrdersPaneBody
+                v-model:filters-open="ordersFiltersOpen"
+                :event="event"
+                @update:active-filter-count="ordersFilterCount = $event"
+              />
             </div>
           </SplitterPanel>
         </template>
@@ -443,7 +438,7 @@ const kassaHeightStyle = computed(() =>
               :title="t('sales.workspace.dataPanel.title')"
               @close="dataOpen = false"
             />
-            <div class="flex-1 overflow-y-auto p-4 pt-2">
+            <div class="flex-1 overflow-y-auto min-w-0 flex flex-col">
               <SalesEventWorkspaceDataPanel :event="event" :team-param="teamParam" />
             </div>
           </SplitterPanel>
@@ -471,12 +466,12 @@ const kassaHeightStyle = computed(() =>
                 </template>
               </Suspense>
             </div>
-            <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-3 py-3">
-              <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
-              <UButton :loading="settingsSaving" :disabled="!settingsDirty" :color="settingsDirty ? 'primary' : 'neutral'" :variant="settingsDirty ? 'solid' : 'soft'" @click="settingsTab?.save()">
-                {{ t('sales.common.save') }}
-              </UButton>
-            </div>
+            <SalesEventWorkspaceSettingsSaveBar
+              class="px-3"
+              :dirty="settingsDirty"
+              :saving="settingsSaving"
+              @save="settingsTab?.save()"
+            />
           </SplitterPanel>
         </template>
       </SplitterGroup>
@@ -616,16 +611,11 @@ const kassaHeightStyle = computed(() =>
             </UChip>
           </SalesEventWorkspacePaneHeader>
           <div class="flex-1 overflow-y-auto p-4 pt-2">
-            <Suspense>
-              <SalesEventWorkspaceOrdersTab
-                v-model:filters-open="ordersFiltersOpen"
-                :event="event"
-                @update:active-filter-count="ordersFilterCount = $event"
-              />
-              <template #fallback>
-                <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
-              </template>
-            </Suspense>
+            <SalesEventWorkspaceOrdersPaneBody
+              v-model:filters-open="ordersFiltersOpen"
+              :event="event"
+              @update:active-filter-count="ordersFilterCount = $event"
+            />
           </div>
         </div>
       </template>
@@ -692,12 +682,12 @@ const kassaHeightStyle = computed(() =>
               </template>
             </Suspense>
           </div>
-          <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-3 py-3">
-            <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
-            <UButton :loading="settingsSaving" :disabled="!settingsDirty" :color="settingsDirty ? 'primary' : 'neutral'" :variant="settingsDirty ? 'solid' : 'soft'" @click="settingsTab?.save()">
-              {{ t('sales.common.save') }}
-            </UButton>
-          </div>
+          <SalesEventWorkspaceSettingsSaveBar
+            class="px-3"
+            :dirty="settingsDirty"
+            :saving="settingsSaving"
+            @save="settingsTab?.save()"
+          />
         </div>
       </template>
     </USlideover>

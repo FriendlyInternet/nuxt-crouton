@@ -618,8 +618,10 @@
         "settingsDesc": "Détails de l'événement, imprimantes, texte des tickets et aides",
         "settingsStat": "imprimantes"
       },
-      "outstanding": "{count} en attente",
-      "outstandingNone": "Rien en attente"
+      "outstanding": "{count} en préparation",
+      "outstandingNone": "Rien en préparation",
+      "outstandingFilter": "Afficher seulement celles-ci",
+      "outstandingFilterClear": "Afficher toutes les commandes"
     },
     "helpers": {
       "title": "Bénévoles actifs",

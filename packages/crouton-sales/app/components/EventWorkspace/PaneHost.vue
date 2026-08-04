@@ -80,16 +80,12 @@ const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
       </SalesEventWorkspacePaneHeader>
 
       <div class="flex-1 overflow-y-auto p-4 pt-2">
-        <Suspense v-if="pane === 'orders'">
-          <SalesEventWorkspaceOrdersTab
-            v-model:filters-open="ordersFiltersOpen"
-            :event="event"
-            @update:active-filter-count="ordersFilterCount = $event"
-          />
-          <template #fallback>
-            <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
-          </template>
-        </Suspense>
+        <SalesEventWorkspaceOrdersPaneBody
+          v-if="pane === 'orders'"
+          v-model:filters-open="ordersFiltersOpen"
+          :event="event"
+          @update:active-filter-count="ordersFilterCount = $event"
+        />
 
         <SalesEventWorkspaceClientsPanel v-else-if="pane === 'clients'" :event="event" />
 
@@ -105,15 +101,13 @@ const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
 
       <!-- Settings Save: a fixed footer outside the scroll area (content
            scrolls above it, never behind). -->
-      <div
+      <SalesEventWorkspaceSettingsSaveBar
+          class="px-4"
         v-if="pane === 'settings'"
-        class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-4 py-3"
-      >
-        <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
-        <UButton :loading="settingsSaving" :disabled="!settingsDirty" :color="settingsDirty ? 'primary' : 'neutral'" :variant="settingsDirty ? 'solid' : 'soft'" @click="settingsTab?.save()">
-          {{ t('sales.common.save') }}
-        </UButton>
-      </div>
+        :dirty="settingsDirty"
+        :saving="settingsSaving"
+        @save="settingsTab?.save()"
+      />
     </template>
   </div>
 </template>

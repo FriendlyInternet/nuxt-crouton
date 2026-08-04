@@ -50,14 +50,26 @@ function jobFilterConditions(db: any, salesOrders: any, f: OrderFilters) {
   ].filter(Boolean)
 }
 
+// Backlog-only (#1846): the same rule the count uses, applied to the LIST.
+// A correlated NOT EXISTS rather than a join, so it composes with the other
+// filters without changing the row shape or duplicating rows.
+function outstandingConditions(salesOrders: any, f: OrderFilters, salesHandovers?: any) {
+  if (!f.outstanding || !salesHandovers) return []
+  return [
+    ne(salesOrders.status, 'cancelled'),
+    sql`not exists (select 1 from ${salesHandovers} where ${salesHandovers.orderId} = ${salesOrders.id})`
+  ]
+}
+
 // Shared WHERE for both the list and the count so a filtered page and its total
 // stay in sync. Column-equality filters here; print-job EXISTS filters above.
 // owner stores the helper displayName (stable across logins) — what the
 // OrdersTab helper filter sends. Undefined filters drop out via .filter().
-function buildWhere(db: any, salesOrders: any, teamId: string, eventId: string, f: OrderFilters) {
+function buildWhere(db: any, salesOrders: any, teamId: string, eventId: string, f: OrderFilters, salesHandovers?: any) {
   return and(
     eq(salesOrders.teamId, teamId),
     eq(salesOrders.eventId, eventId),
+    ...outstandingConditions(salesOrders, f, salesHandovers),
     ...[
       f.owner ? eq(salesOrders.owner, f.owner) : undefined,
       f.clientId ? eq(salesOrders.clientId, f.clientId) : undefined
@@ -100,7 +112,9 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const filters = parseOrderFilters(query)
   const { page, pageSize, offset } = parsePageParams(query)
-  const whereExpr = buildWhere(db, salesOrders, team.id, eventId, filters)
+  // Loaded up-front because the backlog-only filter needs it in the WHERE.
+  const { salesHandovers } = await import('~~/layers/sales/collections/handovers/server/database/schema')
+  const whereExpr = buildWhere(db, salesOrders, team.id, eventId, filters, salesHandovers)
 
   const rows = await (db as any)
     .select({
