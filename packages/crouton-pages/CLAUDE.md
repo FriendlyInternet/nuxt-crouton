@@ -339,6 +339,61 @@ Block properties with `type: 'image'` are rendered with `ImageEditor.vue`, which
 - Direct URL input mode
 - Emits image URL string via `v-model`
 
+### Per-block visibility (`blockVisibility`)
+
+Every block — core **and** addon — carries an optional `blockVisibility` attr
+holding per-block display conditions. It rides the same rails as `blockSize`:
+defined in `app/editor/extensions/block-utils.ts`, registered once as a TipTap
+**global attribute** (`page-blocks.ts` `addGlobalAttributes()` +
+`addon-block-factory.ts`), so no block type registers it individually.
+
+```ts
+interface BlockVisibility {
+  audience?: 'anonymous' | 'authenticated'        // omitted = anyone
+  roles?: ('owner' | 'admin' | 'member')[]        // naming any role implies authenticated
+  viewports?: ('mobile' | 'tablet' | 'desktop')[] // omitted/empty = all
+}
+```
+
+Sparse by design — the editor deletes keys that stop restricting anything and
+stores `null` rather than `{}`, so a block nobody configured carries nothing and
+needs no migration. Serializes into the page's existing `content` JSON (and to
+`data-block-visibility` on the HTML round-trip). Logic lives in
+`app/utils/block-visibility.ts`, unit-tested in `test/block-visibility.test.ts`.
+
+**⚠️ Presentation filter, NOT a security boundary.** A hidden block is still in
+the page payload; it just isn't displayed. Gate sensitive content with the
+page-level `visibility` field, which is enforced server-side. The property panel
+says so in as many words — the failure mode is an author assuming otherwise.
+
+**Why the two axes resolve differently.** The public page route declares
+`defineRouteRules({ swr: 3600 })` (`app/pages/[team]/[locale]/[...slug].vue`), so
+its HTML is cached for an hour and **shared between visitors**. Therefore:
+
+- **viewport → CSS classes** on the existing per-block wrapper in
+  `BlockContent.vue`. One hide-class per *excluded* band (`max-md:hidden`,
+  `md:max-lg:hidden`, `lg:hidden` — boundaries 768/1024, matching `Nav.vue` and
+  `layouts/public.vue`). Resolves per-device in the browser: cache-safe, no JS,
+  no flicker. These class strings must stay **whole literals** or Tailwind's
+  scanner purges them.
+- **audience/roles → after hydration only.** `audienceResolved` is false during
+  SSR *and* the first client render (so hydration matches), then true on mount.
+  Reading auth state during SSR would bake one visitor's session into the shared
+  cached HTML.
+
+A block with **no** audience gate takes neither path — no wrapper class, no
+deferral, byte-identical to before the feature existed. `hasAudienceGate()` is
+what decides that, and viewport-only blocks deliberately return false.
+
+Auth is read defensively: crouton-auth is not a dependency of this package, so
+`useSession()`/`useTeam()` are resolved in try/catch and an unknowable reader
+means **show** the block — a missing auth package can never blank a page. Same
+for corrupt stored values: every unusable input fails *open*.
+
+Editor previews (`BlockPropertyPanel`, `BlockEditorWithPreview`) pass
+`ignore-visibility` so an author always sees the block being configured, even
+one they just hid from themselves.
+
 ### Adding Custom Blocks
 
 1. Define type in `app/types/blocks.ts`
