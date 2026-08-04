@@ -363,13 +363,13 @@ jobs:
             echo "no commits ahead of ${BASE} — no PR to open"
           fi
 
-          # 6) ACCEPTANCE GATE (#1849) — VERIFY the result, don't assert it. Typecheck ONLY the
-          #    touched app (never the monorepo — an unrelated poc's errors must not false-block). A
-          #    scaffold/generate task that shipped no working collection FAILS here. The verdict is a
-          #    `pipeline/acceptance` COMMIT STATUS on the head SHA, posted BEFORE the PR opens so
-          #    automerge's green-gate (#339) holds a red result with no race. Conservative: PASS/FAIL
-          #    only when a typecheck actually ran; NEUTRAL (non-blocking, but surfaced) when the app
-          #    has no typecheck — never false-block on inability to check.
+          # 6) ACCEPTANCE GATE (#1849) — VERIFY the result, don't assert it. Typecheck the touched app,
+          #    but fail ONLY on type errors INSIDE it: a Nuxt app's typecheck also surfaces PRE-EXISTING
+          #    errors across the whole workspace graph (`../other-poc/…`), which are not this task's
+          #    fault and MUST NOT false-block (the #1855 lesson — gadget had 0 own-errors but 8 in other
+          #    pocs). A real broken deliverable (app-local errors) FAILS, and the PR opens as a DRAFT,
+          #    which automerge already skips (#339) — no commit-status scope needed. NEUTRAL (non-block)
+          #    when the app has no typecheck to run.
           ACCEPT="neutral"; ACCEPT_MSG="touched app has no typecheck script — not verified"
           if [ "$HAVE_COMMITS" = "1" ]; then
             APP_DIR="$(grep -hE '^(apps|pocs)/[^/]+/' "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sed -E 's#^((apps|pocs)/[^/]+)/.*#\1#' | sort -u | head -1)"
@@ -378,32 +378,36 @@ jobs:
               HAS_TC="$(node -e "process.exit(require('./$APP_DIR/package.json').scripts?.typecheck?0:1)" 2>/dev/null && echo 1 || echo 0)"
               if [ "$HAS_TC" = "1" ] && [ -n "$PKG" ]; then
                 echo "acceptance: pnpm --filter $PKG typecheck ($APP_DIR)"
-                if pnpm --filter "$PKG" typecheck > "$RUNNER_TEMP/acc.log" 2>&1; then
-                  ACCEPT="pass"; ACCEPT_MSG="pnpm --filter $PKG typecheck passed"
+                pnpm --filter "$PKG" typecheck > "$RUNNER_TEMP/acc.log" 2>&1 || true
+                # OWN = `error TS` lines whose path stays INSIDE the app (no `../` escape to another package).
+                OWN="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -avE '(^|[[:space:](])\.\./' | grep -c . || echo 0)"
+                EXT="$(grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" 2>/dev/null | grep -aE '(^|[[:space:](])\.\./' | grep -c . || echo 0)"
+                if [ "$OWN" -gt 0 ]; then
+                  ACCEPT="fail"; ACCEPT_MSG="${OWN} type error(s) in ${APP_DIR}"
+                  echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"
+                  grep -aE 'error TS[0-9]' "$RUNNER_TEMP/acc.log" | grep -avE '(^|[[:space:](])\.\./' | head -15 || true
                 else
-                  ACCEPT="fail"; ACCEPT_MSG="pnpm --filter $PKG typecheck FAILED"
-                  echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"; tail -25 "$RUNNER_TEMP/acc.log" || true
+                  ACCEPT="pass"; ACCEPT_MSG="${APP_DIR} typechecks clean"; [ "$EXT" -gt 0 ] && ACCEPT_MSG="${ACCEPT_MSG} (ignored ${EXT} pre-existing error(s) elsewhere)"
                 fi
               fi
             fi
             echo "acceptance verdict: $ACCEPT — $ACCEPT_MSG"
-            HEAD_SHA="$(git rev-parse HEAD)"
-            [ "$ACCEPT" = "fail" ] && ST="failure" || ST="success"
-            gh api -X POST "repos/${REPO}/statuses/${HEAD_SHA}" \
-              -f state="$ST" -f context="pipeline/acceptance" \
-              -f description="$(printf '%s' "$ACCEPT_MSG" | cut -c1-138)" \
-              -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" 2>&1 | tail -1 || true
           fi
 
-          # 7) Open the PR now that the acceptance status is set.
+          # 7) Open the PR. On a FAILED acceptance, open it as a DRAFT (automerge skips drafts, #339) —
+          #    creating it draft-from-the-start avoids a race where automerge lands it before we convert.
           if [ "$HAVE_COMMITS" = "1" ]; then
             EXISTING="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
+            DRAFT_FLAG=""; [ "$ACCEPT" = "fail" ] && DRAFT_FLAG="--draft"
             if [ -z "$EXISTING" ]; then
-              gh pr create --base "$BASE" --head "$BR" \
+              gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$(git log -1 --format=%s)" \
                 --body "$(printf 'Closes #%s\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE")" 2>&1 | tail -3
             else
-              echo "PR #${EXISTING} already open for ${BR}"
+              # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
+              if [ "$ACCEPT" = "fail" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
+              else gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
+              echo "PR #${EXISTING} already open for ${BR} (draft=$([ "$ACCEPT" = fail ] && echo yes || echo no))"
             fi
           fi
 
