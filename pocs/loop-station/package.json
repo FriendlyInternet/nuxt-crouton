@@ -10,7 +10,8 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "typecheck": "nuxt typecheck",
-    "cf:staging": "node scripts/prepare-data.mjs && NITRO_PRESET=cloudflare_module nuxt build && npx wrangler deploy --env staging"
+    "cf:staging": "node scripts/prepare-data.mjs && NITRO_PRESET=cloudflare_module nuxt build && npx wrangler deploy --env staging",
+    "cf:version": "node scripts/prepare-data.mjs && NITRO_PRESET=cloudflare_module nuxt build && npx wrangler versions upload --env staging"
   },
   "dependencies": {
     "@fyit/crouton-themes": "workspace:*",
