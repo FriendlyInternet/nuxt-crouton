@@ -307,19 +307,29 @@ jobs:
           ARTIFACTS="$(grep '^SIGNOFF_ARTIFACTS ' "$APPLY_OUT" | head -1 | cut -d' ' -f2-)"
           if [ -n "$ARTIFACTS" ]; then
             echo "committing signoff artifacts to ${EPIC_BRANCH}: $ARTIFACTS"
-            git config user.name  "nuxt-harness[bot]"
-            git config user.email "nuxt-harness[bot]@users.noreply.github.com"
-            git fetch origin "$EPIC_BRANCH" --quiet 2>/dev/null || true
-            git checkout -B "$EPIC_BRANCH" "origin/${EPIC_BRANCH}" 2>&1 | tail -1 || git checkout -B "$EPIC_BRANCH"
-            for f in $ARTIFACTS; do [ -f "$f" ] && git add -- "$f"; done
-            if ! git diff --cached --quiet; then
-              git commit -q -m "docs(root): design sign-off artifacts for #${ISSUE} (#1821)" \
-                -m "Rendered by the decompose signoff hold; referenced from the epic comment."
-              REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
-              git push "$REMOTE" "HEAD:${EPIC_BRANCH}" 2>&1 | tail -1
-            else
-              echo "no artifact changes to commit"
-            fi
+            # BEST-EFFORT — the sign-off hold (comment + status:blocked + the inline schema table) is
+            # ALREADY posted; committing the PNGs only makes the comment's raw-URL images resolve. So
+            # this must NEVER fail the run (the GHA shell is `bash -e`, which is what turned an earlier
+            # push failure into a red run even though the hold succeeded, #1821). Run it in a `set +e`
+            # subshell with a catch-all `|| warn` so the step always exits 0.
+            (
+              set +e
+              git config user.name  "nuxt-harness[bot]"
+              git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+              # Fetch the epic branch to FETCH_HEAD (no remote-tracking ref exists — checkout was depth-1
+              # on main) and branch off it, so the push is a fast-forward. Fallback: branch off HEAD.
+              git fetch origin "$EPIC_BRANCH" --quiet 2>/dev/null \
+                && git checkout -B "$EPIC_BRANCH" FETCH_HEAD 2>/dev/null \
+                || git checkout -B "$EPIC_BRANCH" 2>/dev/null
+              for f in $ARTIFACTS; do [ -f "$f" ] && git add -- "$f"; done
+              if git diff --cached --quiet; then
+                echo "no artifact changes to commit"
+              else
+                git commit -q -m "docs(root): design sign-off artifacts for #${ISSUE} (#1821)" \
+                  -m "Rendered by the decompose signoff hold; referenced from the epic comment."
+                git push "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" "HEAD:${EPIC_BRANCH}" 2>&1 | tail -2
+              fi
+            ) || echo "::warning::signoff artifact commit failed (non-fatal) — the hold + inline schema table are already posted"
           fi
 
       # ── Artifact-gate (#461) — PASS/FAIL logic reused from decompose-on-issue.yml ────────
