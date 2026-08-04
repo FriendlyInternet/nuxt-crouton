@@ -245,7 +245,7 @@ jobs:
           if [ -n "${EPIC_BRANCH:-}" ]; then
             BRANCH_INSTR="branch off the integration branch '${EPIC_BRANCH}' and target the PR THERE (not main)"
           fi
-          printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s), then %s. Make the change and run pnpm typecheck to verify it. Do NOT run git commit and do NOT open a pull request — the workflow commits EXACTLY the files you edit and opens the PR for you, so you never need to. Make ALL file changes with the edit/write tools (never shell redirects or heredocs) so your work is captured in the commit. If you are genuinely blocked, do NOT guess: post a top-level comment on the issue explaining the blocker and add the status:blocked label, then stop. Making no file edits and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$BRANCH_INSTR" "$ISSUE" >> "$PROMPT_FILE"
+          printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s), then %s. For a scaffold/generate task, RUN the crouton generator (e.g. crouton config / generate_collection) — its output IS committed for you, so do NOT hand-write generated files. Author only the inputs (schema, config) with the edit/write tools (never shell redirects or heredocs) so they are captured. Run the touched app typecheck ONCE to sanity-check (pnpm --filter <app> typecheck), but do NOT loop trying to make typecheck fully green — a harness acceptance gate typechecks the result and reports failures, so stop after your change plus one check instead of grinding on it. Do NOT run git commit and do NOT open a pull request — the workflow commits your inputs AND the generator output and opens the PR, so you never need to. If you are genuinely blocked, do NOT guess: post a top-level comment on the issue explaining the blocker and add the status:blocked label, then stop. Making no file changes and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$BRANCH_INSTR" >> "$PROMPT_FILE"
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
           # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
           # So the instant `pi | tee` fails (pipefail), -e aborts the script BEFORE
@@ -354,33 +354,73 @@ jobs:
           N=$((NIN + NGEN))
           [ "$N" -eq 0 ] && echo "nothing to commit (no real changes vs ${BASE})"
 
-          # 5) Push + open the PR (base = the epic branch, head = work-<issue>). Force-push so a
-          #    re-dispatch idempotently re-bases the branch instead of failing non-fast-forward.
+          # 5) Push the branch. The PR opens in step 7 — AFTER the acceptance verdict is posted, so
+          #    automerge sees it the instant it evaluates (no race).
+          HAVE_COMMITS=0
           if [ "$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]; then
-            git push -u --force origin "HEAD:${BR}" 2>&1 | tail -2
-            EXISTING="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
-            if [ -z "$EXISTING" ]; then
-              gh pr create --base "$BASE" --head "$BR" \
-                --title "$(git log -1 --format=%s)" \
-                --body "$(printf 'Closes #%s\n\n🤖 Opened by the pi worker finish step from pi'\''s edited-file ledger (Pattern B, #1764/#1782).' "$ISSUE")" 2>&1 | tail -3
-            else
-              echo "PR #${EXISTING} already open for ${BR}"
-            fi
+            git push -u --force origin "HEAD:${BR}" 2>&1 | tail -2; HAVE_COMMITS=1
           else
             echo "no commits ahead of ${BASE} — no PR to open"
           fi
 
-          # 6) RUN RECORD (#1849) — a FACTUAL note on the PR: what landed, split by bucket, and what
-          #    changed but was excluded (junk). Derived from the commit plan + git, NOT pi's
-          #    narration — so it can't claim work it didn't do. This is the signal that would have
-          #    made #1830 (config committed, collection silently dropped) obvious at a glance.
+          # 6) ACCEPTANCE GATE (#1849) — VERIFY the result, don't assert it. Typecheck ONLY the
+          #    touched app (never the monorepo — an unrelated poc's errors must not false-block). A
+          #    scaffold/generate task that shipped no working collection FAILS here. The verdict is a
+          #    `pipeline/acceptance` COMMIT STATUS on the head SHA, posted BEFORE the PR opens so
+          #    automerge's green-gate (#339) holds a red result with no race. Conservative: PASS/FAIL
+          #    only when a typecheck actually ran; NEUTRAL (non-blocking, but surfaced) when the app
+          #    has no typecheck — never false-block on inability to check.
+          ACCEPT="neutral"; ACCEPT_MSG="touched app has no typecheck script — not verified"
+          if [ "$HAVE_COMMITS" = "1" ]; then
+            APP_DIR="$(grep -hE '^(apps|pocs)/[^/]+/' "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sed -E 's#^((apps|pocs)/[^/]+)/.*#\1#' | sort -u | head -1)"
+            if [ -n "$APP_DIR" ] && [ -f "$APP_DIR/package.json" ]; then
+              PKG="$(node -p "require('./$APP_DIR/package.json').name || ''" 2>/dev/null || true)"
+              HAS_TC="$(node -e "process.exit(require('./$APP_DIR/package.json').scripts?.typecheck?0:1)" 2>/dev/null && echo 1 || echo 0)"
+              if [ "$HAS_TC" = "1" ] && [ -n "$PKG" ]; then
+                echo "acceptance: pnpm --filter $PKG typecheck ($APP_DIR)"
+                if pnpm --filter "$PKG" typecheck > "$RUNNER_TEMP/acc.log" 2>&1; then
+                  ACCEPT="pass"; ACCEPT_MSG="pnpm --filter $PKG typecheck passed"
+                else
+                  ACCEPT="fail"; ACCEPT_MSG="pnpm --filter $PKG typecheck FAILED"
+                  echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"; tail -25 "$RUNNER_TEMP/acc.log" || true
+                fi
+              fi
+            fi
+            echo "acceptance verdict: $ACCEPT — $ACCEPT_MSG"
+            HEAD_SHA="$(git rev-parse HEAD)"
+            [ "$ACCEPT" = "fail" ] && ST="failure" || ST="success"
+            gh api -X POST "repos/${REPO}/statuses/${HEAD_SHA}" \
+              -f state="$ST" -f context="pipeline/acceptance" \
+              -f description="$(printf '%s' "$ACCEPT_MSG" | cut -c1-138)" \
+              -f target_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}" 2>&1 | tail -1 || true
+          fi
+
+          # 7) Open the PR now that the acceptance status is set.
+          if [ "$HAVE_COMMITS" = "1" ]; then
+            EXISTING="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
+            if [ -z "$EXISTING" ]; then
+              gh pr create --base "$BASE" --head "$BR" \
+                --title "$(git log -1 --format=%s)" \
+                --body "$(printf 'Closes #%s\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE")" 2>&1 | tail -3
+            else
+              echo "PR #${EXISTING} already open for ${BR}"
+            fi
+          fi
+
+          # 8) RUN RECORD (#1849) — FACTUAL note on the PR: what landed by bucket + junk excluded +
+          #    the acceptance verdict. From the commit + git + the typecheck exit, NOT pi's narration.
           PRNUM="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
           if [ -n "$PRNUM" ]; then
             cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sort -u | grep . > "$RUNNER_TEMP/committed.txt" || true
             EXCL="$(comm -23 <(sort -u "$RUNNER_TEMP/changed.txt" | grep .) "$RUNNER_TEMP/committed.txt" 2>/dev/null | grep -c . || echo 0)"
+            case "$ACCEPT" in
+              pass) ACC_LINE="✅ **acceptance: passed** — ${ACCEPT_MSG}" ;;
+              fail) ACC_LINE="🔴 **acceptance: FAILED** — ${ACCEPT_MSG}. Held: automerge won't land a red result — fix, then re-dispatch." ;;
+              *)    ACC_LINE="⚠️ **acceptance: not verified** — ${ACCEPT_MSG}" ;;
+            esac
             REC="$RUNNER_TEMP/run-record.md"
             {
-              echo "> 🤖 **pi worker — run record** · _facts from the commit + git, not pi's narration (#1849)_"
+              echo "> 🤖 **pi worker — run record** · _facts from the commit + git + typecheck, not pi's narration (#1849)_"
               echo
               echo "**Committed ${N} file(s)** onto \`${BR}\` → \`${BASE}\`:"
               echo "- 📝 inputs (hand-authored — schema/config): **${NIN}**"
@@ -390,7 +430,7 @@ jobs:
               [ "$NGEN" -gt 20 ] && echo "  - …and $((NGEN-20)) more"
               echo "- 🗑️ changed but excluded as junk (node_modules/.nuxt/.pi/…): **${EXCL}**"
               echo
-              echo "<sub>Acceptance (typecheck/boot) is a separate gate — this record only states what landed.</sub>"
+              echo "$ACC_LINE"
             } > "$REC"
             gh pr comment "$PRNUM" --body-file "$REC" 2>&1 | tail -1 || true
           fi
