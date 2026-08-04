@@ -41,6 +41,9 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `server/api/crouton-sales/teams/[id]/sync-status.get.ts` | Live-dashboard freshness read (#179) — `{ lastContactAt, lastEventAt, lastBatchApplied, serverNow }` |
 | `app/components/Sync/Status.vue` | `SalesSyncStatus` — mirror freshness banner (#179): "synced Xs ago" / stale, polls sync-status |
 | `app/components/Dashboard/SalesSummary.vue` | `SalesDashboardSalesSummary` — live revenue/orders/avg + top products (#179), built on the chart endpoints |
+| `app/components/Dashboard/PerProductTotals.vue` | `SalesDashboardPerProductTotals` — **per-product Verkocht + Nog uit** in the Data pane (#1867): the mid-event "moeten we nog pils bijbestellen?" question, with the kitchen backlog beside it. `outstanding: null` renders as **—**, never `0` — an opt-out location *cannot* have a backlog, which is a different statement from "has none right now" (a `0` reads as "all caught up" and invites waiting for a number that never moves). Presentation decisions live in computeds, not template branches |
+| `server/utils/per-product-totals.ts` | **Per-product aggregation (#1867).** `buildPerProductTotals(db, tables, { teamId, eventId, personnel })` → one row per product with `sold` (units gone from the cellar) + `outstanding` (units a location still owes, or `null` when no backlog is possible). **Two queries on purpose**: `sales_kdsbumps` has no uniqueness constraint, so joining bumps in to compute both at once would let a double-tapped location fan the item rows out and silently double `sold`. Cancelled orders are excluded from BOTH (a mis-punch is not consumption) — ⚠️ note this deliberately differs from `product-day-matrix`, which filters no status at all. Tables injected (same reason as `handover.ts`). Contract: `test/per-product-totals.test.ts` |
+| `server/utils/personnel-condition.ts` | The staff-order rule as a condition over an **injected column** (`personnelConditionOn`) + `parsePersonnelMode`. Split out of `personnel-filter.ts` (#1867) because that module imports `salesOrders` from the generated layer at module scope, so it's unresolvable from a package unit test or from a query that receives its tables as parameters. `personnel-filter.ts` is now the thin binding that supplies the table — and deliberately does **not** re-export these (Nitro auto-imports every `server/utils/` export, so a re-export makes the symbol resolvable from two modules and Nuxt warns "Duplicated imports") |
 | `server/database/schema.ts` | Package-owned Drizzle schema: `salesSyncOutbox` (`sales_sync_outbox`) + `salesSyncStatus` (`sales_sync_status`, #179 heartbeat) |
 | `server/db/schema.ts` | Re-export NuxtHub scans so consuming apps auto-pick-up `sales_sync_outbox` + `sales_sync_status` in `db:generate` |
 | `server/database/migrations/0001_sales_sync_outbox.sql` | Package migration creating `sales_sync_outbox` |
@@ -256,7 +259,10 @@ open pane's tab hides — the pane header (icon + title, mirroring the tab) carr
   `SalesEventWorkspaceDataPanel`) — the pane body only, Shell owns the pane header. The event's
   key sales numbers beside the kassa, deliberately a **composition** of the existing "data"
   surfaces scoped to the workspace's event: `SalesDashboardSalesSummary` (revenue/orders/avg +
-  top products, polling), the revenue-by-day `CroutonChartsWidget` (via `SALES_CHART_KINDS`,
+  top products, polling), **`SalesDashboardPerProductTotals`** (per-product Verkocht + Nog uit,
+  #1867 — sits directly under the summary because it answers the standing mid-event question
+  "do we need to order more of this?", while the charts below are for looking back), the
+  revenue-by-day `CroutonChartsWidget` (via `SALES_CHART_KINDS`,
   silently dropped when `@fyit/crouton-charts` isn't installed — `hasApp('charts')`), and
   `SalesBlocksProductMatrixRender` (product × day pivot, reused as-is via `attrs.eventScope`).
   The chart/matrix endpoints are team-members-only, matching the gate. The
@@ -513,6 +519,7 @@ Each accepts an optional `?eventId=` to scope to one event; omitted ⇒ team-wid
 | `teams/[id]/charts/product-day-matrix` | product × day, both measures + totals | `{ days, products:[{product,units,revenue,totalUnits,totalRevenue}], dayTotals, grandTotal }` — feeds the `salesProductMatrixBlock` table |
 | `teams/[id]/charts/orders-by-status` | order status | `{ status, count }` |
 | `teams/[id]/charts/sales-by-location` | product location (null ⇒ No location) | `{ location, revenue }` |
+| `teams/[id]/charts/per-product-totals` | product | `{ items: [{ productId, product, location, sold, outstanding }] }` — feeds `SalesDashboardPerProductTotals` (#1867). **`?eventId=` is REQUIRED here** (400 without it), unlike its siblings: a backlog is a property of one running event, and summing "still to deliver" across finished events is a meaningless number that still looks authoritative. Returns a bespoke shape, **not** the `CroutonChartsWidget` `{ items }` contract |
 
 Note: `orderItems.quantity` is TEXT (`cast(... as real)` before summing); `unitPrice`/`totalPrice`
 are `real` (no cast).

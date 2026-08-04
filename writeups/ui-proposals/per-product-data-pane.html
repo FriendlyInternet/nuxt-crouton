@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<!--
+  UI proposal — per-product view in the Data pane (#1867).
+  The open question: "nog te leveren per product" vs "totaal verkocht" vs beide.
+  Self-contained: no JS, no external assets.
+-->
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Per product — wat wil je zien in het Data-paneel?</title>
+<style>
+  :root{ --page:#0a0e17; --ink:#e8edf6; --muted:#8b97ad; --card:#151b27; --card2:#11161f;
+         --line:#222b3a; --soft:#1b2230; --green:#34d399; --amber:#fbbf24; --blue:#60a5fa; }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1100px 500px at 75% -10%, #16213c 0%, var(--page) 55%);
+       color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1240px;margin:0 auto;padding:34px 22px 56px}
+  .eyebrow{text-transform:uppercase;letter-spacing:.18em;font-size:11px;color:var(--green);font-weight:700}
+  h1{font-size:31px;margin:6px 0 6px;letter-spacing:-.02em}
+  .lede{color:var(--muted);margin:0 0 12px;font-size:15px;max-width:80ch}
+  .lede b{color:var(--ink)}
+
+  /* ---------- context strip: what already exists ---------- */
+  .today{background:#0d1220;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:18px 0 30px}
+  .today h3{margin:0 0 3px;font-size:14px;display:flex;align-items:center;gap:9px}
+  .today p{margin:0 0 13px;color:var(--muted);font-size:12.5px;max-width:88ch}
+  .matrix{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--card2);border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .matrix th{background:#0b1120;text-align:left;padding:7px 11px;font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--line)}
+  .matrix td{padding:6px 11px;border-bottom:1px solid var(--soft)}
+  .matrix td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:700}
+  .matrix tr:last-child td{border-bottom:none;background:#0b1120;font-weight:800}
+  .toggle{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;font-size:11px;font-weight:700;margin-bottom:9px}
+  .toggle span{padding:4px 11px;color:var(--muted)}
+  .toggle span.on{background:var(--green);color:#04231a}
+
+  /* ---------- option columns ---------- */
+  .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;align-items:start}
+  .opt{background:#101725;border:1px solid var(--line);border-radius:16px;padding:17px;display:flex;flex-direction:column}
+  .opt.pick{border-color:#1f5e47;box-shadow:0 0 0 1px rgba(52,211,153,.16)}
+  .opt h2{margin:0 0 3px;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tag{font-size:10.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-weight:700;letter-spacing:.03em}
+  .tag.new{color:var(--green);border-color:#1f5e47}
+  .tag.dup{color:var(--amber);border-color:#5c4a13}
+  .sub{color:var(--muted);font-size:12.5px;margin:0 0 14px;min-height:36px}
+
+  /* ---------- fake data-pane ---------- */
+  .pane{background:var(--card2);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  .phead{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:#0d1220;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:800}
+  .phead .live{display:flex;align-items:center;gap:6px;font-weight:500;color:var(--muted);font-size:11px}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--green)}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;padding:9px 11px 3px}
+  .chip{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .chip.on{background:rgba(52,211,153,.12);border-color:#1f5e47;color:var(--green)}
+  .rows{padding:8px 11px 12px;display:grid;gap:5px}
+  .row{display:flex;align-items:center;gap:10px;padding:6px 9px;background:var(--card);border:1px solid var(--soft);border-radius:8px;font-size:13px}
+  .row .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .loc{font-size:10px;color:var(--muted);display:block;font-weight:500}
+  .row .v{font-variant-numeric:tabular-nums;font-weight:800;font-size:15px;min-width:2.2rem;text-align:right}
+  .v.green{color:var(--green)} .v.amber{color:var(--amber)} .v.dim{color:#4c586d;font-weight:600;font-size:12px}
+  .row.muted{opacity:.62}
+  .bar{height:4px;border-radius:3px;background:#22304a;margin-top:4px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:3px}
+  .bar i.g{background:var(--green)} .bar i.a{background:var(--amber)}
+
+  /* two-column variant (option C) */
+  .row.two .v{min-width:2rem}
+  .colhead{display:flex;gap:10px;padding:2px 20px 0 11px;font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:800;justify-content:flex-end}
+  .colhead span{min-width:2rem;text-align:right}
+
+  .note{margin-top:11px;padding:9px 11px;border-radius:9px;font-size:12px;line-height:1.5}
+  .note.warn{background:rgba(251,191,36,.07);border:1px solid #5c4a13;color:#f4d58d}
+  .note.ok{background:rgba(52,211,153,.07);border:1px solid #1f5e47;color:#a9f0d2}
+  .note.info{background:rgba(96,165,250,.07);border:1px solid #24466f;color:#bcd7fb}
+  .foot{margin-top:26px;color:var(--muted);font-size:12.5px;text-align:center}
+  .foot b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">#1867 · Data-paneel</div>
+  <h1>Per product — wat wil je zien?</h1>
+  <p class="lede">Je staat aan de toog en vraagt je af: <b>“moeten we nog pils bijbestellen?”</b> Drie versies van hetzelfde blok. Kies A, B of C.</p>
+
+  <!-- ============ what's already there ============ -->
+  <div class="today">
+    <h3>📊 Wat er <b>nu al</b> in het Data-paneel staat</h3>
+    <p>De product×dag-matrix (met Aantal ⇄ Omzet-schakelaar) en de top-10 in het overzicht. Voor één event is dat één kolom — dus <b>“totaal verkocht per product” staat er eigenlijk al</b>.</p>
+    <div class="toggle"><span class="on">Aantal</span><span>Omzet</span></div>
+    <table class="matrix">
+      <tr><th>Product</th><th style="text-align:right">za 12 jul</th><th style="text-align:right">Totaal</th></tr>
+      <tr><td>Pils</td><td class="n">47</td><td class="n">47</td></tr>
+      <tr><td>Frieten</td><td class="n">31</td><td class="n">31</td></tr>
+      <tr><td>Burger</td><td class="n">18</td><td class="n">18</td></tr>
+      <tr><td>Cava</td><td class="n">12</td><td class="n">12</td></tr>
+      <tr><td>Totaal</td><td class="n">108</td><td class="n">108</td></tr>
+    </table>
+  </div>
+
+  <div class="cols">
+
+    <!-- ============ A ============ -->
+    <div class="opt">
+      <h2>A · Nog te leveren <span class="tag new">nieuw</span></h2>
+      <p class="sub">Wat de keuken nog schuldig is, per product. Letterlijk wat je vroeg: “filter op nog bezig”.</p>
+
+      <div class="pane">
+        <div class="phead"><span>Nog te leveren</span><span class="live"><i class="dot"></i>20 stuks</span></div>
+        <div class="chips"><span class="chip on">Alles</span><span class="chip">Keuken</span><span class="chip">Bar</span></div>
+        <div class="rows">
+          <div class="row"><span class="name">Frieten<span class="loc">Keuken</span></span><span class="v amber">12</span></div>
+          <div class="row"><span class="name">Burger<span class="loc">Keuken</span></span><span class="v amber">5</span></div>
+          <div class="row"><span class="name">Hotdog<span class="loc">Keuken</span></span><span class="v amber">3</span></div>
+          <div class="row muted"><span class="name">Pils<span class="loc">Bar · geeft direct mee</span></span><span class="v dim">—</span></div>
+          <div class="row muted"><span class="name">Cava<span class="loc">Bar · geeft direct mee</span></span><span class="v dim">—</span></div>
+        </div>
+      </div>
+
+      <div class="note warn"><b>Let op:</b> de bar staat op “geeft direct mee”, dus pils komt hier <b>nooit</b> in voor. Precies de vraag waarmee je begon (“nog pils bijbestellen?”) beantwoordt dit dus níet.</div>
+    </div>
+
+    <!-- ============ B ============ -->
+    <div class="opt">
+      <h2>B · Totaal verkocht <span class="tag dup">bestaat al</span></h2>
+      <p class="sub">Alles wat de kelder uit is, geleverd of niet. Dit beantwoordt “bijbestellen?” — maar staat er dus al.</p>
+
+      <div class="pane">
+        <div class="phead"><span>Verkocht vandaag</span><span class="live"><i class="dot"></i>123 stuks</span></div>
+        <div class="chips"><span class="chip on">Alles</span><span class="chip">Keuken</span><span class="chip">Bar</span></div>
+        <div class="rows">
+          <div class="row"><span class="name">Pils<span class="loc">Bar</span><span class="bar"><i class="g" style="width:100%"></i></span></span><span class="v green">47</span></div>
+          <div class="row"><span class="name">Frieten<span class="loc">Keuken</span><span class="bar"><i class="g" style="width:66%"></i></span></span><span class="v green">31</span></div>
+          <div class="row"><span class="name">Burger<span class="loc">Keuken</span><span class="bar"><i class="g" style="width:38%"></i></span></span><span class="v green">18</span></div>
+          <div class="row"><span class="name">Cava<span class="loc">Bar</span><span class="bar"><i class="g" style="width:26%"></i></span></span><span class="v green">12</span></div>
+          <div class="row"><span class="name">Water<span class="loc">Bar</span><span class="bar"><i class="g" style="width:19%"></i></span></span><span class="v green">9</span></div>
+          <div class="row"><span class="name">Hotdog<span class="loc">Keuken</span><span class="bar"><i class="g" style="width:13%"></i></span></span><span class="v green">6</span></div>
+        </div>
+      </div>
+
+      <div class="note info">Zo goed als hetzelfde als de matrix hierboven. Kiezen we B, dan is het werk <b>een filter + nettere weergave</b>, geen nieuw blok.</div>
+    </div>
+
+    <!-- ============ C ============ -->
+    <div class="opt pick">
+      <h2>C · Beide naast elkaar <span class="tag new">nieuw</span></h2>
+      <p class="sub">Verkocht (= voorraad weg) én hoeveel daarvan nog buiten staat. Eén blok, twee kolommen.</p>
+
+      <div class="pane">
+        <div class="phead"><span>Per product</span><span class="live"><i class="dot"></i>live</span></div>
+        <div class="chips"><span class="chip on">Alles</span><span class="chip">Keuken</span><span class="chip">Bar</span></div>
+        <div class="colhead"><span>Verkocht</span><span>Nog uit</span></div>
+        <div class="rows">
+          <div class="row two"><span class="name">Pils<span class="loc">Bar · direct mee</span></span><span class="v green">47</span><span class="v dim">—</span></div>
+          <div class="row two"><span class="name">Frieten<span class="loc">Keuken</span></span><span class="v green">31</span><span class="v amber">12</span></div>
+          <div class="row two"><span class="name">Burger<span class="loc">Keuken</span></span><span class="v green">18</span><span class="v amber">5</span></div>
+          <div class="row two"><span class="name">Cava<span class="loc">Bar · direct mee</span></span><span class="v green">12</span><span class="v dim">—</span></div>
+          <div class="row two"><span class="name">Water<span class="loc">Bar · direct mee</span></span><span class="v green">9</span><span class="v dim">—</span></div>
+          <div class="row two"><span class="name">Hotdog<span class="loc">Keuken</span></span><span class="v green">6</span><span class="v amber">3</span></div>
+        </div>
+      </div>
+
+      <div class="note ok"><b>Beantwoordt beide vragen:</b> “bijbestellen?” leest links, “wat moet de keuken nog buiten krijgen?” rechts. De kolom “Nog uit” gebruikt exact dezelfde regel als de teller in Bestellingen, dus ze kunnen niet uit elkaar lopen.</div>
+    </div>
+
+  </div>
+
+  <p class="foot">Antwoord met <b>A</b>, <b>B</b> of <b>C</b>. Ik bouw pas daarna.</p>
+</div>
+</body>
+</html>
