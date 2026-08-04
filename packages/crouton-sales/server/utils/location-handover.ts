@@ -10,6 +10,8 @@
  * a pils across the counter has nothing to confirm.
  */
 
+import { and, eq, isNull, or, type AnyColumn, type SQL } from 'drizzle-orm'
+
 export interface OrderLocationState {
   locationId: string
   /** Null on rows predating the migration — treated as requiring. */
@@ -41,4 +43,42 @@ export function locationBlocksDelivery(l: OrderLocationState): boolean {
  */
 export function isOrderDelivered(locations: OrderLocationState[]): boolean {
   return !locations.some(locationBlocksDelivery)
+}
+
+/**
+ * The same rule, as a SQL predicate — for the queries that must decide this in
+ * the database rather than over fetched rows.
+ *
+ * ## Why this exists
+ *
+ * `locationBlocksDelivery` above answers the question for a row already in
+ * memory. Two queries need to answer it *while aggregating*, where pulling
+ * every order into JS is not an option: the Bestellingen backlog counter
+ * (`orders.get.ts`) and the per-product view (#1867). Before this function, the
+ * counter re-implemented the rule inline as SQL — one sentence with two
+ * independent implementations, which is the shape that drifts. A third copy was
+ * about to be added.
+ *
+ * So both callers import THIS. Not "both are tested to agree" — there is only
+ * one predicate, so there is nothing left to disagree. `per-product-totals.test.ts`
+ * additionally pins it to the same truth table `locationBlocksDelivery` answers,
+ * so the SQL and the TypeScript halves cannot part ways either.
+ *
+ * Expects the caller to have LEFT JOINed the bump rows for the order/location
+ * pair — `bumpId` null means "no bump", which is what makes this readable as a
+ * plain condition rather than a correlated subquery.
+ */
+export function locationBlocksDeliverySql(cols: {
+  /** `id` of the LEFT JOINed bump row — null when this location hasn't bumped. */
+  bumpId: AnyColumn
+  /** The location's `requiresHandover`. Null (pre-migration) counts as requiring. */
+  requiresHandover: AnyColumn
+}): SQL {
+  return and(
+    isNull(cols.bumpId),
+    // Mirrors `requiresHandover ?? true` above: NULL must read as REQUIRING, and
+    // SQL's three-valued logic will not do that for us — `requiresHandover = 1`
+    // alone is NULL (not true) for a legacy row, silently dropping it.
+    or(isNull(cols.requiresHandover), eq(cols.requiresHandover, true))
+  )!
 }
