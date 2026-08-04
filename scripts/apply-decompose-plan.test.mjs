@@ -41,6 +41,38 @@ test('parsePlan rejects malformed plans (honest failure, no fabrication)', () =>
   assert.throws(() => parsePlan({ leaf: false, children: [{ title: 'x', body: '' }] }), PlanError)
 })
 
+// ── signoff (Option C, #1821): a design sign-off hold instead of deadlocking design-worker children ──
+test('parsePlan accepts a signoff hold and normalizes it', () => {
+  const p = parsePlan({ signoff: { summary: 'schema + UI are ambiguous', questions: ['equal vs weighted?', '  ', 'matrix vs list?'] } })
+  assert.ok(p.signoff)
+  assert.equal(p.signoff.questions.length, 2)               // blank question dropped
+  assert.equal(p.signoff.schema, null)
+  assert.equal(p.signoff.diagram, null)
+  assert.equal(p.signoff.ui, null)
+})
+
+test('parsePlan keeps optional signoff artifacts when well-formed', () => {
+  const p = parsePlan({ signoff: { summary: 's', questions: ['q'], schema: { collection: 'expenses', fields: { amount: { type: 'number' } } }, ui: '<div>x</div>' } })
+  assert.equal(p.signoff.schema.collection, 'expenses')
+  assert.deepEqual(p.signoff.schema.fields, { amount: { type: 'number' } })
+  assert.equal(p.signoff.ui, '<div>x</div>')
+})
+
+test('parsePlan rejects a malformed signoff (honest failure)', () => {
+  assert.throws(() => parsePlan({ signoff: { questions: ['q'] } }), PlanError)          // no summary
+  assert.throws(() => parsePlan({ signoff: { summary: 's' } }), PlanError)              // no questions
+  assert.throws(() => parsePlan({ signoff: { summary: 's', questions: [] } }), PlanError)
+  assert.throws(() => parsePlan({ signoff: { summary: 's', questions: ['  '] } }), PlanError)
+})
+
+test('a signoff plan → one signoff-hold action on the target, no children', () => {
+  const acts = planToActions(parsePlan({ signoff: { summary: 's', questions: ['q1', 'q2'] } }), CTX)
+  assert.deepEqual(acts.map(a => a.type), ['signoff-hold'])
+  assert.equal(acts[0].issue, CTX.target)
+  assert.equal(acts[0].signoff.questions.length, 2)
+  assert.ok(!acts.some(a => a.type === 'create'))            // NEVER spawns worker children
+})
+
 test('parsePlan enforces MAX_CHILDREN', () => {
   const many = { leaf: false, children: Array.from({ length: 7 }, (_, i) => CHILD({ title: `c${i}` })) }
   assert.throws(() => parsePlan(many), PlanError)
@@ -115,6 +147,29 @@ test('runActions creates, links, and labels each child in order (mock exec)', ()
   assert.ok(kinds.includes('issue edit'))                        // the trigger label
   // NO call ever goes through a shell — args are arrays. Assert no arg contains a heredoc/`$(`.
   assert.ok(!calls.flat().some(a => typeof a === 'string' && a.includes('$(')))
+})
+
+test('runActions on a signoff hold comments the forks + blocks the epic, never creates children (mock exec)', () => {
+  const calls = []
+  let commentBody = ''
+  // Stub: node render scripts + gh all go through here; capture the comment body via writeBody.
+  const exec = (file, args) => { calls.push([file, ...args]); return '' }
+  const acts = planToActions(parsePlan({ signoff: { summary: 'schema + view ambiguous', questions: ['equal vs weighted?', 'matrix vs list?'] } }),
+    { ...CTX, epic_branch: BRANCH })
+  const summary = runActions(acts, { repo: 'o/r', exec, log: () => {}, writeBody: (t, b) => { commentBody = b; return `/tmp/${t}` } })
+  // held, not created
+  assert.equal(summary.held.length, 1)
+  assert.equal(summary.created.length, 0)
+  // posted a comment on the target epic + added status:blocked
+  const kinds = calls.map(c => c.slice(1, 4).join(' '))
+  assert.ok(kinds.some(k => k.startsWith('issue comment 1706')), 'comments on the epic')
+  assert.ok(calls.some(c => c.includes('--add-label') && c.includes('status:blocked')), 'adds status:blocked')
+  // NEVER creates a worker child for a design decision
+  assert.ok(!kinds.some(k => k.startsWith('issue create')), 'no children created')
+  // the comment carries the forks + the hold instruction
+  assert.match(commentBody, /equal vs weighted\?/)
+  assert.match(commentBody, /matrix vs list\?/)
+  assert.match(commentBody, /lgtm/i)
 })
 
 test('runActions on a leaf edits the target body and labels it (mock exec)', () => {

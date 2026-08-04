@@ -220,10 +220,11 @@ jobs:
           EVENT-DRIVEN DECOMPOSE — PLAN ONLY. You are the task-decomposer. Do NOT run `/task-decompose`, do NOT spawn any subagent, and do NOT run any `gh`, `git`, or issue-mutating command. Your ONLY output is a plan file that a deterministic step will apply. Concretely:
           1. READ the target issue (use `gh issue view` to read only — reading is fine, mutating is not).
           2. Apply the LEAF TEST: single coherent change, bounded file set, clear/testable acceptance, one focused run.
-          3. Using your file-writing tool (NOT a shell heredoc — bodies contain emoji/backticks and shell quoting breaks, #1001), write a file named exactly `decompose-plan.json` in the current working directory, as valid JSON:
-             - If the issue is a single leaf: {"leaf": true}
-             - If it needs splitting: {"leaf": false, "children": [ {"title": "...", "body": "...markdown with ## 👤 For humans / ## 🤖 For agents / ## 🧪 How to test...", "labels": ["type:...","<component>"], "needsSplit": false}, ... ]} — 2 to 6 children, one coherent concern each. Set needsSplit=true for a child that itself still needs decomposing (it will be re-decomposed), false for a child that is a ready leaf. Use exactly one `type:*` label plus a real component label per child (labels that do not exist are dropped by the apply step). Do NOT put a pipeline block or Dedup line in the body — the apply step adds them.
-          4. After writing decompose-plan.json, STOP. Do not create issues, branches, PRs, or labels yourself — the apply step does all of that from your plan. Writing a correct decompose-plan.json IS your entire deliverable.
+          3. Using your file-writing tool (NOT a shell heredoc — bodies contain emoji/backticks and shell quoting breaks, #1001), write a file named exactly `decompose-plan.json` in the current working directory, as valid JSON — ONE of these three shapes:
+             - Single leaf: {"leaf": true}
+             - Split: {"leaf": false, "children": [ {"title": "...", "body": "...markdown with ## 👤 For humans / ## 🤖 For agents / ## 🧪 How to test...", "labels": ["type:...","<component>"], "needsSplit": false}, ... ]} — 2 to 6 children, one coherent concern each. Set needsSplit=true for a child that itself still needs decomposing, false for a ready leaf. Exactly one `type:*` label plus a real component label per child (unknown labels are dropped). Do NOT put a pipeline block or Dedup line in the body.
+             - DESIGN SIGN-OFF HOLD (#1821): if the epic needs a human DESIGN DECISION before any code — a genuinely ambiguous data model or UI layout, or a fork with no defensible default (e.g. which split strategy, which balance view) — do NOT create "decide & sign off" children (a code worker cannot build a decision and will deadlock). Instead HOLD: {"signoff": {"summary": "one short paragraph: why we're holding", "questions": ["the real fork to decide", "..."], "schema": {"collection": "name", "fields": { <crouton fieldsFile JSON: fieldName → {type, ...}> }}, "diagram": { <optional ticket-excalidraw graph.json: nodes+edges> }, "ui": "<optional self-contained HTML mockup>"}}. Propose your BEST-GUESS schema/UI so the human reacts to something concrete, and list the genuine forks as `questions`. The apply step renders these (a schema field-table, a diagram, a UI mockup screenshot), posts them on the epic, and holds `status:blocked`; the owner's `lgtm` reply resumes into build children. Include `schema` whenever the data model is the ambiguity; `diagram`/`ui` are optional. Only hold when the ambiguity is real — a well-specified epic just splits.
+          4. After writing decompose-plan.json, STOP. Do not create issues, branches, PRs, or labels yourself — the apply step does all of that from your plan. Writing a correct decompose-plan.json (split, leaf, OR signoff hold) IS your entire deliverable — a design sign-off hold is a complete, successful outcome, not a failure.
           PI_ED
             printf 'The target issue is #%s. Read it and write decompose-plan.json now.\n' "$ISSUE" >> "$PROMPT_FILE"
           else
@@ -295,8 +296,31 @@ jobs:
             fi
           fi
           echo "context: epic=${EPIC} depth=${DEPTH} epic_branch=${EPIC_BRANCH}"
+          APPLY_OUT="$RUNNER_TEMP/apply-out.txt"
           node scripts/apply-decompose-plan.mjs apply decompose-plan.json \
-            --repo "$REPO" --target "$ISSUE" --epic "$EPIC" --epic-branch "$EPIC_BRANCH" --depth "$DEPTH"
+            --repo "$REPO" --target "$ISSUE" --epic "$EPIC" --epic-branch "$EPIC_BRANCH" --depth "$DEPTH" \
+            | tee "$APPLY_OUT"
+
+          # A design sign-off hold (#1821) renders artifacts (schema table / diagram / mockup) into
+          # writeups/**; commit them to the epic branch so the raw URLs referenced in the posted
+          # comment resolve. Uses the App token remote so the push is authenticated.
+          ARTIFACTS="$(grep '^SIGNOFF_ARTIFACTS ' "$APPLY_OUT" | head -1 | cut -d' ' -f2-)"
+          if [ -n "$ARTIFACTS" ]; then
+            echo "committing signoff artifacts to ${EPIC_BRANCH}: $ARTIFACTS"
+            git config user.name  "nuxt-harness[bot]"
+            git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+            git fetch origin "$EPIC_BRANCH" --quiet 2>/dev/null || true
+            git checkout -B "$EPIC_BRANCH" "origin/${EPIC_BRANCH}" 2>&1 | tail -1 || git checkout -B "$EPIC_BRANCH"
+            for f in $ARTIFACTS; do [ -f "$f" ] && git add -- "$f"; done
+            if ! git diff --cached --quiet; then
+              git commit -q -m "docs(root): design sign-off artifacts for #${ISSUE} (#1821)" \
+                -m "Rendered by the decompose signoff hold; referenced from the epic comment."
+              REMOTE="https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git"
+              git push "$REMOTE" "HEAD:${EPIC_BRANCH}" 2>&1 | tail -1
+            else
+              echo "no artifact changes to commit"
+            fi
+          fi
 
       # ── Artifact-gate (#461) — PASS/FAIL logic reused from decompose-on-issue.yml ────────
       # Harness-agnostic: PASS/FAIL is GitHub-state via GITHUB_TOKEN (comment / linked

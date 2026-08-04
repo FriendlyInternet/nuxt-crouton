@@ -23,7 +23,7 @@
 // The PURE core (parsePlan / planToActions / buildChildBody) is unit-tested (…test.mjs). The I/O
 // (runActions → gh via execFileSync) is a thin executor injected for tests.
 
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { writePipelineBlock } from './pipeline-context.mjs'
@@ -38,7 +38,29 @@ export function parsePlan(raw) {
     try { p = JSON.parse(raw) } catch (e) { throw new PlanError(`plan is not valid JSON: ${e.message}`) }
   } else { p = raw }
   if (!p || typeof p !== 'object') throw new PlanError('plan must be an object')
-  if (typeof p.leaf !== 'boolean') throw new PlanError('plan.leaf must be a boolean')
+  // Design sign-off hold (#1821, Option C). When an epic has genuine design ambiguity, the
+  // decomposer must NOT spawn "decide & sign off" worker children (they deadlock the code worker,
+  // which has no render/hold tool). Instead it proposes the design and HOLDS on the epic: we render
+  // the artifacts (schema table / diagram / UI mockup) and post them + status:blocked, then the
+  // existing lgtm→resume-on-comment loop continues the decomposition into build children.
+  if (p.signoff && typeof p.signoff === 'object') {
+    const s = p.signoff
+    if (typeof s.summary !== 'string' || !s.summary.trim()) throw new PlanError('signoff.summary must be a non-empty string')
+    if (!Array.isArray(s.questions) || s.questions.length === 0) throw new PlanError('signoff.questions must be a non-empty array (the forks to decide)')
+    const questions = s.questions.filter(q => typeof q === 'string' && q.trim()).map(q => q.trim())
+    if (!questions.length) throw new PlanError('signoff.questions must contain at least one non-empty question')
+    return {
+      signoff: {
+        summary: s.summary.trim(),
+        questions,
+        // Optional rendered artifacts — best-effort; a bad one is skipped, the questions always post.
+        schema: (s.schema && typeof s.schema === 'object' && s.schema.fields) ? { collection: String(s.schema.collection || 'collection'), fields: s.schema.fields } : null,
+        diagram: (s.diagram && typeof s.diagram === 'object') ? s.diagram : null,
+        ui: (typeof s.ui === 'string' && s.ui.trim()) ? s.ui : null,
+      },
+    }
+  }
+  if (typeof p.leaf !== 'boolean') throw new PlanError('plan.leaf must be a boolean, or provide a `signoff` object')
   if (p.leaf) return { leaf: true, children: [] }
   if (!Array.isArray(p.children) || p.children.length === 0) {
     throw new PlanError('a non-leaf plan must have a non-empty children array')
@@ -84,6 +106,10 @@ export function planToActions(plan, ctx) {
   const { target, epic, depth = 0, epic_branch, knownLabels = [] } = ctx
   const childDepth = (Number.isFinite(depth) ? depth : 0) + 1
   const actions = []
+  if (plan.signoff) {
+    // Hold on the epic (target) for a design sign-off — no children are created (#1821).
+    return [{ type: 'signoff-hold', issue: target, epic_branch, signoff: plan.signoff }]
+  }
   if (plan.leaf) {
     // The target itself is the leaf: stamp the block at ITS depth, then label it work-this.
     actions.push({ type: 'edit-body', issue: target, ctx: { epic, depth, epic_branch } })
@@ -118,14 +144,68 @@ function realExec(file, args, input) {
  * One small handler per action type (a dispatch table) — each closes over the shared run state.
  */
 export function runActions(actions, { repo, exec = realExec, log = console.error, writeBody = defaultWriteBody } = {}) {
-  const state = { repo, exec, writeBody, log, refToNumber: {}, created: [], labelled: [] }
+  const state = { repo, exec, writeBody, log, refToNumber: {}, created: [], labelled: [], held: [], artifacts: [] }
   for (const a of actions) {
     const handler = ACTION_HANDLERS[a.type]
     if (!handler) throw new Error(`unknown action type: ${a.type}`)
     handler(a, state)
   }
-  return { created: state.created, labelled: state.labelled }
+  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts }
 }
+
+// Render the artifacts pi proposed for a design sign-off. BEST-EFFORT: every render is guarded so a
+// bad proposal (wrong fieldsFile shape, unrenderable HTML) is skipped and the questions still post.
+// Returns { schemaMd, images:[{label,path}] } and pushes committed-artifact paths onto state.artifacts.
+// The render scripts are plain `node` (schema-review / ui-proposal / ticket-excalidraw) — pi-runnable.
+function renderSignoffArtifacts(signoff, state) {
+  const tmp = process.env.RUNNER_TEMP || '/tmp'
+  const out = { schemaMd: '', images: [] }
+  const tryRender = (label, fn) => {
+    try { fn() } catch (e) { state.log(`⚠️  signoff render skipped (${label}): ${e.message}`) }
+  }
+  if (signoff.schema) {
+    tryRender('schema', () => {
+      const col = signoff.schema.collection.replace(/[^a-z0-9_-]/gi, '') || 'collection'
+      const jf = `${tmp}/signoff-schema-${col}.json`
+      writeFileSync(jf, JSON.stringify(signoff.schema.fields, null, 2))
+      mkdirSync('writeups/schema-reviews', { recursive: true })
+      state.exec('node', ['.claude/skills/schema-review/render-schema.mjs', jf, '--collection', col, '--out-dir', 'writeups/schema-reviews'])
+      const md = `writeups/schema-reviews/${col}.md`
+      const html = `writeups/schema-reviews/${col}.html`
+      if (existsSync(md)) { out.schemaMd = readFileSync(md, 'utf8').trim(); state.artifacts.push(md) }
+      if (existsSync(html)) {
+        state.artifacts.push(html)
+        const png = `writeups/schema-reviews/${col}.png`
+        tryRender('schema-png', () => { state.exec('node', ['.claude/skills/ui-proposal/render.mjs', html, png]); if (existsSync(png)) { state.artifacts.push(png); out.images.push({ label: `Schema — ${col}`, path: png }) } })
+      }
+    })
+  }
+  if (signoff.diagram) {
+    tryRender('diagram', () => {
+      const gf = `${tmp}/signoff-diagram.json`
+      writeFileSync(gf, JSON.stringify(signoff.diagram, null, 2))
+      const before = new Set(state.artifacts)
+      state.exec('node', ['scripts/ticket-excalidraw.mjs', gf, '--out-dir', 'writeups/diagrams'])
+      // ticket-excalidraw names files by slug; pick up the freshly written .png.
+      const dir = 'writeups/diagrams'
+      const pngs = (existsSync(dir) ? readdirSync(dir) : []).filter(f => f.endsWith('.png')).map(f => `${dir}/${f}`)
+      const newest = pngs.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
+      if (newest && !before.has(newest)) { state.artifacts.push(newest); out.images.push({ label: 'Diagram', path: newest }) }
+    })
+  }
+  if (signoff.ui) {
+    tryRender('ui', () => {
+      const hf = `${tmp}/signoff-ui.html`
+      writeFileSync(hf, signoff.ui)
+      mkdirSync('writeups/ui-mockups', { recursive: true })
+      const png = 'writeups/ui-mockups/signoff-ui.png'
+      state.exec('node', ['.claude/skills/ui-proposal/render.mjs', hf, png])
+      if (existsSync(png)) { state.artifacts.push(png); out.images.push({ label: 'UI mockup', path: png }) }
+    })
+  }
+  return out
+}
+
 
 const ACTION_HANDLERS = {
   // A leaf: stamp the WS2 block onto the target's CURRENT body (merge, don't clobber prose).
@@ -133,6 +213,39 @@ const ACTION_HANDLERS = {
     const cur = exec('gh', ['issue', 'view', String(a.issue), '--repo', repo, '--json', 'body', '-q', '.body'])
     const f = writeBody(`edit-${a.issue}`, writePipelineBlock(cur, a.ctx))
     exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--body-file', f])
+  },
+  // Design sign-off hold (#1821): render the proposed artifacts, post them + the forks on the epic,
+  // and add status:blocked. Creates NO children — the lgtm→resume-on-comment loop continues later.
+  'signoff-hold'(a, state) {
+    const { repo, exec, writeBody } = state
+    const art = renderSignoffArtifacts(a.signoff, state)
+    const rawBase = a.epic_branch ? `https://raw.githubusercontent.com/${repo}/${a.epic_branch}` : null
+    const lines = []
+    lines.push('> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _design sign-off gate (#1821)_')
+    lines.push('')
+    lines.push('## 🎨 Design sign-off needed before building')
+    lines.push('')
+    lines.push(a.signoff.summary)
+    lines.push('')
+    lines.push('### Decide these forks')
+    a.signoff.questions.forEach((q, i) => lines.push(`${i + 1}. ${q}`))
+    if (art.schemaMd) {
+      lines.push('')
+      lines.push('### Proposed schema')
+      lines.push(art.schemaMd)
+    }
+    if (art.images.length && rawBase) {
+      lines.push('')
+      lines.push('### Rendered')
+      for (const img of art.images) lines.push(`**${img.label}**\n\n![${img.label}](${rawBase}/${img.path})`)
+    }
+    lines.push('')
+    lines.push('---')
+    lines.push('Reply **`lgtm`** / **`approve`** to proceed to build, or answer the forks above and I\'ll revise. Holding on `status:blocked`.')
+    const f = writeBody(`signoff-${a.issue}`, lines.join('\n'))
+    exec('gh', ['issue', 'comment', String(a.issue), '--repo', repo, '--body-file', f])
+    try { exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--add-label', 'status:blocked']) } catch (e) { state.log(`addLabel status:blocked: ${e.message}`) }
+    state.held.push({ issue: a.issue, questions: a.signoff.questions.length, images: art.images.length })
   },
   'add-label'(a, { repo, exec, labelled }) {
     // Force a FRESH labeled event (#1764): the leaf target may already carry work-this from a
@@ -210,6 +323,14 @@ function main(argv) {
   const actions = planToActions(plan, ctx)
   const summary = runActions(actions, { repo: args.repo })
   console.log(JSON.stringify(summary, null, 2))
+  if (plan.signoff) {
+    // A design sign-off hold IS the deliverable (status:blocked + the posted forks/artifacts);
+    // the artifact-gate recognises signoffHeld. Emit the rendered files so the workflow commits
+    // them to the epic branch (their raw URLs are referenced in the posted comment).
+    if (summary.artifacts.length) console.log(`SIGNOFF_ARTIFACTS ${summary.artifacts.join(' ')}`)
+    if (!summary.held.length) { console.error('signoff plan produced no hold — failing'); process.exit(1) }
+    return
+  }
   if (!plan.leaf && summary.created.length === 0) {
     console.error('apply produced no children — failing so the artifact-gate stays honest')
     process.exit(1)
