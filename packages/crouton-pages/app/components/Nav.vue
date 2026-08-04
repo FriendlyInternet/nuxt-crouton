@@ -189,7 +189,14 @@ const adminDropdownItems = computed<DropdownMenuItem[][]>(() => {
 })
 
 // Shared pill styles
-const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-full border border-default shadow-lg shadow-neutral-950/5'
+// `pointer-events-auto` belongs HERE, on the visible pill — not on the wrapper's
+// direct children (#1842). The wrapper spans the full viewport width when docked
+// top (`inset-x-0`), and its child is only a flex row that right-aligns this
+// pill. Re-enabling pointer events at that level put an invisible, full-width,
+// z-50 click-catcher across the top of every page, swallowing clicks on whatever
+// sat beneath it — the workspace pane headers' ✕ and filter buttons, in the
+// report that found this.
+const pillClass = 'pointer-events-auto flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-full border border-default shadow-lg shadow-neutral-950/5'
 
 // Full-screen pages (kassa and friends) own the whole viewport top — the
 // pills dock to the bottom-left corner there instead of reserving a top
@@ -204,7 +211,7 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
        below the status bar — env(safe-area-inset-top) is 0 there; the max()
        keeps it clear of the notch in standalone/PWA mode). -->
   <div
-    class="fixed z-50 pointer-events-none [&>*]:pointer-events-auto"
+    class="fixed z-50 pointer-events-none"
     :class="dockBottom
       ? 'bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 sm:left-6'
       : 'top-[max(0.25rem,env(safe-area-inset-top))] sm:top-6 inset-x-0 px-4 sm:px-6'"
