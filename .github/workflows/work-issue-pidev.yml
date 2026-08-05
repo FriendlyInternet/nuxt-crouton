@@ -437,7 +437,35 @@ jobs:
           # executable here.
           COMMITTED="$RUNNER_TEMP/committed-all.txt"
           cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | grep . | sort -u > "$COMMITTED" || true
-          PLAN_OUT="$(node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" || true)"
+          # ⚠️ NO `|| true` HERE (#2012). It used to swallow the exit code, and on 2026-08-05 that
+          # cost four undiagnosable runs: `pi-finish.mjs` died with MODULE_NOT_FOUND (it imports a
+          # sibling relatively, and the sibling has to be stashed alongside it — see the stash step),
+          # `|| true` ate the crash, PLAN_OUT came back empty, every count read 0, nothing was staged
+          # and no PR opened. The artifact-gate then reported `FINISH_OUTCOME: success` with no
+          # deliverable — so #1876's harness-failed detector, which gates on FINISH_OUTCOME ==
+          # 'failure' and would have named this instantly, could never fire. Four runs said "none of
+          # the known causes matched" about a cause the harness was actively hiding.
+          #
+          # The distinction the old code lost: "the planner RAN and found nothing" (legitimate — a
+          # sign-off hold commits nothing) versus "the planner never ran" (a harness bug). Only the
+          # second is a failure, and it is the one that must be loud.
+          PLAN_ERR="$RUNNER_TEMP/plan-stderr.txt"
+          PLAN_OUT="$(node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" 2>"$PLAN_ERR")"
+          PLAN_RC=$?
+          if [ "$PLAN_RC" -ne 0 ]; then
+            echo "::error::pi-finish plan exited $PLAN_RC — the harness could not read this run's result. This is a WORKFLOW bug, not an underspecified issue."
+            tail -20 "$PLAN_ERR" || true
+            exit "$PLAN_RC"
+          fi
+          # Files were committed but the planner described none of them: it ran, yet its output is
+          # unusable, so anything downstream (the acceptance gate, the tests gate, the PR body)
+          # would be reasoning about an empty picture. Conditioned on $COMMITTED being non-empty so
+          # a legitimate sign-off hold — which commits nothing and plans nothing — still passes.
+          if [ -s "$COMMITTED" ] && [ -z "$(printf '%s' "$PLAN_OUT" | tr -d '[:space:]')" ]; then
+            echo "::error::plan is EMPTY while $(wc -l < "$COMMITTED") file(s) were committed — the planner produced no usable output. WORKFLOW bug, not an underspecified issue."
+            tail -20 "$PLAN_ERR" || true
+            exit 1
+          fi
           APP_DIR="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^APP_DIR=//p')"
           PKG_LOGIC="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^PKG_LOGIC=//p')"; PKG_LOGIC=${PKG_LOGIC:-0}
           TEST_FILES="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^TEST_FILES=//p')"; TEST_FILES=${TEST_FILES:-0}
