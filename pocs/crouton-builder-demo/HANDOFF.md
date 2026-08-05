@@ -125,6 +125,33 @@ by porting the board into the old zoom shell):
 
 ## Signed-off design decisions (current truth)
 
+### Outline / DOM-tree editor — composition + responsiveness on one surface (#983, signed off 2026-08-05)
+
+**The direction for editing a page is an OUTLINE of its layout tree, not a free-floating card canvas.**
+A page is document flow, not a whiteboard — the saved page was always a `LayoutTree` (split/leaf/nested),
+so the free 2D card scatter implied absolute positioning it never had. The outline *shows* that tree and
+edits it directly (`pocs/crouton-builder`, route `/builder/outline/[pageId]`; the canvas board still
+coexists for now).
+
+- **Add from a list** (tap to insert) — drag is reserved for *rearranging*, never composing.
+- **Columns come from GROUPING**, per-group — select rows → "Group as Columns / Stack" wraps them into a
+  child layout, shown as **indentation**; each group carries a ⬌/⬍ toggle. There is **no page-global
+  Stack/Columns switch** — columns-vs-stack is layout-dependent (the correction that killed that toggle).
+- **Child layouts = nesting** — groups inside groups (nested `split`s), a `nested` node = a first-class
+  child layout. The outline is the recursive tree; the drop indicator is a **1D insertion line**, never
+  the ambiguous 2D edge/pane cue.
+- **Responsiveness is combined on the same surface** — the app's *real* slider breakpoint editor
+  (`CroutonLayoutBreakpointAuthor`) is embedded inline, bound to the same page, so its width slider /
+  device presets / scaled preview / variants / collapse motion are right there and a structure edit
+  updates the preview live. **Not** a separate mode, and **not** a reinvented device bar (that was tried
+  and rejected — it duplicated the real tool, worse).
+
+Supersedes the free-canvas *drag-to-compose* for composition (the `snap-dwell-arm` / `pane-drop-beside` /
+`ghost-ease-apart` board gestures below remain real, but are the reframed-away approach). **Deferred**
+(not blocking the sign-off): horizontal drag-to-nest (grouping-via-action already makes child layouts),
+cross-group reorder, and retiring the canvas so the outline is the sole editor. Spec: `outline-tree-editor`
+in `spec.json` (settled).
+
 ### Page model — one node is *the* page (#942)
 
 The board is a sandbox of layout candidates + loose draft blocks; **exactly one node is "the page"**

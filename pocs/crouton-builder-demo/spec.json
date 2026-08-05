@@ -358,17 +358,20 @@
   },
   {
     "id": "outline-tree-editor",
-    "behaviour": "Edit a page as an outline of its layout tree (DOM-like), not a free-floating card canvas. Adding is a list; drag is only for rearranging.",
-    "when": "editing a page: tap a block in a list to insert it; drag a row vertically to reorder; drag a row horizontally to nest/unnest; toggle a group's direction for columns (⬌) vs stack (⬍)",
-    "expect": "the outline IS the LayoutTree -- nesting depth = split children, a group's direction = flex row/column, a nested app = a nested node; the drop indicator is a simple 1D insertion line + indent guide (never the ambiguous 2D edge/pane cue); a live preview reflects every edit; there is no free-floating 2D card canvas",
-    "hook": "",
-    "howToTest": "1. open a page editor -> a vertical outline of the page's blocks + an add-from-list  2. tap a block in the list -> it inserts into the page (insertion line shows where)  3. drag a row up/down -> reorders  4. drag a row into a group (indent) -> it nests; toggle the group ⬌ -> its children become columns  5. the live preview updates to match",
-    "status": "proposed",
+    "behaviour": "Edit a page as an outline of its layout tree (DOM-like), with responsiveness combined into the SAME surface — not a free-floating card canvas and not a separate breakpoints mode. Add from a list; drag only rearranges; group to make columns / child layouts.",
+    "when": "editing a page (/builder/outline/[pageId]): tap a block from a list to add it; drag a row's handle to reorder within its group; tap rows to select then 'Group as Columns / Stack' to wrap them into a child layout (shown as indentation); a group row's ⬌/⬍ toggles columns vs stack; the app's real slider breakpoint editor (CroutonLayoutBreakpointAuthor) is embedded INLINE below, bound to the same page",
+    "expect": "the outline IS the LayoutTree (nesting depth = split children, a group's direction = flex row/column, a nested app = a nested node); the drop indicator is a simple 1D insertion line (never the ambiguous 2D edge/pane cue); COLUMNS come from grouping — a per-group ⬌/⬍, never a page-global switch (columns-vs-stack is layout-dependent); RESPONSIVENESS is authored on the same surface via the embedded real slider tool (its width slider / device presets / scaled preview / variants / collapse motion), and a structure edit updates that preview live; there is no free-floating 2D card canvas in this editor",
+    "hook": "outline-list",
+    "howToTest": "1. open a page -> tap 'Outline' -> the outline editor at /builder/outline/[pageId]  2. tap a block chip under 'Add a block' -> it appears as a row + in the preview  3. drag a row handle up/down -> reorders (1D insertion line)  4. tap two rows -> 'Group as Columns' -> they indent under a Columns group with a ⬌/⬍ toggle; Ungroup flattens  5. scroll to 'Responsive & preview' -> drag the width slider -> the same page reflows; a structure edit above updates it live",
+    "status": "settled",
+    "signedOff": "looks good — session walk 2026-08-05 (slice 4, combined structure + real breakpoint slider on one surface; landed in PR #1877)",
     "supersedes": "",
     "consideredRejected": [
-      "free-floating card canvas + drag-to-compose (reframes snap-dwell-arm / pane-drop-beside / ghost-ease-apart) -> the 2D drop is ambiguous (which edge / which pane / columns-or-rows), unreadable on a phone (IMG_2221); a page is document flow, not a whiteboard, so the tree was always the truth underneath the scattered cards",
-      "list-to-add but keep the canvas drag-to-compose -> leaves the ambiguous 2D gesture in place; only fixes half the problem",
-      "note: this is `proposed` -- it reframes the built canvas-compose entries above rather than superseding one; awaiting a human walk + sign-off before it becomes the settled contract"
+      "free-floating card canvas + drag-to-compose (reframes the built snap-dwell-arm / pane-drop-beside / ghost-ease-apart entries) -> the 2D drop is ambiguous (which edge / which pane / columns-or-rows), unreadable on a phone (IMG_2221); a page is document flow, not a whiteboard, so the tree was always the truth underneath the scattered cards",
+      "list-to-add but keep the canvas drag-to-compose -> ❌ leaves the ambiguous 2D gesture in place; only fixes half the problem",
+      "a page-global Stack/Columns toggle -> ❌ layout-dependent; columns-vs-stack belongs per-group (the built ⬌/⬍ on each group), not one page switch",
+      "a reinvented Phone/Tablet/Desktop device bar for responsiveness -> ❌ duplicated (worse) the app's existing slider breakpoint editor; embed the real CroutonLayoutBreakpointAuthor on the same surface instead",
+      "DEFERRED refinements (not yet built, not blocking the sign-off): horizontal drag-to-nest (grouping-via-action already creates child layouts); cross-group reorder; retiring the canvas board so the outline is the sole editor — the canvas still coexists"
     ]
   }
 ]
