@@ -4,7 +4,7 @@ import { nanoid } from 'nanoid'
 interface SalesProductsOptionItem {
   id: string
   label?: string
-  value?: string
+  priceModifier?: number
 }
 
 const model = defineModel<SalesProductsOptionItem>({ required: true })
@@ -23,6 +23,16 @@ if (model.value && !model.value.id) {
           class="w-full"
           size="xl"
           placeholder="Enter label"
+        />
+      </UFormField>
+      <UFormField>
+        <UInputNumber
+          v-model="model.priceModifier"
+          class="w-32"
+          size="xl"
+          :default-value="0"
+          :step="0.10"
+          placeholder="Price +/-"
         />
       </UFormField>
   </div>
