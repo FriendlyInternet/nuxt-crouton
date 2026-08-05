@@ -156,10 +156,11 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 
 `AGENT_RUNNER` (swap agent jobs to the self-hosted mac-mini; default ubuntu-latest) · `AGENT_HARNESS` (`pi` opt-in) · `CLEANUP_BRANCHES_APPLY` · `LABEL_READY_EPICS_APPLY` (write-gates for otherwise dry-run jobs) · `DIGEST_REPORT_EMAIL` / `DIGEST_EMAIL_FROM` / `RESEND_FROM` / `RED_TEAM_REPORT_EMAIL` (email rails) · `PROJECT_NAME` · `UNLIGHTHOUSE_SITE`.
 
-### Two auth rules every agent workflow obeys
+### Three auth rules every agent workflow obeys
 
 1. **The token-cascade rule** (the single most repeated fact across these files): GitHub suppresses workflow triggers for events initiated by the built-in `GITHUB_TOKEN`. Any mutation that must trigger a downstream workflow (apply `delegate` → decompose fires; merge → schedule-waves; close → strip-status; push → CI re-runs) is done with a **Harness App installation token**. Read-only or chain-terminal steps deliberately use `GITHUB_TOKEN`.
-2. **Job-level permissions only**: job-level `permissions` fully OVERRIDES (does not merge with) a workflow-level block, so `id-token: write` must sit on the job or the claude-code-action OIDC request fails. Stated verbatim in several workflows (e.g. `resume-on-comment.yml`).
+2. **The ruleset-bypass rule** (#1133): the `main` ruleset requires a PR, so **any workflow that pushes directly to `main` must push with the Harness App token** — the App is on the ruleset's bypass list, and `GITHUB_TOKEN` cannot be. GitHub Actions is not an installable App in the org, so adding it as a bypass actor is rejected outright (`422 — Actor GitHub Actions integration must be part of the ruleset source or owner organization`). The direct-to-`main` writers are `loop-station-inventory` · `loop-station-usage` · `loop-station-findings` · `bundle-budget`; all four commit with `[skip ci]`, which is what stops the App-token push (unlike a `GITHUB_TOKEN` push) from re-triggering the very workflow that made it.
+3. **Job-level permissions only**: job-level `permissions` fully OVERRIDES (does not merge with) a workflow-level block, so `id-token: write` must sit on the job or the claude-code-action OIDC request fails. Stated verbatim in several workflows (e.g. `resume-on-comment.yml`).
 
 Also: `anthropics/claude-code-action` is pinned to one SHA across several workflows with "keep in sync when bumping" — a manual multi-file sync liability; grep for the pin and check all of them when bumping (re-verify block).
 
