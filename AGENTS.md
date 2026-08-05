@@ -136,6 +136,13 @@ unrelated changes; never stage indiscriminately — stage per intent. Run doc-sy
 only when a PR's own history is noisy (`wip`/`oops`). Every commit on trunk: atomic, green,
 single-concern, real "why". One PR = one coherent change set.
 
+**Merging a stack: retarget before `--delete-branch`.** GitHub **auto-closes** (doesn't retarget) a
+PR whose base branch gets deleted. Before merging a stacked PR's base with `--delete-branch`,
+retarget each dependent PR onto the surviving integration branch first — or merge deepest-first so
+each merge carries the stack forward. (Incident: epic #1303, 2026-07-10 — merging #1330 with
+`--delete-branch` auto-closed #1344 and #1353, which were based on its branch; both survived only
+because stacked branches carry their ancestors' commits.)
+
 ## Decomposition pipeline (agents)
 
 One task → a tree of agent-worked issues: an **orchestrator** fans the epic into sub-issues; a
