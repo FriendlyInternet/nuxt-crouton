@@ -304,7 +304,10 @@ jobs:
           #    (edit/write tools). Generator output (crouton config/generate_collection, produced via
           #    a bash/MCP tool) is NOT a write-tool path, so it never appears in the ledger — which is
           #    exactly why the old "commit only the ledger" DROPPED the generated collection (#1830).
-          SESSION="$(ls -t "$RUNNER_TEMP/pi-session"/*.jsonl 2>/dev/null | head -1)"
+          # `|| true` is LOAD-BEARING (#1876): with no session the glob never expands, `ls` exits 2,
+          # `pipefail` propagates it to the assignment and errexit kills the step HERE — making the
+          # ::warning:: below unreachable. The empty case must reach the `if`, not abort the job.
+          SESSION="$(ls -t "$RUNNER_TEMP/pi-session"/*.jsonl 2>/dev/null | head -1 || true)"
           if [ -n "$SESSION" ] && [ -f "$SESSION" ]; then echo "pi session: $SESSION"
           else echo "::warning::no pi session in $RUNNER_TEMP/pi-session (#1764)"; fi
 
@@ -314,8 +317,14 @@ jobs:
           #    granular (blame→schema, bisect→generator). `-uall` expands untracked DIRECTORIES to
           #    files, or the generated collection would be an invisible collapsed `dir/` entry.
           git status --porcelain -uall 2>/dev/null | sed 's/^...//; s/^.* -> //' | sort -u > "$RUNNER_TEMP/changed.txt" || true
-          PLAN="$(node "$RUNNER_TEMP/pi-commit-plan.mjs" "${SESSION:-/nonexistent}" "$ROOT" "$RUNNER_TEMP/changed.txt" 2>/dev/null || echo '{"inputs":[],"generated":[]}')"
-          printf '%s' "$PLAN" | node -e 'const p=JSON.parse(require("fs").readFileSync(0,"utf8"));const t=process.env.RUNNER_TEMP;require("fs").writeFileSync(t+"/inputs.txt",(p.inputs||[]).join("\n"));require("fs").writeFileSync(t+"/generated.txt",(p.generated||[]).join("\n"))'
+          # `--out` has the (unit-tested) splitter write both bucket files itself, CORRECTLY
+          # TERMINATED. The old inline `node -e` serialised with a bare `.join("\n")`, leaving the
+          # last path unterminated — and the `while IFS= read` loops below skip a final unterminated
+          # line, so the LAST file of each bucket was silently dropped from the commit while
+          # `grep -c` still counted it (#1876; it ate the one locale file #1874 was about).
+          # Pre-create both files so a splitter failure leaves empty buckets, not missing ones.
+          : > "$RUNNER_TEMP/inputs.txt"; : > "$RUNNER_TEMP/generated.txt"
+          node "$RUNNER_TEMP/pi-commit-plan.mjs" "${SESSION:-/nonexistent}" "$ROOT" "$RUNNER_TEMP/changed.txt" --out "$RUNNER_TEMP" >/dev/null 2>&1 || echo "::warning::commit-plan splitter failed — treating both buckets as empty (#1876)"
           NIN="$(grep -c . "$RUNNER_TEMP/inputs.txt" 2>/dev/null || true)"; NIN=${NIN:-0}
           NGEN="$(grep -c . "$RUNNER_TEMP/generated.txt" 2>/dev/null || true)"; NGEN=${NGEN:-0}
           echo "commit plan (#1849) — inputs=$NIN generated=$NGEN"
@@ -372,7 +381,12 @@ jobs:
           #    when the app has no typecheck to run.
           ACCEPT="neutral"; ACCEPT_MSG="could not typecheck the touched app — not verified"
           if [ "$HAVE_COMMITS" = "1" ]; then
-            APP_DIR="$(grep -hE '^(apps|pocs)/[^/]+/' "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sed -E 's#^((apps|pocs)/[^/]+)/.*#\1#' | sort -u | head -1)"
+            # `|| true` is LOAD-BEARING (#1876): a leaf whose diff is entirely `packages/**` (or
+            # `.github/`, `scripts/`, docs) matches NOTHING here, so grep exits 1, `pipefail`
+            # propagates it to the assignment and errexit kills the step — after the push, before
+            # `gh pr create`. That is exactly how #1874/#1875 pushed a branch and never opened a PR.
+            # No app dir is a legitimate NEUTRAL verdict below, not a crash.
+            APP_DIR="$(grep -hE '^(apps|pocs)/[^/]+/' "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sed -E 's#^((apps|pocs)/[^/]+)/.*#\1#' | sort -u | head -1 || true)"
             if [ -n "$APP_DIR" ] && [ -f "$APP_DIR/package.json" ]; then
               PKG="$(node -p "require('./$APP_DIR/package.json').name || ''" 2>/dev/null || true)"
               HAS_TC="$(node -e "process.exit(require('./$APP_DIR/package.json').scripts?.typecheck?0:1)" 2>/dev/null && echo 1 || echo 0)"
@@ -482,6 +496,9 @@ jobs:
           # #1764: '1' only when the deterministic finish step could NOT persist pi's edits
           # (a git/tooling failure) — lets the gate name that cause instead of "underspecified".
           PI_LEFT_DIRTY: ${{ steps.finish.outputs.still_dirty }}
+          # #1876: the finish step's own outcome. Without it the gate cannot tell "pi had nothing to
+          # do" from "the harness crashed mid-finish", and defaults to blaming the ISSUE.
+          FINISH_OUTCOME: ${{ steps.finish.outcome }}
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           TRIGGER: ${{ github.event_name }}
         with:
@@ -596,9 +613,33 @@ jobs:
             const fs = require('fs')
             let why = '', action = '', detail = ''
             const failed = process.env.CLAUDE_CONCLUSION === 'failure'
+
+            // ── HARNESS-FAILED-AFTER-COMMITTING (#1876) — checked FIRST ────────────────
+            // The gate's evidence used to be {pi's exit code, pi's stdout, the GitHub API}. The
+            // FINISH step was invisible to it, so when the finish step crashed after pushing a
+            // branch, every real cause missed and the run fell through to the `else` below and
+            // told the owner their ISSUE was underspecified — while a branch with their work sat
+            // on the remote (#1874/#1875). A pushed `work-<issue>` branch is proof the agent
+            // produced something; the only thing missing is the PR the harness died before opening.
+            let workBranch = null
+            try {
+              const ref = await github.rest.git.getRef({ ...context.repo, ref: `heads/work-${issue_number}` })
+              const commit = await github.rest.git.getCommit({ ...context.repo, commit_sha: ref.data.object.sha })
+              const committedAt = new Date(commit.data.committer?.date || 0).getTime()
+              if (committedAt >= sinceMs) workBranch = { sha: ref.data.object.sha.slice(0, 7) }
+            } catch (e) { /* no such branch — the ordinary "nothing was built" case */ }
+
+            if (workBranch && process.env.FINISH_OUTCOME === 'failure') {
+              why = `the HARNESS failed after committing — \`work-${issue_number}\` (\`${workBranch.sha}\`) was pushed this run, but the finish step died before opening the PR`
+              action = 'open the run log at the `finish` step — this is a workflow bug, NOT an underspecified issue. '
+                + 'Do not edit the issue; fix the workflow, delete the branch, and re-apply the label'
+            }
+
             try {
               const logFile = process.env.PI_EXEC_LOG
-              if (logFile && fs.existsSync(logFile)) {
+              // `!why` — never let the log-grep chain overwrite the harness-failure verdict above,
+              // whose evidence (a pushed branch + a failed finish step) is stronger than a regex (#1876).
+              if (!why && logFile && fs.existsSync(logFile)) {
                 const log = fs.readFileSync(logFile, 'utf8')
                 const tail = log.length > 600 ? log.slice(-600) : log
                 // GLM Coding Plan quota (z.ai) — checked FIRST: its 429 is distinct from an
@@ -625,9 +666,17 @@ jobs:
                   why = 'the pi agent step errored before it built anything'
                   action = 'open the run log, fix the SDK/tooling error, then re-dispatch'
                   if (tail.trim()) detail = tail.trim()
+                } else if (process.env.FINISH_OUTCOME === 'failure') {
+                  // The finish step failed but pushed nothing — still a harness fault, not the ticket.
+                  why = 'the finish step failed before it could commit anything'
+                  action = 'open the run log at the `finish` step — a workflow bug, not an underspecified issue'
                 } else {
-                  why = 'pi finished without opening a PR, creating sub-issues, or holding for sign-off'
-                  action = 'the issue is likely underspecified — add a concrete description + acceptance criteria, then re-dispatch'
+                  // LAST RESORT — no known cause matched. Say exactly that (#1876). The old text
+                  // asserted "the issue is likely underspecified", which is a GUESS printed in the
+                  // same confident voice as the real detections above; it sent the owner to rewrite
+                  // two well-specified tickets while the actual bug was in this workflow.
+                  why = 'pi ran to completion but no PR, sub-issues, or sign-off hold appeared — and none of the known causes matched'
+                  action = 'open the run log before changing anything. Only if the log shows pi genuinely had nothing to act on is the issue underspecified'
                 }
               }
             } catch (e) { core.warning(`artifact-gate: could not read pi run log: ${e.message}`) }
