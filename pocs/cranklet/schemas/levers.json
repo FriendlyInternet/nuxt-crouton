@@ -1,0 +1,21 @@
+{
+  "name": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "label": "Name",
+      "area": "main",
+      "group": "basic"
+    }
+  },
+  "throw": {
+    "type": "number",
+    "meta": {
+      "required": true,
+      "default": 0,
+      "label": "Throw",
+      "area": "main",
+      "group": "basic"
+    }
+  }
+}
