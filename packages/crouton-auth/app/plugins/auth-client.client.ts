@@ -4,7 +4,7 @@
  * Initializes the Better Auth client on the client-side.
  * Configures organization, passkey, and 2FA client plugins based on @crouton/auth config.
  */
-import { createAuthClient } from 'better-auth/client'
+import { createAuthClient } from 'better-auth/client/vue'
 import type { BetterAuthClientPlugin } from 'better-auth/client'
 import { organizationClient, twoFactorClient, adminClient } from 'better-auth/client/plugins'
 import { passkeyClient } from '@better-auth/passkey/client'
