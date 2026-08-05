@@ -28,12 +28,10 @@ import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'
 
 import { outstandingOrdersCondition, OUTSTANDING_DEFINITION } from '../server/utils/pass-tickets'
 
-// Local-only, and a known gap rather than a preference: every ci.yml job installs with
-// `pnpm install --ignore-scripts`, so better-sqlite3's native binding is never built and
-// `new Database()` throws "Could not locate the bindings file". Same guard, same reason as
-// `per-product-totals.test.ts`; #1880 fixes CI and removes both. Until then run these
-// locally before touching the outstanding rule.
-const describeLocal = describe.skipIf(process.env.CI)
+// Runs in CI as well as locally: ci.yml's test job rebuilds better-sqlite3's native binding
+// (#1880), so `new Database()` no longer dies on "Could not locate the bindings file". These
+// must NOT be skipped — a skipped guard is indistinguishable from a passing one, which is how
+// the #1612 seed contract went dark.
 
 // Minimal mirrors of the generated tables — only the columns the predicate reads.
 const orders = sqliteTable('sales_orders', {
@@ -121,7 +119,7 @@ beforeEach(() => {
   ]).run()
 })
 
-describeLocal('outstandingOrdersCondition — the list answers the same sentence as the count', () => {
+describe('outstandingOrdersCondition — the list answers the same sentence as the count', () => {
   it('keeps an order whose requiring location has no bump', () => {
     seedOrder('o1', ['kitchen'])
     expect(outstandingIds()).toEqual(['o1'])
