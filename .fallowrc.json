@@ -89,6 +89,12 @@
     "**/playground/**",
     "**/e2e-templates/**",
     "packages/*/examples/**",
+    // The canary rig's crash-test dummy (#1878). Unreferenced ON PURPOSE — its README
+    // forbids importing it — so "unused file" is a true observation with a wrong
+    // conclusion. Ignoring it also keeps canary RUNS honest: a worker editing this folder
+    // must not collect a red fallow check for a reason unrelated to what the canary tests
+    // (the same trap as the acceptance gate going NEUTRAL on an unprepared poc).
+    "pocs/canary/**",
     // Internal notes/prototypes, not part of any code graph
     "writeups/**"
   ],
