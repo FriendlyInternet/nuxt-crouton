@@ -426,13 +426,20 @@ const mobileCartOpen = ref(false)
 // Order-history slideover (narrow-pane bar). The active user's own orders.
 const historyOpen = ref(false)
 
+// Total units in the cart (sum of line quantities, not line count) — the
+// single source every "how many" in the POS reads, so the mobile bar and the
+// category tab badges (cartCountsByCategory, below) can't disagree (#1979).
+const cartUnitCount = computed(() =>
+  cartItems.value.reduce((sum, item) => sum + item.quantity, 0)
+)
+
 // Collapsed cart bar (narrow panes). Mirrors the print feedback while the
 // cart is empty; with items it stays the cart summary — a pending warning
 // then only swaps the icon (the rows wait inside the drawer).
 const mobileBar = computed(() => {
   if (cartItems.value.length > 0) {
     return {
-      label: `${t('sales.cart.title')} (${cartItems.value.length}) - ${formatPrice(cartTotal.value)}`,
+      label: `${t('sales.cart.title')} (${cartUnitCount.value}) - ${formatPrice(cartTotal.value)}`,
       icon: printWarnings.value.length > 0 ? 'i-lucide-alert-triangle' : 'i-lucide-shopping-cart',
       color: 'primary',
       variant: 'solid',
