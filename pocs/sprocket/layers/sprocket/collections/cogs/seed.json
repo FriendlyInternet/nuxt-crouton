@@ -1,0 +1,18 @@
+{
+  "table": "sprocket_cogs",
+  "key": "name",
+  "rows": [
+    {
+      "name": "Sample name 1",
+      "teeth": 1
+    },
+    {
+      "name": "Sample name 2",
+      "teeth": 2
+    },
+    {
+      "name": "Sample name 3",
+      "teeth": 3
+    }
+  ]
+}

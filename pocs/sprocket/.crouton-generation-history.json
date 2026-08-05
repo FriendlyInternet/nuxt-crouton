@@ -1,0 +1,13 @@
+[
+  {
+    "collection": "cogs",
+    "fields": [
+      "name",
+      "teeth"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-05T11:46:20.837Z",
+    "layer": "sprocket",
+    "gitSha": "5b9dfa6"
+  }
+]
