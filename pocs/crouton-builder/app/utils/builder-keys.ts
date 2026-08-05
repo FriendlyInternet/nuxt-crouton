@@ -10,6 +10,9 @@ import type { PaneDropEdge } from '@fyit/crouton-layout/app/utils/layout-edit'
 /** The label of the item a ghost pane stands in for (threaded to BuilderGhostPane). */
 export const BUILDER_GHOST_LABEL_KEY: InjectionKey<Ref<string | null> | null> = Symbol('builder-ghost-label')
 
+/** The drop edge, so the ghost slab carries the `ghost-pane[data-edge]` walk hook (drop-beside-pane). */
+export const BUILDER_GHOST_EDGE_KEY: InjectionKey<Ref<PaneDropEdge | null> | null> = Symbol('builder-ghost-edge')
+
 /**
  * Set-as-page (spec: `page-model-one-node`) — move the ★ page badge to another card. Exactly one
  * node on a board is "the page" (the live layout a visitor sees); this marks the given node as the

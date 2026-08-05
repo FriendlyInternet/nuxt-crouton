@@ -19,7 +19,7 @@ import { useElementSize } from '@vueuse/core'
 import type { LayoutNode, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
 import { resolveLayoutAtWidth } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { applyPaneDrop } from '@fyit/crouton-layout/app/utils/layout-edit'
-import { BUILDER_SNAP_KEY, BUILDER_SET_PAGE_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, BUILDER_GHOST_LABEL_KEY, type BuilderRegion } from '~/utils/builder-keys'
+import { BUILDER_SNAP_KEY, BUILDER_SET_PAGE_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, BUILDER_GHOST_LABEL_KEY, BUILDER_GHOST_EDGE_KEY, type BuilderRegion } from '~/utils/builder-keys'
 
 const props = defineProps<{
   data: {
@@ -289,20 +289,8 @@ const setRegion = inject(BUILDER_SET_REGION_KEY, null)
 // already the page). The board clears the flag on every other card so exactly one stays the page.
 const setPage = inject(BUILDER_SET_PAGE_KEY, null)
 
-const paneGuideStyle = computed(() => {
-  const p = snapHere.value?.paneDrop
-  if (!p) return undefined
-  const r = p.rect
-  const pct = (v: number) => `${v * 100}%`
-  const t = `${snapHere.value!.armed ? 6 : 10}px`
-  switch (p.edge) {
-    case 'right': return { left: pct(r.left + r.width), top: pct(r.top), height: pct(r.height), width: t, transform: 'translateX(-50%)' }
-    case 'left': return { left: pct(r.left), top: pct(r.top), height: pct(r.height), width: t, transform: 'translateX(-50%)' }
-    case 'top': return { left: pct(r.left), top: pct(r.top), width: pct(r.width), height: t, transform: 'translateY(-50%)' }
-    case 'bottom': return { left: pct(r.left), top: pct(r.top + r.height), width: pct(r.width), height: t, transform: 'translateY(-50%)' }
-  }
-  return undefined
-})
+// (The old absolute pane-edge guide bar was removed — the eased-apart ghost slot is now the single
+// pane-drop indicator; a competing bar made the preview unreadable, IMG_2221.)
 
 // ghost-ease-apart (spec: `ghost-ease-apart`) — while a pane-drop preview points at THIS card,
 // splice a translucent placeholder leaf (`__dropghost__` → BuilderGhostPane) into the targeted split
@@ -314,6 +302,10 @@ const paneGuideStyle = computed(() => {
 const GHOST_LEAF: LayoutNode = { type: 'leaf', blockId: '__dropghost__' }
 const ghostLabel = computed(() => snapHere.value?.label ?? null)
 provide(BUILDER_GHOST_LABEL_KEY, ghostLabel)
+// The drop edge, so the ghost slab can carry the `ghost-pane[data-edge]` walk hook (the hook moved
+// off the removed bar onto the real slot). Null when this card isn't the pane-drop target.
+const ghostEdge = computed(() => snapHere.value?.paneDrop?.edge ?? null)
+provide(BUILDER_GHOST_EDGE_KEY, ghostEdge)
 const renderNode = computed<LayoutNode>(() => {
   const pd = snapHere.value?.paneDrop
   if (pd) return applyPaneDrop(props.data.node, { path: pd.path, edge: pd.edge }, GHOST_LEAF)
@@ -407,17 +399,18 @@ const renderNode = computed<LayoutNode>(() => {
       <UIcon name="i-lucide-move-diagonal-2" class="size-3.5 text-primary" />
     </div>
 
-    <!-- snap-guide / ghost-pane hook: this card is the target. Edge-snap → a bar on the card's
-         outer edge (data-handoff="snap-guide"). Pane-drop → a bar on the targeted pane's edge
-         (data-handoff="ghost-pane" data-edge). Soft blue, then green (armed) after the dwell. -->
+    <!-- snap-guide: this card is an EDGE-SNAP target (two loose cards merging) → a bar on the card's
+         outer edge. The PANE-DROP case draws NO bar here — its single indicator is the eased-apart
+         ghost slot (ghost-ease-apart), so the two don't contradict (a vertical edge line fighting a
+         horizontal slot was unreadable — IMG_2221). The `ghost-pane[data-edge]` walk hook now rides
+         the real slot (BuilderGhostPane), not a separate bar. -->
     <div
-      v-if="snapHere"
-      :data-handoff="snapHere.paneDrop ? 'ghost-pane' : 'snap-guide'"
+      v-if="snapHere && !snapHere.paneDrop"
+      data-handoff="snap-guide"
       :data-armed="snapHere.armed"
       :data-edge="snapHere.edge"
       class="builder-snap-guide"
-      :class="snapHere.paneDrop ? (snapHere.armed ? 'armed' : 'soft') : [snapHere.armed ? 'armed' : 'soft', `e-${snapHere.edge}`]"
-      :style="snapHere.paneDrop ? paneGuideStyle : undefined"
+      :class="[snapHere.armed ? 'armed' : 'soft', `e-${snapHere.edge}`]"
     />
 
     <!-- card-is-live-preview (spec: card-is-live-preview, #983): the card IS the live
@@ -444,7 +437,15 @@ const renderNode = computed<LayoutNode>(() => {
     </div>
 
     <div class="builder-node-live nowheel nopan nodrag" data-handoff="node-live">
-      <CroutonLayoutRenderer :node="renderNode" :interactive="false" />
+      <!-- While THIS card is being dragged, show a quiet labeled chip instead of the live page.
+           Rendering the real form mid-drag surfaced validation noise ("name is required") that
+           cluttered the drop preview (IMG_2221) — a clean chip reads as "the card you're placing"
+           and is cheaper. The target card (not dragging) still renders live + eases its panes apart. -->
+      <CroutonLayoutRenderer v-if="!dragging" :node="renderNode" :interactive="false" />
+      <div v-else class="builder-drag-chip" data-handoff="drag-chip">
+        <UIcon name="i-lucide-shapes" class="size-6 opacity-70" />
+        <span class="builder-drag-chip-label">{{ data.label ?? 'Block' }}</span>
+      </div>
     </div>
 
     <!-- detach-reorder (spec: detach-reorder): long-press → top-level panes become grabbable.
@@ -558,6 +559,25 @@ const renderNode = computed<LayoutNode>(() => {
 /* drag-glow (spec: drag-glow) — a light-green halo while the card is dragged or just added. */
 .builder-drag-glow {
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.55), 0 0 18px 4px rgba(16, 185, 129, 0.35);
+}
+/* drag-chip — the quiet stand-in the dragged card shows instead of its live page (IMG_2221). */
+.builder-drag-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 100%;
+  width: 100%;
+  color: rgb(16, 185, 129);
+}
+.builder-drag-chip-label {
+  font-size: 12px;
+  font-weight: 700;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* snap-guide (spec: snap-dwell-arm) — the edge bar on the snap target. soft = blue/pulse
    (approached), armed = green/glow (held past the dwell → release will snap). */
