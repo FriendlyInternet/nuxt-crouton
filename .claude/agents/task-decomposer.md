@@ -127,8 +127,17 @@ bodies breaks on shell quoting (`$(cat <<EOF)`, #1001) and then fabricates succe
   heredoc), as JSON:
   - leaf → `{ "leaf": true }`
   - split → `{ "leaf": false, "children": [ { "title", "body" (markdown, no pipeline block / no
-    Dedup line — the apply step adds them), "labels": ["type:*","<component>"], "needsSplit": <bool> } … ] }`
+    Dedup line — the apply step adds them), "labels": ["type:*","<component>"], "needsSplit": <bool>,
+    "blockedBy": [<sibling indices>] } … ] }`
     — 2–6 children, `needsSplit:true` for a child that itself needs further decomposition.
+- **Express ORDERING with `blockedBy` (#1750).** It lists the **sibling indices** (0-based positions
+  in this same `children` array — *not* issue numbers, which don't exist yet) that a child must wait
+  for. Only children with no blockers are dispatched on the first pass; the rest are created, linked,
+  stamped `Blocked-by: #N`, and released by the **existing wave scheduler** (`schedule-waves.yml`)
+  when their last blocker closes. Use it whenever a child needs another's code/schema/API to exist
+  first — a flat list is only correct when the children are genuinely independent. Be honest **both
+  ways**: an invented dependency needlessly serialises work that could run in parallel. Self-refs,
+  out-of-range indices and cycles are hard plan errors (a cycle would stall the tree in silence).
 - Then **STOP**. Writing a correct `decompose-plan.json` is the entire deliverable.
 
 The deterministic **apply step** (`scripts/apply-decompose-plan.mjs`) turns the plan into real

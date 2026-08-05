@@ -17,8 +17,16 @@
 //   { "leaf": false, "children": [                     // split into these children
 //       { "title": "...", "body": "...",               // plain markdown body (no pipeline block —
 //         "labels": ["type:chore","meta:agents"],      //   this step injects it)
-//         "needsSplit": false }                         // false → a leaf child (work-this);
-//   ] }                                                //   true → needs more decomposition (delegate-pi)
+//         "needsSplit": false,                          // false → a leaf child (work-this);
+//         "blockedBy": [0] }                            //   true → needs more decomposition (delegate-pi)
+//   ] }                                                // blockedBy = sibling INDICES this child waits on
+//
+// ORDERING (#1750). `blockedBy` is how the decomposer expresses that one leaf cannot start until
+// another lands. A blocked child is created and linked like any other but gets NO trigger label —
+// the EXISTING wave scheduler (schedule-waves.yml → wave-gate.mjs, #283) releases it when its
+// last blocker closes. Omit it and children fan out
+// in parallel, which stays correct for genuinely independent work. Indices, not issue numbers:
+// the children do not exist when the plan is written.
 //
 // The PURE core (parsePlan / planToActions / buildChildBody) is unit-tested (…test.mjs). The I/O
 // (runActions → gh via execFileSync) is a thin executor injected for tests.
@@ -76,9 +84,44 @@ export function parsePlan(raw) {
       body: c.body,
       labels: Array.isArray(c.labels) ? c.labels.filter(l => typeof l === 'string' && l) : [],
       needsSplit: !!c.needsSplit,
+      // ORDERING (#1750): sibling INDICES this child depends on. Indices, not issue numbers —
+      // at plan time the children do not exist yet, so there is nothing to reference but position.
+      blockedBy: normalizeBlockedBy(c.blockedBy, i, p.children.length),
     }
   })
+  assertNoDependencyCycle(children)
   return { leaf: false, children }
+}
+
+/** Validate one child's `blockedBy` → a sorted, de-duped array of in-range sibling indices. */
+function normalizeBlockedBy(raw, self, count) {
+  if (raw === undefined || raw === null) return []
+  const list = Array.isArray(raw) ? raw : [raw]
+  const out = new Set()
+  for (const v of list) {
+    if (!Number.isInteger(v)) throw new PlanError(`child[${self}].blockedBy must contain sibling indices (integers), got ${JSON.stringify(v)}`)
+    if (v === self) throw new PlanError(`child[${self}].blockedBy cannot reference itself`)
+    if (v < 0 || v >= count) throw new PlanError(`child[${self}].blockedBy references sibling ${v}, which does not exist (0..${count - 1})`)
+    out.add(v)
+  }
+  return [...out].sort((a, b) => a - b)
+}
+
+/**
+ * A cycle would deadlock the whole tree: every child waits on another, none is ever dispatched,
+ * and the epic silently stalls with no worker and no error. Fail LOUD at plan time instead —
+ * an honest parse failure is recoverable, a silent stall is the failure mode this issue is about.
+ */
+function assertNoDependencyCycle(children) {
+  const state = new Array(children.length).fill(0)   // 0 = unvisited, 1 = on stack, 2 = done
+  const walk = (i, path) => {
+    if (state[i] === 1) throw new PlanError(`child dependency cycle: ${[...path, i].map(n => `child[${n}]`).join(' → ')}`)
+    if (state[i] === 2) return
+    state[i] = 1
+    for (const dep of children[i].blockedBy) walk(dep, [...path, i])
+    state[i] = 2
+  }
+  for (let i = 0; i < children.length; i++) walk(i, [])
 }
 
 /** Keep only labels that actually exist in the repo taxonomy — an unknown label fails `gh issue
@@ -88,6 +131,28 @@ export function sanitizeLabels(labels = [], known = []) {
   const kept = [], dropped = []
   for (const l of labels) (knownSet.has(l) ? kept : dropped).push(l)
   return { kept, dropped }
+}
+
+/**
+ * The `Blocked-by:` line — the on-issue record of an inter-sibling dependency (#1750).
+ *
+ * This is NOT a new convention: `schedule-waves.yml` has released dependent waves off this exact
+ * line since #283, and `wave-gate.mjs`'s `parseBlockers` is its reader. The gap was only that the
+ * DECOMPOSER never emitted it — a human hand-wrote the edges (as on the #1713 tree) or they did
+ * not exist. So we write the shape the existing scheduler already consumes; `parseBlockedBy` here
+ * exists to round-trip-test our own writer, not to become a second parser.
+ */
+export function formatBlockedBy(numbers) {
+  return `Blocked-by: ${numbers.map(n => `#${n}`).join(', ')}`
+}
+
+/** Pull every issue number off a body's `Blocked-by:` lines. Tolerant of case/spacing/multiples. */
+export function parseBlockedBy(body = '') {
+  const out = new Set()
+  for (const m of String(body).matchAll(/^\s*blocked[-\s]?by\s*:(.+)$/gim)) {
+    for (const n of m[1].matchAll(/#(\d+)/g)) out.add(Number(n[1]))
+  }
+  return [...out].sort((a, b) => a - b)
 }
 
 /** The child's final body = its markdown + the WS2 pipeline block at childDepth. Pure. */
@@ -116,17 +181,33 @@ export function planToActions(plan, ctx) {
     actions.push({ type: 'add-label', issue: target, label: WORKER_TRIGGER })
     return actions
   }
+  // ORDERING (#1750). Two passes, and the split matters: a `Blocked-by: #N` line can only be
+  // written once N exists, so EVERY child must be created before ANY dependency is recorded or
+  // any worker dispatched. The old interleaved create→link→label loop dispatched child 0's worker
+  // while child 1 was still uncreated — which is how three workers for one package started within
+  // five seconds, two of them against preconditions that did not exist yet.
   plan.children.forEach((c, i) => {
-    const ref = `child${i}`
     const { kept, dropped } = sanitizeLabels(c.labels, knownLabels)
     actions.push({
-      type: 'create', ref,
+      type: 'create', ref: `child${i}`,
       title: c.title,
       body: buildChildBody(c.body, { epic, childDepth, epic_branch }),
       labels: kept, droppedLabels: dropped,
     })
-    actions.push({ type: 'link', parent: target, ref })
-    actions.push({ type: 'trigger-label', ref, label: labelForChild({ depth: childDepth, isLeaf: !c.needsSplit, maxDepth: MAX_DEPTH }) })
+    actions.push({ type: 'link', parent: target, ref: `child${i}` })
+  })
+  // Pass 2: record dependencies, then dispatch ONLY the children with none. A blocked child gets
+  // no trigger label at all — the wave scheduler releases it when its last blocker closes. That
+  // is the whole point: an unbuildable leaf should never consume a run on the serial mac-mini.
+  plan.children.forEach((c, i) => {
+    const deps = c.blockedBy || []
+    if (deps.length) {
+      actions.push({ type: 'note-blocked', ref: `child${i}`, blockedByRefs: deps.map(d => `child${d}`) })
+    }
+  })
+  plan.children.forEach((c, i) => {
+    if ((c.blockedBy || []).length) return
+    actions.push({ type: 'trigger-label', ref: `child${i}`, label: labelForChild({ depth: childDepth, isLeaf: !c.needsSplit, maxDepth: MAX_DEPTH }) })
   })
   return actions
 }
@@ -144,13 +225,13 @@ function realExec(file, args, input) {
  * One small handler per action type (a dispatch table) — each closes over the shared run state.
  */
 export function runActions(actions, { repo, exec = realExec, log = console.error, writeBody = defaultWriteBody } = {}) {
-  const state = { repo, exec, writeBody, log, refToNumber: {}, created: [], labelled: [], held: [], artifacts: [] }
+  const state = { repo, exec, writeBody, log, refToNumber: {}, created: [], labelled: [], held: [], artifacts: [], blocked: [] }
   for (const a of actions) {
     const handler = ACTION_HANDLERS[a.type]
     if (!handler) throw new Error(`unknown action type: ${a.type}`)
     handler(a, state)
   }
-  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts }
+  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked }
 }
 
 // Render the artifacts pi proposed for a design sign-off. BEST-EFFORT: every render is guarded so a
@@ -279,6 +360,20 @@ const ACTION_HANDLERS = {
     const child = refToNumber[a.ref]
     exec('gh', ['issue', 'edit', String(child), '--repo', repo, '--add-label', a.label])
     labelled.push({ issue: child, label: a.label })
+  },
+  // ORDERING (#1750): stamp `Blocked-by: #N` onto a child that must wait. This is the ONLY
+  // record of the dependency, and the format is load-bearing, not decoration: the wave scheduler
+  // (`wave-gate.mjs` → `parseBlockers`, #283) reads these lines back off the body to decide what a
+  // closing issue just released. We deliberately emit the shape it already parses rather than a
+  // second mechanism — it also carries the green-branch gate (#1688) any new one would lack.
+  'note-blocked'(a, { repo, exec, refToNumber, blocked }) {
+    const child = refToNumber[a.ref]
+    const blockers = a.blockedByRefs.map(r => refToNumber[r]).filter(Boolean)
+    if (!blockers.length) return
+    const body = exec('gh', ['issue', 'view', String(child), '--repo', repo, '--json', 'body', '-q', '.body']) || ''
+    const line = formatBlockedBy(blockers)
+    exec('gh', ['issue', 'edit', String(child), '--repo', repo, '--body', `${line}\n\n${body}`])
+    blocked.push({ issue: child, blockers })
   },
 }
 

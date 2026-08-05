@@ -26,10 +26,19 @@ export function parseBlockers(body) {
   return [...new Set((m[1].match(/\d+/g) || []).map(Number))]
 }
 
-/** Already dispatched or being worked — never re-release. */
+/**
+ * Already dispatched or being worked — never re-release.
+ *
+ * `work-this` counts (#1750). The event-driven pipeline dispatches a LEAF straight to the
+ * single-use worker with that label, never `delegate` — so before this, a leaf already being
+ * built looked un-dispatched to the scheduler, which would add `delegate` on top and start a
+ * redundant decompose run against an issue a worker was mid-way through. `delegate-pi` is the
+ * same story one rung up (a child that still needs splitting).
+ */
 export function isDispatched(labels = []) {
   const names = labels.map(l => (typeof l === 'string' ? l : l.name))
-  return names.includes('delegate') || names.includes('status:in-progress')
+  return names.includes('delegate') || names.includes('delegate-pi') ||
+    names.includes('work-this') || names.includes('status:in-progress')
 }
 
 /**
