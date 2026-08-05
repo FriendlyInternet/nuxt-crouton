@@ -1,0 +1,13 @@
+[
+  {
+    "collection": "plates",
+    "fields": [
+      "name",
+      "weight"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-05T12:28:08.609Z",
+    "layer": "main",
+    "gitSha": "3e78b8b40"
+  }
+]

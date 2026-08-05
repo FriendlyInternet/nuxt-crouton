@@ -1,0 +1,18 @@
+{
+  "table": "main_plates",
+  "key": "name",
+  "rows": [
+    {
+      "name": "Sample name 1",
+      "weight": 1
+    },
+    {
+      "name": "Sample name 2",
+      "weight": 2
+    },
+    {
+      "name": "Sample name 3",
+      "weight": 3
+    }
+  ]
+}
