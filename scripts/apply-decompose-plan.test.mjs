@@ -13,6 +13,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   parsePlan, PlanError, sanitizeLabels, buildChildBody, planToActions, runActions,
+  formatBlockedBy, parseBlockedBy,
 } from './apply-decompose-plan.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { WORKER_TRIGGER, MAX_DEPTH } from './pipeline-loop-guard.mjs'
@@ -207,4 +208,69 @@ test('a signoff hold @mentions the owner and holds status:blocked (mock exec)', 
   // and it must actually hold, or the artifact-gate sees no sign-off and calls the run a no-op
   const labelCalls = calls.filter(c => Array.isArray(c) && c.includes('status:blocked'))
   assert.ok(labelCalls.some(c => c.includes('--add-label')), 'must apply status:blocked')
+})
+
+// ── #1750: sibling ordering — dependent leaves must not all fire at once ─────────────
+// The #1713 shape: three good leaves, one of them (#1738) a precondition for the other two.
+// All three got work-this within five seconds on a serial runner. Ordering was load-bearing
+// and had no way to be expressed. These pin the expression and the dispatch decision.
+test('blockedBy is normalized: deduped, sorted, and absent means independent', () => {
+  const p = parsePlan({ leaf: false, children: [
+    { title: 'a', body: 'x' },
+    { title: 'b', body: 'x', blockedBy: [0, 0] },
+    { title: 'c', body: 'x', blockedBy: 1 },        // scalar accepted
+  ] })
+  assert.deepEqual(p.children[0].blockedBy, [])
+  assert.deepEqual(p.children[1].blockedBy, [0])
+  assert.deepEqual(p.children[2].blockedBy, [1])
+})
+
+test('parsePlan rejects a bad blockedBy (honest failure, not a silent stall)', () => {
+  const kids = (b) => ({ leaf: false, children: [{ title: 'a', body: 'x' }, { title: 'b', body: 'x', blockedBy: b }] })
+  assert.throws(() => parsePlan(kids([9])), PlanError)      // out of range
+  assert.throws(() => parsePlan(kids([1])), PlanError)      // self-reference
+  assert.throws(() => parsePlan(kids(['0'])), PlanError)    // not an integer
+  // a cycle would deadlock the whole tree with no worker and no error — must fail LOUD
+  assert.throws(() => parsePlan({ leaf: false, children: [
+    { title: 'a', body: 'x', blockedBy: [1] },
+    { title: 'b', body: 'x', blockedBy: [0] },
+  ] }), PlanError)
+})
+
+test('only the unblocked leaf is dispatched, and every child exists before any dispatch', () => {
+  // the #1713 shape: child0 independent, child1 + child2 both wait on it
+  const acts = planToActions(parsePlan({ leaf: false, children: [
+    { title: 'switch the client', body: 'x' },
+    { title: 'write the tests', body: 'x', blockedBy: [0] },
+    { title: 'resolve the shim', body: 'x', blockedBy: [0] },
+  ] }), CTX)
+
+  const triggers = acts.filter(a => a.type === 'trigger-label')
+  assert.equal(triggers.length, 1, 'exactly one worker dispatched, not three')
+  assert.equal(triggers[0].ref, 'child0', 'and it is the one with no blockers')
+
+  // the ordering bug in miniature: a dispatch before the last create would race issue creation
+  const lastCreate = acts.findLastIndex(a => a.type === 'create')
+  assert.ok(acts.indexOf(triggers[0]) > lastCreate, 'no child is dispatched before all children exist')
+
+  // both blocked children must carry the dependency record, or nothing can ever unblock them
+  const notes = acts.filter(a => a.type === 'note-blocked')
+  assert.deepEqual(notes.map(n => n.ref), ['child1', 'child2'])
+  assert.deepEqual(notes[0].blockedByRefs, ['child0'])
+})
+
+test('genuinely independent leaves still fan out in parallel (no accidental serialisation)', () => {
+  const acts = planToActions(parsePlan({ leaf: false, children: [
+    { title: 'a', body: 'x' }, { title: 'b', body: 'x' }, { title: 'c', body: 'x' },
+  ] }), CTX)
+  assert.equal(acts.filter(a => a.type === 'trigger-label').length, 3)
+  assert.equal(acts.filter(a => a.type === 'note-blocked').length, 0)
+})
+
+test('Blocked-by round-trips through format → parse', () => {
+  assert.equal(formatBlockedBy([1738]), 'Blocked-by: #1738')
+  assert.deepEqual(parseBlockedBy(formatBlockedBy([1738, 1740])), [1738, 1740])
+  // tolerant of the shapes a human might hand-write (the #1713 tree was sequenced by hand)
+  assert.deepEqual(parseBlockedBy('blocked by: #12\nsome prose #99 here'), [12])
+  assert.deepEqual(parseBlockedBy('no dependency here'), [])
 })
