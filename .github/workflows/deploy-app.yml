@@ -250,8 +250,26 @@ jobs:
           BETTER_AUTH_URL: ${{ inputs.environment == 'production' && inputs['production-url'] || inputs['staging-url'] }}
         run: |
           set -o pipefail
+          PR_NUM="${{ github.event.pull_request.number }}"
           if [ "${{ inputs.environment }}" = "production" ]; then
             pnpm run cf:deploy | tee deploy.log
+          elif [ -n "$PR_NUM" ]; then
+            # PER-PR PREVIEW (#2020). `cf:staging` targets the app's ONE staging Worker and its
+            # configured stagingUrl, so running it from a PR published over shared staging: two
+            # PRs clobbered each other, a merge to main overwrote both, and the PR comment still
+            # claimed the result was isolated. Same build, then the config is rewritten to a
+            # PR-scoped Worker with id-less bindings (wrangler auto-provisions fresh D1/KV, the
+            # way the app's own first deploy does) and no custom-domain route.
+            echo "PR preview for #$PR_NUM — rewriting the built config"
+            NITRO_PRESET=cloudflare_module npx nuxt build
+            node scripts/inject-wrangler-env.mjs
+            PREVIEW_OUT="$(node "$GITHUB_WORKSPACE/scripts/pr-preview-wrangler.mjs" \
+              .output/server/wrangler.json "${{ inputs.app }}" "$PR_NUM")"
+            PREVIEW_DB="$(printf '%s\n' "$PREVIEW_OUT" | sed -n 's/^db=//p')"
+            npx wrangler deploy --config .output/server/wrangler.json | tee deploy.log
+            # Fresh DB every time, so migrations are the whole schema — not incremental.
+            [ -n "$PREVIEW_DB" ] && npx wrangler d1 migrations apply "$PREVIEW_DB" --remote 2>&1 | tail -5
+            (pnpm db:seed:staging || true)
           else
             pnpm run cf:staging | tee deploy.log
           fi
@@ -264,6 +282,11 @@ jobs:
           # Fall back to the log-grep only when no URL was configured (#293).
           if [ "${{ inputs.environment }}" = "production" ]; then
             URL="${{ inputs['production-url'] }}"
+          elif [ -n "${{ github.event.pull_request.number }}" ]; then
+            # #2020: a preview must NEVER advertise the shared staging URL — that link would
+            # show whatever deployed last, which is the bug. Leave URL empty so the
+            # workers.dev fallback below (the hostname wrangler actually published) wins.
+            URL=""
           else
             URL="${{ inputs['staging-url'] }}"
           fi
@@ -578,7 +601,8 @@ jobs:
             const login = (email && password)
               ? `${oneClick}\n\n<details><summary>…or paste the creds</summary>\n\n\`\`\`\nEmail:    ${email}\nPassword: ${password}\n\`\`\`\n</details>\n_Disposable account on this isolated, throwaway staging DB._`
               : ''
-            const body = `${marker}\n🚀 **${app}** deployed to staging: ${url}${login}\n\n<sub>🤖 isolated, auto-provisioned Workers staging env (its own D1 + KV)</sub>`
+            const pr = context.issue.number
+            const body = `${marker}\n🚀 **${app}** preview for this PR: ${url}${login}\n\n<sub>🤖 \`${app}-pr${pr}\` — a Worker of its own, with its own auto-provisioned D1 + KV. Not shared staging; nothing else deploys over it, and it is deleted when this PR closes (#2020).</sub>`
             const { owner, repo } = context.repo
             const issue_number = context.issue.number
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number })
