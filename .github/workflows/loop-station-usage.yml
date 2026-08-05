@@ -73,7 +73,7 @@ jobs:
       - name: Aggregate into one usage record
         run: |
           FILES=$(find traces -name '*.jsonl' 2>/dev/null || true)
-          # shellcheck disable=SC2086 — file list is intentionally word-split
+          # shellcheck disable=SC2086 # file list is intentionally word-split
           node .claude/skills/loop-station/aggregate-usage.mjs --window 7 $FILES > usage.record.json
           cat usage.record.json
 

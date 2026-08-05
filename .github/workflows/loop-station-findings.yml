@@ -93,7 +93,7 @@ jobs:
       - name: Ingest candidates (merged → confirmed, closed → drop, open → skip)
         run: |
           FILES=$(find candidates -name '*.json' 2>/dev/null || true)
-          # shellcheck disable=SC2086 — file list is intentionally word-split
+          # shellcheck disable=SC2086 # file list is intentionally word-split
           node scripts/eval-ledger/ingest-findings.mjs --status-map states.json $FILES
 
       - name: Reconcile escaped defects from the eval-ledger

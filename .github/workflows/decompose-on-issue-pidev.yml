@@ -587,6 +587,7 @@ jobs:
           # `-newermt "$SINCE"` scopes to dirs touched at/after the run-start timestamp, so we
           # never mis-attribute a PRIOR run's telemetry (the #839 stale-row bug). `-newermt`
           # works on both BSD find (the mac-mini) and GNU find (ubuntu fallback).
+          # shellcheck disable=SC2038 # -I{} consumes whole LINES, so a path with spaces survives
           TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" 2>/dev/null \
             | xargs -I{} stat -f '%m {}' {} 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           if [ -z "$TELE_DIR" ]; then
