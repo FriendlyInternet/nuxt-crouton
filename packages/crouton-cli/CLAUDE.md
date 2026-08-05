@@ -425,9 +425,28 @@ to a nonexistent path, so the failure surfaced minutes later as an unresolvable 
 *build* (the #1825 chores case). The check no-ops when no collection map is available (no
 config/targets), since nothing can be verified there.
 
-⚠️ **`refTarget` cannot reference a person.** Users live in `@fyit/crouton-auth`, not as a
-generated collection, so `refTarget: "users"` has no route to them — the error says so and
-points at **#1958**, which tracks giving fields a real way to reference a team member.
+### Referencing a person (`refScope: "external"`)
+
+A field that points at a **team member** is not a collection ref. The auth `user` table is
+re-exported into every app's `server/db/schema.ts`, so reach it as an **external** target:
+
+```json
+{ "assigneeId": { "type": "string", "refTarget": "users", "refScope": "external" } }
+```
+
+That makes `database-queries.ts` emit `import { user } from '~~/server/db/schema'` plus an
+aliased `leftJoin` — the same path the built-in `owner`/`createdBy`/`updatedBy` refs already
+take — instead of the collection-directory import. Use exactly **`users`** (mapped to the
+singular `user` export); `person`/`member`/`account` have no table behind them.
+
+`refScope: "external"` (and `"adapter"`) is **exempt from the `refTarget` existence check**
+above: an external ref resolves against the app barrel, not `collectionLayerMap`, so validating
+it against the collection list only ever produces a false refusal. Omitting `refScope` on a
+`users` target still fails — that's the #1825 chores case, where the generator took the
+collection path and wrote an import to a `users` collection nobody created.
+
+Still open: **#1958**, a first-class member *picker* in the generated Form and a name (not a
+raw id) in the generated List. The join works today; the UI half does not.
 
 ### Field Meta Properties
 
@@ -931,7 +950,21 @@ pagination (`limit`/`offset`). It builds a `conditions` array and applies `and(.
 each FK filter is opt-in (applied only when present). This is what scopes
 `@fyit/crouton-sales` event-workspace tabs to one event (without it, every event showed the
 team-wide union of products/categories/locations/printers/orders).
-Owner/createdBy/updatedBy user refs are intentionally excluded from filters.
+
+**Every reference field is filterable, including the user refs.** That means declared FKs
+(`eventId`), a declared person ref (`assigneeId` with `refScope: "external"`), **and** the
+auto `owner`/`createdBy`/`updatedBy` columns — so a list can answer "everything I own" or
+"what did I change" (`?owner=<userId>`). These three used to be stripped as "not real FK
+columns"; they are real columns and the question is an ordinary one. Worse, the rule keyed off
+`isUserReference`, which also caught any person ref the **author** declared — so adding an
+`assigneeId` silently cost you the ability to filter by it.
+
+The list is built ONCE by `collectFilterFields` (`lib/utils/filter-fields.ts`) and shared by
+`api-endpoints.ts` (which reads the query params) and `database-queries.ts` (which declares the
+`opts` they're passed as). Those two used to derive it independently and agreed only by
+coincidence; a change to one side silently emitted an endpoint passing an option the query
+function didn't accept. `owner` is unconditional, `createdBy`/`updatedBy` ride `useMetadata` —
+mirroring the auto refs `detectReferenceFields` appends.
 
 ## List Pagination
 
