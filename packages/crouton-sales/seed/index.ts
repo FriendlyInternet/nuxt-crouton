@@ -88,6 +88,45 @@ function seedCatalog(ctx: SeedContext) {
     food: seedId('cat', ctx.teamSlug, EVENT_SLUG, 'food')
   }
 
+  // Prep stations. Two, not one, on purpose: `locationId` is what routes an order
+  // item to a kitchen screen and a printer, so a single station would leave the
+  // per-station split — the thing the KDS exists to do — unreproducible on a seeded
+  // app. Drinks→Bar, food→Keuken mirrors the category split.
+  //
+  // Seeding these is not cosmetic: products.locationId is NOT NULL (#1769), so a
+  // seed with no stations cannot produce a valid product row at all.
+  //
+  // `requiresHandover` is deliberately split across the two (#1851): the Bar hands
+  // a drink straight over, the kitchen's part waits to be sent out. A demo where
+  // both are the same never exercises the opt-out path.
+  const locationIds: Record<SeedProduct['category'], string> = {
+    drinks: seedId('loc', ctx.teamSlug, EVENT_SLUG, 'bar'),
+    food: seedId('loc', ctx.teamSlug, EVENT_SLUG, 'keuken')
+  }
+
+  ctx.upsert('sales_locations', { id: locationIds.drinks }, {
+    teamId: ctx.teamId,
+    owner: 'seed',
+    eventId,
+    title: 'Bar',
+    requiresHandover: false,
+    createdAt: ctx.now,
+    updatedAt: ctx.now,
+    createdBy: 'seed',
+    updatedBy: 'seed'
+  }, { ifAbsent: true })
+  ctx.upsert('sales_locations', { id: locationIds.food }, {
+    teamId: ctx.teamId,
+    owner: 'seed',
+    eventId,
+    title: 'Keuken',
+    requiresHandover: true,
+    createdAt: ctx.now,
+    updatedAt: ctx.now,
+    createdBy: 'seed',
+    updatedBy: 'seed'
+  }, { ifAbsent: true })
+
   ctx.upsert('sales_categories', { id: categoryIds.drinks }, {
     teamId: ctx.teamId,
     owner: 'seed',
@@ -118,6 +157,7 @@ function seedCatalog(ctx: SeedContext) {
       order: product.order,
       eventId,
       categoryId: categoryIds[product.category],
+      locationId: locationIds[product.category],
       title: product.title,
       price: product.price,
       isActive: true,

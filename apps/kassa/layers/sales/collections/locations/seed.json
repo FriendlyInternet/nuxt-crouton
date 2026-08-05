@@ -2,17 +2,7 @@
   "table": "sales_locations",
   "key": "title",
   "rows": [
-    {
-      "title": "Sample title 1",
-      "requiresHandover": true
-    },
-    {
-      "title": "Sample title 2",
-      "requiresHandover": false
-    },
-    {
-      "title": "Sample title 3",
-      "requiresHandover": true
-    }
+    { "eventId": "seed:sales:events:mosselconcert", "title": "Bar", "requiresHandover": false },
+    { "eventId": "seed:sales:events:mosselconcert", "title": "Keuken", "requiresHandover": true }
   ]
 }

@@ -210,6 +210,28 @@ jobs:
       - name: Check package documentation
         run: node scripts/check-docs.mjs
 
+  # An app's schemas/*.json is a COPY of its package's and forks silently from install
+  # onwards. kassa's products.json lost `required: true` that way, which is how order
+  # items ended up routing to no kitchen screen (#1766/#1769). Only UNDECLARED
+  # behavioural drift fails — intentional divergence lives in
+  # scripts/schema-drift.baseline.json with a reason. The unit tests for the checker
+  # itself are picked up by the `scripts-tests` job's scripts/*.test.mjs glob.
+  schema-drift-check:
+    name: Schema Drift Check
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check app↔package schema drift
+        run: node scripts/check-schema-drift.mjs
+
   sync-validation:
     name: Sync Validation
     needs: changes
@@ -569,9 +591,9 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [changes, typecheck-mcp, typecheck-apps, build-kassa, docs-check, sync-validation,
-            mcp-server-tests, test, changeset-check, package-check, scripts-tests, fallow-audit,
-            shellcheck-workflows]
+    needs: [changes, typecheck-mcp, typecheck-apps, build-kassa, docs-check, schema-drift-check,
+            sync-validation, mcp-server-tests, test, changeset-check, package-check, scripts-tests,
+            fallow-audit, shellcheck-workflows]
     runs-on: ubuntu-latest
     steps:
       - name: Every needed job succeeded or was legitimately skipped

@@ -6,17 +6,17 @@ import { z } from 'zod'
 
 const bodySchema = z.object({
   eventId: z.string().min(1, 'eventId is required'),
-  categoryId: z.string().optional(),
-  locationId: z.string().optional(),
+  categoryId: z.string().min(1, 'categoryId is required'),
+  locationId: z.string().min(1, 'locationId is required'),
   title: z.string().min(1, 'title is required'),
-  description: z.string().optional(),
+  description: z.string().nullish(),
   price: z.number(),
-  isActive: z.boolean().optional(),
-  requiresRemark: z.boolean().optional(),
-  remarkPrompt: z.string().optional(),
-  hasOptions: z.boolean().optional(),
-  multipleOptionsAllowed: z.boolean().optional(),
-  options: z.array(z.any()).optional()
+  isActive: z.boolean().nullish(),
+  requiresRemark: z.boolean().nullish(),
+  remarkPrompt: z.string().nullish(),
+  hasOptions: z.boolean().nullish(),
+  multipleOptionsAllowed: z.boolean().nullish(),
+  options: z.array(z.any()).nullish()
 }).partial().strip()
 
 export default defineEventHandler(async (event) => {
