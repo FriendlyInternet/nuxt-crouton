@@ -141,6 +141,19 @@ Check every changed file against this checklist. Skip categories that don't appl
 - [ ] Team-scoped endpoints use `useTeamContext()`
 - [ ] Return types are consistent (not mixing shapes)
 
+#### Gates, Checks & Flow Steps
+
+Applies when the diff adds or changes **a rule that judges other code** — a validator, a CI check, a
+sign-off gate. See `AGENTS.md` → *Authoring a gate* for the argument.
+
+- [ ] **Was the rule run over the corpus, with the hit count reported?** Green unit tests only prove
+      the rule matches its author's imagination — #1957's first version passed 8 and would have refused
+      4 shipping schemas. Cheap to do:
+      `node scripts/corpus-check.mjs --glob 'apps/*/schemas/*.json' --rule ./my-rule.mjs`
+      (advisory — skip it when there's no meaningful corpus, e.g. a rule over one generated file)
+- [ ] **Does "no matches" mean clean, or mean the query was wrong?** A scan that matched nothing has
+      proved nothing
+
 #### Vue Components (*.vue files only)
 - [ ] Props have TypeScript types
 - [ ] Emits are declared with `defineEmits`

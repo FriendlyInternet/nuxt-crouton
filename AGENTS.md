@@ -77,6 +77,24 @@ no `lgtm`, not done. Where the work has an enumerable contract (a behaviour spec
 comes from **comparison against the expected result**, not from re-reading the list: a list can't
 reveal its own gaps; running the real thing next to the contract can.
 
+## Authoring a gate
+
+The gates above judge other people's work, so a wrong gate is worse than no gate — it refuses correct
+code, or waves the broken case through. **Advisory**: apply this where it means something, not as
+ceremony.
+
+**Run the rule over the corpus, not just its tests.** Tests prove the rule matches its author's
+*imagination*; only the corpus proves it matches the repo. A validator for cross-collection references
+passed eight green unit tests and would have refused four shipping schemas, because it compared the
+reference against the *configured* name while the reference legitimately names the *generated* one
+(#1957). That same scan showed the fall-through branch it was "fixing" was load-bearing for the normal
+case — deleting it would have broken every cross-collection reference in the repo. Tests could not have
+shown that. The inverse shape is the same lesson: sign-off images were silently gitignored, so every
+hold posted a dead link, found by checking the artifact paths against the *real* ignore file (#1933).
+So: before merging, run the proposed rule over every file it would judge and report the hit count. Each
+refusal of existing code is then a claim to defend file by file. Skip it when there is no meaningful
+corpus (a rule over one generated file) — an empty corpus run proves nothing either way.
+
 ## Deciding vs asking
 
 The sign-off gates above are *pre-declared* decision points. Most forks aren't those — they surface
