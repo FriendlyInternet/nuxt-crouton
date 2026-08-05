@@ -427,18 +427,44 @@ jobs:
             echo "acceptance verdict: $ACCEPT — $ACCEPT_MSG"
           fi
 
-          # 7) Open the PR. On a FAILED acceptance, open it as a DRAFT (automerge skips drafts, #339) —
+          # 6b) TESTS GATE (#1885) — hold a packages/ LOGIC change that shipped no test.
+          # Instructing the worker isn't enough on its own: the contract now says "write the
+          # test", but nothing downstream noticed when #1875's five agreed cases simply didn't
+          # appear — acceptance said "not verified", CI went green (a missing test breaks no
+          # build) and the PR was mergeable. So the omission has to be VISIBLE. This reuses the
+          # draft mechanism above rather than blocking: automerge already skips drafts (#339),
+          # a human can still merge, and the run record says why.
+          #
+          # Scoped deliberately to hand-written logic: .ts/.mjs/.js under packages/, excluding
+          # tests themselves, i18n locale JSON (#1874 was a label-only change and must NOT be
+          # held) and .vue (a visual change answers to the UI gate, not this one).
+          TESTS_MISSING=0
+          if [ "$HAVE_COMMITS" = "1" ]; then
+            COMMITTED="$RUNNER_TEMP/committed-all.txt"
+            cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | grep . | sort -u > "$COMMITTED" || true
+            PKG_LOGIC="$(grep -E '^packages/[^/]+/.*\.(ts|mjs|js)$' "$COMMITTED" 2>/dev/null | grep -vE '(^|/)(test|tests|__tests__)/|\.(test|spec)\.' | grep -c . || true)"; PKG_LOGIC=${PKG_LOGIC:-0}
+            HAS_TEST="$(grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.' "$COMMITTED" 2>/dev/null | grep -c . || true)"; HAS_TEST=${HAS_TEST:-0}
+            if [ "$PKG_LOGIC" -gt 0 ] && [ "$HAS_TEST" -eq 0 ]; then
+              TESTS_MISSING=1
+              echo "::warning::tests gate (#1885): ${PKG_LOGIC} packages/ logic file(s) committed with no test — opening the PR as a DRAFT"
+            fi
+            echo "tests gate (#1885) — packages-logic=$PKG_LOGIC test-files=$HAS_TEST missing=$TESTS_MISSING"
+          fi
+
+          # 7) Open the PR. On a FAILED acceptance or a missing test, open it as a DRAFT (automerge skips drafts, #339) —
           #    creating it draft-from-the-start avoids a race where automerge lands it before we convert.
           if [ "$HAVE_COMMITS" = "1" ]; then
             EXISTING="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
-            DRAFT_FLAG=""; [ "$ACCEPT" = "fail" ] && DRAFT_FLAG="--draft"
+            # Draft on a red acceptance OR a missing test (#1885) — both are "don't land this yet".
+            DRAFT_FLAG=""
+            { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ]; } && DRAFT_FLAG="--draft"
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$(git log -1 --format=%s)" \
                 --body "$(printf 'Closes #%s\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE")" 2>&1 | tail -3
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
-              if [ "$ACCEPT" = "fail" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
+              if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
               else gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
               echo "PR #${EXISTING} already open for ${BR} (draft=$([ "$ACCEPT" = fail ] && echo yes || echo no))"
             fi
@@ -468,6 +494,12 @@ jobs:
               echo "- 🗑️ changed but excluded as junk (node_modules/.nuxt/.pi/…): **${EXCL}**"
               echo
               echo "$ACC_LINE"
+              # Name the missing test in the run record, or the draft state is unexplained (#1885).
+              [ "$TESTS_MISSING" = "1" ] && {
+                echo
+                echo "🧪 **tests: MISSING** — ${PKG_LOGIC} \`packages/\` logic file(s) landed with no test file."
+                echo "Opened as a DRAFT so it can't auto-merge. Add the test (or say on the issue why it can't run here), then re-dispatch."
+              }
             } > "$REC"
             gh pr comment "$PRNUM" --body-file "$REC" 2>&1 | tail -1 || true
           fi
