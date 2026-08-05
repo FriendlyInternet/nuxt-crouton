@@ -89,8 +89,29 @@ test('sanitizeLabels keeps known and drops unknown (the bad-label create failure
 // ── buildChildBody ───────────────────────────────────────────────────────────────
 test('buildChildBody injects the WS2 block at childDepth', () => {
   const body = buildChildBody('## body', { epic: 1685, childDepth: 2, epic_branch: BRANCH })
-  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH })
+  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null })
   assert.match(body, /^## body/)
+})
+
+// ── #1923: the withheld trigger label is RECORDED, not discarded ─────────────────────
+test('a blocked child records the label it would have been dispatched with', () => {
+  const acts = planToActions(parsePlan({ leaf: false, children: [
+    { title: 'foundation', body: 'x' },
+    { title: 'dependent leaf', body: 'x', blockedBy: [0] },
+    { title: 'dependent, still splits', body: 'x', needsSplit: true, blockedBy: [0] },
+  ] }), CTX)
+  const created = acts.filter(a => a.type === 'create')
+
+  // the unblocked child is dispatched now, so nothing needs recording on it
+  assert.equal(parsePipelineBlock(created[0].body).dispatch, null)
+  // the blocked ones carry exactly what they'd have got — a leaf and a splitter differ
+  assert.equal(parsePipelineBlock(created[1].body).dispatch, 'work-this')
+  assert.equal(parsePipelineBlock(created[2].body).dispatch, 'delegate-pi')
+
+  // and the recorded label must equal the one actually applied to an equivalent unblocked child
+  const applied = acts.find(a => a.type === 'trigger-label' && a.ref === 'child0').label
+  assert.equal(applied, parsePipelineBlock(created[1].body).dispatch,
+    'a blocked leaf must be released with what an unblocked leaf is dispatched with')
 })
 
 // ── planToActions ────────────────────────────────────────────────────────────────

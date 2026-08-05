@@ -16,6 +16,8 @@
  *   node --test scripts/wave-gate.test.mjs
  */
 
+import { parsePipelineBlock } from './pipeline-context.mjs'
+
 /** Dedupe marker so a held wave is explained once, not on every re-check. */
 export const HOLD_MARKER = '<!-- wave-gate:held -->'
 
@@ -68,13 +70,39 @@ export function summarizeChecks(checkRuns = []) {
  * and this workflow has no timer to rescue it — the failure mode we are fixing is a SILENT
  * bad release, not a slow one.
  */
-export function shouldRelease({ blockerStates = [], labels = [], branchStatus = 'unknown' } = {}) {
+export function shouldRelease({ blockerStates = [], labels = [], branchStatus = 'unknown', body = '' } = {}) {
   if (isDispatched(labels)) return { release: false, reason: 'already-dispatched' }
   if (!blockerStates.length) return { release: false, reason: 'no-blockers' }
   if (blockerStates.some(s => s !== 'closed')) return { release: false, reason: 'blockers-open' }
   if (branchStatus === 'failure') return { release: false, reason: 'branch-red' }
-  return { release: true, reason: branchStatus === 'success' ? 'green' : `ungated-${branchStatus}` }
+  return {
+    release: true,
+    reason: branchStatus === 'success' ? 'green' : `ungated-${branchStatus}`,
+    label: releaseLabel(body),
+  }
 }
+
+/**
+ * WHICH label to release with (#1923).
+ *
+ * Default `delegate` — a full decompose run that works out what the issue is. Correct for a
+ * hand-sequenced epic, and for everything that predates the event-driven pipeline.
+ *
+ * But when the decomposer itself created the child it ALREADY applied the leaf test, and #1750
+ * withholds the trigger label from a blocked child — so that classification would be thrown away
+ * and re-derived by a whole extra decompose run (measured on the #1750 live-fire: #1919/#1920
+ * each cost one). Worse, the re-derivation is a judgement call that can come back DIFFERENT,
+ * quietly re-shaping a tree its parent already planned. So if the child recorded its intended
+ * label, honour it; otherwise fall back and behave exactly as before.
+ */
+export function releaseLabel(body = '') {
+  const { dispatch } = parsePipelineBlock(body)
+  return RELEASABLE.has(dispatch) ? dispatch : 'delegate'
+}
+
+// Allow-list, not passthrough: the body is model-authored, and this value becomes a label that
+// dispatches a run. Anything unrecognised falls back to `delegate` rather than being applied.
+const RELEASABLE = new Set(['work-this', 'delegate-pi', 'delegate'])
 
 /** The comment posted when a wave is held because its branch is red. */
 export function formatHoldComment({ issueNumber, branch, doneNumber }) {
@@ -88,10 +116,10 @@ export function formatHoldComment({ issueNumber, branch, doneNumber }) {
 }
 
 /** The comment posted on a normal release. */
-export function formatReleaseComment({ doneNumber, branchStatus }) {
+export function formatReleaseComment({ doneNumber, branchStatus, label = 'delegate' }) {
   const suffix = branchStatus === 'success'
     ? ' Its branch is green.'
     : ''
   return `🟢 **Unblocked — starting this workstream now.** Its last blocker (#${doneNumber}) just closed.${suffix}\n\n`
-    + `<sub>🤖 wave scheduler (#283) · applied \`delegate\`</sub>`
+    + `<sub>🤖 wave scheduler (#283) · applied \`${label}\`</sub>`
 }
