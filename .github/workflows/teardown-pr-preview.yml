@@ -1,0 +1,77 @@
+name: Teardown PR preview
+
+# Delete the per-PR preview environment when its PR closes (#2020).
+#
+# Every preview creates a Worker plus its own D1 and KV (deploy-app.yml rewrites the built
+# config to id-less bindings so wrangler provisions fresh ones). Without this, each PR leaves
+# three resources behind forever — and unlike a stale branch they are invisible until someone
+# opens the Cloudflare dashboard and finds hundreds.
+#
+# Deliberately NOT gated on `merged`: a closed-without-merging PR leaks exactly the same
+# resources as a merged one.
+#
+# Best-effort by design. A preview that was never deployed (no app change on the PR) has
+# nothing to delete, and `wrangler delete` on a missing resource is a normal, expected miss —
+# so each step tolerates failure and reports what it actually removed. The one thing this
+# must never do is fail the PR-close event.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  teardown:
+    # Fork PRs never got a preview (no secrets), so there is nothing to tear down.
+    if: ${{ !github.event.pull_request.head.repo.fork }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Which apps could this PR have deployed? Same source of truth as the deploy side —
+      # an app opts in with a deploy.config.json, so anything without one never had a preview.
+      - id: apps
+        run: |
+          set -uo pipefail
+          APPS=""
+          for cfg in apps/*/deploy.config.json pocs/*/deploy.config.json; do
+            [ -f "$cfg" ] || continue
+            APPS="$APPS $(basename "$(dirname "$cfg")")"
+          done
+          echo "list=$(echo $APPS | xargs)" >> "$GITHUB_OUTPUT"
+          echo "candidate apps:$APPS"
+
+      - name: Delete preview Worker + D1 + KV
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR: ${{ github.event.pull_request.number }}
+          APPS: ${{ steps.apps.outputs.list }}
+        run: |
+          set -uo pipefail
+          if [ -z "${CLOUDFLARE_API_TOKEN:-}" ]; then
+            echo "::warning::No Cloudflare token — skipping teardown (previews were never deployed either)."
+            exit 0
+          fi
+          REMOVED=0
+          for APP in $APPS; do
+            WORKER="${APP}-pr${PR}"
+            # `wrangler delete` exits non-zero for a Worker that doesn't exist. For most apps on
+            # most PRs that is the NORMAL case (the PR didn't touch that app), so it is noise,
+            # not an error — count what actually went away instead of trusting exit codes.
+            if npx wrangler delete --name "$WORKER" --force 2>&1 | tee /tmp/del.log | tail -2; then
+              grep -qi "deleted\|success" /tmp/del.log && { echo "  ✓ worker $WORKER"; REMOVED=$((REMOVED+1)); }
+            fi
+            for BINDING in db kv; do
+              RES="${WORKER}-${BINDING}"
+              case "$BINDING" in
+                db) npx wrangler d1 delete "$RES" --skip-confirmation 2>&1 | tail -1 && echo "  ✓ d1 $RES" || true ;;
+                kv) npx wrangler kv namespace delete --namespace-id "$RES" 2>&1 | tail -1 || true ;;
+              esac
+            done
+          done
+          echo "teardown for PR #${PR}: ${REMOVED} worker(s) removed"
