@@ -38,12 +38,29 @@ function stripNonCommandRegions(body) {
 }
 
 /**
- * Which label a comment is asking for, or `null` when it is only talking about them.
+ * The command vocabulary, in match order.
  *
- * `/delegate-pi` is tested before `/delegate` because the latter is a prefix of the
- * former — that ordering is load-bearing (#1077). `/deploy` maps to `delegate` too,
- * preserving the behaviour the workflow shipped with. `/work` reaches the single-use
- * worker lane, which had no comment gesture at all before #2010.
+ * NAMED FOR WHAT THE LANE DOES, not for who does it (#2010). `/delegate` said *who*
+ * (an agent) and not *what* (plan it, or build it) — so on an issue whose work had
+ * already started, the obvious word was the wrong lane, and the decomposer was sent
+ * somewhere it had nothing to plan. `/plan` and `/build` cannot be confused that way.
+ *
+ * The old names stay as aliases forever: they are written into issue bodies, skills and
+ * runbooks across the repo, and silently breaking them would be a worse trap than the
+ * one this replaces.
+ *
+ * Order is load-bearing twice over: `work`/`build` before the planning lane, and the
+ * `-pi` variants before their bare forms — `/plan` is a prefix of `/plan-pi`, exactly as
+ * `/delegate` is of `/delegate-pi` (#1077).
+ */
+const COMMANDS = [
+  { label: 'work-this', words: ['build', 'work'] },
+  { label: 'delegate-pi', words: ['plan-pi', 'delegate-pi'] },
+  { label: 'delegate', words: ['plan', 'delegate', 'deploy'] },
+]
+
+/**
+ * Which label a comment is asking for, or `null` when it is only talking about them.
  *
  * @param {string} body Raw Markdown body of the issue comment.
  * @returns {'delegate-pi' | 'delegate' | 'work-this' | null}
@@ -52,13 +69,13 @@ export function parseCommand(body) {
   const text = stripNonCommandRegions(String(body || ''))
 
   // Anchored to line start (`m`), allowing leading whitespace so an indented command in
-  // a list item still works. A trailing boundary stops `/delegate-something-else` from
-  // being read as `/delegate`.
-  const has = cmd => new RegExp(`^[ \\t]*/${cmd}(?![\\w-])`, 'm').test(text)
+  // a list item still works. The trailing boundary stops `/plan-pi` being read as `/plan`
+  // and `/workflow-thing` as `/work`.
+  const has = word => new RegExp(`^[ \\t]*/${word}(?![\\w-])`, 'm').test(text)
 
-  if (has('work')) return 'work-this'
-  if (has('delegate-pi')) return 'delegate-pi'
-  if (has('delegate') || has('deploy')) return 'delegate'
+  for (const { label, words } of COMMANDS) {
+    if (words.some(has)) return label
+  }
   return null
 }
 

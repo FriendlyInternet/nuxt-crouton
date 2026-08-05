@@ -7,11 +7,15 @@ name: Comment dispatch
 # other harness (#1077 / #669 WS7). Only the repo owner / members / collaborators can
 # trigger it.
 #
-# TWO LANES, and the command is not the whole story (#2010):
-#   • DECOMPOSER — `/delegate` | `/delegate-pi` | `/deploy`. Plans an issue: splits it into
-#     sub-issues, or hands a leaf onward. Right for work that has not started.
-#   • WORKER — `/work` → the `work-this` label → work-issue-pidev.yml. Implements ONE leaf
-#     on its existing branch. Right for work already in flight.
+# TWO LANES, named for what they DO (#2010):
+#   • `/plan`  → the decomposer. Splits an issue into sub-issues, or hands a leaf onward.
+#                Right for work that has not started. (`/plan-pi` forces the pi harness.)
+#   • `/build` → the single-use worker (`work-this` → work-issue-pidev.yml). Implements ONE
+#                leaf on its existing branch. Right for work already in flight.
+# `/delegate`, `/delegate-pi`, `/deploy` and `/work` remain as ALIASES and always will —
+# they are written into issue bodies, skills and runbooks across the repo. The rename
+# exists because `/delegate` named *who* does the work, never *what happens to it*, so on
+# an issue whose branch already existed the obvious word was the wrong lane.
 # A `/delegate` on an issue that already has a `work-<issue>` branch is AUTO-ROUTED to the
 # worker, because the decomposer would have nothing left to plan — it would produce no
 # artifact, fail the artifact-gate (#461), and page the owner about a pipeline that was
@@ -42,7 +46,9 @@ jobs:
       (github.event.comment.author_association == 'OWNER' ||
        github.event.comment.author_association == 'MEMBER' ||
        github.event.comment.author_association == 'COLLABORATOR') &&
-      (contains(github.event.comment.body, '/delegate') ||
+      (contains(github.event.comment.body, '/plan') ||
+       contains(github.event.comment.body, '/build') ||
+       contains(github.event.comment.body, '/delegate') ||
        contains(github.event.comment.body, '/deploy') ||
        contains(github.event.comment.body, '/work'))
     # ⚠️ The two `contains()` above are a CHEAP PRE-FILTER ONLY, not the decision (#2004).

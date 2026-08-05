@@ -96,6 +96,37 @@ test('FIXTURE: the #1791 explanation comment must NOT dispatch', () => {
   assert.equal(parseCommand(body), null)
 })
 
+// ── #2010: the vocabulary — named for what the lane DOES ─────────────────────────────
+
+test('/plan reaches the decomposer', () => {
+  assert.equal(parseCommand('/plan'), 'delegate')
+})
+
+test('/build reaches the worker', () => {
+  assert.equal(parseCommand('/build'), 'work-this')
+})
+
+test('/plan-pi wins over /plan — same prefix trap as #1077', () => {
+  assert.equal(parseCommand('/plan-pi'), 'delegate-pi')
+})
+
+test('the old names still work — they are written into issues and skills across the repo', () => {
+  assert.equal(parseCommand('/delegate'), 'delegate')
+  assert.equal(parseCommand('/delegate-pi'), 'delegate-pi')
+  assert.equal(parseCommand('/deploy'), 'delegate')
+  assert.equal(parseCommand('/work'), 'work-this')
+})
+
+test('the new names are mention-safe too', () => {
+  assert.equal(parseCommand('Use `/build` to finish a leaf.'), null)
+  assert.equal(parseCommand('> /plan'), null)
+})
+
+test('/planning and /builder are not commands', () => {
+  assert.equal(parseCommand('/planning-doc'), null)
+  assert.equal(parseCommand('/builder'), null)
+})
+
 // ── #2010: the worker lane needs a gesture, and /delegate must stop misfiring ────────
 
 test('/work reaches the worker lane', () => {
