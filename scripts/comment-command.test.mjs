@@ -9,7 +9,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseCommand } from './comment-command.mjs'
+import { parseCommand, resolveLane } from './comment-command.mjs'
 
 test('a bare command on its own line dispatches', () => {
   assert.equal(parseCommand('/delegate'), 'delegate')
@@ -94,6 +94,44 @@ test('FIXTURE: the #1791 explanation comment must NOT dispatch', () => {
     '| Leaf with an existing `work-*` branch | remove + re-add **`work-this`** |',
   ].join('\n')
   assert.equal(parseCommand(body), null)
+})
+
+// ── #2010: the worker lane needs a gesture, and /delegate must stop misfiring ────────
+
+test('/work reaches the worker lane', () => {
+  assert.equal(parseCommand('/work'), 'work-this')
+})
+
+test('/work still counts after a steer paragraph', () => {
+  assert.equal(parseCommand('Finish the last three files.\n\n/work'), 'work-this')
+})
+
+test('/work mentioned in prose does not dispatch', () => {
+  assert.equal(parseCommand('Use `/work` to reach the worker.'), null)
+})
+
+test('/workflow is not read as /work', () => {
+  assert.equal(parseCommand('/workflow-thing'), null)
+})
+
+test('an explicit /work is honoured whether or not a branch exists', () => {
+  assert.deepEqual(resolveLane('work-this', false), { label: 'work-this', rerouted: false })
+  assert.deepEqual(resolveLane('work-this', true), { label: 'work-this', rerouted: false })
+})
+
+test('/delegate on an issue with a work branch routes to the worker — the #1791 trap', () => {
+  // The decomposer has nothing to plan once a work-<n> branch exists; sending it there
+  // produces no artifact and pages the owner about a working pipeline.
+  assert.deepEqual(resolveLane('delegate', true), { label: 'work-this', rerouted: true })
+})
+
+test('/delegate with no work branch still goes to the decomposer, unchanged', () => {
+  assert.deepEqual(resolveLane('delegate', false), { label: 'delegate', rerouted: false })
+})
+
+test('/delegate-pi reroutes too — the lane follows state, not the word typed', () => {
+  assert.deepEqual(resolveLane('delegate-pi', true), { label: 'work-this', rerouted: true })
+  assert.deepEqual(resolveLane('delegate-pi', false), { label: 'delegate-pi', rerouted: false })
 })
 
 test('FIXTURE: the #1979 dispatch comment must dispatch', () => {

@@ -7,6 +7,19 @@ name: Comment dispatch
 # other harness (#1077 / #669 WS7). Only the repo owner / members / collaborators can
 # trigger it.
 #
+# TWO LANES, and the command is not the whole story (#2010):
+#   • DECOMPOSER — `/delegate` | `/delegate-pi` | `/deploy`. Plans an issue: splits it into
+#     sub-issues, or hands a leaf onward. Right for work that has not started.
+#   • WORKER — `/work` → the `work-this` label → work-issue-pidev.yml. Implements ONE leaf
+#     on its existing branch. Right for work already in flight.
+# A `/delegate` on an issue that already has a `work-<issue>` branch is AUTO-ROUTED to the
+# worker, because the decomposer would have nothing left to plan — it would produce no
+# artifact, fail the artifact-gate (#461), and page the owner about a pipeline that was
+# working fine. That is not hypothetical: it is what happened twice on #1791.
+#
+# Both decompose workflows and the worker trigger on their label being *added*, never on it
+# merely being present — hence the remove-then-add below.
+#
 # AUTH (#519 WS5): the label is applied with a Nuxt Harness GitHub App installation token, so
 # the dispatched decompose run is attributed to `nuxt-harness[bot]` and passes claude-code-action's
 # bot-actor guard via its `allowed_bots` allow-list (see decompose-on-issue.yml). This retires the
@@ -30,7 +43,8 @@ jobs:
        github.event.comment.author_association == 'MEMBER' ||
        github.event.comment.author_association == 'COLLABORATOR') &&
       (contains(github.event.comment.body, '/delegate') ||
-       contains(github.event.comment.body, '/deploy'))
+       contains(github.event.comment.body, '/deploy') ||
+       contains(github.event.comment.body, '/work'))
     # ⚠️ The two `contains()` above are a CHEAP PRE-FILTER ONLY, not the decision (#2004).
     # They are unanchored substring tests, so they also match a command that is merely being
     # *mentioned* — in backticks, a table cell, a fenced block, or a quote of someone else's
@@ -69,12 +83,26 @@ jobs:
             // start of a line, outside code spans/fences and outside `>` quotes, and keeps
             // the `/delegate-pi` before `/delegate` ordering (#1077). Unit tests, including
             // the two real comments from the #1791 incident: scripts/comment-command.test.mjs
-            const { parseCommand } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-command.mjs`)
-            const label = parseCommand(context.payload.comment.body)
-            if (!label) {
+            const { parseCommand, resolveLane } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-command.mjs`)
+            const command = parseCommand(context.payload.comment.body)
+            if (!command) {
               core.info(`#${issue_number}: comment mentions a command but does not issue one — ignoring.`)
               return
             }
+
+            // Pick the LANE from observed state, not from the word typed (#2010). `/delegate`
+            // is the reflex gesture, and on an issue whose work is already in flight it sends
+            // the decomposer somewhere it has nothing to plan — no artifact, a failed
+            // artifact-gate (#461), and the owner paged about a working pipeline (#1791).
+            // A `work-<issue>` branch is the evidence that "delegate this" means "finish it".
+            let hasWorkBranch = false
+            try {
+              await github.rest.git.getRef({ owner, repo, ref: `heads/work-${issue_number}` })
+              hasWorkBranch = true
+            } catch (e) {
+              if (e.status !== 404) core.warning(`work-branch probe for #${issue_number}: ${e.message}`)
+            }
+            const { label, rerouted } = resolveLane(command, hasWorkBranch)
 
             // Fire a FRESH labeled event: both decompose workflows only trigger on the
             // label being *added* (not merely present), so if it's already there, remove first.
@@ -86,7 +114,15 @@ jobs:
 
             // Acknowledge so the commenter sees it registered (handy on mobile).
             try { await github.rest.reactions.createForIssueComment({ owner, repo, comment_id, content: 'rocket' }) } catch (e) {}
-            const harness = label === 'delegate-pi' ? 'pi.dev' : 'claude'
+
+            // Name the lane that was actually chosen — and, when it differs from what was
+            // typed, say why. A silent reroute would be its own small mystery.
+            const lane = label === 'work-this'
+              ? 'single-use worker'
+              : `${label === 'delegate-pi' ? 'pi.dev' : 'claude'} decomposer`
+            const why = rerouted
+              ? `\n\n_Routed to the worker rather than the decomposer because \`work-${issue_number}\` already exists — there is work in flight to finish, not a plan to make (#2010)._`
+              : ''
             await github.rest.issues.createComment({ owner, repo, issue_number,
-              body: `🟢 **On it — the ${harness} agent is picking this up now.**\n\n<sub>🤖 comment-dispatch · applied \`${label}\`</sub>` })
-            core.info(`Dispatched #${issue_number} via comment (label: ${label}).`)
+              body: `🟢 **On it — the ${lane} is picking this up now.**${why}\n\n<sub>🤖 comment-dispatch · applied \`${label}\`</sub>` })
+            core.info(`Dispatched #${issue_number} via comment (command: ${command}, label: ${label}, rerouted: ${rerouted}).`)
