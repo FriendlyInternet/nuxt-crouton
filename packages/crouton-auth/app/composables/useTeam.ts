@@ -130,36 +130,54 @@ export function useTeam() {
   const authClient = useAuthClient()
 
   // Use useSession's activeOrganization which is properly populated via getFullOrganization()
-  // This replaces the nanostore atoms which aren't automatically synced
   // Also get activeOrgRaw which includes members array for role checking
   const { activeOrganization: sessionActiveOrg, activeOrgRaw } = useSession()
 
-  // The organizations list comes from useState, NOT from better-auth's
-  // `useListOrganizations` nanostore (#1703). We use better-auth's *vanilla*
-  // client, so that export is a raw nanostore rather than a Vue ref — and
-  // nothing ever subscribes to it, so it is never mounted and its `.value`
-  // stays `undefined` forever. Reading it produced a computed with no reactive
-  // dependencies that silently cached its first evaluation.
-  //
-  // This state is populated by `refreshTeams()` below and, crucially, by
+  // fallbackTeams is populated by `refreshTeams()` below and, crucially, by
   // `team-context.global.ts` during SSR — which is why a full page load
   // resolves the team when a client-side transition sometimes did not.
   const fallbackTeams = useState<Team[]>('crouton-auth-fallback-teams', () => [])
 
-  // Use session's active org instead of nanostore (which doesn't auto-populate)
-  const activeOrgData = computed(() => sessionActiveOrg.value)
+  // Better Auth's Vue client (`better-auth/vue`, #1738) makes
+  // `useActiveOrganization`/`useListOrganizations` real Vue composables — they RETURN a
+  // `DeepReadonly<Ref<{ data, error, isPending, … }>>`, unlike the vanilla client's dead
+  // nanostores (#1703). So the payload is `ref.value.data`, NOT the nanostore's
+  // `atom.data.value` — reading the old shape yields undefined and silently falls through
+  // to the SSR sources, i.e. exactly the dead-read this epic exists to remove.
+  // Guard with `typeof` so an environment/mock where these aren't callable can't crash the
+  // composable — it just falls back to the SSR-populated sources below.
+  // The `?.` on `authClient` is load-bearing, NOT defensive noise: `auth-client.client.ts`
+  // is a CLIENT-ONLY plugin, so `$authClient` is `undefined` during SSR and a bare
+  // `authClient.useActiveOrganization` throws before the `typeof` can help — a 500 on every
+  // server-rendered page. `useAuthClient()` is typed non-nullable, so typecheck cannot see
+  // this; only the fixture smoke can (it caught it).
+  const activeOrgRef = typeof authClient?.useActiveOrganization === 'function'
+    ? authClient.useActiveOrganization()
+    : undefined
+  const orgsRef = typeof authClient?.useListOrganizations === 'function'
+    ? authClient.useListOrganizations()
+    : undefined
 
   // Local state
   const loading = ref(false)
   const error = ref<string | null>(null)
   const membersData = ref<(MemberWithUser | Member)[]>([])
 
-  // Computed: current team (active organization)
-  // activeOrgData is already a Team type from useSession
-  const currentTeam = computed<Team | null>(() => activeOrgData.value)
+  // Computed: current team (active organization). Prefer the reactive atom;
+  // fall back to useSession's activeOrganization (SSR-populated).
+  const currentTeam = computed<Team | null>(() => {
+    const raw = activeOrgRef?.value?.data
+    if (raw) return mapOrganizationToTeam(raw)
+    return sessionActiveOrg.value
+  })
 
-  // Computed: all user's teams
-  const teams = computed<Team[]>(() => fallbackTeams.value)
+  // Computed: all user's teams. Prefer the reactive atom; fall back to
+  // fallbackTeams (populated by refreshTeams()/SSR middleware).
+  const teams = computed<Team[]>(() => {
+    const raw = orgsRef?.value?.data
+    if (raw && raw.length > 0) return raw.map(mapOrganizationToTeam)
+    return fallbackTeams.value
+  })
 
   // Fetch teams via API as fallback when nanostore atom stays pending
   async function refreshTeams(): Promise<void> {

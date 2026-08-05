@@ -5,7 +5,12 @@
  * Better Auth's client is dynamically typed based on plugins,
  * so we create a comprehensive type that covers all configured plugins.
  */
-import { createAuthClient } from 'better-auth/client'
+// Derive the type from the SAME client the runtime plugin builds — `better-auth/vue`
+// (#1738). Deriving it from `better-auth/client` (vanilla) declared `use*` as nanostore
+// ATOMS while `auth-client.client.ts` created the Vue client, whose `use*` are FUNCTIONS
+// returning `DeepReadonly<Ref<…>>`. That mismatch is what made `useTeam.ts` "not callable"
+// (TS2349) and every `as CroutonAuthClient` cast stop overlapping (TS2352).
+import { createAuthClient } from 'better-auth/vue'
 import {
   organizationClient,
   twoFactorClient,
