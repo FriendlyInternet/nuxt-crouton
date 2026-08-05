@@ -42,6 +42,27 @@ export function planCommits({ ledger, changed }) {
   return { inputs, generated };
 }
 
+// Serialise ONE bucket to the exact bytes the finish step's readers need.
+//
+// A bucket file MUST end in a newline. `while IFS= read -r p` does NOT run the loop body for a
+// final UNTERMINATED line, so a plain `.join('\n')` silently drops the LAST path in the bucket —
+// which is how #1874's `nl.json` (the only file that ticket was actually about) never reached its
+// commit while the run record still counted it, because `grep -c` DOES see that last line (#1876).
+// Empty bucket → an empty file, never a blank line (a blank line would stage `$CONTENT/`).
+export function serializeBucket(list) {
+  const lines = (list || []).map(p => String(p).trim()).filter(Boolean);
+  return lines.length ? lines.join('\n') + '\n' : '';
+}
+
+// Write both bucket files into `dir` as `inputs.txt` / `generated.txt`. The finish step calls this
+// instead of serialising inline, so the round-trip is covered by pi-commit-plan.test.mjs rather
+// than only in production (#1876).
+export function writeBuckets(plan, dir) {
+  fs.writeFileSync(path.join(dir, 'inputs.txt'), serializeBucket(plan.inputs));
+  fs.writeFileSync(path.join(dir, 'generated.txt'), serializeBucket(plan.generated));
+  return plan;
+}
+
 // I/O wrapper: read the ledger from the session and the changed list from a file.
 export function planFromFiles(sessionPath, repoRoot, changedPath) {
   const ledger = fs.existsSync(sessionPath) ? ledgerFromSession(sessionPath, repoRoot) : new Set();
@@ -52,10 +73,18 @@ export function planFromFiles(sessionPath, repoRoot, changedPath) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [, , sessionPath, repoRoot, changedPath] = process.argv;
-  if (!sessionPath || !repoRoot || !changedPath) {
-    console.error('usage: pi-commit-plan.mjs <session.jsonl> <repoRoot> <changed-files.txt>');
+  const argv = process.argv.slice(2);
+  const outIdx = argv.indexOf('--out');
+  const outDir = outIdx === -1 ? null : argv[outIdx + 1];
+  if (outIdx !== -1) argv.splice(outIdx, 2);
+  const [sessionPath, repoRoot, changedPath] = argv;
+  if (!sessionPath || !repoRoot || !changedPath || (outIdx !== -1 && !outDir)) {
+    console.error('usage: pi-commit-plan.mjs <session.jsonl> <repoRoot> <changed-files.txt> [--out <dir>]');
     process.exit(2);
   }
-  process.stdout.write(JSON.stringify(planFromFiles(sessionPath, repoRoot, changedPath)) + '\n');
+  const plan = planFromFiles(sessionPath, repoRoot, changedPath);
+  // --out writes the two bucket files directly (correctly terminated); stdout stays JSON either
+  // way so the previous contract still holds.
+  if (outDir) writeBuckets(plan, outDir);
+  process.stdout.write(JSON.stringify(plan) + '\n');
 }
