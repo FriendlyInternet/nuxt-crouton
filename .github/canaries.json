@@ -60,11 +60,10 @@
     },
     {
       "id": "packages-logic-needs-test",
-      "issue": null,
-      "target": "packages/** — NOT YET WIRED, see note",
-      "why": "#1885 — the worker shipped #1875's logic with none of its five agreed tests, and every check went green. Clause (7) now requires the test; this asserts it actually appears.",
-      "task": "a small hand-written logic change under packages/, with the issue naming its test cases",
-      "blockedOn": "The tests gate keys on ^packages/[^/]+/.*\\.(ts|mjs|js)$ (planTestsGate), so pocs/canary cannot exercise it — this canary needs a disposable target inside packages/, which is edit-guarded and needs explicit approval to create. The linked issue also has to carry a pkg:* label so packages-guard accepts the PR (that part needs no code change).",
+      "issue": 1932,
+      "target": "packages/canary-target/src/index.ts",
+      "why": "#1885 — the worker shipped #1875's logic with none of its five agreed tests, and every check went green. Clause (7) now requires the test; this asserts it actually appears. The only canary that cannot use pocs/canary: planTestsGate keys on ^packages/[^/]+/, which no poc path matches — hence the disposable packages/canary-target.",
+      "task": "add a pure percentOf() helper to packages/canary-target/src/index.ts AND its test in test/",
       "expect": {
         "prOpened": true,
         "filesMatch": "\\.(test|spec)\\.",

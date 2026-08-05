@@ -1,0 +1,14 @@
+{
+  "name": "@fyit/canary-target",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Disposable target for the worker-pipeline canary rig (#1878). Never published, never imported.",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "catalog:"
+  }
+}
