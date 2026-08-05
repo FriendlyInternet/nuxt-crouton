@@ -241,7 +241,10 @@ const ACTION_HANDLERS = {
     }
     lines.push('')
     lines.push('---')
-    lines.push('Reply **`lgtm`** / **`approve`** to proceed to build, or answer the forks above and I\'ll revise. Holding on `status:blocked`.')
+    // @mention the owner: a hold is an ASK — it needs action, so it must notify (#1745). Without
+    // this the comment + status:blocked land silently and the hold waits on someone noticing it.
+    // Per CLAUDE.md an @mention is a request for action, which is exactly what this is.
+    lines.push('@pmcp — reply **`lgtm`** / **`approve`** to proceed to build, or answer the forks above and I\'ll revise. Holding on `status:blocked`.')
     const f = writeBody(`signoff-${a.issue}`, lines.join('\n'))
     exec('gh', ['issue', 'comment', String(a.issue), '--repo', repo, '--body-file', f])
     try { exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--add-label', 'status:blocked']) } catch (e) { state.log(`addLabel status:blocked: ${e.message}`) }
