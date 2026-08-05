@@ -7,6 +7,12 @@
     "demand. `expect` keys must exist in ASSERTIONS (scripts/canary.mjs) — an unknown key FAILS",
     "rather than passing silently, so the rig cannot quietly stop checking.",
     "",
+    "TARGET: pocs/canary — a disposable tsc-only package that exists solely to be edited by these",
+    "runs (see pocs/canary/README.md). It is NOT in fixtures/ because the acceptance gate resolves",
+    "an app only from ^(apps|pocs)/ (planAcceptance, scripts/pi-finish.mjs); a fixtures/ path would",
+    "leave every acceptance canary permanently neutral. Canary branches are closed and deleted on",
+    "each dispatch, so a worker's edits there are thrown away rather than merged.",
+    "",
     "`issue: null` means the canary is specified but not yet wired to a real ticket; the verify",
     "workflow skips it and says so. Fill in the number once the ticket exists.",
     "",
@@ -15,10 +21,11 @@
   ],
   "canaries": [
     {
-      "id": "packages-locale-3-files",
+      "id": "locale-3-files",
       "issue": null,
-      "why": "#1876 defect 1 — the last file of a commit bucket was dropped, and the dropped one was the only file that mattered. Also #1874's shape: a locale-only change must NOT be held by the tests gate.",
-      "task": "change a string in three of a package's locale files",
+      "target": "pocs/canary/i18n/",
+      "why": "#1876 defect 1 — the last file of a commit bucket was dropped, and in #1874 the dropped one was the only file that mattered. Three files in, three files out; nl.json asserted BY NAME because a count alone would pass on the wrong three.",
+      "task": "change the `farewell` string in all three of pocs/canary/i18n/{nl,en,fr}.json",
       "expect": {
         "prOpened": true,
         "draft": false,
@@ -30,8 +37,9 @@
     {
       "id": "app-acceptance-pass",
       "issue": null,
-      "why": "The acceptance gate's happy path — an apps/ change must resolve an APP_DIR and typecheck clean.",
-      "task": "a one-line, behaviour-free change in an app the acceptance gate can typecheck",
+      "target": "pocs/canary/src/greeting.ts",
+      "why": "The acceptance gate's happy path — an apps/pocs change must resolve an APP_DIR and typecheck clean. Guards the #1876 APP_DIR probe that used to kill the whole finish step on a no-match.",
+      "task": "add an exported `farewell(locale, name)` to pocs/canary/src/greeting.ts, mirroring `greet`",
       "expect": {
         "prOpened": true,
         "draft": false,
@@ -41,8 +49,9 @@
     {
       "id": "acceptance-red",
       "issue": null,
-      "why": "A genuinely broken deliverable must open as a DRAFT so automerge (#339) skips it. If this canary ever goes non-draft, red work can land.",
-      "task": "a change that fails the touched app's typecheck",
+      "target": "pocs/canary/src/greeting.ts",
+      "why": "A genuinely broken deliverable must open as a DRAFT so automerge (#339) skips it. If this canary ever goes non-draft, red work can land. The failure is REAL (a tight `Locale` union rejects the new key), not staged — a staged failure would prove nothing about the gate.",
+      "task": "add a German greeting to the GREETINGS map in pocs/canary/src/greeting.ts WITHOUT widening the `Locale` union",
       "expect": {
         "prOpened": true,
         "draft": true,
@@ -52,8 +61,10 @@
     {
       "id": "packages-logic-needs-test",
       "issue": null,
+      "target": "packages/** — NOT YET WIRED, see note",
       "why": "#1885 — the worker shipped #1875's logic with none of its five agreed tests, and every check went green. Clause (7) now requires the test; this asserts it actually appears.",
       "task": "a small hand-written logic change under packages/, with the issue naming its test cases",
+      "blockedOn": "The tests gate keys on ^packages/[^/]+/.*\\.(ts|mjs|js)$ (planTestsGate), so pocs/canary cannot exercise it — this canary needs a disposable target inside packages/, which is edit-guarded and needs explicit approval to create. The linked issue also has to carry a pkg:* label so packages-guard accepts the PR (that part needs no code change).",
       "expect": {
         "prOpened": true,
         "filesMatch": "\\.(test|spec)\\.",
@@ -63,8 +74,9 @@
     {
       "id": "genuine-no-op",
       "issue": null,
+      "target": "pocs/canary/README.md",
       "why": "The one canary that SHOULD produce nothing. It guards the artifact-gate's honesty: no PR is correct here, but the failure comment must not assert a cause it never checked (#1751, #1876 defect 3).",
-      "task": "an issue whose work is already done, so there is nothing to build",
+      "task": "an issue asking for something already true of pocs/canary/README.md, so there is nothing to build",
       "expect": {
         "prOpened": false,
         "commentsExclude": "likely underspecified"

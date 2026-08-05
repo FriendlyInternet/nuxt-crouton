@@ -11,6 +11,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { checkCanary, checkAll, renderReport, ASSERTIONS } from './canary.mjs';
 
 // The #1874 run AFTER the #1879 fix: 3 locale files, PR opened, not draft.
@@ -139,6 +140,33 @@ test('the rollup is all-or-nothing', () => {
   ];
   const { ok } = checkAll(specs, { good: HEALTHY, bad: BROKEN_NO_PR });
   assert.equal(ok, false);
+});
+
+test('the SHIPPED canaries.json only asks for assertions that exist', () => {
+  // The runtime unknown-key guard above fails a canary during a run — an hour after dispatch, on
+  // the self-hosted runner. This catches the same typo at commit time, on the real config, which
+  // is the only place it can be cheap. Config-as-data still has to be validated somewhere.
+  const specs = JSON.parse(fs.readFileSync(new URL('../.github/canaries.json', import.meta.url), 'utf8')).canaries;
+  assert.ok(specs.length > 0, 'canaries.json has no canaries');
+  for (const s of specs) {
+    assert.ok(s.id, 'every canary needs an id');
+    assert.ok(s.why, `${s.id}: every canary must say why it exists`);
+    for (const key of Object.keys(s.expect || {})) {
+      assert.ok(ASSERTIONS[key], `${s.id}: expects unknown assertion "${key}"`);
+    }
+  }
+});
+
+test('every wired canary names a target that exists on disk', () => {
+  // A canary pointed at a deleted path would dispatch, run for up to 45 minutes, and fail for a
+  // reason that has nothing to do with the pipeline. Only checked for WIRED canaries — an unwired
+  // one is allowed to describe a target that does not exist yet.
+  const specs = JSON.parse(fs.readFileSync(new URL('../.github/canaries.json', import.meta.url), 'utf8')).canaries;
+  for (const s of specs.filter((x) => x.issue)) {
+    assert.ok(s.target, `${s.id}: a wired canary must name its target`);
+    const p = new URL(`../${s.target}`, import.meta.url);
+    assert.ok(fs.existsSync(p), `${s.id}: target ${s.target} does not exist`);
+  }
 });
 
 test('the report names every failing assertion', () => {

@@ -138,6 +138,17 @@ convention will first be retrofitted onto.
 edit that flips an entry to `status: "settled"` without a populated `signedOff` — so "done" can't be
 self-asserted by editing one word. Until a human signs off, an entry stays `stopgap`/`new`.
 
+## One deliberate exception: `pocs/canary`
+
+`pocs/canary` is **not** a crouton app and is not incubating anything. It is the canary rig's
+crash-test dummy (#1878) — a bare `tsc --noEmit` package that fixed, re-runnable tickets are
+pointed at, so the worker pipeline can be exercised against code nobody depends on.
+
+It lives here rather than in `fixtures/` because the acceptance gate only resolves an app from
+`^(apps|pocs)/` (`planAcceptance`, `scripts/pi-finish.mjs`) — a `fixtures/` path would make both
+acceptance canaries permanently neutral. None of the guidance on this page applies to it: no
+`HANDOFF.md`, no `spec.json`, no graduation path, and never a deploy. See its `README.md`.
+
 ## What lives here right now
 
 A mix of two things:
