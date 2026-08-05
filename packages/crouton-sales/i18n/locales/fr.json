@@ -544,7 +544,7 @@
       "noLocations": "Aucun emplacement",
       "noHelpers": "Aucun bénévole connecté actuellement.",
       "expires": "Expire",
-      "addProduct": "Ajouter un produit",
+      "addProduct": "Produit",
       "loadingProducts": "Chargement des produits...",
       "noProducts": "Aucun produit",
       "inThisCategory": " dans cette catégorie",
@@ -566,7 +566,7 @@
       "currency": "Devise",
       "currencyEur": "Euro (€)",
       "currencyUsd": "Dollar ($)",
-      "showInactive": "Produits inactifs",
+      "showInactive": "Inactifs",
       "editCatalog": "Modifier",
       "doneEditing": "Terminé",
       "clientsPanel": {
