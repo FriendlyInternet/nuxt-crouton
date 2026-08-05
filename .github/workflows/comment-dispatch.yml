@@ -31,6 +31,14 @@ jobs:
        github.event.comment.author_association == 'COLLABORATOR') &&
       (contains(github.event.comment.body, '/delegate') ||
        contains(github.event.comment.body, '/deploy'))
+    # ⚠️ The two `contains()` above are a CHEAP PRE-FILTER ONLY, not the decision (#2004).
+    # They are unanchored substring tests, so they also match a command that is merely being
+    # *mentioned* — in backticks, a table cell, a fenced block, or a quote of someone else's
+    # comment. That is how a comment EXPLAINING a mis-dispatch dispatched one on #1791.
+    # The authoritative check is `parseCommand()` in the script step below, which requires
+    # the command at the start of a line, outside code and quotes. Do not move the decision
+    # back up here: GitHub expressions have no newline escape, so it cannot be anchored in
+    # YAML — `'\n'` in a single-quoted scalar is a literal backslash-n and never matches.
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     steps:
       # Mint a Nuxt Harness App installation token so the `delegate` label is applied by
@@ -43,6 +51,12 @@ jobs:
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+      # Needed so the script can `require` the unit-tested command parser
+      # (scripts/comment-command.mjs) — same pattern as schedule-waves.yml.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - uses: actions/github-script@v7
         with:
           github-token: ${{ steps.app-token.outputs.token }}
@@ -51,10 +65,16 @@ jobs:
             const issue_number = context.payload.issue.number
             const comment_id = context.payload.comment.id
 
-            // Pick the harness label. Check `/delegate-pi` FIRST — `/delegate` is a
-            // substring of it, so the order is load-bearing (#1077).
-            const body = context.payload.comment.body || ''
-            const label = body.includes('/delegate-pi') ? 'delegate-pi' : 'delegate'
+            // Was a command ISSUED, or only MENTIONED? `parseCommand` requires it at the
+            // start of a line, outside code spans/fences and outside `>` quotes, and keeps
+            // the `/delegate-pi` before `/delegate` ordering (#1077). Unit tests, including
+            // the two real comments from the #1791 incident: scripts/comment-command.test.mjs
+            const { parseCommand } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-command.mjs`)
+            const label = parseCommand(context.payload.comment.body)
+            if (!label) {
+              core.info(`#${issue_number}: comment mentions a command but does not issue one — ignoring.`)
+              return
+            }
 
             // Fire a FRESH labeled event: both decompose workflows only trigger on the
             // label being *added* (not merely present), so if it's already there, remove first.
