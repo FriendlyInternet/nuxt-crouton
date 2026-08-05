@@ -1,0 +1,16 @@
+{
+  "name": "cogs",
+  "fields": [
+    {
+      "name": "name",
+      "type": "string",
+      "required": true
+    },
+    {
+      "name": "teeth",
+      "type": "number",
+      "required": true,
+      "default": 0
+    }
+  ]
+}
