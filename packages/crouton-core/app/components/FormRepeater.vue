@@ -119,7 +119,7 @@ onMounted(() => {
       :key="item.id || index"
       :ui="{ body: 'sm:p-2 p-2' }"
     >
-      <div class="flex gap-2 justify-between">
+      <div class="flex gap-2 items-start">
         <!-- Drag handle (only if sortable) -->
         <UButton
           v-if="sortable"
@@ -128,9 +128,18 @@ onMounted(() => {
           variant="ghost"
           size="sm"
           icon="i-lucide-grip-vertical"
-          class="drag-handle cursor-move"
+          class="drag-handle cursor-move mt-2"
           :aria-label="t('form.dragToReorder')"
         />
+
+        <!-- Item component -->
+        <div class="flex-1 min-w-0 p-2">
+          <component
+            :is="componentName"
+            :model-value="item"
+            @update:model-value="(val: unknown) => updateItem(index, val)"
+          />
+        </div>
 
         <!-- Remove button -->
         <UButton
@@ -139,17 +148,9 @@ onMounted(() => {
           variant="ghost"
           size="sm"
           icon="i-lucide-x"
+          class="mt-2"
           :aria-label="t('form.removeItem')"
           @click="removeItem(index)"
-        />
-      </div>
-
-      <!-- Item component -->
-      <div class="p-2">
-        <component
-          :is="componentName"
-          :model-value="item"
-          @update:model-value="(val: unknown) => updateItem(index, val)"
         />
       </div>
     </UCard>
