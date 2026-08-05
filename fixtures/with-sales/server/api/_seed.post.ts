@@ -65,7 +65,14 @@ export default defineEventHandler(async (event) => {
   //    location + a kitchen printer pointed at the fake :9100 server. Stable
   //    seed ids keep the whole route idempotent (re-seeding upserts in place).
   const eventId = seedId('event', body.teamSlug, EVENT_SLUG)
-  const locationId = seedId('loc', body.teamSlug, EVENT_SLUG, 'kitchen')
+  // MUST be a station the provider's products actually route to (#1769). Products
+  // now carry a required `locationId` (Bar for drinks, Keuken for food), and a
+  // kitchen ticket is only generated when a printer sits at the item's location.
+  // This used to mint its own 'kitchen' station: harmless while seeded products had
+  // a NULL location and fell into the synthetic "default" ticket that goes to every
+  // kitchen printer, but with routing live it meant no printer served either real
+  // station and NO job was ever enqueued.
+  const locationId = seedId('loc', body.teamSlug, EVENT_SLUG, 'keuken')
   const printerId = seedId('prn', body.teamSlug, EVENT_SLUG, 'kitchen')
   const now = Math.floor(Date.now() / 1000)
   const printerIp = body.printerIp ?? '127.0.0.1'
@@ -100,9 +107,14 @@ export default defineEventHandler(async (event) => {
   `)
 
   // 3. Read back the products so the spec can place an order with a real product.
+  //    SCOPED TO THE PRINTER'S STATION (#1769): the spec orders `products[0]`, and
+  //    an item only produces a ticket when a printer sits at its location — so
+  //    handing back a product from another station would make the printing specs
+  //    fail depending on which row happened to come back first.
   //    `db.all` (libsql drizzle) returns an array of row objects directly.
   const rows = (await db.all(sql`
-    SELECT "id" AS id, "price" AS price FROM "sales_products" WHERE "eventId" = ${eventId}
+    SELECT "id" AS id, "price" AS price FROM "sales_products"
+    WHERE "eventId" = ${eventId} AND "locationId" = ${locationId}
   `)) as Array<{ id: string, price: number }>
 
   return {
