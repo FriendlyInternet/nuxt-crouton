@@ -93,9 +93,34 @@ export function checkCanary(spec, observed) {
   return { id: spec.id, issue: spec.issue, ok: results.every((r) => r.ok), results };
 }
 
-/** Roll several canaries up. `ok` is all-or-nothing — a rig that "mostly passes" tells you nothing. */
+/**
+ * Roll several canaries up. `ok` is all-or-nothing — a rig that "mostly passes" tells you nothing.
+ *
+ * A MISSING observation is its own failure, checked before any assertion runs. Substituting `{}`
+ * and letting the assertions judge it looks equivalent and is not: `genuine-no-op` expects
+ * `prOpened: false`, which an empty observation satisfies — so "this canary never ran" scored
+ * identically to "this canary correctly produced nothing". The one canary whose entire job is to
+ * catch the harness claiming something it never checked was doing exactly that (found on the
+ * rig's first live run, #1878). The gather step writes an entry for every canary it looks at,
+ * so a truly absent key means it was never looked at.
+ */
 export function checkAll(specs, observations) {
-  const rows = specs.map((s) => checkCanary(s, observations[s.id] || {}));
+  const obs = observations || {};
+  const rows = specs.map((s) => {
+    if (!Object.prototype.hasOwnProperty.call(obs, s.id)) {
+      return {
+        id: s.id,
+        issue: s.issue,
+        ok: false,
+        results: [{
+          key: '(observation)',
+          ok: false,
+          detail: 'no observation recorded — this canary was never gathered, so nothing about it was checked'
+        }]
+      };
+    }
+    return checkCanary(s, obs[s.id]);
+  });
   return { ok: rows.every((r) => r.ok), rows };
 }
 

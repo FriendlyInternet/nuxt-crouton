@@ -136,6 +136,12 @@ jobs:
         run: |
           set -uo pipefail
           echo '{}' > /tmp/obs.json
+          # Assert against the SAME set we gather, not the whole spec file. Handing canary.mjs
+          # .github/canaries.json while gathering only the `only`-filtered canary made every
+          # undispatched canary fail on a missing observation, so a single-canary verify was
+          # guaranteed red — the rig's first live run reported 2/5 while the canary under test
+          # had actually passed (#1878).
+          echo "$WIRED" | node -e 'const w=JSON.parse(require("fs").readFileSync(0,"utf8"));require("fs").writeFileSync("/tmp/specs.json",JSON.stringify({canaries:w},null,2))'
           for n in $(echo "$WIRED" | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8")).forEach(c=>console.log(c.issue))'); do
             ID="$(echo "$WIRED" | ISSUE="$n" node -e 'const w=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log((w.find(c=>String(c.issue)===process.env.ISSUE)||{}).id||"")')"
             PR_JSON="$(gh pr list --head "work-$n" --state all --json number,isDraft,files,body -q '.[0]' 2>/dev/null || echo '')"
@@ -160,7 +166,7 @@ jobs:
             '
             echo "gathered $ID (#$n)"
           done
-          node scripts/canary.mjs .github/canaries.json /tmp/obs.json | tee /tmp/report.md
+          node scripts/canary.mjs /tmp/specs.json /tmp/obs.json | tee /tmp/report.md
           echo "REPORT_EXIT=$?"
 
       - name: Summarise
