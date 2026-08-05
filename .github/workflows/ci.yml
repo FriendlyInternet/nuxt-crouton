@@ -438,12 +438,22 @@ jobs:
       - name: Extract each `run:` block and lint it
         run: |
           set -uo pipefail
-          # LOCAL, not `-g`. A global install is not on `node -e`'s resolution path from the repo
-          # root, so `require("js-yaml")` throws MODULE_NOT_FOUND and the step dies before linting
-          # anything. It passed locally only because js-yaml is already in this repo's node_modules
-          # as a transitive dep — and this job deliberately runs no `pnpm install`, so on a runner
-          # there is nothing to resolve against. Local verification did not cover the difference.
-          npm i --no-save --no-audit --no-fund js-yaml@4 >/dev/null 2>&1
+          # js-yaml is installed into a SCRATCH dir and reached via NODE_PATH. Two earlier shapes
+          # both failed on a runner while passing locally, so the reasoning is recorded here:
+          #   • `npm i -g` — a global prefix is NOT on `node -e`'s resolution path from the repo
+          #     root ⇒ MODULE_NOT_FOUND.
+          #   • `npm i` in the repo root — dies with EUNSUPPORTEDPROTOCOL on the root
+          #     package.json's `catalog:` deps, which npm cannot parse (pnpm-only protocol).
+          # A scratch dir has no package.json to inherit, so neither applies. Locally this all
+          # "worked" only because js-yaml is already in this repo's node_modules as a transitive
+          # dep — and this job deliberately runs no `pnpm install`.
+          # Errors are NOT redirected to /dev/null: hiding npm's stderr is what made the second
+          # failure a silent 2-second exit with nothing to read.
+          DEPS=/tmp/wf-deps
+          mkdir -p "$DEPS"
+          ( cd "$DEPS" && npm init -y >/dev/null && npm i --no-audit --no-fund js-yaml@4 >/dev/null ) \
+            || { echo "::error::could not install js-yaml into $DEPS"; exit 1; }
+          export NODE_PATH="$DEPS/node_modules"
           node -e 'require("js-yaml")' || { echo "::error::js-yaml unavailable — cannot parse workflows"; exit 1; }
           mkdir -p /tmp/wf-shell
           node -e '
