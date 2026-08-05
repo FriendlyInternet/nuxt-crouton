@@ -105,12 +105,13 @@
           variant="avatars"
         />
 
-        <!-- Expand/Collapse button -->
+        <!-- Expand/Collapse button — no-op on mobile, the slideover is already fullscreen there -->
         <UButton
           :icon="state.isExpanded ? 'i-lucide-minimize-2' : 'i-lucide-maximize-2'"
           variant="ghost"
           color="neutral"
           size="xs"
+          class="hidden sm:inline-flex"
           :title="state.isExpanded ? t('form.collapse') : t('form.expand')"
           @click.stop="toggleExpand(state.id)"
         />
@@ -231,7 +232,8 @@ const getSlideoverUi = (state: CroutonState, index: number) => {
       content: `fixed inset-0 w-screen max-w-none ${baseTransition}`,
       overlay: 'fixed inset-0 bg-gray-900/80 backdrop-blur-sm transition-opacity duration-300',
       body: `flex-1 overflow-y-auto p-6 ${baseTransition}`,
-      header: 'flex items-center gap-1.5 p-4 sm:px-6 min-h-16 border-b border-gray-200 dark:border-gray-700'
+      header: 'flex items-center gap-1.5 p-4 sm:px-6 min-h-16 sm:min-h-16 border-b border-gray-200 dark:border-gray-700',
+      description: 'sr-only sm:not-sr-only'
     }
   }
 
@@ -239,7 +241,8 @@ const getSlideoverUi = (state: CroutonState, index: number) => {
   return {
     content: `fixed right-0 inset-y-0 w-full max-w-2xl ${baseTransition}`,
     body: `flex-1 overflow-y-auto p-4 ${baseTransition}`,
-    header: 'flex items-center gap-1.5 p-4 sm:px-6 min-h-16 border-b border-gray-200 dark:border-gray-700'
+    header: 'flex items-center gap-1.5 p-4 sm:px-6 min-h-16 sm:min-h-16 border-b border-gray-200 dark:border-gray-700',
+    description: 'sr-only sm:not-sr-only'
   }
 }
 
