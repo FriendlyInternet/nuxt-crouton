@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<!--
+  UI proposal — admin cancel an order (#1941).
+  Open question: WHICH order list, and does Cancel replace hard-delete?
+  Self-contained: no JS, no external assets.
+-->
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bestelling annuleren — waar?</title>
+<style>
+  :root{ --page:#0a0e17; --ink:#e8edf6; --muted:#8b97ad; --card:#151b27; --card2:#11161f;
+         --line:#222b3a; --soft:#1b2230; --green:#34d399; --amber:#fbbf24; --red:#f87171; }
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1100px 500px at 75% -10%, #16213c 0%, var(--page) 55%);
+       color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1200px;margin:0 auto;padding:34px 22px 56px}
+  .eyebrow{text-transform:uppercase;letter-spacing:.18em;font-size:11px;color:var(--green);font-weight:700}
+  h1{font-size:30px;margin:6px 0 6px;letter-spacing:-.02em}
+  .lede{color:var(--muted);margin:0 0 24px;font-size:15px;max-width:80ch}
+  .lede b{color:var(--ink)}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+  .opt{background:#101725;border:1px solid var(--line);border-radius:16px;padding:18px}
+  .opt.pick{border-color:#1f5e47;box-shadow:0 0 0 1px rgba(52,211,153,.16)}
+  .opt h2{margin:0 0 3px;font-size:16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tag{font-size:10.5px;padding:2px 9px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-weight:700}
+  .tag.new{color:var(--green);border-color:#1f5e47}
+  .tag.old{color:var(--amber);border-color:#5c4a13}
+  .sub{color:var(--muted);font-size:12.5px;margin:0 0 14px;min-height:34px}
+
+  .pane{background:var(--card2);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  .phead{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:#0d1220;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:800}
+  .phead .cnt{font-weight:500;color:var(--muted);font-size:11px}
+
+  /* workspace expandable rows */
+  .orow{border-bottom:1px solid var(--soft);padding:9px 12px;display:flex;align-items:center;gap:9px;font-size:13px}
+  .orow .num{font-family:ui-monospace,monospace;color:var(--muted);font-size:12px}
+  .orow .who{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .led{width:8px;height:8px;border-radius:50%;background:var(--green);flex:none}
+  .chev{color:var(--muted);font-size:11px}
+  .expand{background:var(--card);border-bottom:1px solid var(--soft);padding:11px 13px 13px}
+  .items{list-style:none;margin:0 0 11px;padding:0;font-size:12.5px;color:#cdd6e6}
+  .items li{display:flex;gap:8px;padding:2px 0}
+  .items b{color:var(--green);min-width:18px}
+  .actions{display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--soft);padding-top:10px}
+  .btn{font-size:11.5px;font-weight:700;padding:5px 12px;border-radius:7px;border:1px solid var(--line);color:var(--muted);background:transparent}
+  .btn.warn{color:var(--amber);border-color:#5c4a13;background:rgba(251,191,36,.08)}
+  .btn.danger{color:var(--red);border-color:#6b2b2b;background:rgba(248,113,113,.08)}
+
+  /* cancelled state */
+  .orow.cancelled{opacity:.55}
+  .orow.cancelled .who{text-decoration:line-through}
+  .badge{font-size:10px;font-weight:800;padding:2px 7px;border-radius:999px;background:rgba(248,113,113,.12);border:1px solid #6b2b2b;color:var(--red);letter-spacing:.03em}
+
+  /* admin table */
+  .tabs{display:flex;gap:2px;padding:8px 10px 0;font-size:11px;overflow-x:auto}
+  .tab{padding:5px 10px;border-radius:7px 7px 0 0;color:var(--muted);white-space:nowrap;border:1px solid transparent}
+  .tab.on{background:var(--card);border-color:var(--line);border-bottom-color:transparent;color:var(--ink);font-weight:700}
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{background:#0b1120;text-align:left;padding:7px 11px;font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--line)}
+  td{padding:7px 11px;border-bottom:1px solid var(--soft)}
+  .pill{font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+  .pill.ok{color:var(--green);border-color:#1f5e47}
+
+  .note{margin-top:12px;padding:10px 12px;border-radius:9px;font-size:12.5px;line-height:1.55}
+  .note.ok{background:rgba(52,211,153,.07);border:1px solid #1f5e47;color:#a9f0d2}
+  .note.warn{background:rgba(251,191,36,.07);border:1px solid #5c4a13;color:#f4d58d}
+  .q{margin-top:26px;background:#0d1220;border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+  .q h3{margin:0 0 10px;font-size:14px}
+  .q ul{margin:0;padding-left:18px;color:#cdd6e6;font-size:13px}
+  .q li{padding:2px 0}
+  .q b{color:#fff}
+  .foot{margin-top:22px;color:var(--muted);font-size:12.5px;text-align:center}
+  .foot b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">#1941 · Bestelling annuleren</div>
+  <h1>Annuleren — in welke lijst?</h1>
+  <p class="lede">Nu kan een verkeerd aangeslagen bestelling alleen <b>verwijderd</b> worden: weg, met de lijnen en de printjobs. Annuleren laat de bestelling staan maar telt ze niet meer mee. <b>Waar zet ik de knop?</b></p>
+
+  <div class="cols">
+
+    <!-- ============ A ============ -->
+    <div class="opt pick">
+      <h2>A · Bestellingen-paneel <span class="tag new">waar Verwijderen al staat</span></h2>
+      <p class="sub">In de kassa-werkruimte. Klap een bestelling open — Annuleren komt naast de bestaande Verwijderen-knop.</p>
+
+      <div class="pane">
+        <div class="phead"><span>Bestellingen</span><span class="cnt">12 · 3 nog uit</span></div>
+
+        <div class="orow"><span class="num">#41</span><span class="who">Tafel 3 · Jan</span><span class="led"></span><span class="chev">▾</span></div>
+        <div class="expand">
+          <ul class="items">
+            <li><b>3×</b> Pils</li>
+            <li><b>2×</b> Frieten</li>
+          </ul>
+          <div class="actions">
+            <span class="btn warn">Annuleren</span>
+            <span class="btn danger">Verwijderen</span>
+          </div>
+        </div>
+
+        <div class="orow cancelled"><span class="num">#40</span><span class="who">Tafel 1 · Marie</span><span class="badge">Geannuleerd</span><span class="chev">▸</span></div>
+        <div class="orow"><span class="num">#39</span><span class="who">Toog · Piet</span><span class="led"></span><span class="chev">▸</span></div>
+      </div>
+
+      <div class="note ok"><b>Waarom hier:</b> dit is de lijst waar je tijdens het event effectief werkt, en Verwijderen staat er al — dezelfde plek, dezelfde twee-stappen-bevestiging. Geannuleerd blijft staan, doorstreept.</div>
+    </div>
+
+    <!-- ============ B ============ -->
+    <div class="opt">
+      <h2>B · Admin-bestellingentabel <span class="tag old">heeft al een tab</span></h2>
+      <p class="sub">De aparte pagina <code>/admin/…/sales/orders</code>. Daar staat al een “Geannuleerd”-tab die nooit vult.</p>
+
+      <div class="pane">
+        <div class="tabs">
+          <span class="tab on">Alles (12)</span><span class="tab">Open (3)</span><span class="tab">Klaar (8)</span><span class="tab">Geannuleerd (1)</span>
+        </div>
+        <table>
+          <tr><th>#</th><th>Klant</th><th>Status</th><th style="text-align:right">Actie</th></tr>
+          <tr><td>41</td><td>Tafel 3</td><td><span class="pill ok">Klaar</span></td><td style="text-align:right"><span class="btn warn">Annuleren</span></td></tr>
+          <tr><td>40</td><td>Tafel 1</td><td><span class="pill">Geannuleerd</span></td><td style="text-align:right">—</td></tr>
+          <tr><td>39</td><td>Toog</td><td><span class="pill ok">Klaar</span></td><td style="text-align:right"><span class="btn warn">Annuleren</span></td></tr>
+        </table>
+      </div>
+
+      <div class="note warn"><b>Let op:</b> deze pagina is de oudere weergave — je werkt er tijdens een event niet in, en Verwijderen staat er niet. Dan leven de twee acties op twee plekken.</div>
+    </div>
+
+  </div>
+
+  <div class="q">
+    <h3>Twee dingen die ik gok als je niets zegt</h3>
+    <ul>
+      <li><b>Annuleren vervangt Verwijderen niet</b> — ze blijven allebei. Annuleren = “telt niet mee, blijft staan”; Verwijderen = “weg, ook uit de historiek”. Wil je liever dat annuleren de enige optie wordt, zeg het.</li>
+      <li><b>Printjobs blijven staan.</b> Het ticket is meestal al gedrukt, dus annuleren haalt niets uit de wachtrij.</li>
+    </ul>
+  </div>
+
+  <p class="foot">Antwoord met <b>A</b> of <b>B</b>. Ik bouw pas daarna.</p>
+</div>
+</body>
+</html>

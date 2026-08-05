@@ -356,7 +356,10 @@
       "clientHelp": "Selecteer een bestaande klant of maak een nieuwe aan",
       "clientRequired": "Klant vereist",
       "clientRequiredDescription": "Dit evenement vereist een klant. Selecteer of maak er een aan.",
-      "deleteError": "Kon bestelling niet verwijderen"
+      "deleteError": "Kon bestelling niet verwijderen",
+      "cancel": "Annuleren",
+      "cancelConfirm": "Zeker?",
+      "cancelError": "Kon bestelling niet annuleren"
     },
     "events": {
       "title": "Evenementen",

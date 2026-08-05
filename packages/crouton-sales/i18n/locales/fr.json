@@ -355,7 +355,10 @@
       "clientHelp": "Sélectionnez un client existant ou créez-en un nouveau",
       "clientRequired": "Client requis",
       "clientRequiredDescription": "Cet événement nécessite un client. Veuillez en sélectionner ou en créer un.",
-      "deleteError": "Impossible de supprimer la commande"
+      "deleteError": "Impossible de supprimer la commande",
+      "cancel": "Annuler",
+      "cancelConfirm": "Sûr ?",
+      "cancelError": "Impossible d'annuler la commande"
     },
     "events": {
       "title": "Événements",

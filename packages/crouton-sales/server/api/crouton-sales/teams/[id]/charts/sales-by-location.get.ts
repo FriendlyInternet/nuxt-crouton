@@ -6,9 +6,9 @@
  * Optional ?eventId= narrows to a single event; omitted ⇒ team-wide.
  * Used by the salesChartBlock's `sales-by-location` chart kind.
  */
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { personnelFilter } from '../../../../../utils/personnel-filter'
+import { chartOrderScope } from '../../../../../utils/chart-scope'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
@@ -19,7 +19,6 @@ export default defineEventHandler(async (event) => {
   const db = useDB()
 
   const { eventId, personnel } = getQuery(event)
-  const eventFilter = eventId ? eq(salesOrders.eventId, String(eventId)) : undefined
 
   const locationExpr = sql<string>`coalesce(${salesLocations.title}, 'No location')`
   const revenueExpr = sql<number>`sum(${salesOrderitems.totalPrice})`
@@ -33,7 +32,7 @@ export default defineEventHandler(async (event) => {
     .innerJoin(salesOrders, eq(salesOrderitems.orderId, salesOrders.id))
     .innerJoin(salesProducts, eq(salesOrderitems.productId, salesProducts.id))
     .leftJoin(salesLocations, eq(salesProducts.locationId, salesLocations.id))
-    .where(and(eq(salesOrders.teamId, team.id), eventFilter, personnelFilter(personnel)))
+    .where(chartOrderScope(salesOrders, { teamId: team.id, eventId, personnel }))
     .groupBy(locationExpr)
     .orderBy(desc(revenueExpr))
 
