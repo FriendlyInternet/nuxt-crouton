@@ -355,5 +355,20 @@
       "keep the static BuilderNodePreview thumbnail -> it smooshes when small; only a workaround for the reka-observer OOM that #1178 removed",
       "unverified: scroll-inside-card vs pan-canvas under zoom, and all-cards-live vs focused-only (perf) -- both to confirm on device"
     ]
+  },
+  {
+    "id": "outline-tree-editor",
+    "behaviour": "Edit a page as an outline of its layout tree (DOM-like), not a free-floating card canvas. Adding is a list; drag is only for rearranging.",
+    "when": "editing a page: tap a block in a list to insert it; drag a row vertically to reorder; drag a row horizontally to nest/unnest; toggle a group's direction for columns (⬌) vs stack (⬍)",
+    "expect": "the outline IS the LayoutTree -- nesting depth = split children, a group's direction = flex row/column, a nested app = a nested node; the drop indicator is a simple 1D insertion line + indent guide (never the ambiguous 2D edge/pane cue); a live preview reflects every edit; there is no free-floating 2D card canvas",
+    "hook": "",
+    "howToTest": "1. open a page editor -> a vertical outline of the page's blocks + an add-from-list  2. tap a block in the list -> it inserts into the page (insertion line shows where)  3. drag a row up/down -> reorders  4. drag a row into a group (indent) -> it nests; toggle the group ⬌ -> its children become columns  5. the live preview updates to match",
+    "status": "proposed",
+    "supersedes": "",
+    "consideredRejected": [
+      "free-floating card canvas + drag-to-compose (reframes snap-dwell-arm / pane-drop-beside / ghost-ease-apart) -> the 2D drop is ambiguous (which edge / which pane / columns-or-rows), unreadable on a phone (IMG_2221); a page is document flow, not a whiteboard, so the tree was always the truth underneath the scattered cards",
+      "list-to-add but keep the canvas drag-to-compose -> leaves the ambiguous 2D gesture in place; only fixes half the problem",
+      "note: this is `proposed` -- it reframes the built canvas-compose entries above rather than superseding one; awaiting a human walk + sign-off before it becomes the settled contract"
+    ]
   }
 ]
