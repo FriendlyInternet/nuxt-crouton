@@ -33,6 +33,44 @@ const ID_FIELDS = ['database_id', 'id', 'bucket_name', 'preview_database_id', 'p
  * @param {number|string} pr  PR number.
  * @returns {{ config: object, name: string, changed: string[] }}
  */
+/** Binding sections, and which field (if any) carries the resource's human name. */
+const BINDING_SECTIONS = [
+  ['d1_databases', 'database_name'],
+  ['kv_namespaces', null],
+  ['r2_buckets', 'bucket_name'],
+]
+
+/**
+ * Strip everything that ties the config to a REAL environment: the custom-domain route it
+ * would otherwise fight staging for, and any nested `env` block that would smuggle staging's
+ * bindings straight back in.
+ */
+function detachFromRealEnvs(out, changed) {
+  for (const key of ['routes', 'route', 'env']) {
+    if (out[key]) { delete out[key]; changed.push(`dropped ${key}`) }
+  }
+  // The workers.dev hostname IS the deliverable — without it there is no link to post.
+  if (out.workers_dev !== true) { out.workers_dev = true; changed.push('workers_dev=true') }
+}
+
+/**
+ * Make every binding provision fresh. The BINDING name is preserved (the app's code refers
+ * to it); only the provisioned id goes, plus a per-PR resource name so two previews cannot
+ * land on the same database.
+ */
+function scrubBindings(out, name, changed) {
+  for (const [section, nameField] of BINDING_SECTIONS) {
+    for (const b of out[section] || []) {
+      for (const f of ID_FIELDS) {
+        if (f in b) { delete b[f]; changed.push(`${section}.${b.binding}: dropped ${f}`) }
+      }
+      if (!nameField) continue
+      b[nameField] = `${name}-${b.binding}`.toLowerCase()
+      changed.push(`${section}.${b.binding}: ${nameField}=${b[nameField]}`)
+    }
+  }
+}
+
 export function toPrPreview(config, app, pr) {
   if (!config || typeof config !== 'object') throw new TypeError('config must be an object')
   if (!app) throw new TypeError('app is required')
@@ -40,35 +78,11 @@ export function toPrPreview(config, app, pr) {
 
   const out = structuredClone(config)
   const name = `${app}-pr${pr}`
-  const changed = []
-
+  const changed = [`name=${name}`]
   out.name = name
-  changed.push(`name=${name}`)
 
-  // Routes/custom domains belong to the real environments. A preview is workers.dev only.
-  for (const key of ['routes', 'route']) {
-    if (out[key]) { delete out[key]; changed.push(`dropped ${key}`) }
-  }
-  // The preset may leave an `env` block; a preview is its own top-level Worker, so any
-  // nested env would only reintroduce the staging bindings we are trying to escape.
-  if (out.env) { delete out.env; changed.push('dropped env') }
-
-  // Ensure it actually gets a workers.dev hostname — that URL is the whole deliverable.
-  if (out.workers_dev !== true) { out.workers_dev = true; changed.push('workers_dev=true') }
-
-  // Bindings: keep the BINDING name (the code refers to it) but drop the provisioned id and
-  // give the resource a per-PR name, so wrangler creates a fresh one.
-  for (const [section, nameField] of [['d1_databases', 'database_name'], ['kv_namespaces', null], ['r2_buckets', 'bucket_name']]) {
-    for (const b of out[section] || []) {
-      for (const f of ID_FIELDS) {
-        if (f in b) { delete b[f]; changed.push(`${section}.${b.binding}: dropped ${f}`) }
-      }
-      if (nameField) {
-        b[nameField] = `${name}-${b.binding}`.toLowerCase()
-        changed.push(`${section}.${b.binding}: ${nameField}=${b[nameField]}`)
-      }
-    }
-  }
+  detachFromRealEnvs(out, changed)
+  scrubBindings(out, name, changed)
 
   return { config: out, name, changed }
 }
