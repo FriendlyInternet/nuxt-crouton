@@ -2,19 +2,24 @@
 /**
  * /builder/outline/[pageId] — the OUTLINE editor (spec: `outline-tree-editor`, proposed).
  *
- * SLICE 1 of the DOM-tree direction: edit a page as an OUTLINE of its layout tree instead of a
- * free-floating card canvas. A page's LayoutTree root is shown as a vertical list of its top-level
- * blocks; you TAP a block from a list to add, and DRAG a row (1D insertion line — never the
- * ambiguous 2D drop) to reorder. A live preview renders the real tree beside it. Persists to the
- * same `builderPages.board.layout` the canvas board uses (`serializeLayoutTree`).
+ * SLICE 2 — outline + responsive, combined in ONE surface (no separate "Breakpoints" mode).
+ *  · list-to-add + drag-to-reorder + live preview   (slice 1)
+ *  · a DEVICE/WIDTH bar (Phone/Tablet/Desktop): the outline + preview RESOLVE at that width
+ *    via the engine's `resolveLayoutAtWidth`, so you see the page as it looks on that device.
+ *  · a page DIRECTION toggle (⬌ columns / ⬍ stack) — the responsive dial that matters most.
+ *  · AUTHOR-AT-WIDTH: an edit at the base (narrowest) width edits `tree.root`; an edit at a
+ *    wider device authors a breakpoint there (`patchBreakpoint`, min-width-locks-upward). So
+ *    "columns on Desktop, stack on Phone" is just something you demonstrate at each width.
  *
- * Deferred to later slices: horizontal drag to nest/unnest, the per-group ⬌/⬍ column toggle,
- * and retiring the canvas board. This slice proves the core: list-to-add + drag-to-reorder + preview.
+ * Persists the whole tree (incl. breakpoints) to `builderPages.board.layout`. Deferred to a
+ * later slice: horizontal drag to nest/unnest, per-group toggles, retiring the canvas.
  */
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { useElementSize } from '@vueuse/core'
 import type { LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
 import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize'
 import { moveChild, removeNode } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { resolveLayoutAtWidth, patchBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
 definePageMeta({ middleware: ['auth'] })
@@ -25,8 +30,8 @@ const { items: pages } = await useCollectionQuery('builderPages')
 const page = computed(() => (pages.value as BuilderPage[]).find(p => p.id === pageId.value) ?? null)
 useHead({ title: () => `Outline · ${page.value?.title ?? 'Page'}` })
 
-// ── The page's layout tree (edited locally; explicit Save persists it). ──────────
-const root = ref<LayoutNode | null>(null)
+// ── The page's whole layout tree (root + authored breakpoints). ──────────────────
+const tree = ref<LayoutTree>({ renderer: 'panes', root: starterRoot() })
 const loadedFor = ref<string | null>(null)
 const dirty = ref(false)
 
@@ -44,17 +49,48 @@ watch([page, pageId] as const, ([p, id]) => {
   if (!p || loadedFor.value === id) return
   const stored = (p.board as Record<string, unknown> | null)?.layout
   const parsed = typeof stored === 'string' ? parseLayoutTree(stored) : null
-  root.value = parsed?.root ?? starterRoot()
+  tree.value = parsed ?? { renderer: 'panes', root: starterRoot() }
   loadedFor.value = id
 }, { immediate: true })
 
-// The outline rows = the root split's direct children (a lone leaf/nested root = one row).
+// ── Device / width bar — the outline + preview resolve at the selected width. ─────
+const DEVICES = [
+  { key: 'phone', label: 'Phone', icon: 'i-lucide-smartphone', width: 390 },
+  { key: 'tablet', label: 'Tablet', icon: 'i-lucide-tablet-smartphone', width: 768 },
+  { key: 'desktop', label: 'Desktop', icon: 'i-lucide-monitor', width: 1200 },
+] as const
+const deviceKey = ref<(typeof DEVICES)[number]['key']>('phone')
+const device = computed(() => DEVICES.find(d => d.key === deviceKey.value)!)
+
+// The effective layout AT this width (base + any authored breakpoints, largest-active-wins).
+const resolved = computed(() => resolveLayoutAtWidth(tree.value, device.value.width))
+// `activeBreakpoint === null` ⇒ we're on the BASE layer (edits go to tree.root); else the
+// device's width is a breakpoint layer (edits author/patch a full-root override there).
+const atBase = computed(() => resolved.value.activeBreakpoint === null)
+const bpCount = computed(() => tree.value.breakpoints?.length ?? 0)
+
+// Every structural edit routes through here: mutate the resolved root, then write it to the
+// right layer for the current width (base vs a per-width breakpoint override).
+function editRoot(mutate: (root: LayoutNode) => LayoutNode | null) {
+  const next = mutate(resolved.value.root) ?? starterRoot()
+  if (atBase.value) tree.value = { ...tree.value, root: next }
+  else tree.value = patchBreakpoint(tree.value, device.value.width, { root: next, label: device.value.label })
+  dirty.value = true
+}
+
+// ── Page direction (⬌ columns / ⬍ stack) — the responsive dial, authored at this width. ──
+const pageDir = computed(() => (resolved.value.root.type === 'split' ? resolved.value.root.direction : null))
+function setPageDir(dir: 'horizontal' | 'vertical') {
+  editRoot(root => (root.type === 'split' ? { ...root, direction: dir } : root))
+}
+
+// ── Outline rows = the resolved root's direct children. ──────────────────────────
 const { getBlock } = useCroutonLayoutBlocks()
 interface Row { node: LayoutNode, label: string, icon: string, sub: string | null }
-function labelFor(node: LayoutNode): { label: string, icon: string, sub: string | null } {
+function labelFor(node: LayoutNode): Omit<Row, 'node'> {
   if (node.type === 'split') {
     const dir = node.direction === 'horizontal' ? 'columns' : 'stack'
-    return { label: `Group`, icon: node.direction === 'horizontal' ? 'i-lucide-columns-2' : 'i-lucide-rows-2', sub: `${node.children.length} blocks · ${dir}` }
+    return { label: 'Group', icon: node.direction === 'horizontal' ? 'i-lucide-columns-2' : 'i-lucide-rows-2', sub: `${node.children.length} blocks · ${dir}` }
   }
   if (node.type === 'nested') return { label: node.label ?? 'Nested app', icon: 'i-lucide-box', sub: 'nested layout' }
   const b = getBlock(node.blockId)
@@ -62,13 +98,12 @@ function labelFor(node: LayoutNode): { label: string, icon: string, sub: string 
   return { label: b?.name ?? node.blockId, icon: b?.icon ?? 'i-lucide-square', sub: cfg?.heading ?? null }
 }
 const rows = computed<Row[]>(() => {
-  const r = root.value
-  if (!r) return []
+  const r = resolved.value.root
   const kids = r.type === 'split' ? r.children : [r]
   return kids.map(node => ({ node, ...labelFor(node) }))
 })
 
-// ── Add-from-list (tap to insert; appends to the end — the insertion line shows where). ──
+// ── Add-from-list (tap to insert; appends at this width's layer). ─────────────────
 const palette = [
   { blockId: 'artists-list', label: 'Artists · List', icon: 'i-lucide-list', collection: 'builderArtists', heading: 'Artists' },
   { blockId: 'artists-form', label: 'Artists · New', icon: 'i-lucide-square-pen', collection: 'builderArtists', heading: 'New artist' },
@@ -77,33 +112,22 @@ const palette = [
   { blockId: 'spacer', label: 'Spacer', icon: 'i-lucide-square-dashed' },
 ]
 type PaletteItem = (typeof palette)[number]
-
 function addBlock(item: PaletteItem) {
   const leaf: LayoutNode = {
     type: 'leaf',
     blockId: item.blockId,
     config: item.collection ? { collection: item.collection, heading: item.heading } : {},
   }
-  const r = root.value
-  if (!r) root.value = leaf
-  else if (r.type === 'split') root.value = { ...r, children: [...r.children, leaf] }
-  else root.value = { type: 'split', direction: 'vertical', children: [r, leaf] }
-  dirty.value = true
+  editRoot(root => (root.type === 'split' ? { ...root, children: [...root.children, leaf] } : { type: 'split', direction: 'vertical', children: [root, leaf] }))
 }
-
 function removeRow(index: number) {
-  const r = root.value
-  if (!r) return
-  if (r.type !== 'split') { root.value = null; dirty.value = true; return }
-  root.value = removeNode(r, [index]) ?? null
-  dirty.value = true
+  editRoot(root => (root.type === 'split' ? removeNode(root, [index]) : null))
 }
 
-// ── Pointer drag-to-reorder — the 1D insertion line (no ambiguous 2D drop). ──────
+// ── Pointer drag-to-reorder — the 1D insertion line. ─────────────────────────────
 const listEl = ref<HTMLElement | null>(null)
 const dragIndex = ref<number | null>(null)
-const dropIndex = ref<number | null>(null) // insertion slot (0..rows.length)
-
+const dropIndex = ref<number | null>(null)
 function onHandleDown(index: number, e: PointerEvent) {
   dragIndex.value = index
   dropIndex.value = index
@@ -129,22 +153,23 @@ function onUp() {
   dragIndex.value = null
   dropIndex.value = null
   if (from == null || to == null) return
-  // A drop slot AFTER the dragged row collapses by one once the row is removed.
   if (to > from) to -= 1
   if (to === from) return
-  const r = root.value
-  if (r?.type === 'split') { root.value = moveChild(r, [], from, to); dirty.value = true }
+  editRoot(root => (root.type === 'split' ? moveChild(root, [], from, to) : root))
 }
 
-// ── Save (explicit, mirrors the canvas board). ──────────────────────────────────
+// ── Scaled device preview (zoom to fit the phone screen). ────────────────────────
+const previewWrap = ref<HTMLElement | null>(null)
+const { width: availW } = useElementSize(previewWrap)
+const previewScale = computed(() => Math.min(1, (availW.value || 340) / device.value.width))
+
+// ── Save (explicit; persists the whole tree incl. breakpoints). ──────────────────
 const { update } = useCollectionMutation('builderPages')
 const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
 async function save() {
-  if (!root.value) return
-  const tree: LayoutTree = { renderer: 'panes', root: root.value }
   saveState.value = 'saving'
   try {
-    await update(pageId.value, { board: { layout: serializeLayoutTree(tree) } })
+    await update(pageId.value, { board: { layout: serializeLayoutTree(tree.value) } })
     dirty.value = false
     saveState.value = 'saved'
   } catch { saveState.value = 'idle' }
@@ -173,18 +198,67 @@ async function save() {
       </UButton>
     </header>
 
+    <!-- device / width bar -->
+    <div class="flex items-center gap-2 border-b border-default px-3 py-2" data-handoff="device-bar">
+      <div class="flex rounded-lg bg-elevated/50 p-0.5">
+        <button
+          v-for="d in DEVICES"
+          :key="d.key"
+          type="button"
+          class="flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition"
+          :class="deviceKey === d.key ? 'bg-primary text-inverted shadow' : 'text-muted hover:text-default'"
+          :data-handoff="`device-${d.key}`"
+          @click="deviceKey = d.key"
+        >
+          <UIcon :name="d.icon" class="size-4" />
+          {{ d.label }}
+        </button>
+      </div>
+      <span class="ml-auto text-[11px]" data-handoff="editing-layer">
+        <template v-if="atBase">editing <span class="font-semibold text-default">base</span> · all widths</template>
+        <template v-else>editing <span class="font-semibold text-primary">{{ device.label }}</span> & up</template>
+      </span>
+    </div>
+
     <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
+      <!-- page direction (the responsive dial) -->
+      <section v-if="pageDir">
+        <div class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          Page layout <span class="normal-case text-muted/70">· on {{ atBase ? 'all widths' : device.label + ' & up' }}</span>
+        </div>
+        <div class="flex rounded-lg border border-default p-0.5" data-handoff="page-direction">
+          <button
+            type="button"
+            class="flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition"
+            :class="pageDir === 'vertical' ? 'bg-primary text-inverted' : 'text-muted hover:text-default'"
+            data-handoff="dir-stack"
+            @click="setPageDir('vertical')"
+          >
+            <UIcon name="i-lucide-rows-2" class="size-4" /> Stack
+          </button>
+          <button
+            type="button"
+            class="flex flex-1 items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-medium transition"
+            :class="pageDir === 'horizontal' ? 'bg-primary text-inverted' : 'text-muted hover:text-default'"
+            data-handoff="dir-columns"
+            @click="setPageDir('horizontal')"
+          >
+            <UIcon name="i-lucide-columns-2" class="size-4" /> Columns
+          </button>
+        </div>
+      </section>
+
       <!-- the outline -->
       <section>
-        <div class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Page outline</div>
+        <div class="mb-1.5 flex items-center gap-2 px-1">
+          <span class="text-[11px] font-semibold uppercase tracking-wide text-muted">Page outline</span>
+          <UBadge v-if="bpCount" color="primary" variant="subtle" size="xs" data-handoff="bp-count">
+            {{ bpCount }} breakpoint{{ bpCount > 1 ? 's' : '' }}
+          </UBadge>
+        </div>
         <div ref="listEl" data-handoff="outline-list" class="flex flex-col">
           <template v-for="(row, i) in rows" :key="i">
-            <!-- insertion line -->
-            <div
-              v-if="dropIndex === i && dragIndex !== null"
-              class="mx-1 my-0.5 h-0.5 rounded-full bg-primary"
-              data-handoff="insertion-line"
-            />
+            <div v-if="dropIndex === i && dragIndex !== null" class="mx-1 my-0.5 h-0.5 rounded-full bg-primary" data-handoff="insertion-line" />
             <div
               data-row
               data-handoff="outline-row"
@@ -204,22 +278,10 @@ async function save() {
                 <div class="truncate text-sm font-medium">{{ row.label }}</div>
                 <div v-if="row.sub" class="truncate text-[11px] text-muted">{{ row.sub }}</div>
               </div>
-              <UButton
-                icon="i-lucide-trash-2"
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                aria-label="Remove block"
-                @click="removeRow(i)"
-              />
+              <UButton icon="i-lucide-trash-2" color="neutral" variant="ghost" size="xs" aria-label="Remove block" @click="removeRow(i)" />
             </div>
           </template>
-          <!-- trailing insertion line -->
-          <div
-            v-if="dropIndex === rows.length && dragIndex !== null"
-            class="mx-1 my-0.5 h-0.5 rounded-full bg-primary"
-            data-handoff="insertion-line"
-          />
+          <div v-if="dropIndex === rows.length && dragIndex !== null" class="mx-1 my-0.5 h-0.5 rounded-full bg-primary" data-handoff="insertion-line" />
           <p v-if="!rows.length" class="rounded-lg border border-dashed border-default px-3 py-6 text-center text-sm text-muted">
             Empty page — add a block below.
           </p>
@@ -245,11 +307,15 @@ async function save() {
         </div>
       </section>
 
-      <!-- live preview -->
+      <!-- live preview at the selected device width -->
       <section class="min-h-0 flex-1">
-        <div class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Live preview</div>
-        <div class="overflow-hidden rounded-xl border border-default bg-elevated/30" data-handoff="outline-preview">
-          <CroutonLayoutRenderer v-if="root" :node="root" :interactive="false" />
+        <div class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">
+          Live preview <span class="normal-case text-muted/70">· {{ device.label }} ({{ device.width }}px)</span>
+        </div>
+        <div ref="previewWrap" class="overflow-hidden rounded-xl border border-default bg-elevated/30 p-2" data-handoff="outline-preview">
+          <div :style="{ width: device.width + 'px', zoom: previewScale }" class="mx-auto overflow-hidden rounded-lg border border-default/60 bg-default">
+            <CroutonLayoutRenderer :node="resolved.root" :interactive="false" />
+          </div>
         </div>
       </section>
     </div>
