@@ -1,5 +1,6 @@
 // Generator for database queries
 import { toKebabCase, pascal } from '../utils/helpers.ts'
+import { collectFilterFields } from '../utils/filter-fields.ts'
 
 // Shared context for the tree-query template builders below
 interface TreeQueryContext {
@@ -813,9 +814,9 @@ export function generateQueries(data: Record<string, any>, config: Record<string
   // Detect reference fields for LEFT JOINs and post-query processing
   const { singleReferences, arrayReferences } = detectReferenceFields(data, config)
 
-  // Foreign-key fields usable to scope getAll* (e.g. ?eventId=...). Excludes the
-  // owner/createdBy/updatedBy user refs — only real FK columns (eventId, categoryId, …).
-  const filterFields = singleReferences.filter(r => !r.isUserReference).map(r => r.fieldName)
+  // Reference fields usable to scope getAll* (e.g. ?eventId=…, ?assigneeId=…, ?owner=…).
+  // Shared with api-endpoints.ts so the emitted params and this opts type cannot drift.
+  const filterFields = collectFilterFields(data, config)
 
   const schemaImports = buildSchemaImports(singleReferences, arrayReferences, currentLayer, collectionLayerMap)
   const { selectClause, leftJoins, aliasDefinitions } = buildSelectJoins(singleReferences, tableName, getTargetLayerCamelCase)

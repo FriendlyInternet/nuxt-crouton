@@ -950,7 +950,21 @@ pagination (`limit`/`offset`). It builds a `conditions` array and applies `and(.
 each FK filter is opt-in (applied only when present). This is what scopes
 `@fyit/crouton-sales` event-workspace tabs to one event (without it, every event showed the
 team-wide union of products/categories/locations/printers/orders).
-Owner/createdBy/updatedBy user refs are intentionally excluded from filters.
+
+**Every reference field is filterable, including the user refs.** That means declared FKs
+(`eventId`), a declared person ref (`assigneeId` with `refScope: "external"`), **and** the
+auto `owner`/`createdBy`/`updatedBy` columns — so a list can answer "everything I own" or
+"what did I change" (`?owner=<userId>`). These three used to be stripped as "not real FK
+columns"; they are real columns and the question is an ordinary one. Worse, the rule keyed off
+`isUserReference`, which also caught any person ref the **author** declared — so adding an
+`assigneeId` silently cost you the ability to filter by it.
+
+The list is built ONCE by `collectFilterFields` (`lib/utils/filter-fields.ts`) and shared by
+`api-endpoints.ts` (which reads the query params) and `database-queries.ts` (which declares the
+`opts` they're passed as). Those two used to derive it independently and agreed only by
+coincidence; a change to one side silently emitted an endpoint passing an option the query
+function didn't accept. `owner` is unconditional, `createdBy`/`updatedBy` ride `useMetadata` —
+mirroring the auto refs `detectReferenceFields` appends.
 
 ## List Pagination
 

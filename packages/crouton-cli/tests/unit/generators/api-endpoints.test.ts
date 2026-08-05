@@ -50,8 +50,18 @@ describe('API Endpoint Generators', () => {
     it('uses team-based queries', () => {
       const result = generateGetEndpoint(apiEndpointData, minimalConfig as AnyConfig)
       expect(result).toContain('resolveTeamAndCheckMembership(event)')
-      expect(result).toContain('getAllShopProducts(team.id)')
+      expect(result).toContain('getAllShopProducts(team.id')
       expect(result).toContain('getShopProductsByIds(team.id, ids)')
+    })
+
+    it('scopes the list by the auto user refs even with no declared FK', () => {
+      // Every collection has owner/createdBy/updatedBy columns, so every list can answer
+      // "everything I own" / "what did I change". These used to be stripped as "not real FK
+      // columns", which also cost any author-declared person ref its filter.
+      const result = generateGetEndpoint(apiEndpointData, minimalConfig as AnyConfig)
+      for (const f of ['owner', 'createdBy', 'updatedBy']) {
+        expect(result).toContain(`${f}: query.${f} ? String(query.${f}) : undefined`)
+      }
     })
 
     it('handles translations when configured', () => {
