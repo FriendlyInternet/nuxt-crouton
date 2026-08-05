@@ -133,6 +133,35 @@ test('a missing observation fails instead of passing', () => {
   assert.equal(rows[0].ok, false);
 });
 
+test('#1878 live run: a NO-OP canary with no observation still fails', () => {
+  // The subtle half of the same property, and the one that actually bit. `genuine-no-op` expects
+  // prOpened:false — which an empty observation satisfies — so before this, "never dispatched"
+  // and "correctly produced nothing" were indistinguishable, and the rig reported ✅ for a canary
+  // it had not looked at. The canary whose whole job is catching that exact dishonesty.
+  const spec = { id: 'genuine-no-op', issue: 1930, expect: { prOpened: false, commentsExclude: 'likely underspecified' } };
+  const absent = checkAll([spec], {});
+  assert.equal(absent.ok, false);
+  assert.match(absent.rows[0].results[0].detail, /no observation recorded/);
+
+  // …while a REAL gathered no-op — an entry that exists and holds no PR — still passes.
+  const gathered = checkAll([spec], { 'genuine-no-op': { pr: null, runRecord: '', issueComments: [] } });
+  assert.equal(gathered.ok, true);
+});
+
+test('#1878 live run: only the canaries handed in are asserted', () => {
+  // The workflow gathers observations for the `only`-filtered canaries but used to hand
+  // canary.mjs the FULL spec file, so every canary that was never dispatched failed on a missing
+  // observation and any single-canary verify was guaranteed red. The module already behaves
+  // correctly when given a filtered list; this pins the contract the workflow must honour.
+  const specs = [
+    { id: 'ran', issue: 1, expect: { prOpened: true } },
+    { id: 'not-dispatched', issue: 2, expect: { prOpened: true } }
+  ];
+  const obs = { ran: HEALTHY };
+  assert.equal(checkAll(specs, obs).ok, false);                        // both → red
+  assert.equal(checkAll(specs.filter((s) => s.id === 'ran'), obs).ok, true); // filtered → green
+});
+
 test('the rollup is all-or-nothing', () => {
   const specs = [
     { id: 'good', issue: 1, expect: { prOpened: true } },
