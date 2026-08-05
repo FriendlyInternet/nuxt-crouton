@@ -4,7 +4,12 @@
  * Initializes the Better Auth client on the client-side.
  * Configures organization, passkey, and 2FA client plugins based on @crouton/auth config.
  */
-import { createAuthClient } from 'better-auth/client/vue'
+// The Vue client is exported at `better-auth/vue` — NOT `better-auth/client/vue`, which does not
+// exist in better-auth 1.5.5 (its exports map has `./vue`, `./client`, `./client/plugins`).
+// #1713's body named the wrong subpath; importing it typed the whole client `never`, so every
+// `authClient.use*` read failed "not callable" and every consuming app's typecheck/build broke
+// while the mocked unit tests stayed green.
+import { createAuthClient } from 'better-auth/vue'
 import type { BetterAuthClientPlugin } from 'better-auth/client'
 import { organizationClient, twoFactorClient, adminClient } from 'better-auth/client/plugins'
 import { passkeyClient } from '@better-auth/passkey/client'
