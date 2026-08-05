@@ -161,8 +161,11 @@ describe('useTeam', () => {
       expect(currentTeam.value).toBeNull()
     })
 
-    // TODO: Better Auth nanostore mock complexity - tracked for future refactoring
-    it.todo('should return currentTeam when active organization exists', () => {
+    // Simulates better-auth's Vue-aware client: useActiveOrganization() exposes
+    // the active org via a reactive atom. Fails against the current vanilla
+    // client because useTeam() derives currentTeam from useSession().activeOrganization
+    // instead — this is the contract the #1713 client switch must satisfy.
+    it('should return currentTeam when active organization exists', () => {
       mockActiveOrgData.value = {
         id: 'org-1',
         name: 'Test Team',
@@ -188,8 +191,12 @@ describe('useTeam', () => {
       expect(teams.value).toEqual([])
     })
 
-    // TODO: Better Auth nanostore mock complexity
-    it.todo('should return teams list when organizations exist', () => {
+    // Simulates better-auth's Vue-aware client: useListOrganizations() exposes
+    // the org list via a reactive atom. Fails against the current vanilla
+    // client because useTeam() derives teams from fallbackTeams (a useState
+    // populated by refreshTeams()/SSR middleware) instead of this atom — the
+    // dead-nanostore gap #1713 exists to close.
+    it('should return teams list when organizations exist', () => {
       mockOrganizationsData.value = [
         { id: 'org-1', name: 'Team 1', slug: 'team-1', createdAt: '2024-01-01T00:00:00Z' },
         { id: 'org-2', name: 'Team 2', slug: 'team-2', createdAt: '2024-01-02T00:00:00Z' }
