@@ -11,6 +11,7 @@
 import { computed, ref } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
 import { useI18n } from 'vue-i18n'
+import { useBlockEditRequest } from '../../composables/useBlockEditRequest'
 
 interface EventWorkspaceAttrs {
   eventSlug?: string
@@ -28,25 +29,10 @@ const attrs = computed(() => props.node.attrs)
 const { t } = useI18n()
 
 const innerRef = ref<HTMLElement | null>(null)
-
-function findEditorId(): string | undefined {
-  let el: HTMLElement | null = innerRef.value
-  while (el) {
-    if (el.classList?.contains('crouton-editor-blocks') && el.dataset?.editorId) {
-      return el.dataset.editorId
-    }
-    el = el.parentElement
-  }
-  return undefined
-}
+const { openPanel } = useBlockEditRequest(innerRef)
 
 function handleOpenPanel() {
-  const editorId = findEditorId()
-  const event = new CustomEvent('block-edit-request', {
-    bubbles: true,
-    detail: { node: props.node, pos: props.getPos(), editorId }
-  })
-  document.dispatchEvent(event)
+  openPanel(props.node, props.getPos())
 }
 </script>
 
@@ -57,18 +43,13 @@ function handleOpenPanel() {
     data-type="event-workspace-block"
     @dblclick="handleOpenPanel"
   >
-    <div ref="innerRef" class="relative group rounded border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50 transition-colors">
+    <div ref="innerRef" class="relative group rounded border border-transparent hover:border-default transition-colors">
       <div class="p-3">
         <!-- Header -->
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2">
-            <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="m7.5 4.27 9 5.15" />
-                <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-                <path d="M3.3 7 12 12l8.7-5" />
-                <path d="M12 22V12" />
-              </svg>
+            <span class="inline-flex items-center gap-1 text-[10px] font-medium text-muted uppercase tracking-wider">
+              <UIcon name="i-lucide-layout-dashboard" class="size-3" />
               {{ t('sales.block.eventWorkspace') }}
             </span>
             <span
@@ -77,45 +58,38 @@ function handleOpenPanel() {
             >
               {{ attrs.eventSlug }}
             </span>
-            <span
-              v-else
-              class="inline-flex items-center text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
-            >
+            <UBadge v-else color="warning" variant="subtle" size="sm">
               {{ t('sales.block.noEventPicked') }}
-            </span>
+            </UBadge>
           </div>
           <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
-            <button
-              type="button"
-              class="p-1 text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              icon="i-lucide-pencil"
               :title="t('sales.block.editBlock')"
               @click.stop="handleOpenPanel"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              class="p-1 text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+            />
+            <UButton
+              color="error"
+              variant="ghost"
+              size="xs"
+              icon="i-lucide-trash-2"
               :title="t('sales.block.deleteBlock')"
               @click.stop="deleteNode"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
+            />
           </div>
         </div>
 
         <!-- Mini workspace preview: tab strip over a list -->
-        <div class="bg-gray-50/50 dark:bg-gray-800/30 rounded-lg p-4 border border-gray-100 dark:border-gray-700/50">
+        <div class="bg-muted/50 rounded-lg p-4 border border-default">
           <div class="flex gap-1.5 mb-3">
             <div class="h-4 w-16 rounded bg-primary/30" />
-            <div v-for="tab in 3" :key="tab" class="h-4 w-16 rounded bg-gray-200/60 dark:bg-gray-700/40" />
+            <div v-for="tab in 3" :key="tab" class="h-4 w-16 rounded bg-accented" />
           </div>
           <div class="space-y-1.5">
-            <div v-for="row in 3" :key="row" class="h-6 rounded bg-gray-200/60 dark:bg-gray-700/40" />
+            <div v-for="row in 3" :key="row" class="h-6 rounded bg-accented" />
           </div>
         </div>
       </div>
