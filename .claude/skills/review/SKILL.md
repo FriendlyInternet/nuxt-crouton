@@ -143,9 +143,18 @@ Check every changed file against this checklist. Skip categories that don't appl
 
 #### Gates, Checks & Flow Steps
 
-Applies when the diff adds or changes **a rule that judges other code** — a validator, a CI check, a
-sign-off gate. See `AGENTS.md` → *Authoring a gate* for the argument.
+Applies when the diff adds or changes **a rule that judges other code** (a validator, a CI check, a
+sign-off gate) or **a step that mutates state** (writes a file, commits, labels, dispatches). See
+`AGENTS.md` → *Authoring a gate* for the argument.
 
+- [ ] **Can this path exit 0 having done nothing?** The recurring defect is a silent no-op, not a crash:
+      `git add` on a gitignored path adds nothing (#1933) · `--add-label X` on an issue already carrying
+      `X` fires no event, so nothing downstream wakes (#1750) · `rows.filter(r => r.refTarget)` dropped
+      the relations *missing* a target, then reported "No relationships" (#1953)
+- [ ] **What in the output would prove it acted?** A count, a path, a diff — if the run's own output
+      can't distinguish "did the work" from "did nothing", say so and add the proof
+- [ ] **Where it can no-op, assert the effect** instead of assuming it — check the artifact is
+      committable rather than trusting the write; remove-then-add rather than hoping the event fires
 - [ ] **Was the rule run over the corpus, with the hit count reported?** Green unit tests only prove
       the rule matches its author's imagination — #1957's first version passed 8 and would have refused
       4 shipping schemas. Cheap to do:

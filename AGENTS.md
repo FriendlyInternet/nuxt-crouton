@@ -80,8 +80,8 @@ reveal its own gaps; running the real thing next to the contract can.
 ## Authoring a gate
 
 The gates above judge other people's work, so a wrong gate is worse than no gate — it refuses correct
-code, or waves the broken case through. **Advisory**: apply this where it means something, not as
-ceremony.
+code, or waves the broken case through. Two checks, before a gate (or any rule, check or flow step)
+merges. Both are **advisory**: apply them where they mean something, not as ceremony.
 
 **Run the rule over the corpus, not just its tests.** Tests prove the rule matches its author's
 *imagination*; only the corpus proves it matches the repo. A validator for cross-collection references
@@ -94,6 +94,19 @@ hold posted a dead link, found by checking the artifact paths against the *real*
 So: before merging, run the proposed rule over every file it would judge and report the hit count. Each
 refusal of existing code is then a claim to defend file by file. Skip it when there is no meaningful
 corpus (a rule over one generated file) — an empty corpus run proves nothing either way.
+
+**Ask of every step: can this path exit 0 having done nothing?** The most common defect here is not a
+crash but a **silent no-op** — an operation that succeeds, does nothing, and reports nothing. Three in
+one session: adding a file on an ignored path (exits 0, adds nothing — every sign-off dropped its
+image, #1933); adding a label an issue already carries (fires no event, so the listener never woke,
+#1750); filtering a list by the very field being reported on (records missing it vanished, and the
+report cheerfully said "none", #1953). Each exits 0, each produces a plausible-looking result, and
+**none is visible in the run's own output** — you find it later by noticing an absence, which is the
+expensive way. So pair the question with a second one: *what in the output would prove it acted?* And
+where an operation can no-op, **assert the effect** rather than assume it — check the artifact is
+committable rather than trusting the write; remove-then-add rather than hoping the event fires.
+(No detector is proposed: a shell exit code, an API semantic and an array filter share no syntax. The
+value is in the question being asked.)
 
 ## Deciding vs asking
 
