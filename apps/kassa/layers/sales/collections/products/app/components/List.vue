@@ -2,7 +2,7 @@
   @crouton-generated
   @collection products
   @layer sales
-  @generated 2026-06-16
+  @generated 2026-08-05
 
   ## AI Context
   - List component for products collection

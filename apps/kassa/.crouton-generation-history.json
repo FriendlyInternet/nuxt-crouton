@@ -16,6 +16,132 @@
       "options"
     ],
     "generator": "crouton-cli",
+    "timestamp": "2026-08-05T22:27:30.835Z",
+    "layer": "sales",
+    "gitSha": "e585d701c"
+  },
+  {
+    "collection": "products",
+    "fields": [
+      "eventId",
+      "categoryId",
+      "locationId",
+      "title",
+      "description",
+      "price",
+      "isActive",
+      "requiresRemark",
+      "remarkPrompt",
+      "hasOptions",
+      "multipleOptionsAllowed",
+      "options"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-05T22:27:15.839Z",
+    "layer": "sales",
+    "gitSha": "e585d701c"
+  },
+  {
+    "collection": "products",
+    "fields": [
+      "eventId",
+      "categoryId",
+      "locationId",
+      "title",
+      "description",
+      "price",
+      "isActive",
+      "requiresRemark",
+      "remarkPrompt",
+      "hasOptions",
+      "multipleOptionsAllowed",
+      "options"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-05T22:27:04.899Z",
+    "layer": "sales",
+    "gitSha": "e585d701c"
+  },
+  {
+    "collection": "products",
+    "fields": [
+      "eventId",
+      "categoryId",
+      "locationId",
+      "title",
+      "description",
+      "price",
+      "isActive",
+      "requiresRemark",
+      "remarkPrompt",
+      "hasOptions",
+      "multipleOptionsAllowed",
+      "options"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-05T22:26:26.910Z",
+    "layer": "sales",
+    "gitSha": "e585d701c"
+  },
+  {
+    "collection": "products",
+    "fields": [
+      "eventId",
+      "categoryId",
+      "locationId",
+      "title",
+      "description",
+      "price",
+      "isActive",
+      "requiresRemark",
+      "remarkPrompt",
+      "hasOptions",
+      "multipleOptionsAllowed",
+      "options"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-05T22:25:51.720Z",
+    "layer": "sales",
+    "gitSha": "e585d701c"
+  },
+  {
+    "collection": "products",
+    "fields": [
+      "eventId",
+      "categoryId",
+      "locationId",
+      "title",
+      "description",
+      "price",
+      "isActive",
+      "requiresRemark",
+      "remarkPrompt",
+      "hasOptions",
+      "multipleOptionsAllowed",
+      "options"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-05T22:25:42.147Z",
+    "layer": "sales",
+    "gitSha": "e585d701c"
+  },
+  {
+    "collection": "products",
+    "fields": [
+      "eventId",
+      "categoryId",
+      "locationId",
+      "title",
+      "description",
+      "price",
+      "isActive",
+      "requiresRemark",
+      "remarkPrompt",
+      "hasOptions",
+      "multipleOptionsAllowed",
+      "options"
+    ],
+    "generator": "crouton-cli",
     "timestamp": "2026-08-05T16:26:19.153Z",
     "layer": "sales",
     "gitSha": "729abb027"
@@ -1523,118 +1649,6 @@
     ],
     "generator": "crouton-cli",
     "timestamp": "2026-06-09T14:37:51.326Z",
-    "layer": "sales",
-    "gitSha": "195d15f8"
-  },
-  {
-    "collection": "orders",
-    "fields": [
-      "eventId",
-      "clientId",
-      "clientName",
-      "eventOrderNumber",
-      "overallRemarks",
-      "isPersonnel",
-      "status"
-    ],
-    "generator": "crouton-cli",
-    "timestamp": "2026-06-09T14:37:51.300Z",
-    "layer": "sales",
-    "gitSha": "195d15f8"
-  },
-  {
-    "collection": "categories",
-    "fields": [
-      "eventId",
-      "title",
-      "displayOrder"
-    ],
-    "generator": "crouton-cli",
-    "timestamp": "2026-06-09T14:37:51.279Z",
-    "layer": "sales",
-    "gitSha": "195d15f8"
-  },
-  {
-    "collection": "products",
-    "fields": [
-      "eventId",
-      "categoryId",
-      "locationId",
-      "title",
-      "description",
-      "price",
-      "isActive",
-      "requiresRemark",
-      "remarkPrompt",
-      "hasOptions",
-      "multipleOptionsAllowed",
-      "options"
-    ],
-    "generator": "crouton-cli",
-    "timestamp": "2026-06-09T14:37:51.244Z",
-    "layer": "sales",
-    "gitSha": "195d15f8"
-  },
-  {
-    "collection": "events",
-    "fields": [
-      "title",
-      "slug",
-      "description",
-      "eventType",
-      "startDate",
-      "endDate",
-      "status",
-      "isCurrent",
-      "requiresClient",
-      "helperPin",
-      "metadata",
-      "archivedAt"
-    ],
-    "generator": "crouton-cli",
-    "timestamp": "2026-06-09T14:37:51.222Z",
-    "layer": "sales",
-    "gitSha": "195d15f8"
-  },
-  {
-    "collection": "pages",
-    "fields": [
-      "title",
-      "slug",
-      "pageType",
-      "content",
-      "config",
-      "status",
-      "visibility",
-      "publishedAt",
-      "showInNavigation",
-      "layout",
-      "seoTitle",
-      "seoDescription",
-      "ogImage",
-      "robots"
-    ],
-    "generator": "crouton-cli",
-    "timestamp": "2026-06-09T14:22:26.664Z",
-    "layer": "pages",
-    "gitSha": "195d15f8"
-  },
-  {
-    "collection": "printqueues",
-    "fields": [
-      "eventId",
-      "orderId",
-      "printerId",
-      "locationId",
-      "status",
-      "printData",
-      "printMode",
-      "errorMessage",
-      "retryCount",
-      "completedAt"
-    ],
-    "generator": "crouton-cli",
-    "timestamp": "2026-06-09T14:22:26.638Z",
     "layer": "sales",
     "gitSha": "195d15f8"
   }
