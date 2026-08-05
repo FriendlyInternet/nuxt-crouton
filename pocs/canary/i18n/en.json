@@ -1,6 +1,6 @@
 {
   "greeting": "Hello",
-  "farewell": "Goodbye",
+  "farewell": "See you",
   "canary": {
     "label": "Canary",
     "description": "This folder exists only for the canary rig. Nothing here is real."
