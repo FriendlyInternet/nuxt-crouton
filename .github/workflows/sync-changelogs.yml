@@ -33,6 +33,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0 # full history so the commit-back rebases cleanly
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -69,4 +70,12 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/changelog-releases.json
           git commit -m "chore(docs): sync changelog releases [skip ci]"
-          git push
+          # Rebase onto any concurrent main movement, then push — same loop the
+          # loop-station jobs use. A bare `git push` loses the race whenever a PR
+          # merges during the run ("! [rejected] main -> main (fetch first)", #1943);
+          # this job rewrites the whole data file, so a race is likely, not rare.
+          for i in 1 2 3 4; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            echo "push attempt $i failed; retrying…"; sleep $((2 ** i))
+          done
+          exit 1
