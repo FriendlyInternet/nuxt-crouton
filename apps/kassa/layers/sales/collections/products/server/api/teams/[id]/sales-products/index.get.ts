@@ -24,12 +24,12 @@ export default defineEventHandler(async (event) => {
   if (query.page !== undefined) {
     const page = Math.max(1, Number(query.page) || 1)
     const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 10))
-    const { items, total } = await getAllSalesProducts(team.id, { eventId: query.eventId ? String(query.eventId) : undefined, categoryId: query.categoryId ? String(query.categoryId) : undefined, locationId: query.locationId ? String(query.locationId) : undefined, limit: pageSize, offset: (page - 1) * pageSize })
+    const { items, total } = await getAllSalesProducts(team.id, { eventId: query.eventId ? String(query.eventId) : undefined, categoryId: query.categoryId ? String(query.categoryId) : undefined, locationId: query.locationId ? String(query.locationId) : undefined, owner: query.owner ? String(query.owner) : undefined, createdBy: query.createdBy ? String(query.createdBy) : undefined, updatedBy: query.updatedBy ? String(query.updatedBy) : undefined, limit: pageSize, offset: (page - 1) * pageSize })
     dbTimer.end()
     return { items, total, page, pageSize }
   }
 
-  const result = await getAllSalesProducts(team.id, { eventId: query.eventId ? String(query.eventId) : undefined, categoryId: query.categoryId ? String(query.categoryId) : undefined, locationId: query.locationId ? String(query.locationId) : undefined })
+  const result = await getAllSalesProducts(team.id, { eventId: query.eventId ? String(query.eventId) : undefined, categoryId: query.categoryId ? String(query.categoryId) : undefined, locationId: query.locationId ? String(query.locationId) : undefined, owner: query.owner ? String(query.owner) : undefined, createdBy: query.createdBy ? String(query.createdBy) : undefined, updatedBy: query.updatedBy ? String(query.updatedBy) : undefined })
   dbTimer.end()
   return result
 })

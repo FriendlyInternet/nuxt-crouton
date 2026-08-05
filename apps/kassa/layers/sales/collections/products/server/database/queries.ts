@@ -10,9 +10,9 @@ import { user } from '~~/server/db/schema'
 
 // Overload order matters: the paginated signature (required `limit`) must come
 // first so non-paginated calls fall through to the array overload.
-export async function getAllSalesProducts(teamId: string, opts: { eventId?: string; categoryId?: string; locationId?: string; limit: number; offset?: number }): Promise<{ items: any[]; total: number }>
-export async function getAllSalesProducts(teamId: string, opts?: { eventId?: string; categoryId?: string; locationId?: string }): Promise<any[]>
-export async function getAllSalesProducts(teamId: string, opts: { eventId?: string; categoryId?: string; locationId?: string; limit?: number; offset?: number } = {}) {
+export async function getAllSalesProducts(teamId: string, opts: { eventId?: string; categoryId?: string; locationId?: string; owner?: string; createdBy?: string; updatedBy?: string; limit: number; offset?: number }): Promise<{ items: any[]; total: number }>
+export async function getAllSalesProducts(teamId: string, opts?: { eventId?: string; categoryId?: string; locationId?: string; owner?: string; createdBy?: string; updatedBy?: string }): Promise<any[]>
+export async function getAllSalesProducts(teamId: string, opts: { eventId?: string; categoryId?: string; locationId?: string; owner?: string; createdBy?: string; updatedBy?: string; limit?: number; offset?: number } = {}) {
   const db = useDB()
 
   const ownerUser = alias(user as any, 'ownerUser')
@@ -22,6 +22,9 @@ export async function getAllSalesProducts(teamId: string, opts: { eventId?: stri
   if (opts.eventId) conditions.push(eq(tables.salesProducts.eventId, opts.eventId))
   if (opts.categoryId) conditions.push(eq(tables.salesProducts.categoryId, opts.categoryId))
   if (opts.locationId) conditions.push(eq(tables.salesProducts.locationId, opts.locationId))
+  if (opts.owner) conditions.push(eq(tables.salesProducts.owner, opts.owner))
+  if (opts.createdBy) conditions.push(eq(tables.salesProducts.createdBy, opts.createdBy))
+  if (opts.updatedBy) conditions.push(eq(tables.salesProducts.updatedBy, opts.updatedBy))
   const whereExpr = and(...conditions)
 
   let listQuery = (db as any)
