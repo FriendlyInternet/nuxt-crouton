@@ -330,7 +330,7 @@ const printStatusOptions = computed(() => [
 ])
 
 const activeFilterCount = computed(() =>
-  [selectedHelperName.value, selectedClientId.value, selectedPrinterId.value, selectedPrintStatus.value]
+  [selectedHelperName.value, selectedClientId.value, selectedPrinterId.value, selectedPrintStatus.value, outstandingOnly.value]
     .filter(Boolean).length
 )
 const hasActiveFilters = computed(() => activeFilterCount.value > 0)

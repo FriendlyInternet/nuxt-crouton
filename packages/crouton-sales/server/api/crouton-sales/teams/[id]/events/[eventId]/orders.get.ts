@@ -18,7 +18,7 @@
 import { and, desc, eq, exists, inArray, ne, sql } from 'drizzle-orm'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { requireTeamEvent } from '../../../../../../utils/team-event'
-import { planOutstandingCount } from '../../../../../../utils/pass-tickets'
+import { planOutstandingCount, outstandingOrdersCondition } from '../../../../../../utils/pass-tickets'
 import { locationBlocksDeliverySql } from '../../../../../../utils/location-handover'
 import {
   parseLocationRemarks,
@@ -51,20 +51,38 @@ function jobFilterConditions(db: any, salesOrders: any, f: OrderFilters) {
   ].filter(Boolean)
 }
 
-// Backlog-only (#1846): the same rule the count uses, applied to the LIST.
-// A correlated NOT EXISTS rather than a join, so it composes with the other
-// filters without changing the row shape or duplicating rows.
+// Backlog-only (#1846, re-fixed #1875). The predicate itself is
+// `outstandingOrdersCondition` in `server/utils/pass-tickets.ts`, beside
+// OUTSTANDING_DEFINITION — it takes its tables as PARAMETERS, which is what lets
+// a package unit test reach it (`test/outstanding-list-filter.test.ts`). This
+// wrapper only resolves the app-layer tables the alias can't give a test.
+async function outstandingCondition(db: any, salesOrders: any) {
+  const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
+  const { salesProducts } = await import('~~/layers/sales/collections/products/server/database/schema')
+  const { salesLocations } = await import('~~/layers/sales/collections/locations/server/database/schema')
+  const { salesKdsbumps } = await import('~~/layers/sales/collections/kdsbumps/server/database/schema')
+
+  return outstandingOrdersCondition(db, {
+    orders: salesOrders,
+    orderitems: salesOrderitems,
+    products: salesProducts,
+    locations: salesLocations,
+    kdsbumps: salesKdsbumps
+  })
+}
+
 // Shared WHERE for both the list and the count so a filtered page and its total
 // stay in sync. Column-equality filters here; print-job EXISTS filters above.
 // owner stores the helper displayName (stable across logins) — what the
 // OrdersTab helper filter sends. Undefined filters drop out via .filter().
-function buildWhere(db: any, salesOrders: any, teamId: string, eventId: string, f: OrderFilters) {
+async function buildWhere(db: any, salesOrders: any, teamId: string, eventId: string, f: OrderFilters) {
   return and(
     eq(salesOrders.teamId, teamId),
     eq(salesOrders.eventId, eventId),
     ...[
       f.owner ? eq(salesOrders.owner, f.owner) : undefined,
-      f.clientId ? eq(salesOrders.clientId, f.clientId) : undefined
+      f.clientId ? eq(salesOrders.clientId, f.clientId) : undefined,
+      f.outstanding ? await outstandingCondition(db, salesOrders) : undefined
     ].filter(Boolean),
     ...jobFilterConditions(db, salesOrders, f)
   )
@@ -121,7 +139,7 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const filters = parseOrderFilters(query)
   const { page, pageSize, offset } = parsePageParams(query)
-  const whereExpr = buildWhere(db, salesOrders, team.id, eventId, filters)
+  const whereExpr = await buildWhere(db, salesOrders, team.id, eventId, filters)
 
   const rows = await (db as any)
     .select({

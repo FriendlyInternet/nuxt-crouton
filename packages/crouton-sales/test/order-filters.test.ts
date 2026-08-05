@@ -51,6 +51,26 @@ describe('parseOrderFilters', () => {
     const f = parseOrderFilters({ owner: 'Bram', page: '2', pageSize: '25', foo: 'bar' })
     expect(f).toEqual({ owner: 'Bram', clientId: undefined, printerId: undefined, printStatus: undefined })
   })
+
+  // The "in bereiding" chip (#1875). This half was parsed for two releases while
+  // the WHERE ignored it, so the toggle restyled and changed nothing — the parse
+  // side had no coverage at all to notice the other half had gone missing.
+  it('turns ?outstanding=1 into the backlog filter', () => {
+    expect(parseOrderFilters({ outstanding: '1' }).outstanding).toBe(true)
+  })
+
+  it('accepts ONLY the literal 1, so a stray 0/false cannot silently narrow the list', () => {
+    for (const v of ['0', 'false', 'true', 'yes', '']) {
+      expect(parseOrderFilters({ outstanding: v }).outstanding).toBeUndefined()
+    }
+    expect(parseOrderFilters({}).outstanding).toBeUndefined()
+  })
+
+  it('survives alongside the other filters (the chip composes, it does not replace)', () => {
+    const f = parseOrderFilters({ owner: 'Anna', outstanding: '1' })
+    expect(f.owner).toBe('Anna')
+    expect(f.outstanding).toBe(true)
+  })
 })
 
 describe('parsePageParams', () => {
