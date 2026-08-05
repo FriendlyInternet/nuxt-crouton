@@ -49,6 +49,14 @@ exactly the regression it is there to catch.
 - **`packages-guard`** (PR-time, #1611) requires a `packages/**` PR to *declare* the edit. The
   canary's own issue carries a `pkg:canary-target` label, which satisfies the linked-issue signal —
   no carve-out in `scripts/packages-guard.mjs` was needed.
+
+  **The label alone is not enough: the PR body must actually reference the issue.** The guard
+  resolves linked issues by matching `Closes|Fixes|Resolves|Refs #NN` **in the PR body**
+  (`.github/workflows/packages-guard.yml`) — a bare `#NN` mentioned in prose links nothing and the
+  check fails with *"no declared approval"*. A worker PR carries `Closes #NN` by convention, so a
+  canary run satisfies this on its own. A hand-written PR touching this package must add `Refs #NN`
+  (links without closing — canary issues must stay open) or a `Packages-approved:` body line.
+  Learned the hard way: the PR introducing this package failed the guard for exactly this reason.
 - **Never merged.** `mode=dispatch` closes the previous canary PR and deletes its branch, so a
   worker's edits here are thrown away. `main` should always show just `clamp` and its test.
 - **Not in the changesets fixed group.** Named `@fyit/canary-target`, not `@fyit/crouton-*`, so it
