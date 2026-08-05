@@ -146,10 +146,15 @@ export function useTeam() {
   // to the SSR sources, i.e. exactly the dead-read this epic exists to remove.
   // Guard with `typeof` so an environment/mock where these aren't callable can't crash the
   // composable — it just falls back to the SSR-populated sources below.
-  const activeOrgRef = typeof authClient.useActiveOrganization === 'function'
+  // The `?.` on `authClient` is load-bearing, NOT defensive noise: `auth-client.client.ts`
+  // is a CLIENT-ONLY plugin, so `$authClient` is `undefined` during SSR and a bare
+  // `authClient.useActiveOrganization` throws before the `typeof` can help — a 500 on every
+  // server-rendered page. `useAuthClient()` is typed non-nullable, so typecheck cannot see
+  // this; only the fixture smoke can (it caught it).
+  const activeOrgRef = typeof authClient?.useActiveOrganization === 'function'
     ? authClient.useActiveOrganization()
     : undefined
-  const orgsRef = typeof authClient.useListOrganizations === 'function'
+  const orgsRef = typeof authClient?.useListOrganizations === 'function'
     ? authClient.useListOrganizations()
     : undefined
 
