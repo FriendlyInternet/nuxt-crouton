@@ -839,6 +839,20 @@ jobs:
               }
             } catch (e) { core.warning(`artifact-gate: could not read pi run log: ${e.message}`) }
 
+            // #2012 — the finish step FAILED, and that verdict must not depend on pi's log
+            // existing. This same check also lives inside the `if (logFile && exists(logFile))`
+            // chain above, which is exactly where it cannot help: when the harness dies early pi
+            // never runs, so PI_EXEC_LOG is empty, the whole chain is skipped, and the branch that
+            // would name this is unreachable. That is how run 31057590885 reported "none of the
+            // known causes matched" while its own env said FINISH_OUTCOME=failure. #1876's detector
+            // misses it too — that one requires a commit made THIS run, and a harness that dies
+            // before committing has none by definition.
+            if (!why && process.env.FINISH_OUTCOME === 'failure') {
+              why = 'the finish step FAILED — the harness could not process this run'
+              action = 'open the run log at the `finish` step and read its error (a non-zero plan exit prints the stderr tail there). '
+                + 'This is a WORKFLOW bug, not an underspecified issue — do not edit the ticket'
+            }
+
             // #1764 fallback — an uncommitted tree is a definite cause even if the log is unreadable.
             if (!why && process.env.PI_LEFT_DIRTY === '1') {
               why = 'the deterministic finish step could not persist pi\'s edits — the working tree is still dirty (#1764)'
