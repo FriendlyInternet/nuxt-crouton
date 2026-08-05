@@ -34,8 +34,9 @@
  * layer (`~~/layers/sales/...`), which a package unit test cannot resolve — the
  * same reason `handover.ts` takes its table as a parameter.
  */
-import { and, desc, eq, ne, sql } from 'drizzle-orm'
+import { and, desc, eq, sql } from 'drizzle-orm'
 import { locationBlocksDeliverySql } from './location-handover'
+import { excludesCancelledOrders } from './order-status'
 import { personnelConditionOn } from './personnel-condition'
 
 export interface PerProductTables {
@@ -85,7 +86,7 @@ export async function buildPerProductTotals(
   const inScope = and(
     eq(orders.teamId, input.teamId),
     eq(orders.eventId, input.eventId),
-    ne(orders.status, 'cancelled'),
+    excludesCancelledOrders(orders),
     personnelConditionOn(orders.isPersonnel, input.personnel)
   )
 
