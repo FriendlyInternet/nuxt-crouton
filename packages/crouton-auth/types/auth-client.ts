@@ -43,21 +43,46 @@ const _typedAuthClient = createAuthClient({
 export type CroutonAuthClient = typeof _typedAuthClient
 
 /**
- * Helper to get auth client with proper typing
- * Returns the typed auth client. Will throw on server-side if accessed.
+ * Get the auth client, or `null` when it isn't available.
+ *
+ * `auth-client.client.ts` is a CLIENT-ONLY plugin, so `$authClient` is
+ * `undefined` during SSR — hence the nullable return. This used to be typed
+ * non-nullable, which meant TypeScript could not flag an unguarded dereference
+ * and a 500-on-every-server-rendered-page shipped with a green typecheck (#1951,
+ * incident in #1738/#1884). Safe to call at setup; guard before you dereference.
+ *
+ * Inside a code path that only ever runs client-side (an event handler,
+ * `onMounted`), prefer `requireAuthClient()` — it is non-nullable and fails loudly.
  */
-export function useAuthClient(): CroutonAuthClient {
+export function useAuthClient(): CroutonAuthClient | null {
   const nuxtApp = useNuxtApp()
-  return nuxtApp.$authClient as CroutonAuthClient
+  return (nuxtApp.$authClient ?? null) as CroutonAuthClient | null
 }
 
 /**
- * Helper to get auth client with proper typing (nullable)
- * Returns null on server-side since authClient is client-only
+ * Get the auth client, throwing if it is unavailable.
+ *
+ * For CLIENT-ONLY code paths that genuinely cannot proceed without it. Call it
+ * INSIDE the handler, never at composable setup — setup runs during SSR, where
+ * this throws by design.
+ */
+export function requireAuthClient(): CroutonAuthClient {
+  const client = useAuthClient()
+  if (!client) {
+    throw new Error(
+      '[crouton-auth] auth client unavailable — it is client-only, so this ran during SSR. '
+      + 'Call requireAuthClient() inside a client-only path, or use useAuthClient() and guard the null.'
+    )
+  }
+  return client
+}
+
+/**
+ * @deprecated Redundant since `useAuthClient()` became honestly nullable (#1951).
+ * Use `useAuthClient()`; this is kept as an alias so existing call sites keep working.
  */
 export function useAuthClientSafe(): CroutonAuthClient | null {
-  const nuxtApp = useNuxtApp()
-  return (nuxtApp.$authClient ?? null) as CroutonAuthClient | null
+  return useAuthClient()
 }
 
 // Module augmentation for NuxtApp is defined in the generated .nuxt/types/*.d.ts files
