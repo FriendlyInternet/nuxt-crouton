@@ -1,0 +1,18 @@
+{
+  "table": "cranklet_levers",
+  "key": "name",
+  "rows": [
+    {
+      "name": "Sample name 1",
+      "throw": 1
+    },
+    {
+      "name": "Sample name 2",
+      "throw": 2
+    },
+    {
+      "name": "Sample name 3",
+      "throw": 3
+    }
+  ]
+}

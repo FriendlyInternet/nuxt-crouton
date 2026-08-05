@@ -1,0 +1,13 @@
+[
+  {
+    "collection": "levers",
+    "fields": [
+      "name",
+      "throw"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-05T12:17:29.412Z",
+    "layer": "cranklet",
+    "gitSha": "b77cf6e"
+  }
+]
