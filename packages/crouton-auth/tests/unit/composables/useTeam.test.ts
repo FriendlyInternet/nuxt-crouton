@@ -118,14 +118,21 @@ vi.stubGlobal('useAuthConfig', () => ({
 // Mock useAuthClient - used by useTeam internally
 vi.stubGlobal('useAuthClient', () => mockAuthClient)
 
-// Setup mock return values - must be done before import
-mockAuthClient.useListOrganizations = vi.fn(() => ({
-  data: mockOrganizationsData
-}))
+// Setup mock return values - must be done before import.
+//
+// Shape matters and was wrong until #1738: better-auth's VUE client returns
+// `DeepReadonly<Ref<{ data, error, isPending }>>` — a ref HOLDING the payload — not the
+// vanilla nanostore's `{ data: Ref }`. Mocking the nanostore shape here made the contract
+// assert the very API this epic exists to replace, so a correct implementation failed it.
+// Keep these as `computed(() => ({ data }))` so the source refs stay reactive and the shape
+// stays honest to `better-auth/dist/client/vue/index.d.mts`.
+mockAuthClient.useListOrganizations = vi.fn(() => computed(() => ({
+  data: mockOrganizationsData.value
+})))
 
-mockAuthClient.useActiveOrganization = vi.fn(() => ({
-  data: mockActiveOrgData
-}))
+mockAuthClient.useActiveOrganization = vi.fn(() => computed(() => ({
+  data: mockActiveOrgData.value
+})))
 
 describe('useTeam', () => {
   beforeEach(() => {
