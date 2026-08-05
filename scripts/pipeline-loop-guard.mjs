@@ -4,7 +4,7 @@
 // so the invariants that broke at #457 can't silently regress when the decomposer starts
 // emitting labels.
 //
-// THE THREE INVARIANTS (each has a function here; the workflows / the decomposer wire to them):
+// THE FOUR INVARIANTS (each has a function here; the workflows / the decomposer wire to them):
 //
 //  1. BOT-ACTOR GUARD (#457/#1004) — a label applied from INSIDE a run must be actored by the
 //     Harness App (`nuxt-harness[bot]`, an allowed + cascading bot). Any OTHER `*[bot]` actor —
@@ -23,10 +23,16 @@
 //     `delegate-pi` child could beget a `delegate-pi` child forever. `MAX_CHILDREN` bounds one
 //     split. `withinCaps` is the decision the decomposer's label choice maps to.
 //
+//  4. CLAIM GUARD (#1890) — an issue that is already closed, already has an open/merged PR, or
+//     carries a fresh `status:in-progress` must NOT be worked again. Five workflows stamped that
+//     label and none read it, which cost three duplicate builds in one day (#1478/#1622/#1889).
+//     `decideClaim` is the read side; the workers call the `claim-guard` CLI below.
+//
 // These MUST stay in lockstep with the caps in `.claude/agents/task-decomposer.md` and the job
 // `if:` blocks in the two `*-pidev.yml` workflows. This file is the single tested source.
 
 import { pathToFileURL } from 'node:url'
+import { readFileSync } from 'node:fs'
 
 export const ALLOWED_BOT = 'nuxt-harness[bot]'
 export const MAX_DEPTH = 3
@@ -85,12 +91,91 @@ export function labelForChild({ depth = 0, isLeaf = false, maxDepth = MAX_DEPTH 
   return decideSplit({ depth, isLeaf, maxDepth }).action === 'leaf' ? WORKER_TRIGGER : 'delegate-pi'
 }
 
+/**
+ * INVARIANT 4 — is this issue already claimed? (#1890)
+ *
+ * Before #1890 the claim signal was WRITE-ONLY: five workflows stamped `status:in-progress`
+ * and nothing read it, so two runners could build the same issue. It cost three duplicate
+ * builds in one day — #1478 (started 8 min after #1473 closed the issue), #1622, #1889.
+ *
+ * Signals are ranked by how much they can be trusted, strongest first:
+ *   1. the issue is CLOSED            — timestamp-free, unambiguous: the work is over
+ *   2. a MERGED PR references it      — timestamp-free: the work already landed
+ *   3. an OPEN PR references it       — timestamp-free: another runner is on it
+ *   4. `status:in-progress` age < TTL — weakest; needs a clock, and a crashed run leaves it
+ *
+ * (4) is deliberately the last resort and TTL'd. A crashed run must not wedge an issue
+ * forever, so a stale stamp PROCEEDS (saying so), and an unparseable timestamp fails OPEN —
+ * the three strong signals still gate. A closed-but-unmerged PR does not claim anything: a
+ * rejected attempt should free the issue, not lock it.
+ */
+export const CLAIM_TTL_MINUTES = 90
+
+export function decideClaim({
+  issueState = 'open',
+  linkedPRs = [],
+  inProgressSince = null,
+  now = null,
+  ttlMinutes = CLAIM_TTL_MINUTES,
+  self = {},
+} = {}) {
+  if (issueState === 'closed') {
+    return { action: 'refuse', reason: 'the issue is already closed — its work is done or was dropped' }
+  }
+
+  // A PR of our own (a re-dispatch onto the same branch) is not a competing claim.
+  const others = (linkedPRs || []).filter((pr) => pr && pr.number !== self?.pr)
+  const merged = others.find((pr) => pr.merged)
+  if (merged) {
+    return { action: 'refuse', claimedBy: merged.number, reason: `PR #${merged.number} already merged for this issue` }
+  }
+  const open = others.find((pr) => pr.state === 'open')
+  if (open) {
+    return { action: 'refuse', claimedBy: open.number, reason: `PR #${open.number} is already open for this issue` }
+  }
+
+  const since = inProgressSince ? Date.parse(inProgressSince) : NaN
+  const at = now ? Date.parse(now) : NaN
+  if (Number.isFinite(since) && Number.isFinite(at)) {
+    const ageMin = (at - since) / 60_000
+    if (ageMin < ttlMinutes) {
+      return { action: 'refuse', reason: `status:in-progress was stamped ${Math.round(ageMin)}m ago (< ${ttlMinutes}m) — another run holds it` }
+    }
+    return { action: 'proceed', reason: `status:in-progress is stale (${Math.round(ageMin)}m > ${ttlMinutes}m) — treating the prior run as dead` }
+  }
+
+  return { action: 'proceed', reason: 'no claim found' }
+}
+
 // ── CLI ──────────────────────────────────────────────────────────────────────────
 //   node scripts/pipeline-loop-guard.mjs bot-guard <actor> [<allowed>]
 //     → exit 0 if allowed, exit 1 (with an ::error::) if a disallowed bot. Used as the
 //       workflow's Bot-actor guard step so the SHIPPED guard is the unit-tested function.
+//   node scripts/pipeline-loop-guard.mjs claim-guard < facts.json
+//     → facts.json is { issueState, linkedPRs, inProgressSince, now, self } gathered by the
+//       workflow's API step. Exit 0 to proceed; exit 1 (with an ::error::) when the issue is
+//       already claimed, so the run stops before spending a build on duplicate work (#1890).
 function main(argv) {
   const [cmd, ...rest] = argv
+  if (cmd === 'claim-guard') {
+    let facts = {}
+    try {
+      const raw = readFileSync(0, 'utf8').trim()
+      facts = raw ? JSON.parse(raw) : {}
+    } catch (err) {
+      // Fail OPEN on unreadable facts: a gather glitch must not wedge the pipeline. The
+      // duplicate-work risk is real but bounded; a permanently-blocked worker is worse.
+      console.log(`::warning::claim-guard could not read its facts (${err.message}) — proceeding.`)
+      return
+    }
+    const verdict = decideClaim(facts)
+    if (verdict.action === 'proceed') {
+      console.log(`Claim guard OK — ${verdict.reason}.`)
+      return
+    }
+    console.log(`::error::Claim guard: refusing to work this issue — ${verdict.reason}. This is a deliberate stop, not a build failure (#1890).`)
+    process.exit(1)
+  }
   if (cmd === 'bot-guard') {
     const actor = rest[0]
     const allowed = rest[1] || ALLOWED_BOT
@@ -101,7 +186,7 @@ function main(argv) {
     console.log(`::error::Bot-actor guard: '${actor}' may not drive the pi pipeline (only ${allowed}). Refusing to run.`)
     process.exit(1)
   }
-  console.error('usage: node scripts/pipeline-loop-guard.mjs bot-guard <actor> [<allowed>]')
+  console.error('usage: node scripts/pipeline-loop-guard.mjs bot-guard <actor> [<allowed>]\n       node scripts/pipeline-loop-guard.mjs claim-guard < facts.json')
   process.exit(2)
 }
 
