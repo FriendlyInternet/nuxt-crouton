@@ -1,0 +1,24 @@
+{
+  "name": { "type": "string", "meta": { "required": true, "maxLength": 255, "label": "Name" } },
+  "cadence": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "label": "Cadence",
+      "options": ["daily", "weekly", "monthly"],
+      "displayAs": "optionsSelect"
+    }
+  },
+  "assigneeId": {
+    "type": "string",
+    "refTarget": "users",
+    "meta": { "required": true, "label": "Assignee" }
+  },
+  "lastDoneById": {
+    "type": "string",
+    "refTarget": "users",
+    "meta": { "label": "Last Done By" }
+  },
+  "lastDoneAt": { "type": "date", "meta": { "label": "Last Done At" } },
+  "notes": { "type": "text", "meta": { "label": "Notes" } }
+}
