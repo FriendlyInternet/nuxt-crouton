@@ -208,7 +208,8 @@ crouton init my-app --dry-run
 
 ### What `crouton init` Does
 
-1. **scaffold-app** — Creates the app skeleton (nuxt.config, package.json, schemas/, etc.) and
+1. **scaffold-app** — Creates the app skeleton (nuxt.config, package.json, **tsconfig.json**
+   — extends `./.nuxt/tsconfig.json` so `nuxt typecheck` resolves auto-imports, #1872 — schemas/, etc.) and
    writes a **`.crouton.json`** identifier (`{ name, kind: poc|app, cliVersion, scaffoldedAt }`) —
    provenance + the marker the guard reads. **It refuses only a dir that's already scaffolded**
    (has `.crouton.json` or `package.json`); it **scaffolds *into* a config-only dir** (one that has

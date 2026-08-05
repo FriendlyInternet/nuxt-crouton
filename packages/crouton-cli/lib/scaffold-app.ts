@@ -460,6 +460,22 @@ logs
 `
 }
 
+// The root tsconfig every Nuxt app needs: it EXTENDS the `.nuxt/tsconfig.json` that
+// `nuxt prepare` generates, which is what wires in the auto-import type declarations
+// (ref/defineEventHandler/useCrouton/…). Without this file `nuxt typecheck` runs
+// `vue-tsc` with default options, never sees `.nuxt`'s types, and reports every
+// auto-import as `TS2304: Cannot find name` — ~thousands of false errors on clean
+// generated code (#1872). #1866 gave the scaffold a `typecheck` SCRIPT but not the
+// tsconfig that makes it meaningful; this is that missing half. Byte-identical to the
+// root tsconfig in every working app (apps/velo, apps/triage, fixtures/*).
+export function tmplTsconfig(): string {
+  return `{
+  // https://nuxt.com/docs/guide/concepts/typescript
+  "extends": "./.nuxt/tsconfig.json"
+}
+`
+}
+
 function tmplAppConfig(): string {
   return `import { translationsUiConfig } from '@fyit/crouton-i18n/app/composables/useTranslationsUi'
 
@@ -630,7 +646,7 @@ async function resolveScaffoldContext(
 }
 
 // The full file list: core + (optionally) Cloudflare + the .crouton.json identifier (#1233).
-async function buildScaffoldFiles(ctx: ScaffoldContext, outDir: string | undefined, cf: boolean): Promise<ScaffoldFile[]> {
+export async function buildScaffoldFiles(ctx: ScaffoldContext, outDir: string | undefined, cf: boolean): Promise<ScaffoldFile[]> {
   const { vars, authSecret } = ctx
   const identifier = JSON.stringify({
     crouton: true, name: vars.name,
@@ -639,6 +655,7 @@ async function buildScaffoldFiles(ctx: ScaffoldContext, outDir: string | undefin
   }, null, 2) + '\n'
   const files: ScaffoldFile[] = [
     { path: 'package.json', content: tmplPackageJson(vars) },
+    { path: 'tsconfig.json', content: tmplTsconfig() },
     { path: 'nuxt.config.ts', content: tmplNuxtConfig(vars) },
     { path: 'crouton.config.js', content: tmplCroutonConfig(vars) },
     { path: '.crouton.json', content: identifier },
