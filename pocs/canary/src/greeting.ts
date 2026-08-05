@@ -20,7 +20,8 @@ export interface Greeting {
 const GREETINGS: Record<Locale, string> = {
   nl: 'Hallo',
   en: 'Hello',
-  fr: 'Bonjour'
+  fr: 'Bonjour',
+  de: 'Hallo'
 }
 
 /** Greet in `locale`. Total over `Locale` by construction — no runtime fallback needed. */
