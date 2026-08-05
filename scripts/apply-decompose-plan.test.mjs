@@ -208,3 +208,56 @@ test('a signoff hold @mentions the owner and holds status:blocked (mock exec)', 
   const labelCalls = calls.filter(c => Array.isArray(c) && c.includes('status:blocked'))
   assert.ok(labelCalls.some(c => c.includes('--add-label')), 'must apply status:blocked')
 })
+
+// ── Dependency ordering / wave edges (#1843) ───────────────────────────────────────
+test('parsePlan accepts dependsOn and normalizes to deduped sibling indices', () => {
+  const p = parsePlan({ leaf: false, children: [CHILD(), CHILD({ title: 'UI', dependsOn: [0, 0] })] })
+  assert.deepEqual(p.children[0].dependsOn, [])
+  assert.deepEqual(p.children[1].dependsOn, [0])   // deduped
+})
+
+test('parsePlan rejects a self-dependency, an out-of-range index, and a cycle', () => {
+  assert.throws(() => parsePlan({ leaf: false, children: [CHILD({ dependsOn: [0] })] }), PlanError)          // self
+  assert.throws(() => parsePlan({ leaf: false, children: [CHILD(), CHILD({ dependsOn: [5] })] }), PlanError) // out of range
+  assert.throws(() => parsePlan({ leaf: false, children: [CHILD({ dependsOn: [1] }), CHILD({ dependsOn: [0] })] }), PlanError) // A→B→A cycle
+})
+
+test('a blocked child gets a set-blocked-by action and NO trigger-label; the blocker still fires', () => {
+  const plan = parsePlan({ leaf: false, children: [CHILD({ title: 'scaffold' }), CHILD({ title: 'UI', dependsOn: [0] })] })
+  const acts = planToActions(plan, CTX)
+  // every create precedes every set-blocked-by (numbers resolve at exec time)
+  const lastCreate = acts.map(a => a.type).lastIndexOf('create')
+  const firstBlock = acts.map(a => a.type).indexOf('set-blocked-by')
+  assert.ok(lastCreate < firstBlock, 'all creates before any set-blocked-by')
+  // only the UNBLOCKED child (scaffold, child0) gets a trigger-label
+  const triggers = acts.filter(a => a.type === 'trigger-label')
+  assert.equal(triggers.length, 1)
+  assert.equal(triggers[0].ref, 'child0')
+  const block = acts.find(a => a.type === 'set-blocked-by')
+  assert.equal(block.ref, 'child1')
+  assert.deepEqual(block.blockerRefs, ['child0'])
+})
+
+test('runActions stamps a wave-gate-parseable "Blocked-by: #N" line and never labels the blocked child (mock exec)', () => {
+  const calls = []
+  let next = 6000
+  let lastBody = ''
+  const exec = (file, args, input) => {
+    calls.push([file, ...args])
+    if (args[0] === 'issue' && args[1] === 'create') return `https://github.com/o/r/issues/${++next}`
+    if (args[0] === 'api') return '99999'
+    return ''
+  }
+  const writeBody = (tag, body) => { if (tag.startsWith('blocked-')) lastBody = body; return `/tmp/${tag}` }
+  const plan = parsePlan({ leaf: false, children: [CHILD({ title: 'scaffold' }), CHILD({ title: 'UI', dependsOn: [0] })] })
+  const summary = runActions(planToActions(plan, CTX), { repo: 'o/r', exec, log: () => {}, writeBody })
+  assert.equal(summary.created.length, 2)
+  assert.equal(summary.blocked.length, 1)
+  // child1 = 6002 blocked by child0 = 6001 → a line wave-gate's /Blocked-by:\s*([#\d,\s]+)/i parses
+  assert.match(lastBody, /Blocked-by:\s*#6001/)
+  assert.match(lastBody, /A helper/)              // preserved the child's built body (no re-fetch)
+  assert.match(lastBody, /<!-- pipeline:/)        // the injected WS2 pipeline block is still intact
+  // exactly ONE trigger label applied (the unblocked scaffold), NOT the blocked UI child
+  const addLabelCalls = calls.filter(c => c.includes('--add-label'))
+  assert.equal(addLabelCalls.length, 1)
+})

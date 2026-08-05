@@ -127,8 +127,12 @@ bodies breaks on shell quoting (`$(cat <<EOF)`, #1001) and then fabricates succe
   heredoc), as JSON:
   - leaf → `{ "leaf": true }`
   - split → `{ "leaf": false, "children": [ { "title", "body" (markdown, no pipeline block / no
-    Dedup line — the apply step adds them), "labels": ["type:*","<component>"], "needsSplit": <bool> } … ] }`
+    Dedup line — the apply step adds them), "labels": ["type:*","<component>"], "needsSplit": <bool>,
+    "dependsOn": [<sibling index>] } … ] }`
     — 2–6 children, `needsSplit:true` for a child that itself needs further decomposition.
+    `dependsOn` = 0-based indices of siblings that must merge FIRST (#1843): the apply step stamps a
+    `Blocked-by: #N` line and withholds the trigger label, and `schedule-waves` releases the child once
+    its blockers close (scaffold → UI → deploy). `[]`/omit = dispatch immediately. No self-ref, no cycles.
 - Then **STOP**. Writing a correct `decompose-plan.json` is the entire deliverable.
 
 The deterministic **apply step** (`scripts/apply-decompose-plan.mjs`) turns the plan into real
