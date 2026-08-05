@@ -1,0 +1,7 @@
+{
+  "name": "plate",
+  "fields": [
+    { "name": "name", "type": "string", "required": true },
+    { "name": "weight", "type": "number", "required": true, "default": 0 }
+  ]
+}
