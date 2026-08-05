@@ -273,7 +273,7 @@ jobs:
             const det = detail ? `\n\n<details><summary>agent's final message</summary>\n\n> ${detail.replace(/\n/g, '\n> ')}\n</details>` : ''
             const body = why
               ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${det}${foot}`
-              : `🔴 **@pmcp — this run produced nothing** — no PR, no sign-off hold (a bare "spawning the worker…" progress comment doesn't count).\n\n**Fix:** re-apply \`delegate\` to retry; if it recurs the issue is underspecified — add a description + acceptance criteria.${foot}`
+              : `🔴 **@pmcp — this run produced nothing** — no PR, no sign-off hold (a bare "spawning the worker…" progress comment doesn't count).\n\n**Fix:** open the run log before changing anything. Only if the log shows the agent genuinely had nothing to act on is the issue underspecified. To retry, re-apply \`delegate\`.${foot}`
 
             await github.rest.issues.createComment({ ...context.repo, issue_number, body })
             core.setFailed(`Artifact-gate: run on #${issue_number} produced no deliverable (no PR, not held for sign-off).`)
