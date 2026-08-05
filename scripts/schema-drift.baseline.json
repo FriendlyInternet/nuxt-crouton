@@ -1,0 +1,141 @@
+{
+  "$comment": "Declared app↔package schema divergences (#1769). Each entry says WHY a consumer copy differs from packages/*/schemas. Undeclared behavioural drift fails CI. Regenerate with: node scripts/check-schema-drift.mjs --update — it preserves these reasons.",
+  "apps/triage/schemas/input.json": {
+    "package": "packages/crouton-triage/schemas/input.json",
+    "reason": "NEEDS REVIEW — `+name` is plausible app-specific customisation, but `accountId.refTarget` is not: the package points it at `accounts` and triage's copy declares no refTarget at all, so triage generates the column without the relation. Captured, not blessed (#1769).",
+    "fields": [
+      "+name",
+      "accountId.refTarget"
+    ]
+  },
+  "apps/triage/schemas/output.json": {
+    "package": "packages/crouton-triage/schemas/output.json",
+    "reason": "NEEDS REVIEW — same pair as input.json: `+name` is app-specific, `accountId.refTarget` drops the package's `accounts` relation. Captured, not blessed (#1769).",
+    "fields": [
+      "+name",
+      "accountId.refTarget"
+    ]
+  },
+  "apps/triage/schemas/pages.json": {
+    "package": "packages/crouton-pages/schemas/pages.json",
+    "reason": "Intentional — triage runs a deliberately reduced pages model (no ogImage/robots SEO fields, its own hierarchy config and required-ness). The `visibility.options` entry is the shared stale-copy cause below.",
+    "fields": [
+      "-ogImage",
+      "-robots",
+      "$hierarchy",
+      "slug.required",
+      "title.required",
+      "visibility.options"
+    ]
+  },
+  "apps/velo/schemas/pages.json": {
+    "package": "packages/crouton-pages/schemas/pages.json",
+    "reason": "Stale copy, inert — predates the `admin`/`scoped` visibility options. Harmless today because the option list the UI renders is hardcoded in crouton-pages' Workspace/Editor.vue, not read from this file. kassa's identical case was reconciled in #1769; velo and the pocs below are the same one-line fix, left out of that issue's scope.",
+    "fields": [
+      "visibility.options"
+    ]
+  },
+  "fixtures/with-sales/schemas/printers.json": {
+    "package": "packages/crouton-sales/schemas/printers.json",
+    "reason": "Stale copy — the fixture still requires `locationId`, which the package dropped when receipt printers stopped needing a location. Reconciling it means regenerating the fixture, so it is declared here rather than half-fixed (#1769).",
+    "fields": [
+      "locationId.required"
+    ]
+  },
+  "fixtures/with-sales/schemas/products.json": {
+    "package": "packages/crouton-sales/schemas/products.json",
+    "reason": "Stale copy of the exact #1769 defect — the fixture lacks the `required: true` that kassa gained in this issue. Same reconcile, but it needs a fixture regeneration to stay coherent with the generated table, so it is declared rather than half-fixed.",
+    "fields": [
+      "categoryId.required",
+      "locationId.required"
+    ]
+  },
+  "pocs/alexdeforce/schemas/pages.json": {
+    "package": "packages/crouton-pages/schemas/pages.json",
+    "reason": "Stale copy, inert — see apps/velo/schemas/pages.json.",
+    "fields": [
+      "visibility.options"
+    ]
+  },
+  "pocs/crouton-builder-demo/schemas/pages.json": {
+    "package": "packages/crouton-pages/schemas/pages.json",
+    "reason": "Stale copy, inert — see apps/velo/schemas/pages.json.",
+    "fields": [
+      "visibility.options"
+    ]
+  },
+  "pocs/crouton-builder/schemas/pages.json": {
+    "package": "packages/crouton-pages/schemas/pages.json",
+    "reason": "Not the CMS pages collection — the builder POC reuses the `pages` name for its own canvas model (`board`, `isHome`; no content/layout/SEO/visibility). It shares only a basename with crouton-pages, which is what pairs them here.",
+    "fields": [
+      "-config",
+      "-content",
+      "-layout",
+      "-ogImage",
+      "-pageType",
+      "-publishedAt",
+      "-robots",
+      "-seoDescription",
+      "-seoTitle",
+      "-visibility",
+      "+board",
+      "+isHome",
+      "$hierarchy",
+      "slug.maxLength",
+      "slug.translatable",
+      "status.maxLength",
+      "status.options",
+      "title.maxLength",
+      "title.translatable"
+    ]
+  },
+  "pocs/kvr/schemas/settings.json": {
+    "package": "packages/crouton-bookings/schemas/settings.json",
+    "reason": "Intentional — kvr is a work-permit app, not a booking app: it drops the package's `groups`/`statuses` repeaters and adds its own `recipients` email list.",
+    "fields": [
+      "-groups",
+      "-statuses",
+      "+recipients"
+    ]
+  },
+  "pocs/sintlukas/schemas/categories.json": {
+    "package": "packages/crouton-sales/schemas/categories.json",
+    "reason": "Not really the same collection — sintlukas reuses the `categories` NAME for CMS categories (colour, thumbnail, background, sidebar flag) rather than crouton-sales' event-scoped POS categories. The basename collision is what pairs them here.",
+    "fields": [
+      "-displayOrder",
+      "-eventId",
+      "-id",
+      "+background",
+      "+color",
+      "+isSidebar",
+      "+order",
+      "+thumbnail",
+      "title.translatable"
+    ]
+  },
+  "pocs/sintlukas/schemas/locations.json": {
+    "package": "packages/crouton-sales/schemas/locations.json",
+    "reason": "Not really the same collection — sintlukas' `locations` are school campuses with addresses and coordinates, not crouton-sales' event-scoped prep stations (hence also no `requiresHandover`). Basename collision, as with categories.json above.",
+    "fields": [
+      "-eventId",
+      "-id",
+      "-requiresHandover",
+      "+city",
+      "+info",
+      "+isMain",
+      "+location",
+      "+order",
+      "+street",
+      "+zip",
+      "title.maxLength",
+      "title.translatable"
+    ]
+  },
+  "pocs/sintlukas/schemas/pages.json": {
+    "package": "packages/crouton-pages/schemas/pages.json",
+    "reason": "Stale copy, inert — see apps/velo/schemas/pages.json.",
+    "fields": [
+      "visibility.options"
+    ]
+  }
+}
