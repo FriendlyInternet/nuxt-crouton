@@ -33,11 +33,17 @@ test('parseBlockers dedupes and tolerates no line', () => {
   assert.deepEqual(parseBlockers(undefined), [])
 })
 
-test('isDispatched catches both in-flight labels, in either shape', () => {
+test('isDispatched catches every in-flight label, in either shape', () => {
   assert.equal(isDispatched(['delegate']), true)
   assert.equal(isDispatched([{ name: 'status:in-progress' }]), true)
   assert.equal(isDispatched([{ name: 'type:feat' }]), false)
   assert.equal(isDispatched([]), false)
+  // #1750: the event-driven pipeline sends a leaf straight to the single-use worker with
+  // `work-this` (never `delegate`), and a still-splitting child gets `delegate-pi`. Missing
+  // these made an issue a worker was already building look un-dispatched, so the scheduler
+  // would pile `delegate` on top and start a redundant run against live work.
+  assert.equal(isDispatched(['work-this']), true)
+  assert.equal(isDispatched([{ name: 'delegate-pi' }]), true)
 })
 
 // ── summarizeChecks ──────────────────────────────────────────────────────────
