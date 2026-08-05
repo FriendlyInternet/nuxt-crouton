@@ -22,7 +22,7 @@
   "canaries": [
     {
       "id": "locale-3-files",
-      "issue": null,
+      "issue": 1927,
       "target": "pocs/canary/i18n/",
       "why": "#1876 defect 1 — the last file of a commit bucket was dropped, and in #1874 the dropped one was the only file that mattered. Three files in, three files out; nl.json asserted BY NAME because a count alone would pass on the wrong three.",
       "task": "change the `farewell` string in all three of pocs/canary/i18n/{nl,en,fr}.json",
@@ -36,7 +36,7 @@
     },
     {
       "id": "app-acceptance-pass",
-      "issue": null,
+      "issue": 1928,
       "target": "pocs/canary/src/greeting.ts",
       "why": "The acceptance gate's happy path — an apps/pocs change must resolve an APP_DIR and typecheck clean. Guards the #1876 APP_DIR probe that used to kill the whole finish step on a no-match.",
       "task": "add an exported `farewell(locale, name)` to pocs/canary/src/greeting.ts, mirroring `greet`",
@@ -48,7 +48,7 @@
     },
     {
       "id": "acceptance-red",
-      "issue": null,
+      "issue": 1929,
       "target": "pocs/canary/src/greeting.ts",
       "why": "A genuinely broken deliverable must open as a DRAFT so automerge (#339) skips it. If this canary ever goes non-draft, red work can land. The failure is REAL (a tight `Locale` union rejects the new key), not staged — a staged failure would prove nothing about the gate.",
       "task": "add a German greeting to the GREETINGS map in pocs/canary/src/greeting.ts WITHOUT widening the `Locale` union",
@@ -73,7 +73,7 @@
     },
     {
       "id": "genuine-no-op",
-      "issue": null,
+      "issue": 1930,
       "target": "pocs/canary/README.md",
       "why": "The one canary that SHOULD produce nothing. It guards the artifact-gate's honesty: no PR is correct here, but the failure comment must not assert a cause it never checked (#1751, #1876 defect 3).",
       "task": "an issue asking for something already true of pocs/canary/README.md, so there is nothing to build",
