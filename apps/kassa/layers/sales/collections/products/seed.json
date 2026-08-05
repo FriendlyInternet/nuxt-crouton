@@ -2,43 +2,38 @@
   "table": "sales_products",
   "key": "title",
   "rows": [
-    { "order": 1, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:aperitief", "locationId": "seed:sales:locations:bar", "title": "Gin tonic", "price": 8.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 2, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:aperitief", "locationId": "seed:sales:locations:bar", "title": "Gin tonic (alcoholvrij)", "price": 7.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 3, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:aperitief", "locationId": "seed:sales:locations:bar", "title": "Cava", "price": 3.5, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 4, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:aperitief", "locationId": "seed:sales:locations:bar", "title": "Fles cava", "price": 18.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 5, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:aperitief", "locationId": "seed:sales:locations:bar", "title": "Blond (rum-cola)", "price": 8.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-
-    { "order": 6, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Pils", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 7, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Carlsberg NA", "price": 2.7, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 8, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Palm", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 9, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Hoegaarden", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 10, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Kriek", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 11, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Leffe", "price": 3.8, "isActive": true, "requiresRemark": false, "hasOptions": true, "multipleOptionsAllowed": false, "options": [ { "id": "blond", "label": "Blond", "priceModifier": 0 }, { "id": "bruin", "label": "Bruin", "priceModifier": 0 } ] },
-    { "order": 12, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Duvel", "price": 4.2, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 13, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Orval", "price": 4.2, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 14, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Cola", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": true, "multipleOptionsAllowed": false, "options": [ { "id": "regular", "label": "Regular", "priceModifier": 0 }, { "id": "zero", "label": "Zero", "priceModifier": 0 } ] },
-    { "order": 15, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Water", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": true, "multipleOptionsAllowed": false, "options": [ { "id": "plat", "label": "Plat", "priceModifier": 0 }, { "id": "bruis", "label": "Bruis", "priceModifier": 0 } ] },
-    { "order": 16, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Limonade", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 17, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Schweppes", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 18, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:dranken", "locationId": "seed:sales:locations:bar", "title": "Ice tea", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-
-    { "order": 19, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:hoofdgerechten", "locationId": "seed:sales:locations:keuken", "title": "Mosselen goudmerk", "description": "Met frieten of brood.", "price": 28.0, "isActive": true, "requiresRemark": false, "hasOptions": true, "multipleOptionsAllowed": false, "options": [ { "id": "frieten", "label": "Frieten", "priceModifier": 0 }, { "id": "brood", "label": "Brood", "priceModifier": 0 } ] },
-    { "order": 20, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:hoofdgerechten", "locationId": "seed:sales:locations:keuken", "title": "Kinderportie mosselen", "price": 16.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 21, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:hoofdgerechten", "locationId": "seed:sales:locations:keuken", "title": "Brochetten met groenten", "price": 18.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 22, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:hoofdgerechten", "locationId": "seed:sales:locations:keuken", "title": "Brochetten met provençaalse saus", "price": 18.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 23, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:hoofdgerechten", "locationId": "seed:sales:locations:keuken", "title": "Kinderportie brochetten", "price": 10.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 24, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:hoofdgerechten", "locationId": "seed:sales:locations:keuken", "title": "Vol-au-vent met frieten", "price": 15.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 25, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:hoofdgerechten", "locationId": "seed:sales:locations:keuken", "title": "Kinderportie vol-au-vent", "price": 9.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 26, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:hoofdgerechten", "locationId": "seed:sales:locations:keuken", "title": "Veggieburger", "description": "Met groenten of provençaal.", "price": 18.0, "isActive": true, "requiresRemark": false, "hasOptions": true, "multipleOptionsAllowed": false, "options": [ { "id": "groenten", "label": "Groenten", "priceModifier": 0 }, { "id": "provencaal", "label": "Provençaal", "priceModifier": 0 } ] },
-
-    { "order": 27, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:wijnen", "locationId": "seed:sales:locations:bar", "title": "Glas wijn", "description": "Wit: Château Toutigeac Bordeaux · Rood: Château Grand Théâtre Bordeaux Supérieur.", "price": 3.5, "isActive": true, "requiresRemark": false, "hasOptions": true, "multipleOptionsAllowed": false, "options": [ { "id": "wit", "label": "Wit", "priceModifier": 0 }, { "id": "rood", "label": "Rood", "priceModifier": 0 } ] },
-    { "order": 28, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:wijnen", "locationId": "seed:sales:locations:bar", "title": "Fles wijn", "description": "Wit: Château Toutigeac Bordeaux · Rood: Château Grand Théâtre Bordeaux Supérieur.", "price": 18.0, "isActive": true, "requiresRemark": false, "hasOptions": true, "multipleOptionsAllowed": false, "options": [ { "id": "wit", "label": "Wit", "priceModifier": 0 }, { "id": "rood", "label": "Rood", "priceModifier": 0 } ] },
-
-    { "order": 29, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:nagerechten", "locationId": "seed:sales:locations:keuken", "title": "IJsje", "price": 3.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 30, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:nagerechten", "locationId": "seed:sales:locations:keuken", "title": "IJsje met chocolade", "price": 4.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 31, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:nagerechten", "locationId": "seed:sales:locations:keuken", "title": "Dame blanche", "price": 7.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 32, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:nagerechten", "locationId": "seed:sales:locations:keuken", "title": "IJs met advocaat", "price": 7.0, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 33, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:nagerechten", "locationId": "seed:sales:locations:keuken", "title": "Koffie", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false },
-    { "order": 34, "eventId": "seed:sales:events:mosselconcert", "categoryId": "seed:sales:categories:nagerechten", "locationId": "seed:sales:locations:keuken", "title": "Thee", "price": 2.5, "isActive": true, "requiresRemark": false, "hasOptions": false, "multipleOptionsAllowed": false }
+    {
+      "title": "Sample title 1",
+      "description": "Sample description content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "price": 1,
+      "isActive": true,
+      "requiresRemark": true,
+      "remarkPrompt": "Sample remarkPrompt 1",
+      "hasOptions": true,
+      "multipleOptionsAllowed": true,
+      "options": "Sample options 1"
+    },
+    {
+      "title": "Sample title 2",
+      "description": "Sample description content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "price": 2,
+      "isActive": false,
+      "requiresRemark": false,
+      "remarkPrompt": "Sample remarkPrompt 2",
+      "hasOptions": false,
+      "multipleOptionsAllowed": false,
+      "options": "Sample options 2"
+    },
+    {
+      "title": "Sample title 3",
+      "description": "Sample description content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "price": 3,
+      "isActive": true,
+      "requiresRemark": true,
+      "remarkPrompt": "Sample remarkPrompt 3",
+      "hasOptions": true,
+      "multipleOptionsAllowed": true,
+      "options": "Sample options 3"
+    }
   ]
 }
