@@ -1,0 +1,17 @@
+[
+  {
+    "collection": "chores",
+    "fields": [
+      "name",
+      "cadence",
+      "assigneeId",
+      "lastDoneById",
+      "lastDoneAt",
+      "notes"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-05T14:04:30.972Z",
+    "layer": "chores",
+    "gitSha": "83f165444"
+  }
+]

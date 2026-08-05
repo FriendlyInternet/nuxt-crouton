@@ -1,0 +1,24 @@
+{
+  "table": "chores_chores",
+  "key": "name",
+  "rows": [
+    {
+      "name": "Sample name 1",
+      "cadence": "weekly",
+      "lastDoneAt": 1785938670,
+      "notes": "Sample notes content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "name": "Sample name 2",
+      "cadence": "monthly",
+      "lastDoneAt": 1785852270,
+      "notes": "Sample notes content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "name": "Sample name 3",
+      "cadence": "daily",
+      "lastDoneAt": 1785765870,
+      "notes": "Sample notes content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    }
+  ]
+}
