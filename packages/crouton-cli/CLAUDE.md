@@ -214,7 +214,17 @@ crouton init my-app --dry-run
 | `-d, --dialect <type>` | `sqlite` or `pg` (default: sqlite) |
 | `--no-cf` | Skip Cloudflare-specific config |
 | `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); auto-bound on deploy. Omit → id-less `*.workers.dev` |
+| `--poc` | Scaffold into `pocs/<name>` (the incubator) instead of `apps/<name>` |
+| `--out <dir>` | Explicit target directory — overrides `--poc`; defaults to `apps/<name>` |
 | `--dry-run` | Preview without writing files |
+
+```bash
+# Scaffold into the pocs/ incubator instead of apps/
+crouton init quotes --poc
+
+# Explicit output directory (overrides --poc)
+crouton init scratch --out sandboxes/scratch
+```
 
 ### What `crouton init` Does
 
