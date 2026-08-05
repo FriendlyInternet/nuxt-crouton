@@ -545,7 +545,7 @@
       "noLocations": "Geen locaties",
       "noHelpers": "Er zijn momenteel geen helpers ingelogd.",
       "expires": "Verloopt",
-      "addProduct": "Product toevoegen",
+      "addProduct": "Product",
       "loadingProducts": "Producten laden...",
       "noProducts": "Geen producten",
       "inThisCategory": " in deze categorie",
@@ -567,7 +567,7 @@
       "currency": "Valuta",
       "currencyEur": "Euro (€)",
       "currencyUsd": "Dollar ($)",
-      "showInactive": "Inactieve producten",
+      "showInactive": "Inactieve",
       "editCatalog": "Bewerken",
       "doneEditing": "Klaar",
       "clientsPanel": {
