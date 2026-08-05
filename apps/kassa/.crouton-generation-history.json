@@ -1,5 +1,26 @@
 [
   {
+    "collection": "products",
+    "fields": [
+      "eventId",
+      "categoryId",
+      "locationId",
+      "title",
+      "description",
+      "price",
+      "isActive",
+      "requiresRemark",
+      "remarkPrompt",
+      "hasOptions",
+      "multipleOptionsAllowed",
+      "options"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-05T16:26:19.153Z",
+    "layer": "sales",
+    "gitSha": "729abb027"
+  },
+  {
     "collection": "locations",
     "fields": [
       "eventId",
@@ -1614,23 +1635,6 @@
     ],
     "generator": "crouton-cli",
     "timestamp": "2026-06-09T14:22:26.638Z",
-    "layer": "sales",
-    "gitSha": "195d15f8"
-  },
-  {
-    "collection": "printers",
-    "fields": [
-      "eventId",
-      "locationId",
-      "title",
-      "ipAddress",
-      "port",
-      "status",
-      "showPrices",
-      "isActive"
-    ],
-    "generator": "crouton-cli",
-    "timestamp": "2026-06-09T14:22:26.615Z",
     "layer": "sales",
     "gitSha": "195d15f8"
   }

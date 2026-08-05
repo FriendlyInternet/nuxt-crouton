@@ -2,7 +2,7 @@
  * @crouton-generated
  * @collection products
  * @layer sales
- * @generated 2026-06-16
+ * @generated 2026-08-05
  *
  * ## AI Context
  * - Composable: useSalesProducts
@@ -28,8 +28,8 @@ import { z } from 'zod'
 // Keep schema outside of objects that might be serialized/cloned during SSR
 export const salesProductSchema = z.object({
   eventId: z.string().min(1, 'eventId is required'),
-  categoryId: z.string().optional(),
-  locationId: z.string().optional(),
+  categoryId: z.string().min(1, 'categoryId is required'),
+  locationId: z.string().min(1, 'locationId is required'),
   title: z.string().min(1, 'title is required'),
   description: z.string().optional(),
   price: z.number(),
