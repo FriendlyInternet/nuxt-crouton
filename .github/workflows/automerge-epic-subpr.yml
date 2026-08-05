@@ -48,10 +48,25 @@ name: Auto-merge epic sub-PRs
 # `pull_request: closed` event would not reach schedule-waves and the chain would stall
 # (#572). An App installation token cascades. Merge commit — NOT squash (merge policy).
 
+# RE-EVALUATION (#2013) — the trigger that makes every gate above mean anything.
+# `pull_request: opened` fires ~10s after the worker opens the PR, when ci.yml has barely
+# started, so `CI Gate` does not exist yet and the presence gate correctly declines. And
+# `check_suite` NEVER fires for our own CI: every check on a pipeline PR is created by
+# GitHub Actions under GITHUB_TOKEN, and GITHUB_TOKEN-triggered events never start a new
+# workflow run (the same recursion guard as #572/#626, documented for the sibling workflow
+# in #1884). A one-shot worker makes no second push, so `synchronize` never fires either.
+# Net effect: this workflow asked exactly once, always too early, and never again — every
+# green sub-PR sat unmerged forever, and the owner merged them by hand.
+# `workflow_run` DOES fire for Actions-generated completions. `CI` owns `CI Gate`, so its
+# completion is precisely the moment the answer can change. Same cure #1884 applied to
+# pipeline-pr-status.yml.
 on:
   pull_request:
     types: [opened, ready_for_review, synchronize]
   check_suite:
+    types: [completed]
+  workflow_run:
+    workflows: ["CI"]
     types: [completed]
 
 permissions:
@@ -63,7 +78,8 @@ jobs:
     # (a red/again-pending suite will re-fire this when it next completes green).
     if: >
       github.event_name == 'pull_request' ||
-      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success')
+      (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success') ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/create-github-app-token@v1
@@ -114,10 +130,16 @@ jobs:
             if (context.eventName === 'pull_request') {
               candidates.add(context.payload.pull_request.number)
             } else {
-              for (const p of (context.payload.check_suite.pull_requests || [])) candidates.add(p.number)
+              // check_suite and workflow_run carry the same two useful fields under
+              // different keys, and NEITHER carries `pull_request` — reading
+              // `github.event.pull_request` on these triggers yields undefined (#2013).
+              const src = context.payload.check_suite || context.payload.workflow_run
+              for (const p of (src.pull_requests || [])) candidates.add(p.number)
               if (!candidates.size) {
+                // `pull_requests` is routinely empty on workflow_run, so this fallback is
+                // the normal path there, not an edge case.
                 const assoc = await github.paginate(github.rest.repos.listPullRequestsAssociatedWithCommit,
-                  { owner, repo, commit_sha: context.payload.check_suite.head_sha, per_page: 100 })
+                  { owner, repo, commit_sha: src.head_sha, per_page: 100 })
                 assoc.forEach(p => candidates.add(p.number))
               }
             }
