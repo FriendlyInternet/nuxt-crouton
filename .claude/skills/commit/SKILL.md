@@ -196,6 +196,32 @@ EOF
 )"
 ```
 
+## Merging a Stack (retarget before `--delete-branch`)
+
+When merging a PR whose branch is the **base of other open PRs**, deleting that branch on merge
+makes GitHub **auto-close** the dependents — it does not retarget them. Silently, mid-train.
+
+Before merging a stacked PR's base:
+
+```bash
+# 1. Find anything based on the branch you're about to delete
+gh pr list --base <branch-being-merged>
+
+# 2. Retarget each dependent onto the surviving integration branch FIRST
+gh pr edit <dependent-pr> --base <surviving-branch>
+
+# 3. Only then merge the base
+gh pr merge <pr> --merge --delete-branch
+```
+
+Or merge **deepest-first**, so each merge carries the stack forward and no base is ever deleted
+out from under an open PR.
+
+Incident: epic #1303 (2026-07-10) — merging #1330 with `--delete-branch` auto-closed #1344 and
+#1353. Both survived only because stacked branches carry their ancestors' commits; without that
+property the work would have been silently dropped. Rule of record: `AGENTS.md` § Commits →
+Merge policy.
+
 ## Edge Cases
 
 ### Nothing to commit
