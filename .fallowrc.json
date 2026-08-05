@@ -202,8 +202,27 @@
   // dead-code + duplication stay strict. Regenerate the ratchet as we burn legacy down:
   //   npx fallow health --save-baseline .fallow-health-baseline.json
   // (kept at repo root, not .fallow/, because fallow self-ignores its .fallow/ cache dir.)
+  // ALL THREE baselines, not just health (#1714). Health alone left dead-code and duplication
+  // with no baseline at all, so those two relied entirely on the base-snapshot attribution pass
+  // — and that pass is position-based, so a PR that merely DELETES or MOVES lines in a
+  // debt-carrying file gets the file's pre-existing findings attributed to it. PR #1708 went red
+  // with 12 complexity findings, 3 unused exports and 1 clone group that are byte-identical on
+  // `main`. The pressure that creates is backwards: the cheapest path to green was deleting
+  // exported symbols from a shared package on a zero-imports signal — exactly what #1149 forbids.
+  //
+  // These live in CONFIG rather than as CI flags so a local `npx fallow audit` (which CLAUDE.md
+  // tells you to run before pushing) judges the diff the same way CI does. A CI-only flag would
+  // make the two disagree, which is how you get a green local run and a red PR.
+  //
+  // REFRESH after genuinely paying debt down — never to silence a finding you just introduced:
+  //   npx fallow health    --save-baseline .fallow-health-baseline.json
+  //   npx fallow dead-code --save-baseline .fallow-dead-code-baseline.json
+  //   npx fallow dupes     --save-baseline .fallow-dupes-baseline.json
+  // (kept at repo root, not .fallow/, because fallow self-ignores its .fallow/ cache dir.)
   "audit": {
-    "healthBaseline": ".fallow-health-baseline.json"
+    "healthBaseline": ".fallow-health-baseline.json",
+    "deadCodeBaseline": ".fallow-dead-code-baseline.json",
+    "dupesBaseline": ".fallow-dupes-baseline.json"
   },
   "rules": {
     "unused-dependencies": "warn",
