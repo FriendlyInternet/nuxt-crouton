@@ -1,3 +1,6 @@
+import { and, eq, exists, ne, sql, type SQL } from 'drizzle-orm'
+import { locationBlocksDeliverySql } from './location-handover'
+
 /**
  * The outstanding-orders rule (#1763, re-pointed by #1851).
  *
@@ -18,6 +21,61 @@ export const OUTSTANDING_DEFINITION = {
   excludesCancelled: true,
   excludesHandedOver: true
 } as const
+
+/**
+ * The tables the outstanding predicate reads. INJECTED, not imported — they live
+ * in the consuming app's generated layer (`~~/layers/sales/...`), which a package
+ * unit test cannot resolve. Keeping them parameters is what makes this testable
+ * at all (same reason as `handover.ts` / `per-product-totals.ts`).
+ */
+export interface OutstandingOrderTables {
+  orders: any
+  orderitems: any
+  products: any
+  locations: any
+  kdsbumps: any
+}
+
+/**
+ * "Still in bereiding", as a WHERE condition over the ORDERS list (#1875).
+ *
+ * The count and the list must answer the same sentence. They stopped doing so
+ * once: #1846 applied this rule to the list keyed on `salesHandovers`; #1851
+ * re-pointed the COUNT onto `salesKdsbumps` and left the list behind — so
+ * `?outstanding=1` was parsed, sent, and silently ignored while the chip above
+ * the list still lit up. The per-location half delegates to
+ * `locationBlocksDeliverySql`, so there is ONE predicate for "does this location
+ * still owe something" and nothing left for the two callers to disagree about.
+ *
+ * A correlated EXISTS, not a join: composes with the owner/client/print filters
+ * without changing the row shape or duplicating rows.
+ *
+ * Cancelled is excluded HERE, not globally — the unfiltered list still shows
+ * cancelled orders; only this filter claims to be about what is still coming.
+ */
+export function outstandingOrdersCondition(db: any, tables: OutstandingOrderTables): SQL {
+  const { orders, orderitems, products, locations, kdsbumps } = tables
+  return and(
+    ne(orders.status, 'cancelled'),
+    exists(
+      db.select({ one: sql`1` })
+        .from(orderitems)
+        .innerJoin(products, eq(products.id, orderitems.productId))
+        .innerJoin(locations, eq(locations.id, products.locationId))
+        .leftJoin(kdsbumps, and(
+          eq(kdsbumps.orderId, orderitems.orderId),
+          eq(kdsbumps.locationId, products.locationId)
+        ))
+        .where(and(
+          eq(orderitems.orderId, orders.id),
+          locationBlocksDeliverySql({
+            bumpId: kdsbumps.id,
+            requiresHandover: locations.requiresHandover
+          })
+        ))
+    )
+  )!
+}
 
 export interface OutstandingCountPlan {
   teamId: string

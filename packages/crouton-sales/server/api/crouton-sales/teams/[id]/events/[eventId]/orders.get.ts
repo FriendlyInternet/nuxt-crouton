@@ -18,7 +18,7 @@
 import { and, desc, eq, exists, inArray, ne, sql } from 'drizzle-orm'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { requireTeamEvent } from '../../../../../../utils/team-event'
-import { planOutstandingCount } from '../../../../../../utils/pass-tickets'
+import { planOutstandingCount, outstandingOrdersCondition } from '../../../../../../utils/pass-tickets'
 import { locationBlocksDeliverySql } from '../../../../../../utils/location-handover'
 import {
   parseLocationRemarks,
@@ -51,41 +51,24 @@ function jobFilterConditions(db: any, salesOrders: any, f: OrderFilters) {
   ].filter(Boolean)
 }
 
-// Backlog-only (#1846, re-fixed #1875): the same rule `countOutstanding` uses,
-// applied to the LIST via `?outstanding=1`. A correlated EXISTS rather than a
-// join, so it composes with the other filters without changing the row shape
-// or duplicating rows. Keyed on `salesKdsbumps`, mirroring `countOutstanding`
-// below: an order still has items "in bereiding" when at least one location
-// that requires confirmation (`requiresHandover` true or NULL — NULL predates
-// the migration and counts as requiring) has no matching bump. Only scopes to
-// not-cancelled when this filter is active — the unfiltered list still shows
-// cancelled orders, matching prior behavior.
+// Backlog-only (#1846, re-fixed #1875). The predicate itself is
+// `outstandingOrdersCondition` in `server/utils/pass-tickets.ts`, beside
+// OUTSTANDING_DEFINITION — it takes its tables as PARAMETERS, which is what lets
+// a package unit test reach it (`test/outstanding-list-filter.test.ts`). This
+// wrapper only resolves the app-layer tables the alias can't give a test.
 async function outstandingCondition(db: any, salesOrders: any) {
   const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
   const { salesProducts } = await import('~~/layers/sales/collections/products/server/database/schema')
   const { salesLocations } = await import('~~/layers/sales/collections/locations/server/database/schema')
   const { salesKdsbumps } = await import('~~/layers/sales/collections/kdsbumps/server/database/schema')
 
-  return and(
-    ne(salesOrders.status, 'cancelled'),
-    exists(
-      db.select({ one: sql`1` })
-        .from(salesOrderitems)
-        .innerJoin(salesProducts, eq(salesProducts.id, salesOrderitems.productId))
-        .innerJoin(salesLocations, eq(salesLocations.id, salesProducts.locationId))
-        .leftJoin(salesKdsbumps, and(
-          eq(salesKdsbumps.orderId, salesOrderitems.orderId),
-          eq(salesKdsbumps.locationId, salesProducts.locationId)
-        ))
-        .where(and(
-          eq(salesOrderitems.orderId, salesOrders.id),
-          locationBlocksDeliverySql({
-            bumpId: salesKdsbumps.id,
-            requiresHandover: salesLocations.requiresHandover
-          })
-        ))
-    )
-  )
+  return outstandingOrdersCondition(db, {
+    orders: salesOrders,
+    orderitems: salesOrderitems,
+    products: salesProducts,
+    locations: salesLocations,
+    kdsbumps: salesKdsbumps
+  })
 }
 
 // Shared WHERE for both the list and the count so a filtered page and its total
