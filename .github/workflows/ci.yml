@@ -279,6 +279,14 @@ jobs:
       - name: Install dependencies (skip postinstall scripts)
         run: pnpm install --frozen-lockfile --ignore-scripts
 
+      # --ignore-scripts above also skips better-sqlite3's native build, so any test
+      # that opens a real SQLite DB dies on "Could not locate the bindings file" and
+      # has to be skipped in CI — which is how the #1612 seed contract went dark.
+      # Same fix already live in deploy-app/docs/pocs (#154). No `|| true` here: in
+      # the test job a missing binding must fail loudly, not silently re-skip. (#1880)
+      - name: Build better-sqlite3's native binding
+        run: pnpm rebuild better-sqlite3
+
       - name: Cache layer builds
         id: layer-cache
         uses: actions/cache@v4
