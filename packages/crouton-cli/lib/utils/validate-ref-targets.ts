@@ -29,7 +29,17 @@ export interface RefTargetField {
   name: string
   type?: string
   refTarget?: string
+  refScope?: string
 }
+
+/**
+ * `refScope` values that mean "this target is NOT a generated collection". `database-queries.ts`
+ * routes these away from the collection-directory import entirely — external refs import from the
+ * app barrel (`~~/server/db/schema`), which is where package-owned tables like the auth `user`
+ * live. `collectionLayerMap` therefore has nothing to say about them, and checking one against it
+ * only ever produces a false refusal.
+ */
+const EXTERNAL_SCOPES = new Set(['external', 'adapter'])
 
 export interface UnresolvedRef {
   field: string
@@ -46,10 +56,13 @@ export class RefTargetError extends Error {
 }
 
 /**
- * Targets that mean "a person". These are NOT typos — they are a real want with no mechanism
- * (#1958: users live in the auth package, not as a generated collection, so `refTarget` has no
- * route to them). The message must say that, or the author is left renaming a collection that
- * was never going to work.
+ * Targets that mean "a person". These are NOT typos — the author wants to point at a team member,
+ * and no *collection* will ever be called this. There IS a route: the auth `user` table is
+ * re-exported into every app's `server/db/schema.ts`, and `refScope: "external"` +
+ * `refTarget: "users"` makes the generator emit `import { user } from '~~/server/db/schema'` with
+ * an aliased join — exactly what the built-in `owner`/`createdBy`/`updatedBy` refs already do.
+ * The message must name that escape hatch, or the author is left renaming a collection that was
+ * never going to exist. (Only `users` is wired; the other spellings need renaming first.)
  */
 const PERSON_TARGETS = new Set(['user', 'users', 'person', 'people', 'member', 'members', 'account', 'accounts'])
 
@@ -76,6 +89,9 @@ export function validateRefTargets(
   for (const f of fields || []) {
     const target = f?.refTarget
     if (!target) continue
+    // An external ref never resolves against the collection map — it imports from the app barrel.
+    // Refusing it here would block the one working way to reference a package-owned table.
+    if (f.refScope && EXTERNAL_SCOPES.has(String(f.refScope).toLowerCase())) continue
     if (knownTargets.has(String(target).toLowerCase())) continue
     unresolved.push({ field: f.name, target: String(target) })
   }
@@ -90,14 +106,20 @@ export function validateRefTargets(
     `  Collections available here: ${known.join(', ')}`,
   ]
 
-  // A person-shaped target is a capability gap, not a misspelling — say so, or the author
-  // burns time renaming something that could never have resolved.
+  // A person-shaped target is not a misspelling — it's the wrong mechanism. Name the right one,
+  // or the author burns time renaming something that was never going to be a collection.
   if (unresolved.some((u) => PERSON_TARGETS.has(u.target.toLowerCase()))) {
     lines.push(
       '',
-      '  One of these looks like it means "a person". Users are not a generated collection here —',
-      '  they belong to the auth package — so a relation cannot reach them yet. Tracked as #1958.',
-      '  For now, model it another way (e.g. a plain string field you populate yourself).',
+      '  One of these looks like it means "a person". Users are not a generated collection — the',
+      '  auth `user` table is re-exported into server/db/schema.ts, so reference it as an EXTERNAL',
+      '  target instead:',
+      '',
+      '      "assigneeId": { "type": "string", "refTarget": "users", "refScope": "external" }',
+      '',
+      '  That emits an aliased join on the auth user table, the same way owner/createdBy already',
+      '  work. Use exactly "users" — the other spellings have no table behind them. (A first-class',
+      '  member picker in the generated Form/List is still open: #1958.)',
     )
   }
 

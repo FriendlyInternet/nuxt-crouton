@@ -425,9 +425,28 @@ to a nonexistent path, so the failure surfaced minutes later as an unresolvable 
 *build* (the #1825 chores case). The check no-ops when no collection map is available (no
 config/targets), since nothing can be verified there.
 
-⚠️ **`refTarget` cannot reference a person.** Users live in `@fyit/crouton-auth`, not as a
-generated collection, so `refTarget: "users"` has no route to them — the error says so and
-points at **#1958**, which tracks giving fields a real way to reference a team member.
+### Referencing a person (`refScope: "external"`)
+
+A field that points at a **team member** is not a collection ref. The auth `user` table is
+re-exported into every app's `server/db/schema.ts`, so reach it as an **external** target:
+
+```json
+{ "assigneeId": { "type": "string", "refTarget": "users", "refScope": "external" } }
+```
+
+That makes `database-queries.ts` emit `import { user } from '~~/server/db/schema'` plus an
+aliased `leftJoin` — the same path the built-in `owner`/`createdBy`/`updatedBy` refs already
+take — instead of the collection-directory import. Use exactly **`users`** (mapped to the
+singular `user` export); `person`/`member`/`account` have no table behind them.
+
+`refScope: "external"` (and `"adapter"`) is **exempt from the `refTarget` existence check**
+above: an external ref resolves against the app barrel, not `collectionLayerMap`, so validating
+it against the collection list only ever produces a false refusal. Omitting `refScope` on a
+`users` target still fails — that's the #1825 chores case, where the generator took the
+collection path and wrote an import to a `users` collection nobody created.
+
+Still open: **#1958**, a first-class member *picker* in the generated Form and a name (not a
+raw id) in the generated List. The join works today; the UI half does not.
 
 ### Field Meta Properties
 

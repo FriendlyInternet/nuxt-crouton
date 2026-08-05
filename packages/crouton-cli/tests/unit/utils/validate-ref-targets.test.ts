@@ -72,9 +72,9 @@ describe('validateRefTargets', () => {
     ])
   })
 
-  it('points a person-shaped target at the feature issue instead of reading as a dead end', () => {
-    // `user`/`users`/`people`/`members` are a real want with no mechanism yet (#1958) — the
-    // message must not imply the author simply typo'd a collection name.
+  it('points a person-shaped target at the external-ref escape hatch, not a dead end', () => {
+    // `user`/`users`/`people`/`members` are a real want that DOES have a mechanism — the message
+    // must hand over `refScope: "external"`, not imply the author typo'd a collection name.
     for (const target of ['user', 'users', 'People', 'members']) {
       let err: RefTargetError | undefined
       try {
@@ -82,7 +82,7 @@ describe('validateRefTargets', () => {
       } catch (e) {
         err = e as RefTargetError
       }
-      expect(err!.message, `for target "${target}"`).toContain('#1958')
+      expect(err!.message, `for target "${target}"`).toContain('"refScope": "external"')
     }
   })
 
@@ -111,5 +111,34 @@ it('accepts the PLURAL directory form of a singular config name (the apps/velo c
   // happens to emit the right path.
   const fields = [{ name: 'locationId', type: 'string', refTarget: 'locations' }]
   expect(() => validateRefTargets(fields, known('location', 'booking'), 'booking')).not.toThrow()
+})
+
+// ── the second false positive: refusing the one mechanism that works ─────────────────
+it('accepts an EXTERNAL ref, which never resolves against the collection map', () => {
+  // `refScope: "external"` routes the field away from the collection-directory import entirely —
+  // database-queries.ts emits `import { user } from '~~/server/db/schema'` and an aliased join,
+  // the same path the built-in owner/createdBy refs take. Checking it against the collection map
+  // refused the ONLY working way to reference a person (the #1825 chores case).
+  const fields = [
+    { name: 'assigneeId', type: 'string', refTarget: 'users', refScope: 'external' },
+    { name: 'lastDoneById', type: 'string', refTarget: 'users', refScope: 'external' },
+  ]
+  expect(() => validateRefTargets(fields, known('chores'), 'chores')).not.toThrow()
+})
+
+it('still refuses a person target when refScope is absent', () => {
+  // The escape hatch is opt-in: without refScope the generator DOES try the collection path and
+  // emits an unresolvable import, so this must stay a refusal.
+  const fields = [{ name: 'assigneeId', type: 'string', refTarget: 'users' }]
+  expect(() => validateRefTargets(fields, known('chores'), 'chores')).toThrow(RefTargetError)
+})
+
+it('does not let an external scope wave through a genuinely wrong collection target', () => {
+  // `adapter`/`external` are about WHERE the table lives, so an external ref is exempt by design.
+  // A LOCAL ref to a nonexistent collection must still be caught.
+  const fields = [
+    { name: 'roomId', type: 'string', refTarget: 'rooms', refScope: 'local' },
+  ]
+  expect(() => validateRefTargets(fields, known('chores'), 'chores')).toThrow(RefTargetError)
 })
 })
