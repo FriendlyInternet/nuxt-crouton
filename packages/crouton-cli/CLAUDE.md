@@ -377,6 +377,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/add-module.ts` | Module installation implementation |
 | `lib/rollback-collection.ts` | Remove a collection — files, schema barrel, `app.config`, `extends`. Barrel via `getSchemaPath` (modern→legacy). `orphanTableName`/`dropTableWarning` (the code-only-rollback warning) + `generateDropMigration` (`--drop-table` emit / `--dry-run` temp-out preview) — #1445 WS4 |
 | `lib/utils/generate-migrations.ts` | Direct migration generation (`generateMigrations`, `prepareSchemaForMigration`, `DuplicateTableError`) — resolve graph → duplicate gate → app's `db:generate` (drizzle-kit, no Nuxt). Deferral/throw failure contract. Used by config/`add`/`init` (#1445 WS2) |
+| `lib/utils/validate-ref-targets.ts` | `validateRefTargets` / `RefTargetError` — refuse an unknown `refTarget` before any file is written; person-shaped targets get a message pointing at #1958 (#1957) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/dialects.ts` | PostgreSQL/SQLite configs |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
@@ -415,6 +416,18 @@ lib/generators/
   "categoryId": { "type": "string", "refTarget": "categories" }
 }
 ```
+
+**`refTarget` must name a collection that exists (#1957).** It is validated in `writeScaffold`
+*before* anything is written: an unknown target throws `RefTargetError` naming the collection,
+the field, the bad target and the collections that do exist. Previously `database-queries.ts`
+fell through its `// or unknown — fall back to existing behavior` branch and emitted an import
+to a nonexistent path, so the failure surfaced minutes later as an unresolvable module in the
+*build* (the #1825 chores case). The check no-ops when no collection map is available (no
+config/targets), since nothing can be verified there.
+
+⚠️ **`refTarget` cannot reference a person.** Users live in `@fyit/crouton-auth`, not as a
+generated collection, so `refTarget: "users"` has no route to them — the error says so and
+points at **#1958**, which tracks giving fields a real way to reference a team member.
 
 ### Field Meta Properties
 
