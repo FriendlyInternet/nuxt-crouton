@@ -235,6 +235,9 @@ jobs:
           cp scripts/pi-edited-files.mjs "$RUNNER_TEMP/pi-edited-files.mjs"
           # pi-commit-plan.mjs imports ./pi-edited-files.mjs relatively, so stash it alongside (#1849).
           cp scripts/pi-commit-plan.mjs "$RUNNER_TEMP/pi-commit-plan.mjs"
+          # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
+          # above: pi may check out a work branch mid-run that doesn't carry scripts/.
+          cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
@@ -339,10 +342,11 @@ jobs:
           #    (edit/write tools). Generator output (crouton config/generate_collection, produced via
           #    a bash/MCP tool) is NOT a write-tool path, so it never appears in the ledger — which is
           #    exactly why the old "commit only the ledger" DROPPED the generated collection (#1830).
-          # `|| true` is LOAD-BEARING (#1876): with no session the glob never expands, `ls` exits 2,
-          # `pipefail` propagates it to the assignment and errexit kills the step HERE — making the
-          # ::warning:: below unreachable. The empty case must reach the `if`, not abort the job.
-          SESSION="$(ls -t "$RUNNER_TEMP/pi-session"/*.jsonl 2>/dev/null | head -1 || true)"
+          # `resolveSession` (#1904) — unit-tested, and returns EMPTY rather than failing when there
+          # is no session. That is the whole point: the previous `ls -t …/*.jsonl | head -1` exited 2
+          # on an unexpanded glob, `pipefail` propagated it, and errexit killed the step HERE, making
+          # the ::warning:: below unreachable (#1876). `|| true` stays as belt-and-braces.
+          SESSION="$(node "$RUNNER_TEMP/pi-finish.mjs" session "$RUNNER_TEMP/pi-session" || true)"
           if [ -n "$SESSION" ] && [ -f "$SESSION" ]; then echo "pi session: $SESSION"
           else echo "::warning::no pi session in $RUNNER_TEMP/pi-session (#1764)"; fi
 
@@ -414,14 +418,24 @@ jobs:
           #    pocs). A real broken deliverable (app-local errors) FAILS, and the PR opens as a DRAFT,
           #    which automerge already skips (#339) — no commit-status scope needed. NEUTRAL (non-block)
           #    when the app has no typecheck to run.
+          # ── ONE plan call feeds BOTH gates (#1904) ──────────────────────────────────────────
+          # `pi-finish.mjs plan` replaces the two inline greps that used to compute these — the
+          # `APP_DIR` probe that killed the step on a packages/-only diff (#1876) and the tests-gate
+          # counts (#1885). It is unit-tested (`scripts/pi-finish.test.mjs`) and CANNOT exit non-zero
+          # on an expected input, which is the property the shell versions kept failing to have.
+          # Values are read with `sed`, not `eval` — a path with a shell metacharacter must not be
+          # executable here.
+          COMMITTED="$RUNNER_TEMP/committed-all.txt"
+          cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | grep . | sort -u > "$COMMITTED" || true
+          PLAN_OUT="$(node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" || true)"
+          APP_DIR="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^APP_DIR=//p')"
+          PKG_LOGIC="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^PKG_LOGIC=//p')"; PKG_LOGIC=${PKG_LOGIC:-0}
+          TEST_FILES="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^TEST_FILES=//p')"; TEST_FILES=${TEST_FILES:-0}
+          TESTS_MISSING="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^TESTS_MISSING=//p')"; TESTS_MISSING=${TESTS_MISSING:-0}
+          echo "plan (#1904) — app=${APP_DIR:-<none>} packages-logic=$PKG_LOGIC test-files=$TEST_FILES tests-missing=$TESTS_MISSING"
+
           ACCEPT="neutral"; ACCEPT_MSG="could not typecheck the touched app — not verified"
           if [ "$HAVE_COMMITS" = "1" ]; then
-            # `|| true` is LOAD-BEARING (#1876): a leaf whose diff is entirely `packages/**` (or
-            # `.github/`, `scripts/`, docs) matches NOTHING here, so grep exits 1, `pipefail`
-            # propagates it to the assignment and errexit kills the step — after the push, before
-            # `gh pr create`. That is exactly how #1874/#1875 pushed a branch and never opened a PR.
-            # No app dir is a legitimate NEUTRAL verdict below, not a crash.
-            APP_DIR="$(grep -hE '^(apps|pocs)/[^/]+/' "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | sed -E 's#^((apps|pocs)/[^/]+)/.*#\1#' | sort -u | head -1 || true)"
             if [ -n "$APP_DIR" ] && [ -f "$APP_DIR/package.json" ]; then
               PKG="$(node -p "require('./$APP_DIR/package.json').name || ''" 2>/dev/null || true)"
               HAS_TC="$(node -e "process.exit(require('./$APP_DIR/package.json').scripts?.typecheck?0:1)" 2>/dev/null && echo 1 || echo 0)"
@@ -488,17 +502,12 @@ jobs:
           # Scoped deliberately to hand-written logic: .ts/.mjs/.js under packages/, excluding
           # tests themselves, i18n locale JSON (#1874 was a label-only change and must NOT be
           # held) and .vue (a visual change answers to the UI gate, not this one).
-          TESTS_MISSING=0
-          if [ "$HAVE_COMMITS" = "1" ]; then
-            COMMITTED="$RUNNER_TEMP/committed-all.txt"
-            cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | grep . | sort -u > "$COMMITTED" || true
-            PKG_LOGIC="$(grep -E '^packages/[^/]+/.*\.(ts|mjs|js)$' "$COMMITTED" 2>/dev/null | grep -vE '(^|/)(test|tests|__tests__)/|\.(test|spec)\.' | grep -c . || true)"; PKG_LOGIC=${PKG_LOGIC:-0}
-            HAS_TEST="$(grep -E '(^|/)(test|tests|__tests__)/|\.(test|spec)\.' "$COMMITTED" 2>/dev/null | grep -c . || true)"; HAS_TEST=${HAS_TEST:-0}
-            if [ "$PKG_LOGIC" -gt 0 ] && [ "$HAS_TEST" -eq 0 ]; then
-              TESTS_MISSING=1
-              echo "::warning::tests gate (#1885): ${PKG_LOGIC} packages/ logic file(s) committed with no test — opening the PR as a DRAFT"
-            fi
-            echo "tests gate (#1885) — packages-logic=$PKG_LOGIC test-files=$HAS_TEST missing=$TESTS_MISSING"
+          #
+          # The COUNTS come from the single `plan` call above (#1904) — `planTestsGate` in
+          # scripts/pi-finish.mjs, unit-tested against all six shapes. Only the announcement
+          # lives here. A commitless run leaves TESTS_MISSING at its 0 default.
+          if [ "$HAVE_COMMITS" = "1" ] && [ "$TESTS_MISSING" = "1" ]; then
+            echo "::warning::tests gate (#1885): ${PKG_LOGIC} packages/ logic file(s) committed with no test — opening the PR as a DRAFT"
           fi
 
           # 7) Open the PR. On a FAILED acceptance or a missing test, open it as a DRAFT (automerge skips drafts, #339) —
@@ -818,6 +827,7 @@ jobs:
           # `-newermt "$SINCE"` scopes to dirs touched at/after the run-start timestamp, so we
           # never mis-attribute a PRIOR run's telemetry (the #839 stale-row bug). `-newermt`
           # works on both BSD find (the mac-mini) and GNU find (ubuntu fallback).
+          # shellcheck disable=SC2038 # -I{} consumes whole LINES, so a path with spaces survives
           TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" 2>/dev/null \
             | xargs -I{} stat -f '%m {}' {} 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           if [ -z "$TELE_DIR" ]; then

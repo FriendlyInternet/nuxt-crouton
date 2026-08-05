@@ -403,6 +403,100 @@ jobs:
       - name: Run scripts/*.test.mjs
         run: node --test scripts/*.test.mjs
 
+  # Lint the bash embedded in our workflows (#1904). ~700 lines of shell live inside YAML with no
+  # local execution path, and every defect found in the pi worker's finish step so far lived
+  # there, so any feedback at all is an improvement on none.
+  #
+  # WHAT IT DOES NOT COVER — stated up front, because an earlier version of this comment claimed
+  # otherwise. shellcheck does NOT catch the #1876 shape (`X="$(grep …)"` aborting the step under
+  # `set -e` when grep finds nothing). Verified, not assumed: that snippet is clean at
+  # `-S warning`, and still clean with `-o all`. SC2311/SC2312 are about a return value being
+  # MASKED (`export X="$(…)"`), which is the opposite failure. The guard against #1876 is
+  # pi-finish.mjs plus its unit tests — this job is a broad shell-hygiene net, not that guard.
+  # Its first run earned its keep anyway: 3 of our `# shellcheck disable=` directives were
+  # malformed and had been silently not applying.
+  #
+  # BLOCKING as of #1904. It shipped warn-only for one commit on the theory that a corpus
+  # predating the check would have a backlog worth draining first. Measured instead of assumed:
+  # 203 run-blocks produced 14 findings, and 11 of those were manufactured by this job's own
+  # extractor — substituting an Actions expression with a literal turned `[ "$X" = "y" ]` into a
+  # constant comparison (SC2050/SC2194/SC2157). Substituting a VARIABLE instead removes all 11
+  # without weakening a single rule. The real residue was 3 malformed `# shellcheck disable=`
+  # directives (SC1125 — our `— prose` suffix is invalid syntax, so those disables were being
+  # dropped) and 2 deliberate `find | xargs -I{}` uses, all fixed at the source. Backlog: zero,
+  # so there is nothing left for warn-only to protect.
+  shellcheck-workflows:
+    name: Shellcheck workflow shell
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Extract each `run:` block and lint it
+        run: |
+          set -uo pipefail
+          # js-yaml is installed into a SCRATCH dir and reached via NODE_PATH. Two earlier shapes
+          # both failed on a runner while passing locally, so the reasoning is recorded here:
+          #   • `npm i -g` — a global prefix is NOT on `node -e`'s resolution path from the repo
+          #     root ⇒ MODULE_NOT_FOUND.
+          #   • `npm i` in the repo root — dies with EUNSUPPORTEDPROTOCOL on the root
+          #     package.json's `catalog:` deps, which npm cannot parse (pnpm-only protocol).
+          # A scratch dir has no package.json to inherit, so neither applies. Locally this all
+          # "worked" only because js-yaml is already in this repo's node_modules as a transitive
+          # dep — and this job deliberately runs no `pnpm install`.
+          # Errors are NOT redirected to /dev/null: hiding npm's stderr is what made the second
+          # failure a silent 2-second exit with nothing to read.
+          DEPS=/tmp/wf-deps
+          mkdir -p "$DEPS"
+          ( cd "$DEPS" && npm init -y >/dev/null && npm i --no-audit --no-fund js-yaml@4 >/dev/null ) \
+            || { echo "::error::could not install js-yaml into $DEPS"; exit 1; }
+          export NODE_PATH="$DEPS/node_modules"
+          node -e 'require("js-yaml")' || { echo "::error::js-yaml unavailable — cannot parse workflows"; exit 1; }
+          mkdir -p /tmp/wf-shell
+          node -e '
+            const yaml = require("js-yaml"), fs = require("fs"), path = require("path");
+            let n = 0;
+            for (const f of fs.readdirSync(".github/workflows").filter(f => /\.ya?ml$/.test(f))) {
+              let doc; try { doc = yaml.load(fs.readFileSync(path.join(".github/workflows", f), "utf8")) } catch { continue }
+              for (const [jobId, job] of Object.entries(doc?.jobs || {})) {
+                for (const [i, step] of (job.steps || []).entries()) {
+                  if (typeof step.run !== "string") continue;
+                  // Actions expressions are not shell, so they have to be substituted with
+                  // SOMETHING before shellcheck can parse the structure around them. Substitute a
+                  // VARIABLE, not a literal: a literal turns `[ "$X" = "y" ]` into a constant
+                  // comparison and shellcheck dutifully reports SC2050/SC2194/SC2157 on code that
+                  // is fine — 11 of the first run`s 14 findings were this, i.e. the check
+                  // inventing its own backlog. The preamble assigns it so SC2154 stays quiet.
+                  // (NB: never write a literal expression delimiter inside a `run:` block —
+                  // Actions evaluates it at COMPILE time, and an empty one fails the whole
+                  // workflow with zero jobs, which is exactly how this job first shipped red.)
+                  const body = step.run.replace(/\$\{\{[^}]*\}\}/g, "$GHA_EXPR");
+                  const shell = step.shell || job.defaults?.run?.shell || doc.defaults?.run?.shell || "bash";
+                  if (!/^bash|^sh/.test(shell)) continue;
+                  // `export` + quotes so the preamble is itself clean (a bare assignment trips
+                  // SC2034 unused + SC2209 "did you mean $(…)" in every one of the 203 files).
+                  const preamble = "#!/bin/bash\nexport GHA_EXPR=\"gha-expr\"\n";
+                  fs.writeFileSync(`/tmp/wf-shell/${f}__${jobId}__${i}.sh`, preamble + body);
+                  n++;
+                }
+              }
+            }
+            console.log(`extracted ${n} run-block(s)`);
+          '
+          # No `|| true` on the install: a blocking gate that silently degrades to "shellcheck:
+          # command not found" would be the #1751 shape — a check reporting on something it
+          # never ran.
+          sudo apt-get install -y shellcheck >/dev/null 2>&1
+          shellcheck --version
+          # Excluded, all three because the EXTRACTION makes them meaningless rather than because
+          # we tolerate them: SC2086 (word-splitting on a substituted expression), SC2016 (single
+          # quotes around a substituted expression), SC1091 (a sourced file that does not exist in
+          # /tmp). Everything else at -S warning is on and blocking.
+          shellcheck -S warning -e SC2086,SC2016,SC1091 /tmp/wf-shell/*.sh
+
   fallow-audit:
     if: needs.changes.outputs.code == 'true'
     # Rung 1 of the check ladder (#632): the codebase-intelligence gate (#1145).
@@ -455,7 +549,8 @@ jobs:
     name: CI Gate
     if: always()
     needs: [changes, typecheck-mcp, typecheck-apps, build-kassa, docs-check, sync-validation,
-            mcp-server-tests, test, changeset-check, package-check, scripts-tests, fallow-audit]
+            mcp-server-tests, test, changeset-check, package-check, scripts-tests, fallow-audit,
+            shellcheck-workflows]
     runs-on: ubuntu-latest
     steps:
       - name: Every needed job succeeded or was legitimately skipped

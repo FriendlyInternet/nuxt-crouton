@@ -88,7 +88,7 @@ jobs:
               echo "::warning::$app wrangler dry-run failed — recording client bundle only"
             fi
 
-            # shellcheck disable=SC2086 — SERVER_ARG is intentionally unquoted (empty or a flag pair)
+            # shellcheck disable=SC2086 # SERVER_ARG is intentionally unquoted (empty or a flag pair)
             node scripts/perf/bundle-size.mjs --app "$app" --dir "$ASSETS" $SERVER_ARG --commit "$SHA" --pretty \
               | node scripts/perf/append-bundle-history.mjs
             ANY=1
