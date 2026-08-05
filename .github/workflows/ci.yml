@@ -508,16 +508,23 @@ jobs:
             }
             console.log(`extracted ${n} run-block(s)`);
           '
-          # No `|| true` on the install: a blocking gate that silently degrades to "shellcheck:
-          # command not found" would be the #1751 shape — a check reporting on something it
-          # never ran.
-          sudo apt-get install -y shellcheck >/dev/null 2>&1
-          shellcheck --version
+          # PINNED. `apt-get install shellcheck` gives whatever the runner image ships (0.9.0 at
+          # the time of writing) — for a BLOCKING gate that means a base-image bump can introduce
+          # new rules and turn the check red with no code change. The pinned tarball is also the
+          # version this job was validated against.
+          #
+          # No `|| true`: a blocking gate that silently degrades to "shellcheck: command not
+          # found" would be the #1751 shape — a check reporting on something it never ran.
+          SC_VERSION=v0.10.0
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SC_VERSION}/shellcheck-${SC_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJ -C /tmp
+          SHELLCHECK="/tmp/shellcheck-${SC_VERSION}/shellcheck"
+          "$SHELLCHECK" --version
           # Excluded, all three because the EXTRACTION makes them meaningless rather than because
           # we tolerate them: SC2086 (word-splitting on a substituted expression), SC2016 (single
           # quotes around a substituted expression), SC1091 (a sourced file that does not exist in
           # /tmp). Everything else at -S warning is on and blocking.
-          shellcheck -S warning -e SC2086,SC2016,SC1091 /tmp/wf-shell/*.sh
+          "$SHELLCHECK" -S warning -e SC2086,SC2016,SC1091 /tmp/wf-shell/*.sh
 
   fallow-audit:
     if: needs.changes.outputs.code == 'true'
