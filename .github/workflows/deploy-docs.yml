@@ -41,7 +41,13 @@ jobs:
   deploy:
     name: Deploy docs to Cloudflare Workers
     runs-on: ubuntu-latest
-    environment: production
+    # `docs-production`, NOT the shared `production` env (#1133). docs is a public
+    # content site that ships continuously on merge, and its own header (above) says
+    # it is explicitly NOT the #318 prod gate. Putting the required reviewer on
+    # `production` — so a cash-register app deploy needs a human click — would
+    # otherwise freeze every docs merge behind that same click. Separate env, no
+    # reviewer, branch policy restricted to `main`.
+    environment: docs-production
     permissions:
       contents: read
     env:
