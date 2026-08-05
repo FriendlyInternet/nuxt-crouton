@@ -101,14 +101,14 @@ jobs:
               for (const r of runs) {
                 if (r.status !== 'completed') { pending++; continue }
                 if (['success', 'neutral', 'skipped'].includes(r.conclusion)) success++
-                else { failure++; failing.push(r.name) } // failure, cancelled, timed_out, action_required, stale
+                else { failure++; failing.push({ name: r.name, id: r.id }) } // failure, cancelled, timed_out, action_required, stale
               }
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
                 for (const s of combined.statuses || []) {
                   if (s.state === 'pending') pending++
                   else if (s.state === 'success') success++
-                  else { failure++; failing.push(s.context) } // error, failure
+                  else { failure++; failing.push({ name: s.context }) } // error, failure — a commit status carries no annotations
                 }
               } catch (e) { core.warning(`combined status for ${ref}: ${e.message}`) }
               const total = success + pending + failure
@@ -151,18 +151,46 @@ jobs:
               const comments = await github.paginate(github.rest.issues.listComments,
                 { owner, repo, issue_number: pr.number, per_page: 100 })
               if (comments.some(c => (c.body || '').includes(marker))) return // already pinged this SHA
-              // Name the failing checks and say what is expected of the reader (#1909). The
-              // count alone ("1 failing check") told the owner they were needed without telling
-              // them what for, so the ping cost attention and returned none.
-              const names = (st.failing || []).slice(0, 5)
-              const more = (st.failing || []).length - names.length
+              // Name the failing checks (#1909) AND quote what actually went wrong (#2015).
+              // Names alone still meant leaving the notification, opening the checks tab, picking
+              // a job and scrolling a log — on a phone that is the entire task.
+              //
+              // `CI Gate` is the AGGREGATE (`if: always()` over 14 needs). It is never an
+              // independent cause; naming it beside the real failure doubles the apparent problem
+              // and sends the reader to a log that only says "not every job succeeded". Drop it
+              // whenever something else is red — but keep it when it is the ONLY red check, since
+              // that means something genuinely different (a needed job cancelled or stuck).
+              const ROLLUP = 'CI Gate'
+              const all = st.failing || []
+              const causes = all.length > 1 ? all.filter(f => f.name !== ROLLUP) : all
+              const names = causes.slice(0, 5)
+              const more = causes.length - names.length
               const list = names.length
-                ? names.map(n => `\`${n}\``).join(', ') + (more > 0 ? ` +${more} more` : '')
+                ? names.map(f => `\`${f.name}\``).join(', ') + (more > 0 ? ` +${more} more` : '')
                 : 'see the checks tab'
+
+              // The distilled failure: a step's `::error::` output becomes a check-run annotation,
+              // which is already the short form of the log. Two per check, truncated — enough to
+              // diagnose, collapsed so the notification itself stays scannable.
+              const excerpts = []
+              for (const f of names) {
+                if (!f.id) continue // a commit status has no annotations
+                try {
+                  const anns = (await github.rest.checks.listAnnotations(
+                    { owner, repo, check_run_id: f.id, per_page: 2 })).data
+                  for (const a of anns) {
+                    const msg = String(a.message || '').trim().slice(0, 400)
+                    if (msg) excerpts.push(`${f.name}: ${msg}`)
+                  }
+                } catch (e) { core.warning(`annotations for ${f.name}: ${e.message}`) }
+              }
+              const why = excerpts.length
+                ? `\n\n<details><summary>what failed</summary>\n\n\`\`\`\n${excerpts.join('\n\n')}\n\`\`\`\n</details>`
+                : ''
               const body =
                 `${marker}\n` +
-                `🔴 **@${OWNER} — CI failed on this pipeline PR** (${st.failure} failing ` +
-                `check${st.failure === 1 ? '' : 's'}): ${list}.\n\n` +
+                `🔴 **@${OWNER} — CI failed on this pipeline PR** (${causes.length} failing ` +
+                `check${causes.length === 1 ? '' : 's'}): ${list}.${why}\n\n` +
                 `**What's needed:** read the failure, then either push a fix to \`${pr.head.ref}\` ` +
                 `or reply here saying why it isn't yours. A red sub-PR won't auto-merge into its ` +
                 `epic, so it sits until one of those happens — **it does not mean the work is ` +
