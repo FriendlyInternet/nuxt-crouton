@@ -95,3 +95,32 @@ test('validate rejects an unknown gate id', () => {
   const bad = { stages: { x: { paths: ['x/'], gates: ['not-a-gate'], optionalGates: [], deploy: 'none' } } }
   assert.ok(validate(bad).some((p) => p.includes('unknown gate')))
 })
+
+test('--json CLI mode: single path resolves to a structured object matching stageForPath/gateMode', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const out = execFileSync('node', ['scripts/harness-stages.mjs', '--json', 'packages/crouton-core/app/foo.ts'], { encoding: 'utf8' })
+  const parsed = JSON.parse(out)
+  assert.equal(parsed.path, 'packages/crouton-core/app/foo.ts')
+  assert.equal(parsed.stage, 'package')
+  assert.equal(parsed.deploy, 'none')
+  assert.deepEqual(parsed.gates.required, ['test-first'])
+  assert.deepEqual(parsed.gates.optIn, [])
+  assert.equal(parsed.editGuard, true)
+})
+
+test('--json CLI mode: multiple paths resolve to an array, one entry per path', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const out = execFileSync('node', ['scripts/harness-stages.mjs', '--json', 'packages/crouton-core/app/foo.ts', 'apps/velo/foo.ts'], { encoding: 'utf8' })
+  const parsed = JSON.parse(out)
+  assert.equal(parsed.length, 2)
+  assert.equal(parsed[0].stage, 'package')
+  assert.equal(parsed[1].stage, 'app')
+  assert.equal(parsed[1].deploy, 'staging')
+})
+
+test('--json is absent from human-readable output and does not change --check exit codes', async () => {
+  const { execFileSync } = await import('node:child_process')
+  const humanOut = execFileSync('node', ['scripts/harness-stages.mjs', 'packages/crouton-core/app/foo.ts'], { encoding: 'utf8' })
+  assert.ok(humanOut.includes('stage: package'))
+  assert.doesNotThrow(() => execFileSync('node', ['scripts/harness-stages.mjs', '--check'], { encoding: 'utf8' }))
+})

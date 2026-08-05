@@ -10,6 +10,7 @@
  *   node scripts/harness-stages.mjs                 # print the stage table
  *   node scripts/harness-stages.mjs <path> [path…]  # resolve path(s) → stage + gates
  *   node scripts/harness-stages.mjs --check         # validate the config shape (CI)
+ *   node scripts/harness-stages.mjs --json <path> [path…]  # same resolution, JSON on stdout
  *
  * Library API (imported by WS3 call sites + the test):
  *   loadStages()                       → { stages, unstaged }
@@ -123,8 +124,26 @@ if (isMain) {
     process.exit(0)
   }
 
+  const asJson = args.includes('--json')
   const paths = args.filter((a) => !a.startsWith('--'))
   if (paths.length) {
+    if (asJson) {
+      const results = paths.map((p) => {
+        const { name, stage } = stageForPath(p, model)
+        return {
+          path: p,
+          stage: name,
+          deploy: stage.deploy || 'none',
+          gates: {
+            required: stage.gates || [],
+            optIn: stage.optionalGates || [],
+          },
+          editGuard: stage.editGuard === true,
+        }
+      })
+      console.log(JSON.stringify(paths.length === 1 ? results[0] : results, null, 2))
+      process.exit(0)
+    }
     for (const p of paths) {
       const { name, stage } = stageForPath(p, model)
       const req = (stage.gates || []).join(', ') || '—'
