@@ -445,6 +445,18 @@ async function saveBoard() {
       </span>
 
       <div class="ml-auto flex items-center gap-2">
+        <!-- outline-tree-editor (proposed, slice 1): the DOM-tree editor alternative to this canvas. -->
+        <UButton
+          size="sm"
+          icon="i-lucide-list-tree"
+          color="neutral"
+          variant="ghost"
+          :to="`/builder/outline/${pageId}`"
+          data-handoff="open-outline"
+          title="Edit as an outline (beta)"
+        >
+          Outline
+        </UButton>
         <span v-if="saveState === 'saved' && !dirty" class="flex items-center gap-1 text-xs text-muted">
           <UIcon name="i-lucide-check" class="size-4 text-primary" /> Saved
         </span>
