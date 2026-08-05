@@ -15,6 +15,7 @@ import { detectRequiredDependencies, displayMissingDependencies, ensureLayersExt
 import { setupCroutonCssSource, displayManualCssSetupInstructions } from './utils/css-setup.ts'
 import { syncFrameworkPackages, addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-config.ts'
 import { addNamedSchemaExport, getSchemaPath } from './utils/update-schema-index.ts'
+import { validateRefTargets } from './utils/validate-ref-targets.ts'
 import { generateMigrations, DuplicateTableError } from './utils/generate-migrations.ts'
 import { addToAppConfig, resolveAppConfigPath } from './utils/update-app-config.ts'
 import { loadFields } from './utils/load-fields.ts'
@@ -1032,6 +1033,20 @@ function buildCollectionLayerMap(config: Record<string, any> | null): Map<string
   return map
 }
 
+// Every name a `refTarget` may legitimately use (#1957). BOTH forms are accepted because
+// `refTarget` names the generated DIRECTORY — which is the PLURAL — while the config (and so
+// `buildCollectionLayerMap`) is keyed by the collection name as written. apps/velo configures
+// `location` and its schema correctly says `refTarget: "locations"`; checking only the config
+// key would reject that valid, shipping schema. Verified by scanning every schema in the repo.
+function buildKnownRefTargets(config: Record<string, any> | null): Set<string> {
+  const names = new Set<string>()
+  for (const key of buildCollectionLayerMap(config).keys()) {
+    names.add(key)
+    names.add(toCase(key).plural.toLowerCase())
+  }
+  return names
+}
+
 // Build the core file set every collection gets: components, composable, CRUD
 // endpoints (+ hierarchy/sortable endpoints), queries, schema, types, the layer
 // nuxt.config and README.
@@ -1310,6 +1325,13 @@ async function registerCollectionInAppConfig(params: {
 }
 
 async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, noTests = false }: WriteScaffoldOptions): Promise<void> {
+  // REFUSE an unresolvable relation BEFORE anything is written or installed (#1957). The queries
+  // generator would otherwise fall through its `// or unknown — fall back to existing behavior`
+  // branch and emit an import to a collection that does not exist, turning a local, obvious
+  // mistake into an opaque build failure minutes later (the #1825 chores case). We hold the full
+  // collection map right here, so this is the cheapest possible place to catch it.
+  validateRefTargets(fields, buildKnownRefTargets(config), collection)
+
   const cases = toCase(collection)
   const base = path.resolve('layers', layer, 'collections', cases.plural)
 
