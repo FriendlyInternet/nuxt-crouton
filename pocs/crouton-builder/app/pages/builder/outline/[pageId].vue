@@ -213,9 +213,6 @@ function onUp() {
   setRoot(setAt(root.value, parentPath, moveChild(parent, [], from, to)))
 }
 
-// ── Responsive: open the app's EXISTING slider-based breakpoint author. ──────────
-const showResponsive = ref(false)
-
 // ── Save. ────────────────────────────────────────────────────────────────────────
 const { update } = useCollectionMutation('builderPages')
 const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
@@ -234,7 +231,6 @@ async function save() {
         <div class="truncate text-sm font-semibold">{{ page?.title ?? 'Page' }}</div>
         <div class="text-[11px] text-muted">Outline · <span class="text-primary">beta</span></div>
       </div>
-      <UButton icon="i-lucide-ruler" color="neutral" variant="ghost" size="sm" data-handoff="open-responsive" @click="showResponsive = true">Responsive</UButton>
       <UButton
         :icon="dirty ? 'i-lucide-save' : 'i-lucide-check'"
         :color="dirty ? 'primary' : 'neutral'" :variant="dirty ? 'solid' : 'ghost'" size="sm"
@@ -299,11 +295,15 @@ async function save() {
         </div>
       </section>
 
-      <!-- live preview (structure; per-width lives in the Responsive tool) -->
+      <!-- COMBINED: the app's real slider-based breakpoint author, inline under the structure
+           outline, bound to the SAME tree. Structure (above) + responsive/preview (here) are one
+           surface — not a separate mode. It brings its own width slider, device presets, scaled
+           preview, per-block variants and collapse motion; a structure edit above updates its
+           preview live (shared v-model). Watch its output to mark the page dirty. -->
       <section class="min-h-0 flex-1">
-        <div class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Live preview</div>
-        <div class="overflow-hidden rounded-xl border border-default bg-elevated/30" data-handoff="outline-preview">
-          <CroutonLayoutRenderer :node="root" :interactive="false" />
+        <div class="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Responsive &amp; preview</div>
+        <div class="overflow-hidden rounded-xl border border-default" data-handoff="responsive-inline">
+          <CroutonLayoutBreakpointAuthor :model-value="tree" @update:model-value="(t: LayoutTree) => { tree = t; dirty = true }" />
         </div>
       </section>
     </div>
@@ -321,17 +321,6 @@ async function save() {
       </template>
       <UButton v-if="selectedGroup" icon="i-lucide-ungroup" size="sm" color="neutral" variant="soft" data-handoff="ungroup" @click="ungroup(selectedGroup.path)">Ungroup</UButton>
       <UButton icon="i-lucide-x" size="sm" color="neutral" variant="ghost" class="ml-auto" aria-label="Clear selection" @click="selected = new Set()" />
-    </div>
-
-    <!-- responsive: the EXISTING slider-based breakpoint author, bound to the same tree -->
-    <div v-if="showResponsive" class="absolute inset-0 z-50 flex flex-col bg-default" data-handoff="responsive-overlay">
-      <div class="flex items-center gap-2 border-b border-default px-3 py-2">
-        <div class="flex-1 text-sm font-semibold">Responsive · {{ page?.title }}</div>
-        <UButton icon="i-lucide-check" color="primary" size="sm" data-handoff="responsive-done" @click="showResponsive = false; dirty = true">Done</UButton>
-      </div>
-      <div class="min-h-0 flex-1 overflow-y-auto">
-        <CroutonLayoutBreakpointAuthor v-model="tree" />
-      </div>
     </div>
   </div>
 </template>
