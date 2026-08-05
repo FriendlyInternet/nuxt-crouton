@@ -336,6 +336,7 @@ function onNodeDrag(id: string, pos: { x: number, y: number }) {
     edge: cand.edge,
     armed: cand.key === snapKey ? snapPreview.value?.armed === true : false,
     paneDrop: cand.paneDrop,
+    label: moved.data.label,
   }
   if (cand.key === snapKey) { snapPreview.value = rec; return }
   snapKey = cand.key

@@ -66,6 +66,8 @@ export interface BuilderSnapPreview {
   targetNode: LayoutNode
   edge: PaneDropEdge
   armed: boolean
+  /** Label of the dragged card, so the eased-apart ghost slab (ghost-ease-apart) can name it. */
+  label?: string
   /**
    * When set, this is a DROP-BESIDE-PANE (spec: `pane-drop-beside`) — the dragged card is OVER a
    * composed target and will land beside the pane at `path` on `edge`, not merge onto the card's

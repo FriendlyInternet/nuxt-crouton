@@ -14,11 +14,12 @@
  *
  * `footprint` / `sizeOf` / `BUILDER_BASE_*` are auto-imported from app/utils/builder-layout.
  */
-import { computed, inject, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { computed, inject, provide, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useElementSize } from '@vueuse/core'
 import type { LayoutNode, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
 import { resolveLayoutAtWidth } from '@fyit/crouton-layout/app/utils/layout-responsive'
-import { BUILDER_SNAP_KEY, BUILDER_SET_PAGE_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion } from '~/utils/builder-keys'
+import { applyPaneDrop } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { BUILDER_SNAP_KEY, BUILDER_SET_PAGE_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, BUILDER_GHOST_LABEL_KEY, type BuilderRegion } from '~/utils/builder-keys'
 
 const props = defineProps<{
   data: {
@@ -55,7 +56,7 @@ const size = computed(() => {
 // observer-free CroutonLayoutRenderer — NOT CroutonLayoutResponsiveRenderer, whose container-measure
 // would re-introduce the ResizeObserver that OOM-crashes a transform-scaled Vue Flow node (#1178).
 // (Resolves the structural/size override; authored variants/collapse still preview in the editor.)
-const renderNode = computed<LayoutNode>(() => {
+const baseRenderNode = computed<LayoutNode>(() => {
   const bp = props.data.bp
   if (!bp || !bp.length) return props.data.node
   return resolveLayoutAtWidth({ renderer: 'panes', root: props.data.node, breakpoints: bp }, effWidthPx.value).root
@@ -301,6 +302,22 @@ const paneGuideStyle = computed(() => {
     case 'bottom': return { left: pct(r.left), top: pct(r.top + r.height), width: pct(r.width), height: t, transform: 'translateY(-50%)' }
   }
   return undefined
+})
+
+// ghost-ease-apart (spec: `ghost-ease-apart`) — while a pane-drop preview points at THIS card,
+// splice a translucent placeholder leaf (`__dropghost__` → BuilderGhostPane) into the targeted split
+// at the exact drop slot. Because the card renders through CroutonLayoutRenderer, whose FLIP now
+// covers the observer-free view path, the REAL panes EASE APART to open room for the incoming card
+// (not just a flat edge bar) — and ease back the instant the preview clears. The splice is the SAME
+// applyPaneDrop the on-release merge runs, with the ghost standing in for the dragged node, so the
+// preview matches the result. The thin `ghost-pane[data-edge]` bar (pane-drop-beside hook) stays.
+const GHOST_LEAF: LayoutNode = { type: 'leaf', blockId: '__dropghost__' }
+const ghostLabel = computed(() => snapHere.value?.label ?? null)
+provide(BUILDER_GHOST_LABEL_KEY, ghostLabel)
+const renderNode = computed<LayoutNode>(() => {
+  const pd = snapHere.value?.paneDrop
+  if (pd) return applyPaneDrop(props.data.node, { path: pd.path, edge: pd.edge }, GHOST_LEAF)
+  return baseRenderNode.value
 })
 </script>
 
