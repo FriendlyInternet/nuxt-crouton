@@ -395,8 +395,23 @@ jobs:
               # auto-imports (ref/defineEventHandler/useCrouton/…) resolve. A raw `npx nuxt typecheck`
               # WITHOUT prepare flags every auto-import as undefined — 37 false errors on a clean
               # generated poc (#1863). So no script ⇒ NEUTRAL (safe, non-blocking), never a false fail.
-              # (Reliably typechecking a scriptless fresh poc needs a prepare step — tracked follow-up.)
+              # (A scriptless fresh poc still can't be verified — no script to run prepare — but #1866
+              # makes every scaffold emit the script, so that case is legacy-only.)
               if [ "$HAS_TC" = "1" ] && [ -n "$PKG" ]; then
+                # PREPARE THE ENV (#1872) — the job's `pnpm install --frozen-lockfile` (top of the job)
+                # ran BEFORE pi scaffolded this poc, so the new workspace member was never linked: no
+                # `pocs/<name>/node_modules`, no `.nuxt`. `nuxt typecheck` then can't resolve Nuxt
+                # auto-imports and reports ~37 bogus `TS2304: Cannot find name` on fine code — which the
+                # AUTOIMP guard below (correctly) treats as NEUTRAL, so a good poc lands UNVERIFIED.
+                # Link it now: a NON-frozen install (a new importer changes the lockfile, so `--frozen`
+                # would error) scoped to this app + its workspace deps (`$PKG...`) against the warm store
+                # ⇒ seconds. That link is what lets `nuxt prepare` (run by the typecheck script below)
+                # generate the auto-import types, so the verdict becomes trustworthy — a real PASS on a
+                # fresh poc. Guarded (errexit is on for this step): a failed install just leaves the env
+                # unprepared, and the AUTOIMP→NEUTRAL guard still catches it — never a false FAIL.
+                echo "acceptance: linking $PKG into the workspace before typecheck (#1872)"
+                pnpm install --filter "$PKG..." --no-frozen-lockfile > "$RUNNER_TEMP/acc-install.log" 2>&1 \
+                  || { echo "::warning::acceptance: install for $PKG failed — env may be unprepared (#1872)"; tail -15 "$RUNNER_TEMP/acc-install.log" || true; }
                 echo "acceptance: pnpm --filter $PKG typecheck ($APP_DIR)"
                 if pnpm --filter "$PKG" typecheck > "$RUNNER_TEMP/acc.log" 2>&1; then TC_EXIT=0; else TC_EXIT=$?; fi
               else
