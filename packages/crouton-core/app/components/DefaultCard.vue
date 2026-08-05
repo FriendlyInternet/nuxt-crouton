@@ -197,7 +197,7 @@ const cardUi = computed(() => {
       v-if="!stateless"
       delete
       update
-      class="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+      class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity shrink-0"
       @delete="handleDelete"
       @update="handleEdit"
     />
@@ -256,7 +256,7 @@ const cardUi = computed(() => {
               v-if="!stateless"
               delete
               update
-              class="opacity-0 group-hover:opacity-100 transition-opacity"
+              class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity"
               @delete="handleDelete"
               @update="handleEdit"
             />
@@ -297,7 +297,7 @@ const cardUi = computed(() => {
           v-if="!stateless"
           delete
           update
-          class="opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+          class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity shrink-0"
           @delete="handleDelete"
           @update="handleEdit"
         />

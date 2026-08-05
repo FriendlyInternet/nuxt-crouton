@@ -434,3 +434,337 @@
 .minimal-link.minimal-link--error {
   color: #dc2626 !important;
 }
+
+/* ============================================
+   TABS (#1393) — an underline, nothing else
+   ============================================ */
+
+.minimal-tabs-list {
+  background-color: transparent;
+  border-bottom: var(--minimal-border-width-thick) solid var(--minimal-black);
+  gap: 1rem;
+  padding: 0;
+  border-radius: 0;
+}
+
+.minimal-tabs-trigger {
+  font-family: var(--minimal-font);
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--minimal-gray-500);
+  border: none;
+  border-radius: 0;
+  padding: 0.5rem 0.25rem;
+  transition: color var(--minimal-transition);
+}
+
+.minimal-tabs-trigger:hover {
+  color: var(--minimal-black);
+}
+
+.minimal-tabs-trigger[data-state="active"] {
+  color: var(--minimal-black);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--minimal-black);
+}
+
+.minimal-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — a square and a circle
+   ============================================ */
+
+.minimal-check-box,
+.minimal-radio-box {
+  background-color: var(--minimal-white);
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.minimal-radio-box {
+  border-radius: 9999px;
+}
+
+.minimal-check-indicator {
+  background-color: var(--minimal-black);
+  color: var(--minimal-white);
+}
+
+.minimal-radio-indicator {
+  background-color: var(--minimal-white);
+  border-radius: 9999px;
+}
+
+.minimal-radio-indicator::after {
+  background-color: var(--minimal-black);
+  border-radius: 9999px;
+  width: 50%;
+  height: 50%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a framed note; errors invert
+   ============================================ */
+
+.minimal-alert {
+  font-family: var(--minimal-font);
+  background-color: var(--minimal-white);
+  color: var(--minimal-black);
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.minimal-alert-title {
+  font-weight: 600;
+}
+
+.minimal-alert--primary {
+  background-color: var(--minimal-white);
+}
+
+.minimal-alert--warning {
+  border-style: dashed;
+}
+
+.minimal-alert--error {
+  background-color: var(--minimal-black);
+  color: var(--minimal-white);
+}
+
+.minimal-alert--neutral {
+  border-width: var(--minimal-border-width);
+  border-color: var(--minimal-gray-300);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — switch, modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths)
+   ============================================ */
+
+/* Base geometry token (#1594): minimal is sharp square corners — drive Nuxt
+   UI's radius scale to 0 so calm surfaces (unmarked cards/rows) square too, not
+   just the theme's named variants. Scoped to both activation paths. */
+[data-theme="minimal"],
+.theme-minimal {
+  --ui-radius: 0;
+  /* Complete base palette (#1597): minimal declared no --ui-* surface/text/border
+     tokens, so calm surfaces fell back to Nuxt UI's default slate instead of its
+     own monochrome. Map them onto minimal's greyscale — which .dark flips
+     (#1395) — so both schemes follow from one declaration. */
+  --ui-bg: var(--minimal-white);
+  --ui-bg-muted: var(--minimal-gray-50);
+  --ui-bg-elevated: var(--minimal-gray-100);
+  --ui-bg-accented: var(--minimal-gray-200);
+  --ui-text-dimmed: var(--minimal-gray-400);
+  --ui-text-muted: var(--minimal-gray-500);
+  --ui-text-toned: var(--minimal-gray-600);
+  --ui-text: var(--minimal-gray-800);
+  --ui-text-highlighted: var(--minimal-black);
+  --ui-border: var(--minimal-gray-300);
+  --ui-border-muted: var(--minimal-gray-200);
+  --ui-border-accented: var(--minimal-gray-400);
+}
+
+[data-theme="minimal"] button[role="switch"],
+.theme-minimal button[role="switch"] {
+  border-radius: 9999px;
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  background-color: var(--minimal-white);
+  box-shadow: none;
+  transition: background-color var(--minimal-transition);
+}
+
+[data-theme="minimal"] button[role="switch"][data-state="checked"],
+.theme-minimal button[role="switch"][data-state="checked"] {
+  background-color: var(--minimal-black);
+}
+
+[data-theme="minimal"] button[role="switch"] > span,
+.theme-minimal button[role="switch"] > span {
+  background-color: var(--minimal-black);
+  box-shadow: none;
+}
+
+[data-theme="minimal"] button[role="switch"][data-state="checked"] > span,
+.theme-minimal button[role="switch"][data-state="checked"] > span {
+  background-color: var(--minimal-white);
+}
+
+[data-theme="minimal"] [role="dialog"][data-slot="content"],
+.theme-minimal [role="dialog"][data-slot="content"] {
+  background-color: var(--minimal-white);
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-theme="minimal"] [role="dialog"] [data-slot="title"],
+.theme-minimal [role="dialog"] [data-slot="title"] {
+  font-family: var(--minimal-font);
+  color: var(--minimal-black);
+  font-weight: 600;
+}
+
+[data-theme="minimal"] [data-slot="overlay"],
+.theme-minimal [data-slot="overlay"] {
+  background-color: rgb(0 0 0 / 0.35);
+  backdrop-filter: none;
+}
+
+[data-theme="minimal"] li[data-slot="base"],
+.theme-minimal li[data-slot="base"] {
+  background-color: var(--minimal-white);
+  border: var(--minimal-border-width-thick) solid var(--minimal-black);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+[data-theme="minimal"] li[data-slot="base"] [data-slot="title"],
+.theme-minimal li[data-slot="base"] [data-slot="title"] {
+  font-family: var(--minimal-font);
+  color: var(--minimal-black);
+  font-weight: 600;
+}
+
+[data-theme="minimal"] nav[data-slot="root"] button,
+.theme-minimal nav[data-slot="root"] button {
+  font-family: var(--minimal-font);
+  background-color: var(--minimal-white);
+  color: var(--minimal-black);
+  border: var(--minimal-border-width) solid var(--minimal-gray-300);
+  border-radius: 0;
+  box-shadow: none;
+  transition: border-color var(--minimal-transition);
+}
+
+[data-theme="minimal"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-minimal nav[data-slot="root"] button:hover:not(:disabled) {
+  border-color: var(--minimal-black);
+}
+
+[data-theme="minimal"] nav[data-slot="root"] button[data-selected],
+.theme-minimal nav[data-slot="root"] button[data-selected] {
+  background-color: var(--minimal-black);
+  color: var(--minimal-white);
+  border-color: var(--minimal-black);
+}
+
+/* ============================================
+   CALENDAR (#1458) — pure geometry, square cells, inversion for the
+   selected day. Named variant (minimal-cal-*); selected/today state is
+   ours to supply.
+   ============================================ */
+
+.minimal-cal-heading {
+  color: var(--minimal-black);
+  font-weight: 600;
+}
+
+.minimal-cal-head {
+  color: var(--minimal-muted);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  border-radius: 0;
+}
+
+.minimal-cal-cell {
+  color: var(--minimal-black);
+  border: 1px solid transparent;
+  border-radius: 0;
+  transition: var(--minimal-transition);
+}
+
+.minimal-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.minimal-cal-cell[data-highlighted] {
+  border-color: var(--minimal-black);
+}
+
+.minimal-cal-cell[data-selected] {
+  background-color: var(--minimal-black);
+  color: var(--minimal-white);
+}
+
+.minimal-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--minimal-black);
+  border-width: var(--minimal-border-width-thick);
+}
+
+.minimal-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker. No variant hook;
+   scoped to both activation paths. Slider anchors on [data-slider-impl]
+   (unique to USlider). Thin black lines, square, no shadow.
+   ============================================ */
+
+[data-theme="minimal"] [data-slider-impl] [data-slot="track"],
+.theme-minimal [data-slider-impl] [data-slot="track"] {
+  background-color: var(--minimal-white);
+  border: 1px solid var(--minimal-black);
+  border-radius: 0;
+}
+
+[data-theme="minimal"] [data-slider-impl] [data-slot="range"],
+.theme-minimal [data-slider-impl] [data-slot="range"] {
+  background-color: var(--minimal-black);
+  border-radius: 0;
+}
+
+[data-theme="minimal"] [data-slider-impl] [data-slot="thumb"],
+.theme-minimal [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--minimal-black);
+  border-radius: 0;
+  --tw-ring-color: var(--minimal-white);
+}
+
+[data-theme="minimal"] [data-slot="picker"] [data-slot="selector"],
+.theme-minimal [data-slot="picker"] [data-slot="selector"],
+[data-theme="minimal"] [data-color-picker-track],
+.theme-minimal [data-color-picker-track] {
+  border: 1px solid var(--minimal-black);
+  border-radius: 0;
+}
+
+[data-theme="minimal"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-minimal [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="minimal"] [data-slot="selectorThumb"],
+.theme-minimal [data-slot="selectorThumb"],
+[data-theme="minimal"] [data-slot="trackThumb"],
+.theme-minimal [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--minimal-black);
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — the negative, DESIGNED for the same geometry:
+   white lines on black, grays re-stepped for the dark page. Activated
+   by the colorMode class on <html>.
+   ============================================ */
+
+.dark {
+  --minimal-white: #121212;
+  --minimal-black: #f2f2f2;
+  --minimal-gray-50: #171717;
+  --minimal-gray-100: #1f1f1f;
+  --minimal-gray-200: #292929;
+  --minimal-gray-300: #404040;
+  --minimal-gray-400: #737373;
+  --minimal-gray-500: #a3a3a3;
+  --minimal-gray-600: #c4c4c4;
+  --minimal-gray-700: #d9d9d9;
+  --minimal-gray-800: #e8e8e8;
+  --minimal-gray-900: #f5f5f5;
+}

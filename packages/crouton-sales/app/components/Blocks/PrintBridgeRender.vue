@@ -150,25 +150,25 @@ onUnmounted(() => {
 <template>
   <div class="print-bridge-block">
     <!-- Editor didn't pick an event -->
-    <div
+    <UAlert
       v-if="!eventSlug"
-      class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-    >
-      <UIcon name="i-lucide-printer" class="w-6 h-6 mx-auto mb-2 text-muted" />
-      {{ t('sales.block.noEventPicked') }}
-    </div>
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-printer"
+      :title="t('sales.block.noEventPicked')"
+    />
 
     <!-- Picked event no longer resolves -->
-    <div
+    <UAlert
       v-else-if="eventNotFound"
-      class="bg-muted/80 rounded-3xl border border-dashed border-default p-6 text-center text-sm text-muted"
-    >
-      <UIcon name="i-lucide-printer" class="w-6 h-6 mx-auto mb-2 text-muted" />
-      {{ t('sales.blocks.printBridge.ui.eventNotFound') }}
-    </div>
+      color="neutral"
+      variant="soft"
+      icon="i-lucide-printer"
+      :title="t('sales.blocks.printBridge.ui.eventNotFound')"
+    />
 
     <!-- The bridge -->
-    <div v-else class="rounded-3xl overflow-hidden bg-elevated/60 border border-default p-5">
+    <UCard>
       <header class="flex items-center justify-between mb-4">
         <div class="flex items-center gap-2">
           <UIcon name="i-lucide-printer" class="size-5 text-primary" />
@@ -225,7 +225,7 @@ onUnmounted(() => {
           </UButton>
         </div>
       </TransitionGroup>
-    </div>
+    </UCard>
   </div>
 </template>
 

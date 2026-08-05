@@ -68,10 +68,16 @@ chose a different design. Four rules now prevent that:
    runs** — the orchestrator posts the proposed tree, @mentions `@pmcp`, blocks. Plus the
    epic→`main` PR is the integration review. Low-risk epics (`review:auto`) skip the gate.
 
-4. **Block, don't improvise (#352).** A worker that finds a prerequisite missing (a
+4. **Block, don't improvise (#352, #1229).** A worker that finds a prerequisite missing (a
    package/table/symbol a sibling owns, not yet merged) **stops and waits** — it never
    scaffolds the missing thing itself, and never silently diverges from the epic's stated
-   design invariants. Missing prerequisite = blocker, not a DIY.
+   design invariants. Missing prerequisite = blocker, not a DIY. **The same rule applies when
+   the *documented* path fails unexpectedly** — a tool errors (e.g. `crouton init` → *"directory
+   already exists"*), a generator refuses, a step behaves unlike its docs: **STOP**, comment the
+   exact error + what you tried + what you'd need, `@mention @pmcp`, set `status:blocked`, stop —
+   do **NOT** improvise an alternative or hand-roll what the tool was supposed to do. Improvising
+   turned #1213's one-command scaffold into **109 turns / $4.14** of off-standard work that hid the
+   real bug. An unexpected failure of the *intended* path is a stop signal, not a puzzle to solve.
 
 ## `.github/workflows/` boundary — embed-patch, don't block (#1076)
 
@@ -145,6 +151,12 @@ If a leaf's work needs a workflow-file change (new trigger, path filter, job):
        **blocks the create without it** (#297).
 2. **Launch the orchestrator.** Spawn it via the `Agent` tool:
    - `subagent_type: "task-orchestrator"`
+   - **`run_in_background: false` — MANDATORY. Spawn it SYNCHRONOUSLY and wait for it to finish.**
+     The `Agent` tool defaults to background; in the one-shot CI job (`decompose-on-issue.yml`) a
+     backgrounded orchestrator is **killed when the job ends**, so the sub-issue tree never persists
+     and the artifact-gate fails the run (the #1209/#1210 fire-and-forget). **Never** end your turn
+     with "orchestration is running in the background / I'll be notified" — you will **not** be
+     re-invoked here. Hold until the orchestrator returns (sub-issues created + epic branch pushed).
    - prompt: `{ epic_issue_number: <epic number>, depth: 0 }` + a short restatement of the
      task so it doesn't need an extra read.
    - **If `#NN` is a CHILD issue (it has a `parent_issue_url`), not an epic** — e.g. someone

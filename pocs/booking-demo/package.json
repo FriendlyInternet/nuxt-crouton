@@ -11,6 +11,7 @@
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "cf:deploy": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler --cwd .output deploy && node scripts/sync-wrangler-ids.mjs && npx wrangler d1 migrations apply booking-demo-db --remote",
     "cf:staging": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && npx wrangler d1 migrations apply booking-demo-staging-db --env staging --remote",
+    "cf:version": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler versions upload --config .output/server/wrangler.json --env staging",
     "sync:ids": "node scripts/sync-wrangler-ids.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npx wrangler d1 migrations apply booking-demo-db --local",
@@ -23,7 +24,6 @@
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-layout": "workspace:*",
-    "@libsql/client": "^0.17.0",
     "drizzle-orm": "^0.45.1",
     "nuxt": "^4.2.2",
     "vue": "^3.5.26",
@@ -32,7 +32,6 @@
   "devDependencies": {
     "@fyit/crouton-cli": "workspace:*",
     "@fyit/crouton-devtools": "workspace:*",
-    "@fyit/crouton-feedback": "workspace:*",
     "drizzle-kit": "^0.31.0",
     "wrangler": "^4.64.0"
   }

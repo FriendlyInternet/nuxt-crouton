@@ -1,0 +1,5 @@
+{
+  "title": { "type": "string", "meta": { "required": true, "maxLength": 200 } },
+  "url": { "type": "string", "meta": { "required": true, "maxLength": 2048 } },
+  "note": { "type": "text", "meta": { "required": false } }
+}

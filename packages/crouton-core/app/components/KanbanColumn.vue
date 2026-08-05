@@ -231,7 +231,7 @@ const crouton = useCrouton()
           </div>
 
           <!-- Action buttons (show on hover) -->
-          <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div class="absolute top-2 right-2 opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
             <CroutonItemButtonsMini
               delete
               update

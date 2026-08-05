@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import { bucketPrintStatuses } from '../../../shared/utils/print-status'
 
 const props = defineProps<{
   event: SalesEvent
@@ -48,29 +49,51 @@ const selectedPrinterId = ref<string | null>(null)
 const selectedPrintStatus = ref<string | null>(null)
 
 // All filters apply server-side — the list is paginated, so client-side
-// filtering would miss matches on other pages. Printer filters go through
-// an EXISTS over the order's print jobs.
-const ordersQuery = computed(() => {
-  const q: Record<string, string> = { eventId: props.event.id }
-  if (selectedHelperName.value) q.owner = selectedHelperName.value
-  if (selectedClientId.value) q.clientId = selectedClientId.value
-  if (selectedPrinterId.value) q.printerId = selectedPrinterId.value
-  if (selectedPrintStatus.value) q.printStatus = selectedPrintStatus.value
-  return q
+// filtering would miss matches on other pages. Helper/printer/status filters
+// need logic the generic CRUD generator can't produce (printer/status match the
+// shared crouton-printing queue via EXISTS), so this hits the package-owned
+// filtered-orders endpoint rather than the generated salesOrders collection —
+// that keeps the filtering correct without per-app patches (drop-in).
+const ordersPageSize = 25
+const ordersPage = ref(1)
+
+// Narrow the list to the backlog. Declared here because `ordersUrl` reads it.
+const outstandingOnly = ref(false)
+
+const ordersUrl = computed(() => {
+  const params = new URLSearchParams({ page: String(ordersPage.value), pageSize: String(ordersPageSize) })
+  if (selectedHelperName.value) params.set('owner', selectedHelperName.value)
+  if (selectedClientId.value) params.set('clientId', selectedClientId.value)
+  if (selectedPrinterId.value) params.set('printerId', selectedPrinterId.value)
+  if (selectedPrintStatus.value) params.set('printStatus', selectedPrintStatus.value)
+  if (outstandingOnly.value) params.set('outstanding', '1')
+  return `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/orders?${params}`
 })
 
 // Server pagination: events run into hundreds of orders, and this view polls
-// every 2s — fetch only the newest page (server orders by createdAt desc).
-const {
-  items: orders,
-  pending: ordersPending,
-  refresh: refreshOrders,
-  page: ordersPage,
-  pageCount: ordersPageCount
-} = await useCollectionQuery(
-  'salesOrders',
-  { query: ordersQuery, watch: true, pagination: { pageSize: 25 } }
+// every 2s — fetch only the current page (server orders by createdAt desc).
+// useFetch tracks the reactive URL, so a page/filter change refetches.
+const { data: ordersData, pending: ordersPending, refresh: refreshOrders } = await useFetch<{ items: any[], total: number, outstanding: number }>(
+  ordersUrl,
+  { default: () => ({ items: [], total: 0, outstanding: 0 }) }
 )
+const orders = computed(() => ordersData.value?.items || [])
+// "Still waiting" (#1763): orders not cancelled and not yet handed over. The
+// server computes it OUTSIDE the list filters, so it stays the event's real
+// backlog even while the table below is filtered down to one helper.
+const outstanding = computed(() => ordersData.value?.outstanding ?? 0)
+
+// Click the backlog to narrow the list to exactly those orders. This rides the
+// normal filter path (server-side, resets to page 1), so it composes with the
+// helper/client/printer filters rather than fighting them. The NUMBER itself
+// stays put — it is computed outside every filter by design (#1763), so it
+// keeps reading the true backlog while the list shows a slice of it.
+function toggleOutstandingOnly() {
+  outstandingOnly.value = !outstandingOnly.value
+  ordersPage.value = 1
+}
+
+const ordersPageCount = computed(() => Math.max(1, Math.ceil((ordersData.value?.total ?? 0) / ordersPageSize)))
 
 // Filter change ⇒ back to page 1 (the old page may not exist in the new set).
 watch([selectedHelperName, selectedClientId, selectedPrinterId, selectedPrintStatus], () => {
@@ -179,20 +202,65 @@ async function retryPrintJob(jobId: string) {
   }
 }
 
-// Combined worst status across a set of jobs (status enum: 0=pending,
-// 1=printing, 2=done, 9=error). Red wins, then orange (busy), then green;
-// no jobs at all ⇒ grey.
+// Whole-order Reprint (OrderItems emits the orderId). Same team-authed endpoint,
+// keyed by { orderId }: it resets the order's existing done/failed jobs back to
+// pending so the transport re-drains them. Refresh flips the LEDs to Printing.
+async function reprintOrder(orderId: string) {
+  try {
+    await $fetch(
+      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/printqueues/retry-failed`,
+      { method: 'POST', body: { orderId } }
+    )
+    await refreshPrintJobs()
+    retryNotify.success(t('sales.orders.reprintQueued', 'Reprint queued'))
+  }
+  catch {
+    retryNotify.error(t('sales.orders.reprintError', 'Could not reprint this order'))
+  }
+}
+
+// Hard-delete one order (team-admin endpoint cascades to its items + print
+// jobs). Fire the salesOrders crouton:mutation so every listener refreshes —
+// notably the POS client picker's tab totals — then refresh this list + the
+// print-queue poll and drop the (now-gone) row from the expanded set.
+const nuxtApp = useNuxtApp()
+async function deleteOrder(orderId: string) {
+  try {
+    await $fetch(
+      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/orders/${orderId}`,
+      { method: 'DELETE' }
+    )
+    await nuxtApp.hooks.callHook('crouton:mutation', {
+      operation: 'delete',
+      collection: 'salesOrders',
+      itemIds: [orderId],
+      timestamp: Date.now()
+    })
+    if (expandedIds.value.has(orderId)) {
+      const next = new Set(expandedIds.value)
+      next.delete(orderId)
+      expandedIds.value = next
+    }
+    await Promise.all([refreshOrders(), refreshPrintJobs()])
+  }
+  catch {
+    retryNotify.error(t('sales.orders.deleteError', 'Could not delete order'))
+  }
+}
+
+// Map the shared worst-status bucket (failed > busy > done; none ⇒ no jobs) to
+// this row's LED dot. Red wins, then orange (busy), then green; none ⇒ grey.
 function ledFromStatuses(statuses: string[]) {
-  if (!statuses.length) {
-    return { class: 'bg-accented', label: t('sales.printQueue.noTicket', 'No ticket') }
+  switch (bucketPrintStatuses(statuses)) {
+    case 'failed':
+      return { class: 'bg-error', label: t('sales.printQueue.statusError', 'Error') }
+    case 'busy':
+      return { class: 'bg-warning animate-pulse', label: t('sales.printQueue.statusPrinting', 'Printing') }
+    case 'done':
+      return { class: 'bg-success', label: t('sales.printQueue.statusDone', 'Done') }
+    default:
+      return { class: 'bg-accented', label: t('sales.printQueue.noTicket', 'No ticket') }
   }
-  if (statuses.includes('9')) {
-    return { class: 'bg-error', label: t('sales.printQueue.statusError', 'Error') }
-  }
-  if (statuses.some(s => s === '0' || s === '1')) {
-    return { class: 'bg-warning animate-pulse', label: t('sales.printQueue.statusPrinting', 'Printing') }
-  }
-  return { class: 'bg-success', label: t('sales.printQueue.statusDone', 'Done') }
 }
 
 // One LED per order row, across every printer's jobs.
@@ -330,6 +398,35 @@ function toggleExpand(id: string) {
 
 <template>
   <div class="space-y-4 @container">
+    <!-- The backlog, stated plainly. Deliberately ABOVE the filters: it is the
+         one number that does NOT follow them, and putting it below would imply
+         it did. Zero is worth showing too — "nothing waiting" is the answer
+         someone walked over to get. -->
+    <UButton
+      v-if="outstanding > 0"
+      :color="outstandingOnly ? 'warning' : 'neutral'"
+      :variant="outstandingOnly ? 'subtle' : 'ghost'"
+      size="sm"
+      icon="i-lucide-hourglass"
+      :label="t('sales.workspace.outstanding', { count: outstanding })"
+      :aria-pressed="outstandingOnly"
+      :title="outstandingOnly ? t('sales.workspace.outstandingFilterClear') : t('sales.workspace.outstandingFilter')"
+      class="-ms-2"
+      :ui="{ leadingIcon: outstandingOnly ? '' : 'text-warning' }"
+      @click="toggleOutstandingOnly"
+    >
+      <template #trailing>
+        <UIcon v-if="outstandingOnly" name="i-lucide-x" class="size-3.5 opacity-70" />
+      </template>
+    </UButton>
+
+    <!-- Nothing outstanding: a statement, not a control — there is no slice to
+         filter to, so offering a button would be a dead end. -->
+    <div v-else class="flex items-center gap-2 text-sm text-muted">
+      <UIcon name="i-lucide-check-check" class="size-4 text-success" />
+      {{ t('sales.workspace.outstandingNone') }}
+    </div>
+
     <!-- Filters live behind a toggle (in the pane header when the parent
          controls it); the chip marks a collapsed-but-active filter so a
          filtered list is never mistaken for the full one. When header-
@@ -346,194 +443,202 @@ function toggleExpand(id: string) {
         />
       </UChip>
       <template #content>
-        <!-- Container-responsive: 1 column in a narrow pane, 2 side by side
-             once the resizable pane has room. -->
-        <div class="rounded-lg bg-elevated/60 border border-default p-3 space-y-2" :class="headerControlled ? '' : 'mt-2'">
-          <div class="grid grid-cols-1 @md:grid-cols-2 gap-2">
-            <USelectMenu
-              v-model="selectedHelperName"
-              :items="helperOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allHelpers')"
-              icon="i-lucide-user"
-              size="sm"
-              class="w-full"
-              :searchable="true"
-            />
-            <USelectMenu
-              v-if="clientFilterEnabled"
-              v-model="selectedClientId"
-              :items="clientOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allClients')"
-              icon="i-lucide-users"
-              size="sm"
-              class="w-full"
-              :searchable="true"
-            />
-            <USelectMenu
-              v-if="printerList.length"
-              v-model="selectedPrinterId"
-              :items="printerOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allPrinters')"
-              icon="i-lucide-printer"
-              size="sm"
-              class="w-full"
-            />
-            <USelectMenu
-              v-if="printerList.length"
-              v-model="selectedPrintStatus"
-              :items="printStatusOptions"
-              value-key="id"
-              :placeholder="t('sales.workspace.allPrintStatuses')"
-              icon="i-lucide-circle-dot"
-              size="sm"
-              class="w-full"
-            />
+        <!-- Sticky filter bar (#307): the filters ride a CroutonSubBar pinned
+             under the pane header, so they stay reachable while the orders list
+             scrolls. Selects stack on a narrow pane and flow to columns when
+             there's room (@container). -->
+        <CroutonSubBar class="p-2 px-4" sticky auto-hide flush :class="headerControlled ? '' : 'mt-2'">
+          <div class="w-full space-y-2">
+            <div class="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-4">
+              <USelectMenu
+                v-model="selectedHelperName"
+                :items="helperOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allHelpers')"
+                icon="i-lucide-user"
+                size="sm"
+                class="w-full"
+                :searchable="true"
+              />
+              <USelectMenu
+                v-if="clientFilterEnabled"
+                v-model="selectedClientId"
+                :items="clientOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allClients')"
+                icon="i-lucide-users"
+                size="sm"
+                class="w-full"
+                :searchable="true"
+              />
+              <USelectMenu
+                v-if="printerList.length"
+                v-model="selectedPrinterId"
+                :items="printerOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allPrinters')"
+                icon="i-lucide-printer"
+                size="sm"
+                class="w-full"
+              />
+              <USelectMenu
+                v-if="printerList.length"
+                v-model="selectedPrintStatus"
+                :items="printStatusOptions"
+                value-key="id"
+                :placeholder="t('sales.workspace.allPrintStatuses')"
+                icon="i-lucide-circle-dot"
+                size="sm"
+                class="w-full"
+              />
+            </div>
+            <div v-if="hasActiveFilters" class="flex justify-end">
+              <UButton
+                :label="t('sales.workspace.resetFilters')"
+                icon="i-lucide-rotate-ccw"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                @click="resetFilters"
+              />
+            </div>
           </div>
-          <div v-if="hasActiveFilters" class="flex justify-end">
-            <UButton
-              :label="t('sales.workspace.resetFilters')"
-              icon="i-lucide-rotate-ccw"
-              color="neutral"
-              variant="ghost"
-              size="xs"
-              @click="resetFilters"
-            />
-          </div>
-        </div>
+        </CroutonSubBar>
       </template>
     </UCollapsible>
     <!-- Loading state only before first data — the 5s poll flips `pending`
          on every refresh and would otherwise flicker the whole list. -->
-    <div v-if="ordersPending && orderRows.length === 0" class="p-6 text-center text-muted">
-      {{ t('sales.workspace.loadingOrders') }}
-    </div>
-    <ul
-      v-else-if="orderRows.length > 0"
-      role="list"
-      class="divide-y divide-default rounded-lg border border-default overflow-hidden"
-    >
-      <li
-        v-for="order in orderRows"
-        :key="order.id"
-        class="bg-default"
-        :class="order.isPersonnel ? 'border-s-2 border-s-warning' : ''"
+    <div class="px-4">
+      <div v-if="ordersPending && orderRows.length === 0" class="p-6 text-center text-muted">
+        {{ t('sales.workspace.loadingOrders') }}
+      </div>
+      <ul
+        v-else-if="orderRows.length > 0"
+        role="list"
+        class="divide-y divide-default rounded-lg border border-default overflow-hidden"
       >
-        <div
-          class="group relative overflow-hidden hover:bg-elevated/50 transition-colors cursor-pointer"
-          @click="toggleExpand(order.id)"
+        <li
+          v-for="order in orderRows"
+          :key="order.id"
+          class="bg-default"
+          :class="order.isPersonnel ? 'border-s-2 border-s-warning' : ''"
         >
-          <!-- Expand chevron slides in from the left edge (stays out while
-               the row is expanded), pushing the content inward — same
-               affordance pattern as the POS product cards. -->
           <div
-            class="absolute left-0 top-0 bottom-0 z-10 flex items-center ps-3
-                   transition-transform duration-200 ease-out"
-            :class="expandedIds.has(order.id) ? 'translate-x-0' : '-translate-x-full group-hover:translate-x-0 pointer-coarse:translate-x-0'"
+            class="group relative overflow-hidden hover:bg-elevated/50 transition-colors cursor-pointer"
+            @click="toggleExpand(order.id)"
           >
-            <UIcon
-              name="i-lucide-chevron-right"
-              class="shrink-0 text-dimmed transition-transform"
-              :class="expandedIds.has(order.id) ? 'rotate-90' : ''"
-            />
-          </div>
-
-          <div
-            class="flex items-center gap-3 px-3 py-2.5"
-            :class="expandedIds.has(order.id) ? 'ps-9' : 'group-hover:ps-9 pointer-coarse:ps-9'"
-          >
-          <!-- Staff orders: warning edge bar on the row (li), no badge -->
-          <span class="shrink-0 font-mono font-semibold tabular-nums text-muted">
-            #{{ order.eventOrderNumber ?? '—' }}
-          </span>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2">
-              <span class="font-medium truncate">{{ order.clientName || t('sales.orders.client') }}</span>
-            </div>
-            <p v-if="order.owner" class="text-xs text-muted truncate flex items-center gap-1">
-              <UIcon name="i-lucide-user" class="shrink-0" />
-              {{ order.owner }}
-            </p>
-          </div>
-          <!-- One LED per order: the combined worst status across all printers
-               (red wins, then orange, then green; grey = no tickets at all).
-               Hover popover breaks it down per printer. -->
-          <div v-if="printerList.length" class="shrink-0 flex items-center" @click.stop>
-            <UPopover mode="hover" :open-delay="150">
-              <span
-                class="block size-2.5 rounded-full transition-colors"
-                :class="orderLed(order.id).class"
+            <!-- Expand chevron slides in from the left edge (stays out while
+                 the row is expanded), pushing the content inward — same
+                 affordance pattern as the POS product cards. -->
+            <div
+              class="absolute left-0 top-0 bottom-0 z-10 flex items-center ps-3
+                     transition-transform duration-200 ease-out"
+              :class="expandedIds.has(order.id) ? 'translate-x-0' : '-translate-x-full group-hover:translate-x-0 pointer-coarse:translate-x-0'"
+            >
+              <UIcon
+                name="i-lucide-chevron-right"
+                class="shrink-0 text-dimmed transition-transform"
+                :class="expandedIds.has(order.id) ? 'rotate-90' : ''"
               />
-              <template #content>
-                <div class="p-3 space-y-3 min-w-52 max-w-72">
-                  <div v-for="printer in popoverPrinters(order.id)" :key="printer.id" class="space-y-1">
-                    <div class="flex items-center justify-between gap-3">
-                      <p class="text-sm font-semibold flex items-center gap-1.5 min-w-0">
-                        <UTooltip :text="printerLed(order.id, printer.id).label">
-                          <span
-                            class="size-2 rounded-full shrink-0 transition-colors"
-                            :class="printerLed(order.id, printer.id).class"
-                          />
-                        </UTooltip>
-                        <UIcon name="i-lucide-printer" class="shrink-0 text-muted" />
-                        <span class="truncate">{{ printer.title }}</span>
-                      </p>
-                      <span v-if="printerTime(order.id, printer.id)" class="text-xs text-dimmed tabular-nums">
-                        {{ printerTime(order.id, printer.id) }}
-                      </span>
+            </div>
+
+            <div
+              class="flex items-center gap-3 px-3 py-2.5"
+              :class="expandedIds.has(order.id) ? 'ps-9' : 'group-hover:ps-9 pointer-coarse:ps-9'"
+            >
+            <!-- Staff orders: warning edge bar on the row (li), no badge -->
+            <span class="shrink-0 font-mono font-semibold tabular-nums text-muted">
+              #{{ order.eventOrderNumber ?? '—' }}
+            </span>
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="font-medium truncate">{{ order.clientName || t('sales.orders.client') }}</span>
+              </div>
+              <p v-if="order.owner" class="text-xs text-muted truncate flex items-center gap-1">
+                <UIcon name="i-lucide-user" class="shrink-0" />
+                {{ order.owner }}
+              </p>
+            </div>
+            <!-- One LED per order: the combined worst status across all printers
+                 (red wins, then orange, then green; grey = no tickets at all).
+                 Hover popover breaks it down per printer. -->
+            <div v-if="printerList.length" class="shrink-0 flex items-center" @click.stop>
+              <UPopover mode="hover" :open-delay="150">
+                <span
+                  class="block size-2.5 rounded-full transition-colors"
+                  :class="orderLed(order.id).class"
+                />
+                <template #content>
+                  <div class="p-3 space-y-3 min-w-52 max-w-72">
+                    <div v-for="printer in popoverPrinters(order.id)" :key="printer.id" class="space-y-1">
+                      <div class="flex items-center justify-between gap-3">
+                        <p class="text-sm font-semibold flex items-center gap-1.5 min-w-0">
+                          <UTooltip :text="printerLed(order.id, printer.id).label">
+                            <span
+                              class="size-2 rounded-full shrink-0 transition-colors"
+                              :class="printerLed(order.id, printer.id).class"
+                            />
+                          </UTooltip>
+                          <UIcon name="i-lucide-printer" class="shrink-0 text-muted" />
+                          <span class="truncate">{{ printer.title }}</span>
+                        </p>
+                        <span v-if="printerTime(order.id, printer.id)" class="text-xs text-dimmed tabular-nums">
+                          {{ printerTime(order.id, printer.id) }}
+                        </span>
+                      </div>
+                      <template v-for="job in printerJobs(order.id, printer.id)" :key="job.id">
+                        <p v-if="String(job.status ?? '') === '9' && job.errorMessage" class="text-xs text-error">
+                          {{ jobError(job) }}
+                        </p>
+                      </template>
                     </div>
-                    <template v-for="job in printerJobs(order.id, printer.id)" :key="job.id">
-                      <p v-if="String(job.status ?? '') === '9' && job.errorMessage" class="text-xs text-error">
-                        {{ jobError(job) }}
-                      </p>
-                    </template>
+                    <!-- Order generated no tickets at all (grey LED): explain once -->
+                    <p v-if="!popoverPrinters(order.id).length" class="text-xs text-muted">
+                      {{ t('sales.printQueue.noTicketForPrinter') }}
+                    </p>
                   </div>
-                  <!-- Order generated no tickets at all (grey LED): explain once -->
-                  <p v-if="!popoverPrinters(order.id).length" class="text-xs text-muted">
-                    {{ t('sales.printQueue.noTicketForPrinter') }}
-                  </p>
-                </div>
-              </template>
-            </UPopover>
+                </template>
+              </UPopover>
+            </div>
+            </div>
           </div>
-          </div>
-        </div>
-        <SalesEventWorkspaceOrderItems
-          v-if="expandedIds.has(order.id)"
-          :order-id="order.id"
-          :remarks="order.overallRemarks"
-          :location-remarks="order.locationRemarks"
-          :locations="locations || []"
-          :print-jobs="jobsByOrder.get(order.id) || []"
-          :has-printers="printerList.length > 0"
-          @retry-job="retryPrintJob"
+          <SalesEventWorkspaceOrderItems
+            v-if="expandedIds.has(order.id)"
+            :order-id="order.id"
+            :remarks="order.overallRemarks"
+            :location-remarks="order.locationRemarks"
+            :locations="locations || []"
+            :print-jobs="jobsByOrder.get(order.id) || []"
+            :has-printers="printerList.length > 0"
+            @retry-job="retryPrintJob"
+            @reprint-order="reprintOrder"
+            @delete-order="deleteOrder"
+          />
+        </li>
+      </ul>
+      <!-- Same empty-state styling as the cart's "empty" block (Client/Cart.vue) -->
+      <div v-else class="p-12 flex flex-col items-center justify-center gap-3 text-muted">
+        <UIcon name="i-lucide-receipt" class="size-10 opacity-40" />
+        <p class="text-sm">{{ hasActiveFilters ? t('sales.workspace.noOrdersFiltered') : t('sales.workspace.noOrders') }}</p>
+      </div>
+      <!-- Older orders: newest page is the register's working set; history on demand -->
+      <div v-if="ordersPageCount > 1" class="flex items-center justify-center gap-3 pt-1">
+        <UButton
+          variant="ghost"
+          size="xs"
+          icon="i-lucide-chevron-left"
+          :disabled="ordersPage <= 1"
+          @click="ordersPage--"
         />
-      </li>
-    </ul>
-    <!-- Same empty-state styling as the cart's "empty" block (Client/Cart.vue) -->
-    <div v-else class="p-12 flex flex-col items-center justify-center gap-3 text-muted">
-      <UIcon name="i-lucide-receipt" class="size-10 opacity-40" />
-      <p class="text-sm">{{ hasActiveFilters ? t('sales.workspace.noOrdersFiltered') : t('sales.workspace.noOrders') }}</p>
-    </div>
-    <!-- Older orders: newest page is the register's working set; history on demand -->
-    <div v-if="ordersPageCount > 1" class="flex items-center justify-center gap-3 pt-1">
-      <UButton
-        variant="ghost"
-        size="xs"
-        icon="i-lucide-chevron-left"
-        :disabled="ordersPage <= 1"
-        @click="ordersPage--"
-      />
-      <span class="text-xs text-muted tabular-nums">{{ ordersPage }} / {{ ordersPageCount }}</span>
-      <UButton
-        variant="ghost"
-        size="xs"
-        icon="i-lucide-chevron-right"
-        :disabled="ordersPage >= ordersPageCount"
-        @click="ordersPage++"
-      />
+        <span class="text-xs text-muted tabular-nums">{{ ordersPage }} / {{ ordersPageCount }}</span>
+        <UButton
+          variant="ghost"
+          size="xs"
+          icon="i-lucide-chevron-right"
+          :disabled="ordersPage >= ordersPageCount"
+          @click="ordersPage++"
+        />
+      </div>
     </div>
   </div>
 </template>

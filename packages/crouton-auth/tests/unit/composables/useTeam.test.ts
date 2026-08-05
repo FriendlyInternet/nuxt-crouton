@@ -766,4 +766,48 @@ describe('useTeam', () => {
       expect(currentTeam.value?.isDefault).toBe(false)
     })
   })
+
+  describe('teams source (#1703)', () => {
+    // `useListOrganizations` is a raw nanostore from better-auth's vanilla
+    // client, and nothing in the app ever subscribes to it — so it is never
+    // mounted and its `.value` stays `undefined` in production. `teams` is
+    // therefore ALWAYS `fallbackTeams` (the reactive, SSR-populated useState).
+    //
+    // This pins that we deliberately read the reactive source, so deleting the
+    // dead `organizationsData` branch in useTeam.ts is provably behaviour-
+    // preserving. It is also why the `it.todo`s above could never be made to
+    // pass by mocking harder.
+    it('reads fallbackTeams even when the organizations atom exposes other data', () => {
+      const original = mockAuthClient.useListOrganizations
+
+      // An atom that *does* expose data — the state that can never occur in
+      // production, and that we must not prefer over the reactive source.
+      mockAuthClient.useListOrganizations = {
+        value: {
+          data: [{ id: 'stale-org', name: 'Stale Org', slug: 'stale', createdAt: '2024-01-01T00:00:00Z' }]
+        }
+      } as unknown as typeof original
+
+      try {
+        const fallback = useState<Team[]>('crouton-auth-fallback-teams', () => [])
+        fallback.value = [{
+          id: 'org-1',
+          name: 'Test 1',
+          slug: 'test1',
+          logo: null,
+          metadata: {},
+          personal: false,
+          isDefault: false,
+          createdAt: new Date('2024-01-01T00:00:00Z'),
+          updatedAt: new Date('2024-01-01T00:00:00Z')
+        } as Team]
+
+        const { teams } = useTeam()
+        expect(teams.value).toHaveLength(1)
+        expect(teams.value[0]?.slug).toBe('test1')
+      } finally {
+        mockAuthClient.useListOrganizations = original
+      }
+    })
+  })
 })

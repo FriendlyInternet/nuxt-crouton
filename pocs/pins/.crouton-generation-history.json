@@ -1,0 +1,14 @@
+[
+  {
+    "collection": "pins",
+    "fields": [
+      "title",
+      "url",
+      "note"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-07-03T10:39:07.394Z",
+    "layer": "main",
+    "gitSha": "abe88c73"
+  }
+]

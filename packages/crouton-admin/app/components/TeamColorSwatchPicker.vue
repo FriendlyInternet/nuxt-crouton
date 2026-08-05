@@ -5,6 +5,10 @@
  * A grid of color swatches for selecting primary/neutral colors.
  * Tailwind color names are mapped to their 500 shade for display.
  *
+ * Deliberately a custom widget (#1410): a color-swatch grid has no Nuxt UI
+ * equivalent — each cell's background IS the data, so themes shouldn't
+ * restyle it. Chrome around it uses semantic tokens.
+ *
  * @example
  * ```vue
  * <TeamColorSwatchPicker

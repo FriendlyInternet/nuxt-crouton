@@ -123,10 +123,13 @@
           "title": "Kitchen Display",
           "live": "live",
           "active": "{count} active",
-          "allCaughtUp": "All caught up — no open orders.",
-          "bump": "Bump",
+          "allCaughtUp": "Nothing to send out — everything has gone out.",
+          "bump": "Sent out",
           "staff": "staff",
-          "eventNotFound": "Event not found"
+          "eventNotFound": "Event not found",
+          "stale": "Not updating",
+          "staleHint": "This board has lost contact with the server — the orders shown may be out of date. Check the connection.",
+          "connecting": "connecting"
         }
       },
       "salesOrders": {
@@ -203,7 +206,8 @@
       "orders": "Orders",
       "avgOrder": "Avg. order",
       "topProducts": "Top products",
-      "noSalesYet": "No sales yet"
+      "noSalesYet": "No sales yet",
+      "outstanding": "Still waiting"
     },
     "common": {
       "save": "Save",
@@ -218,6 +222,8 @@
       "none": "None",
       "active": "Active",
       "inactive": "Inactive",
+      "on": "On",
+      "off": "Off",
       "confirmDelete": "Confirm delete"
     },
     "block": {
@@ -273,7 +279,8 @@
       "locationRemarkPlaceholder": "Add a remark for this location…",
       "remark": "Remark",
       "remarkPlaceholder": "Type the remark…",
-      "staffOrder": "Staff order"
+      "staffOrder": "Staff order",
+      "staffOrderShort": "Staff"
     },
     "products": {
       "title": "Products",
@@ -281,11 +288,18 @@
       "noProducts": "No products available",
       "outOfStock": "Out of stock",
       "options": "Options",
-      "addToCart": "Add to Cart"
+      "addToCart": "Add to Cart",
+      "inCart": "Ordered"
     },
     "categories": {
       "all": "All",
       "title": "Categories"
+    },
+    "orderHistory": {
+      "title": "My orders",
+      "loading": "Loading your orders…",
+      "empty": "You haven't placed any orders yet.",
+      "loadError": "Could not load your orders"
     },
     "orders": {
       "title": "Orders",
@@ -306,6 +320,10 @@
       "processing": "Processing",
       "client": "Client",
       "rePrint": "Re-print",
+      "rePrintOrder": "Reprint",
+      "rePrintConfirm": "Confirm reprint?",
+      "reprintQueued": "Reprint queued",
+      "reprintError": "Could not reprint this order",
       "printTriggered": "Print triggered",
       "printFailed": "Print failed",
       "printError": "Could not trigger print for this order",
@@ -329,7 +347,8 @@
       "createNewClient": "Create new client",
       "clientHelp": "Select an existing client or create a new one",
       "clientRequired": "Client required",
-      "clientRequiredDescription": "This event requires a client. Please select or create one."
+      "clientRequiredDescription": "This event requires a client. Please select or create one.",
+      "deleteError": "Could not delete order"
     },
     "events": {
       "title": "Events",
@@ -387,7 +406,15 @@
       "driverNetwork": "Network printer",
       "driverNetworkHelp": "Thermal printer on the venue network (ESC/POS).",
       "driverBrowser": "Browser / AirPrint",
-      "driverBrowserHelp": "Print via the device print dialog from a print-bridge screen."
+      "driverBrowserHelp": "Print via the device print dialog from a print-bridge screen.",
+      "testPrint": "Test print",
+      "testPrintQueued": "Test ticket queued — watch the printer",
+      "testPrintError": "Test print failed",
+      "testPrintWaiting": "Sending test ticket to the printer…",
+      "testPrintPrinted": "Printed — the test ticket went through",
+      "testPrintFailed": "Test print failed",
+      "testPrintTimeout": "No response — spooler down or printer unreachable?",
+      "preview": "Preview"
     },
     "helperLogin": {
       "title": "Helper Login",
@@ -438,6 +465,8 @@
       "location": "Location",
       "status": "Status",
       "previewTitle": "Print Preview",
+      "previewFailed": "Couldn't load preview",
+      "previewNote": "As the printer prints it · with your saved settings",
       "printerInformation": "Printer Information",
       "name": "Name",
       "ipAddress": "IP Address",
@@ -482,12 +511,26 @@
       "duplicateEventDesc": "Creates a copy of this event with its categories, locations, products and printers",
       "deleteEvent": "Delete event",
       "deleteEventDesc": "Permanently removes this event",
+      "deleteAllOrders": "Delete all orders",
+      "deleteAllOrdersAction": "Delete orders…",
+      "deleteAllOrdersDesc": "Clear every order, item and print job for this event. Keeps the event, its menu and its clients.",
+      "deleteAllOrdersTitle": "Delete all orders?",
+      "deleteAllOrdersWarning": "This permanently deletes all orders for “{event}”, including their items and print jobs. Other events are untouched. Client tabs stay but reset to empty. This can't be undone.",
+      "deleteAllOrdersConfirmLabel": "Type “{event}” to confirm",
+      "deleteAllOrdersConfirm": "Delete all orders",
+      "deleteAllOrdersDone": "Deleted {count} order(s)",
+      "deleteAllOrdersError": "Could not delete the orders",
       "helperPin": "Helper PIN",
       "receiptSettings": "Print settings",
       "unsavedChanges": "Unsaved changes",
       "settingsSaved": "Settings saved",
       "editReceiptText": "Edit Receipt Text",
       "activeHelpers": "Active Helpers",
+      "helperPinRotateHint": "Changing the PIN logs out every helper still on the old one.",
+      "logoutAllHelpers": "Log out all helpers",
+      "helpersLockedOut": "Logged out {count} helper(s) — they must re-enter the new PIN",
+      "helpersLoggedOut": "Logged out {count} helper(s)",
+      "helpersLogoutError": "Could not log out the helpers",
       "add": "Add",
       "loading": "Loading...",
       "noCategories": "No categories",
@@ -499,6 +542,9 @@
       "noProducts": "No products",
       "inThisCategory": " in this category",
       "eventDetails": "Event Details",
+      "settingsTabData": "General",
+      "settingsTabPrinters": "Printers",
+      "settingsTabHelpers": "Helpers",
       "eventName": "Event name",
       "eventNamePlaceholder": "e.g. Summer Market 2026",
       "eventType": "Event type",
@@ -514,6 +560,8 @@
       "currencyEur": "Euro (€)",
       "currencyUsd": "Dollar ($)",
       "showInactive": "Inactive products",
+      "editCatalog": "Edit",
+      "doneEditing": "Done",
       "clientsPanel": {
         "button": "Clients",
         "title": "Client tabs",
@@ -526,7 +574,29 @@
         "printed": "Receipt printed for {client} — tab settled",
         "printError": "Could not print the receipt",
         "loadError": "Could not load clients"
-      }
+      },
+      "dataPanel": {
+        "button": "Data",
+        "title": "Data",
+        "revenueChart": "Revenue by day",
+        "productMatrix": "Sales per product × day",
+        "includePersonnel": "Include staff orders",
+        "personnelChart": "Staff orders"
+      },
+      "launcher": {
+        "ordersDesc": "All orders for this event — status, tickets, reprints",
+        "ordersStat": "orders",
+        "clientsDesc": "View and settle open client tabs",
+        "clientsStat": "open tabs",
+        "dataDesc": "Live sales numbers, charts and the product table",
+        "dataStat": "revenue",
+        "settingsDesc": "Event details, printers, receipt text and helpers",
+        "settingsStat": "printers"
+      },
+      "outstanding": "{count} in progress",
+      "outstandingNone": "Nothing in progress",
+      "outstandingFilter": "Show only these",
+      "outstandingFilterClear": "Show all orders"
     },
     "helpers": {
       "title": "Active Helpers",
@@ -543,9 +613,7 @@
       "notes": "Notes",
       "label": "Client",
       "selectOrCreate": "Select or create client...",
-      "createNew": "Create new client",
-      "nameLabel": "Client name",
-      "namePlaceholder": "Enter client name"
+      "createNamed": "Add \"{name}\""
     },
     "offline": {
       "title": "Offline",
@@ -581,6 +649,82 @@
         "sendFailed": "Could not send to printer",
         "generic": "Print job failed"
       }
+    },
+    "printFlow": {
+      "title": "Print flow",
+      "description": "Who delivers the printed tickets for this event.",
+      "localDrainer": "Local device",
+      "localDrainerHelp": "A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — works fully offline.",
+      "routerSpooler": "Via the venue router",
+      "routerSpoolerHelp": "The on-site router fetches print jobs from the cloud app and sends them to the printers.",
+      "paused": "No physical printing",
+      "pausedHelp": "No print jobs are created — orders simply appear on screen.",
+      "lastSeen": "last seen",
+      "neverSeen": "never seen",
+      "updated": "Print flow updated",
+      "updateError": "Could not update the print flow",
+      "setup": {
+        "toggle": "Setup",
+        "copy": "Copy",
+        "copied": "Copied",
+        "routerIntro": "One-time: image the router (API_URL in /etc/init.d/print_server). After that it introduces itself — a new event needs nothing on the router.",
+        "routerPrinters": "Put the printers on the router's own network with a static IP, and add each one under Printers with that IP and port 9100.",
+        "routerTicket": "The router prints its own pairing ticket (on start, until it is paired). No ticket? Check power, printer, and that API_URL points at this app:",
+        "routerClaim": "Enter the ticket's Router-ID and code below under \"Pair router\".",
+        "routerLegacy": "Older router without a pairing ticket? Follow the EVENT_ID steps in print-server/README.md.",
+        "routerVerify": "Done when this dot turns green — the router polls within ~30 seconds.",
+        "drainerIntro": "A device at the venue (Pi / mini-PC) runs the app and prints straight to the printers — automatically, no router config and nothing to enable.",
+        "drainerOverride": "Advanced: the app prints locally by default on a venue device. Force it on anywhere, or disable it on a device that must not print, with the env override:",
+        "drainerPrinters": "Add each printer under Printers with its LAN IP and port 9100 — the device must reach the printers on its network.",
+        "drainerFlip": "Keep this Print flow on \"Local device\" — the router flow is the default, and the device prints for itself only for events set to Local device.",
+        "drainerVerify": "Done when this dot turns green — the device ticks within ~30 seconds."
+      },
+      "pairing": {
+        "title": "Pair router",
+        "description": "A factory-fresh router prints its own pairing ticket. Enter the Router ID and code from that ticket — after that, new events need nothing on the router.",
+        "deviceId": "Router ID",
+        "code": "Code",
+        "claim": "Pair",
+        "revoke": "Unpair",
+        "claimSuccess": "Router paired — it starts printing within ~30 seconds",
+        "claimConflict": "This router is paired to another team — unpair it there first",
+        "claimError": "Could not pair the router — check the id and code on the ticket",
+        "revokeSuccess": "Router unpaired — it will print a new pairing ticket",
+        "revokeError": "Could not unpair the router"
+      }
+    },
+    "import": {
+      "action": "Import",
+      "title": "Import products",
+      "subtitle": "Paste rows from a spreadsheet. Nothing is saved until you press Import.",
+      "pasteLabel": "Pasted rows",
+      "pasteHint": "Include the header row (Name, Price, Category, Location).",
+      "mappingLabel": "Columns",
+      "mapColumn": "Map column",
+      "willCreateTitle": "Will also be created",
+      "listSeparator": ", ",
+      "statusHeader": "Status",
+      "statusNew": "New",
+      "statusDuplicate": "Already exists",
+      "statusError": "Error",
+      "createAnyway": "Create anyway",
+      "confirm": "Import",
+      "doneTitle": "Import complete",
+      "doneBody": "{created} created, {skipped} skipped, {errors} failed",
+      "failedTitle": "Import failed",
+      "failedBody": "Nothing was saved.",
+      "fieldIgnore": "Ignore",
+      "fieldTitle": "Product name",
+      "fieldPrice": "Price",
+      "fieldCategory": "Category",
+      "fieldLocation": "Location",
+      "fieldDescription": "Description",
+      "fieldActive": "Active",
+      "fieldRequiresRemark": "Requires remark",
+      "fieldRemarkPrompt": "Remark prompt",
+      "errMissingName": "Missing product name",
+      "errMissingPrice": "No price column",
+      "errBadPrice": "Unreadable price"
     }
   }
 }

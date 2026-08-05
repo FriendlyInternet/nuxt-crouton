@@ -82,7 +82,19 @@ const modalTitle = computed(() => {
   }
 })
 
-// Close modal, restore URL, refresh teams, then navigate
+// Close modal, restore URL, load the team list, then navigate.
+//
+// This is the ONLY thing that moves the user after a successful sign-in, so it
+// has to be deterministic (#1703). Two things used to make it not be:
+//
+//  1. `refreshTeams()` was fire-and-forget, so we navigated with an empty team
+//     list and left the destination page to race the fetch. Now awaited — the
+//     landing route middleware can resolve a team synchronously.
+//  2. `navigateTo(redirectTo)` was a silent no-op whenever `redirectTo` matched
+//     the router's current route, which is EVERY plain login: the router plugin
+//     cancels the navigation to /auth/login and only pushState's the URL, so
+//     vue-router still thinks it is at '/'. `force: true` bypasses that
+//     same-route dedupe so the guard chain actually re-runs.
 async function handleSuccess() {
   const redirectTo = state.value.redirectTo
   state.value.open = false
@@ -92,9 +104,18 @@ async function handleSuccess() {
   if (import.meta.client) {
     window.history.replaceState(null, '', redirectTo)
   }
-  // Refresh teams list now that we're authenticated (nanostore doesn't auto-populate)
-  useTeam().refreshTeams()
-  await navigateTo(redirectTo, { replace: true })
+  // Populate the team list before navigating — a failure here must not strand
+  // the user on the modal, the destination can still recover.
+  await useTeam().refreshTeams().catch(() => {})
+
+  // `force` lives on the route LOCATION (vue-router's RouteLocationOptions),
+  // not on navigateTo's options. Resolve first so a redirectTo carrying a query
+  // or hash survives the round-trip.
+  const target = useRouter().resolve(redirectTo)
+  await navigateTo(
+    { path: target.path, query: target.query, hash: target.hash, force: true },
+    { replace: true }
+  )
 }
 
 // ── OAuth / passkey providers (shared across login & register) ────────────────
@@ -174,20 +195,23 @@ const loginSubmitButton = computed(() => ({
 
 // Prefill credentials from a shared link (e.g. /auth/login?email=…&password=…).
 // Fills the fields only — the user still clicks Sign in (we never auto-submit).
-// Re-apply whenever the form ref appears OR the prefill values change, with
-// `immediate` + `flush:'post'` so the exposed UAuthForm state is ready: the old
-// one-shot `watch(loginFormRef)` silently did nothing if the prefill state
-// wasn't present the instant the ref first resolved, or if it arrived after the
-// form mounted (#1153).
+//
+// This watches the form ref AND the prefill values, `immediate` + `flush: 'post'`
+// (#1153): UAuthForm builds its own `state`, so the values can only be written
+// once that object exists. The old one-shot `watch(loginFormRef)` fired exactly
+// once — before `form.state` was ready it early-returned forever, and a prefill
+// arriving after mount (in-app nav → the router plugin opens the modal on an
+// already-mounted form) was never applied. Watching both sources means whichever
+// lands last still fills the form.
 const loginFormRef = useTemplateRef('loginForm')
 watch(
-  [loginFormRef, () => state.value.prefillEmail, () => state.value.prefillPassword] as const,
+  [loginFormRef, () => state.value.prefillEmail, () => state.value.prefillPassword],
   ([form, email, password]) => {
     if (!form?.state) return
     if (email) form.state.email = email
     if (password) form.state.password = password
   },
-  { immediate: true, flush: 'post' },
+  { immediate: true, flush: 'post' }
 )
 
 async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: string, rememberMe?: boolean }>) {
@@ -200,12 +224,13 @@ async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: 
     return
   }
 
-  // The login UAuthForm carries no schema, so `required` is cosmetic — guard an
-  // empty submit here rather than let the server reject it with a raw Zod error
-  // ("[body.email] expected string, received undefined") (#1153).
+  // The login UAuthForm carries no `:schema`, so `required` on the fields is
+  // cosmetic — an empty submit would reach the server and surface the raw Zod
+  // error (`[body.email] Invalid input: expected string, received undefined`).
+  // Answer it here instead (#1153).
   if (!event.data.email || !event.data.password) {
-    formError.value = t('auth.enterEmailAndPassword')
     submitting.value = false
+    formError.value = t('auth.credentialsRequired', 'Enter your email and password')
     return
   }
 
@@ -402,13 +427,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 </template>
                 <template v-else>
                   {{ t('auth.dontHaveAccount') }}
-                  <button
-                    type="button"
-                    class="text-primary font-medium hover:text-primary/80"
+                  <UButton
+                    variant="link"
+                    size="md"
+                    class="p-0"
                     @click="authModal.setMode('register')"
                   >
                     {{ t('auth.signUp') }}
-                  </button>
+                  </UButton>
                 </template>
               </template>
 
@@ -416,14 +442,15 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 v-if="!showMagicLink && hasPassword"
                 #password-hint
               >
-                <button
-                  type="button"
-                  class="text-primary font-medium hover:text-primary/80"
+                <UButton
+                  variant="link"
+                  size="md"
+                  class="p-0"
                   tabindex="-1"
                   @click="authModal.setMode('forgot-password')"
                 >
                   {{ t('auth.forgotPassword') }}
-                </button>
+                </UButton>
               </template>
 
               <template
@@ -441,13 +468,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 v-if="hasMagicLink && hasPassword"
                 #footer
               >
-                <button
-                  type="button"
-                  class="text-sm text-primary font-medium hover:text-primary/80"
+                <UButton
+                  variant="link"
+                  size="md"
+                  class="p-0"
                   @click="showMagicLink = !showMagicLink; formError = null"
                 >
                   {{ showMagicLink ? t('auth.signInWithPassword') : t('auth.signInWithMagicLink') }}
-                </button>
+                </UButton>
               </template>
             </UAuthForm>
 
@@ -468,13 +496,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 </h2>
                 <p class="mt-2 text-muted">
                   {{ t('auth.dontHaveAccount') }}
-                  <button
-                    type="button"
-                    class="text-primary font-medium hover:text-primary/80"
+                  <UButton
+                    variant="link"
+                    size="md"
+                    class="p-0"
                     @click="authModal.setMode('register')"
                   >
                     {{ t('auth.signUp') }}
-                  </button>
+                  </UButton>
                 </p>
               </div>
               <div class="space-y-3">
@@ -517,13 +546,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
           >
             <template #description>
               {{ t('auth.alreadyHaveAccount') }}
-              <button
-                type="button"
-                class="text-primary font-medium hover:text-primary/80"
+              <UButton
+                variant="link"
+                size="md"
+                class="p-0"
                 @click="authModal.setMode('login')"
               >
                 {{ t('auth.signIn') }}
-              </button>
+              </UButton>
             </template>
 
             <template
@@ -572,13 +602,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
               </h2>
               <p class="mt-2 text-muted">
                 {{ t('auth.alreadyHaveAccount') }}
-                <button
-                  type="button"
-                  class="text-primary font-medium hover:text-primary/80"
+                <UButton
+                  variant="link"
+                  size="md"
+                  class="p-0"
                   @click="authModal.setMode('login')"
                 >
                   {{ t('auth.signIn') }}
-                </button>
+                </UButton>
               </p>
             </div>
             <div class="space-y-3">
@@ -659,13 +690,14 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
             </template>
 
             <template #footer>
-              <button
-                type="button"
-                class="text-primary font-medium hover:text-primary/80"
+              <UButton
+                variant="link"
+                size="md"
+                class="p-0"
                 @click="authModal.setMode('login')"
               >
                 {{ t('auth.backToSignIn') }}
-              </button>
+              </UButton>
             </template>
           </UAuthForm>
         </div>

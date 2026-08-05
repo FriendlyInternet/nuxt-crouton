@@ -26,7 +26,10 @@ export interface SalesProduct {
   hasOptions?: boolean
   multipleOptionsAllowed?: boolean
   options?: ProductOption[]
-  sortOrder?: number
+  // Sortable position column. Named `order` to match the generated backend
+  // (schema column, /reorder query, order-data) and useTreeMutation's payload
+  // key — the whole reorder chain is keyed on `order`, not `sortOrder`.
+  order?: number
 }
 
 export interface CartItem {
@@ -116,13 +119,8 @@ export function usePosOrder(options: UsePosOrderOptions = {}) {
     apiBasePath = '/api/crouton-sales/events'
   } = options
 
-  // Always send the helper token explicitly: the scoped-access-token cookie
-  // is shared with other scoped flows (e.g. a page-gate token, which is
-  // httpOnly and can't be overwritten client-side) and may carry a token for
-  // a different resource — the x-scoped-token header wins server-side.
-  const { token: helperToken } = useHelperAuth()
-  const helperHeaders = (): Record<string, string> =>
-    helperToken.value ? { 'x-scoped-token': helperToken.value } : {}
+  // Always send the helper token explicitly (see useHelperHeaders for why).
+  const { helperHeaders } = useHelperHeaders()
 
   // Captured at setup: checkout emits crouton:mutation after awaits, where
   // useNuxtApp() would lose the Nuxt context.

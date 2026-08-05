@@ -1,0 +1,14 @@
+diff --git a/drivers/fs.mjs b/drivers/fs.mjs
+--- a/drivers/fs.mjs
++++ b/drivers/fs.mjs
+@@ -17,7 +17,9 @@
+   }
+   const base = resolve(userOptions.base);
+   const ignore = anymatch(
+-    userOptions.ignore || ["**/node_modules/**", "**/.git/**"]
++    userOptions.ignore || ["**/node_modules/**", "**/.git/**"],
++    null,
++    { dot: true }
+   );
+   const r = (key) => {
+     if (PATH_TRAVERSE_RE.test(key)) {

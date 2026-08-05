@@ -154,9 +154,15 @@ ${translationsType}${metadataFields}  optimisticId?: string
 }
 
 export type ${prefixedPascalCase}FormData = z.infer<typeof ${prefixedSingular}Schema>
+// Optional (undefined-including) props also accept null on the WRITE path: the
+// server body schema validates non-required fields as .nullish() (#1403 — a
+// nullable column round-trips null, and null is how a client clears a field),
+// so the create input must admit the validated body. The read interface above
+// deliberately stays narrow (form bindings/consumers never want null).
+type NullableOptionals<T> = { [K in keyof T]: undefined extends T[K] ? T[K] | null : T[K] }
 // New* allows the server-set fields (id, createdBy, updatedBy) as optional — the
 // generated POST endpoint provides them; other callers (e.g. seed) may omit them.
-export type New${prefixedPascalCase} = Omit<${prefixedPascalCase}, ${omitList}> & { id?: string${useMetadata ? '; createdBy?: string; updatedBy?: string' : ''} }
+export type New${prefixedPascalCase} = NullableOptionals<Omit<${prefixedPascalCase}, ${omitList}>> & { id?: string${useMetadata ? '; createdBy?: string; updatedBy?: string' : ''} }
 
 // Props type for the Form component
 export interface ${prefixedPascalCase}FormProps {

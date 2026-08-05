@@ -1,28 +1,16 @@
 import { eq, and } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
+import { requireTeamEvent } from '../../../../../../utils/team-event'
+// Single source of truth (#1514): the default an unsaved event shows in the
+// form MUST equal what the formatter prints when no settings row exists —
+// crouton-printing owns that canonical default. A local copy here diverged
+// (English) from the formatter (Dutch), so the form lied about what prints.
+import { DEFAULT_RECEIPT_SETTINGS, type ReceiptSettings } from '@fyit/crouton-printing/server/utils/receipt-formatter'
 import { salesEventsettings } from '~~/layers/sales/collections/eventsettings/server/database/schema'
 
-export interface ReceiptSettings {
-  special_instructions_title: string
-  staff_order_header: string
-  footer_text: string
-}
-
-const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
-  special_instructions_title: 'SPECIAL INSTRUCTIONS:',
-  staff_order_header: '*** STAFF ORDER ***',
-  footer_text: 'Thank you for your order!'
-}
+export type { ReceiptSettings }
 
 export default defineEventHandler(async (event) => {
-  const { team } = await resolveTeamAndCheckMembership(event)
-  const eventId = getRouterParam(event, 'eventId')
-
-  if (!eventId) {
-    throw createError({ status: 400, statusText: 'Event ID is required' })
-  }
-
-  const db = useDB()
+  const { team, db, eventId } = await requireTeamEvent(event)
 
   const [existing] = await db
     .select()

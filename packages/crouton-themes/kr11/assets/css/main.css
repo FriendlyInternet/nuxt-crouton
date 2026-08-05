@@ -8,11 +8,13 @@
    ============================================ */
 
 :root {
-  /* === Chassis Colors === */
-  --kr-chassis: #e5e2dd;          /* Main light gray body */
-  --kr-chassis-light: #f0eeea;    /* Lighter areas */
-  --kr-chassis-shadow: #d1cec9;   /* Shadow/depth areas */
-  --kr-chassis-dark: #c8c5c0;     /* Recessed areas */
+  /* === Chassis Colors ===
+     Matched to the real KORG KR-11 (#1347): the device is clean neutral
+     WHITE with soft gray seams — not warm beige. */
+  --kr-chassis: #f2f2f0;          /* Main white body */
+  --kr-chassis-light: #fafaf9;    /* Highlight areas */
+  --kr-chassis-shadow: #e0e0dd;   /* Shadow/depth areas */
+  --kr-chassis-dark: #d3d3d0;     /* Recessed areas / seams */
 
   /* === Display Colors === */
   --kr-display-bg: #1a1a1a;       /* Black display background */
@@ -20,15 +22,20 @@
   --kr-display-red-dim: #4a1515;  /* LED red (dimmed/off) */
   --kr-display-red-glow: rgba(255, 43, 43, 0.4);
 
-  /* === Pad Colors === */
-  --kr-pad-cream: #f5f3ef;        /* Standard cream pads */
-  --kr-pad-cream-pressed: #e8e6e2;
-  --kr-pad-coral: #ff9a8b;        /* Coral pink accent (pad 1) */
-  --kr-pad-coral-pressed: #e88a7c;
-  --kr-pad-gold: #d4a853;         /* Golden yellow (fill buttons) */
-  --kr-pad-gold-pressed: #c09545;
-  --kr-pad-mint: #7ee8c7;         /* Mint green (play button) */
-  --kr-pad-mint-pressed: #6ad4b5;
+  /* === Pad Colors ===
+     Matched to the hardware (#1347): cream faces with a visible gray
+     KEYLINE ring; FILL keys are a clean saturated yellow (not brown-gold);
+     the play key is pale mint; pad 1 is a pale salmon face with a coral rim. */
+  --kr-pad-cream: #f1eee6;        /* Standard cream pads */
+  --kr-pad-cream-pressed: #e4e1d8;
+  --kr-pad-keyline: #aaa8a3;      /* The thin gray outline every pad has */
+  --kr-pad-coral: #f7d3ca;        /* Pad-1 pale salmon face */
+  --kr-pad-coral-pressed: #eec2b8;
+  --kr-pad-coral-rim: #f08a7a;    /* Pad-1 coral keyline */
+  --kr-pad-gold: #e9d227;         /* FILL-key yellow */
+  --kr-pad-gold-pressed: #d6c01d;
+  --kr-pad-mint: #b8e9d2;         /* Play-key pale mint */
+  --kr-pad-mint-pressed: #a3dcc1;
 
   /* === LED Indicator Colors === */
   --kr-led-yellow: #e8d84c;       /* Yellow indicator */
@@ -52,6 +59,9 @@
   /* === Spacing & Sizing === */
   --kr-pad-radius: 8px;
   --kr-button-radius: 6px;
+  /* Text on the colored pads (mint/yellow/coral stay light in both schemes,
+     so the label on them must not flip) — #1395. */
+  --kr-on-pad: #3d3d3d;
   --kr-display-radius: 4px;
   --kr-card-radius: 12px;
 
@@ -88,63 +98,66 @@
    ============================================ */
 
 .kr-pad {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: var(--kr-pad-cream) !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-pad-radius) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  /* The hardware's signature: every pad wears a thin gray keyline (#1347). */
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: var(--kr-pad-radius);
   box-shadow:
-    0 2px 4px rgba(0, 0, 0, 0.1),
-    0 4px 8px rgba(0, 0, 0, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
-  transition: all var(--kr-transition-fast) !important;
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    0 3px 6px rgba(0, 0, 0, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-pad:hover {
-  background-color: var(--kr-pad-cream-pressed) !important;
+  background-color: var(--kr-pad-cream-pressed);
   box-shadow:
     0 1px 2px rgba(0, 0, 0, 0.1),
     0 2px 4px rgba(0, 0, 0, 0.05),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .kr-pad:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
   box-shadow:
     0 0 1px rgba(0, 0, 0, 0.1),
-    inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+    inset 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 /* Coral Pink Pad (Pad 1 style) */
 .kr-pad.kr-pad--coral {
-  background-color: var(--kr-pad-coral) !important;
-  color: var(--kr-text-dark) !important;
+  background-color: var(--kr-pad-coral);
+  color: var(--kr-on-pad);
+  /* Pad 1 on the device: pale salmon face, CORAL keyline. */
+  border-color: var(--kr-pad-coral-rim);
 }
 
 .kr-pad.kr-pad--coral:hover {
-  background-color: var(--kr-pad-coral-pressed) !important;
+  background-color: var(--kr-pad-coral-pressed);
 }
 
 /* Golden Yellow Pad (Fill buttons) */
 .kr-pad.kr-pad--gold {
-  background-color: var(--kr-pad-gold) !important;
-  color: var(--kr-text-dark) !important;
+  background-color: var(--kr-pad-gold);
+  color: var(--kr-on-pad);
 }
 
 .kr-pad.kr-pad--gold:hover {
-  background-color: var(--kr-pad-gold-pressed) !important;
+  background-color: var(--kr-pad-gold-pressed);
 }
 
 /* Mint Green Pad (Play button) */
 .kr-pad.kr-pad--mint {
-  background-color: var(--kr-pad-mint) !important;
-  color: var(--kr-text-dark) !important;
+  background-color: var(--kr-pad-mint);
+  color: var(--kr-on-pad);
 }
 
 .kr-pad.kr-pad--mint:hover {
-  background-color: var(--kr-pad-mint-pressed) !important;
+  background-color: var(--kr-pad-mint-pressed);
 }
 
 /* ============================================
@@ -153,31 +166,33 @@
    ============================================ */
 
 .kr-mode-btn {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.75rem !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.02em !important;
-  background-color: var(--kr-pad-cream) !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-button-radius) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: none;
+  border-radius: var(--kr-button-radius);
+  /* !important stays: spacing utilities (px, py) are deliberately NOT stripped
+     by the subtractive replacer (#1304), so this must outrank them. */
   padding: 0.5rem 1rem !important;
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
-  transition: all var(--kr-transition-fast) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-mode-btn:hover {
-  background-color: var(--kr-pad-cream-pressed) !important;
+  background-color: var(--kr-pad-cream-pressed);
 }
 
 .kr-mode-btn:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
   box-shadow:
     0 0 1px rgba(0, 0, 0, 0.1),
-    inset 0 1px 2px rgba(0, 0, 0, 0.1) !important;
+    inset 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 /* ============================================
@@ -189,26 +204,26 @@
 }
 
 .kr-input-base {
-  font-family: var(--kr-font) !important;
-  font-size: 0.875rem !important;
-  background-color: var(--kr-pad-cream) !important;
-  color: var(--kr-text-dark) !important;
-  border: 1px solid var(--kr-chassis-dark) !important;
-  border-radius: var(--kr-button-radius) !important;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05) !important;
-  transition: all var(--kr-transition) !important;
+  font-family: var(--kr-font);
+  font-size: 0.875rem;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: 1px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-button-radius);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all var(--kr-transition);
 }
 
 .kr-input-base::placeholder {
-  color: var(--kr-text-light) !important;
+  color: var(--kr-text-light);
 }
 
 .kr-input-base:focus {
-  outline: none !important;
-  border-color: var(--kr-pad-mint) !important;
+  outline: none;
+  border-color: var(--kr-pad-mint);
   box-shadow:
     inset 0 1px 2px rgba(0, 0, 0, 0.05),
-    0 0 0 2px rgba(126, 232, 199, 0.3) !important;
+    0 0 0 2px rgba(126, 232, 199, 0.3);
 }
 
 /* ============================================
@@ -217,31 +232,31 @@
    ============================================ */
 
 .kr-card {
-  font-family: var(--kr-font) !important;
-  background-color: var(--kr-chassis-light) !important;
-  border: none !important;
-  border-radius: var(--kr-card-radius) !important;
+  font-family: var(--kr-font);
+  background-color: var(--kr-chassis-light);
+  border: none;
+  border-radius: var(--kr-card-radius);
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.08),
     0 4px 16px rgba(0, 0, 0, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .kr-card-header {
-  font-weight: 600 !important;
-  font-size: 0.75rem !important;
-  letter-spacing: 0.05em !important;
-  text-transform: uppercase !important;
-  color: var(--kr-text-medium) !important;
-  border-bottom: 1px solid var(--kr-chassis-dark) !important;
+  font-weight: 600;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kr-text-medium);
+  border-bottom: 1px solid var(--kr-chassis-dark);
 }
 
 .kr-card-body {
-  color: var(--kr-text-dark) !important;
+  color: var(--kr-text-dark);
 }
 
 .kr-card-footer {
-  border-top: 1px solid var(--kr-chassis-dark) !important;
+  border-top: 1px solid var(--kr-chassis-dark);
 }
 
 /* ============================================
@@ -249,14 +264,16 @@
    ============================================ */
 
 .kr-badge {
-  font-family: var(--kr-font) !important;
-  font-size: 0.625rem !important;
-  font-weight: 600 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-  background-color: var(--kr-display-bg) !important;
-  color: var(--kr-display-red) !important;
-  border-radius: 2px !important;
+  font-family: var(--kr-font);
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background-color: var(--kr-display-bg);
+  color: var(--kr-display-red);
+  border-radius: 2px;
+  /* !important stays: spacing utilities (px, py) are deliberately NOT stripped
+     by the subtractive replacer (#1304), so this must outrank them. */
   padding: 0.25rem 0.5rem !important;
 }
 
@@ -441,49 +458,49 @@
    ============================================ */
 
 .kr-outline {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: transparent !important;
-  color: var(--kr-text-dark) !important;
-  border: 2px solid var(--kr-chassis-dark) !important;
-  border-radius: var(--kr-pad-radius) !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--kr-text-dark);
+  border: 2px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-outline:hover {
-  background-color: var(--kr-chassis-light) !important;
+  background-color: var(--kr-chassis-light);
 }
 
 .kr-outline:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
 }
 
 .kr-outline.kr-outline--mint {
-  border-color: var(--kr-pad-mint) !important;
-  color: #2a9d6d !important;
+  border-color: var(--kr-pad-mint);
+  color: #2a9d6d;
 }
 
 .kr-outline.kr-outline--mint:hover {
-  background-color: rgba(126, 232, 199, 0.15) !important;
+  background-color: rgba(126, 232, 199, 0.15);
 }
 
 .kr-outline.kr-outline--gold {
-  border-color: var(--kr-pad-gold) !important;
-  color: #9a7832 !important;
+  border-color: var(--kr-pad-gold);
+  color: #9a7832;
 }
 
 .kr-outline.kr-outline--gold:hover {
-  background-color: rgba(212, 168, 83, 0.15) !important;
+  background-color: rgba(212, 168, 83, 0.15);
 }
 
 .kr-outline.kr-outline--coral {
-  border-color: var(--kr-pad-coral) !important;
-  color: #d4614f !important;
+  border-color: var(--kr-pad-coral);
+  color: #d4614f;
 }
 
 .kr-outline.kr-outline--coral:hover {
-  background-color: rgba(255, 154, 139, 0.15) !important;
+  background-color: rgba(255, 154, 139, 0.15);
 }
 
 /* ============================================
@@ -492,49 +509,49 @@
    ============================================ */
 
 .kr-soft {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: var(--kr-chassis-light) !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-pad-radius) !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: var(--kr-chassis-light);
+  color: var(--kr-text-dark);
+  border: none;
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-soft:hover {
-  background-color: var(--kr-chassis-dark) !important;
+  background-color: var(--kr-chassis-dark);
 }
 
 .kr-soft:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
 }
 
 .kr-soft.kr-soft--mint {
-  background-color: rgba(126, 232, 199, 0.2) !important;
-  color: #2a9d6d !important;
+  background-color: rgba(126, 232, 199, 0.2);
+  color: #2a9d6d;
 }
 
 .kr-soft.kr-soft--mint:hover {
-  background-color: rgba(126, 232, 199, 0.35) !important;
+  background-color: rgba(126, 232, 199, 0.35);
 }
 
 .kr-soft.kr-soft--gold {
-  background-color: rgba(212, 168, 83, 0.2) !important;
-  color: #9a7832 !important;
+  background-color: rgba(212, 168, 83, 0.2);
+  color: #9a7832;
 }
 
 .kr-soft.kr-soft--gold:hover {
-  background-color: rgba(212, 168, 83, 0.35) !important;
+  background-color: rgba(212, 168, 83, 0.35);
 }
 
 .kr-soft.kr-soft--coral {
-  background-color: rgba(255, 154, 139, 0.2) !important;
-  color: #d4614f !important;
+  background-color: rgba(255, 154, 139, 0.2);
+  color: #d4614f;
 }
 
 .kr-soft.kr-soft--coral:hover {
-  background-color: rgba(255, 154, 139, 0.35) !important;
+  background-color: rgba(255, 154, 139, 0.35);
 }
 
 /* ============================================
@@ -543,46 +560,46 @@
    ============================================ */
 
 .kr-ghost {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: transparent !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  border-radius: var(--kr-pad-radius) !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--kr-text-dark);
+  border: none;
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-ghost:hover {
-  background-color: var(--kr-chassis-light) !important;
+  background-color: var(--kr-chassis-light);
 }
 
 .kr-ghost:active {
-  transform: translateY(1px) !important;
+  transform: translateY(1px);
 }
 
 .kr-ghost.kr-ghost--mint {
-  color: #2a9d6d !important;
+  color: #2a9d6d;
 }
 
 .kr-ghost.kr-ghost--mint:hover {
-  background-color: rgba(126, 232, 199, 0.15) !important;
+  background-color: rgba(126, 232, 199, 0.15);
 }
 
 .kr-ghost.kr-ghost--gold {
-  color: #9a7832 !important;
+  color: #9a7832;
 }
 
 .kr-ghost.kr-ghost--gold:hover {
-  background-color: rgba(212, 168, 83, 0.15) !important;
+  background-color: rgba(212, 168, 83, 0.15);
 }
 
 .kr-ghost.kr-ghost--coral {
-  color: #d4614f !important;
+  color: #d4614f;
 }
 
 .kr-ghost.kr-ghost--coral:hover {
-  background-color: rgba(255, 154, 139, 0.15) !important;
+  background-color: rgba(255, 154, 139, 0.15);
 }
 
 /* ============================================
@@ -591,29 +608,441 @@
    ============================================ */
 
 .kr-link {
-  font-family: var(--kr-font) !important;
-  font-weight: 500 !important;
-  font-size: 0.875rem !important;
-  background-color: transparent !important;
-  color: var(--kr-text-dark) !important;
-  border: none !important;
-  text-decoration: underline !important;
-  text-underline-offset: 3px !important;
-  transition: all var(--kr-transition-fast) !important;
+  font-family: var(--kr-font);
+  font-weight: 500;
+  font-size: 0.875rem;
+  background-color: transparent;
+  color: var(--kr-text-dark);
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: all var(--kr-transition-fast);
 }
 
 .kr-link:hover {
-  text-decoration-thickness: 2px !important;
+  text-decoration-thickness: 2px;
 }
 
 .kr-link.kr-link--mint {
-  color: #2a9d6d !important;
+  color: #2a9d6d;
 }
 
 .kr-link.kr-link--gold {
-  color: #9a7832 !important;
+  color: #9a7832;
 }
 
 .kr-link.kr-link--coral {
-  color: #d4614f !important;
+  color: #d4614f;
+}
+
+/* ============================================
+   DATA-THEME AMBIENT + VARIANT-LESS CHROME (#1347)
+   Background only — no root typography (the #1304 KO readability rule).
+   Both activation paths: [data-theme] from app presets, .theme-kr11 body
+   class from useThemeSwitcher.
+   ============================================ */
+
+[data-theme="kr11"],
+.theme-kr11 {
+  background-color: var(--kr-chassis);
+  /* Base geometry token (#1594): tie Nuxt UI's radius scale to the theme's own
+     card radius so calm surfaces (unmarked cards/rows) match the tactile pads,
+     not just the theme's named variants. card = --ui-radius * 2 = kr-card-radius. */
+  --ui-radius: calc(var(--kr-card-radius) / 2);
+}
+
+/* USwitch as hardware: a cream pad track with an LED thumb — USwitch has
+   no `variant` dimension, so the replacer can't reach it (same pattern as
+   the Brutalist switch, template for #1333). */
+[data-theme="kr11"] button[role="switch"],
+.theme-kr11 button[role="switch"] {
+  border-radius: var(--kr-button-radius);
+  border: 1px solid var(--kr-pad-keyline);
+  background-color: var(--kr-pad-cream);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: background-color var(--kr-transition-fast);
+}
+
+[data-theme="kr11"] button[role="switch"][data-state="checked"],
+.theme-kr11 button[role="switch"][data-state="checked"] {
+  background-color: var(--kr-pad-mint);
+}
+
+[data-theme="kr11"] button[role="switch"] > span,
+.theme-kr11 button[role="switch"] > span {
+  background-color: var(--kr-led-off);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.25);
+  transition: background-color var(--kr-transition-fast), box-shadow var(--kr-transition-fast);
+}
+
+[data-theme="kr11"] button[role="switch"][data-state="checked"] > span,
+.theme-kr11 button[role="switch"][data-state="checked"] > span {
+  background-color: var(--kr-led-green);
+  box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.15),
+    0 0 6px rgba(76, 217, 100, 0.7);
+}
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the white chassis.
+   ============================================ */
+
+[data-theme="kr11"] body,
+body.theme-kr11 {
+  /* Base surface token (#1597): ref the chassis var (flips in dark, #1395) so a
+     calm bg-default surface is the kr11 chassis, not Nuxt UI white. */
+  --ui-bg: var(--kr-chassis);
+  --ui-text-dimmed: #8a8a86;
+  --ui-text-muted: #666663;
+  --ui-text-toned: #4c4c49;
+  --ui-text: #3d3d3d;
+  --ui-text-highlighted: #2a2a28;
+  --ui-bg-muted: #ececea;
+  --ui-bg-elevated: #fafaf9;
+  --ui-bg-accented: #e5e5e2;
+  --ui-border: #d3d3d0;
+  --ui-border-muted: #e0e0dd;
+  --ui-border-accented: #aaa8a3;
+}
+
+/* ============================================
+   TABS (#1393) — a pad row; the active pad reads out on the display
+   ============================================ */
+
+.kr-tabs-list {
+  background-color: var(--kr-chassis);
+  border: 1px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-button-radius);
+  gap: 0.25rem;
+  padding: 0.25rem;
+}
+
+.kr-tabs-trigger {
+  font-family: var(--kr-font);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: calc(var(--kr-button-radius) - 2px);
+  padding: 0.45rem 0.9rem;
+  transition: all var(--kr-transition, 120ms ease);
+}
+
+.kr-tabs-trigger:hover {
+  background-color: var(--kr-pad-cream-pressed);
+}
+
+.kr-tabs-trigger[data-state="active"] {
+  background-color: var(--kr-display-bg);
+  color: var(--kr-display-red);
+  border-color: var(--kr-display-bg);
+  text-shadow: 0 0 6px var(--kr-display-red-glow);
+}
+
+.kr-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — pads with LED confirmation
+   ============================================ */
+
+.kr-check-box,
+.kr-radio-box {
+  background-color: var(--kr-pad-cream);
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 var(--kr-chassis-shadow);
+}
+
+.kr-radio-box {
+  border-radius: 9999px;
+}
+
+.kr-check-indicator {
+  background-color: var(--kr-pad-mint-pressed);
+  color: var(--kr-on-pad);
+  border-radius: 3px;
+}
+
+.kr-radio-indicator {
+  background-color: var(--kr-pad-cream);
+  border-radius: 9999px;
+}
+
+.kr-radio-indicator::after {
+  background-color: var(--kr-display-red);
+  box-shadow: 0 0 5px var(--kr-display-red-glow);
+  border-radius: 9999px;
+  width: 50%;
+  height: 50%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — chassis card, pad-colored by mood
+   ============================================ */
+
+.kr-alert {
+  font-family: var(--kr-font);
+  background-color: var(--kr-chassis-light);
+  color: var(--kr-text-dark);
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: var(--kr-button-radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.kr-alert-title {
+  font-weight: 700;
+}
+
+.kr-alert--primary {
+  background-color: var(--kr-pad-mint);
+  color: var(--kr-on-pad);
+}
+
+.kr-alert--warning {
+  background-color: var(--kr-led-yellow);
+  color: var(--kr-on-pad);
+}
+
+.kr-alert--error {
+  background-color: var(--kr-pad-coral);
+  border-color: var(--kr-pad-coral-rim);
+  color: var(--kr-on-pad);
+}
+
+.kr-alert--neutral {
+  background-color: var(--kr-pad-cream);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (switch already themed above; scoped to both activation paths)
+   ============================================ */
+
+[data-theme="kr11"] [role="dialog"][data-slot="content"],
+.theme-kr11 [role="dialog"][data-slot="content"] {
+  background-color: var(--kr-chassis-light);
+  border: 1px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-card-radius, 12px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+}
+
+[data-theme="kr11"] [role="dialog"] [data-slot="title"],
+.theme-kr11 [role="dialog"] [data-slot="title"] {
+  font-family: var(--kr-font);
+  color: var(--kr-text-dark);
+  font-weight: 700;
+}
+
+[data-theme="kr11"] [data-slot="overlay"],
+.theme-kr11 [data-slot="overlay"] {
+  background-color: rgb(61 61 61 / 0.4);
+}
+
+/* Toast: the LED display speaks. */
+[data-theme="kr11"] li[data-slot="base"],
+.theme-kr11 li[data-slot="base"] {
+  background-color: var(--kr-display-bg);
+  border: 2px solid var(--kr-chassis-dark);
+  border-radius: var(--kr-display-radius, 4px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="kr11"] li[data-slot="base"] [data-slot="title"],
+.theme-kr11 li[data-slot="base"] [data-slot="title"] {
+  color: var(--kr-display-red);
+  text-shadow: 0 0 6px var(--kr-display-red-glow);
+  font-weight: 700;
+}
+
+[data-theme="kr11"] li[data-slot="base"] [data-slot="description"],
+.theme-kr11 li[data-slot="base"] [data-slot="description"] {
+  color: #cfcfcf;
+}
+
+[data-theme="kr11"] nav[data-slot="root"] button,
+.theme-kr11 nav[data-slot="root"] button {
+  font-family: var(--kr-font);
+  background-color: var(--kr-pad-cream);
+  color: var(--kr-text-dark);
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: 4px;
+  box-shadow: inset 0 -1px 0 var(--kr-chassis-shadow);
+  font-weight: 600;
+  transition: background-color 100ms ease;
+}
+
+[data-theme="kr11"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-kr11 nav[data-slot="root"] button:hover:not(:disabled) {
+  background-color: var(--kr-pad-cream-pressed);
+}
+
+[data-theme="kr11"] nav[data-slot="root"] button[data-selected],
+.theme-kr11 nav[data-slot="root"] button[data-selected] {
+  background-color: var(--kr-display-bg);
+  color: var(--kr-display-red);
+  border-color: var(--kr-display-bg);
+  text-shadow: 0 0 6px var(--kr-display-red-glow);
+}
+
+/* ============================================
+   CALENDAR (#1458) — a month of pads on the chassis.
+   Named variant (kr-cal-*); selected/today state is ours to supply —
+   the named variant never fires Nuxt UI's color compounds.
+   ============================================ */
+
+.kr-cal-heading {
+  font-family: var(--kr-font);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--kr-text-dark);
+}
+
+.kr-cal-head {
+  font-family: var(--kr-font);
+  font-size: 0.625rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--kr-text-medium);
+  border-radius: var(--kr-button-radius);
+}
+
+.kr-cal-cell {
+  font-family: var(--kr-font);
+  color: var(--kr-text-dark);
+  border: 1px solid transparent;
+  border-radius: var(--kr-pad-radius);
+  transition: all var(--kr-transition-fast);
+}
+
+/* Hover / keyboard focus: the day rises as a cream pad. */
+.kr-cal-cell:hover:not([data-selected]):not([data-disabled]) {
+  background-color: var(--kr-pad-cream);
+  border-color: var(--kr-pad-keyline);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.kr-cal-cell[data-highlighted] {
+  background-color: var(--kr-pad-cream);
+  border-color: var(--kr-pad-keyline);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+/* Selected: the pressed mint play-key. Mint stays mint in both schemes,
+   so the legend uses the constant pad ink (#1395). */
+.kr-cal-cell[data-selected] {
+  background-color: var(--kr-pad-mint-pressed);
+  color: var(--kr-on-pad);
+  border-color: var(--kr-pad-keyline);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.12);
+  font-weight: 600;
+}
+
+/* Today: the red LED is lit on that pad. */
+.kr-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--kr-display-red);
+  box-shadow: 0 0 5px var(--kr-display-red-glow);
+  font-weight: 600;
+}
+
+.kr-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider + color picker have no variant
+   dimension; scoped to both activation paths like the switch above.
+   Slider anchors on [data-slider-impl] (unique to USlider — the color
+   picker has a "track" slot too), picker on its own slot names.
+   ============================================ */
+
+/* Slider: a volume fader — recessed groove, mint level, cream cap. */
+[data-theme="kr11"] [data-slider-impl] [data-slot="track"],
+.theme-kr11 [data-slider-impl] [data-slot="track"] {
+  background-color: var(--kr-chassis-dark);
+  border-radius: var(--kr-display-radius);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="kr11"] [data-slider-impl] [data-slot="range"],
+.theme-kr11 [data-slider-impl] [data-slot="range"] {
+  background-color: var(--kr-pad-mint);
+  border-radius: var(--kr-display-radius);
+}
+
+[data-theme="kr11"] [data-slider-impl] [data-slot="thumb"],
+.theme-kr11 [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--kr-pad-cream);
+  border-radius: var(--kr-button-radius);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  --tw-ring-color: var(--kr-pad-keyline);
+}
+
+/* Color picker: chrome only — keyline frames, knob-round thumbs;
+   never tint the color surfaces themselves. */
+[data-theme="kr11"] [data-slot="picker"] [data-slot="selector"],
+.theme-kr11 [data-slot="picker"] [data-slot="selector"],
+[data-theme="kr11"] [data-color-picker-track],
+.theme-kr11 [data-color-picker-track] {
+  border: 1px solid var(--kr-pad-keyline);
+  border-radius: var(--kr-button-radius);
+}
+
+[data-theme="kr11"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-kr11 [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: var(--kr-button-radius);
+}
+
+[data-theme="kr11"] [data-slot="selectorThumb"],
+.theme-kr11 [data-slot="selectorThumb"],
+[data-theme="kr11"] [data-slot="trackThumb"],
+.theme-kr11 [data-slot="trackThumb"] {
+  border-radius: 9999px;
+  --tw-ring-color: var(--kr-text-dark);
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — the dark-unit counterpart (a Volca on a night
+   stage), DESIGNED not inverted: graphite chassis, dark pads with light
+   legends, the red LED display and the colored pads stay themselves.
+   Activated by the colorMode class on <html>.
+   ============================================ */
+
+.dark {
+  --kr-chassis: #26262a;
+  --kr-chassis-light: #2d2d31;
+  --kr-chassis-shadow: #1c1c1f;
+  --kr-chassis-dark: #3a3a3f;
+  --kr-pad-cream: #35353b;
+  --kr-pad-cream-pressed: #2c2c31;
+  --kr-pad-keyline: #55555c;
+  --kr-text-dark: #e2e2e6;
+}
+
+/* Semantic tokens for the graphite chassis (counterpart of the #1390 block). */
+[data-theme="kr11"].dark body,
+.dark body.theme-kr11 {
+  --ui-text-dimmed: #77777d;
+  --ui-text-muted: #8f8f95;
+  --ui-text-toned: #bcbcc2;
+  --ui-text: #e2e2e6;
+  --ui-text-highlighted: #f5f5f8;
+  --ui-bg-muted: #232327;
+  --ui-bg-elevated: #2d2d31;
+  --ui-bg-accented: #37373c;
+  --ui-border: #3a3a3f;
+  --ui-border-muted: #303034;
+  --ui-border-accented: #55555c;
 }

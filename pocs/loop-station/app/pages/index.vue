@@ -108,6 +108,17 @@ const maxCold = computed(() => Math.max(1, ...coldWrites.value.map((c) => c.tota
       </KoPanel>
     </section>
 
+    <!-- accountability scoreboard (#1570) -->
+    <section>
+      <KoPanel class="panel">
+        <div class="panel__inner">
+          <h2 class="panel__h">Accountability · reviewer +w / author −w
+            <span class="tag">confirmed defects · severity-weighted</span></h2>
+          <AccountabilityBoard :board="data?.accountability ?? { authors: [], gates: [], findingCount: 0 }" />
+        </div>
+      </KoPanel>
+    </section>
+
     <!-- trace timeline -->
     <section>
       <KoPanel class="panel">

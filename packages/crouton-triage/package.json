@@ -64,8 +64,7 @@
   },
   "dependencies": {
     "@fyit/crouton-ai": "workspace:*",
-    "cheerio": "^1.1.2",
-    "human-id": "^4.1.1"
+    "cheerio": "^1.1.2"
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",

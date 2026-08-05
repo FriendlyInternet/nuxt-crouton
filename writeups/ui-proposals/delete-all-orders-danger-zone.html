@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<!-- ui-proposal — Delete all orders danger zone (crouton-sales SettingsTab, #1519). -->
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UI Proposal — Delete all orders (danger zone)</title>
+<style>
+  :root{
+    --page:#0a0e17; --ink:#e8edf6; --muted:#8b97ad;
+    --app-bg:#0b0f1a; --card:#151b27; --card-2:#11161f; --line:#222b3a; --line-soft:#1b2230;
+    --green:#34d399; --red:#f87171; --red-d:#3a1220; --red-line:#5b2740;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; background:radial-gradient(1100px 500px at 75% -10%, #16213c 0%, var(--page) 55%);
+    color:var(--ink); line-height:1.55; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1040px; margin:0 auto; padding:40px 20px 80px;}
+  .eyebrow{text-transform:uppercase; letter-spacing:.18em; font-size:12px; color:var(--green); font-weight:700;}
+  h1{font-size:clamp(26px,4vw,36px); margin:6px 0 6px; line-height:1.1;}
+  .lede{color:var(--muted); font-size:16px; max-width:70ch; margin:0 0 28px;}
+  .stage{display:flex; flex-wrap:wrap; gap:28px; justify-content:center; align-items:flex-start;}
+  .col{display:flex; flex-direction:column; align-items:center; gap:12px;}
+  .col h2{font-size:15px; margin:0; display:flex; align-items:center; gap:8px;}
+  .tag{font-size:11px; padding:2px 9px; border-radius:999px; border:1px solid var(--line); color:var(--muted);}
+  .tag.bad{color:#f6a; border-color:#5b2740;} .tag.good{color:var(--green); border-color:#1f5e47;}
+  .note{font-size:12.5px; color:var(--muted); max-width:360px; text-align:center;}
+  .ic{width:17px; height:17px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex:none;}
+  .ic.sm{width:14px;height:14px;}
+
+  /* Settings card frame */
+  .ucard{width:420px; background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden;}
+  .ucard-head{padding:12px 16px; border-bottom:1px solid var(--line-soft); font-weight:650; font-size:14px;}
+  .ucard-body{padding:16px; display:flex; flex-direction:column; gap:14px;}
+  .sep{height:1px; background:var(--line-soft); margin:2px 0;}
+
+  .row{display:flex; flex-direction:column; gap:4px;}
+  .rowline{display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .rowlabel{font-size:13.5px; font-weight:600;}
+  .rowdesc{font-size:12.5px; color:var(--muted);}
+
+  .btn{display:inline-flex; align-items:center; gap:6px; border-radius:8px; border:1px solid var(--line); background:var(--card-2); color:var(--ink); font-size:12.5px; padding:6px 11px; white-space:nowrap;}
+  .btn.neutral{color:var(--muted);}
+  .btn.danger-out{color:var(--red); border-color:var(--red-line); background:transparent;}
+  .btn.danger-solid{background:var(--red); border-color:var(--red); color:#2a0a12; font-weight:700;}
+  .btn.disabled{opacity:.45;}
+
+  /* new danger row highlight */
+  .newwrap{position:relative; border:1px dashed #1f5e47; border-radius:10px; padding:10px 12px 11px; background:rgba(52,211,153,.05);}
+  .newtag{position:absolute; top:-9px; left:12px; font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--green); background:var(--card); padding:0 7px; border:1px solid #1f5e47; border-radius:999px;}
+
+  /* Modal */
+  .modalframe{width:460px; background:var(--app-bg); border:1px solid var(--line); border-radius:16px; padding:22px; box-shadow:0 24px 60px rgba(0,0,0,.55); position:relative;}
+  .modal-head{display:flex; align-items:center; gap:10px; margin-bottom:6px;}
+  .warnicon{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:var(--red-d);border:1px solid var(--red-line);color:var(--red);}
+  .modal-title{font-size:17px; font-weight:700;}
+  .modal-body{font-size:13.5px; color:#cdd6e6; margin:8px 0 0;}
+  .callout{margin:14px 0; background:var(--red-d); border:1px solid var(--red-line); border-radius:10px; padding:11px 13px; font-size:12.5px; color:#f4c9d2; display:flex; gap:9px;}
+  .field{margin-top:14px;}
+  .field label{display:block; font-size:12.5px; color:var(--muted); margin-bottom:6px;}
+  .input{width:100%; background:var(--card-2); border:1px solid var(--line); border-radius:9px; padding:9px 12px; color:var(--ink); font-size:13.5px; font-family:ui-monospace,Menlo,Consolas,monospace;}
+  .input.typed{border-color:var(--red-line);}
+  .caret{color:var(--muted); animation:none;}
+  .actions{display:flex; justify-content:flex-end; gap:10px; margin-top:20px;}
+  .hint{font-size:11.5px; color:var(--muted); margin-top:6px;}
+  code{font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.9em; background:rgba(248,113,113,.14); color:#f7b8c1; padding:1px 6px; border-radius:6px;}
+
+  .changes{margin-top:40px; background:#101725; border:1px solid var(--line); border-radius:16px; padding:20px 22px;}
+  .changes h3{margin:0 0 12px; font-size:16px;}
+  .changes ul{margin:0; padding-left:0; list-style:none; display:grid; gap:10px;}
+  .changes li{display:flex; gap:10px; align-items:flex-start; font-size:14px; color:#cdd6e6;}
+  .changes li b{color:#fff;} .check{color:var(--green); flex:none; margin-top:2px;}
+  .changes code{background:rgba(52,211,153,.12); color:#a9f0d2;}
+  footer.fin{margin-top:30px; color:var(--muted); font-size:12.5px; text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="eyebrow">crouton-sales · proposal</span>
+  <h1>Delete all orders — Settings danger zone</h1>
+  <p class="lede">A new admin-only danger-zone action in the event <strong>Settings</strong> that wipes <strong>this event's</strong> orders after a <strong>typed confirmation</strong> — deliberately not on the day-to-day order list, and deliberately not a one-tap pill.</p>
+
+  <div class="stage">
+    <!-- BEFORE -->
+    <div class="col">
+      <h2>Before <span class="tag bad">today</span></h2>
+      <div class="ucard">
+        <div class="ucard-head">Event details</div>
+        <div class="ucard-body">
+          <div class="row">
+            <div class="rowline">
+              <span class="rowlabel">Duplicate event</span>
+              <span class="btn neutral"><svg class="ic sm" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Duplicate</span>
+            </div>
+            <p class="rowdesc">Copy this event's setup into a fresh event.</p>
+          </div>
+          <div class="row">
+            <div class="rowline">
+              <span class="rowlabel">Delete event</span>
+              <span class="btn danger-out"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> Delete</span>
+            </div>
+            <p class="rowdesc">Remove the event and everything under it.</p>
+          </div>
+        </div>
+      </div>
+      <p class="note">No way to reset just the orders after a test run — you'd delete the whole event and rebuild it.</p>
+    </div>
+
+    <!-- AFTER -->
+    <div class="col">
+      <h2>After <span class="tag good">proposed</span></h2>
+      <div class="ucard">
+        <div class="ucard-head">Event details</div>
+        <div class="ucard-body">
+          <div class="row">
+            <div class="rowline">
+              <span class="rowlabel">Duplicate event</span>
+              <span class="btn neutral"><svg class="ic sm" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Duplicate</span>
+            </div>
+            <p class="rowdesc">Copy this event's setup into a fresh event.</p>
+          </div>
+          <div class="row">
+            <div class="rowline">
+              <span class="rowlabel">Delete event</span>
+              <span class="btn danger-out"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> Delete</span>
+            </div>
+            <p class="rowdesc">Remove the event and everything under it.</p>
+          </div>
+          <div class="sep"></div>
+          <div class="newwrap">
+            <span class="newtag">new</span>
+            <div class="row">
+              <div class="rowline">
+                <span class="rowlabel">Delete all orders</span>
+                <span class="btn danger-out"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> Delete orders…</span>
+              </div>
+              <p class="rowdesc">Clear every order, item and print job for this event. Keeps the event, its menu and its clients. Admins only.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="note">A distinct row, opens a typed-confirm modal (right) — the “…” signals it's not a one-tap action.</p>
+    </div>
+
+    <!-- MODAL -->
+    <div class="col">
+      <h2>Typed-confirm modal <span class="tag good">on click</span></h2>
+      <div class="modalframe">
+        <div class="modal-head">
+          <span class="warnicon"><svg class="ic" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+          <span class="modal-title">Delete all orders?</span>
+        </div>
+        <p class="modal-body">This permanently deletes <b>all 128 orders</b> for <b>Vlaamse Kermis</b>, including their items and print jobs. Other events are untouched. Client tabs stay but reset to empty. <b>This can't be undone.</b></p>
+
+        <div class="callout">
+          <svg class="ic sm" viewBox="0 0 24 24" style="margin-top:1px"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+          <span>Scoped strictly to this event — never team-wide.</span>
+        </div>
+
+        <div class="field">
+          <label>Type the event name <code>Vlaamse Kermis</code> to confirm</label>
+          <div class="input typed">Vlaamse Kermis<span class="caret">▏</span></div>
+          <p class="hint">Button stays disabled until the name matches exactly.</p>
+        </div>
+
+        <div class="actions">
+          <span class="btn neutral">Cancel</span>
+          <span class="btn danger-solid"><svg class="ic sm" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg> Delete 128 orders</span>
+        </div>
+      </div>
+      <p class="note">Nuxt UI 4 <code>UModal</code> (#content slot, no UCard) · destructive button enables only on an exact match.</p>
+    </div>
+  </div>
+
+  <div class="changes">
+    <h3>What changes</h3>
+    <ul>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>New danger-zone row.</b> A <b>Delete all orders</b> row is added to the Event details card, directly under <b>Delete event</b>. Rendered for <b>team admins only</b>.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Typed-confirm modal, not a pill.</b> Clicking opens a <code>UModal</code> where the admin must type the event name to enable the destructive button — a stronger guard than the Delete-event pill because it's bulk-destructive.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Scope is spelled out.</b> The modal states it wipes only this event's orders + items + print jobs, keeps clients, and can't be undone.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Empties the list on success.</b> After the delete lands, the event's order list refreshes to empty and a success toast fires.</span></li>
+      <li><svg class="ic check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg><span><b>Nothing else moves.</b> Duplicate, Delete event, and every other Settings card stay exactly as they are.</span></li>
+    </ul>
+  </div>
+  <footer class="fin">Mockup only · pure HTML/CSS/SVG, no JS · order count (128) is illustrative</footer>
+</div>
+</body>
+</html>

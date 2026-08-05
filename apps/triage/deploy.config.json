@@ -1,5 +1,5 @@
 {
-  "stagingUrl": "https://triage-preview.cloudflare-e53.workers.dev",
+  "stagingUrl": "https://triage-preview.pmcp.dev",
   "productionUrl": "https://triage.friendlyinter.net",
   "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-ai @fyit/crouton-triage @fyit/crouton-flow @fyit/crouton",
   "watchPaths": [

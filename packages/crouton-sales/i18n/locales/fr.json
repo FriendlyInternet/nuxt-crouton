@@ -122,10 +122,13 @@
           "title": "Écran cuisine",
           "live": "en direct",
           "active": "{count} actives",
-          "allCaughtUp": "Tout est à jour — aucune commande en cours.",
-          "bump": "Validé",
+          "allCaughtUp": "Rien à remettre — tout est parti.",
+          "bump": "Remis",
           "staff": "personnel",
-          "eventNotFound": "Événement introuvable"
+          "eventNotFound": "Événement introuvable",
+          "stale": "Non actualisé",
+          "staleHint": "Cet écran a perdu le contact avec le serveur — les commandes affichées peuvent être obsolètes. Vérifiez la connexion.",
+          "connecting": "connexion"
         }
       },
       "salesOrders": {
@@ -202,7 +205,8 @@
       "orders": "Commandes",
       "avgOrder": "Commande moy.",
       "topProducts": "Meilleurs produits",
-      "noSalesYet": "Pas encore de ventes"
+      "noSalesYet": "Pas encore de ventes",
+      "outstanding": "En attente"
     },
     "common": {
       "save": "Enregistrer",
@@ -217,6 +221,8 @@
       "none": "Aucun",
       "active": "Actif",
       "inactive": "Inactif",
+      "on": "Activé",
+      "off": "Désactivé",
       "confirmDelete": "Confirmer la suppression"
     },
     "block": {
@@ -272,7 +278,8 @@
       "locationRemarkPlaceholder": "Ajouter une remarque pour ce lieu…",
       "remark": "Remarque",
       "remarkPlaceholder": "Saisissez la remarque…",
-      "staffOrder": "Commande du personnel"
+      "staffOrder": "Commande du personnel",
+      "staffOrderShort": "Personnel"
     },
     "products": {
       "title": "Produits",
@@ -280,11 +287,18 @@
       "noProducts": "Aucun produit disponible",
       "outOfStock": "Rupture de stock",
       "options": "Options",
-      "addToCart": "Ajouter au panier"
+      "addToCart": "Ajouter au panier",
+      "inCart": "Commandé"
     },
     "categories": {
       "all": "Tout",
       "title": "Catégories"
+    },
+    "orderHistory": {
+      "title": "Mes commandes",
+      "loading": "Chargement de vos commandes…",
+      "empty": "Vous n'avez pas encore passé de commande.",
+      "loadError": "Impossible de charger vos commandes"
     },
     "orders": {
       "title": "Commandes",
@@ -305,6 +319,10 @@
       "processing": "En cours de traitement",
       "client": "Client",
       "rePrint": "Réimprimer",
+      "rePrintOrder": "Réimprimer",
+      "rePrintConfirm": "Confirmer la réimpression ?",
+      "reprintQueued": "Réimpression en file d'attente",
+      "reprintError": "Impossible de réimprimer cette commande",
       "printTriggered": "Impression lancée",
       "printFailed": "Échec de l'impression",
       "printError": "Impossible de lancer l'impression pour cette commande",
@@ -328,7 +346,8 @@
       "createNewClient": "Créer un nouveau client",
       "clientHelp": "Sélectionnez un client existant ou créez-en un nouveau",
       "clientRequired": "Client requis",
-      "clientRequiredDescription": "Cet événement nécessite un client. Veuillez en sélectionner ou en créer un."
+      "clientRequiredDescription": "Cet événement nécessite un client. Veuillez en sélectionner ou en créer un.",
+      "deleteError": "Impossible de supprimer la commande"
     },
     "events": {
       "title": "Événements",
@@ -386,7 +405,15 @@
       "driverNetwork": "Imprimante réseau",
       "driverNetworkHelp": "Imprimante thermique sur le réseau du lieu (ESC/POS).",
       "driverBrowser": "Navigateur / AirPrint",
-      "driverBrowserHelp": "Imprimer via la boîte de dialogue d’impression de l’appareil, depuis un écran passerelle."
+      "driverBrowserHelp": "Imprimer via la boîte de dialogue d’impression de l’appareil, depuis un écran passerelle.",
+      "testPrint": "Impression test",
+      "testPrintQueued": "Ticket de test en file — regardez l'imprimante",
+      "testPrintError": "Échec de l'impression test",
+      "testPrintWaiting": "Envoi du ticket de test à l'imprimante…",
+      "testPrintPrinted": "Imprimé — le ticket de test est passé",
+      "testPrintFailed": "Échec de l'impression test",
+      "testPrintTimeout": "Aucune réponse — spooler hors ligne ou imprimante injoignable ?",
+      "preview": "Aperçu"
     },
     "helperLogin": {
       "title": "Connexion bénévole",
@@ -437,6 +464,8 @@
       "location": "Lieu",
       "status": "Statut",
       "previewTitle": "Aperçu d'impression",
+      "previewFailed": "Impossible de charger l'aperçu",
+      "previewNote": "Comme l'imprimante l'imprime · avec vos réglages enregistrés",
       "printerInformation": "Informations sur l'imprimante",
       "name": "Nom",
       "ipAddress": "Adresse IP",
@@ -481,12 +510,26 @@
       "duplicateEventDesc": "Crée une copie de cet événement avec ses catégories, emplacements, produits et imprimantes",
       "deleteEvent": "Supprimer l'événement",
       "deleteEventDesc": "Supprime définitivement cet événement",
+      "deleteAllOrders": "Supprimer toutes les commandes",
+      "deleteAllOrdersAction": "Supprimer les commandes…",
+      "deleteAllOrdersDesc": "Efface chaque commande, article et tâche d'impression de cet événement. Conserve l'événement, sa carte et ses clients.",
+      "deleteAllOrdersTitle": "Supprimer toutes les commandes ?",
+      "deleteAllOrdersWarning": "Ceci supprime définitivement toutes les commandes de « {event} », y compris leurs articles et tâches d'impression. Les autres événements ne sont pas touchés. Les comptes clients restent mais sont remis à zéro. Cette action est irréversible.",
+      "deleteAllOrdersConfirmLabel": "Tapez « {event} » pour confirmer",
+      "deleteAllOrdersConfirm": "Supprimer toutes les commandes",
+      "deleteAllOrdersDone": "{count} commande(s) supprimée(s)",
+      "deleteAllOrdersError": "Impossible de supprimer les commandes",
       "helperPin": "PIN bénévole",
       "receiptSettings": "Paramètres d'impression",
       "unsavedChanges": "Modifications non enregistrées",
       "settingsSaved": "Paramètres enregistrés",
       "editReceiptText": "Modifier le texte du reçu",
       "activeHelpers": "Bénévoles actifs",
+      "helperPinRotateHint": "Changer le code PIN déconnecte tous les bénévoles encore sur l'ancien.",
+      "logoutAllHelpers": "Déconnecter tous les bénévoles",
+      "helpersLockedOut": "{count} bénévole(s) déconnecté(s) — ils doivent saisir le nouveau code PIN",
+      "helpersLoggedOut": "{count} bénévole(s) déconnecté(s)",
+      "helpersLogoutError": "Impossible de déconnecter les bénévoles",
       "add": "Ajouter",
       "loading": "Chargement...",
       "noCategories": "Aucune catégorie",
@@ -498,6 +541,9 @@
       "noProducts": "Aucun produit",
       "inThisCategory": " dans cette catégorie",
       "eventDetails": "Détails de l'événement",
+      "settingsTabData": "Général",
+      "settingsTabPrinters": "Imprimantes",
+      "settingsTabHelpers": "Bénévoles",
       "eventName": "Nom de l'événement",
       "eventNamePlaceholder": "p. ex. Marché d'été 2026",
       "eventType": "Type d'événement",
@@ -513,6 +559,8 @@
       "currencyEur": "Euro (€)",
       "currencyUsd": "Dollar ($)",
       "showInactive": "Produits inactifs",
+      "editCatalog": "Modifier",
+      "doneEditing": "Terminé",
       "clientsPanel": {
         "button": "Clients",
         "title": "Additions clients",
@@ -525,7 +573,29 @@
         "printed": "Addition imprimée pour {client} — compte clôturé",
         "printError": "Impossible d'imprimer l'addition",
         "loadError": "Impossible de charger les clients"
-      }
+      },
+      "dataPanel": {
+        "button": "Données",
+        "title": "Données",
+        "revenueChart": "Revenu par jour",
+        "productMatrix": "Ventes par produit × jour",
+        "includePersonnel": "Inclure les commandes du personnel",
+        "personnelChart": "Commandes du personnel"
+      },
+      "launcher": {
+        "ordersDesc": "Toutes les commandes de cet événement — statut, tickets, réimpressions",
+        "ordersStat": "commandes",
+        "clientsDesc": "Voir et régler les additions ouvertes",
+        "clientsStat": "additions ouvertes",
+        "dataDesc": "Chiffres de vente en direct, graphiques et tableau produits",
+        "dataStat": "chiffre d'affaires",
+        "settingsDesc": "Détails de l'événement, imprimantes, texte des tickets et aides",
+        "settingsStat": "imprimantes"
+      },
+      "outstanding": "{count} en préparation",
+      "outstandingNone": "Rien en préparation",
+      "outstandingFilter": "Afficher seulement celles-ci",
+      "outstandingFilterClear": "Afficher toutes les commandes"
     },
     "helpers": {
       "title": "Bénévoles actifs",
@@ -542,9 +612,7 @@
       "notes": "Notes",
       "label": "Client",
       "selectOrCreate": "Sélectionner ou créer un client...",
-      "createNew": "Créer un nouveau client",
-      "nameLabel": "Nom du client",
-      "namePlaceholder": "Saisir le nom du client"
+      "createNamed": "Ajouter « {name} »"
     },
     "offline": {
       "title": "Hors ligne",
@@ -580,6 +648,82 @@
         "sendFailed": "Échec de l'envoi à l'imprimante",
         "generic": "Échec de la tâche d'impression"
       }
+    },
+    "printFlow": {
+      "title": "Flux d'impression",
+      "description": "Qui imprime les tickets de cet événement.",
+      "localDrainer": "Appareil local",
+      "localDrainerHelp": "Un appareil sur place (Pi / mini-PC) exécute l'application et imprime directement vers les imprimantes — fonctionne entièrement hors ligne.",
+      "routerSpooler": "Via le routeur",
+      "routerSpoolerHelp": "Le routeur sur place récupère les tickets depuis le cloud et les envoie aux imprimantes.",
+      "paused": "Pas d'impression physique",
+      "pausedHelp": "Aucun ticket n'est créé — les commandes apparaissent simplement à l'écran.",
+      "lastSeen": "vu pour la dernière fois",
+      "neverSeen": "jamais vu",
+      "updated": "Flux d'impression mis à jour",
+      "updateError": "Impossible de mettre à jour le flux d'impression",
+      "setup": {
+        "toggle": "Configuration",
+        "copy": "Copier",
+        "copied": "Copié",
+        "routerIntro": "Une seule fois : installez le routeur (API_URL dans /etc/init.d/print_server). Ensuite il se présente lui-même — un nouvel événement ne demande rien sur le routeur.",
+        "routerPrinters": "Placez les imprimantes sur le réseau propre du routeur avec une IP fixe, et ajoutez chacune sous Imprimantes avec cette IP et le port 9100.",
+        "routerTicket": "Le routeur imprime lui-même un ticket de couplage (au démarrage, tant qu'il n'est pas couplé). Pas de ticket ? Vérifiez l'alimentation, l'imprimante et qu'API_URL pointe vers cette application :",
+        "routerClaim": "Saisissez l'ID routeur et le code du ticket ci-dessous sous « Coupler le routeur ».",
+        "routerLegacy": "Routeur plus ancien sans ticket de couplage ? Suivez les étapes EVENT_ID dans print-server/README.md.",
+        "routerVerify": "Terminé quand ce point devient vert — le routeur interroge sous ~30 secondes.",
+        "drainerIntro": "Un appareil sur place (Pi / mini-PC) exécute l'application et imprime directement vers les imprimantes — automatiquement, sans configuration du routeur ni rien à activer.",
+        "drainerOverride": "Avancé : sur un appareil sur place, l'app imprime en local par défaut. Forcez-le partout, ou désactivez-le sur un appareil qui ne doit pas imprimer, via la surcharge d'env :",
+        "drainerPrinters": "Ajoutez chaque imprimante sous Imprimantes avec son IP LAN et le port 9100 — l'appareil doit atteindre les imprimantes sur son réseau.",
+        "drainerFlip": "Laissez ce flux d'impression sur « Appareil local » — le flux routeur est le défaut, et l'appareil n'imprime que pour les événements réglés sur Appareil local.",
+        "drainerVerify": "Terminé quand ce point devient vert — l'appareil se manifeste sous ~30 secondes."
+      },
+      "pairing": {
+        "title": "Coupler le routeur",
+        "description": "Un routeur neuf imprime lui-même un ticket de couplage. Saisissez l'ID routeur et le code de ce ticket — ensuite, plus rien à faire sur le routeur pour les nouveaux événements.",
+        "deviceId": "ID routeur",
+        "code": "Code",
+        "claim": "Coupler",
+        "revoke": "Découpler",
+        "claimSuccess": "Routeur couplé — il commence à imprimer sous ~30 secondes",
+        "claimConflict": "Ce routeur est couplé à une autre équipe — découplez-le là-bas d'abord",
+        "claimError": "Impossible de coupler le routeur — vérifiez l'id et le code sur le ticket",
+        "revokeSuccess": "Routeur découplé — il imprimera un nouveau ticket de couplage",
+        "revokeError": "Impossible de découpler le routeur"
+      }
+    },
+    "import": {
+      "action": "Importer",
+      "title": "Importer des produits",
+      "subtitle": "Collez des lignes depuis un tableur. Rien n'est enregistré avant de cliquer sur Importer.",
+      "pasteLabel": "Lignes collées",
+      "pasteHint": "Incluez la ligne d'en-tête (Nom, Prix, Catégorie, Emplacement).",
+      "mappingLabel": "Colonnes",
+      "mapColumn": "Associer la colonne",
+      "willCreateTitle": "Sera également créé",
+      "listSeparator": ", ",
+      "statusHeader": "Statut",
+      "statusNew": "Nouveau",
+      "statusDuplicate": "Existe déjà",
+      "statusError": "Erreur",
+      "createAnyway": "Créer quand même",
+      "confirm": "Importer",
+      "doneTitle": "Import terminé",
+      "doneBody": "{created} créés, {skipped} ignorés, {errors} en échec",
+      "failedTitle": "Échec de l'import",
+      "failedBody": "Rien n'a été enregistré.",
+      "fieldIgnore": "Ignorer",
+      "fieldTitle": "Nom du produit",
+      "fieldPrice": "Prix",
+      "fieldCategory": "Catégorie",
+      "fieldLocation": "Emplacement",
+      "fieldDescription": "Description",
+      "fieldActive": "Actif",
+      "fieldRequiresRemark": "Remarque requise",
+      "fieldRemarkPrompt": "Invite de remarque",
+      "errMissingName": "Nom du produit manquant",
+      "errMissingPrice": "Pas de colonne prix",
+      "errBadPrice": "Prix illisible"
     }
   }
 }

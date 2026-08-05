@@ -100,7 +100,7 @@ export async function getActiveTemplatesForTrigger(
   try {
     // Import from the centralized schema index (always exists, Vite resolves ~~ alias)
     // Tables are generated at build time — schema typed as Record since exports vary per app
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
     const schema: Record<string, any> = await import('~~/server/db/schema')
     const bookingsEmailtemplates = schema.bookingsEmailtemplates
     if (!bookingsEmailtemplates) return []
@@ -195,7 +195,7 @@ export async function logEmailSend(options: {
   const db = useDB()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
     const schema: Record<string, any> = await import('~~/server/db/schema')
     const bookingsEmaillogs = schema.bookingsEmaillogs
     if (!bookingsEmaillogs) return null
@@ -241,7 +241,7 @@ export async function updateEmailLogStatus(
   const db = useDB()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
     const schema: Record<string, any> = await import('~~/server/db/schema')
     const bookingsEmaillogs = schema.bookingsEmaillogs
     if (!bookingsEmaillogs) return
@@ -675,7 +675,7 @@ export async function getBatchBookingEmailStats(
   const db = useDB()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
     const schema: Record<string, any> = await import('~~/server/db/schema')
     const bookingsEmaillogs = schema.bookingsEmaillogs
     if (!bookingsEmaillogs) return new Map()
@@ -734,7 +734,7 @@ export async function getBatchBookingEmailDetails(
   const bookingIds = bookings.map(b => b.id)
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
     const schema: Record<string, any> = await import('~~/server/db/schema')
     const bookingsEmaillogs = schema.bookingsEmaillogs
     const bookingsEmailtemplates = schema.bookingsEmailtemplates
@@ -908,7 +908,7 @@ export async function getBookingEmailStats(
   const db = useDB()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
     const schema: Record<string, any> = await import('~~/server/db/schema')
     const bookingsEmaillogs = schema.bookingsEmaillogs
     if (!bookingsEmaillogs) return { total: 0, sent: 0, pending: 0, failed: 0 }
@@ -968,7 +968,7 @@ export async function getBookingEmailDetails(
   const db = useDB()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
     const schema: Record<string, any> = await import('~~/server/db/schema')
     const bookingsEmaillogs = schema.bookingsEmaillogs
     const bookingsEmailtemplates = schema.bookingsEmailtemplates

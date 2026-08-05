@@ -95,6 +95,26 @@ const toggleColorMode = () => {
   colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
 }
 
+// Theme quick-select for the pill — a standalone palette dropdown wired to the
+// SAME source as the CV-menu Theme submenu: the shared state key the
+// crouton-themes base layer fills (empty when that layer isn't extended, so
+// this renders nothing without a hard dependency on the themes package). The
+// plugin stores a single "Theme ▸" submenu item; its children are the themes,
+// which we surface directly as the dropdown's items. Gated on the same
+// permission the CV menu uses (admins always; others when allowUserThemes).
+const themePreferenceItems = useState<DropdownMenuItem[]>('crouton:themePreferenceItems', () => [])
+const allowUserThemes = useState<boolean>('crouton:allowUserThemes', () => true)
+const canSwitchTheme = computed(() => allowUserThemes.value || isAdmin.value)
+const themeQuickItems = computed<DropdownMenuItem[][]>(() => {
+  const children = (themePreferenceItems.value[0] as { children?: DropdownMenuItem[] } | undefined)?.children
+  return canSwitchTheme.value && children?.length ? [children] : []
+})
+
+// Pill action slot — other layers push icon buttons here (e.g. pages' own
+// "edit this page" pencil); rendered in the pill next to the appearance
+// controls. See useCroutonNavPill.
+const { visibleActions: navPillActions } = useCroutonNavPill()
+
 // Admin dropdown menu items — mirrors AdminSidebar logic dynamically
 const adminPrefix = computed(() => {
   const teamParam = teamSlugRef.value || teamIdRef.value || currentTeam.value?.slug || ''
@@ -169,7 +189,20 @@ const adminDropdownItems = computed<DropdownMenuItem[][]>(() => {
 })
 
 // Shared pill styles
-const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-full border border-default shadow-lg shadow-neutral-950/5'
+// `pointer-events-auto` belongs HERE, on the visible pill — not on the wrapper's
+// direct children (#1842). The wrapper spans the full viewport width when docked
+// top (`inset-x-0`), and its child is only a flex row that right-aligns this
+// pill. Re-enabling pointer events at that level put an invisible, full-width,
+// z-50 click-catcher across the top of every page, swallowing clicks on whatever
+// sat beneath it — the workspace pane headers' ✕ and filter buttons, in the
+// report that found this.
+const pillClass = 'pointer-events-auto flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-full border border-default shadow-lg shadow-neutral-950/5'
+
+// Full-screen pages (kassa and friends) own the whole viewport top — the
+// pills dock to the bottom-left corner there instead of reserving a top
+// strip. Same 'pageLayout' state the route publishes and the layout reads.
+const pageLayout = useState<'default' | 'full-height' | 'full-screen'>('pageLayout', () => 'default')
+const dockBottom = computed(() => pageLayout.value === 'full-screen')
 </script>
 
 <template>
@@ -177,7 +210,12 @@ const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-
        line right under it (in portrait Safari the webview already starts
        below the status bar — env(safe-area-inset-top) is 0 there; the max()
        keeps it clear of the notch in standalone/PWA mode). -->
-  <div class="fixed top-[max(0.25rem,env(safe-area-inset-top))] sm:top-6 inset-x-0 z-50 px-4 sm:px-6 pointer-events-none [&>*]:pointer-events-auto">
+  <div
+    class="fixed z-50 pointer-events-none"
+    :class="dockBottom
+      ? 'bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 sm:left-6'
+      : 'top-[max(0.25rem,env(safe-area-inset-top))] sm:top-6 inset-x-0 px-4 sm:px-6'"
+  >
     <!-- Loading state -->
     <template v-if="isLoading">
       <div class="relative flex items-center justify-center">
@@ -195,7 +233,7 @@ const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-
     </template>
 
     <!-- Desktop layout -->
-    <div v-else-if="isDesktop" class="relative flex items-center" :class="showPageNav ? 'justify-center' : 'justify-end'">
+    <div v-else-if="isDesktop" class="relative flex items-center" :class="dockBottom ? 'gap-2' : (showPageNav ? 'justify-center' : 'justify-end')">
       <!-- Center pill: Page navigation (hidden when ≤1 page) -->
       <div v-if="showPageNav" :class="[pillClass, 'px-4']">
         <UNavigationMenu
@@ -211,7 +249,7 @@ const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-
       </div>
 
       <!-- Right pill: User menu + language + dark mode (pinned right) -->
-      <div :class="[pillClass, 'px-2 py-1', showPageNav && 'absolute right-0']">
+      <div :class="[pillClass, 'px-2 py-1', showPageNav && !dockBottom && 'absolute right-0']">
         <ClientOnly>
           <template v-if="showAuthControls">
             <!-- Authenticated: Avatar dropdown -->
@@ -289,8 +327,37 @@ const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-
           </template>
         </ClientOnly>
 
+        <!-- Package-contributed pill actions (e.g. the edit-page pencil).
+             Client-only: actions are registered on mount. -->
+        <ClientOnly>
+          <UButton
+            v-for="action in navPillActions"
+            :key="action.id"
+            :icon="action.icon"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :aria-label="action.label"
+            @click="action.onSelect"
+          />
+        </ClientOnly>
+
         <!-- Language Switcher -->
         <CroutonI18nLanguageSwitcher class="w-auto" />
+
+        <!-- Theme quick-select — only when the themes package populates the
+             shared items (client-only, so no SSR hydration mismatch). -->
+        <ClientOnly>
+          <UDropdownMenu v-if="themeQuickItems.length" :items="themeQuickItems">
+            <UButton
+              icon="i-lucide-palette"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :aria-label="t('pages.nav.theme')"
+            />
+          </UDropdownMenu>
+        </ClientOnly>
 
         <!-- Dark/Light Mode Toggle -->
         <ClientOnly>
@@ -354,7 +421,7 @@ const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-
       </div>
 
       <!-- Right pill: auth controls (unless the page hides them) + language + dark mode -->
-      <div :class="[pillClass, 'px-2 py-1', showPageNav && 'absolute right-0']">
+      <div :class="[pillClass, 'px-2 py-1', showPageNav && !dockBottom && 'absolute right-0']">
         <ClientOnly>
           <template v-if="showAuthControls">
             <!-- Authenticated: Avatar dropdown -->
@@ -429,8 +496,34 @@ const pillClass = 'flex items-center gap-1 bg-muted/80 backdrop-blur-sm rounded-
           </template>
         </ClientOnly>
 
-        <!-- Language + dark mode — always reachable, even on chrome-less pages -->
+        <!-- Package-contributed pill actions (e.g. the edit-page pencil). -->
+        <ClientOnly>
+          <UButton
+            v-for="action in navPillActions"
+            :key="action.id"
+            :icon="action.icon"
+            color="neutral"
+            variant="ghost"
+            size="sm"
+            :aria-label="action.label"
+            @click="action.onSelect"
+          />
+        </ClientOnly>
+
+        <!-- Language + theme + dark mode — always reachable, even on chrome-less pages -->
         <CroutonI18nLanguageSwitcher class="w-auto" />
+
+        <ClientOnly>
+          <UDropdownMenu v-if="themeQuickItems.length" :items="themeQuickItems">
+            <UButton
+              icon="i-lucide-palette"
+              color="neutral"
+              variant="ghost"
+              size="sm"
+              :aria-label="t('pages.nav.theme')"
+            />
+          </UDropdownMenu>
+        </ClientOnly>
 
         <ClientOnly>
           <UButton

@@ -153,7 +153,7 @@ Side effects beyond the collection dir (config-mode run, same file `:1091-1152` 
 | `app/app.config.ts` | collection upserted into `croutonCollections` (import + entry) |
 | i18n locale JSON | created when the collection has translatable fields |
 | `server/database/schema/index.ts` | named schema export added per collection (config mode automates the "manual export" step the `crouton` skill lists) |
-| migration | `npx nuxt db generate` runs with a 30s timeout — **can silently produce zero migrations on a fresh tree** (the schema.mjs build-first gotcha, #523) → `db-migrations` skill |
+| migration | drizzle-kit runs **directly on the resolved schema graph** — no Nuxt build (#1445 WS2). ~2s. On a *cold* scaffold it soft-defers (`↻ Migration deferred … re-run: pnpm db:generate`, exit 0) rather than producing it in the same run — #1457. The old `npx nuxt db generate` 30s-timeout/silent-zero-migrations failure (#523) is **retired by design** on resolver apps; still possible on an external legacy `.nuxt`-bundle scaffold (no app in this repo since #1456) → `db-migrations` skill |
 | CSS | Tailwind `@source` directive ensured |
 | `.nuxt`-adjacent registries | type registry + **`server/utils/crouton-query-registry.ts`** (lazy per-collection query lookup) |
 | **`crouton.layout.json`** (app root) | deterministic default layout (§6) |

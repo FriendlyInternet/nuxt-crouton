@@ -104,6 +104,30 @@ critical convention break, diff-scoped so never the backlog). Its lens is conven
 only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
 (`/red-team`).
 
+## The simplify agent (standalone — the quality-pass analog of frontend-review)
+
+`simplify.md` is a **simplification / code-smell prober** (#1576), the quality sibling of
+`frontend-review`. Given `{ scope, depth, fix }` it reads the **diff** the way a senior
+doing a quality pass would — reactivity/async workarounds (`nextTick`/timers papering over
+state a library syncs on its own schedule — the #1550 `useSortable`-`onEnd` case),
+hand-rolled boilerplate that Nuxt/VueUse already do (`useFetch`/`onClickOutside`/
+`useLocalStorage`…), DRY violations the change introduces, over-engineered abstractions for
+one call site, non-idiomatic reactivity — and **returns structured severity-rated
+findings**. It reports; it patches only the safe deterministic set under `fix:true`.
+
+| Agent | File | Recurses? | Writes code? | Model |
+|-------|------|-----------|--------------|-------|
+| `simplify` | `simplify.md` | no | only under `fix:true` (safe set) | `sonnet` |
+
+**It is ADVISORY — it has no 🔴 and NEVER blocks a merge.** Simplification is a judgment
+call, so its whole point is to *inform*, and precision beats recall (a noisy taste call
+teaches people to mute it). It's the CI form of the on-demand `/simplify` built-in, run by
+`.github/workflows/simplify-review.yml` (per-PR `quick`, diff-scoped, report-only — posts a
+sticky comment + writes a verdict for the outage-check, always exits 0). Sonnet (not Haiku)
+because judgment/false-positive cost dominates here — see `routing.json`. Its lens is
+**simpler/less-duplicated/more-idiomatic** only — not bugs (`/code-review`, `red-team`),
+conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`).
+
 ### The agent contract
 
 - **Input is passed in the prompt** as a small JSON-ish object — e.g.
@@ -134,17 +158,32 @@ only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
   **already hold its result** — read it, confirm the PR/comment actually exists, and only then
   report. If the spawn didn't deliver, you are **not done**: spawn again (and wait), or do the
   work yourself. There is no fire-and-forget.
-- **Hand off by SPAWNING, never by LABELING (the #457 root cause).** To get a child issue
-  worked you **spawn** it with the `Agent` tool (a `task-decomposer` or `task-worker`) in
-  THIS run and wait for its result. **NEVER apply the `delegate` label to a sub-issue to
-  "dispatch" it.** `delegate` is the *human* entry trigger only: applied from inside a run
-  you are `claude[bot]`, so it re-enters `decompose-on-issue.yml` as a **bot actor** → the
-  bot-actor guard rejects that child run → it produces nothing; worse, a sub-issue dispatched
-  that way runs `/task-decompose` on *itself as a fresh epic off `main`*, where the real
-  epic's scaffold doesn't exist. (This is exactly how the #457 deploy stalled: the
-  orchestrator applied `delegate` to #456/#457 instead of spawning workers — both child runs
-  were bot-rejected, no PR, no deploy.) There is no label-based hand-off: spawn the agent, or
-  do the leaf's work yourself in this run.
+- **Hand off by SPAWNING, never by LABELING — UNLESS you are in event-driven mode (#1685 WS3).**
+  In the **default (in-process / claude) mode** you get a child worked by **spawning** it with the
+  `Agent` tool (a `task-decomposer` or `task-worker`) in THIS run and waiting for its result.
+  **NEVER apply the `delegate` label to a sub-issue to "dispatch" it here:** applied from inside a
+  claude run you are `claude[bot]`, so it re-enters `decompose-on-issue.yml` as a **disallowed bot
+  actor** → the bot-actor guard rejects that child run → it produces nothing; worse, a sub-issue
+  dispatched that way runs `/task-decompose` on *itself as a fresh epic off `main`*, where the real
+  epic's scaffold doesn't exist. (This is exactly how the #457 deploy stalled: the orchestrator
+  applied `delegate` to #456/#457 instead of spawning workers — both child runs were bot-rejected,
+  no PR, no deploy.)
+  **The one sanctioned exception — event-driven mode (`PIPELINE_MODE=event-driven`, the pi harness):**
+  pi-claude-cli can't drive an in-process `Agent` tree, so there the decomposer hands off by
+  **labeling** (`work-this` / `delegate-pi`) **via the Harness App token** (`GH_TOKEN`) and STOPS —
+  a fresh single-use run works each child. That path is safe because the App token is actored as
+  `nuxt-harness[bot]` — the **one allowed bot** whose adds cascade and pass the guard — so #457 stays
+  dead for every *other* bot. Labels MUST go through the App-token `gh` (not the MCP tool, which uses
+  the human PAT and won't cascade). The invariants that keep it from looping are the pure, unit-tested
+  `scripts/pipeline-loop-guard.mjs` (bot-actor · exact-label · depth cap) — see `task-decomposer.md`
+  → “Event-driven mode”. Outside that one mode, the rule is unchanged: spawn, or do the leaf yourself.
+- **The pi operating contract is canonical in one file (#1022).** `--skill` loads `.claude/skills/**`
+  but not these agent contracts, so the non-negotiable subset pi must obey (never self-merge · sign-off
+  as a **top-level** comment · idempotent `epic/<NN>-*` reuse · `.github/workflows/**` → embed-a-patch ·
+  every PR body opens with `Closes #N`) lives in **`.claude/agents/pi-operating-contract.md`** and is
+  `cat` verbatim into the pi prompt by both `decompose-on-issue-pidev.yml` and `work-issue-pidev.yml`.
+  Edit the contract **there** (one place, so the two flows can't drift — they were byte-identical hand-
+  maintained copies before). Keep that file **pure prose**: it is injected raw, so no frontmatter/headers.
 - **A directly-dispatched child resolves to its parent's epic branch — never a new epic off
   `main`.** When `/task-decompose` is invoked on an issue that is itself a **sub-issue** (its
   `parent_issue_url` is set / it carries a parent epic), do **NOT** mint a fresh
@@ -160,22 +199,28 @@ only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
   GitHub/app notification), apply `status:blocked`, and stop — the human answers by
   replying on the issue. Small ambiguities are decided with a default + a noted
   assumption (no ping). Change the handle in this file and in the task-decompose skill.
-- **A block comment is a HANDOFF, not just a question (#639).** The owner's reply spawns a
-  **brand-new session** (`resume-on-comment.yml`) that has **zero memory** of your reasoning
-  and checks out `main` — not your worktree, which is gone. So the blocking comment must be
-  self-contained enough for a cold agent to resume from. Post this structured block (it
-  doubles as the question *and* the resume brief):
+  **When** to ask vs decide is the 3-part test in `AGENTS.md` → *Deciding vs asking* (ask only
+  when the fork is irreversible/expensive **and** not derivable **and** genuinely the human's;
+  else decide + log). Not "no assumptions" — assume the derivable/reversible, escalate the rest.
+- **A block comment is a HANDOFF, not just a question (#639) — emit it via the `ask-human`
+  skill (#1189).** The owner's reply spawns a **brand-new session** (`resume-on-comment.yml`)
+  that has **zero memory** of your reasoning and checks out `main` — not your worktree, which
+  is gone. So the blocking comment must be self-contained enough for a cold agent to resume
+  from, **and** 10-second-scannable for an owner holding many threads: lead with the one
+  decision **and a recommendation**, never a naked "what do you want?". The skill carries the
+  canonical shape (it doubles as the question *and* the resume brief):
   ```
-  ## 🔀 Blocked — need a decision (handoff)
-  **Question for @pmcp:** <the one thing only you can decide>
-  **Why it blocks:** <what cannot proceed until answered>
-  **State so far:** <what's done · branch name + pushed? · what's NOT done>
-  **After you answer:** a NEW session resumes from THIS ticket —
-    Option A → <next steps> · Option B → <next steps>
+  ## 🔀 Blocked — <the one decision, in one line>
+  > 🤖 provenance header (interactive @pmcp-account disclaimer)
+  **TL;DR — recommend <X>:** <decision restated + why X, first>
+  **Status:** <what's done · branch name + pushed? · what's NOT done>
+  **Why it came up:** <what cannot proceed until answered>
+  **Options:** A) … _(recommended)_ · B) …
+  **Reply:** `A`/`B` (or in-medium) → a NEW session resumes from THIS ticket
   **Don't lose:** <decisions/assumptions already made the next agent must keep>
   ```
   And **push before you block**: if you've written anything, `git push -u origin <branch>`
-  first and name that branch under *State so far* — an unpushed worktree is lost on stop, a
+  first and name that branch under *Status* — an unpushed worktree is lost on stop, a
   pushed branch is recoverable by the resuming session.
 - **The PING is a TOP-LEVEL comment, never a PR *review* body.** Post the handoff/sign-off via
   `add_issue_comment` (a top-level issue/PR comment) — that reliably notifies. A PR **review**
@@ -192,6 +237,11 @@ only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
   so parallel leaves never collide on branches/files. One issue → one branch → one PR
   with `Closes #NN`. Workers obey the `packages/` HARD GATE and the `/commit` + no-squash
   merge policy.
+- **`Closes` only YOUR issue; `Refs` any other blocked issue (#1253).** A PR body's `Closes`
+  on someone else's `status:blocked` issue (e.g. a retest your fix unblocks) auto-closes it
+  out from under the owner's pending reply — the #1233/#1234 race. Use `Refs #NN` for those;
+  `warn-closes-blocked.yml` warns on violations (gate PRs on `epic/*` are exempt — closing
+  their own blocked issue via merge-on-approval is the designed flow).
 
 ### Integration-branch flow & safety (#348)
 

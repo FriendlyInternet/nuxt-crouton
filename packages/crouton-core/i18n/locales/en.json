@@ -151,7 +151,8 @@
     "selectPlaceholder": "Select {label}",
     "createNew": "Create new {label}",
     "noData": "No {label} yet",
-    "noResults": "No results for \"{searchTerm}\""
+    "noResults": "No results for \"{searchTerm}\"",
+    "createNamed": "Add \"{name}\""
   },
   "options": {
     "selectPlaceholder": "Select {label}",

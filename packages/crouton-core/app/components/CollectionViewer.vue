@@ -11,12 +11,12 @@
           v-for="layoutOption in layoutOptions"
           :key="layoutOption.value"
           :icon="layoutOption.icon"
-          :color="currentLayout === layoutOption.value ? 'primary' : 'neutral'"
-          :variant="currentLayout === layoutOption.value ? 'solid' : 'ghost'"
+          :color="displayedLayout === layoutOption.value ? 'primary' : 'neutral'"
+          :variant="displayedLayout === layoutOption.value ? 'solid' : 'ghost'"
           size="sm"
           :aria-label="camelToTitleCase(layoutOption.value)"
-          :aria-pressed="currentLayout === layoutOption.value"
-          @click="currentLayout = layoutOption.value"
+          :aria-pressed="displayedLayout === layoutOption.value"
+          @click="selectLayout(layoutOption.value)"
         />
       </div>
 
@@ -85,8 +85,9 @@
 
         <!-- Async generated List component — boundaried by Suspense so the
              skeleton holds until its data resolves, then reveals at once.
-             effectiveLayout gives the component cards-on-mobile (#690); the
-             skeleton takes the plain-string currentLayout. -->
+             effectiveLayout gives the component cards-on-mobile (#690) while
+             honoring an explicit pick (#1169); the skeleton takes the
+             plain-string displayedLayout so it matches what will render. -->
         <Suspense v-else-if="componentName">
           <component
             :is="componentName"
@@ -94,7 +95,7 @@
             class="h-full"
           />
           <template #fallback>
-            <CroutonCollectionSkeleton :layout="currentLayout" />
+            <CroutonCollectionSkeleton :layout="displayedLayout" />
           </template>
         </Suspense>
 
@@ -136,6 +137,7 @@
 </template>
 
 <script setup lang="ts">
+import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import type { CroutonItemAction } from '../types/table'
 import { CROUTON_ITEM_ACTION_KEY } from '../types/table'
 
@@ -245,18 +247,37 @@ const layoutOptions = computed(() => {
   return options
 })
 
-// On mobile the table scrolls sideways and feels broken, so fall back to the
-// card/list layout below `sm` while keeping the table at `sm+`. The switcher
-// still reports `table` as selected; other layouts pass through unchanged.
+// On mobile the default table scrolls sideways and feels broken, so the
+// un-chosen default falls back to the card/list layout below `sm` (#690).
+// An EXPLICIT pick from the switcher is honored at any width — selecting
+// Table on a phone renders the real (sideways-scrolling) table (#1169).
+const userChose = ref(false)
+const breakpoints = useBreakpoints(breakpointsTailwind)
+const isMobile = breakpoints.smaller('sm')
+
 const effectiveLayout = computed(() =>
-  currentLayout.value === 'table'
+  !userChose.value && currentLayout.value === 'table'
     ? { base: 'list' as const, sm: 'table' as const }
     : currentLayout.value
 )
 
-// Icon for the current layout, shown on the mobile switcher menu button
+// What's actually rendered right now — drives the switcher's active state,
+// the mobile menu icon, and the skeleton, so the switcher never claims a
+// layout it isn't showing (#1169).
+const displayedLayout = computed(() =>
+  !userChose.value && currentLayout.value === 'table' && isMobile.value
+    ? 'list' as const
+    : currentLayout.value
+)
+
+function selectLayout(value: typeof allLayoutOptions[number]['value']) {
+  currentLayout.value = value
+  userChose.value = true
+}
+
+// Icon for the displayed layout, shown on the mobile switcher menu button
 const currentLayoutIcon = computed(() =>
-  allLayoutOptions.find(o => o.value === currentLayout.value)?.icon
+  allLayoutOptions.find(o => o.value === displayedLayout.value)?.icon
     ?? 'i-lucide-table'
 )
 
@@ -265,7 +286,7 @@ const switcherMenuItems = computed(() =>
   layoutOptions.value.map(o => ({
     label: camelToTitleCase(o.value),
     icon: o.icon,
-    onSelect: () => { currentLayout.value = o.value }
+    onSelect: () => selectLayout(o.value)
   }))
 )
 

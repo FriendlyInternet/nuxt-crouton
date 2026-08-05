@@ -1,0 +1,135 @@
+name: Open epic→main PR when assembled
+
+# The "done" signal (#1815). Nothing else in the pipeline opens the epic→main PR — the worker only
+# opens sub-PRs against the epic branch, and automerge-epic-subpr.yml lands those INTO the epic
+# branch. So when an epic's LAST child closes and its branch is ahead of main, THIS opens the
+# epic/<n>-… → main PR (READY, never merged) and requests the owner's review, so "done" lands in the
+# owner's github.com/pulls/review-requested queue. The owner does the actual merge.
+#
+# TRIGGER = issues:closed, NOT pull_request:closed. A sub-PR merging into a non-default epic branch
+# does not auto-close its `Closes #NN` child — schedule-waves.yml closes it explicitly and THAT
+# emits issues:closed. Keying off issues:closed means the just-completed child already reads as
+# closed here (no race against schedule-waves), so "all children closed" is decidable in one pass.
+#
+# APP TOKEN, not GITHUB_TOKEN: a GITHUB_TOKEN-opened PR does not trigger pull_request CI — the same
+# cascade reason automerge-epic-subpr.yml uses the App token. The epic→main PR MUST run CI so the
+# owner reviews it green.
+#
+# The PR body deliberately does NOT carry `Closes #<epic>`: epics close via the /close-epic
+# postmortem flow (#856), so auto-closing on this merge would bypass the postmortem gate.
+
+on:
+  issues:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      epic_branch:
+        description: 'epic/<n>-<slug> branch to evaluate'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # One evaluation per epic at a time (two children closing at once must not double-open the PR).
+  group: epic-ready-${{ github.event.issue.number || github.event.inputs.epic_branch }}
+  cancel-in-progress: false
+
+jobs:
+  open-epic-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/github-script@v7
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
+          DISPATCH_BRANCH: ${{ github.event.inputs.epic_branch }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo
+            const OWNER = process.env.OWNER_LOGIN || 'pmcp'
+            const ws = process.env.GITHUB_WORKSPACE
+            const { parsePipelineBlock } = await import(`${ws}/scripts/pipeline-context.mjs`)
+            const { parseEpicNumber, decideOpen } = await import(`${ws}/scripts/epic-ready.mjs`)
+
+            // Resolve (epicNumber, epicBranch) from either the closed child's pipeline block
+            // or a manual dispatch's branch input.
+            let epicNumber, epicBranch
+            if (context.eventName === 'workflow_dispatch') {
+              epicBranch = process.env.DISPATCH_BRANCH
+              epicNumber = parseEpicNumber(epicBranch)
+            } else {
+              const closed = context.payload.issue
+              const block = parsePipelineBlock(closed.body || '')
+              epicNumber = block.epic
+              epicBranch = block.epic_branch
+              if (!epicNumber) { core.info(`#${closed.number} has no pipeline block — not a pipeline child; skip.`); return }
+              if (epicNumber === closed.number) { core.info(`#${closed.number} is the epic itself — closed via /close-epic, not here; skip.`); return }
+            }
+            if (!epicNumber) { core.info(`could not resolve an epic number from ${epicBranch}; skip.`); return }
+
+            // Fall back to matching-refs if the block carried no branch (older children).
+            if (!epicBranch) {
+              try {
+                const refs = await github.paginate('GET /repos/{owner}/{repo}/git/matching-refs/heads/{prefix}',
+                  { owner, repo, prefix: `epic/${epicNumber}-` })
+                epicBranch = refs[0] ? refs[0].ref.replace('refs/heads/', '') : null
+              } catch (e) { core.warning(`matching-refs epic/${epicNumber}-: ${e.message}`) }
+            }
+            if (!epicBranch) { core.info(`no epic branch for #${epicNumber}; skip.`); return }
+
+            // 1) the epic's DIRECT sub-issues
+            let subIssues = []
+            try {
+              subIssues = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
+                { owner, repo, issue_number: epicNumber, per_page: 100 })
+            } catch (e) { core.warning(`sub-issues for #${epicNumber}: ${e.message}`); return }
+
+            // 2) any existing OPEN epic→main PR (idempotency guard)
+            const existing = await github.paginate(github.rest.pulls.list,
+              { owner, repo, state: 'open', head: `${owner}:${epicBranch}`, base: 'main', per_page: 100 })
+
+            // 3) commits the epic branch is ahead of main
+            let aheadCount = 0
+            try {
+              const cmp = (await github.rest.repos.compareCommitsWithBasehead(
+                { owner, repo, basehead: `main...${epicBranch}` })).data
+              aheadCount = cmp.ahead_by || 0
+            } catch (e) { core.warning(`compare main...${epicBranch}: ${e.message}`); return }
+
+            const { open, reason } = decideOpen({ subIssues, existingEpicMainPrs: existing, aheadCount })
+            core.info(`epic #${epicNumber} (${epicBranch}): ${open ? 'OPEN' : 'skip'} — ${reason}`)
+            if (!open) return
+
+            // Reference the epic WITHOUT closing it (postmortem gate, #856).
+            const epic = (await github.rest.issues.get({ owner, repo, issue_number: epicNumber })).data
+            const childList = subIssues.map(s => `- #${s.number} ${s.title}`).join('\n')
+            const cleanTitle = epic.title.replace(/^Epic:\s*/i, '')
+            const title = `Epic #${epicNumber}: ${cleanTitle}`.slice(0, 250)
+            const body =
+              `Assembles epic #${epicNumber} — all ${subIssues.length} children closed and merged into ` +
+              `\`${epicBranch}\`, ready for \`main\`.\n\n` +
+              `> Referenced, not \`Closes\` — the epic closes via the \`/close-epic\` postmortem flow (#856), ` +
+              `not on this merge.\n\n` +
+              `## 👤 For humans\n${cleanTitle}\n\n**Children (${subIssues.length}):**\n${childList}\n\n` +
+              `## 🧪 How to test\nReview the assembled \`${epicBranch}\` → \`main\` diff; CI runs on this PR. ` +
+              `Merge when green — you are the review gate.\n\n` +
+              `<sub>🤖 agent pipeline (CI) · epic→main assembler (#1815) · review requested from @${OWNER}</sub>`
+
+            let pr
+            try {
+              pr = (await github.rest.pulls.create({ owner, repo, head: epicBranch, base: 'main', title, body })).data
+            } catch (e) { core.setFailed(`create epic→main PR failed: ${e.message}`); return }
+            core.info(`Opened epic→main PR #${pr.number} (${epicBranch} → main).`)
+
+            try {
+              await github.rest.pulls.requestReviewers({ owner, repo, pull_number: pr.number, reviewers: [OWNER] })
+              core.info(`Requested review from @${OWNER}.`)
+            } catch (e) { core.warning(`requestReviewers @${OWNER}: ${e.message}`) }

@@ -1,0 +1,116 @@
+name: loop-station-findings
+
+# Accountability scoreboard capture rollup (#1570). Turns the gate workflows'
+# finding CANDIDATES + the eval-ledger's reverts into committed findings on main.
+#
+# Two deterministic sources, no LLM, no CI state machine:
+#   1. Candidate artifacts (loop-station-finding-*) uploaded by the PR gates
+#      (frontend-review / a11y / red-team) whenever they flag a 🔴 critical.
+#      Confirmation is the DURABLE PR-merge fact: merged → confirmed caught defect,
+#      closed → dropped, open → left for a later run. (ingest-findings.mjs)
+#   2. Reverted runs in the eval-ledger → escaped-defect findings. (reconcile-findings.mjs)
+#
+# Writes ONLY here (a main-context job) — PR-branch gate runs never touch the
+# committed findings.jsonl. Idempotent: re-runs never double-append (dedupKey).
+# Mirrors loop-station-usage.yml's artifact-list → download → rollup → commit shape.
+
+on:
+  schedule:
+    - cron: '31 6 * * 1'   # Mondays 06:31 UTC — before the usage (06:41) + advisor (07:23) runs
+  push:
+    branches: [main]
+    paths:
+      - 'writeups/reports/eval-ledger.jsonl'   # a new revert lands → reconcile promptly
+  workflow_dispatch:
+
+permissions:
+  contents: write # commit new findings.jsonl lines back to main
+  actions: read   # list + download candidate artifacts
+  pull-requests: read # resolve each candidate PR's merge state
+
+concurrency:
+  group: loop-station-findings
+  cancel-in-progress: false # never drop a finding mid-write
+
+jobs:
+  rollup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # List recent candidate artifacts. A listing failure fails the job loudly
+      # (an outage must not read as "no defects"), mirroring the usage rollup.
+      - name: List finding-candidate artifacts (last 14 days)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CUTOFF=$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
+            --jq ".artifacts[] | select(.name | startswith(\"loop-station-finding-\")) | select(.expired == false) | select(.created_at >= \"${CUTOFF}\") | \"\(.id) \(.name)\"" \
+            > artifacts.txt
+          echo "$(wc -l < artifacts.txt) candidate artifact(s) in window (cutoff ${CUTOFF})"
+
+      - name: Download candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p candidates
+          COUNT=0; DROPPED=0
+          while read -r id name; do
+            [ -z "$id" ] && continue
+            if gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${id}/zip" > "candidates/${name}.zip" \
+               && unzip -o -q "candidates/${name}.zip" -d "candidates/${name}"; then
+              COUNT=$((COUNT+1))
+            else
+              DROPPED=$((DROPPED+1)); echo "::warning::could not fetch artifact ${name} (${id})"
+            fi
+          done < artifacts.txt
+          echo "downloaded ${COUNT}, dropped ${DROPPED}"
+
+      # Resolve each candidate's PR merge state → a { "<pr>": "merged|closed|open" } map.
+      - name: Build PR status map
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES=$(find candidates -name '*.json' 2>/dev/null || true)
+          PRS=$(for f in $FILES; do node -e "try{const p=require('./'+process.argv[1])._pr;if(p!=null)console.log(p)}catch{}" "$f"; done | sort -u)
+          echo '{}' > states.json
+          for pr in $PRS; do
+            STATE=$(gh api "/repos/${GITHUB_REPOSITORY}/pulls/${pr}" \
+              --jq 'if .merged then "merged" elif .state == "closed" then "closed" else "open" end' 2>/dev/null || echo "open")
+            node -e "const fs=require('fs');const s=JSON.parse(fs.readFileSync('states.json'));s['$pr']='$STATE';fs.writeFileSync('states.json',JSON.stringify(s))"
+            echo "PR #${pr}: ${STATE}"
+          done
+          cat states.json
+
+      - name: Ingest candidates (merged → confirmed, closed → drop, open → skip)
+        run: |
+          FILES=$(find candidates -name '*.json' 2>/dev/null || true)
+          # shellcheck disable=SC2086 — file list is intentionally word-split
+          node scripts/eval-ledger/ingest-findings.mjs --status-map states.json $FILES
+
+      - name: Reconcile escaped defects from the eval-ledger
+        run: node scripts/eval-ledger/reconcile-findings.mjs
+
+      - name: Commit new findings (if any)
+        run: |
+          if git diff --quiet -- writeups/loop-station/findings.jsonl; then
+            echo "no new findings — nothing to commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add writeups/loop-station/findings.jsonl
+          git commit -m "chore(loop-station): record accountability findings [skip ci]"
+          for i in 1 2 3 4; do
+            git pull --rebase origin main && git push origin HEAD:main && exit 0
+            echo "push attempt $i failed; retrying…"; sleep $((2 ** i))
+          done
+          exit 1

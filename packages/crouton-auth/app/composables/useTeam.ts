@@ -134,11 +134,16 @@ export function useTeam() {
   // Also get activeOrgRaw which includes members array for role checking
   const { activeOrganization: sessionActiveOrg, activeOrgRaw } = useSession()
 
-  // For organizations list, use atom with API fallback
-  const organizationsAtom = authClient?.useListOrganizations
-  const organizationsData = computed(() => organizationsAtom?.value?.data ?? null)
-
-  // Fallback: fetch teams via API when nanostore atom doesn't auto-populate
+  // The organizations list comes from useState, NOT from better-auth's
+  // `useListOrganizations` nanostore (#1703). We use better-auth's *vanilla*
+  // client, so that export is a raw nanostore rather than a Vue ref — and
+  // nothing ever subscribes to it, so it is never mounted and its `.value`
+  // stays `undefined` forever. Reading it produced a computed with no reactive
+  // dependencies that silently cached its first evaluation.
+  //
+  // This state is populated by `refreshTeams()` below and, crucially, by
+  // `team-context.global.ts` during SSR — which is why a full page load
+  // resolves the team when a client-side transition sometimes did not.
   const fallbackTeams = useState<Team[]>('crouton-auth-fallback-teams', () => [])
 
   // Use session's active org instead of nanostore (which doesn't auto-populate)
@@ -153,13 +158,8 @@ export function useTeam() {
   // activeOrgData is already a Team type from useSession
   const currentTeam = computed<Team | null>(() => activeOrgData.value)
 
-  // Computed: all user's teams (atom first, then fallback)
-  const teams = computed<Team[]>(() => {
-    if (organizationsData.value && organizationsData.value.length > 0) {
-      return organizationsData.value.map(mapOrganizationToTeam)
-    }
-    return fallbackTeams.value
-  })
+  // Computed: all user's teams
+  const teams = computed<Team[]>(() => fallbackTeams.value)
 
   // Fetch teams via API as fallback when nanostore atom stays pending
   async function refreshTeams(): Promise<void> {

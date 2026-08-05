@@ -84,6 +84,8 @@ const { schema, columns, config } = useTranslationsUi()
 | `fieldComponents` | `Record<string, string>` | - | Custom components per field |
 | `showAiTranslate` | `boolean` | `false` | Enable AI translation button |
 | `fieldType` | `string` | - | Field type context for AI (e.g., 'product', 'email') |
+| `activeLocale` | `string` | - | **Externally-controlled editing locale** (tabs layout). When set, this input edits that single locale and follows the value — so several inputs can share ONE language selector. Used by the pages editor's language bar (#307). |
+| `hideLocaleSwitcher` | `boolean` | `false` | Hide the built-in EN/NL/FR locale strip. Pair with `activeLocale` + an external selector so switching lives in one place. |
 
 ### AI Translation
 

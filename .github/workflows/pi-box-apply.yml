@@ -1,0 +1,117 @@
+name: pi box config apply (mac-mini)
+
+# Phase 2 of #1060 — the "flip an extension from GitHub → the box updates with no manual step"
+# loop. Runs `scripts/pi-box/apply-pi-config.mjs` on the self-hosted mac-mini runner to reconcile
+# the box's real pi.dev install (`~/.pi/agent/settings.json` + globally-installed packages) to the
+# committed manifest. Phase 1 (the pinned base+deltas manifest + the idempotent apply script)
+# landed in PR #1207.
+#
+# TWO TRIGGERS:
+#   • push → main, path-filtered on the manifest/apply script — the auto loop. A merged manifest
+#     change applies to the box with zero manual steps ("We'll know by").
+#   • workflow_dispatch — a manual run, defaulting to --dry-run so a fat-finger dispatch previews
+#     the plan instead of mutating the box. Toggle dry_run off to apply; skip_base / force_base
+#     pass through to the script.
+#
+# SECURITY — SCOPED TOKEN, NOT HUMAN CREDS (#656/#670). Applying a manifest is CODE EXECUTION ON
+# THE BOX (installing an extension = supply-chain), so the trust model is:
+#   1. The manifest diff IS the supply-chain review — everything is version/SHA-pinned, reviewed
+#      in the PR, and only reaches the box AFTER merge. A `push` event fires ONLY for code already
+#      merged to main; a fork PR never runs in the base repo's context on push, so untrusted fork
+#      code can never reach the self-hosted box through this workflow (same property the
+#      mac-mini-smoke / fleet-smoke dispatch-only jobs rely on, here provided by push-after-merge).
+#   2. The runner uses the EPHEMERAL, AUTO-EXPIRING GITHUB_TOKEN scoped to `contents: read` only —
+#      NOT a PAT, NOT the Harness App token, NOT human creds. The apply performs no GitHub writes;
+#      it mutates the box locally, so read-only checkout is all it needs. The run's result is
+#      surfaced in the job summary rather than commented back, keeping the token minimal.
+#
+# NB: NO `actions/setup-node` — we resolve node/npm/pi via the runner's launchd `.path`
+# (the #654 gotcha) so we reconcile the box's REAL global `~/.pi` (the same install the
+# interactive user sees), not an ephemeral CI node prefix. On a self-hosted runner `$HOME` is the
+# box user's home, so `~/.pi/agent/settings.json` is the genuine box state.
+#
+# NB: `workflow_dispatch` only appears once this file is on the DEFAULT branch (main).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/pi-box/pi-config.manifest.json
+      - scripts/pi-box/apply-pi-config.mjs
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview the plan without touching the box (default true — flip off to apply)."
+        required: false
+        default: true
+        type: boolean
+      skip_base:
+        description: "Reconcile deltas+settings only; don't run the base installer."
+        required: false
+        default: false
+        type: boolean
+      force_base:
+        description: "Re-run the base installer even if the recorded version already matches."
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  # Serialize applies — never let two runs race on the same box mid-mutation. Don't cancel an
+  # in-flight apply (a half-applied box is worse than a queued one), so no cancel-in-progress.
+  group: pi-box-apply
+
+jobs:
+  apply:
+    runs-on: [self-hosted, mac-mini]
+    timeout-minutes: 15
+    # Scoped token: read-only. The apply mutates the BOX, not GitHub — it needs no write scope.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      # Confirm the box toolchain resolves via `.path`, and ensure `pi` is present (the apply's
+      # add/remove/settings steps call it). If missing, install the manifest-PINNED pi version so
+      # what runs on the box matches what was reviewed.
+      - name: Preflight — toolchain + pinned pi
+        run: |
+          set -euo pipefail
+          echo "PATH=$PATH"
+          node -v
+          npm -v
+          if ! command -v pi >/dev/null 2>&1; then
+            PI_SPEC="$(node -e 'const m=require("./scripts/pi-box/pi-config.manifest.json");process.stdout.write(m.pi.package+"@"+m.pi.version)')"
+            echo "pi not on PATH — installing pinned $PI_SPEC"
+            npm i -g "$PI_SPEC"
+          fi
+          pi --version || true
+
+      - name: Apply the pi box manifest
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          SKIP_BASE: ${{ github.event.inputs.skip_base }}
+          FORCE_BASE: ${{ github.event.inputs.force_base }}
+        run: |
+          set -euo pipefail
+          # Plain-string flags (no bash arrays — the mac-mini's default bash is 3.2, where an empty
+          # array under `set -u` is a landmine). Simple `--flag` tokens word-split cleanly unquoted.
+          FLAGS=""
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            # A manual dispatch defaults to dry-run: only an explicit dry_run=false applies.
+            [ "${DRY_RUN:-true}" != "false" ] && FLAGS="$FLAGS --dry-run"
+            [ "${SKIP_BASE:-false}" = "true" ] && FLAGS="$FLAGS --skip-base"
+            [ "${FORCE_BASE:-false}" = "true" ] && FLAGS="$FLAGS --force-base"
+          fi
+          # A push→main is a merged, reviewed manifest change → apply for real (no flags).
+          echo "Running: node scripts/pi-box/apply-pi-config.mjs$FLAGS"
+          node scripts/pi-box/apply-pi-config.mjs $FLAGS 2>&1 | tee apply.log
+          {
+            echo "### pi box config apply — \`${EVENT}\`${FLAGS:+ (flags:$FLAGS)}"
+            echo '```'
+            cat apply.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

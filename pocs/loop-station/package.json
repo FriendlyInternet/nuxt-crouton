@@ -10,15 +10,14 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "typecheck": "nuxt typecheck",
-    "cf:staging": "node scripts/prepare-data.mjs && NITRO_PRESET=cloudflare_module nuxt build && npx wrangler deploy --env staging"
+    "cf:staging": "node scripts/prepare-data.mjs && NITRO_PRESET=cloudflare_module nuxt build && npx wrangler deploy --env staging",
+    "cf:version": "node scripts/prepare-data.mjs && NITRO_PRESET=cloudflare_module nuxt build && npx wrangler versions upload --env staging"
   },
   "dependencies": {
     "@fyit/crouton-themes": "workspace:*",
     "@nuxt/ui": "catalog:",
     "nuxt-charts": "^2.1.2",
     "@vue-flow/core": "^1.41.2",
-    "@vue-flow/background": "^1.3.0",
-    "@vue-flow/controls": "^1.1.2",
     "@dagrejs/dagre": "^1.1.4",
     "nuxt": "catalog:",
     "vue": "catalog:",

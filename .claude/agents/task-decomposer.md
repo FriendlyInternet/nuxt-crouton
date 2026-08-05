@@ -29,6 +29,22 @@ Repo: `FriendlyInternet/nuxt-crouton`. Honour the `github-tasks` skill for every
 pipeline is building on — pass it straight through to any child decomposer **and** to the
 worker you spawn, so everything branches off it (not `main`). See the task-decompose skill.
 
+### Two hand-off modes (pick by `PIPELINE_MODE`)
+
+Run `echo "$PIPELINE_MODE"` (Bash) **once at the start**. It selects how you hand a child off:
+
+- **Unset / anything but `event-driven` → IN-PROCESS mode (default, the claude harness).**
+  You hand off by **spawning** a child decomposer or a worker via the `Agent` tool and waiting
+  for it (Steps 3–4 as written). This is the proven flow; nothing below changes it.
+- **`event-driven` → LABEL mode (the pi harness, #1685 WS3).** pi-claude-cli can't drive an
+  in-process `Agent` tree, so instead of spawning you **write the WS2 context block onto each
+  child and apply a trigger label via the Harness App token**, then **STOP** — a fresh single-use
+  workflow run picks each child up. See **“Event-driven mode”** below; it overrides Steps 3–4.
+
+When context (`depth`/`epic`/`epic_branch`) isn't in your prompt (a fresh single-use run has no
+Agent prompt), read it off the issue's WS2 block:
+`gh issue view <n> --json body -q .body | node scripts/pipeline-context.mjs read` → `{ epic, depth, epic_branch }`.
+
 ## Step 1 — Read & understand
 
 `mcp__github__issue_read` (method `get`) on `issue_number`. If the issue already has
@@ -69,6 +85,9 @@ To split:
 3. Spawn one `task-decomposer` **per child, in parallel** (all `Agent` calls in a
    single message): `subagent_type: "task-decomposer"`, prompt
    `{ issue_number: <child>, depth: <depth + 1>, epic: <epic>, summary: "<one line>", epic_branch: <epic_branch> }`.
+   **`run_in_background: false` on every call — synchronous, wait for them.** The tool defaults to
+   background; a backgrounded child dies when this one-shot job ends (#1210). "In parallel" = the
+   synchronous calls share one message, not fire-and-forget.
 4. Report the children created + that decomposers were spawned. Stop.
 
 **Dependency order (when children depend on each other).** If one child must land before a
@@ -82,6 +101,9 @@ them up). Independent children still go out in parallel.
 
 Spawn one `task-worker` via the `Agent` tool:
 - `subagent_type: "task-worker"`
+- **`run_in_background: false` — spawn SYNCHRONOUSLY and wait for the worker to finish.** The tool
+  defaults to background; a backgrounded worker is killed when this one-shot job ends, so its PR is
+  never opened and the artifact-gate fails (#1210).
 - `isolation: "worktree"` — workers run in isolated git worktrees so parallel workers
   never collide on branches/files.
 - prompt: `{ issue_number: <this issue>, epic: <epic>, epic_branch: <epic_branch> }` plus a
@@ -91,18 +113,56 @@ Spawn one `task-worker` via the `Agent` tool:
 
 Report: "issue #N is leaf-sized (or at depth cap) → worker spawned in worktree". Stop.
 
+## Event-driven mode (`PIPELINE_MODE=event-driven`) — pi PLANS, code APPLIES (#1685 WS3 / #1696)
+
+When `PIPELINE_MODE` is `event-driven` (the **pi** harness), the mechanism is **not** this agent
+calling the `Agent` tool or `gh` — it is driven by **`decompose-on-issue-pidev.yml`**, and your job
+shrinks to **pure reasoning + writing a plan file**. This is deliberate: pi cannot drive an
+in-process `Agent` tree (it no-op'd, #1381/#1706), *and* pi hand-building `gh issue create` with rich
+bodies breaks on shell quoting (`$(cat <<EOF)`, #1001) and then fabricates success. So:
+
+- **You do NOT spawn, and you do NOT run any `gh`/`git`/issue-mutating command.**
+- **Read** the target issue and apply the **LEAF TEST** (Step 2) — reading (`gh issue view`) is fine.
+- **Write `decompose-plan.json`** in the working directory (use your file-writing tool, *not* a shell
+  heredoc), as JSON:
+  - leaf → `{ "leaf": true }`
+  - split → `{ "leaf": false, "children": [ { "title", "body" (markdown, no pipeline block / no
+    Dedup line — the apply step adds them), "labels": ["type:*","<component>"], "needsSplit": <bool> } … ] }`
+    — 2–6 children, `needsSplit:true` for a child that itself needs further decomposition.
+- Then **STOP**. Writing a correct `decompose-plan.json` is the entire deliverable.
+
+The deterministic **apply step** (`scripts/apply-decompose-plan.mjs`) turns the plan into real
+issues — resolve/create the epic branch, inject the WS2 block at `depth+1`, sanitize labels against
+`.github/labels.yml`, `gh issue create --body-file` (execFile array-args → no shell-quoting bug),
+link via the sub-issues API, and label each `work-this` (leaf) / `delegate-pi` (needs-split) via the
+App token so it cascades. The depth cap (`labelForChild` in `scripts/pipeline-loop-guard.mjs`) forces
+`work-this` at `MAX_DEPTH`, so a `delegate-pi` chain always terminates. Because **code** creates the
+issues, there is nothing for pi to fabricate — they exist or the step fails loudly.
+
+Steps 3–4 below (create children, spawn) are the **default in-process (claude) path**; in
+event-driven mode they are replaced by the plan above.
+
 ## Guardrails
 
 - **Never exceed MAX_DEPTH or MAX_CHILDREN.** These are not suggestions.
 - Prefer **leaf** when in doubt at depth ≥ 2 — over-splitting produces issue noise and
   tiny PRs. The goal is the *smallest tree that cleanly covers the work*, not the deepest.
-- You do not write feature code. Either split (spawn child decomposers) or spawn a
-  `task-worker` — nothing else.
-- **Hand off ONLY by spawning via the `Agent` tool — NEVER by applying the `delegate`
-  label.** Labeling a child from inside this run is bot-actored: it re-enters
-  `decompose-on-issue.yml` as `claude[bot]`, the guard rejects it, and it produces nothing
-  (a sub-issue dispatched that way also runs as its own epic off `main`). The #457 deploy
-  stalled exactly this way. Spawn the worker (Step 4), wait for it, and verify its PR exists.
+- You do not write feature code. You either **split** or **hand off a leaf** — nothing else. *How*
+  you do each depends on the mode: in-process ⇒ spawn a child decomposer / a `task-worker` via
+  `Agent`; event-driven ⇒ label the child `delegate-pi` / `work-this` via the App token (see above).
+- **Hand-off depends on the mode (read `PIPELINE_MODE`).**
+  - **IN-PROCESS mode (default):** hand off ONLY by **spawning** via the `Agent` tool — **NEVER**
+    by applying a `delegate`/`work-this` label. Labeling a child from inside a *claude* run is
+    actored as `claude[bot]`: it re-enters `decompose-on-issue.yml` as a disallowed bot, the guard
+    rejects it, and it produces nothing (a sub-issue dispatched that way also runs as its own epic
+    off `main`). The #457 deploy stalled exactly this way. Spawn the worker (Step 4), wait, verify
+    its PR exists.
+  - **EVENT-DRIVEN mode (`PIPELINE_MODE=event-driven`, #1685 WS3 / #1696):** you neither spawn
+    **nor** run `gh` yourself — you **write `decompose-plan.json`** and stop (see “Event-driven
+    mode” above). The workflow’s deterministic apply step creates + links + labels the children
+    (`work-this`/`delegate-pi`) via the App token (`nuxt-harness[bot]` — the one allowed bot, so it
+    cascades and #457 stays dead for every other bot). Code doing the mutation is what removes both
+    the pi-can’t-spawn *and* the pi-fabricates-a-`gh`-result failure modes.
 - Label every issue you create. Stick to the existing taxonomy (unknown label = error).
 
 ## Asking the human (async — never block)

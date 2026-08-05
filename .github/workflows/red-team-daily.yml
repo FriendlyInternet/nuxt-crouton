@@ -41,6 +41,10 @@ jobs:
 
       # The deep pass may boot a fixture for dynamic confirmation — give it node + pnpm + deps.
       - uses: pnpm/action-setup@v4
+        with:
+          # per-job dest — the default ~/setup-pnpm collides between the two
+          # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
+          dest: ${{ runner.temp }}/setup-pnpm
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -51,13 +55,13 @@ jobs:
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
       - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
           # bypassPermissions REQUIRED (#834): headless CI denies un-allowlisted tools, so the
           # deep sweep couldn't write its report, update the standing issue, or file security
           # issues. Broader than the per-PR gate's allowlist because this run also files GitHub
           # issues (MCP) + writes reports; the gate-package-edits hook still protects packages/.
-          claude_args: "--max-turns 60 --permission-mode bypassPermissions"
+          claude_args: "--model claude-sonnet-5 --max-turns 60 --permission-mode bypassPermissions"
           prompt: |
             Run the **`/red-team`** skill (`.claude/skills/red-team/SKILL.md`) at
             **depth=deep, scope=repo**. Fan out the `red-team` subagent across the

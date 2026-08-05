@@ -148,7 +148,7 @@ export function generateListComponent(data: Record<string, any>, config: Record<
       <div v-if="row.original.${field.name} && row.original.${field.name}.length > 0" class="flex flex-wrap gap-1">
         <UBadge
           v-for="(item, idx) in row.original.${field.name}"
-          :key="idx"
+          :key="\`\${idx}-\${item}\`"
           color="neutral"
           variant="subtle"
           size="md"
@@ -159,7 +159,7 @@ export function generateListComponent(data: Record<string, any>, config: Record<
       <span v-else class="text-gray-400">—</span>
     </template>`).join('')}${dateFields.map(field => `
     <template #${field.name}-cell="{ row }">
-      <CroutonDate :date="row.original.${field.name}"></CroutonDate>
+      <CroutonDate :date="row.original.${field.name}" />
     </template>`).join('')}${booleanFields.map(field => `
     <template #${field.name}-cell="{ row }">
       <CroutonBoolean :value="row.original.${field.name}" />

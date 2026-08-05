@@ -98,11 +98,13 @@ const tabErrorCounts = computed(() => {
 const { create, update, deleteItems } = useCollectionMutation(collection)
 const { close, loading } = useCrouton()
 
+// initFormState coerces a nullable column's loaded null back to the form
+// default so it never reaches the narrow client schema and blocks submit (#1498).
 const initialValues = props.action === 'update' && props.activeItem?.id
-  ? { ...defaultValue, ...props.activeItem }
+  ? initFormState(defaultValue, props.activeItem)
   : { ...defaultValue }
 
-const state = ref<CroutonRedirectFormData & { id?: string | null }>(initialValues)
+const state = ref<CroutonRedirectFormData & { id?: string | null }>(initialValues as CroutonRedirectFormData & { id?: string | null })
 
 const handleSubmit = async () => {
   try {

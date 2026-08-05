@@ -113,7 +113,16 @@ So an issue closes by **either** path — `Closes #NN` on a merged PR, **or** a 
 
 ### Closing a child? Always check the parent (REQUIRED — do it the moment the PR merges *or the task is answered*)
 
-A merged PR auto-closes the issues in its `Closes #NN` lines — but **a parent epic has no `Closes` line of its own, so it never auto-closes**, and a fully-delivered epic left open is the most common stale-tracking bug. So **the instant you close an issue — or a PR merges that auto-closes one — walk up the tree, unprompted.** Don't wait to be asked and don't defer it to a later task: closing the leaf is not "done" until you've checked the branch above it. Closing the epic travels *with* the merge that closes its last child — same logical step, not a follow-up someone has to remember.
+A merged PR auto-closes the issues in its `Closes #NN` lines — but **a parent epic has no `Closes` line of its own, so it never auto-closes**, and a fully-delivered epic left open is the most common stale-tracking bug.
+
+> **⚠️ An epic-integration PR uses `Refs #NN`, never `Closes #NN` (#1690).** That "an epic has
+> no `Closes` line" is an *assumption this whole flow rests on*, not something GitHub enforces —
+> and epic #1652 broke it: its integration PR wrote `Closes #1652`, so merging closed the epic
+> instantly, skipping the `/close-epic` gate (step 4) and landing the postmortem *after* the
+> close it was meant to precede. Write `Refs #NN` on the epic→`main` PR and close via
+> `/close-epic`. **Sub-issue PRs keep `Closes #NN`** — the resume merge-on-approval step
+> identifies the gate PR by exactly that string (#1663), so don't "fix" those too. CI warns on
+> a closing keyword aimed at an `epic`-labelled issue (`warn-closes-blocked.yml`). So **the instant you close an issue — or a PR merges that auto-closes one — walk up the tree, unprompted.** Don't wait to be asked and don't defer it to a later task: closing the leaf is not "done" until you've checked the branch above it. Closing the epic travels *with* the merge that closes its last child — same logical step, not a follow-up someone has to remember.
 
 1. Resolve the parent: `mcp__github__issue_read` (`method: get`) → `parent_issue_url`, or read the epic's `get_sub_issues`.
 2. If the issue has a parent, check whether **all** of the parent's children are now `closed` (`get_sub_issues` → every child's `state`).

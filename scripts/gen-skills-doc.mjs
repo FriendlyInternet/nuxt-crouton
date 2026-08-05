@@ -62,6 +62,7 @@ export const META = {
   'db-migrations': { group: 'verify', triggers: ['ask'] },
   'db-clone': { group: 'verify', triggers: ['ask'] },
   'think-aloud': { group: 'meta', triggers: ['ask'] },
+  'ask-human': { group: 'meta', triggers: ['flow', 'ask'] },
   'loop-station': { group: 'meta', triggers: ['ask', 'auto'] },
   // Knowledge-handoff library (epic #1073) — reference packs loaded on demand, not workflow steps.
   'crouton-architecture-contract': { group: 'knowledge', triggers: ['ask'] },
@@ -140,6 +141,12 @@ export const FLOWS = [
     trigger: 'A bug is reported',
     when: 'Archaeology first — find when it broke before fixing.',
     skills: ['bug-archaeology']
+  },
+  {
+    id: 'ask', icon: '🙋', kind: 'flow',
+    trigger: 'An agent hits a fork it can\'t own',
+    when: 'Decide the reversible/derivable calls; for the genuinely-human ones, post a scannable handoff and block.',
+    skills: ['ask-human']
   },
   {
     id: 'close', icon: '🏁', kind: 'flow',

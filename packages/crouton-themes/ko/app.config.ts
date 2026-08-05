@@ -1,6 +1,8 @@
 // KO-UI Theme Configuration
 // Hardware-inspired styling based on Teenage Engineering KO II
 
+import { subtractThemeDefaults } from '../lib/subtractive'
+
 export default defineAppConfig({
   ui: {
     colors: {
@@ -9,8 +11,13 @@ export default defineAppConfig({
     },
 
     button: {
-      // Add KO variants - base and compound (ko-ghost, ko-outline, etc)
-      // Note: No slots.base override - let Nuxt UI handle base classes to avoid hydration mismatches
+      // Subtractive base via the shared marker-gated replacer (#1304): when the
+      // resolved classes carry a ko-* marker, the defaults KO's CSS re-supplies
+      // (color/decoration/motion/typography) are stripped, so the CSS below
+      // needs no !important. Unmarked (non-ko) renders pass through untouched.
+      slots: {
+        base: subtractThemeDefaults
+      },
       variants: {
         variant: {
           ko: '',
@@ -104,6 +111,10 @@ export default defineAppConfig({
 
     // INPUT OVERRIDES
     input: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
       // Add 'ko' to the variant options
       variants: {
         variant: {
@@ -117,6 +128,12 @@ export default defineAppConfig({
 
     // CARD OVERRIDES
     card: {
+      slots: {
+        root: subtractThemeDefaults,
+        header: subtractThemeDefaults,
+        body: subtractThemeDefaults,
+        footer: subtractThemeDefaults
+      },
       // Add 'ko' to the variant options
       variants: {
         variant: {
@@ -128,6 +145,146 @@ export default defineAppConfig({
           }
         }
       }
+    },
+
+    // #1333-deferred coverage, landed with #1393: selects + textarea reuse the
+    // ko-input chrome.
+    select: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: "ko-input-base"
+        }
+      }
+    },
+
+    selectMenu: {
+      slots: {
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: "ko-input-base"
+        }
+      }
+    },
+
+    textarea: {
+      slots: {
+        root: subtractThemeDefaults,
+        base: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            root: "ko-input",
+            base: "ko-input-base"
+          }
+        }
+      }
+    },
+
+    // #1393 component coverage — indicator hidden, active state on the
+    // trigger (the pill/link positioning compounds never fire for a named
+    // variant, and instant state changes fit the theme anyway).
+    tabs: {
+      slots: {
+        list: subtractThemeDefaults,
+        trigger: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            list: "ko-tabs-list",
+            trigger: "ko-tabs-trigger",
+            indicator: "ko-tabs-indicator"
+          }
+        }
+      }
+    },
+
+    checkbox: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            base: "ko-check-box",
+            indicator: "ko-check-indicator"
+          }
+        }
+      }
+    },
+
+    radioGroup: {
+      slots: {
+        base: subtractThemeDefaults,
+        indicator: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            base: "ko-radio-box",
+            indicator: "ko-radio-indicator"
+          }
+        }
+      }
+    },
+
+    // Alert colors live in compoundVariants keyed to the STANDARD variants,
+    // so a named variant starts blank — the theme supplies its own compounds.
+    alert: {
+      slots: {
+        root: subtractThemeDefaults,
+        title: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            root: "ko-alert",
+            title: "ko-alert-title"
+          }
+        }
+      },
+      compoundVariants: [
+        { color: "primary", variant: "ko", class: { root: "ko-alert--primary" } },
+        { color: "warning", variant: "ko", class: { root: "ko-alert--warning" } },
+        { color: "error", variant: "ko", class: { root: "ko-alert--error" } },
+        { color: "neutral", variant: "ko", class: { root: "ko-alert--neutral" } }
+      ]
+    },
+
+    // #1458 second-tier coverage. Calendar: the color dimension fires on
+    // headCell/cellTrigger regardless of variant (like checkbox), so both
+    // carry markers + the replacer; selected/today state lives entirely in
+    // the theme CSS via [data-selected]/[data-today].
+    calendar: {
+      slots: {
+        headCell: subtractThemeDefaults,
+        cellTrigger: subtractThemeDefaults,
+        headingLabel: subtractThemeDefaults
+      },
+      variants: {
+        variant: {
+          ko: {
+            headingLabel: "ko-cal-heading",
+            headCell: "ko-cal-head",
+            cellTrigger: "ko-cal-cell"
+          }
+        }
+      }
+    },
+
+    // #1482: UPinInput reuses this theme's input treatment on each cell
+    // (border/bg/focus); the size variant keeps the square geometry.
+    pinInput: {
+      slots: { base: subtractThemeDefaults },
+      variants: { variant: { ko: { base: "ko-input-base" } } }
     }
   }
 })

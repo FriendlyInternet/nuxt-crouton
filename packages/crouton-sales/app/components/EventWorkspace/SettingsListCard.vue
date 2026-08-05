@@ -29,6 +29,9 @@ const props = defineProps<{
   createData?: Record<string, any>
   /** Enable drag-reorder, persisting the visual index into this field. */
   orderField?: string
+  /** Strip the card chrome (border/ring/shadow/rounded/bg) so the card blends
+   *  into a parent single-card surface — used by the tabbed settings slideover. */
+  flush?: boolean
 }>()
 
 const { t } = useT()
@@ -49,13 +52,22 @@ watch(() => props.rows, (v) => { ordered.value = [...(v || [])] }, { immediate: 
 
 const listEl = ref<HTMLElement | null>(null)
 
-async function persistOrder() {
+async function persistOrder(list: typeof ordered.value) {
   const field = props.orderField
   if (!field) return
-  const changed = ordered.value
+  const changed = list
     .map((row, index) => ({ row, index }))
     .filter(({ row, index }) => (row[field] ?? 0) !== index)
   await Promise.all(changed.map(({ row, index }) => update(row.id, { [field]: index })))
+}
+
+// Apply SortableJS's move (oldIndex → newIndex) to a copy of the list.
+function withMove(list: typeof ordered.value, from: number, to: number) {
+  const next = [...list]
+  const [moved] = next.splice(from, 1)
+  if (moved === undefined) return next
+  next.splice(to, 0, moved)
+  return next
 }
 
 if (import.meta.client && props.orderField) {
@@ -63,15 +75,21 @@ if (import.meta.client && props.orderField) {
     animation: 150,
     handle: '.drag-handle',
     ghostClass: 'opacity-50',
+    // Derive the new order from the drag event itself — SortableJS's
+    // oldIndex/newIndex are the source of truth. (Don't read the bound array
+    // here: useSortable syncs it on nextTick, so at this point it's still the
+    // pre-drag order — which is exactly why we apply the move to it, #1550.)
     onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex !== evt.newIndex) persistOrder()
+      const { oldIndex, newIndex } = evt
+      if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+      persistOrder(withMove(ordered.value, oldIndex, newIndex))
     }
   })
 }
 </script>
 
 <template>
-  <UCard :ui="{ body: 'p-2 sm:p-3' }">
+  <UCard :ui="props.flush ? { root: 'border-0 ring-0 shadow-none rounded-none bg-transparent divide-y-0', body: 'px-0 py-2', header: 'px-0' } : { body: 'p-2 sm:p-3' }">
     <template #header>
       <div class="flex items-center justify-between gap-2">
         <h3 class="font-semibold">{{ title }}</h3>
@@ -104,17 +122,17 @@ if (import.meta.client && props.orderField) {
             class="drag-handle size-4 text-muted cursor-grab active:cursor-grabbing"
           />
         </div>
-        <button
-          type="button"
-          class="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-2.5
-                 bg-elevated/95 hover:bg-elevated text-muted hover:text-highlighted cursor-pointer
+        <UButton
+          icon="i-lucide-pencil"
+          variant="ghost"
+          color="neutral"
+          :aria-label="t('common.edit')"
+          class="absolute right-0 top-0 bottom-0 z-10 flex items-center justify-center px-2.5 rounded-none
+                 bg-elevated/95 hover:bg-elevated text-muted hover:text-highlighted
                  transition-all duration-200 ease-out translate-x-full group-hover/row:translate-x-0
                  pointer-coarse:translate-x-0"
-          :aria-label="t('common.edit')"
           @click.stop="openEdit(row.id)"
-        >
-          <UIcon name="i-lucide-pencil" class="size-4" />
-        </button>
+        />
         <div
           class="px-3 py-2 transition-[padding] duration-200 ease-out group-hover/row:pe-9 pointer-coarse:pe-9"
           :class="orderField ? 'group-hover/row:ps-7 pointer-coarse:ps-7' : ''"

@@ -23,6 +23,7 @@ import type {
   PrintJobData
 } from '@fyit/crouton-printing/server/utils/print-queue-service'
 import type { ReceiptSettings } from '@fyit/crouton-printing/server/utils/receipt-formatter'
+import { resolvePrintOptionLabels } from './option-labels'
 
 interface GenerateInsertOptions {
   db: any
@@ -47,6 +48,17 @@ interface GenerateInsertOptions {
 
 export async function generateAndInsertPrintQueues(opts: GenerateInsertOptions): Promise<string[]> {
   const { db, orderId, eventId, teamId, helperDisplayName, helperId } = opts
+
+  // Print flow 'none' = no physical printing (#1324): don't enqueue at all.
+  // A parked job would never be delivered, so the kassa's print watcher would
+  // spin 60s and warn "printer offline?" on every order — an empty id list
+  // instead makes checkout behave like an event with zero printers (no
+  // watcher, no warning). Flipping to a real flow later only prints NEW
+  // orders; older ones stay reachable via the per-order manual reprint.
+  // getPrintTransport/PRINT_TRANSPORT are crouton-printing nitro globals,
+  // same as enqueuePrintJob below.
+  const transportRow = await getPrintTransport(db, eventId)
+  if (transportRow?.transport === PRINT_TRANSPORT.NONE) return []
 
   const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
   const { salesProducts } = await import('~~/layers/sales/collections/products/server/database/schema')
@@ -87,22 +99,13 @@ export async function generateAndInsertPrintQueues(opts: GenerateInsertOptions):
   const printItems: OrderItemForPrint[] = items.map((it: any) => {
     const product: any = productById.get(it.productId)
 
-    // Resolve selected option IDs to readable labels
-    let resolvedOptions: Record<string, string> | undefined
-    const rawOptions = it.selectedOptions
-    if (rawOptions && product?.options && Array.isArray(product.options) && product.options.length > 0) {
-      const optionIds = Array.isArray(rawOptions)
-        ? rawOptions
-        : typeof rawOptions === 'string'
-          ? [rawOptions]
-          : []
-      const labels = optionIds
-        .map((id: string) => product.options.find((o: any) => o.id === id)?.label)
-        .filter((label: string | undefined): label is string => Boolean(label))
-      if (labels.length > 0) {
-        resolvedOptions = Object.fromEntries(labels.map((label: string) => [label, label]))
-      }
-    }
+    // Resolve selected option IDs to readable labels (print path — unknown ids
+    // dropped, shared with client-tab). Shaped into the label→label map the
+    // print engine expects.
+    const labels = resolvePrintOptionLabels(it.selectedOptions, product?.options)
+    const resolvedOptions: Record<string, string> | undefined = labels.length > 0
+      ? Object.fromEntries(labels.map(label => [label, label]))
+      : undefined
 
     return {
       productId: it.productId,
@@ -154,23 +157,32 @@ export async function generateAndInsertPrintQueues(opts: GenerateInsertOptions):
     opts.locationRemarks
   )
 
-  // Enqueue each job into the generic print_jobs queue (crouton-printing). The
-  // printer transport details (ip/port/title/driver) are denormalized onto the
-  // job at enqueue time so the transport stays self-contained — look them up
-  // from the salesPrinter that produced the job. `printing:job:created` fires
-  // per insert, which the sales subscriber mirrors to the cloud-sync outbox.
+  // Enqueue this order's jobs into the generic print_jobs queue (crouton-printing).
+  // The printer transport details (ip/port/title/driver) are denormalized onto
+  // each job at enqueue time so the transport stays self-contained — look them
+  // up from the salesPrinter that produced the job.
+  //
+  // Batched into ONE insert (#1539): enqueuing sequentially made an order's
+  // tickets go `pending` a poll-interval apart, so the fast-polling spooler
+  // grabbed them one at a time and the per-printer fan-out never received >1
+  // job together (it can only parallelise jobs delivered in the same poll). A
+  // single multi-row insert makes every ticket pending at the same instant, so
+  // one poll hands the fan-out the whole order and different printers overlap.
+  // Contract preserved: enqueuePrintJobs still fires ONE `printing:job:created`
+  // hook per job (see crouton-printing), so the sales cloud-sync outbox mirror
+  // and order-status tracking are unchanged — only the timing differs.
   const printerById = new Map(printers.map((p: any) => [p.id, p]))
-  const queueIds: string[] = []
-  for (const job of jobs) {
-    const printer: any = printerById.get(job.printerId)
-    const id = await enqueuePrintJob(db, {
+  const inputs = jobs.map((job: any) => {
+    // Default to {} so the field reads below need no per-field optional chaining.
+    const printer: any = printerById.get(job.printerId) ?? {}
+    return {
       source: 'sales',
       printerId: job.printerId,
-      printerIp: printer?.ipAddress ?? null,
+      printerIp: printer.ipAddress ?? null,
       // salesPrinters.port is text-typed in the generated schema; coerce to a number.
-      printerPort: printer?.port != null ? Number(printer.port) : null,
-      printerTitle: printer?.title ?? null,
-      driver: printer?.driver ?? 'network-escpos',
+      printerPort: printer.port != null ? Number(printer.port) : null,
+      printerTitle: printer.title ?? null,
+      driver: printer.driver ?? 'network-escpos',
       payload: job.printData,
       printMode: job.printMode,
       locationId: job.locationId ?? null,
@@ -178,9 +190,8 @@ export async function generateAndInsertPrintQueues(opts: GenerateInsertOptions):
       refId: orderId,
       eventId,
       teamId
-    })
-    queueIds.push(id)
-  }
+    }
+  })
 
-  return queueIds
+  return await enqueuePrintJobs(db, inputs)
 }

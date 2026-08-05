@@ -13,22 +13,24 @@ interface InitAppOptions {
   cf?: boolean
   domain?: string
   dryRun?: boolean
+  /** Target directory for the app. Defaults to `apps/<name>`; pass `pocs/<name>` for a POC. */
+  out?: string
 }
 
 /**
  * Run the full init pipeline: scaffold -> generate -> doctor -> summary.
  */
 export async function initApp(name: string, options: InitAppOptions = {}): Promise<void> {
-  const { features = [], theme, dialect = 'sqlite', cf = true, domain, dryRun = false } = options
+  const { features = [], theme, dialect = 'sqlite', cf = true, domain, dryRun = false, out } = options
 
-  console.log(`\n  crouton init — creating ${name}\n`)
+  console.log(`\n  crouton init — creating ${name}${out ? ` in ${out}` : ''}\n`)
 
   // ── Step 1: scaffold-app ──────────────────────────────────────────────
   console.log('  Step 1/3 — Scaffolding app...\n')
   let appDir
   try {
     const { scaffoldApp } = await import('./scaffold-app.ts')
-    const result = await scaffoldApp(name, { features, theme, dialect, cf, domain, dryRun })
+    const result = await scaffoldApp(name, { features, theme, dialect, cf, domain, dryRun, outDir: out })
     appDir = result.appDir
   } catch (error) {
     consola.error('Step 1/3 — Scaffold failed')
@@ -72,9 +74,9 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
     const result = await generateMigrations(appDir)
     if (result.generated) {
       consola.success('Step 3/4 — Migrations generated')
-    } else if (result.reason === 'deps-missing') {
+    } else if (result.reason === 'deferred') {
       needsManualMigrations = true
-      consola.info('Step 3/4 — Migrations deferred (install deps first; see next steps)')
+      consola.info('Step 3/4 — Migrations deferred (install deps so the layers resolve; see next steps)')
     } else {
       needsManualMigrations = true
       consola.warn(`Step 3/4 — Migrations skipped (${result.reason})`)

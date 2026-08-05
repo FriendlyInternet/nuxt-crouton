@@ -34,7 +34,7 @@ Grouped by role; the file count drifts — count it fresh (`ls .github/workflows
 
 | Workflow | Trigger | Gates what |
 |---|---|---|
-| `ci.yml` | push/PR, paths `packages/**, apps/**, scripts/**`, lockfile | Jobs: `typecheck-mcp` (MCP server; was the misnamed `lint-and-typecheck`, renamed under [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097)), `typecheck-apps` (**the full `pnpm typecheck` app sweep — the CI backing for CLAUDE.md's mandatory-typecheck rule**, #1097), `build-fanfare` (matrix of 2 Nitro presets; "the build is the smoke test"), `docs-check`, `sync-validation`, `mcp-server-tests`, `test` (`pnpm test` after building core dists), `changeset-check` (warn-only), `package-check` (publint + attw) |
+| `ci.yml` | push/PR, paths `packages/**, apps/**, scripts/**`, lockfile | Jobs: `typecheck-mcp` (MCP server; was the misnamed `lint-and-typecheck`, renamed under [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097)), `typecheck-apps` (**the full `pnpm typecheck` app sweep — the CI backing for CLAUDE.md's mandatory-typecheck rule**, #1097), `build-fanfare` (matrix of 2 Nitro presets; "the build is the smoke test"), `docs-check`, `sync-validation`, `mcp-server-tests`, `test` (`pnpm test` after building core dists), `changeset-check` (warn-only), `package-check` (publint + attw), `fallow-audit` (diff-scoped `npx fallow audit` vs merge-base — fails only on NEW dead code/duplication/dep drift in the changed files, never the baseline, #1145) |
 | `e2e.yml` | push/PR (paths `packages/**, fixtures/**, e2e/**`, lockfile) + nightly cron full matrix + dispatch | Playwright fixture smoke. Smart selection (#622): PRs run only fixtures affected per each fixture's `e2e.manifest.json`; push-to-main/nightly run all. Regenerates fixtures with the current CLI, so a generator regression = red PR (#197) |
 | `guard-package-approval.yml` | PR to main | Fails the PR if `.claude/.package-edit-approved` is committed (would disable the packages/ HARD GATE, #350). Epic-scoped approval uses the `CROUTON_PACKAGE_EDIT_APPROVED` env var instead |
 | `skills-doc.yml` | push/PR touching `.claude/skills/**` | `writeups/architecture/skills-and-triggers.html` must be regenerated (`node scripts/gen-skills-doc.mjs`) |
@@ -55,7 +55,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 | Workflow | Trigger | Role |
 |---|---|---|
 | `deploy-app.yml` | `workflow_call` only | THE reusable pipeline (#114) — see §2 |
-| `deploy-apps.yml` | push to main + PR (paths `apps/**, packages/**`, lockfile) + `workflow_dispatch(app, environment, review_pr)` | **The one generic caller for every `apps/*` app** (epic #481 WS2). An app opts in by committing `apps/<name>/deploy.config.json`. Replaced the per-app `deploy-<app>.yml` callers |
+| `deploy-apps.yml` | push to main + PR (paths `apps/**, packages/**`, lockfile) + `workflow_dispatch(app, environment, review_pr)` | **The one generic caller for every `apps/*` app** (epic #481 WS2). An app opts in by committing `apps/<name>/deploy.config.json`. Replaced the per-app `deploy-<app>.yml` callers. Its `report-bumped-preview` job comments on a PR whose preview deploys were *cancelled* by queue-bumping (a sibling run took the shared per-app staging slot) — cancelled ≠ failed (#1150) |
 | `deploy-pocs.yml` | PR touching `pocs/**` + dispatch(app, mode) | POC staging previews; `mode: version` = immutable Workers-version preview URL. Steps: `poc-deploy` skill |
 | `deploy-docs.yml` | push to main (`docs/**`) / PR build-smoke / dispatch | Docs site — self-contained, NOT via deploy-app.yml |
 | `deploy-sandbox.yml` | dispatch | Manual `sandboxes/*` deploy |
@@ -214,7 +214,7 @@ When this skill and a workflow file disagree, the workflow file wins — then fi
 
 ## Provenance and maintenance
 
-verified: 2026-07-02
+verified: 2026-07-03
 
 ```bash
 ls .github/workflows | wc -l                                     # inventory size

@@ -1,0 +1,21 @@
+{
+  "table": "main_pins",
+  "key": "title",
+  "rows": [
+    {
+      "title": "Sample title 1",
+      "url": "https://example.com",
+      "note": "Sample note content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "title": "Sample title 2",
+      "url": "https://example.com",
+      "note": "Sample note content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "title": "Sample title 3",
+      "url": "https://example.com",
+      "note": "Sample note content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    }
+  ]
+}

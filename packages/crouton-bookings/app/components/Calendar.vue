@@ -104,6 +104,20 @@ const monthFocusDate = ref<DateValue | undefined>(new CalendarDate(
   1
 ))
 
+// Day activation comes through UCalendar's own cellTrigger (a real <button>,
+// so mouse AND keyboard land here) — never through handlers on the #day slot
+// content, which would need its own widget role and nest interactive controls.
+// Param typed to UCalendar's emit union (single | range | multiple | null);
+// this calendar is single-date, so anything else resolves to undefined.
+function onMonthDayActivate(value: any) {
+  const single: DateValue | undefined
+    = value && !Array.isArray(value) && typeof value.toDate === 'function' ? value : undefined
+  monthFocusDate.value = single
+  if (!single) return
+  const date = single.toDate(getLocalTimeZone())
+  if (hasBookings(date)) emit('select', date)
+}
+
 // Parse statuses from settings
 const parsedStatuses = computed(() => {
   const raw = props.settings?.statuses
@@ -547,7 +561,7 @@ const monthCellHeight = computed(() => {
     <div v-else class="w-full">
       <UCalendar
         :model-value="(monthFocusDate as any)"
-        @update:model-value="(value: any) => { monthFocusDate = value }"
+        @update:model-value="onMonthDayActivate"
         size="sm"
         :week-starts-on="1"
         :ui="{
@@ -563,6 +577,8 @@ const monthCellHeight = computed(() => {
         class="[&_table]:w-full [&_table]:table-fixed"
       >
         <template #day="{ day }">
+          <!-- Presentation only — day activation (mouse + keyboard) arrives via
+               UCalendar's cellTrigger button → onMonthDayActivate. -->
           <div
             class="group relative w-full flex flex-col items-center justify-start pt-1 pb-1 rounded-md transition-all duration-200"
             :style="{ minHeight: `${monthCellHeight}px` }"
@@ -579,7 +595,6 @@ const monthCellHeight = computed(() => {
                 : '',
             ]"
             :title="getDayBlockedReason(day.toDate(getLocalTimeZone())) || undefined"
-            @click="hasBookings(day.toDate(getLocalTimeZone())) && emit('select', day.toDate(getLocalTimeZone()))"
           >
             <!-- Day number -->
             <span
@@ -659,6 +674,10 @@ const monthCellHeight = computed(() => {
             </div>
 
             <!-- Add booking tab (slides down from under the date block on hover) -->
+            <!-- Deliberately a raw button (#1410): a calendar hover cell whose
+                 geometry (absolute slide-down tab under the date block) and
+                 booked-state colors are the widget itself — no Nuxt UI equivalent.
+                 Colors use semantic tokens where possible. -->
             <button
               v-if="!isCreatingDate(day.toDate(getLocalTimeZone()))"
               type="button"

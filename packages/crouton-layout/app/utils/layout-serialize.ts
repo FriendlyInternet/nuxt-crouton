@@ -2,7 +2,7 @@
  * Layout serialisation (#987, graduation WS4) — the **canonical, diffable
  * interchange format** for the agent⇄human layout loop.
  *
- * A `LayoutTree` is the in-memory model; `sanitizeLayoutTree` (`./layout-tree`)
+ * A `LayoutTree` is the in-memory model; `sanitizeLayoutTree` (in crouton-core)
  * is the trusted-on-the-way-IN gate. This module adds the trusted-on-the-way-OUT
  * half: a **stable string form** that an agent and a human can both read, write,
  * and *diff* — on a GitHub ticket (#974), in a store, or in a review.
@@ -22,7 +22,7 @@
  * Pure (no Nuxt runtime) so it's unit-testable.
  */
 import type { LayoutBreakpoint, LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
-import { sanitizeLayoutTree } from './layout-tree'
+import { sanitizeLayoutTree } from '@fyit/crouton-core/app/utils/layout-tree'
 
 // ─── Tree: canonical form ────────────────────────────────────────────────────
 

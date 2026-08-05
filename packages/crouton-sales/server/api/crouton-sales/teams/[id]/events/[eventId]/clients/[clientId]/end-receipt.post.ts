@@ -13,33 +13,19 @@
  * as auto-imported globals by the crouton-printing layer.
  */
 import { eq, and } from 'drizzle-orm'
-import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import type { ReceiptData, ReceiptItem, ReceiptSettings } from '@fyit/crouton-printing/server/utils/receipt-formatter'
 import { aggregateClientTab } from '../../../../../../../../utils/client-tab'
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
+import { requireTeamEvent } from '../../../../../../../../utils/team-event'
 import { salesClients } from '~~/layers/sales/collections/clients/server/database/schema'
 import { salesPrinters } from '~~/layers/sales/collections/printers/server/database/schema'
 import { salesEventsettings } from '~~/layers/sales/collections/eventsettings/server/database/schema'
 
 export default defineEventHandler(async (event) => {
-  const { team, user } = await resolveTeamAndCheckMembership(event)
-  const eventId = getRouterParam(event, 'eventId')
+  const { team, user, db, eventId, salesEvent } = await requireTeamEvent(event)
   const clientId = getRouterParam(event, 'clientId')
 
-  if (!eventId || !clientId) {
-    throw createError({ status: 400, statusText: 'Event ID and Client ID are required' })
-  }
-
-  const db = useDB()
-
-  const [salesEvent] = await db
-    .select()
-    .from(salesEvents)
-    .where(and(eq(salesEvents.id, eventId), eq(salesEvents.teamId, team.id)))
-    .limit(1)
-
-  if (!salesEvent) {
-    throw createError({ status: 404, statusText: 'Event not found' })
+  if (!clientId) {
+    throw createError({ status: 400, statusText: 'Client ID is required' })
   }
 
   const [client] = await db
@@ -118,22 +104,28 @@ export default defineEventHandler(async (event) => {
   // Encode for the receipt printer's output driver (network-escpos = base64
   // ESC/POS, browser-print = JSON) and enqueue onto the generic print_jobs
   // queue. refType='tab' so the order auto-complete reactions skip it.
-  const driver = printer.driver ?? 'network-escpos'
-  const queueId = await enqueuePrintJob(db, {
-    source: 'sales',
-    printerId: printer.id,
-    printerIp: printer.ipAddress ?? null,
-    printerPort: printer.port != null ? Number(printer.port) : null,
-    printerTitle: printer.title ?? null,
-    driver,
-    payload: encodeTicket(receiptData, driver),
-    printMode: 'receipt',
-    locationId: null,
-    refType: 'tab',
-    refId: clientId,
-    eventId,
-    teamId: team.id
-  })
+  // Print flow 'none' (#1324): settle the tab but skip the paper — an
+  // enqueued job would sit pending forever (nothing delivers this event).
+  const transportRow = await getPrintTransport(db, eventId)
+  let queueId: string | null = null
+  if (transportRow?.transport !== PRINT_TRANSPORT.NONE) {
+    const driver = printer.driver ?? 'network-escpos'
+    queueId = await enqueuePrintJob(db, {
+      source: 'sales',
+      printerId: printer.id,
+      printerIp: printer.ipAddress ?? null,
+      printerPort: printer.port != null ? Number(printer.port) : null,
+      printerTitle: printer.title ?? null,
+      driver,
+      payload: encodeTicket(receiptData, driver),
+      printMode: 'receipt',
+      locationId: null,
+      refType: 'tab',
+      refId: clientId,
+      eventId,
+      teamId: team.id
+    })
+  }
 
   // Settled: hide the client from the POS picker and the clients panel.
   await db

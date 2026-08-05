@@ -36,6 +36,17 @@ Read the issue, then ask each — answer with one line of evidence (a link, a pa
    config flip that gets 90% of the value? (KISS — CLAUDE.md core principle.)
 6. **Net-negative?** — does it add surface/complexity we'll regret, contradict a current
    pattern, or block something more valuable? Sometimes the right move is to close it.
+7. **Target reachable?** — do the files the issue *names* actually render or execute? Run
+   `node scripts/check-issue-targets.mjs <issue-number>`. An issue can name dead code, and
+   building exactly to spec then ships something nobody can reach **while satisfying every
+   acceptance criterion** — #1657 specified an Import button in `ProductsTab.vue`, a component
+   mounted in no template.
+   > ⚠️ **Flag, never drop.** Zero references is a *hypothesis* (the #1149 deletion protocol,
+   > in reverse): this repo mounts things dynamically — directory scanners, the
+   > `croutonBlocks`/`croutonLayoutBlocks` registries, `@nuxt/kit` resolver paths. The probe
+   > already excuses file-routed paths (`server/api/**`, `app/pages/**`, auto-imported
+   > `utils`/`composables`) and registry entries, but verify before acting. The right verdict
+   > is **🔁 Reshape** — "build it, somewhere reachable; confirm where" — not 🛑.
 
 ## The verdict (REQUIRED output)
 
@@ -48,7 +59,7 @@ End with exactly one of:
   recommend closing `not_planned` / merging into the duplicate — **ask the owner before
   closing**, don't unilaterally bin their issue.
 
-Keep it tight — six one-line checks and a verdict, not an essay. The value is the *pause*, not
+Keep it tight — seven one-line checks and a verdict, not an essay. The value is the *pause*, not
 a long report.
 
 ## Recording it

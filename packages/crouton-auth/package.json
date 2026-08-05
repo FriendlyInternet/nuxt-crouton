@@ -43,6 +43,10 @@
       "import": "./server/utils/scoped-access.ts",
       "types": "./server/utils/scoped-access.ts"
     },
+    "./server/utils/pairing-code": {
+      "import": "./server/utils/pairing-code.ts",
+      "types": "./server/utils/pairing-code.ts"
+    },
     "./server/utils/auth": {
       "import": "./server/utils/auth.ts",
       "types": "./server/utils/auth.ts"
@@ -88,12 +92,10 @@
     "defu": "^6.1.4"
   },
   "devDependencies": {
-    "@better-auth/cli": "^1.4.21",
     "@nuxt/kit": "^3.14.0",
     "@nuxt/schema": "^3.14.0",
     "@types/better-sqlite3": "^7.6.0",
     "@vitejs/plugin-vue": "^5.2.4",
-    "better-sqlite3": "^11.0.0",
     "drizzle-kit": "catalog:",
     "jsdom": "^25.0.1",
     "nuxt": "catalog:",

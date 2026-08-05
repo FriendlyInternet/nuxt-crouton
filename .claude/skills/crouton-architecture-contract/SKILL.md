@@ -133,7 +133,7 @@ Field types are **not hardcoded in the CLI**. Each package declares a `crouton.m
 
 ## Provenance and maintenance
 
-verified: 2026-07-02
+verified: 2026-07-03
 
 Facts checked against the working tree (velo/core/crouton/auth/layout/cli configs + CLAUDE.mds, `fixtures/minimal` generated tree, `e2e/CLAUDE.md`). Issue numbers cited from discovery-report summaries — check the issue if load-bearing. Volatile facts live below, not in the prose:
 

@@ -101,3 +101,37 @@ export const printJobs = sqliteTable('print_jobs', {
   index('idx_print_jobs_ref').on(table.refType, table.refId),
   index('idx_print_jobs_source').on(table.source),
 ])
+
+/**
+ * Per-event transport selection for `network-escpos` jobs (#1324).
+ *
+ * Historically WHICH transport delivers thermal jobs — the in-process TCP
+ * drainer on the venue Pi vs the on-site router spooler polling over HTTP —
+ * was decided by ops artifacts (an env var on the Pi, an event id hardcoded in
+ * the RUT956 script), and "run either one, never both" was only a comment.
+ * This row makes the choice per-event data, enforced at both drain points.
+ *
+ * The choice is ALWAYS exclusive: an event without a row uses the default
+ * (`router-spooler`, the cloud/production flow — DEFAULT_PRINT_TRANSPORT), so
+ * two transports can never serve one event. `transport = 'none'` parks the
+ * event: jobs stay pending, nobody delivers. `browser-print` jobs are not
+ * governed by this — that driver is chosen per printer.
+ *
+ * The heartbeat columns are a liveness readout for the settings UI ("spooler
+ * last seen 4s ago"): each transport stamps its own column (throttled) when it
+ * polls/ticks. ISO-text timestamps, same convention as print_jobs.completedAt.
+ *
+ * `eventId` stays an opaque correlation key (like on printers/print_jobs) —
+ * this package still knows nothing about what an event is. This is a config
+ * entity: when bidirectional config sync (#802) lands, it should sync with it.
+ */
+export const printTransports = sqliteTable('print_transports', {
+  eventId: text('event_id').primaryKey(),
+  teamId: text('team_id'),
+  // 'local-drainer' | 'router-spooler' | 'none' (see PRINT_TRANSPORT).
+  transport: text('transport').notNull().$default(() => 'router-spooler'),
+  lastSpoolerPollAt: text('last_spooler_poll_at'),
+  lastDrainerTickAt: text('last_drainer_tick_at'),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$default(() => new Date()).$onUpdate(() => new Date()),
+})

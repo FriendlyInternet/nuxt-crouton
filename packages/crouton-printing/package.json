@@ -33,6 +33,10 @@
     "./server/utils/print-queue-service": {
       "import": "./server/utils/print-queue-service.ts",
       "types": "./server/utils/print-queue-service.ts"
+    },
+    "./server/utils/print-transport": {
+      "import": "./server/utils/print-transport.ts",
+      "types": "./server/utils/print-transport.ts"
     }
   },
   "scripts": {
@@ -69,7 +73,9 @@
     "@fyit/crouton-core": "workspace:*"
   },
   "dependencies": {
-    "nanoid": "^5.0.0"
+    "@vueuse/core": "^13.3.0",
+    "nanoid": "^5.0.0",
+    "std-env": "^3.10.0"
   },
   "devDependencies": {
     "unbuild": "^3.6.1",

@@ -1,0 +1,239 @@
+# Publish the venue (node-server) bundle as a release asset (#804).
+#
+# The generic installer (`apps/kassa/deploy/install.sh`) turns a bare Linux
+# box into a running till by *downloading* this tarball — it does NOT clone and
+# build. Building Nuxt on-site needs multiple GB of heap (the Pi rig sets
+# --max-old-space-size=6144), which a 4GB Pi cannot do without swapping for
+# many minutes. Shipping a prebuilt bundle is what makes "bare box → till in
+# one command" actually true.
+#
+# CI's `build-fanfare` job already proves this preset builds on every PR; this
+# workflow is the same build, kept and published.
+name: Release venue bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to create/update (e.g. venue-2026.08.03)."
+        required: true
+        type: string
+      prerelease:
+        description: "Mark the release as a prerelease."
+        required: false
+        default: true
+        type: boolean
+  push:
+    tags:
+      - 'venue-*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-venue-bundle-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    name: Build + publish venue bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Build kassa's workspace dependencies
+        # Dist-consumed, so they must be built before the app (mirrors ci.yml).
+        run: pnpm --filter "kassa^..." build
+
+      - name: Prepare Nuxt
+        run: npx nuxt prepare
+        working-directory: apps/kassa
+
+      - name: Build kassa (node-server)
+        run: npx nuxt build
+        working-directory: apps/kassa
+        env:
+          NITRO_PRESET: node-server
+          NODE_OPTIONS: '--max-old-space-size=8192'
+          # Build-time prerender needs a secret present; value is irrelevant.
+          BETTER_AUTH_SECRET: ci-placeholder
+
+      - name: Add the arm64 native addon (#1680)
+        # libsql ships its native addon as per-platform optional packages, so a
+        # build on this x64 runner installs ONLY linux-x64-gnu. A Raspberry Pi —
+        # the canonical venue till — would then die at boot on
+        # "Cannot find module '@libsql/linux-arm64-gnu'".
+        # Ship both so one tarball runs anywhere and install.sh stays dumb.
+        run: |
+          set -euo pipefail
+          ROOT="apps/kassa/.output"
+
+          # DISCOVER the directory rather than hardcode it: where Nitro traces
+          # @libsql to inside .output is not guaranteed to be one fixed path,
+          # and a wrong guess here fails the whole release (it did once).
+          OUT="$(find "$ROOT" -type d -name '@libsql' -print -quit 2>/dev/null || true)"
+
+          if [ -z "$OUT" ]; then
+            # NOT a soft skip. This app is local-first and always carries the
+            # sqlite driver; its absence means the build produced something
+            # other than the real app. A "graceful" exit 0 here is exactly what
+            # let an empty Nuxt shell ship as venue-2026.08.05.
+            echo "::error::no @libsql under $ROOT — the build did not produce the real app"
+            find "$ROOT" -maxdepth 4 -type d | head -30
+            exit 1
+          fi
+          echo "found @libsql at: $OUT"
+          ls -1 "$OUT"
+
+          if [ -d "$OUT/linux-arm64-gnu" ]; then
+            echo "arm64 addon already present — nothing to do"
+            exit 0
+          fi
+
+          # Derive the version from the x64 package that was actually installed
+          # so the two architectures can never drift apart. Read the file
+          # directly — `require()` of a relative path from `node -e` resolves
+          # against the eval module, not reliably against the workdir.
+          X64_PKG="$OUT/linux-x64-gnu/package.json"
+          if [ ! -f "$X64_PKG" ]; then
+            echo "::error::expected $X64_PKG; @libsql contains:"; ls -1 "$OUT"
+            exit 1
+          fi
+          VERSION="$(node -p "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8')).version" "$X64_PKG")"
+          echo "libsql native addon version: $VERSION"
+
+          TMP="$(mktemp -d)"
+          ( cd "$TMP" && npm pack "@libsql/linux-arm64-gnu@$VERSION" >/dev/null )
+          tar -xzf "$TMP"/*.tgz -C "$TMP"
+          mkdir -p "$OUT/linux-arm64-gnu"
+          cp -R "$TMP/package/." "$OUT/linux-arm64-gnu/"
+
+          echo "platform packages now bundled:"
+          ls -1 "$OUT"
+          # Prove the arm64 binary really is arm64 — a same-arch copy would
+          # silently reintroduce the bug this step exists to fix.
+          file "$OUT/linux-arm64-gnu/index.node"
+          file "$OUT/linux-arm64-gnu/index.node" | grep -q -i "aarch64\|arm64" \
+            || { echo "::error::bundled arm64 addon is not an aarch64 binary"; exit 1; }
+
+      - name: Smoke the bundle (it must be the REAL app, not just any app)
+        # Two lessons, both learned the hard way:
+        #  * nothing here ever STARTED the artifact, so a broken bundle shipped
+        #  * then "it returned HTTP 200" passed on an EMPTY Nuxt shell built
+        #    from a leftover directory — an empty app boots and serves 200 too
+        # So booting is necessary but nowhere near sufficient: assert the
+        # bundle actually contains this app before trusting the response.
+        run: |
+          set -euo pipefail
+          OUT="apps/kassa/.output"
+
+          # --- content assertions (cheap, and the ones that would have caught it)
+          CHUNK_HITS="$(grep -rl "crouton-sales" "$OUT/server/chunks" 2>/dev/null | wc -l | tr -d ' ')"
+          ASSETS="$(find "$OUT/public" -type f 2>/dev/null | wc -l | tr -d ' ')"
+          MODULES="$(ls -1 "$OUT/server/node_modules" 2>/dev/null | wc -l | tr -d ' ')"
+          echo "crouton-sales chunk hits: $CHUNK_HITS · public assets: $ASSETS · bundled modules: $MODULES"
+
+          # A real kassa build had 70 / 466 / 184; the empty shell had 0 / 8 / 11.
+          # Thresholds are deliberately far below the real values and far above
+          # the shell's, so ordinary drift never trips them.
+          [ "$CHUNK_HITS" -ge 1 ]  || { echo "::error::no crouton-sales code in the bundle — this is not the kassa app"; exit 1; }
+          [ "$ASSETS"     -ge 50 ] || { echo "::error::only $ASSETS public assets — the app did not build"; exit 1; }
+          [ "$MODULES"    -ge 50 ] || { echo "::error::only $MODULES bundled modules — dependencies were not traced"; exit 1; }
+
+          # --- and it must still actually boot
+          cd "$OUT"
+          BETTER_AUTH_SECRET=smoke NITRO_PORT=3999 node server/index.mjs & PID=$!
+          for _ in $(seq 1 30); do
+            if curl -fsS -o /dev/null "http://127.0.0.1:3999/" 2>/dev/null; then
+              echo "bundle is the real app AND boots"
+              kill $PID 2>/dev/null || true
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the built bundle did not serve a response within 30s"
+          kill $PID 2>/dev/null || true
+          exit 1
+
+      - name: Assemble the bundle
+        id: bundle
+        run: |
+          set -euo pipefail
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          STAGE="$(mktemp -d)/fanfare-venue"
+          mkdir -p "$STAGE"
+
+          # The runnable server, plus the deploy assets the installer wires up
+          # (systemd unit, health check, network config, env example).
+          cp -R apps/kassa/.output "$STAGE/output"
+          cp -R apps/kassa/deploy "$STAGE/deploy"
+
+          # Stamp provenance so a box can report exactly what it runs.
+          cat > "$STAGE/BUNDLE.json" <<JSON
+          {
+            "tag": "$TAG",
+            "commit": "${{ github.sha }}",
+            "builtAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "preset": "node-server",
+            "node": "20"
+          }
+          JSON
+
+          TARBALL="fanfare-venue.tar.gz"
+          tar -czf "$TARBALL" -C "$(dirname "$STAGE")" fanfare-venue
+          sha256sum "$TARBALL" > "$TARBALL.sha256"
+
+          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          ls -lh "$TARBALL"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.bundle.outputs.tag }}"
+          TARBALL="${{ steps.bundle.outputs.tarball }}"
+          PRERELEASE=""
+          if [ "${{ github.event.inputs.prerelease || 'true' }}" = "true" ]; then
+            PRERELEASE="--prerelease"
+          fi
+
+          # Build the notes in a FILE, not as an inline multi-line argument.
+          # The previous version's continuation lines sat at column 0, which
+          # ends the YAML block scalar — the whole workflow then failed to
+          # parse, so GitHub never registered workflow_dispatch (no "Run
+          # workflow" button) and logged a failed run on every push.
+          # Everything here must stay indented inside this block.
+          {
+            echo "Prebuilt node-server bundle for the venue till installer (#804)."
+            echo
+            echo "Install on a bare Linux box:"
+            echo
+            echo '```bash'
+            echo "curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/apps/kassa/deploy/install.sh | sudo bash -s -- --release $TAG"
+            echo '```'
+            echo
+            echo "Built from commit ${{ github.sha }}."
+          } > release-notes.md
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$TARBALL" "$TARBALL.sha256" --clobber
+          else
+            gh release create "$TAG" "$TARBALL" "$TARBALL.sha256" \
+              --title "Venue bundle $TAG" \
+              --notes-file release-notes.md \
+              $PRERELEASE
+          fi

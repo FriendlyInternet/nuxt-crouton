@@ -28,15 +28,26 @@ N="${1:-}"
 TOKEN="${RUNNER_TOKEN:-${2:-}}"
 REPO_URL="${REPO_URL:-https://github.com/FriendlyInternet/nuxt-crouton}"
 BASE_DIR="${BASE_DIR:-$HOME/actions-runner}"          # the first runner's install
-TARBALL="${TARBALL:-$BASE_DIR/actions-runner.tar.gz}" # downloaded during first setup (§1a)
 
 die() { echo "ERROR: $*" >&2; exit 1; }
+
+# Locate the runner tarball. Prefer the fixed name the runbook §1a downloads to, but
+# fall back to the versioned name GitHub ships (actions-runner-osx-*.tar.gz) — runner #1
+# may have been set up by hand without the `-o` rename (the #1200 drift). Explicit
+# TARBALL= always wins.
+if [ -z "${TARBALL:-}" ]; then
+  if [ -f "$BASE_DIR/actions-runner.tar.gz" ]; then
+    TARBALL="$BASE_DIR/actions-runner.tar.gz"
+  else
+    TARBALL="$(ls -t "$BASE_DIR"/actions-runner-osx-*.tar.gz 2>/dev/null | head -1 || true)"
+  fi
+fi
 
 [ -n "$N" ] || die "usage: RUNNER_TOKEN=<token> $0 <N>   (N = runner number, e.g. 2)"
 case "$N" in *[!0-9]*|'') die "<N> must be a number, got '$N'";; esac
 [ "$N" -ge 2 ] || die "N starts at 2 — runner #1 is the original ~/actions-runner install"
 [ -n "$TOKEN" ] || die "no registration token — pass RUNNER_TOKEN=<token> (repo Settings → Actions → Runners → New self-hosted runner)"
-[ -f "$TARBALL" ] || die "runner tarball not found at $TARBALL — download it per runbook §1a first (or set TARBALL=)"
+[ -n "$TARBALL" ] && [ -f "$TARBALL" ] || die "runner tarball not found in $BASE_DIR (looked for actions-runner.tar.gz and actions-runner-osx-*.tar.gz) — download it per runbook §1a first, or set TARBALL="
 
 DIR="$HOME/actions-runner-$N"
 NAME="mac-mini-$N"

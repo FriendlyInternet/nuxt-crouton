@@ -27,7 +27,17 @@ export default defineNuxtPlugin(() => {
       return
     }
 
-    const redirectTo = (to.query.redirect as string) || '/'
+    const authModal = useAuthModal()
+    const pending = authModal.state.value
+
+    // A guard bounce can re-intercept while the modal is already open with a
+    // deep-link target pending — e.g. /auth/login?redirect=X navigates to '/',
+    // whose auth guard resolves logged-out and fires a bare navigateTo
+    //('/auth/login'). Resetting to '/' here would clobber X and strand the
+    // user on the root page after sign-in (#1323). No explicit ?redirect= on
+    // the incoming navigation → keep the pending target.
+    const redirectTo = (to.query.redirect as string) || (pending.open ? pending.redirectTo : '/')
+    const previousPath = pending.open ? pending.previousPath : from.fullPath
     const prefillEmail = (to.query.email as string) || undefined
     // Convenience prefill for shared demo/preview links — fills the field but
     // never auto-submits. Only for throwaway demo credentials (a password in a
@@ -42,7 +52,7 @@ export default defineNuxtPlugin(() => {
     window.history.pushState(null, '', to.fullPath)
 
     // Open the auth modal
-    useAuthModal().open(mode, redirectTo, from.fullPath, prefillEmail, dismissible, prefillPassword)
+    authModal.open(mode, redirectTo, previousPath, prefillEmail, dismissible, prefillPassword)
 
     // Cancel the router navigation
     return false

@@ -1,0 +1,42 @@
+name: Mac mini fleet concurrency smoke
+
+# Dispatch-only proof that the self-hosted `mac-mini` FLEET (epic #610 / #1045) runs jobs in
+# PARALLEL — the acceptance criterion the single mac-mini-smoke.yml can't self-prove (its
+# concurrency group serializes copies). One dispatch fans out a 3-way matrix; if the fleet has
+# 3 idle runners, all three land at once on distinct runners and hold their slot briefly so the
+# overlap is observable.
+#
+# SAFE on a public repo: workflow_dispatch only (human-with-write-access, manual) — no
+# pull_request/push trigger, so untrusted fork code can never reach the self-hosted box here.
+#
+# NB: workflow_dispatch only works once this file is on the DEFAULT branch (main).
+
+on:
+  workflow_dispatch:
+    inputs:
+      slots:
+        description: "How many parallel slots to fan out (match your fleet size)."
+        required: false
+        default: "3"
+        type: string
+
+# No cancel-in-progress group — the whole point is to let the matrix jobs overlap.
+
+jobs:
+  fan:
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2, 3]
+    runs-on: [self-hosted, mac-mini]
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Identify + hold the slot
+        run: |
+          echo "slot=${{ matrix.slot }} runner=${RUNNER_NAME:-?} host=$(hostname) started=$(date -u +%H:%M:%S)Z"
+          # Hold the slot ~25s so all three jobs are in_progress simultaneously — that overlap
+          # (three distinct RUNNER_NAMEs, none queued) is the #1045 concurrency proof.
+          sleep 25
+          echo "slot=${{ matrix.slot }} done=$(date -u +%H:%M:%S)Z"

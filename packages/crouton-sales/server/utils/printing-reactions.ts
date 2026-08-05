@@ -26,9 +26,10 @@
  */
 import { and, count, eq, ne, notInArray } from 'drizzle-orm'
 import type { OutboxEvent } from './sync-outbox'
+import { SALES_PRINT_STATUS } from '../../shared/utils/print-status'
 
-const STATUS_COMPLETED = '2'
-const STATUS_FAILED = '9'
+const STATUS_COMPLETED = SALES_PRINT_STATUS.COMPLETED
+const STATUS_FAILED = SALES_PRINT_STATUS.FAILED
 
 /** The shape the lazy orders-schema loader must resolve (the generated layer). */
 export interface OrdersSchema {
@@ -67,6 +68,26 @@ export interface JobOutcome {
   eventId: string | null
   status: string
   errorMessage?: string
+}
+
+/**
+ * Build the `printstatus` cloud-sync outbox event for one job's status
+ * transition (#176). `statusPayload` carries the transition-specific fields
+ * (status + completedAt | errorMessage + updatedAt); `id` is always the job id.
+ */
+function mirrorTransition(
+  outcome: JobOutcome,
+  orderId: string | null,
+  statusPayload: Record<string, unknown>
+): OutboxEvent {
+  return {
+    entityType: 'printstatus',
+    entityId: outcome.id,
+    orderId,
+    teamId: outcome.teamId ?? null,
+    eventId: outcome.eventId ?? null,
+    payload: { id: outcome.id, ...statusPayload }
+  }
 }
 
 /**
@@ -127,14 +148,9 @@ export async function onJobCompleted(db: any, outcome: JobOutcome, deps: Printin
     // Mirror the print-status transition (#176): the job → done, plus the order
     // row when it auto-completed. Guarded so disabled processes pay nothing.
     if (deps.isCloudSyncEnabled()) {
-      const events: OutboxEvent[] = [{
-        entityType: 'printstatus',
-        entityId: outcome.id,
-        orderId,
-        teamId: outcome.teamId ?? null,
-        eventId: outcome.eventId ?? null,
-        payload: { id: outcome.id, status: STATUS_COMPLETED, completedAt: now.toISOString(), updatedAt: now }
-      }]
+      const events: OutboxEvent[] = [
+        mirrorTransition(outcome, orderId, { status: STATUS_COMPLETED, completedAt: now.toISOString(), updatedAt: now })
+      ]
       if (orderCompleted) {
         const [orderRow] = await db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).limit(1)
         if (orderRow) {
@@ -150,14 +166,9 @@ export async function onJobCompleted(db: any, outcome: JobOutcome, deps: Printin
   // but still mirror the status transition for the cloud.
   if (deps.isCloudSyncEnabled()) {
     const now = new Date()
-    await deps.recordOutboxEvents(db, [{
-      entityType: 'printstatus',
-      entityId: outcome.id,
-      orderId: null,
-      teamId: outcome.teamId ?? null,
-      eventId: outcome.eventId ?? null,
-      payload: { id: outcome.id, status: STATUS_COMPLETED, completedAt: now.toISOString(), updatedAt: now }
-    }])
+    await deps.recordOutboxEvents(db, [
+      mirrorTransition(outcome, null, { status: STATUS_COMPLETED, completedAt: now.toISOString(), updatedAt: now })
+    ])
   }
 }
 
@@ -186,14 +197,9 @@ export async function onJobFailed(db: any, outcome: JobOutcome, deps: PrintingRe
     // Mirror the print-status transition (#176): the job → failed, plus the
     // current order row (its status may have flipped to print_failed).
     if (deps.isCloudSyncEnabled()) {
-      const events: OutboxEvent[] = [{
-        entityType: 'printstatus',
-        entityId: outcome.id,
-        orderId,
-        teamId: outcome.teamId ?? null,
-        eventId: outcome.eventId ?? null,
-        payload: { id: outcome.id, status: STATUS_FAILED, errorMessage, updatedAt: now }
-      }]
+      const events: OutboxEvent[] = [
+        mirrorTransition(outcome, orderId, { status: STATUS_FAILED, errorMessage, updatedAt: now })
+      ]
       const [orderRow] = await db.select().from(salesOrders).where(eq(salesOrders.id, orderId)).limit(1)
       if (orderRow) {
         events.push({ entityType: 'order', entityId: orderId, orderId, teamId: orderRow.teamId, eventId: orderRow.eventId, payload: orderRow })
@@ -206,13 +212,8 @@ export async function onJobFailed(db: any, outcome: JobOutcome, deps: PrintingRe
   // Non-order job: still mirror the status transition.
   if (deps.isCloudSyncEnabled()) {
     const now = new Date()
-    await deps.recordOutboxEvents(db, [{
-      entityType: 'printstatus',
-      entityId: outcome.id,
-      orderId: null,
-      teamId: outcome.teamId ?? null,
-      eventId: outcome.eventId ?? null,
-      payload: { id: outcome.id, status: STATUS_FAILED, errorMessage, updatedAt: now }
-    }])
+    await deps.recordOutboxEvents(db, [
+      mirrorTransition(outcome, null, { status: STATUS_FAILED, errorMessage, updatedAt: now })
+    ])
   }
 }

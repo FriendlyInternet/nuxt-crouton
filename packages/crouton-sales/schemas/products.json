@@ -11,6 +11,5 @@
   "remarkPrompt": { "type": "string", "meta": { "label": "Remark Prompt" } },
   "hasOptions": { "type": "boolean", "meta": { "label": "Has Options", "default": false } },
   "multipleOptionsAllowed": { "type": "boolean", "meta": { "label": "Multiple Options", "default": false } },
-  "options": { "type": "repeater", "meta": { "label": "Options", "helpText": "Product variants like sizes or extras" } },
-  "sortOrder": { "type": "integer", "meta": { "label": "Sort Order", "default": 0 } }
+  "options": { "type": "repeater", "meta": { "label": "Options", "helpText": "Product variants like sizes or extras" } }
 }

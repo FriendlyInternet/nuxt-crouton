@@ -95,6 +95,7 @@
     },
     "nav": {
       "menu": "Menu",
+      "theme": "Theme",
       "signOut": "Sign out"
     },
     "collection": {
@@ -116,6 +117,9 @@
       "sectionAppearance": "Appearance",
       "sectionNavigation": "Navigation",
       "sectionAccess": "Access",
+      "tabContent": "Content",
+      "tabSeo": "SEO",
+      "untitledShort": "Untitled",
       "generate": "Generate",
       "preview": "Preview",
       "search": "Search",
@@ -178,7 +182,13 @@
       "chromeHideNav": "Hide page navigation",
       "chromeHideNavDescription": "Hide the navigation pill on this page",
       "chromeHideAuth": "Hide login & account controls",
-      "chromeHideAuthDescription": "Hide login, account and admin menus on this page — language and dark mode stay available"
+      "chromeHideAuthDescription": "Hide login, account and admin menus on this page — language and dark mode stay available",
+      "contentLabel": "Content",
+      "block": "block",
+      "blocks": "blocks",
+      "tapToEdit": "Tap to edit",
+      "seoGenerate": "Generate with AI",
+      "seoGenerateFailed": "Could not generate a description"
     },
     "sidebar": {
       "drafts": "Drafts",
@@ -328,6 +338,26 @@
         "linkUrl": "Custom URL",
         "selectPage": "Select a page…",
         "searchPages": "Search pages…"
+      },
+      "visibility": {
+        "title": "Visibility",
+        "restricted": "Limited",
+        "audience": "Show to",
+        "audienceHelp": "Who sees this block on the public page.",
+        "audienceAll": "Anyone",
+        "audienceAnonymous": "Logged-out visitors only",
+        "audienceAuthenticated": "Logged-in visitors only",
+        "roles": "Roles",
+        "rolesHelp": "Limit to these team roles. Owners always see what admins see.",
+        "roleOwner": "Owner",
+        "roleAdmin": "Admin",
+        "roleMember": "Member",
+        "viewports": "Screens",
+        "viewportsHelp": "Screen sizes this block appears on.",
+        "viewportMobile": "Mobile",
+        "viewportTablet": "Tablet",
+        "viewportDesktop": "Desktop",
+        "notSecurityNotice": "A hidden block is still present in the page source — this controls what is shown, not what is accessible. For content that must stay private, set the visibility of the page itself."
       }
     },
     "fieldGroups": {
@@ -961,6 +991,7 @@
     "undo": "Undo",
     "redo": "Redo",
     "ascending": "Ascending",
-    "descending": "Descending"
+    "descending": "Descending",
+    "more": "More"
   }
 }

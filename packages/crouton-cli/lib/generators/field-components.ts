@@ -491,7 +491,7 @@ function generateCardMiniComponent(fieldName: string, fieldPascalCase: string, c
       <div class="flex flex-wrap gap-1">
         <UBadge
           v-for="(item, index) in normalizedValue.slice(0, 3)"
-          :key="index"
+          :key="\`\${index}-\${item.value ?? item.label ?? item}\`"
           color="neutral"
           variant="subtle"
         >

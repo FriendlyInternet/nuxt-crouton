@@ -38,7 +38,7 @@ async function isPackageInstalled(packageName: string, cwd: string = process.cwd
 /**
  * Check if required dependencies are installed
  */
-async function checkDependencies(dependencies: string[], cwd: string = process.cwd()): Promise<{ missing: string[]; installed: string[] }> {
+async function checkDependencies(dependencies: string[], cwd: string = process.cwd()): Promise<{ missing: string[], installed: string[] }> {
   const missing: string[] = []
   const installed: string[] = []
 
@@ -59,7 +59,7 @@ async function checkDependencies(dependencies: string[], cwd: string = process.c
 /**
  * Add a single module to the project
  */
-export async function addModule(moduleName: string, options: AddModuleOptions = {}): Promise<{ success: boolean; message: string }> {
+export async function addModule(moduleName: string, options: AddModuleOptions = {}): Promise<{ success: boolean, message: string }> {
   const { skipInstall, skipMigrations, dryRun, force } = options
   const cwd = process.cwd()
 
@@ -175,17 +175,17 @@ export async function addModule(moduleName: string, options: AddModuleOptions = 
   // Step 4: Generate & apply migrations (if module has tables)
   if (!skipMigrations && module.schemaExport && module.tables && module.tables.length > 0) {
     if (dryRun) {
-      console.log('   • Would build the schema bundle, then run: db:generate')
+      console.log('   • Would run: db:generate (drizzle-kit, no Nuxt build)')
       console.log('   • Would run: npx nuxt db:migrate')
     } else {
-      // Generate migrations — BUILD-FIRST. drizzle-kit reads the bundled schema
-      // at .nuxt/hub/db/schema.mjs, which only exists after `nuxt build`; running
-      // db:generate without building emits zero migrations (the #523 root cause).
+      // Generate migrations directly — drizzle-kit resolves the schema from the
+      // app's layer graph (no Nuxt process, #1445 WS2). A duplicate-table clash
+      // throws (propagates non-zero); an unresolvable layer defers with a recipe.
       const genResult = await generateMigrations(cwd)
       const migrationsGenerated = genResult.generated
       if (!genResult.generated) {
         consola.warn(`Could not generate migrations (${genResult.reason})`)
-        if (genResult.detail) console.log(`   ${genResult.detail}`)
+        if (genResult.reason === 'generate-failed' && genResult.detail) console.log(`   ${genResult.detail}`)
         console.log('   Run manually when ready:')
         for (const step of manualMigrationSteps()) console.log(`     ${step}`)
       }
@@ -251,12 +251,12 @@ export async function addModule(moduleName: string, options: AddModuleOptions = 
 /**
  * Add multiple modules to the project
  */
-export async function addModules(moduleNames: string[], options: AddModuleOptions = {}): Promise<{ success: boolean; results: Array<{ module: string; success: boolean; message: string }> }> {
+export async function addModules(moduleNames: string[], options: AddModuleOptions = {}): Promise<{ success: boolean, results: Array<{ module: string, success: boolean, message: string }> }> {
   console.log('\n╔══════════════════════════════════════════════════╗')
   console.log('║          Crouton Module Installer                ║')
   console.log('╚══════════════════════════════════════════════════╝')
 
-  const results: Array<{ module: string; success: boolean; message: string }> = []
+  const results: Array<{ module: string, success: boolean, message: string }> = []
   let allSuccess = true
 
   for (const moduleName of moduleNames) {

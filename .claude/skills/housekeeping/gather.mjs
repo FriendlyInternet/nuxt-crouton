@@ -202,6 +202,48 @@ function skillFreshness() {
   }
 }
 
+// ── Retired projects (#686) ──────────────────────────────────────────────────
+// Scan `retired/apps/` and `retired/pocs/` for subdirectories with a `.retired.json`
+// stamp file. Compute age from `archivedAt` and flag entries past 60 days for
+// full deletion. Gracefully returns [] when the `retired/` tree doesn't exist or
+// has no stamp files (WS4a may not have landed yet).
+function retiredProjects() {
+  const dirs = (p) => {
+    try {
+      return readdirSync(p, { withFileTypes: true })
+        .filter((d) => d.isDirectory() && !d.name.startsWith('.'))
+        .map((d) => d.name)
+    } catch {
+      return []
+    }
+  }
+  const results = []
+  for (const [base, type] of [['retired/apps', 'app'], ['retired/pocs', 'poc']]) {
+    for (const name of dirs(base)) {
+      const stampPath = `${base}/${name}/.retired.json`
+      if (!existsSync(stampPath)) continue
+      let stamp
+      try {
+        stamp = JSON.parse(readFileSync(stampPath, 'utf8'))
+      } catch {
+        continue // unparseable — skip
+      }
+      const archivedAt = stamp.archivedAt
+      if (!archivedAt) continue
+      const age = ageDays(archivedAt)
+      results.push({
+        name: stamp.name || name,
+        type: stamp.type || type,
+        archivedAt,
+        ageDays: age,
+        pastThreshold: age > 60,
+        sourceEpic: stamp.sourceEpic ?? null
+      })
+    }
+  }
+  return results.sort((a, b) => b.ageDays - a.ageDays)
+}
+
 // ── Issue / PR drift (API) ───────────────────────────────────────────────────
 const COMPONENT_RE = /^(pkg|app|worker|poc):/
 
@@ -305,6 +347,7 @@ const data = {
   labelCoverage: labelCoverage(),
   loopStation: loopStationBudget(),
   skillFreshness: skillFreshness(),
+  retiredProjects: retiredProjects(),
   ...drift
 }
 

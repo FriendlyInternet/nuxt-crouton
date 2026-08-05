@@ -387,19 +387,23 @@ onBeforeUnmount(() => {
         />
       </div>
 
-      <!-- Child count / expand toggle -->
-      <button
+      <!-- Child count / expand toggle — UButton so themes reach it (#1410);
+           the rounded-full pill geometry + flash classes win via class merge -->
+      <UButton
         v-if="hasChildren"
-        class="shrink-0 flex items-center justify-center size-6 text-xs font-semibold tabular-nums rounded-full transition-colors duration-200"
+        color="neutral"
+        variant="soft"
+        square
+        class="shrink-0 justify-center size-6 p-0 text-xs font-semibold tabular-nums rounded-full transition-colors duration-200"
         :class="[
           isCountFlashing
-            ? 'count-pulse bg-primary text-primary-foreground'
-            : 'bg-elevated text-muted hover:bg-accented hover:text-default'
+            ? 'count-pulse bg-primary text-primary-foreground hover:bg-primary'
+            : 'text-muted hover:text-default'
         ]"
         @click.stop="treeDrag.toggle(item.id)"
       >
         {{ childCount }}
-      </button>
+      </UButton>
 
       <!-- Custom card content OR default -->
       <template v-if="cardComponent">
@@ -450,7 +454,7 @@ onBeforeUnmount(() => {
       />
 
       <!-- Actions dropdown -->
-      <div v-if="!hideActions && !isGhost" class="opacity-0 group-hover:opacity-100 transition-opacity">
+      <div v-if="!hideActions && !isGhost" class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
         <UDropdownMenu
           :items="getItemActions(item)"
           :content="{ align: 'end' }"
@@ -467,7 +471,7 @@ onBeforeUnmount(() => {
       </div>
 
       <!-- Inline add dropdown (replaces full-width bar) -->
-      <div v-if="showAddButton && !isGhost" class="opacity-0 group-hover:opacity-100 transition-opacity">
+      <div v-if="showAddButton && !isGhost" class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity">
         <UDropdownMenu
           :items="getAddActions(item)"
           :content="{ align: 'end' }"

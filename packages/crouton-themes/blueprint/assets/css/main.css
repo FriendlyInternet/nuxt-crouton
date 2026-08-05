@@ -1,0 +1,617 @@
+/* Blueprint Theme (#1311)
+   A cyanotype technical drawing: deep blueprint blue, white line-work,
+   dashed dimension rules, drafting annotations, a faint grid.
+   No !important: built on the shared subtractive replacer. */
+
+:root {
+  --bp-blue: #123a63;
+  --bp-blue-deep: #0d2c4d;
+  --bp-line: #dce9f5;
+  --bp-line-dim: #7fa3c4;
+  --bp-accent: #ffd66b;   /* the surveyor's pencil mark */
+  --bp-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  /* Text on the pencil accent — constant across schemes (#1395). */
+  --bp-on-accent: #0d2c4d;
+}
+
+/* ============================================
+   AMBIENT — the sheet (faint drafting grid)
+   ============================================ */
+
+[data-theme="blueprint"],
+.theme-blueprint {
+  background-color: var(--bp-blue);
+  background-image:
+    linear-gradient(rgba(220, 233, 245, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(220, 233, 245, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--bp-line);
+  --ui-bg: var(--bp-blue);
+  /* Base geometry token (#1594): drafting-sheet line-work is square — drive
+     Nuxt UI's radius scale to 0 so calm surfaces square too. */
+  --ui-radius: 0;
+}
+
+/* ============================================
+   BUTTONS — drawn parts
+   ============================================ */
+
+.bp-btn {
+  font-family: var(--bp-mono);
+  background-color: transparent;
+  color: var(--bp-line);
+  border: 1px solid var(--bp-line);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 3px var(--bp-blue), inset 0 0 0 4px var(--bp-line-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: background-color 100ms ease;
+}
+
+.bp-btn:hover {
+  background-color: rgba(220, 233, 245, 0.12);
+}
+
+.bp-btn--primary {
+  background-color: var(--bp-line);
+  color: var(--bp-blue);
+  box-shadow: none;
+}
+
+.bp-btn--primary:hover {
+  background-color: #fff;
+}
+
+.bp-btn--alert {
+  border-style: dashed;
+  color: var(--bp-accent);
+  border-color: var(--bp-accent);
+  box-shadow: none;
+}
+
+/* ============================================
+   OUTLINE / SOFT / GHOST / LINK
+   ============================================ */
+
+.bp-outline {
+  font-family: var(--bp-mono);
+  background-color: transparent;
+  color: var(--bp-line);
+  border: 1px dashed var(--bp-line-dim);
+  border-radius: 0;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: border-color 100ms ease;
+}
+
+.bp-outline:hover {
+  border-color: var(--bp-line);
+  border-style: solid;
+}
+
+.bp-outline--primary {
+  border-color: var(--bp-line);
+}
+
+.bp-outline--alert {
+  color: var(--bp-accent);
+  border-color: var(--bp-accent);
+}
+
+.bp-soft {
+  font-family: var(--bp-mono);
+  background-color: rgba(220, 233, 245, 0.12);
+  color: var(--bp-line);
+  border: none;
+  border-radius: 0;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: background-color 100ms ease;
+}
+
+.bp-soft:hover {
+  background-color: rgba(220, 233, 245, 0.2);
+}
+
+.bp-soft--alert {
+  color: var(--bp-accent);
+  background-color: rgba(255, 214, 107, 0.12);
+}
+
+.bp-ghost {
+  font-family: var(--bp-mono);
+  background-color: transparent;
+  color: var(--bp-line-dim);
+  border: none;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: color 100ms ease;
+}
+
+.bp-ghost:hover {
+  color: var(--bp-line);
+}
+
+.bp-link {
+  font-family: var(--bp-mono);
+  background-color: transparent;
+  color: var(--bp-line);
+  border: none;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 4px;
+  transition: color 100ms ease;
+}
+
+.bp-link:hover {
+  color: #fff;
+  text-decoration-style: solid;
+}
+
+.bp-link--primary {
+  color: var(--bp-accent);
+}
+
+/* ============================================
+   INPUTS — an annotation field
+   ============================================ */
+
+.bp-input {
+  width: 100%;
+}
+
+.bp-input-base {
+  font-family: var(--bp-mono);
+  background-color: var(--bp-blue-deep);
+  color: var(--bp-line);
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+  caret-color: var(--bp-accent);
+  transition: border-color 100ms ease;
+}
+
+.bp-input-base::placeholder {
+  color: var(--bp-line-dim);
+}
+
+.bp-input-base:focus {
+  outline: none;
+  border-color: var(--bp-line);
+}
+
+.bp-input-base:disabled {
+  border-style: dashed;
+  color: var(--bp-line-dim);
+}
+
+/* ============================================
+   CARD — a drawing frame with title block
+   ============================================ */
+
+.bp-card {
+  background-color: var(--bp-blue);
+  border: 1px solid var(--bp-line);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 4px var(--bp-blue), inset 0 0 0 5px var(--bp-line-dim);
+}
+
+.bp-card-header {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  border-bottom: 1px solid var(--bp-line-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0.75rem 1.25rem;
+}
+
+.bp-card-body {
+  color: var(--bp-line);
+  padding: 1rem 1.25rem;
+}
+
+/* the title block */
+.bp-card-footer {
+  font-family: var(--bp-mono);
+  border-top: 1px solid var(--bp-line);
+  color: var(--bp-line-dim);
+  padding: 0.6rem 1.25rem;
+}
+
+/* ============================================
+   SEPARATOR — a dimension line
+   ============================================ */
+
+.bp-separator {
+  border-style: dashed;
+  border-color: var(--bp-line-dim);
+}
+
+/* ============================================
+   BADGE — a callout bubble
+   ============================================ */
+
+.bp-badge {
+  font-family: var(--bp-mono);
+  background-color: transparent;
+  color: var(--bp-accent);
+  border: 1px solid var(--bp-accent);
+  border-radius: 999px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ============================================
+   VARIANT-LESS CHROME — USwitch
+   ============================================ */
+
+[data-theme="blueprint"] button[role="switch"],
+.theme-blueprint button[role="switch"] {
+  border-radius: 0;
+  border: 1px solid var(--bp-line-dim);
+  background-color: var(--bp-blue-deep);
+  transition: none;
+}
+
+[data-theme="blueprint"] button[role="switch"][data-state="checked"],
+.theme-blueprint button[role="switch"][data-state="checked"] {
+  border-color: var(--bp-line);
+  background-color: rgba(220, 233, 245, 0.2);
+}
+
+[data-theme="blueprint"] button[role="switch"] > span,
+.theme-blueprint button[role="switch"] > span {
+  border-radius: 0;
+  background-color: var(--bp-line-dim);
+  transition: none;
+}
+
+[data-theme="blueprint"] button[role="switch"][data-state="checked"] > span,
+.theme-blueprint button[role="switch"][data-state="checked"] > span {
+  background-color: var(--bp-accent);
+}
+
+/* ============================================
+   SEMANTIC TOKENS (#1390) — tuned to the sheet.
+   ============================================ */
+
+[data-theme="blueprint"] body,
+body.theme-blueprint {
+  --ui-text-dimmed: #7fa3c4;
+  --ui-text-muted: #9db9d4;
+  --ui-text-toned: #c3d6e8;
+  --ui-text: #dce9f5;
+  --ui-text-highlighted: #ffffff;
+  --ui-bg-muted: #10344f;
+  --ui-bg-elevated: #0d2c4d;
+  --ui-bg-accented: #1a4570;
+  --ui-border: #7fa3c4;
+  --ui-border-muted: #2c567e;
+  --ui-border-accented: #dce9f5;
+}
+
+/* ============================================
+   TABS (#1393) — drawing sheet index; active carries the pencil mark
+   ============================================ */
+
+.bp-tabs-list {
+  background-color: transparent;
+  border-bottom: 1px solid var(--bp-line-dim);
+  gap: 0.5rem;
+  padding: 0;
+}
+
+.bp-tabs-trigger {
+  font-family: var(--bp-mono);
+  background-color: transparent;
+  color: var(--bp-line-dim);
+  border: 1px solid transparent;
+  border-bottom: none;
+  border-radius: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.8rem;
+  padding: 0.5rem 0.9rem;
+  transition: color 100ms ease;
+}
+
+.bp-tabs-trigger:hover {
+  color: var(--bp-line);
+}
+
+.bp-tabs-trigger[data-state="active"] {
+  color: var(--bp-on-accent);
+  background-color: var(--bp-accent);
+  border-color: var(--bp-line);
+}
+
+.bp-tabs-indicator {
+  display: none;
+}
+
+/* ============================================
+   CHECKBOX / RADIO (#1393) — survey marks on the sheet
+   ============================================ */
+
+.bp-check-box,
+.bp-radio-box {
+  background-color: transparent;
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.bp-radio-box {
+  border-radius: 9999px;
+}
+
+.bp-check-indicator {
+  background-color: var(--bp-accent);
+  color: var(--bp-on-accent);
+}
+
+.bp-radio-indicator {
+  background-color: transparent;
+  border-radius: 9999px;
+}
+
+.bp-radio-indicator::after {
+  background-color: var(--bp-accent);
+  border-radius: 9999px;
+  width: 55%;
+  height: 55%;
+  content: '';
+  display: block;
+  margin: auto;
+}
+
+/* ============================================
+   ALERT (#1393) — a note block on the drawing
+   ============================================ */
+
+.bp-alert {
+  font-family: var(--bp-mono);
+  background-color: var(--bp-blue);
+  color: var(--bp-line);
+  border: 1px solid var(--bp-line);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 4px var(--bp-blue), inset 0 0 0 5px var(--bp-line-dim);
+}
+
+.bp-alert-title {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.bp-alert--primary {
+  border-style: solid;
+}
+
+.bp-alert--warning {
+  border: 1px dashed var(--bp-accent);
+  color: var(--bp-accent);
+  box-shadow: none;
+}
+
+.bp-alert--warning .bp-alert-title {
+  color: var(--bp-accent);
+}
+
+.bp-alert--error {
+  border: 1px dashed var(--bp-accent);
+  color: var(--bp-accent);
+  box-shadow: none;
+}
+
+.bp-alert--error .bp-alert-title {
+  color: var(--bp-accent);
+}
+
+.bp-alert--neutral {
+  border: 1px solid var(--bp-line-dim);
+  box-shadow: none;
+}
+
+/* ============================================
+   AMBIENT CHROME (#1393) — modal/slideover, toast, pagination
+   (no variant hook; scoped to both activation paths like the switch)
+   ============================================ */
+
+[data-theme="blueprint"] [role="dialog"][data-slot="content"],
+.theme-blueprint [role="dialog"][data-slot="content"] {
+  background-color: var(--bp-blue);
+  border: 1px solid var(--bp-line);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 4px var(--bp-blue), inset 0 0 0 5px var(--bp-line-dim);
+}
+
+[data-theme="blueprint"] [role="dialog"] [data-slot="title"],
+.theme-blueprint [role="dialog"] [data-slot="title"] {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+[data-theme="blueprint"] [data-slot="overlay"],
+.theme-blueprint [data-slot="overlay"] {
+  background-color: rgb(13 44 77 / 0.7);
+}
+
+[data-theme="blueprint"] li[data-slot="base"],
+.theme-blueprint li[data-slot="base"] {
+  font-family: var(--bp-mono);
+  background-color: var(--bp-blue);
+  border: 1px solid var(--bp-line);
+  border-radius: 0;
+  box-shadow: inset 0 0 0 3px var(--bp-blue), inset 0 0 0 4px var(--bp-line-dim);
+}
+
+[data-theme="blueprint"] li[data-slot="base"] [data-slot="title"],
+.theme-blueprint li[data-slot="base"] [data-slot="title"] {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+[data-theme="blueprint"] nav[data-slot="root"] button,
+.theme-blueprint nav[data-slot="root"] button {
+  font-family: var(--bp-mono);
+  background-color: transparent;
+  color: var(--bp-line-dim);
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+  box-shadow: none;
+  transition: color 100ms ease;
+}
+
+[data-theme="blueprint"] nav[data-slot="root"] button:hover:not(:disabled),
+.theme-blueprint nav[data-slot="root"] button:hover:not(:disabled) {
+  color: var(--bp-line);
+  border-color: var(--bp-line);
+}
+
+[data-theme="blueprint"] nav[data-slot="root"] button[data-selected],
+.theme-blueprint nav[data-slot="root"] button[data-selected] {
+  background-color: var(--bp-accent);
+  color: var(--bp-on-accent);
+  border-color: var(--bp-accent);
+}
+
+/* ============================================
+   CALENDAR (#1458) — a dimension grid on the sheet: mono title block,
+   the drawn part for the selected day, the pencil-yellow callout for
+   today. Named variant (bp-cal-*); selected/today state is ours.
+   ============================================ */
+
+.bp-cal-heading {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.bp-cal-head {
+  font-family: var(--bp-mono);
+  color: var(--bp-line-dim);
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.bp-cal-cell {
+  font-family: var(--bp-mono);
+  color: var(--bp-line);
+  border: 1px solid transparent;
+  border-radius: 0;
+  transition: background-color 120ms ease;
+}
+
+.bp-cal-cell:hover:not([data-selected]):not([data-disabled]),
+.bp-cal-cell[data-highlighted] {
+  background-color: rgba(220, 233, 245, 0.12);
+  border-color: var(--bp-line-dim);
+}
+
+.bp-cal-cell[data-selected] {
+  background-color: var(--bp-line);
+  color: var(--bp-blue-deep);
+}
+
+.bp-cal-cell[data-today]:not([data-selected]) {
+  border-color: var(--bp-accent);
+  color: var(--bp-accent);
+}
+
+.bp-cal-cell[data-outside-view] {
+  color: var(--ui-text-dimmed);
+}
+
+/* ============================================
+   AMBIENT CHROME (#1458) — slider (a dimension line with a callout) +
+   color picker. No variant hook; scoped to both activation paths.
+   Slider anchors on [data-slider-impl] (unique to USlider).
+   ============================================ */
+
+[data-theme="blueprint"] [data-slider-impl] [data-slot="track"],
+.theme-blueprint [data-slider-impl] [data-slot="track"] {
+  background-color: transparent;
+  border: 1px solid var(--bp-line-dim);
+  border-radius: 0;
+}
+
+[data-theme="blueprint"] [data-slider-impl] [data-slot="range"],
+.theme-blueprint [data-slider-impl] [data-slot="range"] {
+  background-color: var(--bp-line);
+  border-radius: 0;
+}
+
+[data-theme="blueprint"] [data-slider-impl] [data-slot="thumb"],
+.theme-blueprint [data-slider-impl] [data-slot="thumb"] {
+  background-color: var(--bp-blue-deep);
+  border-radius: 0;
+  --tw-ring-color: var(--bp-line);
+}
+
+[data-theme="blueprint"] [data-slot="picker"] [data-slot="selector"],
+.theme-blueprint [data-slot="picker"] [data-slot="selector"],
+[data-theme="blueprint"] [data-color-picker-track],
+.theme-blueprint [data-color-picker-track] {
+  border: 1px solid var(--bp-line);
+  outline: 1px solid var(--bp-line-dim);
+  outline-offset: 2px;
+  border-radius: 0;
+}
+
+[data-theme="blueprint"] [data-slot="picker"] [data-slot="selectorBackground"],
+.theme-blueprint [data-slot="picker"] [data-slot="selectorBackground"] {
+  border-radius: 0;
+}
+
+[data-theme="blueprint"] [data-slot="selectorThumb"],
+.theme-blueprint [data-slot="selectorThumb"],
+[data-theme="blueprint"] [data-slot="trackThumb"],
+.theme-blueprint [data-slot="trackThumb"] {
+  border-radius: 0;
+  --tw-ring-color: var(--bp-line);
+}
+
+/* ============================================
+   DUAL SCHEME (#1395) — pencil-on-white, DESIGNED not inverted: blue
+   linework on white drafting paper, the pencil mark goes graphite-gold.
+   Activated by the colorMode class on <html>.
+   ============================================ */
+
+.light {
+  --bp-blue: #f4f7fa;
+  --bp-blue-deep: #e9eef5;
+  --bp-line: #16406e;
+  --bp-line-dim: #6787a8;
+  --bp-accent: #b58900;
+}
+
+/* Semantic tokens for the white sheet (counterpart of the #1390 block). */
+[data-theme="blueprint"].light body,
+.light body.theme-blueprint {
+  --ui-text-dimmed: #7d94ab;
+  --ui-text-muted: #5b7a99;
+  --ui-text-toned: #2e567f;
+  --ui-text: #16406e;
+  --ui-text-highlighted: #0d2c4d;
+  --ui-bg: #f4f7fa;
+  --ui-bg-muted: #edf1f7;
+  --ui-bg-elevated: #e9eef5;
+  --ui-bg-accented: #dde5ef;
+  --ui-border: #b5c6d8;
+  --ui-border-muted: #cbd8e5;
+  --ui-border-accented: #16406e;
+}

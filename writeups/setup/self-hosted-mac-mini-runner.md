@@ -76,6 +76,16 @@ block has no `cd`, the folder doesn't matter for that command (e.g. `brew instal
 
 ## 0. Prerequisites
 
+> ⚡ **Recreate the whole box in one shot (#1200).** Everything from here down is automated,
+> idempotently, by:
+> ```bash
+> RUNNER_TOKEN=<fresh reg token> ./scripts/mac-mini-runner/bootstrap-mac-mini.sh [FLEET]
+> ```
+> It stands up a bare/wiped mini → fleet online (toolchain · runner #1 · fleet of N · launchd ·
+> no-sleep · watchdog), skipping anything already present. `DRY_RUN=1` prints the plan without
+> changing anything. Pi extensions/settings are **not** in scope (→ #1060). The manual steps
+> below are the reference — what the bootstrap does, and the path when you want to do it by hand.
+
 🖥️ **MINI (terminal)** — SSH in from your own Mac first, then run everything in this section
 there:
 
@@ -116,7 +126,9 @@ local name** regardless of which version URL you paste, so the `tar` line always
 
 ```bash
 cd ~/actions-runner
-# Use the download URL GitHub's runners page shows you; the -o name stays fixed:
+# Download to the FIXED name actions-runner.tar.gz — this is what add-runner.sh / the
+# bootstrap look for first. (They also fall back to the versioned actions-runner-osx-*.tar.gz
+# name, so an already-set-up box won't break, but the fixed name keeps things tidy — #1200.)
 curl -L -o actions-runner.tar.gz \
   https://github.com/actions/runner/releases/download/v2.XXX.X/actions-runner-osx-arm64-2.XXX.X.tar.gz
 tar xzf actions-runner.tar.gz
@@ -525,6 +537,53 @@ The watchdog (§4c) needs **no reconfiguration** — it discovers every installe
 3. `kill` one runner's `Runner.Listener` → the watchdog flags that runner (not "≥1 online
    so fine") and restarts just it.
 4. Regression: a single dispatched job still routes to the mini as before.
+
+## 7. Cut the Claude bill: interactive Claude Code under a Max subscription (#652)
+
+The self-hosted runner (§1–§6) cuts **GitHub Actions minutes**, not the **Claude bill** —
+the agent jobs it runs still call the metered `ANTHROPIC_API_KEY`. The lever for the Claude
+bill is a different axis entirely: **auth mode, not machine.**
+
+- **The cost lever is device-independent.** `claude login` is OAuth against your *account*, so
+  **interactive** ("human in the loop") Claude Code draws on your flat-fee Max/Pro quota
+  **wherever you run it** — your laptop, another Mac, Claude Code on your **phone**, *or* the
+  mini. The mini is **not** required for this, and isn't special for it: interactive work has a
+  human present by definition, and that human is wherever they are.
+- **What's actually mini-specific is the opposite half.** The always-on **runner** runs
+  **unattended**, and unattended automation must use the **API key** — never the subscription
+  (Anthropic terms; see the constraint below). "Always-on" matters for *CI*, not for
+  interactive work.
+
+So the split is: **interactive → subscription (any device)** · **runner/CI → `ANTHROPIC_API_KEY`
+(the mini)**. This section documents both so the two never get crossed.
+
+🖥️ **ANY interactive device (incl. the mini)** — authenticate Claude Code via subscription
+OAuth, **not** an API key:
+
+```bash
+claude login          # opens the OAuth flow → sign in with the Max/Pro account
+# confirm: no ANTHROPIC_API_KEY in the interactive shell's env (that would force metered API)
+env | grep -i ANTHROPIC_API_KEY || echo "good — no API key, running on the subscription"
+```
+
+Verify the account is on a paid plan — the OAuth profile in `~/.claude.json` should show
+`organizationType: claude_max` (or `claude_pro`) and `billingType: stripe_subscription`.
+
+**🚫 Hard constraint — do not wire this into CI.** Subscription OAuth is for **interactive
+use only** (Anthropic Legal & Compliance terms). It must **NOT** back any unattended
+workflow. The CI agent flows (`decompose-on-issue`, `resume-on-comment`, the pi.dev
+pipeline, …) **stay on `ANTHROPIC_API_KEY`** — see the note in
+`.github/workflows/decompose-on-issue.yml`. *Considered & rejected:* pointing CI at
+`CLAUDE_CODE_OAUTH_TOKEN` for flat-fee automation → ❌ disallowed by the terms (and fragile:
+token rotation, no per-run isolation).
+
+✅ **Checkpoint (#652 acceptance):**
+1. `claude login` reports the **subscription** account (not API); no `ANTHROPIC_API_KEY` in
+   the interactive env.
+2. A real coding task is done interactively (on the mini or any device you're signed in on).
+3. 🌐 **Anthropic console** — the **API** usage dashboard shows **no API spend** attributable to
+   that interactive work (it drew on the subscription quota instead). Any spend on the key is
+   *automation* — the CI/runner flows — which is expected to be metered.
 
 ---
 

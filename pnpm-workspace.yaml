@@ -1,5 +1,7 @@
 packages:
   - 'packages/*'
+  # in-package dev/playground apps live one level deeper (#1306)
+  - 'packages/*/playground'
   - 'apps/*'
   - 'docs'
   - 'pocs/*'

@@ -31,23 +31,146 @@ jobs:
         with:
           fetch-depth: 1
 
+      # ── Superseded-close re-check (#1253) ────────────────────────────────────────
+      # The job guard reads labels from the EVENT PAYLOAD snapshot — a close seconds
+      # before the reply still passes it (the #1233 race: PR #1234's stray `Closes`
+      # auto-closed the retest issue 2s before the owner's answer). And the artifact-gate
+      # below counts `closed` as PASS, so a resume against a superseded issue would exit
+      # green having done nothing. Re-fetch live state: if the issue is now CLOSED, tell
+      # the owner plainly and skip the agent run. Fail-OPEN on an API error (proceed as
+      # before) — a transient fetch failure must not eat a legitimate resume. The
+      # merge-on-approval step below stays `if: always()` on purpose: the #572
+      # deterministic-merge fallback must survive this early exit.
+      - name: Re-check the issue is still open
+        id: state
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            let issue
+            try {
+              issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
+            } catch (e) {
+              core.warning(`state re-check failed (${e.message}) — proceeding as open`)
+              core.setOutput('open', 'true'); return
+            }
+            const open = issue.state === 'open'
+            core.setOutput('open', String(open))
+            if (open) return
+            const closer = issue.closed_by ? issue.closed_by.login : 'unknown'
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: `🚫 **Your reply didn't resume anything — this issue was closed (by ${closer}) just before it was picked up.**\n\n`
+                + '**Fix:** reply on the successor issue/PR, or reopen this one and comment again to retry.\n\n'
+                + '<sub>🤖 Claude Code · agent pipeline (CI) · resume skipped, issue already closed (#1253)</sub>' })
+            core.info(`Issue #${issue_number} is closed — skipping the resume agent run.`)
+
+      # Acknowledge the trigger comment immediately: 👀 = "picked up, working on it". The
+      # final step swaps this for 🚀 (done) / 😕 (failed). The job guard already ensures we
+      # only get here for comments we actually act on, so the reaction is never spurious.
+      # (GitHub comment reactions have no ✅/❌ — 🚀/😕 are the closest.)
+      - name: React 👀 — resume picked up
+        if: steps.state.outputs.open == 'true'
+        id: eyes
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              const r = await github.rest.reactions.createForIssueComment({
+                ...context.repo, comment_id: context.payload.comment.id, content: 'eyes',
+              })
+              core.setOutput('id', String(r.data.id))
+            } catch (e) { core.warning(`could not add 👀 reaction: ${e.message}`) }
+
       # Timestamp run start so the artifact-gate (below) can tell "produced during THIS run".
       - id: t0
+        if: steps.state.outputs.open == 'true'
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      # Pinned to the same SHA as claude.yml — keep these in sync when bumping.
-      # AUTH: this is headless/unattended, so it MUST use an API key. Do NOT swap in a
-      # subscription CLAUDE_CODE_OAUTH_TOKEN — subscription OAuth is for interactive
-      # Claude Code use only, not CI automation (Anthropic Legal & Compliance terms).
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+      # ── pi DESIGN-HOLD re-dispatch (#1828) ───────────────────────────────────────
+      # A pi decompose sign-off hold (Option C, #1821) is NOT a gate PR — it holds the EPIC
+      # with a "🎨 Design sign-off" comment and no children. The generic claude `/task-decompose`
+      # resume below does not build from it (it just re-blocks and says "still iterating"). So for
+      # that shape we instead re-run the PI decomposer: on any owner reply, remove status:blocked
+      # and re-apply `delegate-pi` (remove-then-add → a fresh `labeled` event) so decompose-on-issue-
+      # pidev re-runs — and with #1828's prompt change it now SPLITS into build children (it reads the
+      # approval/answers in the thread). The label MUST be applied with the App token, or the
+      # `labeled` event won't cascade to the decompose workflow (GITHUB_TOKEN events are suppressed,
+      # #572). When we take this path we set `redispatch=true` and the claude agent step below skips.
+      - uses: actions/create-github-app-token@v1
+        id: app-token-early
+        if: steps.state.outputs.open == 'true'
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - name: Re-dispatch a pi design-hold to the pi decomposer
+        id: piredispatch
+        if: steps.state.outputs.open == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token-early.outputs.token }}
+          script: |
+            const issue_number = context.payload.issue.number
+            // A pi design-hold = a "🎨 Design sign-off" comment exists AND the epic has no children yet.
+            const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 })
+            const hasHold = comments.some(c => (c.body || '').includes('🎨 Design sign-off needed before building'))
+            let noChildren = true
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', { ...context.repo, issue_number, per_page: 100 })
+              noChildren = subs.length === 0
+            } catch (e) { core.warning(`sub-issue check: ${e.message}`) }
+            if (!(hasHold && noChildren)) { core.setOutput('redispatch', 'false'); core.info('Not a pi design-hold — the claude resume path handles it.'); return }
+            // Re-dispatch: clear the block, then remove-then-add delegate-pi for a fresh labeled event.
+            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
+            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'delegate-pi' }) } catch (e) {}
+            await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['delegate-pi'] })
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1828)_\n\n'
+                + '🔨 **Approved — rebuilding.** Re-running the pi decomposer on your reply; it will split this epic into build children now (not another design hold). Watch for the sub-issues + their PRs.' })
+            core.setOutput('redispatch', 'true')
+            core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
+
+      # ── Collect the answer payload across media (WS5, #1191) ─────────────────────
+      # The owner may answer in the medium the question came in — a top-level reply, an
+      # inline PR *review* comment (e.g. on a schema `.md`), a `🎯 Preview feedback`
+      # comment, or an edited Excalidraw diagram. The resume agent only reads the top-level
+      # thread by default, so an in-medium answer would be invisible. This gathers all of
+      # them into `.resume-answer.md` for the prompt below. Dependency-free (system node +
+      # fetch); the `||` fallback guarantees the file exists so the resume never fails on it.
+      - name: Collect the answer payload
+        if: steps.state.outputs.open == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          node scripts/resume-answer-payload.mjs "$ISSUE" > .resume-answer.md \
+            || echo '_(answer-payload collection skipped — resume from the top-level thread)_' > .resume-answer.md
+          echo "── collected answer payload ──"; cat .resume-answer.md
+
+      # Pinned to the same SHA as claude.yml — keep these in sync when bumping.
+      # AUTH: uses the subscription CLAUDE_CODE_OAUTH_TOKEN (not a metered API key).
+      # This REVERSES the old "OAuth is interactive-only, never in CI" rule (#652/#823)
+      # on the owner's instruction that Anthropic now permits subscription auth for
+      # unattended automation (#1669; supporting source pending on that issue — if it
+      # does not cover automation, revert). Runs on the mac-mini runner.
+      - id: agent
+        # Skip when we re-dispatched a pi design-hold above (#1828) — the pi decomposer builds it,
+        # not this generic claude resume (which would just re-block and double-decompose).
+        if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true'
+        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             Resume the task-decomposition pipeline for issue #${{ github.event.issue.number }}.
-            The owner has replied to a blocking question — read the full issue comment
-            thread (the latest comment is their answer), incorporate it, remove the
-            `status:blocked` label, then continue via /task-decompose #${{ github.event.issue.number }}.
-          claude_args: "--max-turns 30"
+            The owner has replied to a blocking question. Their answer may be in the medium the
+            question came in — this run collected it across every surface into `.resume-answer.md`
+            (the latest reply, any inline PR review comments, any `🎯` preview-feedback comments,
+            and a flag if an Excalidraw diagram was edited). **Read `.resume-answer.md` first** and
+            treat it as their answer; if it flags an edited diagram, run
+            `node scripts/ticket-excalidraw-import.mjs <png>` to decode the scene before acting.
+            Then incorporate the answer, remove the `status:blocked` label, and continue via
+            /task-decompose #${{ github.event.issue.number }}.
+          claude_args: "--model claude-sonnet-5 --max-turns 30"
           show_full_output: true
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
@@ -78,6 +201,7 @@ jobs:
       # `pull_request: closed` event TRIGGERS schedule-waves → close issue → release the
       # next workstream (a GITHUB_TOKEN merge does NOT cascade — #572).
       - name: Merge the gate PR on approval
+        id: mergegate
         if: always()
         uses: actions/github-script@v7
         with:
@@ -89,21 +213,64 @@ jobs:
             if (!/\b(approve|approved|lgtm)\b/i.test(body)) {
               core.info('Comment is not an approval — nothing to merge.'); return
             }
-            // Find the PR(s) that close THIS issue, via the issue timeline cross-references.
+
+            // ── Which PR is "the gate PR" for this issue? (#1663) ────────────────────
+            // This used to grep the body for the literal `Closes #NN`. That string was
+            // load-bearing, NOT semantic: a PR into `epic/*` never auto-closes anything
+            // (GitHub honours closing keywords only on merges to the default branch). So
+            // the whole gate hung on one wording — and when an agent wrote `Sub-issue: #NN`
+            // instead (equally correct, arguably more so) the result was a SILENT no-op:
+            // approval seen, block cleared, PR left open, wave chain stalled, and the
+            // artifact-gate told the owner to retry, which reproduced it.
+            // Now: ask GitHub for the STRUCTURED link first, fall back to prose second —
+            // and anchor the prose to line start so a passing mention deep in a body can't
+            // hijack the merge. Keep the `epic/*` base guard: that, not the wording, is
+            // what stops an unrelated PR being merged.
+            const LINK_RE = new RegExp(
+              String.raw`^[\s>*_-]*(closes?d?|fix(e[sd])?|resolves?d?|sub-?issue|refs?)\b[\s:*_-]*#${issue_number}\b`,
+              'im')
+
+            async function linkReason(pr) {
+              // (1) GitHub's own linked-issue relation — populated by a closing keyword OR
+              //     by hand via the PR's Development sidebar. Structured; wording-proof.
+              try {
+                const q = await github.graphql(
+                  `query($owner:String!,$repo:String!,$n:Int!){
+                     repository(owner:$owner,name:$repo){
+                       pullRequest(number:$n){
+                         closingIssuesReferences(first:20){ nodes{ number } } } } }`,
+                  { owner: context.repo.owner, repo: context.repo.repo, n: pr.number })
+                const linked = (q.repository.pullRequest.closingIssuesReferences.nodes || []).map(x => x.number)
+                if (linked.includes(issue_number)) return 'linked-issue relation'
+              } catch (e) { core.warning(`closingIssuesReferences #${pr.number}: ${e.message}`) }
+              // (2) Prose fallback — Closes/Fixes/Resolves/Sub-issue/Refs at line start.
+              if (LINK_RE.test(pr.body || '')) return 'body reference'
+              return null
+            }
+
+            // Candidate PRs = everything cross-referenced from this issue's timeline.
             const timeline = await github.paginate(github.rest.issues.listEventsForTimeline, {
               ...context.repo, issue_number,
             })
             const prNums = [...new Set(timeline
               .filter(e => e.event === 'cross-referenced' && e.source && e.source.issue && e.source.issue.pull_request)
               .map(e => e.source.issue.number))]
+
             let merged = false
+            // Why each candidate was passed over — surfaced to the artifact-gate so a
+            // failure names the PR and the reason instead of saying "retry" (#1663).
+            const skipped = []
             for (const n of prNums) {
               let pr
               try { pr = (await github.rest.pulls.get({ ...context.repo, pull_number: n })).data } catch { continue }
               if (pr.state !== 'open' || pr.merged) continue
-              // Only the gate PR: it says "Closes #<issue>" and targets an epic branch.
-              if (!new RegExp(`\\bcloses\\s+#${issue_number}\\b`, 'i').test(pr.body || '')) continue
+              const how = await linkReason(pr)
+              if (!how) {
+                skipped.push(`#${n} — no link to this issue (no linked-issue relation, and no \`Closes/Fixes/Resolves/Sub-issue/Refs #${issue_number}\` line)`)
+                continue
+              }
               if (!/^epic\//.test(pr.base.ref)) {
+                skipped.push(`#${n} — base \`${pr.base.ref}\` is not an \`epic/*\` branch`)
                 core.info(`PR #${n} base ${pr.base.ref} is not an epic branch — skipping.`); continue
               }
               // Mark ready (REST can't flip draft→ready; GraphQL can), then merge.
@@ -117,12 +284,27 @@ jobs:
               try {
                 await github.rest.pulls.merge({ ...context.repo, pull_number: n, merge_method: 'merge' })
                 merged = true
-                core.info(`Merged gate PR #${n} into ${pr.base.ref}.`)
-              } catch (e) { core.warning(`merge #${n} failed: ${e.message}`) }
+                core.info(`Merged gate PR #${n} into ${pr.base.ref} (matched via ${how}).`)
+              } catch (e) {
+                skipped.push(`#${n} — matched via ${how}, but the merge failed: ${e.message}`)
+                core.warning(`merge #${n} failed: ${e.message}`)
+              }
             }
-            // Clear the block defensively so the issue can close cleanly.
-            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
-            core.info(merged ? 'Gate PR merged — schedule-waves will advance the chain.' : 'No gate PR merged (none matched / already merged).')
+            core.setOutput('merged', String(merged))
+            core.setOutput('skipped', skipped.join('\n'))
+            // Clear the block ONLY on a real merge, so the issue can close cleanly (#1665).
+            // This used to be unconditional ("defensively"), which made a failed resume a
+            // ONE-WAY DOOR: the job guard above requires `status:blocked`, so stripping it
+            // after a miss meant every later reply was SILENTLY SKIPPED — no run, hence no
+            // artifact-gate, hence no explanation. #1655 needed the label restored by hand
+            // before the owner's approval could execute at all. If nothing merged, the issue
+            // genuinely IS still blocked; say so by leaving the label on.
+            if (merged) {
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
+              core.info('Gate PR merged — schedule-waves will advance the chain.')
+            } else {
+              core.info('No gate PR merged (none matched / already merged) — leaving status:blocked ON so a re-approval can still trigger.')
+            }
 
       # ── Artifact-gate (#603 P0) ────────────────────────────────────────────────
       # A resume must PRODUCE something — otherwise a no-op silently exits green and the
@@ -131,9 +313,18 @@ jobs:
       # run hid it and it took a manual re-/delegate to notice. `decompose-on-issue` already
       # has this gate; the resume path didn't. Now a no-op resume goes RED (visible →
       # re-dispatch). Uses GITHUB_TOKEN (read-only check), never trips the bot-actor guard.
+      # Skipped on the superseded-close path (#1253): with no agent run there's no artifact
+      # to demand, and the state re-check already commented. Exports its facts as outputs
+      # so the success comment below can say WHAT the resume produced.
       - name: Artifact-gate — fail if the resume produced nothing
-        if: always()
+        id: gate
+        if: always() && steps.state.outputs.open == 'true'
         uses: actions/github-script@v7
+        env:
+          # Why the merge step passed over each candidate PR, if it did (#1663). Passed via
+          # env, not `${{ }}` inside the script — the value is multi-line and interpolating
+          # it into JS source would break the script.
+          MERGE_SKIPPED: ${{ steps.mergegate.outputs.skipped }}
         with:
           script: |
             const issue_number = context.payload.issue.number
@@ -169,6 +360,12 @@ jobs:
               }
             } catch (e) { core.warning(`merged-PR check skipped: ${e.message}`) }
 
+            core.setOutput('subIssues', String(createdSubIssues))
+            core.setOutput('mergedPR', String(mergedPR))
+            core.setOutput('closed', String(closed))
+            core.setOutput('stillBlocked', String(stillBlocked))
+            core.setOutput('newComment', String(newComment))
+
             // PASS if the resume did anything observable, OR it's still holding (legit "still
             // iterating" — not a no-op). FAIL only when the block was cleared yet nothing came
             // of it — the silent no-op.
@@ -176,9 +373,159 @@ jobs:
               core.info(`Resume artifact OK: subIssues=${createdSubIssues} mergedPR=${mergedPR} closed=${closed} newComment=${newComment} stillBlocked=${stillBlocked}`)
               return
             }
+            // A blanket "re-dispatch to retry" is the RIGHT remedy for a genuine no-op, but
+            // the WRONG one when the merge step found a gate PR and passed over it — a retry
+            // reproduces it verbatim (#1663). If we have skip reasons, name them instead.
+            // Belt-and-braces for #1665: whatever cleared the block, this run produced
+            // nothing — so the issue is still blocked and MUST keep the label, or the job
+            // guard above will silently skip every future reply. (We only reach here when
+            // `stillBlocked` was false; the merge step no longer clears on a miss, but any
+            // other path that does must not be able to strand the issue.)
+            if (!stillBlocked) {
+              try {
+                await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['status:blocked'] })
+                core.info('Re-applied status:blocked so a re-approval can trigger.')
+              } catch (e) { core.warning(`could not re-apply status:blocked: ${e.message}`) }
+            }
+            const skipped = (process.env.MERGE_SKIPPED || '').trim()
+            const remedy = skipped
+              ? '**A gate PR was found but not merged — retrying will NOT help.** The merge step passed over:\n\n'
+                + skipped.split('\n').map(s => `- ${s}`).join('\n') + '\n\n'
+                + 'Fix the PR itself (link it to this issue, or retarget it at the `epic/*` branch), then re-approve. '
+                + 'If the link looks correct to you, the matcher is at fault — see #1663.'
+              : '**Fix:** re-dispatch with `/delegate` to retry.'
             await github.rest.issues.createComment({ ...context.repo, issue_number,
-              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume artifact-gate (#603)_\n\n'
-                + '⚠️ The resume ran but produced **nothing** (no sub-issues, no merged gate PR, no new '
-                + 'comment, not closed, and the block was cleared) — a silent no-op (the #590 failure mode). '
-                + 'Re-dispatch with `/delegate` to retry.' })
-            core.setFailed(`Resume on #${issue_number} produced no artifact — likely a no-op; re-dispatch.`)
+              body: '🔴 **The resume ran but produced nothing** — no sub-issues, no merged PR, no new comment, and the block was cleared (a silent no-op).\n\n'
+                + remedy + '\n\n'
+                + '<sub>🤖 Claude Code · agent pipeline (CI) · resume artifact-gate (#603/#590)</sub>' })
+            core.setFailed(skipped
+              ? `Resume on #${issue_number}: gate PR found but not merged — see the comment; a retry will not fix it.`
+              : `Resume on #${issue_number} produced no artifact — likely a no-op; re-dispatch.`)
+
+      # Final feedback on the trigger comment: clear the 👀 and stamp the outcome — 🚀 done /
+      # 😕 failed (GitHub reactions have no ✅/❌). Comment ONLY on a hard agent error; a no-op
+      # is already explained by the artifact-gate above, so we don't duplicate it (#1216).
+      - name: React outcome — 🚀 done / 😕 failed
+        if: always() && steps.state.outputs.open == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const comment_id = context.payload.comment.id
+            const ok = '${{ job.status }}' === 'success'
+            const rid = '${{ steps.eyes.outputs.id }}'
+            if (rid) {
+              try { await github.rest.reactions.deleteForIssueComment({ ...context.repo, comment_id, reaction_id: Number(rid) }) }
+              catch (e) { core.warning(`could not remove 👀: ${e.message}`) }
+            }
+            try {
+              await github.rest.reactions.createForIssueComment({ ...context.repo, comment_id, content: ok ? 'rocket' : 'confused' })
+            } catch (e) { core.warning(`could not add outcome reaction: ${e.message}`) }
+            // Comment only when the agent step itself errored (billing / max-turns / tooling) —
+            // the artifact-gate already comments on the no-op case, so this avoids a duplicate.
+            if (!ok && '${{ steps.agent.outcome }}' === 'failure') {
+              const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+              await github.rest.issues.createComment({ ...context.repo, issue_number: context.payload.issue.number,
+                body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume failed_\n\n'
+                  + '😕 The resume from your comment **errored before finishing** (billing / max-turns / tooling). '
+                  + `🔗 [Run log](${runUrl}) — fix the cause, then comment again to retry.` })
+            }
+
+      # ── Visible success (#1253, Fix A) ───────────────────────────────────────────
+      # A successful resume used to signal ONLY via the 🚀 reaction — easy to miss,
+      # especially on mobile (the #1233 "felt ignored" incident), and our own conventions
+      # call a reaction the weak signal. Post a top-level comment saying what the run
+      # produced, from the artifact-gate's own facts. ORDERING IS LOAD-BEARING: this step
+      # MUST come after the artifact-gate — a comment posted before it would make the
+      # gate's `newComment` check always-true and permanently disable the #603 no-op
+      # detection. Skipped when the agent already replied in-thread this run (no double
+      # ping — the gate's `newComment` flag knows). Posted with GITHUB_TOKEN on purpose:
+      # a Bot actor whose events never re-trigger this workflow (double loop safety on
+      # top of the job's `user.type != 'Bot'` guard).
+      - name: Comment ✅ — visible success
+        if: success() && steps.state.outputs.open == 'true' && steps.gate.outputs.newComment != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const facts = []
+            if ('${{ steps.gate.outputs.subIssues }}' === 'true') facts.push('created sub-issues')
+            if ('${{ steps.gate.outputs.mergedPR }}' === 'true') facts.push('merged the gate PR')
+            if ('${{ steps.gate.outputs.closed }}' === 'true') facts.push('closed this issue')
+            if ('${{ steps.gate.outputs.stillBlocked }}' === 'true') facts.push('still iterating — the block stays on for your next reply')
+            const did = facts.length ? facts.join(' · ') : 'continued the pipeline'
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1253)_\n\n'
+                + `✅ **Resumed from your reply** — ${did}. 🔗 [Run log](${runUrl})` })
+
+      # A cancelled resume (the 30-min timeout) must announce itself, not vanish silently (#1220).
+      - name: Flag a timeout / cancellation
+        if: cancelled()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resume timed out_\n\n'
+                + '⏱️ This resume was **cancelled** — almost always the 30-min job timeout. It may have '
+                + `partially progressed. 🔗 [Run log](${runUrl}) — comment again to retry.` })
+
+  # ── "Nothing happened" is never silence (#1665) ──────────────────────────────────
+  # The `resume` job above only runs while the issue carries `status:blocked`. So an
+  # approval reply on an issue that has LOST the label produces no run at all — no
+  # artifact-gate, no comment, nothing. That's exactly how #1655 looked to the owner:
+  # an lgtm that vanished. The label-clearing bug that caused it is fixed above; this
+  # job is the safety net for any OTHER route to the same state.
+  #
+  # Deliberately narrow, to stay quiet: it fires only when the reply reads as an
+  # approval AND the issue actually has a pending gate PR (open, into an `epic/*`
+  # branch). An approval word on an ordinary issue is ignored.
+  explain-skipped-approval:
+    if: |
+      !github.event.issue.pull_request &&
+      github.event.comment.user.type != 'Bot' &&
+      !contains(github.event.issue.labels.*.name, 'status:blocked') &&
+      (contains(github.event.comment.body, 'lgtm') || contains(github.event.comment.body, 'approve'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const body = context.payload.comment.body || ''
+            // Re-check precisely — the job `if` is a coarse prefilter.
+            if (!/\b(approve|approved|lgtm)\b/i.test(body)) return
+
+            // Is there really a gate waiting? Only then is silence a bug worth explaining.
+            let gatePR = null
+            try {
+              const tl = await github.paginate(github.rest.issues.listEventsForTimeline, { ...context.repo, issue_number })
+              const prNums = [...new Set(tl
+                .filter(e => e.event === 'cross-referenced' && e.source && e.source.issue && e.source.issue.pull_request)
+                .map(e => e.source.issue.number))]
+              for (const n of prNums) {
+                const pr = (await github.rest.pulls.get({ ...context.repo, pull_number: n })).data
+                if (pr.state === 'open' && !pr.merged && /^epic\//.test(pr.base.ref)) { gatePR = pr; break }
+              }
+            } catch (e) { core.warning(`gate-PR probe failed: ${e.message}`); return }
+            if (!gatePR) { core.info('No pending epic/* gate PR — an approval word here is not a gate reply.'); return }
+
+            // Don't re-explain the same thing on every reply.
+            const recent = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 })
+            const already = recent.slice(-3).some(c => (c.body || '').includes('<!-- skipped-approval-notice -->'))
+            if (already) { core.info('Already explained recently — staying quiet.'); return }
+
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '<!-- skipped-approval-notice -->\n'
+                + '> 🤖 **Claude Code** · agent pipeline (CI) · _approval reply on a non-blocked issue_\n\n'
+                + `🤷 **Your approval did not start anything** — and that is a bug, not a decision. PR #${gatePR.number} `
+                + `is still open into \`${gatePR.base.ref}\`, so a gate IS pending here.\n\n`
+                + 'The resume workflow only runs while this issue carries `status:blocked`, and the label is gone. '
+                + 'Add `status:blocked` back and reply again, and it will run.\n\n'
+                + '<sub>Root cause of the label going missing: #1665.</sub>' })
+            core.info(`Explained the skipped approval (pending gate PR #${gatePR.number}).`)

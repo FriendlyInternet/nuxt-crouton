@@ -248,7 +248,7 @@ function getImageMode(index: number): string {
               class="drag-handle size-4 text-muted cursor-grab active:cursor-grabbing"
             />
             <!-- Type toggle buttons -->
-            <UButtonGroup size="xs">
+            <UFieldGroup size="xs">
               <UButton
                 :color="isIcon(item) ? 'primary' : 'neutral'"
                 :variant="isIcon(item) ? 'solid' : 'ghost'"
@@ -263,7 +263,7 @@ function getImageMode(index: number): string {
                 :label="t('pages.blocks.logos.typeImage')"
                 @click="!isIcon(item) ? undefined : switchItemType(index, 'image')"
               />
-            </UButtonGroup>
+            </UFieldGroup>
           </div>
 
           <!-- Delete -->
@@ -324,10 +324,10 @@ function getImageMode(index: number): string {
 
           <!-- No Image: action buttons -->
           <div v-if="!item.value && getImageMode(index) === 'preview'" class="flex flex-col gap-2">
-            <div class="flex items-center justify-center h-16 rounded-lg border-2 border-dashed border-default bg-neutral-50 dark:bg-neutral-900">
+            <div class="flex items-center justify-center h-16 rounded-lg border-2 border-dashed border-default bg-muted">
               <div class="text-center">
-                <UIcon name="i-lucide-image" class="size-5 text-neutral-400" />
-                <p class="text-xs text-neutral-500">{{ t('pages.blocks.logos.noImage') }}</p>
+                <UIcon name="i-lucide-image" class="size-5 text-dimmed" />
+                <p class="text-xs text-muted">{{ t('pages.blocks.logos.noImage') }}</p>
               </div>
             </div>
             <div class="flex gap-1">

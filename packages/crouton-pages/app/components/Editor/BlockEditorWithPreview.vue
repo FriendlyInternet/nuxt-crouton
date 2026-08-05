@@ -202,6 +202,13 @@ const editorBlocksRef = ref()
 const isFullscreen = ref(false)
 const fsTargetRef = ref<HTMLElement | null>(null)
 
+// Fullscreen toggle presentation, hoisted out of the template so the markup
+// carries no inline ternaries: a labelled Done button while open, a plain
+// maximize icon while collapsed.
+const fsToggle = computed(() => isFullscreen.value
+  ? { icon: 'i-lucide-check', color: 'primary' as const, variant: 'soft' as const, label: t('pages.editor.done', 'Done') }
+  : { icon: 'i-lucide-maximize-2', color: 'neutral' as const, variant: 'ghost' as const, label: '' })
+
 
 // Property panel state (managed here, not in CroutonEditorBlocks)
 const selectedNode = ref<{ pos: number; node: any } | null>(null)
@@ -251,18 +258,23 @@ defineExpose({
     <!-- The editor body teleports into the fullscreen modal when expanded
          (same instance → content/cursor/collab preserved). -->
     <Teleport :to="fsTargetRef" :disabled="!isFullscreen || !fsTargetRef">
+      <!-- Inline body renders at every size (the editor is hosted in a full-height
+           Content tab now, so there's room even on mobile). It teleports into the
+           fullscreen modal when the optional focus mode is toggled. -->
       <div class="flex h-full min-h-0 flex-col" :class="isFullscreen ? 'p-3' : ''">
         <!-- Tab buttons + fullscreen toggle -->
         <div class="flex items-center gap-2">
           <UTabs v-model="activeTab" :items="tabItems" :content="false" class="flex-1" :ui="{ indicator: 'bg-primary/10', trigger: 'data-[state=active]:text-primary' }" />
           <UButton
-            :icon="isFullscreen ? 'i-lucide-minimize-2' : 'i-lucide-maximize-2'"
-            color="neutral"
-            variant="ghost"
+            :icon="fsToggle.icon"
+            :color="fsToggle.color"
+            :variant="fsToggle.variant"
             size="xs"
-            :aria-label="isFullscreen ? t('pages.editor.exitFullscreen', 'Exit fullscreen') : t('pages.editor.fullscreen', 'Fullscreen')"
+            :aria-label="fsToggle.label || t('pages.editor.fullscreen', 'Fullscreen')"
             @click="isFullscreen = !isFullscreen"
-          />
+          >
+            <span v-if="fsToggle.label" class="text-xs font-medium">{{ fsToggle.label }}</span>
+          </UButton>
         </div>
 
         <!-- Editor Tab -->
@@ -318,6 +330,7 @@ defineExpose({
               <div :style="previewZoomStyle">
                 <CroutonPagesBlockContent
                   :content="previewContent as any"
+                  ignore-visibility
                   class="p-4"
                 />
               </div>
@@ -331,7 +344,7 @@ defineExpose({
     <button
       v-if="isFullscreen"
       type="button"
-      class="flex-1 min-h-[120px] flex items-center justify-center gap-2 rounded-lg border border-dashed border-default text-sm text-muted hover:text-default hover:border-primary transition-colors"
+      class="max-sm:hidden flex-1 min-h-[120px] flex items-center justify-center gap-2 rounded-lg border border-dashed border-default text-sm text-muted hover:text-default hover:border-primary transition-colors"
       @click="isFullscreen = true"
     >
       <UIcon name="i-lucide-maximize-2" class="size-4" />

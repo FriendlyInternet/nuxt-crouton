@@ -1,0 +1,59 @@
+{
+  // Cloudflare WORKERS (static assets) config for fanfare — migrated from Pages (#121).
+  //
+  // Nitro's `cloudflare_module` preset (NITRO_PRESET in cf:deploy) reads this file
+  // at build time and writes the deployable config to .output/server/wrangler.json,
+  // injecting `main` + the `assets` binding automatically.
+  //
+  // Migrated in place: PRODUCTION reuses the EXISTING provisioned D1 + KV (same ids
+  // the Pages deploy used), so there is NO data migration — the Worker binds the
+  // same kassa-db. The production domain moves to kassa.friendlyinter.net (pmcp.dev is a
+  // CF zone, so the custom domain + DNS + cert are bound automatically on deploy).
+  "name": "kassa",
+  "compatibility_date": "2024-09-02",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Custom domain — auto-bound on `wrangler deploy` (pmcp.dev is a CF zone).
+  // Cloudflare creates the DNS record + cert; no dashboard step.
+  "routes": [{ "pattern": "kassa.friendlyinter.net", "custom_domain": true }],
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kassa-db",
+      "database_id": "a7ab3e64-7cda-4ef4-9c06-a4eae6be8b22",
+      "migrations_dir": "server/db/migrations/sqlite"
+    }
+  ],
+  "kv_namespaces": [
+    { "binding": "KV", "id": "b3183976e74846ff9913e1b6c641d951" }
+  ],
+
+  // Staging environment (#133: staging on pmcp.dev) — a NEW, isolated D1 + KV
+  // (fanfare has none yet), left ID-LESS so the FIRST `cf:staging` deploy
+  // auto-provisions them; the ids are then written back here by
+  // scripts/sync-wrangler-ids.mjs. This is the disposable, demo-seeded acceptance
+  // DB (#110/#121) — every staging deploy binds it, never prod.
+  // Deploying `--env staging` creates a `fanfare-staging` worker bound to these.
+  // The env block is stripped from the generated .output config (nitro#3429), so
+  // cf:staging re-injects it via scripts/inject-wrangler-env.mjs.
+  "env": {
+    "staging": {
+      "routes": [{ "pattern": "kassa.pmcp.dev", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "kassa-staging-db",
+          "migrations_dir": "server/db/migrations/sqlite",
+          "database_id": "52766d1f-a86a-444f-9d1c-7bb5e3c3a04d"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "KV",
+          "id": "6c9182027fb043eb8ff6ac3e9d8a713d"
+        }
+      ]
+    }
+  }
+}

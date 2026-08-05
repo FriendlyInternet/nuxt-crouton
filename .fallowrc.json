@@ -2,7 +2,70 @@
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
     "src/index.{ts,tsx,js,jsx}",
-    "src/main.{ts,tsx,js,jsx}"
+    "src/main.{ts,tsx,js,jsx}",
+    // Nitro file-based routing — every file IS a route, incl. inside generated layers
+    "**/server/api/**/*.ts",
+    "**/server/routes/**/*.ts",
+    "**/server/plugins/**/*.ts",
+    "**/server/middleware/**/*.ts",
+    // Generated collection components: auto-registered (BookingsBookingsList) and
+    // resolved dynamically via the croutonCollections registry — invisible statically
+    "**/layers/**/app/components/**/*.vue",
+    // Generated collection composables + column defs: Nuxt auto-imported, used without an
+    // explicit import (useMainNotes / mainNotesColumns) — invisible statically (#1252)
+    "**/layers/**/app/composables/**/*.ts",
+    // Generated per-collection types (FormData/FormProps): emitted by the generator for
+    // every collection and consumed structurally by the generated Form/List, so a static
+    // graph reads them as unused. Same generated-code category as the two entries above
+    // (28 such findings across 8 apps before this entry) — #1455.
+    "**/layers/**/collections/**/types.ts",
+    // Loaded by crouton-core's nuxt.config at build time (join(process.cwd(), ...))
+    "**/crouton.config.js",
+    // Referenced from nuxt.config `css:` arrays, not imports
+    "**/app/assets/css/**",
+    // Standalone executables invoked by CI/humans, not imported
+    "scripts/**/*.mjs",
+    // Nuxt module runtime dirs are injected via @nuxt/kit resolver paths
+    "packages/*/src/runtime/**",
+    // Nuxt conventions: file-based page routes, app.config, Nitro server/utils auto-imports
+    "**/app/pages/**/*.vue",
+    "**/app/app.config.ts",
+    "**/server/utils/**/*.ts",
+    // Loaded dynamically by crouton-core at boot ("Loaded N package manifests")
+    "**/crouton.manifest.ts",
+    // Tool-convention entries: unbuild config, Nuxt module source (dist is what's imported)
+    "**/build.config.ts",
+    "packages/*/module.ts",
+    // Executables + the lib files bin/crouton-generate.js spawns via path, not import
+    "packages/*/bin/**",
+    "packages/crouton-cli/lib/**",
+    // Opt-in theme layers — everything inside is reachable once an app extends the theme
+    "packages/crouton-themes/**",
+    // More Nuxt conventions: layouts (used by name via NuxtLayout), priority-stub dirs
+    "**/app/layouts/**/*.vue",
+    "**/app/stubs/**",
+    // @nuxtjs/mcp-toolkit auto-discovers server/mcp/{tools,resources,prompts} from all layers
+    "**/server/mcp/**",
+    // Drizzle schemas + seeds: consumed by migration tooling and dynamic seed endpoints
+    "**/server/db/**",
+    "**/server/database/**",
+    // Module entries, Cloudflare Durable Objects (wrangler entry), injected devtools assets
+    "packages/*/module.mjs",
+    "**/durable-objects/**",
+    "packages/crouton-collab/worker-template/**",
+    "packages/crouton-devtools/eruda/**",
+    // Root-level tool configs (changelogithub, harness stage model) + docs scripts
+    "*.config.{js,mjs,ts}",
+    "docs/scripts/**",
+    // Package test harnesses incl. mocks wired via vitest config aliases
+    "packages/*/tests/**",
+    "pocs/*/scripts/**",
+    // Nuxt `#alias` targets (nuxt.config alias maps) — invisible to import analysis (#1239):
+    // '#crouton/types' → collections.ts (crouton-core/nuxt.config.ts:175), consumed by
+    // useCollectionQuery/Mutation + every generated crouton-collections.d.ts;
+    // '#crouton-audio/types/player' → player.ts, consumed by useAudioPlayer + Player.vue
+    "packages/crouton-core/app/types/collections.ts",
+    "packages/crouton-audio/app/types/player.ts"
   ],
   "workspaces": {
     "packages": [
@@ -21,17 +84,129 @@
     "retired/**",
     "**/.nuxt/**",
     "**/.output/**",
-    "**/dist/**"
+    "**/dist/**",
+    // Dev/harness assets — not reachable from any app graph by design
+    "**/playground/**",
+    "**/e2e-templates/**",
+    "packages/*/examples/**",
+    // Internal notes/prototypes, not part of any code graph
+    "writeups/**"
   ],
+  // Generated per-POC/app type aggregator: re-exports layer collection types resolved via Nuxt's
+  // .nuxt/tsconfig path aliases, which aren't built at audit time (fallback "resolver-less") — #1252
+  "ignoreUnresolvedImports": [
+    "**/collections/**/types"
+  ],
+  // Deps that ARE used, via mechanisms invisible to import analysis (verified #1144)
+  "ignoreDependencies": [
+    "@iconify-json/vscode-icons", // Nuxt Icon discovers icon collections by package name
+    "better-sqlite3",             // @nuxt/content local-dev driver, loaded dynamically
+    "y-protocols",                // subpath-imported at runtime; wired via vite optimizeDeps
+    "@fyit/crouton-events",       // meta-package distribution dep: makes extends resolvable
+    "@ai-sdk/ui-utils",           // imported by crouton-ai's built dist .d.ts (dist is ignored)
+    "@libsql/client",             // D1/sqlite runtime driver in generated scaffolds, loaded dynamically (like better-sqlite3) — #1252
+    "@fyit/crouton-feedback"      // crouton-devtools loads it via installModule('@fyit/crouton-feedback') — string ref, invisible to import analysis (verified src/module.ts:63) — #1324
+  ],
+  // ONE health block only: this file briefly carried two "health" keys and JSON
+  // last-key-wins silently discarded the first (#1256) — never add a second.
+  "health": {
+    // CRAP gate (#1256): CI feeds real coverage into the audit (test job emits
+    // coverage/coverage-final.json → artifact → `fallow audit --coverage`); locally,
+    // fallow auto-discovers ./coverage/coverage-final.json after `pnpm test:coverage`.
+    // maxCrap 30 is meaningful only where coverage can exist, i.e. packages/* where
+    // test-first is required (#779) — the thresholdOverrides below noise-floor the
+    // zero-coverage stages, where CRAP degenerates to cyclomatic²+cyclomatic and 30
+    // fires on every cyc≥5 function. Cyclomatic/cognitive/unit-size gates still apply
+    // everywhere (overrides, unlike `ignore`, keep those intact).
+    "maxCrap": 30,
+    "thresholdOverrides": [
+      {
+        // CRAP is UNDEFINED for a Vue template, not merely strict (#1794).
+        // Two of its premises fail at once: (1) a template's cyclomatic count
+        // counts DISPLAY variations (v-if/v-for), not independent logic paths,
+        // so it is not the quantity the formula was calibrated on; and (2) the
+        // coverage term is a proxy for "has anyone checked this", but templates
+        // in packages/* are verified by the e2e fixture harness, which emits no
+        // Istanbul coverage — so cov=0 is a measurement artifact, not a finding.
+        // Squaring an ill-fitting complexity by a false coverage amplifies the
+        // error, not the risk: a 6-branch template scores 42 while SubBar.vue
+        // sits in the baseline at 12 (CRAP 156).
+        //
+        // Scoped to CRAP ONLY. cyclomatic / cognitive / unit-size still gate
+        // these files, because "is this template doing too much" is a real
+        // question that does not depend on a coverage signal.
+        //
+        // Same principle already accepted twice in this file: the zero-coverage
+        // override below, and health.ignore's `**/layers/**/app/components/**`
+        // ("the CRAP is in the template"). This is the unenumerated third case.
+        //
+        // The RIGHT long-term fix is a real coverage signal for components
+        // (component/e2e tests), which would make CRAP valid here again rather
+        // than exempt — tracked separately.
+        "files": ["packages/**/app/components/**/*.vue"],
+        "maxCrap": 420,
+        "reason": "Vue templates carry no unit coverage by design (verified via the e2e fixture harness), so CRAP degenerates to cyc²+cyc and flags every new cyc≥5 component; cyclomatic/cognitive/unit-size gates still apply (#1794)"
+      },
+      {
+        "files": [
+          "apps/**",
+          "pocs/**",
+          "fixtures/**",
+          "sandboxes/**",
+          "examples/**",
+          "workers/**",
+          "docs/**",
+          "scripts/**",
+          "e2e/**"
+        ],
+        "maxCrap": 420,
+        "reason": "zero-coverage stages (test-first off/opt-in, #779): CRAP degenerates to cyc²+cyc, so 30 would flag every new cyc≥5 function and re-block hotspot-splitting PRs (#1243); cyclomatic/cognitive/unit-size gates still apply"
+      }
+    ],
+    // Generated crouton code is boilerplate, not hand-maintained — exclude it from complexity
+    // (the CRAP is in the template, fixed once there, not per-POC). Same spirit as fixtures. (#1252)
+    "ignore": [
+      "**/scripts/sync-wrangler-ids.mjs",
+      "**/scripts/inject-wrangler-env.mjs",
+      "**/layers/**/app/components/**/*.vue",
+      "**/layers/**/collections/**/server/**"
+    ]
+  },
   "duplicates": {
     // Hide pair-only clones; focus on widespread copy-paste
     // worth refactoring. Lower to 2 to report every duplicate pair.
     "minOccurrences": 3,
     "ignore": [
-      "fixtures/**" // throwaway generated e2e apps — duplication is by design
+      "fixtures/**", // throwaway generated e2e apps — duplication is by design
+      // Generated deploy-scaffold scripts — byte-identical across every app/POC by design (#1252)
+      "**/scripts/sync-wrangler-ids.mjs",
+      "**/scripts/inject-wrangler-env.mjs",
+      // Generated collection code (CRUD API routes, List/_Form, queries) — every collection is the
+      // same crouton template, so cross-collection duplication is by design, not copy-paste (#1252)
+      "**/layers/**/collections/**",
+      // Generated per-app scaffold files — byte-identical across every crouton app/POC (#1252)
+      "**/server/db/translations-ui.ts",
+      "**/server/utils/_cf-stubs/**"
     ]
   },
+  // Complexity/unit-size (CRAP, big functions) is advisory, not walling (#1235/#1236).
+  // fallow bundles dead-code + complexity + duplication into ONE audit pass/fail with no
+  // per-category "warn" switch — so we snapshot today's complexity and gate only on findings
+  // WORSE than the snapshot: touching a legacy big function passes, NEW mess is still blocked,
+  // dead-code + duplication stay strict. Regenerate the ratchet as we burn legacy down:
+  //   npx fallow health --save-baseline .fallow-health-baseline.json
+  // (kept at repo root, not .fallow/, because fallow self-ignores its .fallow/ cache dir.)
+  "audit": {
+    "healthBaseline": ".fallow-health-baseline.json"
+  },
   "rules": {
-    "unused-dependencies": "warn"
+    "unused-dependencies": "warn",
+    // Crouton apps/POCs `extends` the layer stack, which PROVIDES @nuxt/ui, zod, nanoid,
+    // tailwindcss, @fyit/crouton-auth etc. — so a consuming workspace imports them without
+    // re-declaring them in its own package.json. fallow's per-workspace check can't see the
+    // `extends`-provided deps, flagging them "unlisted" repo-wide. Advisory, not walling — the
+    // build + deploy are the real gate. Declaring them in generated package.json is the proper
+    // long-term fix (crouton-cli). (#1252)
+    "unlisted-dependencies": "warn"
   }
 }

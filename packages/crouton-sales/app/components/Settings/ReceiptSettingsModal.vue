@@ -1,14 +1,12 @@
 <template>
   <UModal v-model:open="isOpen">
-    <template #header>
-      <div class="flex items-center gap-2">
-        <UIcon name="i-lucide-receipt" class="w-5 h-5" />
-        <span>{{ t('sales.receipt.settingsTitle') }}</span>
-      </div>
-    </template>
+    <template #content="{ close }">
+      <div class="p-6 space-y-6">
+        <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-receipt" class="w-5 h-5" />
+          <span class="text-lg font-semibold">{{ t('sales.receipt.settingsTitle') }}</span>
+        </div>
 
-    <template #body>
-      <div class="space-y-6">
         <p class="text-sm text-muted">
           {{ t('sales.receipt.customize') }}
         </p>
@@ -17,14 +15,14 @@
           <UFormField :label="t('sales.receipt.specialInstructionsTitle')" :help="t('sales.receipt.specialInstructionsHelp')">
             <UInput
               v-model="settings.special_instructions_title"
-              placeholder="SPECIAL INSTRUCTIONS:"
+              placeholder="OPMERKING:"
             />
           </UFormField>
 
           <UFormField :label="t('sales.receipt.staffOrderHeader')" :help="t('sales.receipt.staffOrderHeaderHelp')">
             <UInput
               v-model="settings.staff_order_header"
-              placeholder="*** STAFF ORDER ***"
+              placeholder="*** PERSONEEL ***"
             />
           </UFormField>
         </div>
@@ -33,24 +31,22 @@
           <UTextarea
             v-model="settings.footer_text"
             :rows="2"
-            placeholder="Thank you for your order!"
+            placeholder="Bedankt voor je bestelling!"
           />
         </UFormField>
-      </div>
-    </template>
 
-    <template #footer>
-      <div class="flex justify-end gap-3">
-        <UButton variant="outline" @click="close">
-          {{ t('sales.common.cancel') }}
-        </UButton>
-        <UButton
-          color="primary"
-          :loading="saving"
-          @click="save"
-        >
-          {{ t('sales.receipt.saveSettings') }}
-        </UButton>
+        <div class="flex justify-end gap-3">
+          <UButton variant="outline" @click="close">
+            {{ t('sales.common.cancel') }}
+          </UButton>
+          <UButton
+            color="primary"
+            :loading="saving"
+            @click="save"
+          >
+            {{ t('sales.receipt.saveSettings') }}
+          </UButton>
+        </div>
       </div>
     </template>
   </UModal>
@@ -84,10 +80,12 @@ const isOpen = computed({
 
 const saving = ref(false)
 
+// Defaults mirror crouton-printing's canonical DEFAULT_RECEIPT_SETTINGS (Dutch),
+// so the form matches what actually prints for an unsaved event (#1514).
 const settings = ref<ReceiptSettings>({
-  special_instructions_title: 'SPECIAL INSTRUCTIONS:',
-  staff_order_header: '*** STAFF ORDER ***',
-  footer_text: 'Thank you for your order!',
+  special_instructions_title: 'OPMERKING:',
+  staff_order_header: '*** PERSONEEL ***',
+  footer_text: 'Bedankt voor je bestelling!',
 })
 
 async function loadSettings() {

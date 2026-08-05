@@ -59,6 +59,7 @@ function handleCancel(onCancel: () => void) {
     query-param="page"
     :title="t('pages.workspace.title') || 'Pages'"
     sidebar-id="pages-sidebar"
+    content-provides-back
   >
     <template #sidebar-actions>
       <UButton
@@ -79,14 +80,16 @@ function handleCancel(onCancel: () => void) {
       />
     </template>
 
-    <template #content="{ selectedId, mode, sessionKey, onSave, onDelete, onCancel }">
+    <template #content="{ selectedId, mode, sessionKey, onSave, onDelete, onCancel, onClose }">
       <CroutonPagesWorkspaceEditor
         :key="sessionKey"
         :page-id="selectedId"
         :default-parent-id="mode === 'create' ? createParentId : null"
+        show-back
         @save="(item: any) => handleSave(item, onSave)"
         @delete="onDelete"
         @cancel="() => handleCancel(onCancel)"
+        @back="onClose"
       />
     </template>
 

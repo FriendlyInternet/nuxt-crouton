@@ -6,12 +6,15 @@
  * spooler. This plugin runs that drainer on a poll loop, over the generic
  * `print_jobs` lifecycle (see `escpos-drainer.ts`).
  *
- * OFF by default and on every Cloudflare deploy: it only starts when the enable
- * flag is set (the venue Pi sets it), so existing deploys are unchanged and
- * Workers (no raw sockets, no long-lived process) never run it. `node:net` is
- * imported lazily by the drainer, so even loading this plugin is import-safe.
+ * AUTO by default (#1471): runs whenever the runtime can open raw sockets — a
+ * long-lived Node target (the venue Pi) — and never on Cloudflare Workers
+ * (workerd: no sockets, no persistent process). The loop self-gates to
+ * `local-drainer` events (#1324), so auto-on serves nothing until an event opts
+ * in via the Print flow picker — the picker is the only switch. The env var is
+ * an explicit override; `node:net` is imported lazily by the drainer, so even
+ * loading this plugin is import-safe.
  *
- *   CROUTON_PRINTING_DRAINER           '1' | 'true' to enable
+ *   CROUTON_PRINTING_DRAINER           override: '1'/'true' force on · '0'/'false' force off · unset = auto
  *     (CROUTON_SALES_PRINT_DRAINER also honoured for back-compat during migration)
  *   CROUTON_PRINTING_DRAINER_EVENT     optional: only drain this event
  *   CROUTON_PRINTING_DRAINER_POLL_MS   poll interval (default 2000)
@@ -19,10 +22,11 @@
  * Run EITHER this OR the HTTP spooler for a given printer set, never both.
  */
 import { drainPendingEscposJobs } from '../utils/escpos-drainer'
+import { canUseRawSockets, parseDrainerFlag, shouldRunDrainer } from '../utils/drainer-gate'
 
 export default defineNitroPlugin(() => {
-  const flag = process.env.CROUTON_PRINTING_DRAINER || process.env.CROUTON_SALES_PRINT_DRAINER
-  if (flag !== '1' && flag !== 'true') return
+  const envFlag = parseDrainerFlag(process.env.CROUTON_PRINTING_DRAINER || process.env.CROUTON_SALES_PRINT_DRAINER)
+  if (!shouldRunDrainer({ envFlag, canUseRawSockets: canUseRawSockets() })) return
 
   const eventId = process.env.CROUTON_PRINTING_DRAINER_EVENT
     || process.env.CROUTON_SALES_PRINT_DRAINER_EVENT
@@ -46,6 +50,8 @@ export default defineNitroPlugin(() => {
     }
   }
 
-  console.log(`🍞 crouton:printing in-process ESC/POS drainer ON (poll ${pollMs}ms${eventId ? `, event ${eventId}` : ', all events'})`)
+  // Name why it's on — helps debug an unexpected "why is this box printing?".
+  const mode = envFlag === 'on' ? 'forced on' : 'auto: Node runtime'
+  console.log(`🍞 crouton:printing in-process ESC/POS drainer ON [${mode}] (poll ${pollMs}ms${eventId ? `, event ${eventId}` : ', all events'})`)
   setInterval(tick, pollMs)
 })

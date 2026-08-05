@@ -17,6 +17,9 @@ const { items: printers } = await useCollectionQuery('salesPrinters', { query: e
 
 const selectedCategoryId = ref<string | null>(null)
 
+// Paste-import (#1657) — mounted lazily so its queries fire only when opened.
+const importOpen = ref(false)
+
 // Admin products view has no "All" tab — default to the first category once loaded.
 watch(categories, (cats) => {
   const list = (cats as { id: string }[] | null) || []
@@ -52,24 +55,38 @@ const listEl = ref<HTMLElement | null>(null)
 // /reorder endpoint (order = index) instead of per-item PATCH.
 const { reorderSiblings, reordering } = useTreeMutation('salesProducts')
 
-async function persistOrder() {
+async function persistOrder(list: SalesProduct[]) {
   if (reordering.value) return
   const updates: Array<{ id: string, order: number }> = []
-  orderedProducts.value.forEach((p, index) => {
+  list.forEach((p, index) => {
     if (orderOf(p) !== index) updates.push({ id: p.id, order: index })
   })
   if (updates.length) await reorderSiblings(updates)
 }
 
-// useSortable mutates orderedProducts directly on drop; onEnd fires after.
+// Apply SortableJS's move (oldIndex → newIndex) to a copy of the list.
+function withMove(list: SalesProduct[], from: number, to: number): SalesProduct[] {
+  const next = [...list]
+  const [moved] = next.splice(from, 1)
+  if (moved === undefined) return next
+  next.splice(to, 0, moved)
+  return next
+}
+
 if (import.meta.client) {
   useSortable(listEl, orderedProducts, {
     animation: 150,
     handle: '.drag-handle',
     ghostClass: 'opacity-50',
     chosenClass: 'bg-elevated',
+    // Derive the new order from the drag event itself — SortableJS's
+    // oldIndex/newIndex are the source of truth. (Don't read the bound array
+    // here: useSortable syncs it on nextTick, so at this point it's still the
+    // pre-drag order — which is exactly why we apply the move to it, #1550.)
     onEnd: (evt: { oldIndex?: number, newIndex?: number }) => {
-      if (evt.oldIndex !== evt.newIndex) persistOrder()
+      const { oldIndex, newIndex } = evt
+      if (oldIndex == null || newIndex == null || oldIndex === newIndex) return
+      persistOrder(withMove(orderedProducts.value, oldIndex, newIndex))
     }
   })
 }
@@ -111,9 +128,20 @@ function openEditProduct(id: string) {
         :counts="productCountsByCategory"
         :show-all="false"
       />
-      <UButton color="primary" size="sm" icon="i-lucide-plus" @click="openCreateProduct">
-        {{ t('sales.workspace.addProduct') }}
-      </UButton>
+      <div class="flex items-center gap-2">
+        <UButton
+          color="neutral"
+          variant="soft"
+          size="sm"
+          icon="i-lucide-clipboard-paste"
+          @click="importOpen = true"
+        >
+          {{ t('sales.import.action', 'Import') }}
+        </UButton>
+        <UButton color="primary" size="sm" icon="i-lucide-plus" @click="openCreateProduct">
+          {{ t('sales.workspace.addProduct') }}
+        </UButton>
+      </div>
     </div>
 
     <div v-if="productsPending" class="p-6 text-center text-muted">
@@ -176,9 +204,23 @@ function openEditProduct(id: string) {
     <div v-else class="p-12 text-center text-muted">
       <UIcon name="i-lucide-package" class="text-4xl mb-2" />
       <p>{{ t('sales.workspace.noProducts') }}{{ selectedCategoryId ? t('sales.workspace.inThisCategory') : '' }}</p>
-      <UButton size="sm" variant="outline" class="mt-3" @click="openCreateProduct">
-        {{ t('sales.workspace.addProduct') }}
-      </UButton>
+      <div class="flex items-center justify-center gap-2 mt-3">
+        <UButton size="sm" variant="outline" @click="openCreateProduct">
+          {{ t('sales.workspace.addProduct') }}
+        </UButton>
+        <UButton size="sm" variant="outline" icon="i-lucide-clipboard-paste" @click="importOpen = true">
+          {{ t('sales.import.action', 'Import') }}
+        </UButton>
+      </div>
     </div>
+
+    <!-- Async setup (queries products/categories/locations) → own Suspense;
+         `v-if` keeps those queries off this tab's initial load. -->
+    <Suspense v-if="importOpen">
+      <SalesEventWorkspaceProductImportModal
+        v-model:open="importOpen"
+        :event-id="props.event.id"
+      />
+    </Suspense>
   </div>
 </template>

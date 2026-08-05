@@ -485,8 +485,13 @@ export async function extendScopedToken(
  * PINs are low-entropy, so the hash is NOT the security boundary here —
  * the per-grant lockout in verifyAndRedeemGrant is. SHA-256 keeps this
  * cheap on Workers; the salt only prevents trivial cross-grant comparison.
+ *
+ * Exported for sibling grant modules (e.g. pairing-code.ts) that need the same
+ * hashing/lockout primitives. Not part of the package's public API — consumers
+ * use upsertScopedGrant / verifyAndRedeemGrant instead.
+ * @internal
  */
-async function hashGrantSecret(secret: string, saltHex?: string): Promise<string> {
+export async function hashGrantSecret(secret: string, saltHex?: string): Promise<string> {
   const salt = saltHex ?? Array.from(crypto.getRandomValues(new Uint8Array(16)))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('')
@@ -498,20 +503,32 @@ async function hashGrantSecret(secret: string, saltHex?: string): Promise<string
   return `${salt}:${hash}`
 }
 
-async function verifyGrantSecret(secret: string, stored: string): Promise<boolean> {
+/**
+ * Exported for sibling grant modules — see hashGrantSecret.
+ * @internal
+ */
+export async function verifyGrantSecret(secret: string, stored: string): Promise<boolean> {
   const [salt] = stored.split(':')
   if (!salt) return false
   return (await hashGrantSecret(secret, salt)) === stored
 }
 
-/** Lockout policy: after this many consecutive failures, redemption locks */
-const GRANT_LOCKOUT_THRESHOLD = 5
+/**
+ * Lockout policy: after this many consecutive failures, redemption locks.
+ * Exported for sibling grant modules — see hashGrantSecret.
+ * @internal
+ */
+export const GRANT_LOCKOUT_THRESHOLD = 5
 /** Base lockout duration; doubles with each failure past the threshold */
 const GRANT_LOCKOUT_BASE_MS = 60 * 1000
 /** Lockout never exceeds this */
 const GRANT_LOCKOUT_MAX_MS = 60 * 60 * 1000
 
-function lockoutDuration(failedAttempts: number): number {
+/**
+ * Exported for sibling grant modules — see hashGrantSecret.
+ * @internal
+ */
+export function lockoutDuration(failedAttempts: number): number {
   const past = failedAttempts - GRANT_LOCKOUT_THRESHOLD
   return Math.min(GRANT_LOCKOUT_BASE_MS * 2 ** Math.max(past, 0), GRANT_LOCKOUT_MAX_MS)
 }
@@ -763,6 +780,89 @@ export async function verifyAndRedeemGrant(
     resourceId,
     displayName
   }
+}
+
+/**
+ * Options for verifying a credential by resource alone (no organization).
+ */
+export interface VerifyGrantByResourceOptions {
+  /** Resource type the credential claims (e.g. 'print-device') */
+  resourceType: string
+  /** Resource ID — for devices, the device's self-generated id */
+  resourceId: string
+  /** Presented secret */
+  secret: string
+  /** Credential presentation type (default: 'pin') */
+  credentialType?: string
+}
+
+export type VerifyGrantByResourceResult =
+  | { ok: true, organizationId: string, grantId: string, role: string }
+  | { ok: false, reason: 'not_found' | 'invalid_secret' | 'locked', retryAfterMs?: number }
+
+/**
+ * Verify a presented credential against a resource's grant WITHOUT knowing
+ * the organization — the grant's `organizationId` IS the answer ("whose
+ * device is this?"). Built for the inverse-pairing device poll (#1366): the
+ * router presents its self-generated id + printed code on every poll, so
+ * unlike `verifyAndRedeemGrant` this mints no token, never bumps `usedCount`,
+ * and a clean success performs NO database write. Failure counting and the
+ * exponential lockout are shared with redemption — this is the security
+ * boundary for the low-entropy printed code.
+ */
+export async function verifyScopedGrantByResource(
+  options: VerifyGrantByResourceOptions
+): Promise<VerifyGrantByResourceResult> {
+  const { resourceType, resourceId, secret, credentialType = 'pin' } = options
+
+  const db = useDB()
+  const now = new Date()
+
+  const [grant] = await db
+    .select()
+    .from(scopedAccessGrant)
+    .where(
+      and(
+        eq(scopedAccessGrant.resourceType, resourceType),
+        eq(scopedAccessGrant.resourceId, resourceId),
+        eq(scopedAccessGrant.credentialType, credentialType),
+        eq(scopedAccessGrant.isActive, true)
+      )
+    )
+    .limit(1)
+
+  if (!grant || (grant.expiresAt && grant.expiresAt <= now)) {
+    return { ok: false, reason: 'not_found' }
+  }
+
+  if (grant.lockedUntil && grant.lockedUntil > now) {
+    return { ok: false, reason: 'locked', retryAfterMs: grant.lockedUntil.getTime() - now.getTime() }
+  }
+
+  if (!(await verifyGrantSecret(secret, grant.secretHash))) {
+    const failedAttempts = grant.failedAttempts + 1
+    const lockedUntil = failedAttempts >= GRANT_LOCKOUT_THRESHOLD
+      ? new Date(now.getTime() + lockoutDuration(failedAttempts))
+      : null
+    await db
+      .update(scopedAccessGrant)
+      .set({ failedAttempts, lockedUntil })
+      .where(eq(scopedAccessGrant.id, grant.id))
+    return lockedUntil
+      ? { ok: false, reason: 'locked', retryAfterMs: lockedUntil.getTime() - now.getTime() }
+      : { ok: false, reason: 'invalid_secret' }
+  }
+
+  // Reset failure state only when there is something to reset — this path
+  // runs on every ~2s device poll and must stay write-free when clean.
+  if (grant.failedAttempts > 0 || grant.lockedUntil) {
+    await db
+      .update(scopedAccessGrant)
+      .set({ failedAttempts: 0, lockedUntil: null })
+      .where(eq(scopedAccessGrant.id, grant.id))
+  }
+
+  return { ok: true, organizationId: grant.organizationId, grantId: grant.id, role: grant.role }
 }
 
 /**

@@ -26,7 +26,6 @@ export default defineBuildConfig({
     '@fyit/crouton-auth',
     '@fyit/crouton-ai',
     '@vueuse/core',
-    'cheerio',
-    'human-id'
+    'cheerio'
   ]
 })

@@ -23,6 +23,14 @@ a feature branch.
 
 ## Procedure
 
+> **Execute the documented command — don't reverse-engineer the CLI (efficiency HARD RULE, #1223).**
+> If a task has a known command, *run it*. **Scaffolding a new app/POC = `crouton init <name> --poc`**
+> (→ `pocs/<name>`, does scaffold→generate→doctor); a launched app = `crouton init <name>`. Adding a
+> collection to an existing app = `crouton config` / `generate_collection`. Do **NOT** read
+> `crouton-cli/lib/init-app.ts` / `scaffold-app.ts` to "figure out how to scaffold" — that source-dive
+> burned the entire 30-min budget on #1213 and produced nothing. Once you've read the issue + the
+> relevant skill/CLAUDE.md, **act**; a leaf that only investigates and never executes is a failed run.
+
 1. **Read the issue.** `mcp__github__issue_read` (method `get`). The acceptance criteria
    and `## 🧪 How to test` are your spec. Also read the **epic** (the `epic` number in
    your prompt) so you know the epic's stated design/invariants.
@@ -41,6 +49,16 @@ a feature branch.
      + **stop** (see "Asking the human"). The pipeline (epic branch + dependency order)
      is supposed to give you the prerequisite; if it's absent, the right move is to wait,
      not to invent it.
+   - **The documented/expected path fails unexpectedly ⇒ STOP (do NOT improvise) (#1229).**
+     If the command or approach the issue/skill/docs told you to run fails in a way you didn't
+     anticipate — a tool errors (e.g. `crouton init` → *"directory already exists"*), a generator
+     refuses, a step behaves differently than documented — do **NOT** improvise an alternative,
+     hand-roll what the tool was supposed to do, or grind through a workaround. That is how the
+     #1213 pi run turned a one-command scaffold into **109 turns / $4.14** of manual work that was
+     off-standard **and hid the real bug**. An unexpected failure of the *intended* path is a
+     **stop signal**, not a puzzle to solve: comment the exact error + what you tried + what you'd
+     need to proceed, `@mention` `NOTIFY_HANDLE`, set `status:blocked`, and **stop**. Bounded cost
+     (~5 turns, not 100+), the real problem surfaced for a one-time fix, no non-conformant output.
    - **Don't silently diverge from the epic's design.** If implementing the issue as
      written would contradict the epic's stated model/invariant (e.g. the epic says "use
      the generic `print_jobs` table" but the path of least resistance is to extend the old
@@ -124,6 +142,11 @@ a feature branch.
      linked issue when the PR merges into the **default branch** (`main`); an epic-branch
      PR won't — the epic→`main` PR closes them later. So the breadcrumb comment (above) is
      how the issue reflects "done-for-now," not the merge.
+   - **`Closes` ONLY your own issue — `Refs`, never `Closes`, any OTHER blocked issue (#1253).**
+     A root-cause-fix PR that `Closes` a `status:blocked` retest/sibling issue auto-closes it
+     out from under the owner's pending reply (PR #1234 closed the #1233 retest 2s before the
+     owner's answer). Reference related blocked issues with `Refs #NN`; only the issue this PR
+     implements gets `Closes`. `warn-closes-blocked.yml` flags violations on non-epic PRs.
    - **Do not squash by default** (merge policy) — your commits are curated and atomic.
    - **If a sign-off gate already opened a draft PR** (step 5 — UI or schema), don't open a
      second one — reuse it: push the implementation/generated files, then mark it ready for
@@ -368,16 +391,18 @@ choices don't need a ping — make them and note them in the PR body.
 **The comment is a HANDOFF, not just a question (#639).** The owner's reply spawns a
 **brand-new session** (`resume-on-comment.yml`) with **zero memory** of your reasoning — it
 checks out `main`, not this worktree (which is gone on stop). So the comment must let a cold
-agent resume without re-deriving or diverging. Use the canonical handoff block (see
-`.claude/agents/CLAUDE.md` → "A block comment is a HANDOFF"):
+agent resume without re-deriving or diverging. **Emit it via the `ask-human` skill** (#1189) —
+it carries the canonical shape: lead with the one decision **and a recommendation**, stay
+10-second-scannable, always propose an answer (never a naked "what do you want?"):
 
 ```
-## 🔀 Blocked — need a decision (handoff)
-**Question for @pmcp:** <the one thing only you can decide>
-**Why it blocks:** <what cannot proceed until answered>
-**State so far:** <what's done · branch name + pushed? · what's NOT done>
-**After you answer:** a NEW session resumes from THIS ticket —
-  Option A → <next steps> · Option B → <next steps>
+## 🔀 Blocked — <the one decision, in one line>
+> 🤖 provenance header (interactive @pmcp-account disclaimer)
+**TL;DR — recommend <X>:** <decision restated + why X, first>
+**Status:** <what's done · branch name + pushed? · what's NOT done>
+**Why it came up:** <what cannot proceed until answered>
+**Options:** A) … _(recommended)_ · B) …
+**Reply:** `A`/`B` (or in-medium) → a NEW session resumes from THIS ticket
 **Don't lose:** <decisions/assumptions already made the next agent must keep>
 ```
 

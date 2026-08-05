@@ -30,6 +30,13 @@ on:
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
+# Cancel superseded PR *preview* runs when a new commit is pushed to the same PR branch.
+# cancel-in-progress is event-conditional (`pull_request` only) so a push→main deploy and
+# a manual workflow_dispatch are NEVER cancelled mid-flight. (#1523)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   deploy:
     name: Deploy docs to Cloudflare Workers

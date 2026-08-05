@@ -69,8 +69,10 @@ export default createConfigForNuxt({
     rules: {
       // Allow console in CLI tools
       'no-console': 'off',
-      // Allow any type (common in utility packages, Nuxt UI does the same)
-      '@typescript-eslint/no-explicit-any': 'off',
+      // Warn on `any` so a deliberate use must carry an `eslint-disable ... -- <reason>`
+      // (a bare disable then shows as an unused directive) — the #1435 audit convention.
+      // `warn`, not `error`: it surfaces the signal without walling the existing backlog.
+      '@typescript-eslint/no-explicit-any': 'warn',
       // Allow dynamic delete (common in Vue reactive patterns)
       '@typescript-eslint/no-dynamic-delete': 'off',
       // Nuxt pages/layouts use file-based names (index.vue, login.vue, etc.)

@@ -157,6 +157,8 @@ The approval file is gitignored and session-scoped. Always clean it up after fin
 
 This applies to all agents and sub-agents.
 
+**PR-time backstop (#1611).** The PreToolUse hook only runs *in an agent session*, so it can't catch a `packages/**` change on its way to `main`. The `packages-guard` CI check (`.github/workflows/packages-guard.yml`, decision in the unit-tested `scripts/packages-guard.mjs`) is the authoritative PR-time gate: a PR touching `packages/**` **fails** unless the edit is *declared* — a **`packages:approved`** label, a **`Packages-approved: <why>`** body line, **or** a linked signed-off **`pkg:*`** issue — and it comments the blast-radius (which package files changed). It's declaration, not prohibition. (Distinct from `guard-package-approval.yml`, which only fails a *committed* `.package-edit-approved` override file.)
+
 ### Context Clearing Between Tasks
 After each task: announce completion, STOP. User runs `/clear`. Fresh agent reads the relevant GitHub issue/epic (and PROGRESS_TRACKER.md if a phase rollup exists) and continues.
 
@@ -253,8 +255,26 @@ When a POC instead **graduates into `packages/*`** (it was incubating a future p
 
 A Cloudflare build (and any whole-monorepo `pnpm install`) runs *every* workspace's `postinstall`. On a fresh install the dist-consumed `@fyit/*` workspace packages aren't built yet, so a bare `nuxt prepare` errors with `Could not load '@fyit/crouton'`, exits 1, and **aborts the entire install — failing the deploy of every other app, including the docs site.** The `2>/dev/null || true` guard always exits 0; the real prepare/build still runs in each app's own deploy pipeline. When scaffolding a new app, copy the guarded form from `apps/velo/package.json`.
 
-## MANDATORY: TypeScript Checking
-**EVERY change requires `pnpm typecheck`** (runs per-app via `pnpm -r --filter './apps/*' typecheck`). Never run `npx nuxt typecheck` from root — it has no Nuxt app context and produces thousands of false positives. Fix errors immediately. Never skip.
+## MANDATORY: Post-change checks (typecheck + fallow + a quality pass)
+
+Three cheap gates run **in-session before committing**, mirroring what CI gates — so a
+session catches what the PR would, not after:
+
+1. **Typecheck (always).** `pnpm typecheck` (runs per-app via `pnpm -r --filter './apps/*'
+   typecheck`). Never run `npx nuxt typecheck` from root — it has no Nuxt app context and
+   produces thousands of false positives. Fix errors immediately. Never skip.
+2. **Fallow audit (always, it's fast + diff-scoped).** `npx fallow audit` — the same
+   structural gate CI runs (`fallow-audit` in `ci.yml`): dead code, duplication, complexity,
+   dependency hygiene, judged on **just your diff**. Run it before pushing so the PR's fallow
+   check can't be the thing that surprises you. (`npx fallow health --score` / `npx fallow
+   dead-code` for a wider look — see the Fallow MCP row in the artifacts table.)
+3. **A quality pass on a non-trivial diff (`/simplify` or `/code-review`).** Typecheck and
+   fallow don't catch *design smells* — e.g. reaching for `nextTick()` to paper over a
+   library's async state instead of deriving from the source event, an over-engineered
+   pipeline, a workaround where a cleaner primitive exists. The CI `frontend-review` gate only
+   covers **Nuxt UI 4 conventions**, not general Vue/reactivity smells, so **you** are the
+   reviewer for those: run `/simplify` (quality-only) or `/code-review` on any non-trivial
+   change before committing. If a reviewer would raise it, raise it on yourself first.
 
 ## Core Principles
 
@@ -328,7 +348,12 @@ Slideover and Drawer follow the same pattern: `v-model` + `#content="{ close }"`
 ## Development Commands
 
 ```bash
-pnpm dev / pnpm build / pnpm preview
+pnpm --filter <app> dev   # There is NO root `dev` script — always filter to an app
+pnpm build / pnpm build:packages
+pnpm preview <app>    # LOOK AT a change: boots the app, seeds it, mints a disposable
+                      # review login and prints a PREFILLED one-click URL (#1777).
+                      # The answer to "a packages change has no preview" — a
+                      # packages-only PR gets no deploy preview by design.
 pnpm typecheck        # Runs per-app typecheck (NEVER npx nuxt typecheck from root)
 npx nuxt db generate  # Database migrations
 pnpm test / pnpm test:unit / pnpm test:e2e
@@ -608,6 +633,7 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 | Skill | `.claude/skills/test-review/SKILL.md` | Propose the failing test(s) FIRST and get a human to sign off on the **behaviour** before writing code — the test analog of schema-review/ui-proposal. Scoped by location (`packages/*` on, `apps/*` opt-in, `pocs/*` off, #779) and to hand-written **logic** within packages; reuses the `lgtm`/`status:blocked` loop (#310/#572). Part of the test sign-off gate (#774) |
 | Skill | `.claude/skills/block-authoring/SKILL.md` | Author a placeable layout block (`croutonLayoutBlocks`) that looks right at **any pane size** — the one hard rule (size to the pane via `@container`, never the viewport) + list/form playbooks + the sizing contract (`minWidth`…) the viability metric reads. Use when adding/converting a layout block or when one breaks in a narrow pane (layout engine, #703/#710) |
 | Skill | `.claude/skills/postmortem/SKILL.md` | At epic close (after the verify rollup, before closing): post a retro comment — what went well / what was hard (evidence-backed) / 1–3 proposals — and offer to mint accepted proposals as `workflow` issues. Tightens the loop over time (#403) |
+| Skill | `.claude/skills/ask-human/SKILL.md` | The scannable, recommendation-first handoff an agent posts when it hits a fork it can't own — leads with the one decision + a recommendation, 10-second-readable, self-contained enough for a fresh `resume-on-comment.yml` session to boot from. Extends the #639 handoff block; pairs with the `AGENTS.md` *Deciding vs asking* rule; carries the multi-modal medium-selection guide (which of preview / screenshot / video / schema / diagram fits the question) (WS3+WS4 of epic #1182, #1189/#1190) |
 | Skill | `.claude/skills/spec/SKILL.md` | Capture a POC's **signed-off behaviour** into its spec ledger (`<poc>/spec.json`) — the structured, walkable behaviour contract graduation freezes as authoritative (the third leg beside `HANDOFF.md` prose + `changelog.json` history). Run at the moment a behaviour is approved ("ok, this works"), same trigger as the handoff update. Enforces the schema (`pocs/CLAUDE.md`) + the done-rule: `settled` needs a recorded `signedOff` (blocked otherwise by `gate-spec-signoff.mjs`). Consumed by `/graduate` at A0 (freeze) + C1 (walk). Use when a POC behaviour is signed off / "capture this spec" (#992 WS2) |
 | Skill | `.claude/skills/graduate/SKILL.md` | The deliberate **"step back and rebuild"** checkpoint after heavy POC iteration — **spec-driven** (#992): the POC *discovers* a behaviour spec (the `<poc>/spec.json` ledger, captured at each sign-off), graduation *freezes* it authoritative, and the app is **rebuilt the crouton way to satisfy it** — never a port. A POC is a **floor, not a ceiling**, so the app is a *superset* in three buckets: **Preserve** (proven experience → C1 side-by-side) · **Replace** (POC fakes → real crouton) · **Add** (completeness the POC left open → its own schema/UI/test gate). Promotes only when **both** acceptance axes are signed off — experience (C1) **and** crouton-conformance (`/conformance`, C2). "Done" is *derived* from a recorded `lgtm`, never a green build (the #988 lesson). Use when a POC is "done" / "graduate this poc" / "make it a real app" (#916, #992) |
 | Skill | `.claude/skills/conformance/SKILL.md` | The **crouton-conformance gate** — graduation's second acceptance axis (C2; the first is the experience side-by-side, C1). Certifies a graduated app is a *real crouton app* — **CLI-scaffolded** (`server/db/schema.ts` present, the #988 500) · **real collections** not stub blocks · **consumes the correct packages without reinventing them** (DRY) — by **composing** the existing probes (`/frontend-review`, `/a11y`, `/e2e-smoke`, `pnpm typecheck`) plus crouton-structural checks, then rendering a *required, signed-off* checklist on the graduation PR (holds on `status:blocked`). A gate, not a finding-rater. Run at `/graduate` stage C2, or "is this app crouton-native" (#992) |
@@ -623,7 +649,7 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 | Agent | `.claude/agents/task-decomposer.md` | Recursive: LEAF TEST one issue → spawn a worker (leaf) or split into sub-issues + spawn a decomposer per child |
 | Agent | `.claude/agents/task-worker.md` | Implements one leaf issue on an isolated worktree branch → `pnpm typecheck` → `/commit` → PR (`Closes #NN`) |
 | MCP Server | `packages/crouton-mcp/` | AI collection generation |
-| MCP Server | `fallow-mcp` (root devDep, [fallow](https://docs.fallow.tools/)) | Deterministic codebase intelligence — `audit` / `dead_code` / `dupes` / `health` tools for dead code, duplication, complexity, and dependency hygiene. CLI: `npx fallow audit` (diff-scoped PR verdict), `npx fallow health --score`, `npx fallow dead-code`. Config: `.fallowrc.json` (root; `_archive`/`retired`/build output ignored). Prefer it over grep for "who imports this / is this export used / what's duplicated" (#1120) |
+| MCP Server | `fallow-mcp` (root devDep, [fallow](https://docs.fallow.tools/)) | Deterministic codebase intelligence — `audit` / `dead_code` / `dupes` / `health` tools for dead code, duplication, complexity, and dependency hygiene. CLI: `npx fallow audit` (diff-scoped PR verdict), `npx fallow health --score`, `npx fallow dead-code`. Config: `.fallowrc.json` (root; `_archive`/`retired`/build output ignored). Prefer it over grep for "who imports this / is this export used / what's duplicated" (#1120). **⚠️ Deletion protocol (#1149): a zero-imports finding is a hypothesis, not a verdict** — before deleting a "dead" file, rule out the *dynamic* mechanisms a static graph can't see: directory scanners (`@nuxtjs/mcp-toolkit` loads `server/mcp/**` at runtime — the #1143 near-miss), `@nuxt/kit` resolver paths (module runtime dirs), spawn-by-path (crouton-cli `bin/` → `lib/`), config-string refs (nuxt.config `css:`, vite `optimizeDeps`), and published-exports consumers outside this repo. Grep for the *loader*, not just the import |
 | Themes | `packages/crouton-themes/` | Swappable UI themes |
 
 ### MCP Server Tools

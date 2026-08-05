@@ -1,7 +1,7 @@
 import { ref, readonly } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import type { LayoutTree } from '@fyit/crouton-core/app/types/layout'
-import { sanitizeLayoutTree } from '../utils/layout-tree'
+import { sanitizeLayoutTree } from '@fyit/crouton-core/app/utils/layout-tree'
 
 /**
  * Persistence for editable layouts (Sprint 3, #706) — load/save a `LayoutTree`

@@ -49,6 +49,15 @@ on:
         required: false
         type: string
 
+# Cancel superseded PR *preview* runs when a new commit is pushed to the same PR branch.
+# cancel-in-progress is event-conditional (`pull_request` only) so a manual
+# workflow_dispatch preview is NEVER cancelled mid-flight. This concurrency sits on the
+# caller; the reusable deploy-app.yml inherits it, so groups are per-POC/PR (not on the
+# leaf) — no cross-POC cancellation. (#1523)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Figure out which opted-in POCs to deploy → a matrix the deploy job fans out over.
   detect:
@@ -121,7 +130,6 @@ jobs:
       workspace: pocs
       environment: staging
       staging-url: ${{ matrix.stagingUrl }}
-      layer-packages: ${{ matrix.layerPackages }}
       # PR-tied deploys wire the preview-review bridge to this PR (#607); on a manual
       # dispatch use the optional review_pr input; empty → the bridge stays off.
       review-pr: ${{ github.event.pull_request.number || github.event.inputs.review_pr }}
@@ -170,6 +178,35 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Fail in seconds, not after a full install + package build (#1836). This
+      # mode runs the POC's own `cf:version`, which nothing generates and which
+      # a hand-wired POC can simply lack — and pnpm's own error for that is
+      # "Missing script: cf:version. Did you mean cf:deploy?", which names the
+      # symptom and suggests the wrong fix.
+      # The dispatch input reaches the shell through `env:`, never through a
+      # `${{ }}` interpolation inside `run:` — GitHub substitutes those as raw
+      # text before bash parses the script, so a quote in the input executes as
+      # code, in a job whose env carries CLOUDFLARE_API_TOKEN. `detect` above
+      # uses the same env indirection. The node check reads process.env too, so
+      # nothing untrusted is ever spliced into a JS string either.
+      - name: Check the POC has a cf:version script
+        env:
+          APP: ${{ github.event.inputs.app }}
+        run: |
+          case "$APP" in
+            ''|*[!a-z0-9-]*|-*)
+              echo "::error::Invalid POC name: '$APP' (expected lowercase kebab-case)"; exit 1 ;;
+          esac
+          export PKG="pocs/$APP/package.json"
+          if [ ! -f "$PKG" ]; then
+            echo "::error::No such POC: pocs/$APP"; exit 1
+          fi
+          if ! node -e 'process.exit(require("./" + process.env.PKG).scripts?.["cf:version"] ? 0 : 1)'; then
+            echo "::error::pocs/$APP has no \"cf:version\" script, which mode=version needs."
+            echo "::error::Add one to $PKG mirroring its own cf:staging, with 'wrangler versions upload' in place of 'wrangler deploy'."
+            exit 1
+          fi
+
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
@@ -185,24 +222,14 @@ jobs:
       - name: Rebuild native build deps skipped by --ignore-scripts
         run: pnpm rebuild better-sqlite3 2>/dev/null || true
 
-      # Build the dist-consumed framework layers the app needs (same set + flow as
-      # deploy-app.yml; only packages WITH a build script are built).
-      - name: Build layer packages
-        env:
-          LAYER_PACKAGES: ${{ matrix.layerPackages }}
-        run: |
-          for pkg in $LAYER_PACKAGES @fyit/crouton-devtools; do
-            dir="packages/${pkg#@fyit/}"
-            if [ -d "$dir/dist" ] && [ -n "$(ls -A "$dir/dist" 2>/dev/null)" ]; then
-              echo "Skipping $pkg (already built this run)"
-              continue
-            fi
-            if node -e "process.exit(require('./$dir/package.json').scripts?.build ? 0 : 1)" 2>/dev/null; then
-              echo "Building $pkg"; pnpm --filter "$pkg" build
-            else
-              echo "Skipping $pkg (no build script / pure source layer)"
-            fi
-          done
+      # Ensure EVERY @fyit/* dist is present before the build — same action every
+      # other build path uses (#1222). This job used to hand-roll a subset build
+      # from `matrix.layerPackages`; that is exactly the per-caller subset which
+      # could miss a transitively-extended package and kill the build with
+      # "Could not load '@fyit/crouton'". It was the last caller left on the old
+      # mechanism after #1222 migrated deploy-app.yml (#1787).
+      - name: Warm @fyit package builds
+        uses: ./.github/actions/warm-packages
 
       - name: Prepare Nuxt (generate tsconfig)
         run: npx nuxt prepare

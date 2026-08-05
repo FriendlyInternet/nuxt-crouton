@@ -131,33 +131,36 @@ function handleQuickAction(path: string) {
       <h3 class="mb-4 text-lg font-medium text-gray-900 dark:text-white">
         {{ t('superAdmin.quickActions.title') }}
       </h3>
+      <!-- Quick-action cards — UButton on semantic tokens (not raw buttons on
+           hardcoded grays) so themes reach them (#1410) -->
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <button
+        <UButton
           v-for="action in quickActions"
           :key="action.path"
-          type="button"
-          class="group flex items-center gap-4 rounded-lg border border-gray-200 bg-white p-4 text-left transition-colors hover:border-primary-500 hover:bg-primary-50 dark:border-gray-800 dark:bg-gray-900 dark:hover:border-primary-400 dark:hover:bg-primary-950"
+          color="neutral"
+          variant="outline"
+          class="group w-full justify-start gap-4 p-4 text-left transition-colors hover:ring-primary hover:bg-primary/5"
           @click="handleQuickAction(action.path)"
         >
-          <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-gray-600 group-hover:bg-primary-100 group-hover:text-primary-600 dark:bg-gray-800 dark:text-gray-400 dark:group-hover:bg-primary-900 dark:group-hover:text-primary-400">
+          <div class="flex size-10 shrink-0 items-center justify-center rounded-lg bg-elevated text-muted group-hover:bg-primary/10 group-hover:text-primary">
             <UIcon
               :name="action.icon"
               class="size-5"
             />
           </div>
           <div>
-            <p class="font-medium text-gray-900 dark:text-white">
+            <p class="font-medium text-highlighted">
               {{ action.label }}
             </p>
-            <p class="text-sm text-gray-500 dark:text-gray-400">
+            <p class="text-sm text-muted">
               {{ action.description }}
             </p>
           </div>
           <UIcon
             name="i-lucide-chevron-right"
-            class="ml-auto size-5 text-gray-400 group-hover:text-primary-500"
+            class="ml-auto size-5 text-dimmed group-hover:text-primary"
           />
-        </button>
+        </UButton>
       </div>
     </div>
   </div>

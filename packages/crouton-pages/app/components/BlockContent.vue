@@ -5,8 +5,9 @@
  * Renders page content that is stored in block format (JSON).
  * Routes each block type to its appropriate render component.
  */
-import type { PageBlockContent, PageBlock, BlockSize } from '../types/blocks'
+import type { PageBlockContent, PageBlock, BlockSize, BlockAudienceContext, BlockAudienceRole } from '../types/blocks'
 import { parseBlockContent } from '../utils/content-detector'
+import { hasAudienceGate, matchesAudience, viewportClasses } from '../utils/block-visibility'
 
 // Addon blocks from croutonBlocks registry
 const { getBlock: getAddonBlock } = useCroutonBlocks()
@@ -31,6 +32,12 @@ function sanitizeHtml(html: string): string {
 interface Props {
   /** Raw JSON content string or parsed PageBlockContent */
   content: string | PageBlockContent | null | undefined
+  /**
+   * Render every block regardless of its `blockVisibility`.
+   * Used by the editor previews, where an author must always see the block
+   * they are configuring — even one they have just hidden from themselves.
+   */
+  ignoreVisibility?: boolean
 }
 
 const props = defineProps<Props>()
@@ -230,6 +237,90 @@ function getBlockSizeClass(block: PageBlock): string | undefined {
   return undefined
 }
 
+// ---------------------------------------------------------------------------
+// Block visibility
+//
+// The public page route is `swr: 3600` cached, so its HTML is shared between
+// visitors. Auth state must therefore never be read while rendering on the
+// server, or one visitor's session gets baked into the page everyone receives.
+//
+// So the two axes resolve differently:
+//   - viewport → CSS classes, which resolve per-device in the browser
+//   - audience/roles → after hydration only (see `audienceResolved`)
+// ---------------------------------------------------------------------------
+
+/**
+ * False during SSR *and* the first client render — so both agree and hydration
+ * matches — then true once mounted, when the session is safe to read.
+ */
+const audienceResolved = ref(false)
+onMounted(() => { audienceResolved.value = true })
+
+/**
+ * Auth sources, resolved once in setup — composables must not be called from a
+ * computed getter. Read defensively: crouton-auth is not a dependency of this
+ * package and may not be installed, in which case these stay null and the
+ * matcher treats the reader as unknowable (and shows the block).
+ */
+// Held as plain variables, not refs: they are bound once here and never
+// reassigned, and the computed below still tracks reads of their `.value`.
+// Typed structurally so any Ref/ComputedRef shape fits without importing
+// anything from crouton-auth.
+let sessionUser: { value: unknown } | null = null
+let teamRole: { value: unknown } | null = null
+
+try {
+  sessionUser = useSession().user
+} catch {
+  // crouton-auth not installed.
+}
+
+try {
+  teamRole = useTeam().currentRole
+} catch {
+  // No team context (or no auth package).
+}
+
+const audienceContext = computed<BlockAudienceContext>(() => {
+  // Before hydration the session must not be read at all: this component's
+  // markup is cached and shared between visitors.
+  if (!audienceResolved.value) return { authenticated: null, role: null }
+
+  const authenticated = sessionUser ? !!sessionUser.value : null
+
+  const current = teamRole?.value
+  const role: BlockAudienceRole | null
+    = current === 'owner' || current === 'admin' || current === 'member' ? current : null
+
+  return { authenticated, role }
+})
+
+/** The raw `blockVisibility` attr, if the block carries one. */
+function getBlockVisibility(block: PageBlock): unknown {
+  return (block.attrs as any)?.blockVisibility
+}
+
+/**
+ * Whether to render this block at all.
+ *
+ * A block with no audience gate returns true immediately and takes no new
+ * code path — identical to the behaviour before per-block visibility existed.
+ * A gated block stays out of the cached SSR markup and appears on hydration.
+ */
+function shouldRenderBlock(block: PageBlock): boolean {
+  if (props.ignoreVisibility) return true
+  const visibility = getBlockVisibility(block)
+  if (!hasAudienceGate(visibility)) return true
+  return audienceResolved.value && matchesAudience(visibility, audienceContext.value)
+}
+
+/** Wrapper classes for a block: its size, plus any viewport restrictions. */
+function getBlockWrapperClasses(block: PageBlock): (string | undefined)[] {
+  const size = getBlockSizeClass(block)
+  if (props.ignoreVisibility) return [size]
+  return [size, ...viewportClasses(getBlockVisibility(block))]
+}
+
 /** Tailwind classes per heading level */
 const headingClasses: Record<number, string> = {
   1: 'text-4xl font-bold tracking-tight text-[var(--ui-text-highlighted)] mt-8 mb-4',
@@ -246,7 +337,7 @@ const headingClasses: Record<number, string> = {
 
     <template v-if="renderableBlocks.length > 0">
       <template v-for="(block, index) in renderableBlocks" :key="(block as any).attrs?.blockId || `${block.type}-${index}`">
-        <div :class="getBlockSizeClass(block)">
+        <div v-if="shouldRenderBlock(block)" :class="getBlockWrapperClasses(block)">
           <!-- Dynamic blocks: fetch runtime data, must render client-side only -->
           <ClientOnly
             v-if="isClientOnlyBlock(block.type)"

@@ -17,7 +17,6 @@
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-printing": "workspace:*",
     "@fyit/crouton-sales": "workspace:*",
-    "@libsql/client": "^0.17.0",
     "drizzle-orm": "^0.45.1",
     "nuxt": "^4.2.2",
     "vue": "^3.5.26",

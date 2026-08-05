@@ -180,6 +180,8 @@ const initCmd = defineCommand({
     dialect: { type: 'string', alias: 'd', description: 'Database dialect (sqlite or pg)', default: 'sqlite' },
     noCf: { type: 'boolean', description: 'Skip Cloudflare-specific config (wrangler.jsonc, CF stubs)' },
     domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev)' },
+    poc: { type: 'boolean', description: 'Scaffold into pocs/<name> (the incubator) instead of apps/<name>' },
+    out: { type: 'string', description: 'Explicit target directory (overrides --poc; default apps/<name>)' },
     dryRun: { type: 'boolean', description: 'Preview what will be generated without writing files' },
   },
   async run({ args }) {
@@ -190,12 +192,16 @@ const initCmd = defineCommand({
       ? args.features.split(',').map(f => f.trim()).filter(Boolean)
       : []
 
+    // Target: --out wins; else --poc → pocs/<name>; else the initApp default (apps/<name>).
+    const out = args.out || (args.poc ? `pocs/${args.name}` : undefined)
+
     await initApp(args.name, {
       features,
       theme: args.theme,
       dialect: args.dialect,
       cf: !args.noCf,
       domain: args.domain,
+      out,
       dryRun: args.dryRun,
     })
   }
@@ -283,6 +289,7 @@ const rollbackCmd = defineCommand({
     collection: { type: 'positional', description: 'Collection name', required: true },
     dryRun: { type: 'boolean', description: 'Preview what will be removed' },
     keepFiles: { type: 'boolean', description: 'Keep generated files, only clean configs' },
+    dropTable: { type: 'boolean', description: 'Also emit a DROP TABLE migration for the removed table (preview with --dry-run)' },
     force: { type: 'boolean', description: 'Skip confirmation prompts' },
   },
   async run({ args }) {
@@ -301,6 +308,7 @@ const rollbackCmd = defineCommand({
       collection: args.collection,
       dryRun: args.dryRun,
       keepFiles: args.keepFiles,
+      dropTable: args.dropTable,
       force: args.force,
     })
   }

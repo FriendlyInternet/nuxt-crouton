@@ -25,7 +25,6 @@
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-layout": "workspace:*",
     "@fyit/crouton-maps": "workspace:*",
-    "@libsql/client": "catalog:",
     "drizzle-orm": "catalog:",
     "html2canvas-pro": "^2.0.2",
     "jspdf": "^4.2.1",

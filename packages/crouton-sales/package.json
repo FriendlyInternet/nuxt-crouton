@@ -59,14 +59,20 @@
   },
   "dependencies": {
     "@fyit/crouton-i18n": "workspace:*",
-    "@fyit/crouton-printing": "workspace:*"
+    "@fyit/crouton-printing": "workspace:*",
+    "@nuxt/ui": "catalog:",
+    "@vueuse/integrations": "^13.3.0",
+    "nanoid": "^5.0.0",
+    "reka-ui": "^2.9.0"
   },
   "peerDependencies": {
     "nuxt": "^4.0.0",
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-auth": "workspace:*",
     "@nuxtjs/i18n": "^9.0.0 || ^10.0.0",
-    "zod": "^3.0.0"
+    "zod": "^3.0.0",
+    "@tiptap/vue-3": "^3.0.0",
+    "vue-i18n": "^10.0.0 || ^11.0.0"
   },
   "devDependencies": {
     "unbuild": "^3.6.1",

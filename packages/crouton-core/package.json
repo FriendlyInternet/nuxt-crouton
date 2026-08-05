@@ -10,12 +10,14 @@
     "./shared/seed": "./shared/seed/index.ts",
     "./shared/utils/date": "./shared/utils/date.ts",
     "./shared/utils/fs": "./shared/utils/fs.ts",
+    "./shared/utils/d1": "./shared/utils/d1.ts",
     "./shared/types/scaffold": "./shared/types/scaffold.ts",
     "./shared/utils/scaffold": "./shared/utils/scaffold.ts",
     "./app/types/app": "./app/types/app.ts",
     "./app/types/block-definition": "./app/types/block-definition.ts",
     "./app/types/layout": "./app/types/layout.ts",
     "./app/types/layout-block": "./app/types/layout-block.ts",
+    "./app/utils/layout-tree": "./app/utils/layout-tree.ts",
     "./app/composables/*": {
       "types": "./dist/app/composables/*.d.ts",
       "import": "./dist/app/composables/*.mjs"
@@ -69,7 +71,6 @@
     "@fyit/crouton-admin": "workspace:*",
     "@fyit/crouton-auth": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
-    "@libsql/client": "catalog:",
     "@nuxt/kit": "^4.0.0",
     "@nuxthub/core": "^0.10.0",
     "@nuxt/image": "^1.11.0",

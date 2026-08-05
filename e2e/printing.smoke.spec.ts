@@ -134,7 +134,21 @@ test.describe(`fixture "${FIXTURE}" sales/printing`, () => {
     const { token } = await redeemRes.json()
     expect(token, 'scoped token').toBeTruthy()
 
+    // Route the event to the in-process drainer (#1324): an event without a
+    // transport row defaults to 'router-spooler', so the drainer-driven tiers
+    // must opt their event in explicitly. Tier 3 overrides this per-step.
+    await setTransport(page, base, { teamId, eventId: seed.eventId }, 'local-drainer')
+
     return { teamId: teamId as string, eventId: seed.eventId as string, products: seed.products, token: token as string }
+  }
+
+  /** Set the event's per-event print transport (#1324) via the sales endpoint. */
+  async function setTransport(page: import('@playwright/test').Page, base: string, ctx: { teamId: string, eventId: string }, transport: string) {
+    const res = await page.request.put(
+      `${base}/api/crouton-sales/teams/${ctx.teamId}/events/${ctx.eventId}/print-transport`,
+      { headers: authHeaders(base), data: { transport } }
+    )
+    expect(res.ok(), `print-transport PUT failed: ${res.status()} ${await res.text()}`).toBeTruthy()
   }
 
   /** Place a one-product order; returns the order id + the enqueued job ids. */
@@ -271,6 +285,175 @@ test.describe(`fixture "${FIXTURE}" sales/printing`, () => {
       ).toBe('print_failed')
     } finally {
       await new Promise<void>(r => printer.close(() => r()))
+    }
+  })
+
+  // ── TIER 3 (per-event transport gating, #1324) ────────────────────────────
+  // The print_transports row decides WHO delivers the event's thermal jobs
+  // (unset = the 'router-spooler' default). Set to 'router-spooler': the
+  // in-process drainer must NOT print (job stays pending) while the spooler's
+  // /jobs GET serves it. Flip to 'local-drainer': the spooler GET goes
+  // soft-empty [] and the drainer drives the job to done.
+  test('tier 3: the per-event transport row routes jobs between drainer and spooler', async ({ page, baseURL }) => {
+    test.setTimeout(FIRST_HIT + DRAIN_TIMEOUT + 60000)
+    const base = baseURL || 'http://localhost:3000'
+
+    const printer = startFakePrinter([0x00, 0x00]) // online, paper present
+    const port = await listen(printer)
+
+    const spoolerHeaders = { 'x-api-key': '1234' } // dev default (print-server-auth)
+
+    const putTransport = (ctx: { teamId: string, eventId: string }, transport: string) =>
+      setTransport(page, base, ctx, transport)
+
+    async function spoolerJobs(eventId: string) {
+      const res = await page.request.get(`${base}/api/print-server/events/${eventId}/jobs`, { headers: spoolerHeaders })
+      expect(res.ok(), `spooler jobs GET failed: ${res.status()}`).toBeTruthy()
+      return (await res.json()) as Array<{ id: string }>
+    }
+
+    let ctx: Awaited<ReturnType<typeof setup>> | undefined
+    try {
+      ctx = await setup(page, base, port)
+
+      // Route the event to the spooler, then order.
+      await putTransport(ctx, 'router-spooler')
+      const { orderId } = await placeOrder(page, base, ctx)
+
+      // The spooler sees the job…
+      await expect.poll(async () => (await spoolerJobs(ctx!.eventId)).length, {
+        message: 'spooler /jobs serves the pending job while transport=router-spooler',
+        timeout: 30000,
+        intervals: [1000, 2000]
+      }).toBeGreaterThan(0)
+
+      // …and the drainer must have left it alone: after 3+ drainer ticks (2s
+      // poll) the job is still PENDING. A gating bug prints it to the fake
+      // printer and flips it to '2', failing this assertion.
+      await page.waitForTimeout(7000)
+      const gated = await printStatus(page, base, ctx, orderId)
+      expect(gated.length).toBeGreaterThan(0)
+      expect(gated.every(j => j.status === '0'), 'drainer skipped the router-spooler event').toBeTruthy()
+
+      // Flip to the local drainer: spooler goes soft-empty, drainer delivers.
+      await putTransport(ctx, 'local-drainer')
+      await expect.poll(async () => (await spoolerJobs(ctx!.eventId)).length, {
+        message: 'spooler /jobs is soft-empty once transport=local-drainer',
+        timeout: 15000,
+        intervals: [1000, 2000]
+      }).toBe(0)
+      await expect.poll(async () => {
+        const jobs = await printStatus(page, base, ctx!, orderId)
+        return jobs.length > 0 && jobs.every(j => j.status === '2')
+      }, {
+        message: 'the drainer delivers the pending job after the flip',
+        timeout: DRAIN_TIMEOUT,
+        intervals: [1000, 2000, 2000]
+      }).toBe(true)
+
+      // 'none' = no physical printing: an order enqueues NO print jobs at all
+      // (empty printQueueIds), so the kassa's print watcher never starts and
+      // can't warn "printer offline?" — the #1324 no-physical-printing rule.
+      await putTransport(ctx, 'none')
+      const quiet = await placeOrder(page, base, ctx)
+      expect(quiet.printQueueIds, 'no print jobs enqueued while transport=none').toHaveLength(0)
+    } finally {
+      // Leave the event drainer-friendly for reruns of the earlier tiers.
+      if (ctx) await putTransport(ctx, 'local-drainer').catch(() => {})
+      await new Promise<void>(r => printer.close(() => r()))
+    }
+  })
+
+  // ── TIER 4 (device self-pairing, #1366) ───────────────────────────────────
+  // The inverse-pairing flow: an unclaimed device's poll answers 428 with a
+  // server-rendered pairing ticket; claiming it in the app makes the SAME poll
+  // serve the team's router-spooler jobs; a foreign device gets nothing; a
+  // wrong code is a 401; revoking returns the device to unclaimed.
+  test('tier 4: router self-pairing — unclaimed ticket, claim, jobs, foreign device, revoke', async ({ page, baseURL }) => {
+    test.setTimeout(FIRST_HIT + 60000)
+    const base = baseURL || 'http://localhost:3000'
+
+    const DEVICE = { id: 'rut-e2e-01', code: '824241' }
+    const deviceHeaders = (code = DEVICE.code) => ({ 'x-device-id': DEVICE.id, 'x-device-code': code })
+
+    const devicePoll = (headers: Record<string, string>) =>
+      page.request.get(`${base}/api/print-server/jobs?mark_as_printing=false`, { headers })
+
+    let ctx: Awaited<ReturnType<typeof setup>> | undefined
+    try {
+      ctx = await setup(page, base, 65000)
+
+      // Make sure a previous run's claim doesn't linger (idempotent reruns).
+      await page.request.delete(
+        `${base}/api/crouton-sales/teams/${ctx.teamId}/print-devices/${DEVICE.id}`,
+        { headers: authHeaders(base) }
+      ).catch(() => {})
+
+      // 1. Unclaimed: 428 + a server-rendered base64 pairing ticket.
+      const unclaimed = await devicePoll(deviceHeaders())
+      expect(unclaimed.status(), 'unclaimed poll answers 428').toBe(428)
+      const pairing = await unclaimed.json()
+      expect(pairing.status).toBe('unclaimed')
+      expect(typeof pairing.ticket).toBe('string')
+      // The ticket is real ESC/POS carrying the device id + code (printable
+      // bytes survive a base64 roundtrip).
+      const ticketBytes = Buffer.from(pairing.ticket, 'base64').toString('latin1')
+      expect(ticketBytes).toContain(DEVICE.id)
+      expect(ticketBytes).toContain(DEVICE.code)
+
+      // 2. Claim it for the team (the app half of the printed ticket).
+      const claim = await page.request.post(`${base}/api/crouton-sales/teams/${ctx.teamId}/print-devices`, {
+        headers: authHeaders(base),
+        data: { deviceId: DEVICE.id, code: DEVICE.code }
+      })
+      expect(claim.ok(), `claim failed: ${claim.status()} ${await claim.text()}`).toBeTruthy()
+
+      // 3. Route the event to the router and order: the device poll serves the
+      //    job in the LEGACY row shape (bare array, no eventId).
+      await setTransport(page, base, ctx, 'router-spooler')
+      await placeOrder(page, base, ctx)
+
+      const claimed = await devicePoll(deviceHeaders())
+      expect(claimed.status(), 'claimed poll answers 200').toBe(200)
+      const jobs = await claimed.json()
+      expect(Array.isArray(jobs), 'claimed poll returns the bare jobs array').toBeTruthy()
+      expect(jobs.length, 'the team\'s router-spooler job is served').toBeGreaterThan(0)
+      expect(jobs[0]).not.toHaveProperty('eventId')
+      expect(jobs[0].printData, 'job carries base64 printData').toBeTruthy()
+
+      // 4. Flip to local-drainer: the device poll goes empty — per-event
+      //    routing (#1324) is what makes team-wide serving leak-proof.
+      await setTransport(page, base, ctx, 'local-drainer')
+      const gated = await devicePoll(deviceHeaders())
+      expect(gated.status()).toBe(200)
+      expect(await gated.json(), 'no jobs once the event routes to the drainer').toHaveLength(0)
+
+      // 5. A foreign (unclaimed) device id gets a pairing ticket, never jobs.
+      const foreign = await page.request.get(`${base}/api/print-server/jobs`, {
+        headers: { 'x-device-id': 'rut-foreign-9', 'x-device-code': '000000' }
+      })
+      expect(foreign.status(), 'foreign device stays unclaimed').toBe(428)
+
+      // 6. A wrong code on a CLAIMED device is a 401 (counted toward lockout).
+      const wrong = await devicePoll(deviceHeaders('999999'))
+      expect(wrong.status(), 'wrong code is rejected').toBe(401)
+
+      // 7. Revoke: the device drops back to unclaimed (prints a fresh ticket).
+      const revoke = await page.request.delete(
+        `${base}/api/crouton-sales/teams/${ctx.teamId}/print-devices/${DEVICE.id}`,
+        { headers: authHeaders(base) }
+      )
+      expect(revoke.ok(), `revoke failed: ${revoke.status()}`).toBeTruthy()
+      const afterRevoke = await devicePoll(deviceHeaders())
+      expect(afterRevoke.status(), 'revoked device is unclaimed again').toBe(428)
+    } finally {
+      if (ctx) {
+        await page.request.delete(
+          `${base}/api/crouton-sales/teams/${ctx.teamId}/print-devices/${DEVICE.id}`,
+          { headers: authHeaders(base) }
+        ).catch(() => {})
+        await setTransport(page, base, ctx, 'local-drainer').catch(() => {})
+      }
     }
   })
 })

@@ -23,11 +23,15 @@ const toggleColorMode = () => {
   colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
 }
 
-// Dropdown menu items with custom slot for color swatches
+// Dropdown menu items with custom slot for color swatches.
+// Slot names are prefixed: a bare theme name would collide with Vue's
+// reserved slots — the 'default' theme literally became `#default` and
+// silently REPLACED the dropdown's trigger slot with a static item row
+// (the chip stuck on "Default" forever).
 const menuItems = computed(() =>
   themes.map(theme => ({
     label: theme.label,
-    slot: theme.name,
+    slot: `theme-${theme.name}`,
     onSelect: () => setTheme(theme.name),
     active: currentTheme.value === theme.name
   }))
@@ -61,8 +65,8 @@ const menuItems = computed(() =>
         </span>
       </UButton>
 
-      <!-- Custom slots for each theme item -->
-      <template v-for="theme in themes" :key="theme.name" #[theme.name]>
+      <!-- Custom slots for each theme item (prefixed — see menuItems) -->
+      <template v-for="theme in themes" :key="theme.name" #[`theme-${theme.name}`]>
         <span class="flex items-center gap-2 w-full">
           <span class="flex -space-x-0.5">
             <span
