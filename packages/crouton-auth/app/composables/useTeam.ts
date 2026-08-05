@@ -138,16 +138,18 @@ export function useTeam() {
   // resolves the team when a client-side transition sometimes did not.
   const fallbackTeams = useState<Team[]>('crouton-auth-fallback-teams', () => [])
 
-  // Better Auth's Vue client (`better-auth/client/vue`, #1738) makes
-  // `useActiveOrganization`/`useListOrganizations` real Vue composables
-  // returning reactive refs, unlike the vanilla client's dead nanostores
-  // (#1703). Guard with `typeof` so an environment/mock where these aren't
-  // callable functions can't crash the composable — it just falls back to
-  // the SSR-populated sources below.
-  const activeOrgAtom = typeof authClient.useActiveOrganization === 'function'
+  // Better Auth's Vue client (`better-auth/vue`, #1738) makes
+  // `useActiveOrganization`/`useListOrganizations` real Vue composables — they RETURN a
+  // `DeepReadonly<Ref<{ data, error, isPending, … }>>`, unlike the vanilla client's dead
+  // nanostores (#1703). So the payload is `ref.value.data`, NOT the nanostore's
+  // `atom.data.value` — reading the old shape yields undefined and silently falls through
+  // to the SSR sources, i.e. exactly the dead-read this epic exists to remove.
+  // Guard with `typeof` so an environment/mock where these aren't callable can't crash the
+  // composable — it just falls back to the SSR-populated sources below.
+  const activeOrgRef = typeof authClient.useActiveOrganization === 'function'
     ? authClient.useActiveOrganization()
     : undefined
-  const orgsAtom = typeof authClient.useListOrganizations === 'function'
+  const orgsRef = typeof authClient.useListOrganizations === 'function'
     ? authClient.useListOrganizations()
     : undefined
 
@@ -159,7 +161,7 @@ export function useTeam() {
   // Computed: current team (active organization). Prefer the reactive atom;
   // fall back to useSession's activeOrganization (SSR-populated).
   const currentTeam = computed<Team | null>(() => {
-    const raw = activeOrgAtom?.data?.value
+    const raw = activeOrgRef?.value?.data
     if (raw) return mapOrganizationToTeam(raw)
     return sessionActiveOrg.value
   })
@@ -167,7 +169,7 @@ export function useTeam() {
   // Computed: all user's teams. Prefer the reactive atom; fall back to
   // fallbackTeams (populated by refreshTeams()/SSR middleware).
   const teams = computed<Team[]>(() => {
-    const raw = orgsAtom?.data?.value
+    const raw = orgsRef?.value?.data
     if (raw && raw.length > 0) return raw.map(mapOrganizationToTeam)
     return fallbackTeams.value
   })
