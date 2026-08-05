@@ -284,6 +284,13 @@ jobs:
             BRANCH_INSTR="branch off the integration branch '${EPIC_BRANCH}' and target the PR THERE (not main)"
           fi
           printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s), then %s. For a scaffold/generate task, RUN the crouton generator (e.g. crouton config / generate_collection) — its output IS committed for you, so do NOT hand-write generated files. Author only the inputs (schema, config) with the edit/write tools (never shell redirects or heredocs) so they are captured. Run the touched app typecheck ONCE to sanity-check (pnpm --filter <app> typecheck), but do NOT loop trying to make typecheck fully green — a harness acceptance gate typechecks the result and reports failures, so stop after your change plus one check instead of grinding on it. Do NOT run git commit and do NOT open a pull request — the workflow commits your inputs AND the generator output and opens the PR, so you never need to. If you are genuinely blocked, do NOT guess: post a top-level comment on the issue explaining the blocker and add the status:blocked label, then stop. Making no file changes and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$BRANCH_INSTR" >> "$PROMPT_FILE"
+          # VISUAL EVIDENCE (#1748) — the owner reviews from a phone and cannot judge a layout
+          # change from a diff. A .vue/CSS/theme change must therefore ARRIVE with something to
+          # look at. `writeups/ui-proposals/` is un-ignored in .gitignore precisely so a PNG can be
+          # committed and then render inline via raw.githubusercontent (the #483 ticket-diagram
+          # pattern) — GitHub's API cannot upload an image to a comment, so committing is the only
+          # way to get a picture in front of a phone.
+          printf 'VISUAL EVIDENCE — if your change touches a .vue file, app/components|layouts|pages, CSS or a theme: capture the changed surface with the pre-installed headless chromium (node scripts/app-shots.mjs <baseUrl> <path:name>, booting the app first) and SAVE the PNGs to writeups/ui-proposals/%s-<surface>.png. Author them with the write tool so they are committed. Then post ONE comment on the issue embedding each as ![surface](https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/work-%s/writeups/ui-proposals/%s-<surface>.png), and say in one line what changed visually. A visual PR opens as a DRAFT and waits for the owner to reply lgtm — so a screenshot is not optional politeness, it is the only thing that lets them answer. If the app cannot be booted, say so explicitly in that comment rather than opening a visual PR with no evidence.\n' "$ISSUE" "$ISSUE" "$ISSUE" >> "$PROMPT_FILE"
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
           # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
           # So the instant `pi | tee` fails (pipefail), -e aborts the script BEFORE
@@ -382,6 +389,9 @@ jobs:
           git fetch origin "$BASE" --quiet 2>/dev/null || true
           git checkout -f -B "work-${ISSUE}" "origin/${BASE}" 2>&1 | tail -1
           BR="work-${ISSUE}"
+          # The branch point, captured BEFORE the two commits below, so "what did this run change"
+          # is a real diff rather than a guess at HEAD~n (the run may make one commit or two).
+          BASE_SHA="$(git rev-parse HEAD)"
           TITLE="$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null)"; [ -z "$TITLE" ] && TITLE="chore: implement #${ISSUE}"
 
           stage_bucket() { while IFS= read -r p; do [ -z "$p" ] && continue; [ -f "$CONTENT/$p" ] && { mkdir -p "$(dirname "$p")"; cp "$CONTENT/$p" "$p"; git add -- "$p"; }; done < "$1"; }
@@ -433,6 +443,17 @@ jobs:
           TEST_FILES="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^TEST_FILES=//p')"; TEST_FILES=${TEST_FILES:-0}
           TESTS_MISSING="$(printf '%s\n' "$PLAN_OUT" | sed -n 's/^TESTS_MISSING=//p')"; TESTS_MISSING=${TESTS_MISSING:-0}
           echo "plan (#1904) — app=${APP_DIR:-<none>} packages-logic=$PKG_LOGIC test-files=$TEST_FILES tests-missing=$TESTS_MISSING"
+
+          # VISUAL CHANGE? (#1748) — read it off what was COMMITTED, not off pi's narration, for
+          # the same reason the acceptance verdict is (#1849). A change the owner has to LOOK at
+          # cannot be reviewed from a diff on a phone, so it opens as a draft and waits.
+          # Deliberately excludes `<script>`-only files? No — a .vue diff can move layout from
+          # script, so any .vue counts. server/**, config, tests and docs do not (#307's scope).
+          UI_TOUCHED=0
+          if git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '\.(vue|css)$|/app/(components|layouts|pages)/|app\.config\.ts$'; then
+            UI_TOUCHED=1
+          fi
+          echo "visual surface touched: $UI_TOUCHED"
 
           ACCEPT="neutral"; ACCEPT_MSG="could not typecheck the touched app — not verified"
           if [ "$HAVE_COMMITS" = "1" ]; then
@@ -514,17 +535,23 @@ jobs:
           #    creating it draft-from-the-start avoids a race where automerge lands it before we convert.
           if [ "$HAVE_COMMITS" = "1" ]; then
             EXISTING="$(gh pr list --head "$BR" --base "$BASE" --json number -q '.[0].number' 2>/dev/null || true)"
-            # Draft on a red acceptance OR a missing test (#1885) — both are "don't land this yet".
+            # Draft on a red acceptance OR a missing test (#1885) OR a visual change (#1748) —
+            # all three are "don't land this yet". The visual case is a HOLD, not a failure: the
+            # owner reviews from a phone and cannot judge a layout change from a diff, so the PR
+            # waits for an `lgtm` reply exactly like the claude lane's UI gate (#307/#572).
             DRAFT_FLAG=""
-            { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ]; } && DRAFT_FLAG="--draft"
+            { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$UI_TOUCHED" = "1" ]; } && DRAFT_FLAG="--draft"
+            HOLD_NOTE=""
+            [ "$UI_TOUCHED" = "1" ] && HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `lgtm` to release it. Evidence should be attached above; if it is missing, that is a harness bug (#1748), not a reason to approve blind.')"
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$(git log -1 --format=%s)" \
-                --body "$(printf 'Closes #%s\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s%s\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE")" 2>&1 | tail -3
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
               else gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
+              # NB a re-dispatch that still touches UI keeps the hold — DRAFT_FLAG is set above.
               echo "PR #${EXISTING} already open for ${BR} (draft=$([ "$ACCEPT" = fail ] && echo yes || echo no))"
             fi
           fi
