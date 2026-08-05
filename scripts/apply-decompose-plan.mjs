@@ -220,6 +220,22 @@ export function planToActions(plan, ctx) {
   return actions
 }
 
+/**
+ * Is this path gitignored? (#1933) `git check-ignore` exits 0 when the path IS ignored, 1 when it
+ * is not — so a non-zero exit throws through the injected executor and means "not ignored".
+ * Fail OPEN: if git itself is unavailable we assume committable rather than silently dropping a
+ * good image, since the .gitignore exceptions are the real fix and this is the backstop.
+ */
+export function isGitIgnored(path, { exec } = {}) {
+  if (!exec) return false
+  try {
+    exec('git', ['check-ignore', '-q', path])
+    return true
+  } catch {
+    return false
+  }
+}
+
 // ── I/O executor ──────────────────────────────────────────────────────────────────
 // Every gh call uses execFile ARRAY ARGS — the shell never parses the body, so the #1001
 // heredoc/quoting failure is structurally impossible. `exec` is injected so tests can assert the
@@ -252,6 +268,18 @@ function renderSignoffArtifacts(signoff, state) {
   const tryRender = (label, fn) => {
     try { fn() } catch (e) { state.log(`⚠️  signoff render skipped (${label}): ${e.message}`) }
   }
+  // Only link an image the repo will actually commit (#1933). `git add` on an ignored path is a
+  // SILENT no-op — exit 0, no warning — so #1821's two new artifact dirs were never committed and
+  // every hold posted a dead raw.githubusercontent link. A missing image costs a little context;
+  // a BROKEN one makes the whole gate look broken. Skipping loudly is the better failure.
+  const linkable = (png, label) => {
+    if (!existsSync(png)) return false
+    if (isGitIgnored(png, state)) {
+      state.log(`⚠️  signoff image NOT linked (${label}): ${png} is gitignored — add a '!' exception for its directory`)
+      return false
+    }
+    return true
+  }
   if (signoff.schema) {
     tryRender('schema', () => {
       const col = signoff.schema.collection.replace(/[^a-z0-9_-]/gi, '') || 'collection'
@@ -265,7 +293,7 @@ function renderSignoffArtifacts(signoff, state) {
       if (existsSync(html)) {
         state.artifacts.push(html)
         const png = `writeups/schema-reviews/${col}.png`
-        tryRender('schema-png', () => { state.exec('node', ['.claude/skills/ui-proposal/render.mjs', html, png]); if (existsSync(png)) { state.artifacts.push(png); out.images.push({ label: `Schema — ${col}`, path: png }) } })
+        tryRender('schema-png', () => { state.exec('node', ['.claude/skills/ui-proposal/render.mjs', html, png]); if (linkable(png, `Schema — ${col}`)) { state.artifacts.push(png); out.images.push({ label: `Schema — ${col}`, path: png }) } })
       }
     })
   }
@@ -279,7 +307,7 @@ function renderSignoffArtifacts(signoff, state) {
       const dir = 'writeups/diagrams'
       const pngs = (existsSync(dir) ? readdirSync(dir) : []).filter(f => f.endsWith('.png')).map(f => `${dir}/${f}`)
       const newest = pngs.sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0]
-      if (newest && !before.has(newest)) { state.artifacts.push(newest); out.images.push({ label: 'Diagram', path: newest }) }
+      if (newest && !before.has(newest) && linkable(newest, 'Diagram')) { state.artifacts.push(newest); out.images.push({ label: 'Diagram', path: newest }) }
     })
   }
   if (signoff.ui) {
@@ -289,7 +317,7 @@ function renderSignoffArtifacts(signoff, state) {
       mkdirSync('writeups/ui-mockups', { recursive: true })
       const png = 'writeups/ui-mockups/signoff-ui.png'
       state.exec('node', ['.claude/skills/ui-proposal/render.mjs', hf, png])
-      if (existsSync(png)) { state.artifacts.push(png); out.images.push({ label: 'UI mockup', path: png }) }
+      if (linkable(png, 'UI mockup')) { state.artifacts.push(png); out.images.push({ label: 'UI mockup', path: png }) }
     })
   }
   return out
