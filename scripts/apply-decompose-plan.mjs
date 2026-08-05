@@ -156,8 +156,8 @@ export function parseBlockedBy(body = '') {
 }
 
 /** The child's final body = its markdown + the WS2 pipeline block at childDepth. Pure. */
-export function buildChildBody(body, { epic, childDepth, epic_branch }) {
-  return writePipelineBlock(body, { epic, depth: childDepth, epic_branch })
+export function buildChildBody(body, { epic, childDepth, epic_branch, dispatch = null }) {
+  return writePipelineBlock(body, { epic, depth: childDepth, epic_branch, dispatch })
 }
 
 /**
@@ -188,10 +188,16 @@ export function planToActions(plan, ctx) {
   // five seconds, two of them against preconditions that did not exist yet.
   plan.children.forEach((c, i) => {
     const { kept, dropped } = sanitizeLabels(c.labels, knownLabels)
+    // The trigger label this child WOULD get if it were not blocked. For an unblocked child it is
+    // applied directly below; for a blocked one it is recorded on the pipeline block (#1923) so the
+    // wave scheduler can release it with the right label instead of falling back to `delegate` and
+    // spending a decompose run re-deriving a classification we already made here.
+    const dispatch = labelForChild({ depth: childDepth, isLeaf: !c.needsSplit, maxDepth: MAX_DEPTH })
+    const isBlocked = (c.blockedBy || []).length > 0
     actions.push({
       type: 'create', ref: `child${i}`,
       title: c.title,
-      body: buildChildBody(c.body, { epic, childDepth, epic_branch }),
+      body: buildChildBody(c.body, { epic, childDepth, epic_branch, dispatch: isBlocked ? dispatch : null }),
       labels: kept, droppedLabels: dropped,
     })
     actions.push({ type: 'link', parent: target, ref: `child${i}` })
@@ -209,6 +215,8 @@ export function planToActions(plan, ctx) {
     if ((c.blockedBy || []).length) return
     actions.push({ type: 'trigger-label', ref: `child${i}`, label: labelForChild({ depth: childDepth, isLeaf: !c.needsSplit, maxDepth: MAX_DEPTH }) })
   })
+  // NB the label in `dispatch=` (recorded above) and the one applied here are the SAME expression —
+  // a blocked child must be released with exactly what it would have been dispatched with.
   return actions
 }
 
