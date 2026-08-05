@@ -438,7 +438,13 @@ jobs:
       - name: Extract each `run:` block and lint it
         run: |
           set -uo pipefail
-          npm i -g js-yaml >/dev/null 2>&1
+          # LOCAL, not `-g`. A global install is not on `node -e`'s resolution path from the repo
+          # root, so `require("js-yaml")` throws MODULE_NOT_FOUND and the step dies before linting
+          # anything. It passed locally only because js-yaml is already in this repo's node_modules
+          # as a transitive dep — and this job deliberately runs no `pnpm install`, so on a runner
+          # there is nothing to resolve against. Local verification did not cover the difference.
+          npm i --no-save --no-audit --no-fund js-yaml@4 >/dev/null 2>&1
+          node -e 'require("js-yaml")' || { echo "::error::js-yaml unavailable — cannot parse workflows"; exit 1; }
           mkdir -p /tmp/wf-shell
           node -e '
             const yaml = require("js-yaml"), fs = require("fs"), path = require("path");
