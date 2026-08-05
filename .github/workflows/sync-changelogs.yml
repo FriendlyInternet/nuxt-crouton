@@ -15,11 +15,24 @@ jobs:
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     defaults:
       run:
-        working-directory: apps/docs
+        # `docs`, NOT `apps/docs` — #164 relocated the docs site to the top level on
+        # 2026-06-15 and this was missed, so every run failed for seven weeks (#1943).
+        working-directory: docs
 
     steps:
+      # Push with the Harness App, not GITHUB_TOKEN — this job commits to `main`, which
+      # the ruleset rejects for a GITHUB_TOKEN push (#1133). See loop-station-inventory.yml.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
