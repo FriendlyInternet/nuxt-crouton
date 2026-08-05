@@ -38,6 +38,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # The label must be applied by the Harness App, NOT GITHUB_TOKEN. Actions' recursion guard
+      # means an event triggered by GITHUB_TOKEN never starts a new workflow run — so a
+      # `work-this` label added with it fires work-issue-pidev.yml exactly zero times. The whole
+      # dispatch would appear to succeed and silently do nothing, and the failure would only show
+      # up as a `verify` run 45 minutes later reporting no observations. Same reason the other
+      # cascade-dependent workflows mint this token (#572/#626/#1133).
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -71,10 +84,15 @@ jobs:
       - name: Dispatch
         if: inputs.mode == 'dispatch'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # App token, not GITHUB_TOKEN — see the note on the app-token step above. This is the
+          # one place in this workflow where the token choice is load-bearing: it is what makes
+          # the `work-this` label actually start a worker run.
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           WIRED: ${{ steps.resolve.outputs.wired }}
         run: |
           set -uo pipefail
+          SINCE="$(date -u -d '2 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"
+          COUNT=0
           for n in $(echo "$WIRED" | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8")).forEach(c=>console.log(c.issue))'); do
             echo "── canary #$n ──"
             # Close any PR from the previous run and delete its branch, so the new run starts clean
@@ -88,8 +106,23 @@ jobs:
             gh issue edit "$n" --remove-label work-this 2>/dev/null || true
             sleep 2
             gh issue edit "$n" --add-label work-this 2>&1 | tail -1 || true
+            COUNT=$((COUNT + 1))
             echo "dispatched #$n"
           done
+
+          # TRIPWIRE for the exact failure the App token above fixes. A dispatch that starts no
+          # worker looks identical to a successful one — the step goes green, and the problem only
+          # surfaces as a `verify` run reporting "no observations" up to 45 minutes later, which
+          # reads as "the pipeline is broken" rather than "the dispatch never happened".
+          # A run is created within seconds of the label event, so a short wait is enough.
+          sleep 25
+          STARTED="$(gh run list --workflow work-issue-pidev.yml --limit 30 --json createdAt \
+            --jq "[.[] | select(.createdAt >= \"$SINCE\")] | length" 2>/dev/null || echo 0)"
+          if [ "${STARTED:-0}" -eq 0 ] && [ "$COUNT" -gt 0 ]; then
+            echo "::error::labelled $COUNT canary issue(s) but NO work-issue-pidev run started. The label event did not reach the worker — check the token (a GITHUB_TOKEN-triggered event never starts a workflow run) before blaming the pipeline."
+            exit 1
+          fi
+          echo "$STARTED worker run(s) started for $COUNT canary(ies)"
           echo "::notice::Canaries dispatched. Re-run this workflow with mode=verify once the runs finish (a worker takes 2–45 min)."
 
       # ── VERIFY ─────────────────────────────────────────────────────────────────────────────
