@@ -10,6 +10,7 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 
 | Package | Dir | What it provides (when to reach for it) |
 |---------|-----|------------------------------------------|
+| `@fyit/canary-target` | `packages/canary-target` | Disposable target for the worker-pipeline canary rig (#1878). Never published, never imported. |
 | `@fyit/crouton` | `packages/crouton` | Unified Nuxt CRUD framework with opt-in features |
 | `@fyit/crouton-admin` | `packages/crouton-admin` | Admin dashboard and user management for Nuxt applications using crouton-auth |
 | `@fyit/crouton-ai` | `packages/crouton-ai` | AI integration layer for Nuxt Crouton |

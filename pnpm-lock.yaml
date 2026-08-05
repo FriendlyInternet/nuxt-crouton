@@ -623,6 +623,12 @@ importers:
         specifier: ^0.31.0
         version: 0.31.10
 
+  packages/canary-target:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   packages/crouton:
     dependencies:
       '@fyit/crouton-admin':
