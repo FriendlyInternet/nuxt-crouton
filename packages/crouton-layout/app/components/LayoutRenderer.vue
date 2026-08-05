@@ -101,6 +101,9 @@ const safeConfig = computed<Record<string, unknown>>(() => {
 // Live width of THIS split's group → converts each child's px min-width floor
 // to a percentage min-size for its panel (horizontal splits only).
 const groupRef = ref<HTMLElement | null>(null)
+// A plain ref on the VIEW-mode grid wrapper so FLIP can find its `[data-crouton-pane]` children
+// (#1178 view path). Deliberately NOT `groupRef` — it must never reach `useElementSize` (no RO).
+const viewGridRef = ref<HTMLElement | null>(null)
 const { width: groupWidth, height: groupHeight } = useElementSize(groupRef)
 const minWidthFor = computed(() => minWidthResolver(blocks.value))
 
@@ -230,7 +233,12 @@ const viewStackCss = computed(() =>
 const childKeys = computed(() => (props.node.type === 'split' ? siblingKeys(props.node.children) : []))
 const flipEnabled = computed(() => props.node.type === 'split' && !inPlace.value)
 const flipPanels = (): HTMLElement[] => {
-  const g = unrefElement(groupRef) as HTMLElement | null
+  // The reka path attaches `groupRef`; the observer-free VIEW-mode grid path (#1178) does NOT
+  // (binding `groupRef` there would re-arm the ResizeObserver #1178 removed) — so fall back to
+  // `viewGridRef`, a plain element ref NOT fed to `useElementSize`, so FLIP also eases the view
+  // panes apart on a structural change. useLayoutFlip measures via getBoundingClientRect (no RO),
+  // so covering the view path adds no observer.
+  const g = (unrefElement(groupRef) ?? unrefElement(viewGridRef)) as HTMLElement | null
   if (!g) return []
   // reka-ui panes carry `data-panel`; stacked panes (own render path) carry `data-crouton-pane`.
   return Array.from(g.querySelectorAll<HTMLElement>(':scope > [data-panel], :scope > [data-crouton-pane]'))
@@ -391,6 +399,7 @@ watch(
     :style="{ containerType: 'inline-size', containerName: viewCqName, height: '100%', width: '100%' }"
   >
     <div
+      ref="viewGridRef"
       class="croutonviewgrid"
       :data-cq="viewCqName"
       :style="viewGridStyle"
