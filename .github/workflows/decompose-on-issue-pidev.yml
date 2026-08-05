@@ -280,6 +280,10 @@ jobs:
           # --approve: trust the project so pi loads the lean .pi/settings.json CI profile AND the
           # .pi/extensions/ completion-enforcer (#1782/#1764). Without it the untrusted runner path
           # silently falls back to the global 28-extension profile (incl pi-ask-user) + ~2min startup.
+          # DEDUP (#297) — the decomposer is the only pi lane that creates issues, so the
+          # create-time dedup gate belongs here and nowhere else. The interactive path is
+          # enforced by a PreToolUse hook, which cannot reach a CI run.
+          printf 'BEFORE creating any sub-issue: search open AND recently-closed issues for the same work (gh issue list --search). If one already covers it, REUSE it — link it as the child instead of minting a duplicate. Ephemeral runs cannot remember what they filed last time, so the duplicate is the default failure here, not the exception. Every issue body you create MUST carry a "Dedup-checked: <what you searched, what you found>" line.\n' >> "$PROMPT_FILE"
           pi --print --approve --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
