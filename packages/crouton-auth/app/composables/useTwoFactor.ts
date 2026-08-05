@@ -12,11 +12,10 @@
  * ```
  */
 import type { TotpSetupData, VerifyTotpOptions, TwoFactorStatus } from './useAuth'
-import { useAuthClient } from '../../types/auth-client'
+import { requireAuthClient } from '../../types/auth-client'
 
 export function useTwoFactor() {
   const config = useAuthConfig()
-  const authClient = useAuthClient()
   const { user: sessionUser, refresh } = useSession()
 
   const loading = ref(false)
@@ -35,7 +34,7 @@ export function useTwoFactor() {
         throw new Error('Two-factor authentication is not enabled')
       }
 
-      const result = await authClient.twoFactor.enable({ password })
+      const result = await requireAuthClient().twoFactor.enable({ password })
 
       if (result.error) {
         throw new Error(result.error.message ?? 'Enable 2FA failed')
@@ -65,7 +64,7 @@ export function useTwoFactor() {
         throw new Error('Two-factor authentication is not enabled')
       }
 
-      const result = await authClient.twoFactor.disable({ password })
+      const result = await requireAuthClient().twoFactor.disable({ password })
 
       if (result.error) {
         throw new Error(result.error.message ?? 'Disable 2FA failed')
@@ -87,7 +86,7 @@ export function useTwoFactor() {
       }
 
       // Better Auth 1.4.x: getTotpUri requires password
-      const result = await authClient.twoFactor.getTotpUri({ password })
+      const result = await requireAuthClient().twoFactor.getTotpUri({ password })
 
       if (result.error) {
         throw new Error(result.error.message ?? 'Get TOTP URI failed')
@@ -110,7 +109,7 @@ export function useTwoFactor() {
         throw new Error('Two-factor authentication is not enabled')
       }
 
-      const result = await authClient.twoFactor.verifyTotp({
+      const result = await requireAuthClient().twoFactor.verifyTotp({
         code: options.code,
         trustDevice: options.trustDevice
       })
@@ -137,7 +136,7 @@ export function useTwoFactor() {
         throw new Error('Two-factor authentication is not enabled')
       }
 
-      const result = await authClient.twoFactor.generateBackupCodes({ password })
+      const result = await requireAuthClient().twoFactor.generateBackupCodes({ password })
 
       if (result.error) {
         throw new Error(result.error.message ?? 'Generate backup codes failed')
@@ -160,7 +159,7 @@ export function useTwoFactor() {
         throw new Error('Two-factor authentication is not enabled')
       }
 
-      const result = await authClient.twoFactor.verifyBackupCode({ code })
+      const result = await requireAuthClient().twoFactor.verifyBackupCode({ code })
 
       if (result.error) {
         throw new Error(result.error.message ?? 'Verify backup code failed')
@@ -189,7 +188,7 @@ export function useTwoFactor() {
         return { enabled: false, hasTotp: false, hasBackupCodes: false }
       }
 
-      const result = await authClient.getSession()
+      const result = await requireAuthClient().getSession()
       const session = result.data
       const twoFactorEnabled = (session?.user as { twoFactorEnabled?: boolean })?.twoFactorEnabled ?? false
 

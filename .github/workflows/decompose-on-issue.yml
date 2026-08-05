@@ -51,6 +51,13 @@ jobs:
       # must *trigger* project-status.yml (which maps status:in-progress → the board's "In progress"
       # column) — and events from the default GITHUB_TOKEN do NOT trigger other workflows. A
       # default-token add would set the label but never move the board card. (#1218)
+      #
+      # And the ADD must be FRESH (#1968). project-status.yml fires on `issues: labeled`, and GitHub
+      # raises no such event when the label is already present — so on an issue that already carries
+      # `status:in-progress` (a re-dispatch, a resume, a human who set it before applying `delegate`)
+      # a bare add succeeds, warns nothing, and the card never moves. Remove first, exactly as
+      # comment-dispatch/resume-on-comment/canary/fix-ci-on-failure already do (the #1750 lesson).
+      # Still safe re: re-trigger — both events name `status:in-progress`, not `delegate`.
       - uses: actions/create-github-app-token@v1
         id: app-token
         with:
@@ -61,11 +68,19 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
+            const issue_number = context.payload.issue.number
+            const LABEL = 'status:in-progress'
+            const had = (context.payload.issue.labels || [])
+              .some((l) => (typeof l === 'string' ? l : l.name) === LABEL)
+            if (had) {
+              // 404 here just means someone removed it between the event and now — the add still runs.
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: LABEL }) }
+              catch (e) { core.warning(`could not remove ${LABEL} before re-adding: ${e.message}`) }
+            }
             try {
-              await github.rest.issues.addLabels({
-                ...context.repo, issue_number: context.payload.issue.number, labels: ['status:in-progress'],
-              })
-            } catch (e) { core.warning(`could not add status:in-progress: ${e.message}`) }
+              await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: [LABEL] })
+              core.info(`applied ${LABEL} to #${issue_number}${had ? ' (removed first, for a fresh labeled event)' : ''}`)
+            } catch (e) { core.warning(`could not add ${LABEL}: ${e.message}`) }
 
       # Timestamp the run start so the artifact-gate can tell "produced during this run"
       # from pre-existing comments/PRs.
