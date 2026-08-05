@@ -12,11 +12,13 @@
   "assigneeId": {
     "type": "string",
     "refTarget": "users",
+    "refScope": "external",
     "meta": { "required": true, "label": "Assignee" }
   },
   "lastDoneById": {
     "type": "string",
     "refTarget": "users",
+    "refScope": "external",
     "meta": { "label": "Last Done By" }
   },
   "lastDoneAt": { "type": "date", "meta": { "label": "Last Done At" } },

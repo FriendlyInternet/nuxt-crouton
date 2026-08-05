@@ -3,28 +3,43 @@ import { eq, and, desc, inArray, sql } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import * as tables from './schema'
 import type { ChoresChore, NewChoresChore } from '../../types'
-import * as usersSchema from '../../../users/server/database/schema'
+import { user } from '~~/server/db/schema'
 
 // Overload order matters: the paginated signature (required `limit`) must come
 // first so non-paginated calls fall through to the array overload.
-export async function getAllChoresChores(teamId: string, opts: { assigneeId?: string; lastDoneById?: string; limit: number; offset?: number }): Promise<{ items: any[]; total: number }>
-export async function getAllChoresChores(teamId: string, opts?: { assigneeId?: string; lastDoneById?: string }): Promise<any[]>
-export async function getAllChoresChores(teamId: string, opts: { assigneeId?: string; lastDoneById?: string; limit?: number; offset?: number } = {}) {
+export async function getAllChoresChores(teamId: string, opts: { assigneeId?: string; lastDoneById?: string; owner?: string; createdBy?: string; updatedBy?: string; limit: number; offset?: number }): Promise<{ items: any[]; total: number }>
+export async function getAllChoresChores(teamId: string, opts?: { assigneeId?: string; lastDoneById?: string; owner?: string; createdBy?: string; updatedBy?: string }): Promise<any[]>
+export async function getAllChoresChores(teamId: string, opts: { assigneeId?: string; lastDoneById?: string; owner?: string; createdBy?: string; updatedBy?: string; limit?: number; offset?: number } = {}) {
   const db = useDB()
 
+  const assigneeIdUser = alias(user as any, 'assigneeIdUser')
+  const lastDoneByIdUser = alias(user as any, 'lastDoneByIdUser')
   const ownerUser = alias(user as any, 'ownerUser')
   const createdByUser = alias(user as any, 'createdByUser')
   const updatedByUser = alias(user as any, 'updatedByUser')
   const conditions = [eq(tables.choresChores.teamId, teamId)]
   if (opts.assigneeId) conditions.push(eq(tables.choresChores.assigneeId, opts.assigneeId))
   if (opts.lastDoneById) conditions.push(eq(tables.choresChores.lastDoneById, opts.lastDoneById))
+  if (opts.owner) conditions.push(eq(tables.choresChores.owner, opts.owner))
+  if (opts.createdBy) conditions.push(eq(tables.choresChores.createdBy, opts.createdBy))
+  if (opts.updatedBy) conditions.push(eq(tables.choresChores.updatedBy, opts.updatedBy))
   const whereExpr = and(...conditions)
 
   let listQuery = (db as any)
     .select({
       ...tables.choresChores,
-      assigneeIdData: usersSchema.choresUsers,
-      lastDoneByIdData: usersSchema.choresUsers,
+      assigneeIdUser: {
+        id: assigneeIdUser.id,
+        name: assigneeIdUser.name,
+        email: assigneeIdUser.email,
+        image: assigneeIdUser.image
+      },
+      lastDoneByIdUser: {
+        id: lastDoneByIdUser.id,
+        name: lastDoneByIdUser.name,
+        email: lastDoneByIdUser.email,
+        image: lastDoneByIdUser.image
+      },
       ownerUser: {
         id: ownerUser.id,
         name: ownerUser.name,
@@ -45,8 +60,8 @@ export async function getAllChoresChores(teamId: string, opts: { assigneeId?: st
       }
     } as any)
     .from(tables.choresChores)
-    .leftJoin(usersSchema.choresUsers, eq(tables.choresChores.assigneeId, usersSchema.choresUsers.id))
-    .leftJoin(usersSchema.choresUsers, eq(tables.choresChores.lastDoneById, usersSchema.choresUsers.id))
+    .leftJoin(assigneeIdUser, eq(tables.choresChores.assigneeId, assigneeIdUser.id))
+    .leftJoin(lastDoneByIdUser, eq(tables.choresChores.lastDoneById, lastDoneByIdUser.id))
     .leftJoin(ownerUser, eq(tables.choresChores.owner, ownerUser.id))
     .leftJoin(createdByUser, eq(tables.choresChores.createdBy, createdByUser.id))
     .leftJoin(updatedByUser, eq(tables.choresChores.updatedBy, updatedByUser.id))
@@ -73,6 +88,8 @@ export async function getAllChoresChores(teamId: string, opts: { assigneeId?: st
 export async function getChoresChoresByIds(teamId: string, choreIds: string[]) {
   const db = useDB()
 
+  const assigneeIdUser = alias(user as any, 'assigneeIdUser')
+  const lastDoneByIdUser = alias(user as any, 'lastDoneByIdUser')
   const ownerUser = alias(user as any, 'ownerUser')
   const createdByUser = alias(user as any, 'createdByUser')
   const updatedByUser = alias(user as any, 'updatedByUser')
@@ -80,8 +97,18 @@ export async function getChoresChoresByIds(teamId: string, choreIds: string[]) {
   const chores = await (db as any)
     .select({
       ...tables.choresChores,
-      assigneeIdData: usersSchema.choresUsers,
-      lastDoneByIdData: usersSchema.choresUsers,
+      assigneeIdUser: {
+        id: assigneeIdUser.id,
+        name: assigneeIdUser.name,
+        email: assigneeIdUser.email,
+        image: assigneeIdUser.image
+      },
+      lastDoneByIdUser: {
+        id: lastDoneByIdUser.id,
+        name: lastDoneByIdUser.name,
+        email: lastDoneByIdUser.email,
+        image: lastDoneByIdUser.image
+      },
       ownerUser: {
         id: ownerUser.id,
         name: ownerUser.name,
@@ -102,8 +129,8 @@ export async function getChoresChoresByIds(teamId: string, choreIds: string[]) {
       }
     } as any)
     .from(tables.choresChores)
-    .leftJoin(usersSchema.choresUsers, eq(tables.choresChores.assigneeId, usersSchema.choresUsers.id))
-    .leftJoin(usersSchema.choresUsers, eq(tables.choresChores.lastDoneById, usersSchema.choresUsers.id))
+    .leftJoin(assigneeIdUser, eq(tables.choresChores.assigneeId, assigneeIdUser.id))
+    .leftJoin(lastDoneByIdUser, eq(tables.choresChores.lastDoneById, lastDoneByIdUser.id))
     .leftJoin(ownerUser, eq(tables.choresChores.owner, ownerUser.id))
     .leftJoin(createdByUser, eq(tables.choresChores.createdBy, createdByUser.id))
     .leftJoin(updatedByUser, eq(tables.choresChores.updatedBy, updatedByUser.id))

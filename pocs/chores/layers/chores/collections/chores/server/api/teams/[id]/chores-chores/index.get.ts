@@ -24,12 +24,12 @@ export default defineEventHandler(async (event) => {
   if (query.page !== undefined) {
     const page = Math.max(1, Number(query.page) || 1)
     const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 10))
-    const { items, total } = await getAllChoresChores(team.id, { assigneeId: query.assigneeId ? String(query.assigneeId) : undefined, lastDoneById: query.lastDoneById ? String(query.lastDoneById) : undefined, limit: pageSize, offset: (page - 1) * pageSize })
+    const { items, total } = await getAllChoresChores(team.id, { assigneeId: query.assigneeId ? String(query.assigneeId) : undefined, lastDoneById: query.lastDoneById ? String(query.lastDoneById) : undefined, owner: query.owner ? String(query.owner) : undefined, createdBy: query.createdBy ? String(query.createdBy) : undefined, updatedBy: query.updatedBy ? String(query.updatedBy) : undefined, limit: pageSize, offset: (page - 1) * pageSize })
     dbTimer.end()
     return { items, total, page, pageSize }
   }
 
-  const result = await getAllChoresChores(team.id, { assigneeId: query.assigneeId ? String(query.assigneeId) : undefined, lastDoneById: query.lastDoneById ? String(query.lastDoneById) : undefined })
+  const result = await getAllChoresChores(team.id, { assigneeId: query.assigneeId ? String(query.assigneeId) : undefined, lastDoneById: query.lastDoneById ? String(query.lastDoneById) : undefined, owner: query.owner ? String(query.owner) : undefined, createdBy: query.createdBy ? String(query.createdBy) : undefined, updatedBy: query.updatedBy ? String(query.updatedBy) : undefined })
   dbTimer.end()
   return result
 })
