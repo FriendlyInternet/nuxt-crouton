@@ -10,7 +10,7 @@
  * ```
  */
 import type { FormSubmitEvent, FormError } from '@nuxt/ui'
-import { useAuthClient } from '../../../types/auth-client'
+import { requireAuthClient } from '../../../types/auth-client'
 
 const { t } = useT()
 
@@ -34,7 +34,6 @@ const emit = defineEmits<{
 const { user, refreshSession } = useAuth()
 const notify = useNotify()
 
-const authClient = useAuthClient()
 
 // Form state (populated from current user)
 const state = reactive({
@@ -125,7 +124,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
   internalLoading.value = true
   try {
     // Update name and image
-    const result = await authClient.updateUser({
+    const result = await requireAuthClient().updateUser({
       name: event.data.name,
       image: event.data.image || undefined
     })
@@ -136,7 +135,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
 
     // Handle email change separately (sends verification)
     if (emailChanged.value && event.data.email) {
-      const emailResult = await authClient.changeEmail({
+      const emailResult = await requireAuthClient().changeEmail({
         newEmail: event.data.email,
         callbackURL: window.location.href
       })

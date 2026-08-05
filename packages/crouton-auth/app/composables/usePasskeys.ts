@@ -12,11 +12,10 @@
  * ```
  */
 import type { PasskeyInfo, AddPasskeyOptions } from './useAuth'
-import { useAuthClient } from '../../types/auth-client'
+import { requireAuthClient } from '../../types/auth-client'
 
 export function usePasskeys() {
   const config = useAuthConfig()
-  const authClient = useAuthClient()
   const { refresh } = useSession()
 
   const loading = ref(false)
@@ -39,7 +38,7 @@ export function usePasskeys() {
         throw new Error('Passkeys are not enabled')
       }
 
-      const result = await authClient.signIn.passkey()
+      const result = await requireAuthClient().signIn.passkey()
 
       if (result.error) {
         throw new Error(result.error.message ?? 'Passkey login failed')
@@ -62,7 +61,7 @@ export function usePasskeys() {
         throw new Error('Passkeys are not enabled')
       }
 
-      const result = await authClient.signIn.passkey({
+      const result = await requireAuthClient().signIn.passkey({
         autoFill: true
       })
 
@@ -91,7 +90,7 @@ export function usePasskeys() {
         throw new Error('Passkeys are not enabled')
       }
 
-      const result = await authClient.passkey.addPasskey({
+      const result = await requireAuthClient().passkey.addPasskey({
         name: options?.name
       })
 
@@ -114,7 +113,7 @@ export function usePasskeys() {
         return []
       }
 
-      const result = await authClient.passkey.listUserPasskeys()
+      const result = await requireAuthClient().passkey.listUserPasskeys()
 
       if (result.error) {
         throw new Error(result.error.message ?? 'List passkeys failed')
@@ -142,7 +141,7 @@ export function usePasskeys() {
         throw new Error('Passkeys are not enabled')
       }
 
-      const result = await authClient.passkey.deletePasskey({ id })
+      const result = await requireAuthClient().passkey.deletePasskey({ id })
 
       if (result.error) {
         throw new Error(result.error.message ?? 'Delete passkey failed')

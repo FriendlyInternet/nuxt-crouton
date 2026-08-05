@@ -20,7 +20,7 @@
  * ```
  */
 import type { Team, MemberRole, Member, MemberWithUser } from '../../types'
-import { useAuthClient } from '../../types/auth-client'
+import { useAuthClient, requireAuthClient } from '../../types/auth-client'
 import { mapOrganizationToTeam } from '../../shared/utils/auth'
 
 export interface CreateTeamData {
@@ -255,7 +255,7 @@ export function useTeam() {
     loading.value = true
     error.value = null
     try {
-      const result = await authClient.organization.setActive({
+      const result = await requireAuthClient().organization.setActive({
         organizationId: teamId
       })
 
@@ -278,7 +278,7 @@ export function useTeam() {
     loading.value = true
     error.value = null
     try {
-      const result = await authClient.organization.setActive({
+      const result = await requireAuthClient().organization.setActive({
         organizationSlug: slug
       })
 
@@ -305,7 +305,7 @@ export function useTeam() {
         throw new Error('Cannot create more teams. Limit reached or not in multi-tenant mode.')
       }
 
-      const result = await authClient.organization.create({
+      const result = await requireAuthClient().organization.create({
         name: data.name,
         slug: data.slug!,
         logo: data.logo,
@@ -322,7 +322,7 @@ export function useTeam() {
 
       // Set the newly created org as active so the session cookie reflects it
       // before any navigation happens (prevents hydration mismatch)
-      await authClient.organization.setActive({
+      await requireAuthClient().organization.setActive({
         organizationId: result.data.id
       })
 
@@ -347,7 +347,7 @@ export function useTeam() {
         throw new Error('No active team to update')
       }
 
-      const result = await authClient.organization.update({
+      const result = await requireAuthClient().organization.update({
         organizationId: currentTeam.value.id,
         data: {
           name: data.name,
@@ -390,7 +390,7 @@ export function useTeam() {
         throw new Error('Only the team owner can delete the team')
       }
 
-      const result = await authClient.organization.delete({
+      const result = await requireAuthClient().organization.delete({
         organizationId: currentTeam.value.id
       })
 
@@ -420,7 +420,7 @@ export function useTeam() {
     }
 
     try {
-      const result = await authClient.organization.listMembers({
+      const result = await requireAuthClient().organization.listMembers({
         query: { organizationId: currentTeam.value.id }
       })
 
@@ -452,7 +452,7 @@ export function useTeam() {
         throw new Error('You do not have permission to invite members')
       }
 
-      const result = await authClient.organization.inviteMember({
+      const result = await requireAuthClient().organization.inviteMember({
         organizationId: currentTeam.value.id,
         email: data.email,
         role: data.role ?? 'member'
@@ -485,7 +485,7 @@ export function useTeam() {
         throw new Error('You do not have permission to remove members')
       }
 
-      const result = await authClient.organization.removeMember({
+      const result = await requireAuthClient().organization.removeMember({
         organizationId: currentTeam.value.id,
         memberIdOrEmail
       })
@@ -520,7 +520,7 @@ export function useTeam() {
         throw new Error('You do not have permission to manage members')
       }
 
-      const result = await authClient.organization.updateMemberRole({
+      const result = await requireAuthClient().organization.updateMemberRole({
         organizationId: currentTeam.value.id,
         memberId,
         role
@@ -562,7 +562,7 @@ export function useTeam() {
         throw new Error('Not authenticated')
       }
 
-      const result = await authClient.organization.removeMember({
+      const result = await requireAuthClient().organization.removeMember({
         organizationId: currentTeam.value.id,
         memberIdOrEmail: user.value.id
       })
@@ -590,7 +590,7 @@ export function useTeam() {
     if (!currentTeam.value) return []
 
     try {
-      const result = await authClient.organization.listInvitations({
+      const result = await requireAuthClient().organization.listInvitations({
         query: { organizationId: currentTeam.value.id }
       })
 
@@ -614,7 +614,7 @@ export function useTeam() {
     loading.value = true
     error.value = null
     try {
-      const result = await authClient.organization.cancelInvitation({
+      const result = await requireAuthClient().organization.cancelInvitation({
         invitationId
       })
 
@@ -637,7 +637,7 @@ export function useTeam() {
     loading.value = true
     error.value = null
     try {
-      const result = await authClient.organization.acceptInvitation({
+      const result = await requireAuthClient().organization.acceptInvitation({
         invitationId
       })
 
@@ -660,7 +660,7 @@ export function useTeam() {
     loading.value = true
     error.value = null
     try {
-      const result = await authClient.organization.rejectInvitation({
+      const result = await requireAuthClient().organization.rejectInvitation({
         invitationId
       })
 
