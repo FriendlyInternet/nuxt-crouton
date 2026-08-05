@@ -1746,6 +1746,12 @@ importers:
         specifier: ^4.64.0
         version: 4.101.0(@cloudflare/workers-types@4.20260118.0)
 
+  pocs/canary:
+    devDependencies:
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+
   pocs/crouton-builder:
     dependencies:
       '@fyit/crouton':

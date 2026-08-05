@@ -1,0 +1,8 @@
+{
+  "greeting": "Hallo",
+  "farewell": "Tot ziens",
+  "canary": {
+    "label": "Kanarie",
+    "description": "Deze map bestaat alleen voor de canary-rig. Niets hier is echt."
+  }
+}
