@@ -84,19 +84,20 @@ jobs:
             // Aggregate every check-run + commit-status for a SHA into one verdict.
             async function ciState(ref) {
               let success = 0, pending = 0, failure = 0
+              const failing = [] // #1909 — the ping must say WHICH checks, not just how many
               const runs = await github.paginate(github.rest.checks.listForRef,
                 { owner, repo, ref, per_page: 100 })
               for (const r of runs) {
                 if (r.status !== 'completed') { pending++; continue }
                 if (['success', 'neutral', 'skipped'].includes(r.conclusion)) success++
-                else failure++ // failure, cancelled, timed_out, action_required, stale
+                else { failure++; failing.push(r.name) } // failure, cancelled, timed_out, action_required, stale
               }
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
                 for (const s of combined.statuses || []) {
                   if (s.state === 'pending') pending++
                   else if (s.state === 'success') success++
-                  else failure++ // error, failure
+                  else { failure++; failing.push(s.context) } // error, failure
                 }
               } catch (e) { core.warning(`combined status for ${ref}: ${e.message}`) }
               const total = success + pending + failure
@@ -105,7 +106,7 @@ jobs:
               else if (failure > 0) { icon = '❌'; word = 'failing' }
               else if (pending > 0) { icon = '⏳'; word = 'running' }
               else { icon = '✅'; word = 'passing' }
-              return { icon, word, success, pending, failure, total }
+              return { icon, word, success, pending, failure, total, failing }
             }
 
             // One sticky status note on the pipeline PR.
@@ -139,13 +140,24 @@ jobs:
               const comments = await github.paginate(github.rest.issues.listComments,
                 { owner, repo, issue_number: pr.number, per_page: 100 })
               if (comments.some(c => (c.body || '').includes(marker))) return // already pinged this SHA
+              // Name the failing checks and say what is expected of the reader (#1909). The
+              // count alone ("1 failing check") told the owner they were needed without telling
+              // them what for, so the ping cost attention and returned none.
+              const names = (st.failing || []).slice(0, 5)
+              const more = (st.failing || []).length - names.length
+              const list = names.length
+                ? names.map(n => `\`${n}\``).join(', ') + (more > 0 ? ` +${more} more` : '')
+                : 'see the checks tab'
               const body =
                 `${marker}\n` +
                 `🔴 **@${OWNER} — CI failed on this pipeline PR** (${st.failure} failing ` +
-                `check${st.failure === 1 ? '' : 's'}).\n\n` +
-                `A red sub-PR won't auto-merge into its epic — it needs you. ` +
+                `check${st.failure === 1 ? '' : 's'}): ${list}.\n\n` +
+                `**What's needed:** read the failure, then either push a fix to \`${pr.head.ref}\` ` +
+                `or reply here saying why it isn't yours. A red sub-PR won't auto-merge into its ` +
+                `epic, so it sits until one of those happens — **it does not mean the work is ` +
+                `finished and waiting on your approval**.\n\n` +
                 `[Checks](${pr.html_url}/checks) · \`${pr.head.ref}\` → \`${pr.base.ref}\`.\n\n` +
-                `<sub>🤖 agent pipeline (CI) · failure notify (#1815)</sub>`
+                `<sub>🤖 agent pipeline (CI) · failure notify (#1815/#1909)</sub>`
               await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body })
               core.info(`Pinged @${OWNER} on red #${pr.number} (${pr.head.sha.slice(0, 7)}).`)
             }
