@@ -20,6 +20,22 @@ name: Auto-merge epic sub-PRs
 # (Epic branches carry no REQUIRED checks, so mergeable_state never gates on CI — this
 # is what gives "merge once it's green" real teeth there.)
 #
+# PRESENCE GATE (#1698): "not red" is NOT the same as "checked". On #1668 the `CI`
+# workflow never STARTED, so there was nothing red to see and this merged a PR whose
+# typecheck/tests had never run — a build break reached main. Absence of failure is not
+# evidence of success. So we additionally require that `CI Gate` has actually REPORTED
+# `success` for the head SHA before merging. `CI Gate` is ci.yml's always-reports
+# aggregator: ci.yml carries no `paths:`/`branches:` filter on `pull_request` precisely
+# so this check can never be legitimately absent (#1698), and its `gate` job runs with
+# `if: always()`, passing only when every needed job succeeded or legitimately skipped.
+#
+# This is deliberately asymmetric with the pending rule above: a MISSING CI Gate leaves
+# the PR open for a human rather than merging it. GitHub intermittently drops
+# `pull_request: opened` events entirely (measured 2026-08-05: 1 of 16 single-commit PRs
+# got no runs at all; #1942 merged by hand with zero checks as a result), and the `main`
+# ruleset cannot cover this path because it only targets the default branch. A stalled
+# sub-PR is cheap; an unchecked merge is what this issue exists about.
+#
 # SHARED-CODE PAUSE (#339): a build sub-PR that touches packages/ (shared code) is NOT
 # auto-merged — it's held for a human. The packages/ HARD GATE (#350) means a change there
 # ripples across every consuming app, so it must never land unreviewed, not even onto an
@@ -63,6 +79,10 @@ jobs:
             const { owner, repo } = context.repo
             const BOTS = ['claude[bot]', 'nuxt-harness[bot]']
 
+            // The check that must have REPORTED before we merge (#1698). ci.yml's `gate`
+            // job — its display name, which is what the checks API returns.
+            const REQUIRED_CHECK = 'CI Gate'
+
             // Any RED check for this SHA? (failed check-run or failed commit status.)
             async function isRed(ref) {
               const runs = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref, per_page: 100 })
@@ -73,6 +93,20 @@ jobs:
                 if ((combined.statuses || []).some(s => ['failure', 'error'].includes(s.state))) return true
               } catch (e) { core.warning(`combined status for ${ref}: ${e.message}`) }
               return false
+            }
+
+            // Has REQUIRED_CHECK completed successfully for this SHA? Returns one of
+            // 'success' | 'pending' | 'missing' so the caller can log why it declined.
+            // Missing ≠ passing — that conflation is exactly what #1668 exploited.
+            async function requiredCheckState(ref) {
+              const runs = await github.paginate(github.rest.checks.listForRef, { owner, repo, ref, per_page: 100 })
+              const mine = runs.filter(r => r.name === REQUIRED_CHECK)
+              if (!mine.length) return 'missing'
+              // Newest attempt wins — a re-run supersedes an earlier verdict.
+              mine.sort((a, b) => new Date(b.started_at || 0) - new Date(a.started_at || 0))
+              const latest = mine[0]
+              if (latest.status !== 'completed') return 'pending'
+              return latest.conclusion === 'success' ? 'success' : 'pending'
             }
 
             // Resolve candidate PR numbers from whatever event fired.
@@ -115,6 +149,28 @@ jobs:
               // Green gate (#339): never merge a red PR; pending is fine (see header).
               if (await isRed(pr.head.sha)) {
                 core.info(`#${pull_number} has a failing check — leaving for a human / fix-bot.`); continue
+              }
+
+              // Presence gate (#1698): require that CI Gate actually REPORTED success.
+              // 'pending' → the check_suite trigger re-fires this when it completes.
+              // 'missing' → the workflow never started (a dropped event); say so loudly
+              // once, so the PR is visibly stalled rather than silently merged unchecked.
+              const checkState = await requiredCheckState(pr.head.sha)
+              if (checkState !== 'success') {
+                core.info(`#${pull_number} — '${REQUIRED_CHECK}' is ${checkState}, not merging.`)
+                if (checkState === 'missing') {
+                  core.warning(`#${pull_number}: '${REQUIRED_CHECK}' never reported for ${pr.head.sha.slice(0, 8)} — CI likely never triggered (#1698).`)
+                  const marker = '<!-- automerge-ci-missing -->'
+                  const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
+                  if (!comments.some(c => (c.body || '').includes(marker))) {
+                    await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
+                      body: `${marker}\n⏸️ **Not auto-merged — \`${REQUIRED_CHECK}\` never reported.**\n\n`
+                        + `No \`${REQUIRED_CHECK}\` check-run exists for \`${pr.head.sha.slice(0, 8)}\`, so typecheck and tests have not run on this code. That is *not* the same as passing — auto-merge treated absence as success once before and a build break reached \`main\` (#1668), which is why this gate exists (#1698).\n\n`
+                        + `**Fix:** GitHub intermittently drops \`pull_request\` events. Push any commit (an empty one works: \`git commit --allow-empty\`) to fire a \`synchronize\` event — checks then run normally and this merges itself.\n\n`
+                        + '<sub>🤖 agent pipeline (CI) · auto-merge presence gate (#1698)</sub>' })
+                  }
+                }
+                continue
               }
 
               // Shared-code pause (#339): hold any PR that touches packages/ for a human.
