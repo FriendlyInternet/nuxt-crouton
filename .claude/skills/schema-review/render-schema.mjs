@@ -78,10 +78,38 @@ for (const [name, def] of Object.entries(fieldsObj)) {
     default: meta.default ?? def.default ?? '',
     refTarget: def.refTarget || '',
     refScope: def.refScope || '',
+    // A field that DECLARES a relation but names no target (#1933-adjacent, the #1825 case).
+    // This is the whole point of the gate: it is the one detail that makes a relation
+    // buildable, and it was previously invisible here — see `unresolved` below.
+    unresolvedRef: isRelationType(def) && !def.refTarget,
   })
 }
 
+/** Does this field's TYPE declare a relation, regardless of whether a target was given? */
+function isRelationType(def) {
+  const t = String(def.type || '').toLowerCase()
+  return t === 'relation' || t === 'reference' || t === 'belongsto' || t === 'ref'
+}
+
 const relations = rows.filter((r) => r.refTarget)
+
+// ── UNRESOLVED REFERENCES (#1825) ─────────────────────────────────────────────────
+// The failure this exists to stop: `chores` was approved with `assignee (relation)` and
+// `lastDoneBy (relation)` and NO target on either. Because the relationship summary was
+// built as `rows.filter(r => r.refTarget)`, both dropped out and the sign-off rendered
+// "_No relationships._" — so there was nothing on screen to question. Downstream each step
+// made the hole more concrete without checking it: the build instruction invented the prose
+// "references household members/users", the worker turned that into `refTarget: "users"`,
+// and the generated import pointed at a collection nobody ever created. The build died
+// minutes later with 400 lines of module paths and no mention of the cause.
+//
+// So an untargeted relation is reported LOUDLY and never counted as "no relationships".
+// It is deliberately NOT a hard exit by default: this renderer is called by the decompose
+// apply step inside a best-effort guard, so exiting non-zero would SKIP the whole artifact
+// and post the sign-off questions with no schema at all — hiding the problem again, worse.
+// Visibility at approval time is the fix. Use --strict for a hard gate (see below).
+const unresolved = rows.filter((r) => r.unresolvedRef)
+const strict = argv.includes('--strict')
 
 // ── Markdown ──
 const yn = (b) => (b ? '✓' : '')
@@ -94,12 +122,30 @@ const md = [
   '|---|---|:--:|:--:|---|---|',
   ...rows.map(
     (r) =>
-      `| \`${r.name}\`${r.primaryKey ? ' 🔑' : ''}${r.unique ? ' ·uniq' : ''} | ${r.type} | ${yn(r.required)} | ${yn(r.translatable)} | ${r.default === '' ? '' : `\`${r.default}\``} | ${r.refTarget ? `\`${r.refTarget}\`${r.refScope ? ` (${r.refScope})` : ''}` : ''} |`,
+      `| \`${r.name}\`${r.primaryKey ? ' 🔑' : ''}${r.unique ? ' ·uniq' : ''} | ${r.type} | ${yn(r.required)} | ${yn(r.translatable)} | ${r.default === '' ? '' : `\`${r.default}\``} | ${r.refTarget ? `\`${r.refTarget}\`${r.refScope ? ` (${r.refScope})` : ''}` : r.unresolvedRef ? '⚠️ **not set**' : ''} |`,
   ),
   '',
+  ...(unresolved.length
+    ? [
+        `> ⚠️ **${unresolved.length} relation field${unresolved.length === 1 ? '' : 's'} with no target — do not approve as-is.**`,
+        '>',
+        ...unresolved.map(
+          (r) => `> - \`${collection}.${r.name}\` says it points at another collection, but doesn't say which.`,
+        ),
+        '>',
+        '> Whatever fills this blank later is a **guess**. Name the collection each one points at,',
+        '> and make sure that collection is actually being built — a target that does not exist',
+        '> generates an import to a missing file and fails the build, long after this decision.',
+        '> If people are meant to be the target, say so explicitly: they come from the auth/team',
+        '> side here, not from a generated collection, so this may need a different field type.',
+        '',
+      ]
+    : []),
   relations.length
     ? `**Relationships:** ${relations.map((r) => `\`${collection}.${r.name}\` → \`${r.refTarget}\``).join(' · ')}`
-    : '_No relationships._',
+    : unresolved.length
+      ? `_No **resolved** relationships — ${unresolved.length} unresolved above._`
+      : '_No relationships._',
   '',
 ].join('\n')
 
@@ -116,7 +162,7 @@ const rowHtml = rows
         <td class="c">${chip(r.required, 'req')}</td>
         <td class="c">${chip(r.translatable, 'i18n')}</td>
         <td>${r.default === '' ? '<span class="muted">—</span>' : `<code>${esc(r.default)}</code>`}</td>
-        <td>${r.refTarget ? `<span class="ref">→ ${esc(r.refTarget)}</span>${r.refScope ? ` <span class="muted">(${esc(r.refScope)})</span>` : ''}` : '<span class="muted">—</span>'}</td>
+        <td>${r.refTarget ? `<span class="ref">→ ${esc(r.refTarget)}</span>${r.refScope ? ` <span class="muted">(${esc(r.refScope)})</span>` : ''}` : r.unresolvedRef ? '<span class="warn">⚠ not set</span>' : '<span class="muted">—</span>'}</td>
       </tr>`,
   )
   .join('\n')
@@ -128,7 +174,9 @@ const relHtml = relations.length
           `<li><code>${esc(collection)}.${esc(r.name)}</code> <span class="arrow">→</span> <code>${esc(r.refTarget)}</code>${r.refScope ? ` <span class="muted">(${esc(r.refScope)})</span>` : ''}</li>`,
       )
       .join('\n')
-  : '<li class="muted">No relationships — this collection stands alone.</li>'
+  : unresolved.length
+    ? `<li class="warn">⚠ ${unresolved.length} relation field${unresolved.length === 1 ? '' : 's'} with NO target — ${unresolved.map((r) => `<code>${esc(r.name)}</code>`).join(', ')}. Name what each points at before approving; whatever fills the blank later is a guess.</li>`
+    : '<li class="muted">No relationships — this collection stands alone.</li>'
 
 const html = `<!DOCTYPE html>
 <!-- schema-review — generated by .claude/skills/schema-review/render-schema.mjs. No JS/CDN. -->
@@ -155,7 +203,8 @@ const html = `<!DOCTYPE html>
   code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;color:#cdd6e6;}
   .chip{display:inline-block;min-width:34px;font-size:11px;color:var(--muted);}
   .chip.on{color:#04231a;background:var(--green);font-weight:700;border-radius:999px;padding:1px 8px;}
-  .ref{color:var(--green);} .arrow{color:var(--muted);} .muted{color:var(--muted);}
+  .warn{color:#fbbf24;font-weight:600}
+    .ref{color:var(--green);} .arrow{color:var(--muted);} .muted{color:var(--muted);}
   h3{margin:28px 0 10px;font-size:15px;}
   .rel{background:#101725;border:1px solid var(--line);border-radius:14px;padding:14px 18px;}
   .rel ul{margin:0;padding:0;list-style:none;display:grid;gap:8px;font-size:13.5px;}
@@ -191,3 +240,17 @@ console.log(`✓ MD   → ${mdPath}`)
 console.log(
   `→ PNG:  node .claude/skills/ui-proposal/render.mjs ${htmlPath} screenshots/schema-review-${collection}.png`,
 )
+
+// --strict (#1825): exit non-zero when a relation names no target, for callers that want a
+// HARD gate (a pre-generate check, CI). Off by default on purpose — the decompose apply step
+// calls this inside a best-effort guard, where a non-zero exit would drop the whole schema
+// artifact from the sign-off comment and hide the very problem this reports.
+if (strict && unresolved.length) {
+  console.error(
+    `\n✖ ${unresolved.length} relation field${unresolved.length === 1 ? '' : 's'} with no target: ` +
+      `${unresolved.map((r) => `${collection}.${r.name}`).join(', ')}\n` +
+      `  Name the collection each points at, and make sure that collection is actually built — ` +
+      `an unresolved target generates an import to a missing file and fails the build later.`,
+  )
+  process.exit(1)
+}
