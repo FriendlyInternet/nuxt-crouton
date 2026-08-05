@@ -403,6 +403,56 @@ jobs:
       - name: Run scripts/*.test.mjs
         run: node --test scripts/*.test.mjs
 
+  # Lint the bash embedded in our workflows (#1904). Rationale: every defect found in the pi
+  # worker's finish step so far lived in shell, and two of them (#1876) were the SAME shape —
+  # an unguarded `$( grep … )` that exits non-zero under `set -e` + `pipefail` and kills the
+  # step mid-way. shellcheck flags that class directly (SC2311/SC2312), which is precisely the
+  # feedback the YAML never had.
+  #
+  # WARN-ONLY for now (`|| true`): the existing corpus predates this check, and a first run
+  # that fails every workflow would just get switched off. Promote to blocking once the
+  # backlog is cleared — that promotion is the point, not this step.
+  shellcheck-workflows:
+    name: Shellcheck workflow shell
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Extract each `run:` block and lint it
+        run: |
+          set -uo pipefail
+          npm i -g js-yaml >/dev/null 2>&1
+          mkdir -p /tmp/wf-shell
+          node -e '
+            const yaml = require("js-yaml"), fs = require("fs"), path = require("path");
+            let n = 0;
+            for (const f of fs.readdirSync(".github/workflows").filter(f => /\.ya?ml$/.test(f))) {
+              let doc; try { doc = yaml.load(fs.readFileSync(path.join(".github/workflows", f), "utf8")) } catch { continue }
+              for (const [jobId, job] of Object.entries(doc?.jobs || {})) {
+                for (const [i, step] of (job.steps || []).entries()) {
+                  if (typeof step.run !== "string") continue;
+                  // ${{ }} expressions are not shell — substitute a literal so shellcheck
+                  // parses the structure rather than choking on the templating.
+                  const body = step.run.replace(/\$\{\{[^}]*\}\}/g, "EXPR");
+                  const shell = step.shell || job.defaults?.run?.shell || doc.defaults?.run?.shell || "bash";
+                  if (!/^bash|^sh/.test(shell)) continue;
+                  fs.writeFileSync(`/tmp/wf-shell/${f}__${jobId}__${i}.sh`, "#!/bin/bash\n" + body);
+                  n++;
+                }
+              }
+            }
+            console.log(`extracted ${n} run-block(s)`);
+          '
+          sudo apt-get install -y shellcheck >/dev/null 2>&1 || true
+          # SC2312 (unchecked command substitution) is the #1876 class and is what we care about;
+          # the rest is reported for context. Never fails the build yet — see the note above.
+          shellcheck -S warning -e SC2086,SC2016,SC1091 /tmp/wf-shell/*.sh || true
+          echo "shellcheck ran (warn-only, #1904)"
+
   fallow-audit:
     if: needs.changes.outputs.code == 'true'
     # Rung 1 of the check ladder (#632): the codebase-intelligence gate (#1145).
