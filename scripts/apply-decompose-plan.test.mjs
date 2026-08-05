@@ -11,9 +11,10 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import {
   parsePlan, PlanError, sanitizeLabels, buildChildBody, planToActions, runActions,
-  formatBlockedBy, parseBlockedBy,
+  formatBlockedBy, parseBlockedBy, isGitIgnored,
 } from './apply-decompose-plan.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { WORKER_TRIGGER, MAX_DEPTH } from './pipeline-loop-guard.mjs'
@@ -294,4 +295,29 @@ test('Blocked-by round-trips through format → parse', () => {
   // tolerant of the shapes a human might hand-write (the #1713 tree was sequenced by hand)
   assert.deepEqual(parseBlockedBy('blocked by: #12\nsome prose #99 here'), [12])
   assert.deepEqual(parseBlockedBy('no dependency here'), [])
+})
+
+// ── #1933: never link an image the repo will silently refuse to commit ───────────────
+// `git add` on an ignored path exits 0 and does nothing. #1821 added two artifact dirs without
+// matching `.gitignore` exceptions, so every design hold committed the .md/.html and dropped the
+// .png — then linked the .png anyway. Both live holds (#1823, #1825) show a broken image.
+test('isGitIgnored maps check-ignore exit status correctly', () => {
+  // `git check-ignore -q` exits 0 when the path IS ignored
+  assert.equal(isGitIgnored('screenshots/x.png', { exec: () => '' }), true)
+  // non-zero exit throws through the executor → NOT ignored
+  assert.equal(isGitIgnored('writeups/diagrams/x.png', {
+    exec: () => { throw new Error('exit 1') },
+  }), false)
+  // fail OPEN when git is unavailable — the .gitignore exceptions are the real fix, this is a
+  // backstop, and dropping a good image would be a worse failure than linking one
+  assert.equal(isGitIgnored('any.png', {}), false)
+})
+
+test('the real repo commits the sign-off artifact paths and still ignores screenshots', () => {
+  // guards the .gitignore exceptions themselves — this is the bug that actually shipped
+  const realExec = (file, args) => execFileSync(file, args, { stdio: 'ignore' })
+  for (const p of ['writeups/schema-reviews/x.png', 'writeups/ui-mockups/x.png', 'writeups/diagrams/x.png']) {
+    assert.equal(isGitIgnored(p, { exec: realExec }), false, `${p} must be committable`)
+  }
+  assert.equal(isGitIgnored('screenshots/x.png', { exec: realExec }), true, 'screenshots stay ignored')
 })
