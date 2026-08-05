@@ -30,11 +30,16 @@
  * A real run needs CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN in the env (the
  * same token the deploy workflows use — Workers Scripts/D1/KV Edit).
  */
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 import { createInterface } from 'node:readline'
 import { findWranglerConfig, isAlreadyGone, parseJsonc, runWrangler } from './lib/wrangler-d1.mjs'
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
+
+/** Read a file if it's there; '' when absent (labels.yml is optional context, not a dependency). */
+function readIfPresent(p) {
+  try { return readFileSync(p, 'utf8') } catch { return '' }
+}
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -100,19 +105,57 @@ function loadWrangler(app) {
 }
 
 /**
+ * Is `app` a POC or a launched app? (#1894)
+ *
+ * It matters because the two have DIFFERENT deploy shapes: `deploy-pocs.yml` gives a POC exactly
+ * ONE worker, at the BASE name, carrying the `<app>.pmcp.dev` route — there is no `-staging`
+ * sibling and no production counterpart. Resolving a POC the app way targets a worker that never
+ * existed, so the teardown silently no-ops and the site keeps serving (the bookmark-stash case).
+ *
+ * Pure — the caller supplies the facts. A directory outranks a label (a promoted POC keeps its
+ * stale `poc:` label); the label is what survives once the code PR is closed and the dir is gone,
+ * which is exactly when teardown runs. Unknown stays UNKNOWN and is treated conservatively.
+ */
+export function detectAppKind({ app, hasPocDir = false, hasAppDir = false, labelsText = '' } = {}) {
+  if (hasAppDir) return 'app'
+  if (hasPocDir) return 'poc'
+  if (labelsText.includes(`"app:${app}"`)) return 'app'
+  if (labelsText.includes(`"poc:${app}"`)) return 'poc'
+  return 'unknown'
+}
+
+/** Which envs a scope actually expands to. A POC has one deploy, whatever was asked for. */
+export function plannedEnvs(kind, scope) {
+  if (kind === 'poc') return ['staging']
+  return scope === 'both' ? ['staging', 'prod'] : [scope]
+}
+
+/**
+ * Does this teardown need the typed prod confirmation? A POC has no production to protect, so
+ * demanding one there teaches an operator to type prod confirmations as routine — which is the
+ * guard defeated. Anything not positively identified as a POC keeps the guard (fail closed).
+ */
+export function needsProdGuard(kind, scope) {
+  if (kind === 'poc') return false
+  return scope === 'prod' || scope === 'both'
+}
+
+/**
  * Resolve the { worker, d1, kvTitle, kvId } for one env scope. Prefers the real
  * names/ids from wrangler.jsonc; falls back to the crouton naming convention so a
  * teardown still works after the app's code has been deleted.
  */
-function resolveScope(app, env, config) {
-  const isProd = env === 'prod'
-  const worker = isProd ? app : `${app}-staging`
+export function resolveScope(app, env, config, kind = 'unknown') {
+  const isPoc = kind === 'poc'
+  const isProd = !isPoc && env === 'prod'
+  // A POC's single deploy lives at the BASE name — same slot a launched app calls prod.
+  const worker = (isProd || isPoc) ? app : `${app}-staging`
   // KV auto-provisions under the title "<worker>-<binding>" (binding is KV) → lowercased.
   const kvTitle = `${worker}-kv`
   let d1 = `${worker}-db`
   let kvId = null
 
-  const block = isProd ? config : config?.env?.staging
+  const block = (isProd || isPoc) ? config : config?.env?.staging
   if (block) {
     const dbName = block.d1_databases?.[0]?.database_name
     if (dbName) d1 = dbName
@@ -184,13 +227,34 @@ async function main() {
   }
 
   const config = loadWrangler(args.app)
-  const envs = args.scope === 'both' ? ['staging', 'prod'] : [args.scope]
-  const scopes = envs.map(env => resolveScope(args.app, env, config))
-  const hasProd = scopes.some(s => s.isProd)
+  const kind = detectAppKind({
+    app: args.app,
+    hasPocDir: existsSync(join(repoRoot, 'pocs', args.app)),
+    hasAppDir: existsSync(join(repoRoot, 'apps', args.app)),
+    labelsText: readIfPresent(join(repoRoot, '.github', 'labels.yml')),
+  })
+  const envs = plannedEnvs(kind, args.scope)
+  const scopes = envs.map(env => resolveScope(args.app, env, config, kind))
+  const hasProd = needsProdGuard(kind, args.scope)
 
   console.log(`\n  teardown-app: ${args.app}`)
   console.log(`    source : ${config ? findWranglerConfig(args.app, repoRoot) : 'wrangler.jsonc gone — using crouton naming convention'}`)
-  console.log(`    scope  : ${args.scope}\n`)
+  console.log(`    kind   : ${kind}${kind === 'poc' ? ' (one deploy, at the base name — no prod counterpart)' : ''}`)
+  console.log(`    scope  : ${args.scope}${kind === 'poc' && args.scope !== 'staging' ? ` → a POC has one env; treating as its single deploy` : ''}\n`)
+
+  // A plan built from a CONVENTION rather than the app's real config is a guess, and a guess
+  // that matches nothing exits 0 and reads as success (#1894). Say so loudly, not in passing.
+  if (!config) {
+    console.log('  ⚠ No wrangler.jsonc found — every name below is INFERRED from the crouton naming')
+    console.log('    convention, not read from the app. If the app deployed under different names,')
+    console.log('    this plan deletes NOTHING and still reports success. Verify against Cloudflare')
+    console.log('    (or the app\'s branch) before trusting a green run.\n')
+  }
+  if (kind === 'unknown') {
+    console.log('  ⚠ Could not tell whether this is a POC or a launched app (no directory, no')
+    console.log('    poc:/app: label). Falling back to the launched-app layout and KEEPING the prod')
+    console.log('    guard. If it was a POC, its worker is at the base name.\n')
+  }
 
   console.log('  Plan (delete these Cloudflare resources):')
   for (const s of scopes) {
@@ -244,7 +308,11 @@ async function main() {
   if (failed.length) process.exit(1)
 }
 
-main().catch((err) => {
-  console.error(`\n  teardown-app failed: ${err.message}\n`)
-  process.exit(1)
-})
+// Run only as a CLI — importing this module (e.g. from teardown-app.test.mjs, #1894) must not
+// execute a teardown. The decision helpers above are exported for that contract.
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
+  main().catch((err) => {
+    console.error(`\n  teardown-app failed: ${err.message}\n`)
+    process.exit(1)
+  })
+}

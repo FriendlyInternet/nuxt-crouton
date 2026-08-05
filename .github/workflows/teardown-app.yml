@@ -98,7 +98,18 @@ jobs:
           ARGS=(--app "$APP" --scope "$SCOPE")
           if [ "$DRY" = "true" ]; then ARGS+=(--dry-run); fi
           if [ -n "$CONFIRM" ]; then ARGS+=(--confirm "$CONFIRM"); fi
-          node scripts/teardown-app.mjs "${ARGS[@]}"
+          # Tee the plan into the job summary (#1894). A dry run whose plan matches nothing still
+          # exits 0, so "result: success" in the summary was the only visible output and proved
+          # nothing — the actual names have to be readable from the run itself.
+          set -o pipefail
+          node scripts/teardown-app.mjs "${ARGS[@]}" 2>&1 | tee "$RUNNER_TEMP/teardown.log"
+          {
+            echo "### Cloudflare plan — \`$APP\`"
+            echo ""
+            echo '```'
+            cat "$RUNNER_TEMP/teardown.log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Mint a Nuxt Harness App installation token so branch deletes + issue closes
       # are attributed to nuxt-harness[bot] (same pattern as comment-dispatch.yml).
