@@ -576,7 +576,7 @@ jobs:
             const det = detail ? `\n\n<details><summary>log tail</summary>\n\n\`\`\`\n${detail}\n\`\`\`\n</details>` : ''
             const body = why
               ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${det}${foot}`
-              : `🔴 **@pmcp — this run produced nothing** — no PR, no sub-issues, no sign-off hold.\n\n**Fix:** re-dispatch; if it recurs the issue is underspecified — add a description + acceptance criteria.${foot}`
+              : `🔴 **@pmcp — this run produced nothing** — no PR, no sub-issues, no sign-off hold, and none of the known causes matched.\n\n**Fix:** open the run log before changing anything. Only if the log shows the agent genuinely had nothing to act on is the issue underspecified.${foot}`
 
             await github.rest.issues.createComment({ ...context.repo, issue_number, body })
             core.setFailed(`Artifact-gate: pi.dev run on #${issue_number} produced no deliverable.`)
