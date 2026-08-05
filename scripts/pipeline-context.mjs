@@ -15,11 +15,19 @@
 //
 //   • An HTML comment, so it renders invisibly in the issue body.
 //   • `key=value` tokens, space-separated, in a single line. Keys: epic (int), depth (int),
-//     epic_branch (branch name; may contain `/` and `-`, never a space).
+//     epic_branch (branch name; may contain `/` and `-`, never a space), dispatch (#1923 — the
+//     trigger label this issue should be released with, e.g. `work-this`; see below).
 //   • Any subset of keys may be present; absent keys parse to null.
 //   • Back-compat (#1686): WS1's worker read a bare `pipeline: epic_branch=<name>` line (no
 //     HTML-comment wrapper). `parsePipelineBlock` still reads that legacy shape so already-
 //     labelled issues keep working; `formatPipelineBlock` always emits the wrapped form.
+//
+// `dispatch` (#1923). When the decomposer WITHHOLDS a trigger label from a blocked child (#1750),
+// the leaf-vs-split classification it already made would otherwise be thrown away — so the wave
+// scheduler released everything with `delegate`, spending a whole decompose run to re-derive
+// `{"leaf": true}`, and able to re-classify the child differently than its parent planned. Record
+// the intended label here instead. Absent → callers fall back to `delegate`, so hand-written
+// `Blocked-by:` edges and every pre-existing epic behave exactly as before.
 //
 // This module is PURE + unit-tested (pipeline-context.test.mjs). The workflows shell out to
 // the CLI at the bottom for the values they need (e.g. `... read epic_branch < body.txt`).
@@ -34,11 +42,11 @@ const LEGACY_RE = /^[ \t]*pipeline:\s*(.+?)\s*$/im
 
 // Keys we understand. Anything else in the block is ignored (forward-compatible).
 const INT_KEYS = new Set(['epic', 'depth'])
-const STR_KEYS = new Set(['epic_branch'])
+const STR_KEYS = new Set(['epic_branch', 'dispatch'])
 
 /** Parse the `k=v k=v` token string into a typed object. Unknown keys are dropped. */
 function parseTokens(tokenStr) {
-  const out = { epic: null, depth: null, epic_branch: null }
+  const out = { epic: null, depth: null, epic_branch: null, dispatch: null }
   if (!tokenStr) return out
   for (const tok of tokenStr.trim().split(/\s+/)) {
     const eq = tok.indexOf('=')
@@ -61,24 +69,25 @@ function parseTokens(tokenStr) {
  * Prefers the wrapped `<!-- pipeline: ... -->` form; falls back to the legacy bare line.
  */
 export function parsePipelineBlock(body) {
-  if (!body || typeof body !== 'string') return { epic: null, depth: null, epic_branch: null }
+  if (!body || typeof body !== 'string') return { epic: null, depth: null, epic_branch: null, dispatch: null }
   const wrapped = body.match(BLOCK_RE)
   if (wrapped) return parseTokens(wrapped[1])
   const legacy = body.match(LEGACY_RE)
   if (legacy) return parseTokens(legacy[1])
-  return { epic: null, depth: null, epic_branch: null }
+  return { epic: null, depth: null, epic_branch: null, dispatch: null }
 }
 
 /**
  * Render the canonical wrapped block for the given context. Only the keys with a
- * non-null/defined value are emitted, in a stable order (epic, depth, epic_branch).
+ * non-null/defined value are emitted, in a stable order (epic, depth, epic_branch, dispatch).
  * Returns null if nothing is worth writing (so callers can skip an empty block).
  */
-export function formatPipelineBlock({ epic, depth, epic_branch } = {}) {
+export function formatPipelineBlock({ epic, depth, epic_branch, dispatch } = {}) {
   const toks = []
   if (epic !== null && epic !== undefined && `${epic}` !== '') toks.push(`epic=${epic}`)
   if (depth !== null && depth !== undefined && `${depth}` !== '') toks.push(`depth=${depth}`)
   if (epic_branch) toks.push(`epic_branch=${epic_branch}`)
+  if (dispatch) toks.push(`dispatch=${dispatch}`)
   if (toks.length === 0) return null
   return `<!-- pipeline: ${toks.join(' ')} -->`
 }
@@ -122,9 +131,9 @@ function stripEmpty(obj) {
 // ── CLI ──────────────────────────────────────────────────────────────────────────
 // Reads an issue body from stdin (or a file arg after the command), for the workflows.
 //   node scripts/pipeline-context.mjs read [<field>]   < body.txt
-//     • no field → prints JSON `{ epic, depth, epic_branch }`
+//     • no field → prints JSON `{ epic, depth, epic_branch, dispatch }`
 //     • field    → prints just that value (empty string when absent) — for `epic_branch=$(...)`
-//   node scripts/pipeline-context.mjs write epic=.. depth=.. epic_branch=..  < body.txt
+//   node scripts/pipeline-context.mjs write epic=.. depth=.. epic_branch=.. dispatch=..  < body.txt
 //     • prints the body with the block upserted
 function readStdin() {
   try { return readFileSync(0, 'utf8') } catch { return '' }
