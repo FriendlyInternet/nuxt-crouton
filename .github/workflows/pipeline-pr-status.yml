@@ -9,11 +9,28 @@ name: Pipeline PR status
 # marker on the epic issue. Both are idempotent, so the high-frequency `check_suite`
 # firing just refreshes the same two comments (no spam).
 #
-# Scope: only PRs whose HEAD branch is `claude/issue-*` (pipeline-authored) — human PRs
-# are never touched. Uses GITHUB_TOKEN (it only writes comments; nothing here needs to
-# cascade to another workflow, so no App token is required).
+# Scope: only PRs whose HEAD branch is pipeline-authored — `claude/issue-*` (the claude
+# pipeline) OR `work-*` (the pi worker, #1815). Human PRs are never touched. Uses
+# GITHUB_TOKEN (it only writes comments; nothing here needs to cascade to another workflow,
+# so no App token is required).
 
 on:
+  # ⚠️ `check_suite` and `status` are NEARLY DEAD TRIGGERS here (#1884) — keep them for
+  # App-generated suites, but they do NOT fire for our own CI. Every check on a pipeline PR is
+  # created by GitHub Actions under GITHUB_TOKEN, and events triggered by GITHUB_TOKEN never
+  # start a new workflow run (the same recursion guard that stops a GITHUB_TOKEN push from
+  # cascading, #572/#626). So the only trigger that ever fired was `pull_request: opened`, and
+  # since the pi worker pushes exactly once there is no `synchronize` either: the sticky was
+  # written ~10s after the PR opened and FROZE there. Every worker PR carried a permanent
+  # "⏳ CI running · 2/11 checks passed" while it was in fact green and mergeable — the one
+  # surface meant to say "ready" saying the opposite, forever.
+  #
+  # `workflow_run` is the trigger that DOES fire for Actions-generated completions, so it is
+  # what actually refreshes the sticky. Add a workflow here when it becomes a gate worth
+  # reflecting; an unlisted one simply doesn't trigger a refresh (the next listed one will).
+  workflow_run:
+    workflows: ["CI", "E2E", "Frontend Review (PR)", "A11y (PR)", "Red-Team (PR)", "Packages guard"]
+    types: [completed]
   check_suite:
     types: [completed]
   status: {}
@@ -34,7 +51,7 @@ permissions:
 # the SAME target collapse to one (each run recomputes full state, so the latest wins); distinct
 # targets never cancel each other.
 concurrency:
-  group: pipeline-status-${{ github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.event.issue.number || github.sha }}
+  group: pipeline-status-${{ github.event.workflow_run.head_sha || github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.event.issue.number || github.sha }}
   cancel-in-progress: true
 
 jobs:
@@ -229,7 +246,12 @@ jobs:
             if (context.eventName === 'pull_request') {
               prNumbers.add(context.payload.pull_request.number)
             } else {
-              const sha = context.payload.check_suite?.head_sha || context.payload.sha
+              // `workflow_run` first — it is the only one of the three that actually fires for
+              // our Actions-generated checks (#1884). It also carries `pull_requests`, but that
+              // array is empty for a run from a fork, so resolve by head SHA like the others.
+              const sha = context.payload.workflow_run?.head_sha
+                || context.payload.check_suite?.head_sha
+                || context.payload.sha
               if (sha) {
                 const assoc = await github.paginate(
                   github.rest.repos.listPullRequestsAssociatedWithCommit,
