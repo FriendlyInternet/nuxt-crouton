@@ -50,9 +50,20 @@ permissions:
 # Key by head SHA (PR/check events) or issue number (issues events) so concurrent refreshes for
 # the SAME target collapse to one (each run recomputes full state, so the latest wins); distinct
 # targets never cancel each other.
+#
+# ⚠️ `cancel-in-progress` MUST stay false here (#1989). This group is keyed by the very SHA this
+# workflow reports ON, and a cancelled run leaves a check-run named `status` attached to that SHA.
+# Both readers treat `cancelled` as red — this file's own `ciState()` (:92) and, fatally,
+# `automerge-epic-subpr.yml`'s RED list (:89) — so self-cancellation marked the commit red and
+# every pipeline sub-PR silently stopped auto-merging into its epic, while a 🔴 ping told the
+# owner to go fix code that was never broken (observed on PR #1987).
+# The other cancelling workflows (a11y, frontend-review, red-team, simplify-review,
+# skill-freshness-pr) key on the PR *number*, so their cancelled run belongs to the superseded
+# SHA and is harmless — do NOT "align" this one back to them.
+# Queueing instead is safe: each run recomputes full state, so the last to finish still wins.
 concurrency:
   group: pipeline-status-${{ github.event.workflow_run.head_sha || github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.event.issue.number || github.sha }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   status:
