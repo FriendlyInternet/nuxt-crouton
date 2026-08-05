@@ -1,12 +1,20 @@
 <script setup lang="ts">
+import { CANCELLED_ORDER_STATUS } from '../../../shared/utils/order-status'
+
 const props = defineProps<{
   orderId: string
   remarks?: string
-  /** This order's print queue rows (passed by OrdersTab, which owns the
-   * event-wide query) — rendered as a per-printer detail list. */
+  /** The order's status — hides Annuleren once it is already cancelled (#1941). */
+  status?: string
+  /**
+   * This order's print queue rows (passed by OrdersTab, which owns the
+   * event-wide query) — rendered as a per-printer detail list.
+   */
   printJobs?: any[]
-  /** Whether the event has active printers — keeps the Printers tab visible
-   * (with an explanation) even when this order generated no tickets. */
+  /**
+   * Whether the event has active printers — keeps the Printers tab visible
+   * (with an explanation) even when this order generated no tickets.
+   */
   hasPrinters?: boolean
   /** Per-location remark text keyed by locationId (order.locationRemarks). */
   locationRemarks?: Record<string, string> | null
@@ -20,6 +28,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   retryJob: [jobId: string]
   reprintOrder: [orderId: string]
+  cancelOrder: [orderId: string]
   deleteOrder: [orderId: string]
 }>()
 
@@ -42,6 +51,29 @@ function onReprintClick() {
   emit('reprintOrder', props.orderId)
 }
 onUnmounted(() => { if (reprintTimer) clearTimeout(reprintTimer) })
+
+// Cancel is two-step for the same reason as Reprint: it changes what the venue
+// believes it sold. Built here rather than with CroutonDeleteButton because
+// that component hardcodes the error colour, the trash icon and the delete
+// wording — correct for "gone forever", wrong for "voided but kept", and it
+// takes no props to say otherwise (#1941).
+const cancelArmed = ref(false)
+let cancelTimer: ReturnType<typeof setTimeout> | null = null
+function onCancelClick() {
+  if (!cancelArmed.value) {
+    cancelArmed.value = true
+    if (cancelTimer) clearTimeout(cancelTimer)
+    cancelTimer = setTimeout(() => { cancelArmed.value = false }, 4000)
+    return
+  }
+  if (cancelTimer) clearTimeout(cancelTimer)
+  cancelArmed.value = false
+  emit('cancelOrder', props.orderId)
+}
+onUnmounted(() => { if (cancelTimer) clearTimeout(cancelTimer) })
+
+/** An already-cancelled order has nothing left to void. */
+const isCancelled = computed(() => props.status === CANCELLED_ORDER_STATUS)
 
 const itemsQuery = computed(() => ({ orderId: props.orderId }))
 const { items, pending } = await useCollectionQuery('salesOrderitems', { query: itemsQuery })
@@ -73,11 +105,9 @@ function jobItems(job: any): string[] {
   let subset: typeof all
   if (job?.printMode === 'kitchen' && !job?.locationId) {
     subset = all.filter(i => !(i.productIdData as any)?.locationId)
-  }
-  else if (job?.locationId) {
+  } else if (job?.locationId) {
     subset = all.filter(i => (i.productIdData as any)?.locationId === job.locationId)
-  }
-  else {
+  } else {
     subset = all
   }
   return subset
@@ -91,7 +121,7 @@ const tabs = computed(() => [
   { label: t('sales.orders.tabOrder', 'Order'), value: 'order', slot: 'order' as const },
   ...(props.printJobs?.length || props.hasPrinters
     ? [{ label: t('sales.orders.tabPrinters', 'Printers'), value: 'printers', slot: 'printers' as const }]
-    : []),
+    : [])
 ])
 
 // Selected options are stored as option ids — resolve each to its label via
@@ -119,7 +149,7 @@ const namedLocationRemarks = computed(() => {
     .map(([locationId, text]) => ({
       locationId,
       title: byId.get(locationId) || locationId,
-      text,
+      text
     }))
 })
 </script>
@@ -127,7 +157,10 @@ const namedLocationRemarks = computed(() => {
 <template>
   <!-- Extra bottom padding sets the expanded ticket apart from the next row -->
   <div class="bg-elevated/30 px-4 pt-3 pb-10">
-    <div v-if="pending" class="py-2 text-sm text-muted">
+    <div
+      v-if="pending"
+      class="py-2 text-sm text-muted"
+    >
       {{ t('sales.workspace.loadingOrders') }}
     </div>
     <UTabs
@@ -158,12 +191,21 @@ const namedLocationRemarks = computed(() => {
       </template>
 
       <template #order>
-        <div v-if="rows.length === 0" class="py-2 text-sm text-muted">
+        <div
+          v-if="rows.length === 0"
+          class="py-2 text-sm text-muted"
+        >
           {{ t('sales.orders.noItems') }}
         </div>
         <template v-else>
-          <div v-if="props.remarks" class="mb-2 flex items-start gap-1.5 text-sm text-warning">
-            <UIcon name="i-lucide-message-square" class="shrink-0 mt-0.5" />
+          <div
+            v-if="props.remarks"
+            class="mb-2 flex items-start gap-1.5 text-sm text-warning"
+          >
+            <UIcon
+              name="i-lucide-message-square"
+              class="shrink-0 mt-0.5"
+            />
             <span>{{ props.remarks }}</span>
           </div>
           <!-- Per-location remarks (printed as REMARK: on that location's ticket) -->
@@ -172,18 +214,32 @@ const namedLocationRemarks = computed(() => {
             :key="remark.locationId"
             class="mb-2 flex items-start gap-1.5 text-sm text-warning"
           >
-            <UIcon name="i-lucide-message-square" class="shrink-0 mt-0.5" />
+            <UIcon
+              name="i-lucide-message-square"
+              class="shrink-0 mt-0.5"
+            />
             <span><span class="font-medium">{{ remark.title }}:</span> {{ remark.text }}</span>
           </div>
           <ul class="divide-y divide-default/60">
-            <li v-for="item in rows" :key="item.id" class="flex items-start gap-3 py-2 text-sm">
+            <li
+              v-for="item in rows"
+              :key="item.id"
+              class="flex items-start gap-3 py-2 text-sm"
+            >
               <span class="shrink-0 tabular-nums font-medium text-muted w-8">{{ item.quantity }}×</span>
               <div class="min-w-0 flex-1">
                 <span class="font-medium">{{ item.productIdData?.title || t('sales.orders.unknownProduct') }}</span>
-                <p v-for="(label, i) in optionLabels(item)" :key="i" class="text-xs text-muted truncate">
+                <p
+                  v-for="(label, i) in optionLabels(item)"
+                  :key="i"
+                  class="text-xs text-muted truncate"
+                >
                   {{ label }}
                 </p>
-                <p v-if="item.remarks" class="text-xs text-warning truncate">
+                <p
+                  v-if="item.remarks"
+                  class="text-xs text-warning truncate"
+                >
                   {{ item.remarks }}
                 </p>
               </div>
@@ -198,15 +254,32 @@ const namedLocationRemarks = computed(() => {
       </template>
 
       <template #printers>
-        <p v-if="!printJobs?.length" class="py-2 text-sm text-muted">
+        <p
+          v-if="!printJobs?.length"
+          class="py-2 text-sm text-muted"
+        >
           {{ t('sales.printQueue.noTicketForPrinter') }}
         </p>
-        <ul v-else class="divide-y divide-default/60">
-          <li v-for="job in printJobs" :key="job.id" class="py-2">
-            <SalesPrintqueuesCard :item="job" stateless class="w-full">
+        <ul
+          v-else
+          class="divide-y divide-default/60"
+        >
+          <li
+            v-for="job in printJobs"
+            :key="job.id"
+            class="py-2"
+          >
+            <SalesPrintqueuesCard
+              :item="job"
+              stateless
+              class="w-full"
+            >
               <!-- Icon-only re-print, left of the LED so the dot stays rightmost -->
               <template #actions>
-                <UTooltip v-if="String(job.status ?? '') === '9'" :text="t('sales.orders.rePrint')">
+                <UTooltip
+                  v-if="String(job.status ?? '') === '9'"
+                  :text="t('sales.orders.rePrint')"
+                >
                   <UButton
                     size="xs"
                     color="warning"
@@ -220,19 +293,53 @@ const namedLocationRemarks = computed(() => {
                 </UTooltip>
               </template>
             </SalesPrintqueuesCard>
-            <ul v-if="jobItems(job).length" class="text-xs text-muted mt-1 ps-7 space-y-0.5">
-              <li v-for="(line, i) in jobItems(job)" :key="i">{{ line }}</li>
+            <ul
+              v-if="jobItems(job).length"
+              class="text-xs text-muted mt-1 ps-7 space-y-0.5"
+            >
+              <li
+                v-for="(line, i) in jobItems(job)"
+                :key="i"
+              >
+                {{ line }}
+              </li>
             </ul>
           </li>
         </ul>
       </template>
     </UTabs>
 
-    <!-- Destructive footer action, below the totals and clear of the tab bar
-         (#1517's whole-order Reprint lives up there). Two-step pill: arm →
-         confirm hard-deletes the order + its items + its print jobs. -->
-    <div v-if="!pending" class="mt-3 pt-3 border-t border-dashed border-default flex justify-end">
-      <CroutonDeleteButton expanded @confirm="emit('deleteOrder', props.orderId)" />
+    <!-- Destructive footer actions, below the totals and clear of the tab bar
+         (#1517's whole-order Reprint lives up there).
+
+         Two actions, deliberately both (#1941): Annuleren voids the order but
+         KEEPS it — it stops counting in revenue, units and the backlog while
+         staying inspectable. Verwijderen is the hard remove for a bogus / test
+         order: it and its items and print jobs are gone. Cancel is offered
+         first because it is the one you almost always want; delete keeps the
+         stronger colour so the irreversible one still reads as such.
+
+         An already-cancelled order shows no Annuleren — there is nothing left
+         to void, and a button that silently no-ops teaches people to distrust
+         the screen. -->
+    <div
+      v-if="!pending"
+      class="mt-3 pt-3 border-t border-dashed border-default flex items-stretch justify-end gap-2"
+    >
+      <UButton
+        v-if="!isCancelled"
+        :color="cancelArmed ? 'error' : 'warning'"
+        variant="soft"
+        size="sm"
+        icon="i-lucide-ban"
+        class="min-h-7"
+        :label="cancelArmed ? t('sales.orders.cancelConfirm') : t('sales.orders.cancel')"
+        @click.stop="onCancelClick"
+      />
+      <CroutonDeleteButton
+        expanded
+        @confirm="emit('deleteOrder', props.orderId)"
+      />
     </div>
   </div>
 </template>

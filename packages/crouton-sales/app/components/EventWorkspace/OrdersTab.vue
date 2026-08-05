@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import type { SalesEvent } from '~~/layers/sales/collections/events/types'
 import { bucketPrintStatuses } from '../../../shared/utils/print-status'
+import { CANCELLED_ORDER_STATUS } from '../../../shared/utils/order-status'
 
 const props = defineProps<{
   event: SalesEvent
-  /** When provided, the filters toggle is owned by the parent (pane header)
-   *  and the internal Filters button is hidden. Bind via v-model:filters-open. */
+  /**
+   * When provided, the filters toggle is owned by the parent (pane header)
+   *  and the internal Filters button is hidden. Bind via v-model:filters-open.
+   */
   filtersOpen?: boolean
 }>()
 
@@ -196,8 +199,7 @@ async function retryPrintJob(jobId: string) {
       { method: 'POST', body: { jobId } }
     )
     await refreshPrintJobs()
-  }
-  catch {
+  } catch {
     retryNotify.error(t('sales.printQueue.resendError', 'Could not requeue print jobs'))
   }
 }
@@ -213,8 +215,7 @@ async function reprintOrder(orderId: string) {
     )
     await refreshPrintJobs()
     retryNotify.success(t('sales.orders.reprintQueued', 'Reprint queued'))
-  }
-  catch {
+  } catch {
     retryNotify.error(t('sales.orders.reprintError', 'Could not reprint this order'))
   }
 }
@@ -242,9 +243,39 @@ async function deleteOrder(orderId: string) {
       expandedIds.value = next
     }
     await Promise.all([refreshOrders(), refreshPrintJobs()])
-  }
-  catch {
+  } catch {
     retryNotify.error(t('sales.orders.deleteError', 'Could not delete order'))
+  }
+}
+
+/** Reads the status off a row — the list's slim projection already carries it. */
+function isCancelledOrder(order: { status?: string }) {
+  return order.status === CANCELLED_ORDER_STATUS
+}
+
+// Cancel one order (#1941) — a status write, NOT a cascade: the items and print
+// jobs stay, which is the whole difference from deleteOrder above. The row is
+// deliberately left expanded: unlike a delete there is still something to look
+// at, and collapsing it would hide the result of the action just taken.
+//
+// Same crouton:mutation broadcast as delete, because the consequences are the
+// same shape — the tab totals, the backlog counter and the per-product numbers
+// all have to drop this order.
+async function cancelOrder(orderId: string) {
+  try {
+    await $fetch(
+      `/api/crouton-sales/teams/${teamParam.value}/events/${props.event.id}/orders/${orderId}/cancel`,
+      { method: 'POST' }
+    )
+    await nuxtApp.hooks.callHook('crouton:mutation', {
+      operation: 'update',
+      collection: 'salesOrders',
+      itemIds: [orderId],
+      timestamp: Date.now()
+    })
+    await Promise.all([refreshOrders(), refreshPrintJobs()])
+  } catch {
+    retryNotify.error(t('sales.orders.cancelError', 'Could not cancel order'))
   }
 }
 
@@ -393,7 +424,6 @@ function toggleExpand(id: string) {
   else next.add(id)
   expandedIds.value = next
 }
-
 </script>
 
 <template>
@@ -416,14 +446,24 @@ function toggleExpand(id: string) {
       @click="toggleOutstandingOnly"
     >
       <template #trailing>
-        <UIcon v-if="outstandingOnly" name="i-lucide-x" class="size-3.5 opacity-70" />
+        <UIcon
+          v-if="outstandingOnly"
+          name="i-lucide-x"
+          class="size-3.5 opacity-70"
+        />
       </template>
     </UButton>
 
     <!-- Nothing outstanding: a statement, not a control — there is no slice to
          filter to, so offering a button would be a dead end. -->
-    <div v-else class="flex items-center gap-2 text-sm text-muted">
-      <UIcon name="i-lucide-check-check" class="size-4 text-success" />
+    <div
+      v-else
+      class="flex items-center gap-2 text-sm text-muted"
+    >
+      <UIcon
+        name="i-lucide-check-check"
+        class="size-4 text-success"
+      />
       {{ t('sales.workspace.outstandingNone') }}
     </div>
 
@@ -431,8 +471,17 @@ function toggleExpand(id: string) {
          controls it); the chip marks a collapsed-but-active filter so a
          filtered list is never mistaken for the full one. When header-
          controlled and closed, render nothing — no stray space-y gap. -->
-    <UCollapsible v-if="!headerControlled || filtersOpen" v-model:open="filtersOpen">
-      <UChip v-if="!headerControlled" :show="hasActiveFilters" :text="activeFilterCount" size="xl" inset>
+    <UCollapsible
+      v-if="!headerControlled || filtersOpen"
+      v-model:open="filtersOpen"
+    >
+      <UChip
+        v-if="!headerControlled"
+        :show="hasActiveFilters"
+        :text="activeFilterCount"
+        size="xl"
+        inset
+      >
         <UButton
           :label="t('sales.workspace.filters')"
           icon="i-lucide-filter"
@@ -447,7 +496,13 @@ function toggleExpand(id: string) {
              under the pane header, so they stay reachable while the orders list
              scrolls. Selects stack on a narrow pane and flow to columns when
              there's room (@container). -->
-        <CroutonSubBar class="p-2 px-4" sticky auto-hide flush :class="headerControlled ? '' : 'mt-2'">
+        <CroutonSubBar
+          class="p-2 px-4"
+          sticky
+          auto-hide
+          flush
+          :class="headerControlled ? '' : 'mt-2'"
+        >
           <div class="w-full space-y-2">
             <div class="grid grid-cols-1 gap-2 @md:grid-cols-2 @2xl:grid-cols-4">
               <USelectMenu
@@ -492,7 +547,10 @@ function toggleExpand(id: string) {
                 class="w-full"
               />
             </div>
-            <div v-if="hasActiveFilters" class="flex justify-end">
+            <div
+              v-if="hasActiveFilters"
+              class="flex justify-end"
+            >
               <UButton
                 :label="t('sales.workspace.resetFilters')"
                 icon="i-lucide-rotate-ccw"
@@ -509,7 +567,10 @@ function toggleExpand(id: string) {
     <!-- Loading state only before first data — the 5s poll flips `pending`
          on every refresh and would otherwise flicker the whole list. -->
     <div class="px-4">
-      <div v-if="ordersPending && orderRows.length === 0" class="p-6 text-center text-muted">
+      <div
+        v-if="ordersPending && orderRows.length === 0"
+        class="p-6 text-center text-muted"
+      >
         {{ t('sales.workspace.loadingOrders') }}
       </div>
       <ul
@@ -546,83 +607,141 @@ function toggleExpand(id: string) {
               class="flex items-center gap-3 px-3 py-2.5"
               :class="expandedIds.has(order.id) ? 'ps-9' : 'group-hover:ps-9 pointer-coarse:ps-9'"
             >
-            <!-- Staff orders: warning edge bar on the row (li), no badge -->
-            <span class="shrink-0 font-mono font-semibold tabular-nums text-muted">
-              #{{ order.eventOrderNumber ?? '—' }}
-            </span>
-            <div class="min-w-0 flex-1">
-              <div class="flex items-center gap-2">
-                <span class="font-medium truncate">{{ order.clientName || t('sales.orders.client') }}</span>
+              <!-- Staff orders: warning edge bar on the row (li), no badge -->
+              <span class="shrink-0 font-mono font-semibold tabular-nums text-muted">
+                #{{ order.eventOrderNumber ?? '—' }}
+              </span>
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <!-- A cancelled order stays in the list, struck through (#1941):
+                     it did not happen, but it did get punched in, and hiding it
+                     would make the row numbers look like a miscount. -->
+                  <span
+                    class="font-medium truncate"
+                    :class="isCancelledOrder(order) ? 'line-through text-muted' : ''"
+                  >{{ order.clientName || t('sales.orders.client') }}</span>
+                  <UBadge
+                    v-if="isCancelledOrder(order)"
+                    color="error"
+                    variant="soft"
+                    size="sm"
+                    :label="t('sales.orders.cancelled')"
+                  />
+                </div>
+                <p
+                  v-if="order.owner"
+                  class="text-xs text-muted truncate flex items-center gap-1"
+                >
+                  <UIcon
+                    name="i-lucide-user"
+                    class="shrink-0"
+                  />
+                  {{ order.owner }}
+                </p>
               </div>
-              <p v-if="order.owner" class="text-xs text-muted truncate flex items-center gap-1">
-                <UIcon name="i-lucide-user" class="shrink-0" />
-                {{ order.owner }}
-              </p>
-            </div>
-            <!-- One LED per order: the combined worst status across all printers
+              <!-- One LED per order: the combined worst status across all printers
                  (red wins, then orange, then green; grey = no tickets at all).
                  Hover popover breaks it down per printer. -->
-            <div v-if="printerList.length" class="shrink-0 flex items-center" @click.stop>
-              <UPopover mode="hover" :open-delay="150">
-                <span
-                  class="block size-2.5 rounded-full transition-colors"
-                  :class="orderLed(order.id).class"
-                />
-                <template #content>
-                  <div class="p-3 space-y-3 min-w-52 max-w-72">
-                    <div v-for="printer in popoverPrinters(order.id)" :key="printer.id" class="space-y-1">
-                      <div class="flex items-center justify-between gap-3">
-                        <p class="text-sm font-semibold flex items-center gap-1.5 min-w-0">
-                          <UTooltip :text="printerLed(order.id, printer.id).label">
-                            <span
-                              class="size-2 rounded-full shrink-0 transition-colors"
-                              :class="printerLed(order.id, printer.id).class"
+              <div
+                v-if="printerList.length"
+                class="shrink-0 flex items-center"
+                @click.stop
+              >
+                <UPopover
+                  mode="hover"
+                  :open-delay="150"
+                >
+                  <span
+                    class="block size-2.5 rounded-full transition-colors"
+                    :class="orderLed(order.id).class"
+                  />
+                  <template #content>
+                    <div class="p-3 space-y-3 min-w-52 max-w-72">
+                      <div
+                        v-for="printer in popoverPrinters(order.id)"
+                        :key="printer.id"
+                        class="space-y-1"
+                      >
+                        <div class="flex items-center justify-between gap-3">
+                          <p class="text-sm font-semibold flex items-center gap-1.5 min-w-0">
+                            <UTooltip :text="printerLed(order.id, printer.id).label">
+                              <span
+                                class="size-2 rounded-full shrink-0 transition-colors"
+                                :class="printerLed(order.id, printer.id).class"
+                              />
+                            </UTooltip>
+                            <UIcon
+                              name="i-lucide-printer"
+                              class="shrink-0 text-muted"
                             />
-                          </UTooltip>
-                          <UIcon name="i-lucide-printer" class="shrink-0 text-muted" />
-                          <span class="truncate">{{ printer.title }}</span>
-                        </p>
-                        <span v-if="printerTime(order.id, printer.id)" class="text-xs text-dimmed tabular-nums">
-                          {{ printerTime(order.id, printer.id) }}
-                        </span>
+                            <span class="truncate">{{ printer.title }}</span>
+                          </p>
+                          <span
+                            v-if="printerTime(order.id, printer.id)"
+                            class="text-xs text-dimmed tabular-nums"
+                          >
+                            {{ printerTime(order.id, printer.id) }}
+                          </span>
+                        </div>
+                        <template
+                          v-for="job in printerJobs(order.id, printer.id)"
+                          :key="job.id"
+                        >
+                          <p
+                            v-if="String(job.status ?? '') === '9' && job.errorMessage"
+                            class="text-xs text-error"
+                          >
+                            {{ jobError(job) }}
+                          </p>
+                        </template>
                       </div>
-                      <template v-for="job in printerJobs(order.id, printer.id)" :key="job.id">
-                        <p v-if="String(job.status ?? '') === '9' && job.errorMessage" class="text-xs text-error">
-                          {{ jobError(job) }}
-                        </p>
-                      </template>
+                      <!-- Order generated no tickets at all (grey LED): explain once -->
+                      <p
+                        v-if="!popoverPrinters(order.id).length"
+                        class="text-xs text-muted"
+                      >
+                        {{ t('sales.printQueue.noTicketForPrinter') }}
+                      </p>
                     </div>
-                    <!-- Order generated no tickets at all (grey LED): explain once -->
-                    <p v-if="!popoverPrinters(order.id).length" class="text-xs text-muted">
-                      {{ t('sales.printQueue.noTicketForPrinter') }}
-                    </p>
-                  </div>
-                </template>
-              </UPopover>
-            </div>
+                  </template>
+                </UPopover>
+              </div>
             </div>
           </div>
           <SalesEventWorkspaceOrderItems
             v-if="expandedIds.has(order.id)"
             :order-id="order.id"
             :remarks="order.overallRemarks"
+            :status="order.status"
             :location-remarks="order.locationRemarks"
             :locations="locations || []"
             :print-jobs="jobsByOrder.get(order.id) || []"
             :has-printers="printerList.length > 0"
             @retry-job="retryPrintJob"
             @reprint-order="reprintOrder"
+            @cancel-order="cancelOrder"
             @delete-order="deleteOrder"
           />
         </li>
       </ul>
       <!-- Same empty-state styling as the cart's "empty" block (Client/Cart.vue) -->
-      <div v-else class="p-12 flex flex-col items-center justify-center gap-3 text-muted">
-        <UIcon name="i-lucide-receipt" class="size-10 opacity-40" />
-        <p class="text-sm">{{ hasActiveFilters ? t('sales.workspace.noOrdersFiltered') : t('sales.workspace.noOrders') }}</p>
+      <div
+        v-else
+        class="p-12 flex flex-col items-center justify-center gap-3 text-muted"
+      >
+        <UIcon
+          name="i-lucide-receipt"
+          class="size-10 opacity-40"
+        />
+        <p class="text-sm">
+          {{ hasActiveFilters ? t('sales.workspace.noOrdersFiltered') : t('sales.workspace.noOrders') }}
+        </p>
       </div>
       <!-- Older orders: newest page is the register's working set; history on demand -->
-      <div v-if="ordersPageCount > 1" class="flex items-center justify-center gap-3 pt-1">
+      <div
+        v-if="ordersPageCount > 1"
+        class="flex items-center justify-center gap-3 pt-1"
+      >
         <UButton
           variant="ghost"
           size="xs"
