@@ -186,3 +186,25 @@ test('runActions on a leaf edits the target body and labels it (mock exec)', () 
   assert.ok(labelCalls.some(c => c.includes('--remove-label')), 'must remove work-this first')
   assert.ok(labelCalls.some(c => c.includes('--add-label')), 'then re-add work-this')
 })
+
+// ── #1745: a hold is an ASK, so it must NOTIFY ────────────────────────────────────────
+// The pi contract now tells the agent that in plan-only mode the {"signoff"} shape IS its
+// asking channel, and promises the apply step "@mentions the owner and applies
+// status:blocked for you". That promise was false when written — the rendered comment had
+// no mention, so a hold landed silently and waited on someone happening to notice it.
+// These pin the promise so it can't silently regress into a lie again.
+test('a signoff hold @mentions the owner and holds status:blocked (mock exec)', () => {
+  const calls = []
+  const exec = (file, args) => { calls.push(args); return '' }
+  const acts = planToActions(parsePlan({ signoff: { summary: 'the cutoff is a policy call', questions: ['14, 30 or 90 days?', 'delete or warn?'] } }), CTX)
+  runActions(acts, { repo: 'o/r', exec, writeBody: (t, b) => { calls.push(['BODY', b]); return `/tmp/${t}` }, log: () => {} })
+
+  const written = calls.find(c => c[0] === 'BODY')[1]
+  assert.match(written, /@pmcp/, 'a hold needs action from the owner → it must @mention them')
+  // both forks must survive into the comment — the ask is useless if a question is dropped
+  assert.match(written, /14, 30 or 90 days\?/)
+  assert.match(written, /delete or warn\?/)
+  // and it must actually hold, or the artifact-gate sees no sign-off and calls the run a no-op
+  const labelCalls = calls.filter(c => Array.isArray(c) && c.includes('status:blocked'))
+  assert.ok(labelCalls.some(c => c.includes('--add-label')), 'must apply status:blocked')
+})

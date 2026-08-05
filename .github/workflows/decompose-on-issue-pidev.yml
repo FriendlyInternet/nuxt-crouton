@@ -441,8 +441,19 @@ jobs:
             )
 
             const signoffHeld = blocked && newComment
+
+            // ── ASK vs APPROVE (#1745) ────────────────────────────────────────────────
+            // A held run means one of two very different things to the owner: "review and
+            // approve this" (a sign-off) or "answer this question" (an ask-human fork — the
+            // decide-vs-ask carve-out in .claude/agents/pi-operating-contract.md). Reporting
+            // both as "held for sign-off" tells the owner to APPROVE when what is actually
+            // needed is an ANSWER — the gate asserting a state it never distinguished (#1751).
+            // The ask-human template's mandatory first line is the discriminator.
+            const askedQuestion = signoffHeld &&
+              comments.some(c => /^##\s*🔀\s*Blocked\b/m.test(c.body || ''))
+
             if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues || leafDispatched) {
-              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues} leafDispatched=${leafDispatched}`)
+              core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} askedQuestion=${askedQuestion} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues} leafDispatched=${leafDispatched}`)
               // Result-comment-back (#1017) — only on a label-triggered run (a human is watching the
               // issue). This comment posts as the Harness App (nuxt-harness[bot]) — an unmistakable
               // bot account — so it uses the agent-pipeline provenance header, NOT the @pmcp disclaimer.
@@ -452,6 +463,7 @@ jobs:
                   .map(e => e.source.issue.number)[0]
                 const what = freshPR
                   ? `done → PR #${freshPR}`
+                  : askedQuestion ? '**asked you a question** — it needs an *answer*, not an approval. See the 🔀 comment above; replying on this issue resumes the work in a fresh run.'
                   : (createdSubIssues ? 'decomposed → sub-issues created (see the tree)'
                     : leafDispatched ? 'classified as a leaf → handed to the `work-this` worker (its PR lands in a separate run)'
                     : signoffHeld ? 'held for sign-off (`status:blocked` + a review)'
