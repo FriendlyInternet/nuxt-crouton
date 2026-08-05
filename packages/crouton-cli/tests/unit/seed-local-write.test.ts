@@ -7,8 +7,9 @@ import { runLocalSeed } from '../../lib/seed-app'
 
 // #1612 (behavioural proof) — the local runner must write into `<appDir>/.data/db/sqlite.db`
 // (the file nuxt dev reads) and never touch the miniflare `.wrangler` dir.
-// Local-only: CI lacks the better-sqlite3 native binding (same reason as crouton-printing #1539).
-describe.skipIf(process.env.CI)('local seed writes into .data/db/sqlite.db (#1612)', () => {
+// Runs in CI now: ci.yml's test job rebuilds better-sqlite3's native binding (#1880). This is
+// the contract #1612 went dark behind — a skipped test reads exactly like a passing one.
+describe('local seed writes into .data/db/sqlite.db (#1612)', () => {
   it('a row from the local runner lands in the .data DB, and .wrangler is never touched', () => {
     const appDir = mkdtempSync(join(tmpdir(), 'seed-write-'))
     try {

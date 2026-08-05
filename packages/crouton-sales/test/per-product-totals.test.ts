@@ -39,14 +39,10 @@ import {
 } from '../server/utils/location-handover'
 import { buildPerProductTotals } from '../server/utils/per-product-totals'
 
-// Local-only, and that is a known gap — not a preference. Every ci.yml job installs with
-// `pnpm install --ignore-scripts`, so better-sqlite3's native binding is never built and
-// `new Database()` below throws "Could not locate the bindings file". Same reason
-// crouton-cli's seed-local-write test is local-only. The rebuild that fixes it is already
-// live in the three deploy workflows (#154) and just needs applying to ci.yml — tracked in
-// #1880, which also removes this guard. Until then the drift these tests catch is unguarded
-// on the PR path: run them locally before touching the outstanding rule.
-const describeLocal = describe.skipIf(process.env.CI)
+// Runs in CI now: ci.yml's test job rebuilds better-sqlite3's native binding (#1880), so
+// `new Database()` no longer throws "Could not locate the bindings file". The alias stays
+// only so the describe blocks below read unchanged.
+const describeLocal = describe
 
 // ---------------------------------------------------------------------------
 // Minimal mirrors of the generated tables — only the columns the query reads.
