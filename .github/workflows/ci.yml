@@ -505,6 +505,27 @@ jobs:
     # existing baseline never walls a PR red; it stops NEW dead code,
     # duplication, and dependency drift at the door. Signal quality was
     # proven by the #1143 triage (712 → 7 unused-file false positives).
+    #
+    # BASELINES (#1714) — three committed artifacts at the repo root, wired in
+    # `.fallowrc.json` under `audit` (NOT as flags here, so a local
+    # `npx fallow audit` judges a diff exactly as CI does):
+    #   .fallow-health-baseline.json · .fallow-dead-code-baseline.json ·
+    #   .fallow-dupes-baseline.json
+    # Before #1714 only `health` had one, so dead-code and duplication relied
+    # solely on the base-snapshot attribution pass — which is position-based and
+    # therefore blamed a PR for a debt-carrying file's PRE-EXISTING findings the
+    # moment it deleted or moved lines there (reproducer: PR #1708 went red with
+    # 12 findings byte-identical on `main`). Regenerate them only when debt is
+    # genuinely paid down — see the refresh commands in `.fallowrc.json`.
+    #
+    # KNOWN, DELIBERATE: this job installs with `--ignore-scripts`, so the audit
+    # logs "Nuxt project missing .nuxt/tsconfig.json". Do NOT "fix" that by
+    # adding `nuxt prepare` here. fallow extracts the BASE snapshot to its own
+    # temp dir and exposes no hook to prepare it, so preparing only the head
+    # would make head resolve BETTER than base — widening the very asymmetry
+    # that mis-attributes findings. Both sides are currently degraded equally,
+    # which is symmetric and therefore safe. (It would also cost a full package
+    # build, since `nuxt prepare` needs the workspace packages built first.)
     name: Fallow Audit
     runs-on: ubuntu-latest
     # Waits on the test job for its coverage artifact (#1256): real per-function
