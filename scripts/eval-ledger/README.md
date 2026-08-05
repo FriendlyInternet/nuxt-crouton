@@ -110,4 +110,4 @@ and provider-qualifies the model. It runs where the session file lives (the mac-
   session jsonl; a real datapoint (2026-07-07 a11y-pidev, $0.365) is already seeded.
 - **task-worker / decompose** capture (appending a row from those flows) is the remaining piece —
   the periodic scoreboard post itself ships here (`eval-scoreboard.yml`).
-- **Golden-task eval** rows (`flow: golden-*`, on fixtures, never `main`) are #885.
+- **Golden-task eval** rows (`flow: golden-*`, on fixtures, never `main`) ship in `scripts/eval-golden/` (#885) — 3 deterministic probes (reports-only / small-crud / scaffold) that append here via the same `append.mjs`.
