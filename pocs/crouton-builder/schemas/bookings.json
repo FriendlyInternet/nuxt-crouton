@@ -1,0 +1,51 @@
+{
+  "artist": {
+    "type": "string",
+    "refTarget": "artists",
+    "meta": {
+      "required": true,
+      "label": "Artist",
+      "area": "main"
+    }
+  },
+  "venue": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "label": "Venue",
+      "area": "main"
+    }
+  },
+  "date": {
+    "type": "date",
+    "meta": {
+      "required": true,
+      "label": "Date",
+      "area": "main",
+      "help": "Feeds the Bookings · Chart block (bookings per week)"
+    }
+  },
+  "fee": {
+    "type": "decimal",
+    "meta": {
+      "label": "Fee",
+      "precision": 10,
+      "scale": 2,
+      "area": "sidebar"
+    }
+  },
+  "status": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "default": "pending",
+      "label": "Status",
+      "area": "sidebar",
+      "options": [
+        { "value": "pending", "label": "Pending" },
+        { "value": "confirmed", "label": "Confirmed" },
+        { "value": "cancelled", "label": "Cancelled" }
+      ]
+    }
+  }
+}

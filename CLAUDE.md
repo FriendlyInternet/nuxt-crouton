@@ -190,6 +190,8 @@ After each task: announce completion, STOP. User runs `/clear`. Fresh agent read
 
 **🟦 STANDING RULE — deploy to STAGING, never production (#318).** The default deploy target is **always staging**: agents, skills, and routine work deploy to staging only (`/deploy` skill / `cf:staging` / **merge to `main`**). **NEVER deploy to production** except via the dedicated **`/deploy-production`** skill, invoked on an **explicit human request** to ship to prod. Production stays a deliberate, manual `workflow_dispatch` (env=production) — never a side effect of an agent flow.
 
+**🟦 STANDING RULE — the owner tests on MOBILE, on the go: the deliverable is a deployed STAGING URL, not a local run.** Maarten reviews from his phone and **cannot run the app locally** — so for any UI-touching or human-testable change, "how do you test this" is answered by a **live staging URL + review creds**, never "run `pnpm dev`". Local dev (+ the pre-installed chromium) is for the **agent's own** verification before shipping; it is **not** a test path you hand the owner. So the last step of such work is: **proactively deploy to staging and hand back the clickable URL** — don't offer local as an option, and don't wait to be asked to deploy. Targets: a `pocs/*` app → dispatch **`deploy-pocs.yml`** (`workflow_dispatch` checks out the branch you run it FROM, so dispatch it on the feature branch — the PR head need not match) with `app:<name>` (+ `review_pr:<n>` to comment the URL on the PR); a launched `apps/*` app → `/deploy` skill / `cf:staging` / merge to `main`. Staging seeds on deploy, so the live app has data. Review login for the builder POC: `review@crouton.dev` / `ReviewCrouton2026`. (Sign-off gates that need a *device* walk — e.g. touch-gesture `status:new` spec entries — are gated on this staging URL, not a local screenshot.)
+
 **Trunk = staging (#347):** a **merge to `main`** that touches an app's paths auto-deploys its **staging** env (`<app>.pmcp.dev`) — landing code previews itself. The old separate `staging` branch is retired. This can't ever reach production: a `push` event never sets `environment=production` (that input is gated on `workflow_dispatch`), so #318 holds structurally, not just by convention.
 
 **The check ladder (#632)** — which checks gate at which rung of PR → staging → prod. The right check at the right rung: PRs stay fast, prod stays safe. Full panel (exact workflows, path filters, gaps): `writeups/architecture/deployment-topology.html`.
@@ -455,6 +457,26 @@ rule:** a prior session's (or a task brief's) claimed limitation is a
 *hypothesis* — verify it with a 5-second check before designing around it. The
 same applies to any "X isn't available here" (TodoWrite, a CLI, a binary): probe,
 don't trust a stale assertion.
+
+**The sandbox can BOTH run a crouton app locally AND reach the live staging preview.**
+Local: `pnpm dev` + this chromium. Deployed: `*.pmcp.dev` staging egress is now
+**allowlisted** (#760), so from a web session you can `curl`/`$fetch`-drive the **real
+deployed build** — log in with the review creds, hit the live API, and observe
+deploy-only state (remote D1, a seed that actually ran) that local dev cannot show
+(verified: signup → set-active → create round-trips against a live `*.pmcp.dev`).
+Match the bug to the right rung of the **fidelity ladder** (`typecheck → local dev →
+deployed staging → the user's device`): a **runtime** bug (reload loop, 500, broken
+interaction) reproduce + verify **locally** first (the #988 board-reload lesson: three
+blind pushes vs one local repro), but a **deploy-only / production-build** bug must be
+checked against the **live** preview, not local. **Two residual gaps:** (a) **iOS/WebKit**
+— no Safari engine here, so a device-specific crash stays the user's call to confirm;
+(b) live **screenshots** — Playwright's bundled chromium `ERR_CONNECTION_RESET`s on the
+egress proxy's re-terminated TLS, so pixel capture of a `*.pmcp.dev` page needs the proxy
+CA trusted in a chromium NSS profile first (**#1172**; functional/API drive already works).
+Never push an unverified guess and wait ~15 min for a deploy to learn it was wrong. The
+method rule lives in `AGENTS.md` (*Bug work → reproduce against the running system*, incl.
+the fidelity ladder); the concrete boot + browser-drive + auth/team recipe is the
+**`crouton-run-and-operate`** skill.
 
 ## UI Sign-Off (deploy a live preview before you build) — epic #307
 

@@ -34,6 +34,21 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
           { label: 'Table', value: 'table' },
         ],
       },
+      // Page-context render (#983): on a PAGE a list is a content-sized block —
+      // it shows `pageSize` items, then a bounded viewer control. Ignored in the
+      // admin (fill-and-scroll) context.
+      { name: 'pageSize', type: 'number', label: 'Items per page', default: 10 },
+      {
+        name: 'viewer',
+        type: 'select',
+        label: 'Viewer',
+        default: 'load-more',
+        options: [
+          { label: 'Load more', value: 'load-more' },
+          { label: 'Paginate', value: 'paginate' },
+          { label: 'Search', value: 'search' },
+        ],
+      },
     ],
   },
   'entity-form': {

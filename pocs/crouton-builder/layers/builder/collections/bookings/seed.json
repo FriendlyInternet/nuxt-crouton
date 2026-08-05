@@ -1,0 +1,48 @@
+{
+  "table": "builder_bookings",
+  "key": null,
+  "rows": [
+    {
+      "artist": "Nova Sirens",
+      "venue": "De Roma",
+      "date": 1780560000,
+      "fee": 1800,
+      "status": { "value": "confirmed", "label": "Confirmed" }
+    },
+    {
+      "artist": "The Copper Owls",
+      "venue": "Trix",
+      "date": 1781164800,
+      "fee": 1200,
+      "status": { "value": "confirmed", "label": "Confirmed" }
+    },
+    {
+      "artist": "Miyu Tanaka",
+      "venue": "Ancienne Belgique",
+      "date": 1781769600,
+      "fee": 2400,
+      "status": { "value": "pending", "label": "Pending" }
+    },
+    {
+      "artist": "Nova Sirens",
+      "venue": "Vooruit",
+      "date": 1782374400,
+      "fee": 2000,
+      "status": { "value": "confirmed", "label": "Confirmed" }
+    },
+    {
+      "artist": "Marée Haute",
+      "venue": "Botanique",
+      "date": 1782979200,
+      "fee": 1500,
+      "status": { "value": "cancelled", "label": "Cancelled" }
+    },
+    {
+      "artist": "The Copper Owls",
+      "venue": "De Roma",
+      "date": 1783584000,
+      "fee": 1600,
+      "status": { "value": "confirmed", "label": "Confirmed" }
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+[
+  {
+    "collection": "bookings",
+    "fields": [
+      "artist",
+      "venue",
+      "date",
+      "fee",
+      "status"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-07-02T20:21:37.473Z",
+    "layer": "builder",
+    "gitSha": "e7d9785"
+  },
+  {
+    "collection": "artists",
+    "fields": [
+      "name",
+      "genre",
+      "image",
+      "bio",
+      "rating",
+      "active"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-07-02T20:21:37.455Z",
+    "layer": "builder",
+    "gitSha": "e7d9785"
+  },
+  {
+    "collection": "pages",
+    "fields": [
+      "title",
+      "slug",
+      "isHome",
+      "status",
+      "showInNavigation",
+      "board"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-07-02T20:21:37.435Z",
+    "layer": "builder",
+    "gitSha": "e7d9785"
+  }
+]

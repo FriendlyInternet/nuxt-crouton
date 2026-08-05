@@ -1,329 +1,543 @@
 <script setup lang="ts">
 /**
- * Board (#988) — `/builder/[pageId]`. Deep-linkable; browser back returns to the Site
- * flow. Composes one page's `LayoutTree` through the graduated package:
- *  - `CroutonLayoutEditableRenderer` owns the pane handles (reorder / detach, #985).
- *  - `applyPaneDrop` (#985) places a palette block beside the hovered pane.
- *  - `CroutonLayoutRenderer` (read-only) previews it hug-aware (#986).
- *  - `serializeLayoutDocument` + the #974 endpoint round-trip it onto a ticket.
- * Reproduces the five `data-handoff` hooks verbatim (page-badge · region-pill · floor
- * -readout · snap-guide · ghost-pane), so one exploratory agent runs identically on the
- * POC and this app. A matching `view-transition-name` morphs the Site card into the board.
+ * /builder/[pageId] — the PAGE BOARD, on the CroutonFlow candidate canvas.
+ *
+ * The board is a Vue Flow surface of layout candidates; exactly ONE node is "the page"
+ * (spec: `page-model-one-node`), rendered over the REAL collections through the package
+ * renderer (WYSIWYG). This is a REAL route (deep-linkable, browser-back returns to
+ * `/builder`) — the graduated replacement for the POC's `selectedPageId` v-if swap
+ * (spec: `page-site-routing`).
+ *
+ * This slice rebuilds the board on the canvas with the foundational gestures:
+ *  · page-model-one-node — the persisted page LayoutTree seeds as one ★ node
+ *  · add-block-land      — palette drop/tap lands a fresh block in a clear spot right of everything
+ *  · enter-page-fit      — entering the page frames its node
+ *  · drag-glow           — a dragged card carries a light-green halo (BuilderBlockNode)
+ * Board state persists DURABLY: the page node serialises through the package's canonical
+ * `layout-serialize` (spec: `layouttree-serialise`) to the `board` json column of the
+ * `builderPages` row (spec: `board-persistence`). The heavy in-canvas gestures
+ * (snap-dwell, pane-drop, detach/reorder, pinch-zoom, focus-edit) arrive in the next slice.
+ *
+ * Hooks: `page-badge` + `region-pill` (on the node), `floor-readout` (header).
  */
-import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
-import { applyPaneDrop, type PaneDropEdge, type NodePath } from '@fyit/crouton-layout/app/utils/layout-edit'
-import { deriveSizing } from '@fyit/crouton-layout/app/utils/layout-viability'
+import { markRaw, shallowRef, provide } from 'vue'
+import type { LayoutNode, LayoutTree, LayoutBreakpoint } from '@fyit/crouton-core/app/types/layout'
+import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize'
+import { dropNode, applyPaneDrop, detachNode, moveChild } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { snapEdge, rectsOverlapFrac } from '@fyit/crouton-layout/app/utils/layout-snap'
+import BuilderBlockNode from '~/components/BuilderBlockNode.vue'
+import { BUILDER_SNAP_KEY, BUILDER_SET_PAGE_KEY, BUILDER_SET_REGION_KEY, BUILDER_SET_SIZE_KEY, BUILDER_DETACH_KEY, BUILDER_REORDER_KEY, type BuilderRegion, type BuilderNodeSize, type BuilderDetachPayload, type BuilderReorderPayload, type BuilderSnapPreview } from '~/utils/builder-keys'
+import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
+
+const blockNode = markRaw(BuilderBlockNode)
+
+// Require auth — same reason as the site page: no session → no team → a stuck board.
+definePageMeta({ middleware: ['auth'] })
 
 const route = useRoute()
-const router = useRouter()
 const pageId = computed(() => String(route.params.pageId))
 
-const { getPage, setPageTree, serialize } = useBuilderDocument()
-const { blocks } = useCroutonLayoutBlocks()
+const { items: pages } = await useCollectionQuery('builderPages')
+const page = computed(() => (pages.value as BuilderPage[]).find(p => p.id === pageId.value) ?? null)
+useHead({ title: () => `Builder · ${page.value?.title ?? 'Page'}` })
 
-const page = computed(() => getPage(pageId.value))
-const root = computed<LayoutNode | null>(() => page.value?.tree.root ?? null)
-
-useHead(() => ({ title: page.value ? `Builder · ${page.value.name}` : 'Builder · not found' }))
-
-// --- editable tree (reorder / detach via the package renderer) -------------------
-function onUpdateNode(node: LayoutNode) {
-  setPageTree(pageId.value, node)
+// ── The board = Vue Flow rows (ephemeral). Exactly one node is "the page" (isPage). ──
+interface FlowNode {
+  id: string
+  type: string
+  position: { x: number, y: number }
+  data: { node: LayoutNode, label?: string, bp?: LayoutBreakpoint[], isPage?: boolean, justAdded?: boolean, region?: BuilderRegion, width?: number, height?: number }
 }
-function onDetach(payload: { path: NodePath, node: LayoutNode }) {
-  // MVP: a detached pane is removed from the board (the host's placement decision —
-  // a fuller app would float it as a free draft card, the POC's board behaviour).
-  if (root.value && root.value.type === 'split') {
-    const remaining = root.value.children.filter((_, i) => i !== payload.path[0])
-    const next: LayoutNode = remaining.length === 1
-      ? remaining[0]!
-      : { ...root.value, children: remaining }
-    setPageTree(pageId.value, next)
+const nodes = ref<FlowNode[]>([])
+let seq = 0
+
+// CroutonFlow exposes fitView / fitBounds / setCenter via ref (deterministic camera).
+const flowRef = ref<{
+  fitBounds?: (b: { x: number, y: number, width: number, height: number }, o?: Record<string, unknown>) => void
+  fitView?: (o?: Record<string, unknown>) => void
+} | null>(null)
+
+// The palette = the app's REAL registered blocks (mirrors app.config's croutonLayoutBlocks).
+const drawer = [
+  { blockId: 'artists-list', label: 'Artists · List', icon: 'i-lucide-list', collection: 'builderArtists', heading: 'Artists' },
+  { blockId: 'artists-form', label: 'Artists · New', icon: 'i-lucide-square-pen', collection: 'builderArtists', heading: 'New artist' },
+  { blockId: 'artists-stats', label: 'Artists · Stats', icon: 'i-lucide-gauge', collection: 'builderArtists', heading: 'Artists' },
+  { blockId: 'bookings-list', label: 'Bookings · List', icon: 'i-lucide-list', collection: 'builderBookings', heading: 'Bookings' },
+  { blockId: 'app-toolbar', label: 'Top bar', icon: 'i-lucide-panel-top' },
+  { blockId: 'app-nav', label: 'Bottom nav', icon: 'i-lucide-panel-bottom' },
+  { blockId: 'spacer', label: 'Spacer', icon: 'i-lucide-square-dashed' },
+]
+type DrawerItem = (typeof drawer)[number]
+
+// A starter arrangement over the REAL collections, so a fresh page opens laid-out.
+function starterRoot(): LayoutNode {
+  return {
+    type: 'split',
+    direction: 'horizontal',
+    children: [
+      { type: 'leaf', blockId: 'artists-list', config: { collection: 'builderArtists', heading: 'Artists', layout: 'list' } },
+      { type: 'leaf', blockId: 'artists-form', config: { collection: 'builderArtists', heading: 'New artist' } },
+    ],
   }
 }
 
-// --- floor readout (deriveSizing, #986 contract) ---------------------------------
-const floor = computed(() => (root.value ? deriveSizing(root.value, blocks.value) : null))
-
-// --- regions (a hug bar at an edge = a pinned region) ----------------------------
-const regions = computed(() => {
-  const r = root.value
-  if (!r || r.type !== 'split' || r.direction !== 'vertical') return [] as { region: 'top' | 'bottom', label: string }[]
-  const out: { region: 'top' | 'bottom', label: string }[] = []
-  const first = r.children[0]
-  const last = r.children[r.children.length - 1]
-  if (first?.type === 'leaf' && first.blockId === 'top-bar') out.push({ region: 'top', label: 'Top bar' })
-  if (last?.type === 'leaf' && last.blockId === 'bottom-nav') out.push({ region: 'bottom', label: 'Bottom nav' })
-  return out
-})
-
-// --- palette + place-a-block (applyPaneDrop, #985) -------------------------------
-const palette = computed(() =>
-  ['overview', 'artists-list', 'artists-form', 'bookings-chart', 'top-bar', 'bottom-nav']
-    .map(id => blocks.value[id])
-    .filter((b): b is NonNullable<typeof b> => Boolean(b)),
+// Seed the board ONCE per page (open / pageId change) — never on a collection refetch,
+// so a save (which refetches builderPages) can't re-seed and loop the board.
+const loadedFor = ref<string | null>(null)
+const ready = ref(false)
+watch(
+  [page, pageId] as const,
+  ([p, id]) => {
+    if (!p || loadedFor.value === id) return
+    const stored = (p.board as Record<string, unknown> | null)?.layout
+    const parsed = typeof stored === 'string' ? parseLayoutTree(stored) : null
+    nodes.value = [{
+      id: `page-${id}`,
+      type: 'default',
+      position: { x: 80, y: 80 },
+      data: { node: parsed?.root ?? starterRoot(), label: p.title, bp: parsed?.breakpoints, isPage: true },
+    }]
+    loadedFor.value = id
+    ready.value = true
+    fitPage()
+  },
+  { immediate: true },
 )
-const defaultConfig: Record<string, Record<string, unknown>> = {
-  'overview': { label: 'Overview', kind: 'panel', icon: 'i-lucide-layout-dashboard' },
-  'artists-list': { label: 'List', kind: 'panel', variant: 'rows', icon: 'i-lucide-list' },
-  'artists-form': { label: 'Form', kind: 'panel', icon: 'i-lucide-square-pen' },
-  'bookings-chart': { label: 'Chart', kind: 'panel', icon: 'i-lucide-bar-chart-3' },
-  'top-bar': { label: 'Top bar', kind: 'bar', icon: 'i-lucide-panel-top' },
-  'bottom-nav': { label: 'Nav', kind: 'nav', icon: 'i-lucide-panel-bottom' },
-}
 
-const placing = ref<string | null>(null) // the blockId being placed
-const boardRef = ref<HTMLElement | null>(null)
-const arm = ref<{ index: number, edge: PaneDropEdge, rect: { left: number, top: number, width: number, height: number } } | null>(null)
+const pageNode = computed(() => nodes.value.find(n => n.data.isPage) ?? null)
 
-function startPlacing(blockId: string) {
-  placing.value = placing.value === blockId ? null : blockId
-  arm.value = null
-}
+// floor-readout hook — the page's derived floor (folded bottom-up over the block registry).
+const { blocks } = useCroutonLayoutBlocks()
+const derived = computed(() => (pageNode.value ? deriveSizing(pageNode.value.data.node, blocks.value) : null))
 
-function onBoardMove(e: PointerEvent) {
-  if (!placing.value || !boardRef.value) return
-  const board = boardRef.value.getBoundingClientRect()
-  const panes = Array.from(boardRef.value.querySelectorAll<HTMLElement>('[data-pane-id]'))
-    .filter(el => el.dataset.paneId !== 'root')
-  for (let i = 0; i < panes.length; i++) {
-    const r = panes[i]!.getBoundingClientRect()
-    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) continue
-    // quadrant → nearest edge
-    const relX = (e.clientX - (r.left + r.width / 2)) / r.width
-    const relY = (e.clientY - (r.top + r.height / 2)) / r.height
-    const edge: PaneDropEdge = Math.abs(relX) >= Math.abs(relY) ? (relX >= 0 ? 'right' : 'left') : (relY >= 0 ? 'bottom' : 'top')
-    arm.value = {
-      index: i,
-      edge,
-      rect: { left: r.left - board.left, top: r.top - board.top, width: r.width, height: r.height },
+// enter-page-fit — frame the page node on entry. The flow measures async on a fresh mount,
+// so retry across a few frames until fitBounds lands on the real geometry.
+function fitPage() {
+  if (!import.meta.client) return
+  const fit = () => {
+    const p = pageNode.value
+    if (p && flowRef.value?.fitBounds) {
+      const s = sizeOf(p.data.node)
+      flowRef.value.fitBounds({ x: p.position.x, y: p.position.y, width: s.width, height: s.height }, { duration: 0, padding: 0.18 })
     }
-    return
+    else { flowRef.value?.fitView?.({ duration: 0, padding: 0.2, maxZoom: 1 }) }
   }
-  arm.value = null
+  nextTick(fit)
+  for (const d of [40, 120, 300]) window.setTimeout(fit, d)
 }
 
-function commitPlace() {
-  const a = arm.value
-  const blockId = placing.value
-  if (!a || !blockId || !root.value) return
-  const def = blocks.value[blockId]
-  const child: LayoutNode = {
+// add-block-land — a clear spot to the RIGHT of every node (never under one).
+// Measure neighbours with `effSize` (the per-element-resized/expanded on-screen size),
+// NOT the intrinsic `sizeOf` footprint — else a new block lands *behind* a card that was
+// resized wider than its footprint (spec: `page-model-one-node`, IMG feedback 2026-07).
+function clearSpot(): { x: number, y: number } {
+  if (!nodes.value.length) return { x: 80, y: 80 }
+  let maxRight = -Infinity, topY = Infinity
+  for (const n of nodes.value) {
+    const s = effSize(n)
+    maxRight = Math.max(maxRight, n.position.x + s.width)
+    topY = Math.min(topY, n.position.y)
+  }
+  return { x: Math.round(maxRight + 100), y: Math.round(topY) }
+}
+
+let justAddedTimer: number | null = null
+function landNode(item: DrawerItem, position: { x: number, y: number }) {
+  dirty.value = true
+  const leaf: LayoutNode = {
     type: 'leaf',
-    blockId,
-    config: defaultConfig[blockId] ?? {},
-    ...(def?.defaultSize !== undefined ? { defaultSize: def.defaultSize } : {}),
+    blockId: item.blockId,
+    config: item.collection ? { collection: item.collection, heading: item.heading } : {},
   }
-  setPageTree(pageId.value, applyPaneDrop(root.value, { path: [a.index], edge: a.edge }, child))
-  placing.value = null
-  arm.value = null
+  const added: FlowNode = { id: `block-${++seq}`, type: 'default', position, data: { node: leaf, label: item.label, justAdded: true } }
+  nodes.value = [...nodes.value.map(n => (n.data.justAdded ? { ...n, data: { ...n.data, justAdded: false } } : n)), added]
+  if (justAddedTimer != null) window.clearTimeout(justAddedTimer)
+  justAddedTimer = window.setTimeout(() => {
+    nodes.value = nodes.value.map(n => (n.id === added.id ? { ...n, data: { ...n.data, justAdded: false } } : n))
+  }, 2400)
+  // Frame the new block so it's never hidden behind an existing layout.
+  const s = sizeOf(leaf)
+  const margin = Math.max(s.width, s.height) * 0.9
+  nextTick(() => flowRef.value?.fitBounds?.(
+    { x: position.x - margin, y: position.y - margin, width: s.width + margin * 2, height: s.height + margin * 2 },
+    { duration: 350, padding: 0.1 },
+  ))
 }
 
-function cancelPlace() {
-  placing.value = null
-  arm.value = null
+// HTML5 drag source (desktop) — stamp the payload CroutonFlow's drop handler reads.
+function onDragStart(e: DragEvent, item: DrawerItem) {
+  e.dataTransfer?.setData('application/json', JSON.stringify({
+    type: 'crouton-item',
+    collection: item.collection ?? 'builder',
+    item: { id: `${item.blockId}-${++seq}`, ...item },
+  }))
+  if (e.dataTransfer) e.dataTransfer.effectAllowed = 'move'
+}
+// CroutonFlow emits this on drop with the flow-space position.
+function onNodeDrop(item: Record<string, unknown>, position: { x: number, y: number }) {
+  const found = drawer.find(d => d.blockId === item.blockId) ?? { blockId: String(item.blockId), label: String(item.label ?? item.blockId) }
+  landNode(found as DrawerItem, position)
+}
+// Tap-to-add (mobile — HTML5 drag doesn't fire on touch): lands in a clear spot, drawer stays open.
+const toast = useToast()
+function addBlock(item: DrawerItem) {
+  landNode(item, clearSpot())
+  toast.add({ title: `Added ${item.label}`, icon: 'i-lucide-plus', duration: 1100 })
 }
 
-onMounted(() => {
-  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cancelPlace() }
-  window.addEventListener('keydown', onKey)
-  onUnmounted(() => window.removeEventListener('keydown', onKey))
-})
+// ── snap-dwell + merge (spec: `snap-dwell-arm`) ─────────────────────────────────
+// Drag a card near another's edge → soft guide; hold ~600ms → armed (green); release while
+// armed → the two merge into a split. The board owns the live preview + the dwell timer; the
+// target card lights its edge (BuilderBlockNode reads `snapPreview` by object identity of its
+// node). The merge is the graduated `dropNode`; the geometry is the graduated `snapEdge`.
+const SNAP_DWELL_MS = 600
+const SNAP_OPTS = { gap: 160, align: 0.25 }
+const PANE_DROP_MIN = 0.35 // ≥35% of the dragged card over a composed target → drop-beside-pane
+const snapPreview = shallowRef<BuilderSnapPreview | null>(null)
+provide(BUILDER_SNAP_KEY, snapPreview)
 
-// snap-guide band styling for the armed edge
-const guideStyle = computed(() => {
-  const a = arm.value
-  if (!a) return {}
-  const thick = 4
-  const base = { position: 'absolute' as const, background: 'var(--ui-primary)', borderRadius: '3px', zIndex: 20 }
-  if (a.edge === 'left' || a.edge === 'right') {
-    return { ...base, top: `${a.rect.top + 6}px`, height: `${a.rect.height - 12}px`, width: `${thick}px`, left: `${a.rect.left + (a.edge === 'right' ? a.rect.width - thick : 0)}px` }
+// page-regions-pin (spec: `page-regions-pin`) — pin/unpin a node to the page's top/bottom edge.
+// Bounded enum on the FlowNode data; the assembled sticky-bar page render is the app's real page
+// route (a follow-up) — the board carries the pin state + the region-pill hook.
+function setRegion(node: LayoutNode, region: BuilderRegion | null) {
+  nodes.value = nodes.value.map(n => (n.data.node === node ? { ...n, data: { ...n.data, region: region ?? undefined } } : n))
+  dirty.value = true
+}
+provide(BUILDER_SET_REGION_KEY, setRegion)
+
+// page-model-one-node — mark a card as THE page (the ★-badged live layout a visitor sees), clearing
+// the flag on every other card so exactly one is the page. Save serialises whichever node is the page.
+function setPage(node: LayoutNode) {
+  nodes.value = nodes.value.map(n => ({ ...n, data: { ...n.data, isPage: n.data.node === node } }))
+  dirty.value = true
+}
+provide(BUILDER_SET_PAGE_KEY, setPage)
+
+// per-element-resize — write a card's explicit display width/height (null clears to footprint).
+function setNodeSize(node: LayoutNode, size: BuilderNodeSize) {
+  nodes.value = nodes.value.map(n => (n.data.node === node
+    ? { ...n, data: { ...n.data, width: size.width ?? undefined, height: size.width === null ? undefined : (size.height ?? n.data.height) } }
+    : n))
+  dirty.value = true
+}
+provide(BUILDER_SET_SIZE_KEY, setNodeSize)
+
+// detach-reorder — reorder a composed card's top-level panes, or pull one out into its own card.
+function onReorder(group: LayoutNode, { from, to }: BuilderReorderPayload) {
+  const next = moveChild(group, [], from, to)
+  nodes.value = nodes.value.map(n => (n.data.node === group ? { ...n, data: { ...n.data, node: next } } : n))
+  dirty.value = true
+}
+function onDetach(group: LayoutNode, { index, dropOffset }: BuilderDetachPayload) {
+  const host = nodes.value.find(n => n.data.node === group)
+  if (!host) return
+  const { root, detached } = detachNode(group, [index])
+  if (!detached) return
+  const freed: FlowNode = {
+    id: `block-${++seq}`,
+    type: 'default',
+    position: { x: Math.round(host.position.x + dropOffset.x), y: Math.round(host.position.y + dropOffset.y) },
+    data: { node: detached, justAdded: true },
   }
-  return { ...base, left: `${a.rect.left + 6}px`, width: `${a.rect.width - 12}px`, height: `${thick}px`, top: `${a.rect.top + (a.edge === 'bottom' ? a.rect.height - thick : 0)}px` }
-})
-const ghostStyle = computed(() => {
-  const a = arm.value
-  if (!a) return {}
-  const half = 0.42
-  const horiz = a.edge === 'left' || a.edge === 'right'
-  const w = horiz ? a.rect.width * half : a.rect.width
-  const h = horiz ? a.rect.height : a.rect.height * half
-  const left = a.edge === 'right' ? a.rect.left + a.rect.width - w : a.rect.left
-  const top = a.edge === 'bottom' ? a.rect.top + a.rect.height - h : a.rect.top
-  return { position: 'absolute' as const, left: `${left}px`, top: `${top}px`, width: `${w}px`, height: `${h}px`, zIndex: 19 }
-})
+  const kept = nodes.value
+    .map(n => (n.data.node === group ? (root ? { ...n, data: { ...n.data, node: root } } : null) : n))
+    .filter(Boolean) as FlowNode[]
+  nodes.value = [...kept, freed]
+  dirty.value = true
+}
+provide(BUILDER_DETACH_KEY, onDetach)
+provide(BUILDER_REORDER_KEY, onReorder)
 
-// --- preview + round-trip --------------------------------------------------------
-const showPreview = ref(false)
+let snapKey: string | null = null
+let snapTimer: number | null = null
+let draggedId: string | null = null
 
-const issueNumber = ref<number | null>(null)
-const posting = ref(false)
-const postResult = ref<{ ok: boolean, message: string, url?: string } | null>(null)
+function clearSnapTimer() { if (snapTimer != null) { window.clearTimeout(snapTimer); snapTimer = null } }
+function resetSnap() { clearSnapTimer(); snapKey = null; snapPreview.value = null }
 
-async function postToTicket() {
-  posting.value = true
-  postResult.value = null
+// EFFECTIVE on-screen size — the per-element-resize (`data.width`/`data.height`, set by the corner
+// handle) WINS over the intrinsic footprint (`sizeOf`). Snap/pane-drop geometry must use this: after
+// you resize a card, its real bounds are the resized ones, so computing snaps from `sizeOf` targeted
+// the ORIGINAL size — the green connect indicator showed up where the card used to be (IMG_1337).
+function effSize(n: FlowNode) {
+  const s = sizeOf(n.data.node)
+  return { width: n.data.width ?? s.width, height: n.data.height ?? s.height }
+}
+function rectOf(n: FlowNode) {
+  const s = effSize(n)
+  return { x: n.position.x, y: n.position.y, width: s.width, height: s.height }
+}
+
+// Live drag (CroutonFlow @node-drag, throttled ~50ms): find the nearest snap edge and (re)arm
+// the dwell. The arm timer is keyed on target+edge, so brushing between edges doesn't reset it,
+// and a still finger still arms (the timer fires even when no drag events do).
+function onNodeDrag(id: string, pos: { x: number, y: number }) {
+  draggedId = id
+  const moved = nodes.value.find(n => n.id === id)
+  if (!moved) { resetSnap(); return }
+  const drag = { x: pos.x, y: pos.y, ...effSize(moved) }
+  const dcx = drag.x + drag.width / 2
+  const dcy = drag.y + drag.height / 2
+
+  type Cand = { target: FlowNode, edge: BuilderSnapPreview['edge'], key: string, paneDrop?: BuilderSnapPreview['paneDrop'] }
+  let cand: Cand | null = null
+
+  // 1) pane-drop (spec: `pane-drop-beside`) — over a COMPOSED target by ≥35% → land beside the
+  //    pane under the cursor (flatten into the row/column, or wrap it perpendicular — applyPaneDrop).
+  let bestOverlap = 0, overTarget: FlowNode | null = null
+  for (const n of nodes.value) {
+    if (n.id === id || n.data.node.type !== 'split') continue
+    const box = { x: n.position.x, y: n.position.y, ...effSize(n) }
+    const frac = rectsOverlapFrac(drag, box)
+    // SIZE-INDEPENDENT "over" test (spec: pane-drop-beside): the raw overlap fraction is normalized by
+    // the SMALLER rect, so a LARGE card clipping a SMALL pane at its edge rarely clears 35% — the drop
+    // never armed. Treat the target as "over" when either centre sits inside the other rect (the big-
+    // over-small / small-over-big cases), which then counts as at least the threshold; otherwise fall
+    // back to the real overlap. So a big card dropping beside a small pane now registers.
+    const dragCentreIn = dcx >= box.x && dcx <= box.x + box.width && dcy >= box.y && dcy <= box.y + box.height
+    const tcx = box.x + box.width / 2, tcy = box.y + box.height / 2
+    const targetCentreIn = tcx >= drag.x && tcx <= drag.x + drag.width && tcy >= drag.y && tcy <= drag.y + drag.height
+    const score = (dragCentreIn || targetCentreIn) ? Math.max(frac, PANE_DROP_MIN) : frac
+    if (score >= PANE_DROP_MIN && score > bestOverlap) { bestOverlap = score; overTarget = n }
+  }
+  if (overTarget) {
+    const box = { left: overTarget.position.x, top: overTarget.position.y, ...effSize(overTarget) }
+    const leaves = collectLeaves(overTarget.data.node, box)
+    const cx = Math.max(box.left, Math.min(box.left + box.width, dcx))
+    const cy = Math.max(box.top, Math.min(box.top + box.height, dcy))
+    const hit = leaves.find(l => cx >= l.rect.left && cx <= l.rect.left + l.rect.width && cy >= l.rect.top && cy <= l.rect.top + l.rect.height) ?? leaves[0]
+    if (hit) {
+      const rx = (cx - hit.rect.left) / hit.rect.width - 0.5
+      const ry = (cy - hit.rect.top) / hit.rect.height - 0.5
+      const edge: BuilderSnapPreview['edge'] = Math.abs(rx) >= Math.abs(ry) ? (rx >= 0 ? 'right' : 'left') : (ry >= 0 ? 'bottom' : 'top')
+      const fr = { left: (hit.rect.left - box.left) / box.width, top: (hit.rect.top - box.top) / box.height, width: hit.rect.width / box.width, height: hit.rect.height / box.height }
+      cand = { target: overTarget, edge, key: `pane:${overTarget.id}:${hit.path.join('.')}`, paneDrop: { path: hit.path, edge, rect: fr } }
+    }
+  }
+
+  // 2) else edge-snap onto a nearby card (the two-loose-cards merge).
+  if (!cand) {
+    let best: { node: FlowNode, edge: BuilderSnapPreview['edge'], gap: number } | null = null
+    for (const n of nodes.value) {
+      if (n.id === id) continue
+      const r = snapEdge(drag, rectOf(n), SNAP_OPTS)
+      if (r && (!best || r.gap < best.gap)) best = { node: n, edge: r.edge, gap: r.gap }
+    }
+    if (best) cand = { target: best.node, edge: best.edge, key: `${best.node.id}:${best.edge}` }
+  }
+
+  if (!cand) { resetSnap(); return }
+
+  // Shared dwell/arm: keyed on target+pane/edge, so a small jitter that flips the nearest edge
+  // doesn't reset the timer; a still finger still arms (the timer fires with no drag events).
+  const rec: BuilderSnapPreview = {
+    targetId: cand.target.id,
+    targetNode: cand.target.data.node,
+    edge: cand.edge,
+    armed: cand.key === snapKey ? snapPreview.value?.armed === true : false,
+    paneDrop: cand.paneDrop,
+    label: moved.data.label,
+  }
+  if (cand.key === snapKey) { snapPreview.value = rec; return }
+  snapKey = cand.key
+  clearSnapTimer()
+  snapPreview.value = rec
+  snapTimer = window.setTimeout(() => {
+    const p = snapPreview.value
+    if (p) snapPreview.value = { ...p, armed: true }
+  }, SNAP_DWELL_MS)
+}
+
+// Drag stop — CroutonFlow re-emits the rows with new positions. If a snap was ARMED, merge the
+// dragged card onto the target's edge (dropNode → a split, the badge-carrying page consumes);
+// else just accept the reposition.
+function onRowsUpdate(rowsRaw: Record<string, unknown>[]) {
+  const rows = rowsRaw as unknown as FlowNode[]
+  const armed = snapPreview.value?.armed ? snapPreview.value : null
+  const movedId = draggedId
+  resetSnap()
+  draggedId = null
+
+  if (armed && movedId && movedId !== armed.targetId) {
+    const moved = rows.find(n => n.id === movedId)
+    const target = rows.find(n => n.id === armed.targetId)
+    if (moved && target) {
+      // Over a composed target → drop beside the targeted pane; else merge onto the outer edge.
+      const mergedNode = armed.paneDrop
+        ? applyPaneDrop(target.data.node, { path: armed.paneDrop.path, edge: armed.paneDrop.edge }, moved.data.node)
+        : dropNode(target.data.node, [], moved.data.node, armed.edge)
+      const merged: FlowNode = {
+        ...target,
+        data: { ...target.data, node: mergedNode, isPage: target.data.isPage || moved.data.isPage, justAdded: false },
+      }
+      nodes.value = rows.filter(n => n.id !== movedId && n.id !== armed.targetId).concat(merged)
+      dirty.value = true
+      return
+    }
+  }
+  nodes.value = rows
+  dirty.value = true
+}
+
+// ── focus-edit-view (spec: `focus-edit-view`) — double-click a node → full-screen edit ──
+// overlay hosting the graduated breakpoint author. NOT a camera zoom (that raced VF's
+// re-measure and framed off-screen). Editing a copy; the board commits only on 'Done'.
+const editing = ref<FlowNode | null>(null)
+function onNodeDblClick(id: string) {
+  editing.value = nodes.value.find(n => n.id === id) ?? null
+}
+function onFocusSave(tree: LayoutTree) {
+  const target = editing.value
+  if (target) {
+    nodes.value = nodes.value.map(n => (n.id === target.id
+      ? { ...n, data: { ...n.data, node: tree.root, bp: tree.breakpoints } }
+      : n))
+    dirty.value = true
+  }
+  editing.value = null
+}
+
+const paletteOpen = ref(false)
+
+// ── Durable persistence — EXPLICIT Save (never autosave: autosave → refetch → reseed loop). ──
+const { update } = useCollectionMutation('builderPages')
+const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
+const dirty = ref(false)
+
+async function saveBoard() {
+  const p = pageNode.value
+  if (!p) return
+  const tree: LayoutTree = { renderer: 'panes', root: p.data.node, breakpoints: p.data.bp }
+  saveState.value = 'saving'
   try {
-    const res = await $fetch<{ ok: boolean, posted: boolean, url?: string, body?: string, message: string }>('/api/builder/post-layout', {
-      method: 'POST',
-      body: { document: serialize(), issue: issueNumber.value },
-    })
-    postResult.value = { ok: res.ok, message: res.message, url: res.url }
-  }
-  catch (err) {
-    postResult.value = { ok: false, message: err instanceof Error ? err.message : 'Failed to post' }
-  }
-  finally {
-    posting.value = false
+    await update(pageId.value, { board: { layout: serializeLayoutTree(tree) } })
+    dirty.value = false
+    saveState.value = 'saved'
+  } catch {
+    saveState.value = 'idle'
   }
 }
 </script>
 
 <template>
-  <div v-if="!page" class="mx-auto max-w-xl p-10 text-center">
-    <UIcon name="i-lucide-file-question" class="mx-auto size-10 text-muted" />
-    <h1 class="mt-3 text-lg font-semibold">Page not found</h1>
-    <UButton class="mt-4" to="/builder" icon="i-lucide-arrow-left" variant="soft">Back to Site flow</UButton>
-  </div>
+  <div class="flex h-[100dvh] flex-col bg-default text-default">
+    <header class="flex items-center gap-3 border-b border-default px-4 py-2">
+      <UButton icon="i-lucide-arrow-left" color="neutral" variant="ghost" size="sm" to="/builder" aria-label="Back to the site flow">
+        Pages
+      </UButton>
 
-  <div v-else class="flex h-dvh flex-col" :style="{ viewTransitionName: `page-${page.id}` }">
-    <!-- Header -->
-    <header class="flex flex-wrap items-center gap-2 border-b border-default px-4 py-2">
-      <UButton icon="i-lucide-arrow-left" variant="ghost" color="neutral" size="sm" @click="router.back()" />
-      <h1 class="text-base font-bold">{{ page.name }}</h1>
-      <UBadge
-        v-if="page.isHome"
-        data-handoff="page-badge"
-        color="primary"
-        variant="solid"
-        size="xs"
-      >
-        <UIcon name="i-lucide-star" class="size-3" /> Home
+      <UBadge v-if="page" data-handoff="page-badge" color="primary" variant="subtle" size="sm">
+        <UIcon name="i-lucide-star" class="size-3" />
+        {{ page.title }}
       </UBadge>
 
-      <!-- region pills (a hug bar pinned at an edge) -->
-      <UBadge
-        v-for="r in regions"
-        :key="r.region"
-        data-handoff="region-pill"
-        :data-region="r.region"
-        color="info"
-        variant="subtle"
-        size="xs"
+      <span
+        v-if="derived"
+        data-handoff="floor-readout"
+        :data-hard-floor="derived.hardMinWidth"
+        :data-soft-floor="derived.softMinWidth"
+        class="text-xs text-muted"
       >
-        <UIcon :name="r.region === 'top' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="size-3" />
-        {{ r.label }}
-      </UBadge>
+        <template v-if="derived.softMinWidth > derived.hardMinWidth">
+          stacks &lt;{{ derived.softMinWidth }} · floor {{ derived.hardMinWidth }}px
+        </template>
+        <template v-else>floor {{ derived.hardMinWidth }}px</template>
+      </span>
 
       <div class="ml-auto flex items-center gap-2">
-        <!-- floor readout (deriveSizing) -->
-        <span
-          v-if="floor"
-          data-handoff="floor-readout"
-          :data-hard-floor="floor.hardMinWidth"
-          :data-soft-floor="floor.softMinWidth"
-          class="rounded-md border border-default bg-elevated/60 px-2 py-1 font-mono text-[11px] text-muted"
+        <!-- outline-tree-editor (proposed, slice 1): the DOM-tree editor alternative to this canvas. -->
+        <UButton
+          size="sm"
+          icon="i-lucide-list-tree"
+          color="neutral"
+          variant="ghost"
+          :to="`/builder/outline/${pageId}`"
+          data-handoff="open-outline"
+          title="Edit as an outline (beta)"
         >
-          stacks &lt;{{ floor.softMinWidth }}px · floor {{ floor.hardMinWidth }}px
+          Outline
+        </UButton>
+        <span v-if="saveState === 'saved' && !dirty" class="flex items-center gap-1 text-xs text-muted">
+          <UIcon name="i-lucide-check" class="size-4 text-primary" /> Saved
         </span>
         <UButton
-          :icon="showPreview ? 'i-lucide-pencil' : 'i-lucide-eye'"
           size="sm"
-          variant="soft"
-          color="neutral"
-          @click="showPreview = !showPreview"
+          icon="i-lucide-save"
+          :color="dirty ? 'primary' : 'neutral'"
+          :variant="dirty ? 'solid' : 'ghost'"
+          :loading="saveState === 'saving'"
+          :disabled="!dirty && saveState !== 'saving'"
+          @click="saveBoard"
         >
-          {{ showPreview ? 'Edit' : 'Preview' }}
+          Save
         </UButton>
       </div>
     </header>
 
-    <div class="flex min-h-0 flex-1">
-      <!-- Palette -->
-      <aside v-if="!showPreview" class="w-44 shrink-0 overflow-y-auto border-r border-default p-2">
-        <p class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Blocks</p>
-        <button
-          v-for="b in palette"
-          :key="b.id"
-          type="button"
-          class="mb-1 flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition"
-          :class="placing === b.id ? 'border-primary bg-primary/10 text-primary' : 'border-default hover:border-primary/60'"
-          @click="startPlacing(b.id)"
-        >
-          <UIcon :name="b.icon" class="size-4" />
-          <span class="truncate">{{ b.name }}</span>
-        </button>
-        <p v-if="placing" class="mt-2 px-1 text-[11px] text-primary">
-          Click a pane edge to place · Esc to cancel
-        </p>
-      </aside>
+    <div class="relative min-h-0 flex-1">
+      <div v-if="!ready" class="flex h-full items-center justify-center text-sm text-muted">
+        Loading board…
+      </div>
 
-      <!-- Board -->
-      <main class="relative min-w-0 flex-1 overflow-auto p-4">
-        <div
-          v-if="root"
-          ref="boardRef"
-          class="relative h-full min-h-[420px] w-full rounded-xl border border-default bg-default/20 p-2"
-          :class="placing ? 'cursor-copy' : ''"
-          @pointermove="onBoardMove"
-          @click="placing && commitPlace()"
-        >
-          <!-- Edit: the package's editable renderer OWNS its pane handles (#985) -->
-          <CroutonLayoutEditableRenderer
-            v-if="!showPreview"
-            :node="root"
-            :editable="!placing"
-            @update:node="onUpdateNode"
-            @detach="onDetach"
-          />
-          <!-- Preview: read-only, hug-aware (#986) -->
-          <CroutonLayoutRenderer
-            v-else
-            :node="root"
-            :interactive="false"
-          />
+      <ClientOnly v-else>
+        <!-- The candidate canvas — the page + any draft blocks as Vue Flow nodes. -->
+        <CroutonFlow
+          ref="flowRef"
+          :rows="nodes"
+          collection="builderPages"
+          :fit-view-on-mount="false"
+          data-mode="ephemeral"
+          :default-node-component="blockNode"
+          allow-drop
+          :minimap="false"
+          @node-drop="onNodeDrop"
+          @node-drag="onNodeDrag"
+          @update:rows="onRowsUpdate"
+          @node-dbl-click="onNodeDblClick"
+        />
+      </ClientOnly>
 
-          <!-- place preview: snap-guide on the armed edge + ghost-pane slot -->
-          <div
-            v-if="arm"
-            data-handoff="snap-guide"
-            :data-armed="placing ? 'true' : 'false'"
-            :style="guideStyle"
-          />
-          <div
-            v-if="arm"
-            data-handoff="ghost-pane"
-            class="flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-[11px] font-semibold text-primary"
-            :style="ghostStyle"
-          >
-            drops here
-          </div>
+      <!-- Top actions pill — add blocks + fit. -->
+      <div v-if="ready" class="pointer-events-none absolute inset-x-0 top-2 z-30 flex justify-center px-4">
+        <div class="pointer-events-auto flex items-center gap-1 rounded-full border border-default/60 bg-elevated/85 p-1.5 shadow-xl backdrop-blur-xl">
+          <UButton icon="i-lucide-scan" size="sm" color="neutral" variant="ghost" title="Fit to page" aria-label="Fit" @click="fitPage" />
+          <UButton icon="i-lucide-plus" size="sm" color="primary" variant="solid" title="Add blocks" aria-label="Add blocks" @click="paletteOpen = true" />
         </div>
-      </main>
+      </div>
     </div>
 
-    <!-- Round-trip footer (#974) -->
-    <footer class="flex flex-wrap items-center gap-2 border-t border-default px-4 py-2">
-      <UIcon name="i-lucide-git-pull-request-arrow" class="size-4 text-muted" />
-      <span class="text-xs text-muted">Round-trip this layout onto a GitHub issue:</span>
-      <UInput
-        v-model.number="issueNumber"
-        type="number"
-        size="xs"
-        placeholder="issue #"
-        class="w-24"
-      />
-      <UButton size="xs" :loading="posting" icon="i-lucide-send" @click="postToTicket">
-        Post layout
-      </UButton>
-      <span
-        v-if="postResult"
-        class="text-xs"
-        :class="postResult.ok ? 'text-success' : 'text-error'"
-      >
-        {{ postResult.message }}
-        <NuxtLink v-if="postResult.url" :to="postResult.url" target="_blank" class="underline">view</NuxtLink>
-      </span>
-    </footer>
+    <!-- Palette — desktop-draggable + tap-to-add, in a bottom sheet. -->
+    <UDrawer v-model:open="paletteOpen" :handle="true" title="Blocks">
+      <template #body>
+        <div class="p-1 pb-4">
+          <p class="px-1 pb-2 text-xs text-muted">Tap a block to add it — or drag it onto the canvas.</p>
+          <div class="flex flex-col gap-2">
+            <UCard
+              v-for="b in drawer"
+              :key="b.blockId"
+              draggable="true"
+              :ui="{ root: 'cursor-pointer transition-colors hover:ring-primary active:scale-[0.99]', body: 'flex items-center gap-2 p-3' }"
+              @dragstart="onDragStart($event, b)"
+              @click="addBlock(b)"
+            >
+              <UIcon :name="b.icon" class="size-4 text-primary" />
+              <span class="text-sm">{{ b.label }}</span>
+              <UIcon name="i-lucide-plus" class="ml-auto size-4 text-muted" />
+            </UCard>
+          </div>
+        </div>
+      </template>
+    </UDrawer>
+
+    <!-- focus-edit-view — full-screen pane editor over the double-clicked node. -->
+    <BuilderFocusShell
+      v-if="editing"
+      :node="editing.data.node"
+      :breakpoints="editing.data.bp"
+      :title="editing.data.label"
+      :initial-width="effSize(editing).width"
+      @save="onFocusSave"
+      @close="editing = null"
+    />
   </div>
 </template>

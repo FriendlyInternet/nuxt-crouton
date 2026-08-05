@@ -6,11 +6,14 @@
 // host is egress-blocked in CI/sandbox, so we never fetch a browser).
 //
 // Usage:
-//   node scripts/app-shots.mjs <baseUrl> <path[:name]> [more paths...] [--out <dir>]
+//   node scripts/app-shots.mjs <baseUrl> <path[:name]> [more paths...] [--out <dir>] [--desktop|--viewport WxH]
+//
+// Viewport is MOBILE (390×844) by DEFAULT — this stack is phone-first (#722). Pass
+// `--desktop` (1280×900) for wide surfaces, or `--viewport 768x1024` for a custom size.
 //
 // Examples:
-//   node scripts/app-shots.mjs http://localhost:3008 /blog:index /blog/hello:post /auth/login:login
-//   node scripts/app-shots.mjs https://blog.pmcp.dev / /blog --out screenshots
+//   node scripts/app-shots.mjs http://localhost:3008 /blog:index /blog/hello:post   # mobile
+//   node scripts/app-shots.mjs https://blog.pmcp.dev / /blog --out screenshots --desktop
 //
 // Output: screenshots/<name>.png (name defaults to a slug of the path).
 // All screenshots go in screenshots/ (repo HARD GATE) unless --out overrides.
@@ -50,6 +53,18 @@ if (outIdx !== -1) {
   outDir = argv[outIdx + 1]
   argv.splice(outIdx, 2)
 }
+// MOBILE-FIRST by default (#722, atelier-plan): this stack is designed phone-first,
+// so verify at a phone viewport unless a surface is explicitly desktop. Pass
+// `--desktop` for wide surfaces, or `--viewport WxH` for a custom size.
+let viewport = { width: 390, height: 844, deviceScaleFactor: 3 } // iPhone-ish
+const dtIdx = argv.indexOf('--desktop')
+if (dtIdx !== -1) { viewport = { width: 1280, height: 900, deviceScaleFactor: 2 }; argv.splice(dtIdx, 1) }
+const vpIdx = argv.indexOf('--viewport')
+if (vpIdx !== -1) {
+  const [w, h] = String(argv[vpIdx + 1] || '').split('x').map(Number)
+  if (w && h) viewport = { width: w, height: h, deviceScaleFactor: 2 }
+  argv.splice(vpIdx, 2)
+}
 const [baseUrl, ...specs] = argv
 
 if (!baseUrl || specs.length === 0) {
@@ -82,7 +97,8 @@ const browser = await chromium.launch(
 )
 console.log(`browser: ${execPath || '(playwright-managed)'}  base: ${baseUrl}`)
 
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 })
+const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: viewport.deviceScaleFactor })
+console.log(`viewport: ${viewport.width}×${viewport.height} @${viewport.deviceScaleFactor}x${viewport.width <= 500 ? ' (mobile — default; --desktop for wide)' : ''}`)
 let failures = 0
 
 for (const spec of specs) {

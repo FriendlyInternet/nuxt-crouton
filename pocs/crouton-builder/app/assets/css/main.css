@@ -2,4 +2,4 @@
 @import "@nuxt/ui";
 
 /* Scan Nuxt Crouton layers for Tailwind classes */
-@source "../../../../../node_modules/@fyit/crouton*/app/**/*.{vue,js,ts}";
+@source "../../../../node_modules/@fyit/crouton*/app/**/*.{vue,js,ts}";

@@ -1,0 +1,374 @@
+[
+  {
+    "id": "site-page-two-level",
+    "behaviour": "Two levels in one place. The Site view shows your pages as a linked sitemap; a Page board is where you arrange blocks. You start on the Site view.",
+    "when": "open the builder",
+    "expect": "a canvas of page cards, with a line linking each page to its parent; tap a card (or its ⤢ button) to open that page's board; 'Pages ←' takes you back to the Site view",
+    "hook": "",
+    "howToTest": "1. open /builder → the Site view shows a canvas of page cards  2. tap a card → its board opens  3. tap 'Pages ←' → back to the Site view",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "port the board into the old zoom shell → ❌ added Site as a level on top of the polished board instead (Decision B)"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "page-model-one-node",
+    "behaviour": "A board can hold several layout ideas and loose drafts, but exactly one card is marked as 'the page' (with a ★ badge) — the live layout a visitor would actually see.",
+    "when": "on a page board with several nodes",
+    "expect": "one card carries the ★ page badge; 'Set as page' moves the badge to another card; 'Duplicate' copies a card as a free draft; when you merge the page card into another, the ★ badge stays with the result",
+    "hook": "page-badge",
+    "howToTest": "1. open a board with 2+ cards → exactly one shows the ★ badge  2. tap 'Set as page' on another card → the badge moves  3. merge the page card into another → the result keeps the ★ badge",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "focus-edit-view",
+    "behaviour": "Editing a layout opens a dedicated full-screen edit view, rather than zooming the canvas in on the card. (Zooming the canvas was unreliable and sometimes framed the card off-screen.)",
+    "when": "double-tap a card",
+    "expect": "a full-screen editor opens with the responsive tools: a width ruler, device buttons, a width slider, per-block display options, and drag handles between panes; 'Done' returns to the board; the card's layout is saved",
+    "hook": "",
+    "howToTest": "1. double-tap a composed card → a full-screen edit view opens (no wobble)  2. drag a handle between panes → the pane sizes change  3. tap Done → returns to the board, changes kept",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "camera zoom onto the node → ❌ VF re-measure race framed the 2nd node off-screen at mobile width"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "per-element-resize",
+    "behaviour": "Each card is sized on its own, not all at once. Every card has a corner resize handle and reflows to look right at whatever width you set. (The old single slider that resized the whole board is gone.)",
+    "when": "a node is selected",
+    "expect": "a corner handle sets the card's width and height; once you set a width, the card shows a live preview at that width (dragging a handle then resizes the whole card, not its panes); opening the editor starts at that same width",
+    "hook": "",
+    "howToTest": "1. select a card → a corner handle appears  2. drag it narrower → the card's content reflows to fit  3. open the editor → it starts at the resized width",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "global board-wide responsive slider → ❌ replaced by per-element width"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "intrinsic-block-sizing",
+    "behaviour": "Each block decides its own size. A block is set to either 'fill' (stretch to fill the space) or 'hug' (shrink to fit its content). A Top bar or Bottom nav hugs its height, so a pinned bar comes out as a short pill — you never set its size by hand.",
+    "when": "place a hug-height block (e.g. Top bar) vs a fill block (List/Form/Chart)",
+    "expect": "a hug block renders short (just tall enough for its content); a fill block stretches; a card can't be shrunk below its minimum size",
+    "hook": "floor-readout",
+    "howToTest": "1. add a Top bar block → it renders as a short pill (it hugs its height)  2. add a List → it fills the space  3. try to shrink a card below its minimum → it won't go (a readout shows the minimum size)",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "per-instance align/size panel → ❌ the component decides, not the instance"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "composite-derive-sizing",
+    "behaviour": "A composed card works out its own size limits from the blocks inside it. A split or nested layout follows the same size rules as its individual blocks, combined from the inside out: its hard minimum is the widest block; its soft minimum is the blocks added up across a row (or the largest down a column).",
+    "when": "select a composed (multi-pane) card",
+    "expect": "the card shows its worked-out minimum size; the resize handle can't drag it below that hard minimum (a layout can't break its own blocks' size rules)",
+    "hook": "floor-readout",
+    "howToTest": "1. compose a 2-pane row → select it  2. read its worked-out minimum (hard = widest block, soft = the blocks added up)  3. resize down → it stops at the hard minimum",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "manual min/max override on a composite → ❌ deferred; risks reintroducing per-instance flex — revisit after graduation if derived floors prove insufficient"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "page-regions-pin",
+    "behaviour": "A card can be pinned to the top or bottom edge of the page (as a sticky bar) from its toolbar. There are only three fixed spots — top, bottom, or main — and the choice is saved. No free-floating positioning.",
+    "when": "pin a node top/bottom, then view the assembled page",
+    "expect": "the badge shows 'Pinned top' or 'Pinned bottom'; in the GRADUATED app the real page is built from these spots — a pinned-top card becomes a sticky top bar, a pinned-bottom card a sticky bottom bar, and the ★ page scrolls in the main area between them",
+    "hook": "region-pill",
+    "howToTest": "GRADUATED: 1. pin a card to the top → its badge shows 'Pinned top'  2. pin another to the bottom  3. open the real page → a sticky top bar, a sticky bottom bar, and a scrolling main area between them",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": [
+      "per-pane pin (pin one pane inside a composed layout) → ❌ deferred; pinning is card-level",
+      "per-pane size lock → ❌ dropped; intrinsic hug sizing makes a pinned bar short automatically"
+    ],
+    "note": "A1 contradiction (▶ Preview did nothing — region assembly didn't run) resolved as an ADD, 2026-07-02: the POC implements pin→region→Preview end-to-end (v46) and no static bug was found, but the walk couldn't verify it and the modal ▶ Preview is POC-only scaffolding anyway — the graduated app assembles regions on the REAL page render. Carried through the new-behaviour gate, not the C1 side-by-side."
+  },
+  {
+    "id": "display-variants",
+    "behaviour": "A block can offer a few set ways to display the same data (for example an Artists list as rows, cards, or a table). The choice comes from a fixed list and is saved with the block, so it stays after a reload.",
+    "when": "select a pane in the edit view",
+    "expect": "a row of 'Display' chips shows up as soon as you select a block that supports it (not hidden behind another toggle); tapping one re-renders the block in that style; the choice is saved with the block",
+    "hook": "",
+    "howToTest": "GRADUATED: 1. edit a List block → select its pane  2. a Display row offers rows/cards/table, visible without hunting  3. pick 'table' → it re-renders; reopen → still a table (the choice was saved)",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": [
+      "free display config → ❌ bounded enum only, inside the expressiveness boundary"
+    ],
+    "note": "A1 contradiction (Display options not visible in the edit view) resolved as an ADD, 2026-07-02: the mechanism is fully implemented in the POC (registry select → leaf.config.variant, v47) but only the Artists·List block declares variants and the chips render only after pane-select AND opening the ⋯ options panel — the walk never surfaced them. Carried to the graduated app with an explicit discoverability acceptance criterion."
+  },
+  {
+    "id": "snap-dwell-arm",
+    "behaviour": "Snapping happens in two steps. When you drag near a snap point you get a soft blue, pulsing guide; hold for about 0.6s and it turns green, meaning 'let go to snap'. Small finger wobble that flips which edge is nearest won't restart the timer.",
+    "when": "drag a card near a snap point and hold",
+    "expect": "first a soft blue guide, then a green guide after you hold; releasing while it's green snaps the card into place",
+    "hook": "snap-guide",
+    "howToTest": "1. drag a card toward another's edge → a soft blue guide appears  2. hold for about 0.6s → it turns green  3. release → the card snaps into place",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "pane-drop-beside",
+    "behaviour": "Drop a card on top of a composed layout (overlapping by at least a third) and it's added next to the pane under your finger, on the nearest side (left, right, top, or bottom). If that side runs the same way as the existing row or column it joins in line; otherwise it splits that pane the other way — so you can add a card 'to the right of a pane in a top-to-bottom stack', which you couldn't do before.",
+    "when": "drag a card over a multi-pane layout near one pane's edge",
+    "expect": "the pane under your finger is the target; the card joins next to it on the nearest side, either in line or as a new split as above; the card you were dragging is the one that lands",
+    "hook": "ghost-pane",
+    "howToTest": "1. drag a card over a 2-pane row, near the right pane's right edge → it joins the row in line  2. drag over a top-to-bottom stack, to the right of a pane → it creates a new left/right split",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "seam-only insert → ❌ couldn't add beside a pane in a stack with no matching seam"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "ghost-ease-apart",
+    "behaviour": "When a drop is armed, the target shows a dashed outline in the exact shape of the card you're dragging (each block becomes a dashed placeholder, keeping its splits and nesting), and the real panes smoothly slide apart to make room — a 2-row card opens a 2-row slot, not a thin sliver. It reverts if you move away and un-arm.",
+    "when": "hold a card armed over a layout",
+    "expect": "a dashed outline in the shape of the card you're dragging appears; the panes slide apart and the card grows to fit; un-arming reverts it",
+    "hook": "ghost-pane",
+    "howToTest": "1. drag a 2-row card over a layout and arm it → a 2-row dashed outline opens  2. the real panes smoothly slide apart  3. move away to un-arm → it reverts",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "detach-reorder",
+    "behaviour": "Long-press a composed card and its top-level panes wiggle, ready to grab. By default you reorder: slide a pane to another slot ('Move here') and release. To pull a pane out on its own you have to drag it clearly out, past about 64px beyond the card edge, so a small overshoot while reordering doesn't accidentally pull it out. This only reaches the top-level panes — a layout nested inside a layout is grabbed as one pane; its inner panes can't be grabbed individually in the POC.",
+    "when": "long-press a composed node, then pull a top-level pane",
+    "expect": "the top-level panes wiggle; sliding one within the card reorders it (green 'Move here'); dragging it far enough out pulls it onto its own card; not far enough and it springs back; tapping outside, Esc, or Done cancels",
+    "hook": "",
+    "howToTest": "1. long-press a composed card → its top-level panes wiggle  2. slide a pane to another slot → 'Move here', release → reordered  3. pull a pane far out (more than ~64px) → it becomes its own card",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "lgtm 999 · Maarten · 2026-07-02 · A1 narrowed-contract sign-off (via session chat, recorded on #999)",
+    "note": "A1 contradiction (didn't work for a layout nested inside a layout) resolved by NARROWING, 2026-07-02: the POC only makes top-level panes grabbable by design ('each top-level pane', SpikeBlockNode) — the nested case was never implemented, so the entry over-claimed depth. Narrowed to the built behaviour; depth-recursive detach/reorder carried as its own Add entry (detach-reorder-nested)."
+  },
+  {
+    "id": "detach-reorder-nested",
+    "behaviour": "The wiggle gesture also reaches panes inside a layout that's nested in another layout. An inner pane can be reordered within its nested group or pulled out on its own, using the same gesture as the top-level panes.",
+    "when": "long-press a node containing a nested layout, then pull one of the nested layout's inner panes",
+    "expect": "inner panes can be grabbed individually; sliding one reorders it within its nested group; dragging it far enough out pulls it onto its own card; the nested layout itself can still be grabbed as a whole at its own level",
+    "hook": "",
+    "howToTest": "GRADUATED: 1. compose a layout that contains a nested layout  2. long-press → panes at both levels wiggle  3. slide an inner pane → it reorders inside its nested group  4. pull it far out (more than ~64px) → it becomes its own card",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "enter-page-fit",
+    "behaviour": "Opening a page frames it neatly and instantly, using the card's known position and size rather than a freshly-measured size that isn't ready yet. There's no zoom-out wobble.",
+    "when": "open a page from the Site flow",
+    "expect": "the page card is framed cleanly and immediately, with no zoom-out wobble and never off-screen",
+    "hook": "",
+    "howToTest": "1. from the Site view, open a page → the board frames the page card instantly and centred (no wobble)",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "Vue Flow fitView → ❌ measures the small wrapper, zooms into the oversized card"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "add-block-land",
+    "behaviour": "Adding a block places it in a clear spot to the right of everything already on the board, the view centres on it at a moderate zoom, and a green 'just added' glow fades after about 2.5s.",
+    "when": "add a block from the palette",
+    "expect": "the new block appears in a clear area (never hidden under a wide or moved layout); the view centres on it; the green glow fades",
+    "hook": "",
+    "howToTest": "1. add a block from the palette → it lands in the clear to the right, the view centres on it, and the green glow fades about 2.5s later",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [
+      "fixed count×300 stride → ❌ dropped new blocks under wide/moved layouts"
+    ],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "pinch-zoom",
+    "behaviour": "A two-finger pinch that starts on a card zooms the board (otherwise the card's drag would swallow the gesture). The card catches the pinch first and zooms the board, keeping the pinched point under your fingers. One finger still drags and long-presses as usual.",
+    "when": "pinch with two fingers starting over a node",
+    "expect": "the board zooms around the pinched point; a single finger still drags and long-presses",
+    "hook": "",
+    "howToTest": "1. (touch) start a two-finger pinch on a card → the board zooms and the pinched point stays under your fingers  2. one finger → still drags",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "drag-glow",
+    "behaviour": "A card you're dragging carries a light-green halo that fades when you drop it. Snap guides (green when armed, blue when soft) show on top of the halo.",
+    "when": "drag a card",
+    "expect": "a light-green halo while dragging, fading on drop; snap guides take visual priority when present",
+    "hook": "",
+    "howToTest": "1. drag a card → a light-green halo  2. bring it near a snap point → the snap guide shows on top of the halo  3. drop → the halo fades",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "spacer-block",
+    "behaviour": "The Spacer is a real block that holds empty space (shown as a faint dashed hint in the builder). It snaps, reorders, and resizes like any other block, to push neighbours around or hold a gap, and can shrink very narrow so it works as a thin gutter.",
+    "when": "add a Spacer from the palette",
+    "expect": "an empty-space block shown with a faint dashed hint; it behaves like any block (snap, reorder, resize) and can become a thin gutter",
+    "hook": "",
+    "howToTest": "1. add a Spacer → a dashed empty block  2. snap it between two blocks → it pushes them apart  3. resize it narrow → a thin gutter",
+    "status": "settled",
+    "supersedes": "",
+    "consideredRejected": [],
+    "signedOff": "A1 spec-walk · Maarten · 2026-07-02"
+  },
+  {
+    "id": "page-site-routing",
+    "behaviour": "Moving between a page and the Site view should be real navigation, not one screen swapping its contents. The POC fakes it: it stays on a single URL, and the page swaps in with a cross-fade that only looks like navigation.",
+    "when": "navigate between the Site flow and a page board",
+    "expect": "POC: one URL, no browser history. GRADUATED: /builder is the Site view and /builder/[pageId] is that page's board (each has its own shareable link), browser back and forward work, and moving page to page is a normal link",
+    "hook": "",
+    "howToTest": "POC: 1. open a page → the URL doesn't change  2. browser back → doesn't return to the Site view. GRADUATED target: the URL becomes /builder/[pageId]; back returns to /builder",
+    "status": "stopgap",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "page-site-transition",
+    "behaviour": "The animation between a page and the Site view is a cross-fade with a slight zoom in the direction of travel. This is a known temporary version.",
+    "when": "move between Site and Page",
+    "expect": "POC: a cross-fade (both views stacked, one fading in as the other fades out). GRADUATED: a shared-element morph where the page card grows into the board and shrinks back",
+    "hook": "",
+    "howToTest": "POC: 1. open or close a page → a cross-fade. GRADUATED target: the page card morphs into the board (shared-element)",
+    "status": "stopgap",
+    "supersedes": "",
+    "consideredRejected": [
+      "mode=out-in → ❌ flashed the dark bg and delayed board mount so fitPage missed"
+    ]
+  },
+  {
+    "id": "board-persistence",
+    "behaviour": "Board changes are only kept in memory. Each page's board is remembered while you move around, so it's restored when you come back, but nothing is saved — a full reload starts from the default layout. This is intentional for the POC.",
+    "when": "edit a board, then reload",
+    "expect": "POC: re-entering a page restores the remembered board, but a full reload resets to the default layout. GRADUATED: real saving — the layout is stored and reloads exactly as left (#974)",
+    "hook": "",
+    "howToTest": "POC: 1. compose a board  2. leave and re-enter → it's restored  3. reload the page → back to the default (not saved). GRADUATED target: it survives a reload",
+    "status": "stopgap",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "layouttree-serialise",
+    "behaviour": "A board can be saved as a clean, comparable description of the layout (layouts, blocks, splits, sizes, and responsive settings) — the shared format that both an agent and the builder read and write. In the POC this format exists but lives in POC-only code.",
+    "when": "graduate the serialisation",
+    "expect": "a stable, human-readable saved-layout format provided by a real package (the editable renderer and saving already landed in @fyit/crouton-layout via #987/#990 — re-check it covers this, don't rebuild)",
+    "hook": "",
+    "howToTest": "GRADUATED: save a composed board → a stable, comparable description; reload it → the exact same layout (it survives a reload)",
+    "status": "stopgap",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "round-trip-ticket",
+    "behaviour": "Save a version straight back to the GitHub ticket: a person's edited layout is posted onto the tracking issue as the spec the agent (re)builds from. The agent writes the layout → a person edits it visually → the edit posts back → the agent reads it. This is the big goal — the builder is the human's seat in an agent pipeline.",
+    "when": "save a builder version",
+    "expect": "the saved layout is posted to the issue as a comparable spec, and it works both ways (like the schema and UI sign-off loops, but the thing being reviewed is the layout)",
+    "hook": "",
+    "howToTest": "GRADUATED: edit a layout → 'save version' → the saved layout appears on the issue → an agent reads it back and rebuilds the same layout",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "magic-ai-arrange",
+    "behaviour": "Two kinds of magic arrange: ✨ Magic arrange lays out your placed blocks with fixed rules, and ✨ Magic (AI) takes a free-text 'Describe the app' request and has an AI arrange the placed blocks — shown only when the crouton-ai add-on is installed. Both produce the same saved layout.",
+    "when": "use magic arrange on placed blocks",
+    "expect": "Magic arrange builds a first-cut layout with fixed rules; with crouton-ai installed, an AI option takes a free-text request and arranges the blocks; both produce a saved layout",
+    "hook": "",
+    "howToTest": "GRADUATED: 1. place blocks → Magic arrange → a composed layout  2. with crouton-ai installed → type a request → the AI arranges the same blocks",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "multiplayer-collab",
+    "behaviour": "Build together: share the board live through crouton-collab, so edits and each person's presence sync between people. The POC runs on its own, not synced. Once synced, undo has to become per-person (only your own last change) — the POC's whole-board undo is a single-user placeholder that would wipe out other people's edits.",
+    "when": "two people edit the same board",
+    "expect": "edits and presence sync between people; undo is per-person (only your own last change), not the whole board at once",
+    "hook": "",
+    "howToTest": "GRADUATED: 1. two people join the same board → edits sync and each person's presence shows  2. person A hits undo → only A's last edit reverts, not B's",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "real-collections",
+    "behaviour": "The graduated builder is a real crouton app backed by real data collections (created the standard crouton way, with generated screens, API, and database), not the POC's demo blocks that have no backend. The builder arranges the blocks for those real collections.",
+    "when": "scaffold the graduated app",
+    "expect": "a properly scaffolded app with real collections (a database schema file present, generated code, and a migration); the demo blocks are replaced by blocks backed by real collections",
+    "hook": "",
+    "howToTest": "GRADUATED (conformance C2): the app starts, its database schema file exists, the collections are really generated (not placeholders), and creating/reading/updating/deleting records works",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": []
+  },
+  {
+    "id": "collection-page-render",
+    "behaviour": "A list block looks different on a public page than in the admin. In the admin it fills its pane and scrolls inside itself. On a page it's sized to its content, showing a set number of items (10 by default, adjustable per block), with more shown via one of a few set options (load-more by default, numbered pages, or search-filter), plus the display style (rows, cards, or table). An empty list is a small block, not a tall empty space.",
+    "when": "the same collection block is rendered on a page (interactive=false) instead of the admin dashboard",
+    "expect": "sized to its content, with no inner scrollbar; the block shows its set number of items then a load-more, numbered-pages, or search control; an empty list collapses to a small block; the whole page scrolls as one",
+    "hook": "",
+    "howToTest": "1. put an Artists list on a page  2. it shows up to 10 rows at natural height, with no inner scroll  3. with more than 10 items a load-more (or pager) appears; choosing 'paginate' shows numbered pages, 'search' shows a filter  4. an empty list is a small block, not full-height",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": [
+      "fixed 'few high' block -> a list you cannot scroll/page through isn't a list",
+      "make everything document-flow -> wrong; admin genuinely wants fill+scroll. The LIST gets a page render, not the whole engine",
+      "per-instance flex/height panel -> rejected (POC): stay inside bounded enumerated viewer options (#970), never hand-tuned config"
+    ]
+  },
+  {
+    "id": "card-is-live-preview",
+    "behaviour": "The card on the board IS the live page preview — there's no separate Preview screen. The card on the canvas shows the real page, live, at its own width (it reflows to fit), and scrolls inside itself when the content is taller than the card. Resizing the card is like resizing the screen.",
+    "when": "you look at / resize a page card on the board",
+    "expect": "the card shows the real page (not a static thumbnail), reflowing to the card's width and scrolling inside itself like a screen; there's no separate preview screen",
+    "hook": "board-node",
+    "howToTest": "1. select a page card and resize it narrow  2. its layout reflows to fit (stacking once it hits its minimum)  3. content taller than the card scrolls inside the card  4. what you see is exactly what the live page shows",
+    "status": "new",
+    "supersedes": "",
+    "consideredRejected": [
+      "separate Preview overlay -> removed (#983): two renders of one page diverge -- the whack-a-mole source",
+      "keep the static BuilderNodePreview thumbnail -> it smooshes when small; only a workaround for the reka-observer OOM that #1178 removed",
+      "unverified: scroll-inside-card vs pan-canvas under zoom, and all-cards-live vs focused-only (perf) -- both to confirm on device"
+    ]
+  },
+  {
+    "id": "outline-tree-editor",
+    "behaviour": "Edit a page as an outline of its layout tree (DOM-like), not a free-floating card canvas. Adding is a list; drag is only for rearranging.",
+    "when": "editing a page: tap a block in a list to insert it; drag a row vertically to reorder; drag a row horizontally to nest/unnest; toggle a group's direction for columns (⬌) vs stack (⬍)",
+    "expect": "the outline IS the LayoutTree -- nesting depth = split children, a group's direction = flex row/column, a nested app = a nested node; the drop indicator is a simple 1D insertion line + indent guide (never the ambiguous 2D edge/pane cue); a live preview reflects every edit; there is no free-floating 2D card canvas",
+    "hook": "",
+    "howToTest": "1. open a page editor -> a vertical outline of the page's blocks + an add-from-list  2. tap a block in the list -> it inserts into the page (insertion line shows where)  3. drag a row up/down -> reorders  4. drag a row into a group (indent) -> it nests; toggle the group ⬌ -> its children become columns  5. the live preview updates to match",
+    "status": "proposed",
+    "supersedes": "",
+    "consideredRejected": [
+      "free-floating card canvas + drag-to-compose (reframes snap-dwell-arm / pane-drop-beside / ghost-ease-apart) -> the 2D drop is ambiguous (which edge / which pane / columns-or-rows), unreadable on a phone (IMG_2221); a page is document flow, not a whiteboard, so the tree was always the truth underneath the scattered cards",
+      "list-to-add but keep the canvas drag-to-compose -> leaves the ambiguous 2D gesture in place; only fixes half the problem",
+      "note: this is `proposed` -- it reframes the built canvas-compose entries above rather than superseding one; awaiting a human walk + sign-off before it becomes the settled contract"
+    ]
+  }
+]

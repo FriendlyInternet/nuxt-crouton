@@ -57,6 +57,29 @@ Pocs that set no port (`blog`, `thinkgraph*`, `three-demo`, `booking-demo` at th
 
 Do NOT verify with `nuxt preview`: crouton collection pages currently 500 under production-preset SSR — an internal data-fetch loses the auth cookie (`e2e/CLAUDE.md`, open problem). Operate against `nuxt dev`.
 
+## 1.5 Reproduce a runtime bug locally — MOBILE-FIRST (never push a fix blind)
+
+The method rule is in `AGENTS.md` (*Bug work → reproduce against the running system*): for a runtime bug (reload loop, 500, broken interaction), reproduce + verify the fix locally *before* pushing. Here's the crouton how-to. **This stack is phone-first (#722, `atelier-plan`) — drive at a phone viewport (390×844) by default**; only check desktop when a surface is explicitly wide.
+
+Write a throwaway driver **inside the repo tree** (playwright resolves from repo `node_modules`; a `/tmp` script can't import it) — `repro.local.mjs` at the repo root; don't commit it.
+
+```js
+import { chromium } from 'playwright'
+const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' // glob newest if the build bumped
+const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] })
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 }) // MOBILE
+const page = await ctx.newPage()
+page.on('console', m => console.log('console', m.type(), m.text()))
+page.on('load', () => console.log('PAGE LOAD', page.url()))         // count loads → reload vs re-render
+page.on('framenavigated', f => f === page.mainFrame() && console.log('nav', f.url()))
+page.on('pageerror', e => console.log('PAGEERROR', e.message))
+```
+
+**Auth/team bootstrap** for a team-scoped page (better-auth's org calls need an **`origin` header**, else `MISSING_OR_NULL_ORIGIN`). Do it via `ctx.request` so cookies are shared:
+`POST /api/auth/sign-up/email {email,password,name}` → `POST /api/auth/organization/create {name,slug}` (headers `{origin, referer}`) → `POST /api/auth/organization/set-active {organizationId}` → seed rows via the collection API `POST /api/teams/<orgId>/<collection>` → `page.goto('/…')`.
+
+**Instrument, then observe — don't theorise.** A full-page reload in Nuxt is often chunk-error auto-reload; counting `load` events tells a reload from a re-render. (#988 board reload: three blind pushes vs one local repro that found it — autosave→refetch→reload — in minutes.)
+
 ## 2. Seeding
 
 **Package demo data** — every app has `db:seed` scripts (verified in the apps' `package.json`):
@@ -116,11 +139,11 @@ At last verification, no runtime analytics was wired in any deployed app: `packa
 ## 6. Screenshots
 
 ```bash
-node scripts/app-shots.mjs <baseUrl> <path[:name]> [more paths...] [--out <dir>]
-# e.g. node scripts/app-shots.mjs http://localhost:3006 /:home /auth/login:login
+node scripts/app-shots.mjs <baseUrl> <path[:name]> [more paths...] [--out <dir>] [--desktop|--viewport WxH]
+# e.g. node scripts/app-shots.mjs http://localhost:3006 /:home /auth/login:login   # MOBILE (default)
 ```
 
-(Also `pnpm app:shots`.) Writes `screenshots/<name>.png`; exits 1 on any failure. It auto-resolves the **pre-installed** chromium under `/opt/pw-browsers/` (globs the newest build; override with `PLAYWRIGHT_CHROMIUM_PATH`) — a failing `npx playwright install` does NOT mean "no browser"; doctrine: `crouton-harness-observability` §5. All screenshots go in `screenshots/` at repo root (HARD GATE, root CLAUDE.md).
+**Shots are MOBILE (390×844) by default** — this stack is phone-first (#722); verify the phone layout first and only add `--desktop` (1280×900) for surfaces that are explicitly wide. (Also `pnpm app:shots`.) Writes `screenshots/<name>.png`; exits 1 on any failure. It auto-resolves the **pre-installed** chromium under `/opt/pw-browsers/` (globs the newest build; override with `PLAYWRIGHT_CHROMIUM_PATH`) — a failing `npx playwright install` does NOT mean "no browser"; doctrine: `crouton-harness-observability` §5. All screenshots go in `screenshots/` at repo root (HARD GATE, root CLAUDE.md).
 
 ## 7. Where artifacts land
 

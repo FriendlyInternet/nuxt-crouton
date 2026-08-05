@@ -42,6 +42,18 @@ the stage, not the name):
 Edit-guarded stages need explicit, scoped approval before a change (granted once per initiative,
 never committed).
 
+**Flow through the stages in order — a capability matures `incubator → launched → shared`, and code
+lives at the stage it has *earned*.** The spike proves the idea and produces the spec/handoff; the
+**app** is the clean reference built to satisfy it; the **package** is *extracted from the proven
+app* as a deliberate third move — not written first and not produced simultaneously with the app.
+The trap is inverting it: growing a shared package with a spike's exploratory code, so unproven work
+lands in the tier every app inherits. So the rule is **consume vs grow**: a spike (or app) may freely
+*consume* an existing shared package, but must not *grow* one — no new shared surface until an app
+has proven it and you extract it on purpose. When a spike genuinely needs new capability, build it
+**in the app** (`launched`), prove it, then extract to `shared`. (Extraction is real package work —
+issue-first, the edit gate, cross-app typecheck — precisely because it's the promotion to the tier
+everyone inherits.)
+
 ## Sign-off gates
 
 A probabilistic runtime needs gates where a human should decide. A gate proposes the right thing and
@@ -158,6 +170,23 @@ The moment a bug/regression/broken build is reported, step 0 is to find **how & 
 introduced** (`git log -S`/`-G`, `blame`, `bisect`) — or rule it a non-code cause (stale install,
 env, data) — and **record that** on the issue *before* fixing. A symptom-first fix can "repair" code
 that was never broken.
+
+**Reproduce against the running system — don't push a runtime fix blind.** For a *runtime* bug (a
+reload loop, a 500, a broken interaction), boot the thing locally and reproduce it — then verify the
+fix locally — *before* shipping. But verification has a **fidelity ladder** — `typecheck/unit →
+local dev → the deployed environment (real build, real data) → the end-user's actual device` — and
+each rung catches a class the ones below cannot: a local run can't see deploy-only state (a remote DB,
+a seed that never ran) or a production-build regression, and no headless engine substitutes for the
+user's real browser (a WebKit/iOS crash a local Chromium won't reproduce). So **"works" must name its
+rung** — a claim is only as strong as the highest rung you actually exercised, and "green locally" is
+necessary, not sufficient, for "works deployed." "I can't test this here" is a **hypothesis to probe**,
+not a fact: a claimed limitation (no browser, no local run, no CLI, no network to the deploy) is almost
+always narrower than it sounds — and when that limitation is exactly what blocks you from the rung that
+matters, the move is to **fix the limitation** (it is often a single setting) rather than design around
+it with a lossy workaround. The anti-pattern is pushing an unverified guess and waiting on a slow deploy
+to learn it was wrong — every blind push burns a deploy cycle and erodes trust; one reproduction at the
+right rung usually finds it in minutes. Instrument, then observe — the mechanism, not a theory.
+(Stack-specific how-to lives in the stack adapter's run-and-operate runbook.)
 
 ## Observe the harness
 

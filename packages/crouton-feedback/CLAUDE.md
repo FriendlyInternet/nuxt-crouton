@@ -18,6 +18,24 @@ dropdown of toggleable tools:
   JSON-first: entries come from a committed `changelog.json`; an optional
   build-time git stamp fills the current deployed commit. Hides itself when the
   app ships no entries, so it costs nothing until an app provides one.
+- **Plan** — a phase-badged row that opens a **plan** in an overlay (#1155).
+  DATA-first (like Changelog): a committed plan JSON (phases/increments) is
+  joined at build with the spec ledger it points at, and the overlay renders it
+  **natively with Nuxt UI** (UModal · UBadge · UCard · UAlert · UCollapsible) —
+  no iframe. The row badge is the active phase (e.g. `B2`). Hides itself when no
+  plan is configured. Lets a build/graduation plan track *in the running
+  preview*, next to Changelog, instead of in a separate file.
+- **Spec walk** — the "does it still work?" facet (#1038 WS1). A `marked/total`-
+  badged row that opens a **non-blocking bottom sheet** (no backdrop — the app
+  stays interactive so you perform each step) and walks the app's LIVE
+  behaviours one at a time: how-to-test steps, a `data-handoff` outline that
+  tracks the current behaviour's element through pan/zoom, ✅ works / ⚠️ issue
+  per entry, and an Export that emits the `lgtm <id>` C1 sign-off. **No build
+  data of its own** — it reuses the same composed plan the Plan tool ships
+  (`runtimeConfig.public.croutonPlan`), pulling the behaviours under `done`/
+  `active` phases + increments. Hides itself when no plan is configured, so it
+  costs nothing until an app sets `croutonFeedback.plan`. Body-mounted from its
+  plugin (NOT page/app.vue — the #1039 lesson).
 
 This package was extracted from `@fyit/crouton-devtools` (epic
 [#960](https://github.com/FriendlyInternet/nuxt-crouton/issues/960)) so the
@@ -108,6 +126,65 @@ injecting `{ entries, commitUrlTemplate, buildCommit }` into
 commit until it's backfilled on the next push; when git is absent (some CI
 builds) the stamp is simply empty. No entries ⇒ the tool hides itself.
 
+## Plan tool config (#1155)
+
+DATA-first data source (like the Changelog tool). Point the module at a plan
+overlay JSON; its `specSource` (or an explicit `specPath`) locates the spec
+ledger the module joins in:
+
+```ts
+// nuxt.config.ts
+croutonFeedback: {
+  plan: {
+    dataPath: 'graduation-plan.json',   // the plan overlay (phases/increments)
+    specPath: 'spec.json',              // optional — else the plan's own `specSource`
+    title: 'Graduation Plan'            // optional override (else the JSON's title)
+  }
+}
+```
+
+At build the module reads the plan JSON + the spec ledger and calls
+`composePlan(planRaw, specRaw)` (pure, unit-tested): each phase/increment's
+`specs` (a list of ids) is resolved to full ledger entries tagged with their
+**bucket** (`settled`→Preserve · `stopgap`→Replace · `new`→Add), and the
+**badge** is the id of the deepest `status: "active"` phase/increment (e.g.
+`B2`). The composed `ComposedPlan` is injected into
+`runtimeConfig.public.croutonPlan`; the overlay maps over it with plain Nuxt UI
+(UModal's `#body` owns the scroll — no custom height; status/bucket colours are
+Nuxt UI `color` props). No phases ⇒ the tool hides itself.
+
+**Gotcha — no arbitrary Tailwind in package components.** A package SFC's
+arbitrary classes (`h-[78dvh]`, `bg-primary/5`) aren't in the consuming app's
+Tailwind content scan, so they emit no CSS. Stick to standard utilities +
+Nuxt UI components (UAlert for callouts, `color` props for tint) — verified by
+the earlier iframe-height regression.
+
+The plan overlay JSON for the crouton-builder graduation is
+`pocs/crouton-builder/graduation-plan.json`; a standalone HTML render (for
+sharing offline) is produced by `node scripts/graduation-plan.mjs
+crouton-builder` → `graduation-plan.html` (same data, separate artifact — not
+consumed by the tool).
+
+## Spec walk tool (#1038 WS1)
+
+**No config of its own — it piggybacks on the Plan tool's data.** Set
+`croutonFeedback.plan` (above) and the Spec walk row appears automatically,
+badged `marked/total`. It reads the SAME composed plan
+(`runtimeConfig.public.croutonPlan`) and flattens the behaviour entries under
+`done`/`active` phases + increments into an ordered walk (an id listed under
+both a phase and its increment appears once, first wins). No plan ⇒ no walk ⇒
+the row hides itself.
+
+The walk is the C1 sign-off gate made in-app: each behaviour shows its
+`howToTest` steps and, via its `hook`, outlines the live element it targets
+(rAF-tracked so it survives the app's own pan/zoom). Mark ✅ works / ⚠️ issue per
+entry (persisted to `localStorage`, keyed `specwalk:<plan-title-slug>` so two
+apps don't collide); **Sign off** exports `lgtm <id>` lines for the ✅s (plus the
+⚠️ issues + notes) to paste back to the agent — that recorded `lgtm` is what the
+done-rule derives from (never a green build). The panel is a **non-blocking**
+bottom sheet (no backdrop) so you can actually perform each gesture while it's
+open, and it body-mounts from the plugin (NOT page/app.vue — the #1039 lesson).
+
 ## Key Files
 
 | File | Purpose |
@@ -116,13 +193,25 @@ builds) the stamp is simply empty. No entries ⇒ the tool hides itself.
 | `src/runtime/composables/useFeedbackTools.ts` | Tool **registry** — `registerTool()` + reactive `tools`/`toggle` the launcher reads. Unit-tested. |
 | `src/runtime/components/FeedbackLauncher.vue` | The glasses launcher — Nuxt UI `UPopover` of toggleable tool rows. |
 | `src/runtime/overlay/mount.ts` | `mountOverlayInBody()` — appContext-mount helper (launcher + future overlays). |
-| `src/runtime/tools/console.ts` | **Console** tool factory — eruda, lazy-loaded on toggle; injectable loader (unit-tested). |
+| `src/runtime/tools/console.ts` | **Console** tool factory — eruda, lazy-loaded on toggle; injectable loader (unit-tested). Injects a floating **Close console ✕** on activate (top-left, clear of the bottom-right launcher) wired to the registry's `deactivate` via the `onRequestClose` callback — eruda hides its own entry button, so this is the panel's only reachable close (#1174). |
 | `src/runtime/tools/annotate.ts` | **Annotate** tool factory — maps activate/deactivate → select-mode start/stop. |
 | `src/runtime/tools/changelog.ts` | **Changelog** tool factory — `vNN` badge + open/close the timeline (unit-tested). |
 | `src/runtime/tools/changelog-data.ts` | Pure changelog helpers (`normalizeChangelog` / `latestVersion` / `buildCommitUrl`) — shared by the module (build) + composable (runtime). Unit-tested, no Vue. |
 | `src/runtime/composables/useChangelog.ts` | Reads `runtimeConfig.public.croutonChangelog` (entries + commit template + build SHA); shared open flag for the overlay. |
 | `src/runtime/components/ChangelogOverlay.vue` | The version-timeline modal (newest first, current entry accented, configurable commit links). |
 | `src/runtime/plugins/tools/changelog.client.ts` | Registers the Changelog tool + mounts its overlay. |
+| `src/runtime/tools/plan.ts` | **Plan** tool factory — phase badge + open/close the plan overlay (unit-tested). |
+| `src/runtime/tools/plan-data.ts` | Pure plan helpers (`composePlan` = join plan JSON + spec ledger → render-ready `ComposedPlan` · `planBadge` = deepest active phase id · `planTitle`) — shared by the module (build) + composable (runtime). Unit-tested, no Vue. |
+| `src/runtime/composables/usePlan.ts` | Reads `runtimeConfig.public.croutonPlan` (the composed plan + badge); shared open flag for the overlay. |
+| `src/runtime/components/PlanOverlay.vue` | The plan modal — renders the composed plan natively with Nuxt UI (UModal `#body` · UCollapsible · UAlert · UBadge). No iframe, no custom height. **Collapsible + fused with the Spec walk (#1180):** phases + increments are `UCollapsible`s, default-open only the ACTIVE one (a scannable outline on mobile, not a wall); a top "Check & sign off — marked/total" bar + each behaviour's **Walk & sign off** action call `useSpecWalk().jumpTo(id)` (closing the plan so the non-blocking walk lets you perform the gesture); each behaviour row reflects its live walk verdict (✅/⚠️/✓). |
+| `src/runtime/components/PlanSpecRow.vue` | One spec-ledger entry as a `UCollapsible` (bucket + behaviour → expect/hook/how-to-test). Shows the live walk **verdict** (✅ works / ⚠️ issue / ✓ signed) and, for a walkable behaviour, a **Walk & sign off** button that `emit`s `walk` (the overlay opens the Spec walk on it). |
+| `src/runtime/plugins/tools/plan.client.ts` | Registers the Plan tool + mounts its overlay. |
+| `src/runtime/tools/specwalk.ts` | **Spec walk** tool factory — `marked/total` badge + open/close the walk panel (unit-tested). |
+| `src/runtime/tools/specwalk-data.ts` | Pure spec-walk helpers (`walkEntries` = flatten a `ComposedPlan`'s LIVE behaviours · `stepsOf` · `selectorFor` · `exportText` = the `lgtm <id>` sign-off) — no Vue, unit-tested. |
+| `src/runtime/composables/useSpecWalk.ts` | Reads `runtimeConfig.public.croutonPlan`, holds the walk + per-behaviour verdicts (localStorage, per-app scoped); shared open flag for the panel. **Scoped walk (#1180):** a `scopeIds` narrows the walked list to a subset — `walkAll()` (full regression), `walkScoped(ids)` (a plan section = "what we just did"), `jumpTo(id)` (one behaviour) — while verdicts stay global by id (a scoped pass still counts toward the overall `markedTotal`/`total`; the launcher badge is always overall). `walk` is the ACTIVE (possibly scoped) list; `marked` is scoped, `markedTotal`/`total` are overall; sign-off exports the scope when scoped, else everything. |
+| `src/runtime/components/SpecWalkOverlay.vue` | The non-blocking walk panel — a **stock Nuxt UI `UDrawer` in non-modal mode** (`:modal="false" :overlay="false"`, `direction="bottom"`): no backdrop, so the app stays interactive while you perform each gesture (the reason it isn't a `USlideover`/`UModal`, which trap the page). Content in the `#body` slot; steps, `data-handoff` outline tracker (rAF), verdicts, `lgtm <id>` Export. **Minimize + dismiss via the native handle (#1180):** the drawer's own snap points (`[0.4, 0.92]`) — drag the grab handle down to a peek, up for the full walk, or all the way down to **dismiss** (`open→false`). **No ✕** on the drawer; when dismissed a floating **re-entry pill** (`started && !open`, bottom-centre) re-opens it without the Plan → walk round-trip, and the pill's own ✕ (`end()`) fully leaves the session. State (idx/verdicts/notes/scope) is module-singleton + localStorage, so snapping/dismissing loses nothing. Readable walk text (base-size behaviour, un-muted steps). Standard-utility styling only (no arbitrary Tailwind — see the gotcha). |
+| `src/runtime/overlay/envProfile.ts` | **Environment profile (#1181)** — a dependency-free `readEnvProfile(win?, nav?)` → `{ device, os, browser, viewportW/H, dpr, touch, orientation, ua }` (UA heuristic; `null` on server) + `formatEnv` one-liner. Stamped onto the Spec-walk sign-off export (`specwalk-data.exportText`'s new `env` arg, via `useSpecWalk`) and the Annotate payload (`capture.ts` `Annotation.env` / `buildAnnotation`, via `useAnnotate`), so every sign-off / feedback says WHERE it was checked. Pure + testable. |
+| `src/runtime/plugins/tools/specwalk.client.ts` | Registers the Spec-walk tool + body-mounts its panel (`mountOverlayInBody`, the #1039 lesson). |
 | `src/runtime/composables/useAnnotate.ts` | Annotate state + DOM select/highlight + POST to `/api/_feedback`. |
 | `src/runtime/components/AnnotateOverlay.vue` | Annotate overlay — highlight + Nuxt UI comment panel. |
 | `src/runtime/overlay/capture.ts` | Pure capture helpers + `formatAnnotationMarkdown` (selector / source-file / Markdown). Unit-tested. |

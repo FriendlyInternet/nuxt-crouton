@@ -1,0 +1,57 @@
+{
+  "id": "default",
+  "renderer": "panes",
+  "pattern": "master-detail",
+  "viable": true,
+  "tree": {
+    "renderer": "panes",
+    "root": {
+      "type": "split",
+      "direction": "vertical",
+      "children": [
+        {
+          "type": "split",
+          "direction": "horizontal",
+          "children": [
+            {
+              "type": "leaf",
+              "blockId": "collection-list",
+              "config": {
+                "collection": "builderPages",
+                "heading": "Pages"
+              },
+              "defaultSize": 40
+            },
+            {
+              "type": "leaf",
+              "blockId": "entity-form",
+              "config": {
+                "collection": "builderPages",
+                "heading": "Pages"
+              },
+              "defaultSize": 60
+            }
+          ]
+        },
+        {
+          "type": "leaf",
+          "blockId": "collection-list",
+          "config": {
+            "collection": "builderArtists",
+            "heading": "Artists"
+          },
+          "defaultSize": 34
+        },
+        {
+          "type": "leaf",
+          "blockId": "collection-list",
+          "config": {
+            "collection": "builderBookings",
+            "heading": "Bookings"
+          },
+          "defaultSize": 34
+        }
+      ]
+    }
+  }
+}

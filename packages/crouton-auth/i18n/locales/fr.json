@@ -7,6 +7,7 @@
     "resetLinkSentDescription": "Nous avons envoyé un lien de réinitialisation à votre e-mail. Cliquez sur le lien pour réinitialiser votre mot de passe.",
     "magicLinkSentDescription": "Nous avons envoyé un lien magique à votre e-mail. Cliquez sur le lien pour vous connecter.",
     "tryAnotherEmail": "Essayer un autre e-mail",
+    "enterEmailAndPassword": "Saisissez votre e-mail et votre mot de passe.",
     "continueWith": "Continuer avec {provider}",
     "placeholders": {
       "email": "vous{'@'}exemple.com",

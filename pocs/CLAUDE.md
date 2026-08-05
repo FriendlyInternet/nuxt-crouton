@@ -4,19 +4,28 @@ This folder holds **real, working crouton Nuxt apps that double as proving groun
 
 ## The idea
 
-New crouton capabilities are not designed as packages up front. They start life as
-ordinary feature code **inside a real app here** — built against a concrete use case,
-with real data, real UI, real deploys. Only once a capability is *proven in an app*
-(it works, the API has settled, the pattern is worth reusing) do we **extract it into
-a `packages/@fyit/crouton-*` layer** and have apps consume it from there.
+New crouton capabilities are not designed as packages up front. They mature through **three
+stages, in order** (the `AGENTS.md` *Stages*: `incubator → launched → shared`):
 
 ```
-build it in a poc app  →  prove it against a real use case  →  extract into packages/  →  apps/ consume the package
+poc (spike, HERE)  →  app (the clean rebuild)  →  package (extracted from the proven app)  →  apps/ consume it
+prove + spec/handoff    the reference impl,          the deliberate 3rd move — not written        …from the package
+                        built the crouton way        first, not produced with the app
 ```
 
-So a poc is allowed to contain code that *will eventually live in a package* but
-doesn't yet. That's the point. The messiness is intentional — it's where we learn the
-right shape before committing to a shared API.
+1. **poc / spike (here in `pocs/`)** — try the idea against a concrete use case (real data, UI,
+   deploys). Churny and safe-to-fail. Its *output* is a proven behaviour + a spec/handoff, **not**
+   the shipping code.
+2. **app (`apps/`)** — graduation *rebuilds* the proven behaviour cleanly as a real app (the
+   `/graduate` skill). This is the **reference implementation** and where new feature code lives.
+3. **package (`packages/`)** — once the app has proven a capability and its API has settled, you
+   **extract** it into a `@fyit/crouton-*` layer, as a deliberate later move, and apps consume it.
+
+So a poc may hold pre-package feature code that *will eventually live in a package* — that's the
+point, it's where we learn the right shape. **But it must not *grow* a shared package**: a spike
+(and an app) may freely *consume* an existing `packages/*` layer, but adding **new shared surface**
+happens only at step 3, extracted from the proven app — never written straight into a package during
+the spike. (Prove it in the app, then extract.) See `AGENTS.md` *Stages* for the general rule.
 
 ## How pocs differ from the rest of the monorepo
 
@@ -122,7 +131,7 @@ not append-only like the changelog):
 | `when` → `expect` | the **testable assertion** — the contract; this is what the rebuild must satisfy and the C1 walk checks |
 | `hook` | the `data-handoff`/`data-testid` selector that locates this state on **both** POC and app, so the same walk runs on each (plant it during the reconcile pass) |
 | `howToTest` | numbered steps with before/after — a human can run it without reading code |
-| `status` | `settled` = the contract, **preserve** · `stopgap` = known-temporary fake, **replace** with the real crouton thing at graduation (an expected C1 diff, not a bug) · `new` = an **addition** the app needs that the POC left open (a POC is a floor, not a ceiling) — no POC expected-result, so it's signed off through its own new-behaviour gate, *not* the side-by-side comparison |
+| `status` | `settled` = the contract, **preserve** (needs `signedOff`) · `stopgap` = known-temporary fake, **replace** with the real crouton thing at graduation (an expected C1 diff, not a bug) · `new` = an **addition** the app needs that the POC left open (a POC is a floor, not a ceiling) — no POC expected-result, so it's signed off through its own new-behaviour gate, *not* the side-by-side comparison · `proposed` = **drafted but not yet signed off** — a behaviour captured *from artifacts* (the A0 retrofit) or proposed ahead of confirmation, awaiting a human walk against the running POC; flips to `settled` (with a recorded `signedOff`) once reconciled. Allowed without `signedOff`; never the frozen contract until it's `settled` |
 | `signedOff` | the recorded sign-off token (`lgtm vNN` / comment ref) — **done is derived from this, never self-asserted** |
 | `supersedes` | `id` of the entry this replaces (specs are pruned/edited, like `HANDOFF.md`) |
 | `consideredRejected` | `option → ❌ why not` — stops future-us re-litigating a settled call |

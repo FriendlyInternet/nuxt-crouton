@@ -5,7 +5,11 @@
  * runtime min-width enforcement Sprint 3 #706).
  *
  * - `split` node → a SplitterGroup with one SplitterPanel per child (recursing),
- *   interleaved with resize handles. Nesting = a group inside a panel.
+ *   interleaved with resize handles. Nesting = a group inside a panel. In VIEW mode
+ *   (`interactive=false`: a served page / Preview) there's nothing to drag, so it
+ *   renders plain flex at the stored proportions instead of reka's SplitterGroup —
+ *   avoiding reka's internal ResizeObserver churn (the benign "loop completed" flood,
+ *   #983) that a read-only view has no reason to pay for. Same proportions, no handles.
  * - `leaf` node  → one block, resolved id → component NAME through the
  *   ALLOWLISTED `croutonLayoutBlocks` registry (#704). An unknown id renders a
  *   safe fallback — NEVER an arbitrary component. Per-block config is sanitized
@@ -17,7 +21,7 @@
  * `panelMinSizePct`. Splitter primitives are SSR-safe (no <ClientOnly> needed);
  * the floor falls back to the authored `minSize` until the group has measured.
  */
-import { computed, inject, nextTick, ref, watch } from 'vue'
+import { computed, inject, nextTick, provide, ref, useId, watch, type Ref } from 'vue'
 import { useElementSize, unrefElement } from '@vueuse/core'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layout'
@@ -27,6 +31,7 @@ import { siblingKeys } from '../utils/layout-flip'
 import { useLayoutFlip } from '../composables/useLayoutFlip'
 import { isSubtreeCollapsed } from '../utils/layout-responsive'
 import { LAYOUT_VARIANTS_KEY, LAYOUT_COLLAPSE_KEY, LAYOUT_CONTAINER_WIDTH_KEY } from '../composables/useCroutonLayoutResponsive'
+import { LAYOUT_RENDER_CONTEXT_KEY, type LayoutRenderContext } from '../composables/useCroutonLayoutRenderContext'
 
 const props = withDefaults(
   defineProps<{
@@ -49,6 +54,16 @@ const props = withDefaults(
 // no overrides. A leaf's variant is merged into its config so the block can read
 // `variant` like any other prop.
 const variants = inject(LAYOUT_VARIANTS_KEY, ref({} as Record<string, string>))
+
+// Render context (#983): a read-only render (`interactive=false` — a served page
+// or the builder board's live preview) is a PAGE; the authoring render is ADMIN.
+// A data-bound leaf (a collection list) injects this to pick a content-sized page
+// render vs the fill-and-scroll admin render. Threaded consistently through the
+// recursion, so providing it per-instance off THIS node's `interactive` is exact.
+provide<Ref<LayoutRenderContext>>(
+  LAYOUT_RENDER_CONTEXT_KEY,
+  computed(() => (props.interactive ? 'admin' : 'page')),
+)
 
 // In-place collapse context (WS6 #875), provided only when an in-place collapse
 // style is active. Absent (the default — plain renderer, editor, gutter-tabs path)
@@ -86,6 +101,9 @@ const safeConfig = computed<Record<string, unknown>>(() => {
 // Live width of THIS split's group → converts each child's px min-width floor
 // to a percentage min-size for its panel (horizontal splits only).
 const groupRef = ref<HTMLElement | null>(null)
+// A plain ref on the VIEW-mode grid wrapper so FLIP can find its `[data-crouton-pane]` children
+// (#1178 view path). Deliberately NOT `groupRef` — it must never reach `useElementSize` (no RO).
+const viewGridRef = ref<HTMLElement | null>(null)
 const { width: groupWidth, height: groupHeight } = useElementSize(groupRef)
 const minWidthFor = computed(() => minWidthResolver(blocks.value))
 
@@ -148,6 +166,63 @@ const hasHug = computed(() =>
   props.node.type === 'split' && !inPlace.value && !shouldStack.value && hugAlongAxis.value.some(Boolean),
 )
 
+// --- VIEW-mode CSS grid (#1178) --------------------------------------------------
+// A read-only (`!interactive`) split renders as CSS Grid built entirely from the
+// declared sizing contract — proportions, floors, hug — so it needs NO ResizeObserver.
+// Each child track is `minmax(<floor>px, <size>fr)` (proportion + min-width in one), or
+// `auto` for a hug pane. The row→column STACK, which drifted to a JS `useElementSize`
+// measurement, becomes a pure container query at the split's own derived soft-floor
+// (the sum of child floors along the axis) — emitted as a per-split `@container` rule
+// with the literal threshold (queries can't read `var()`). Result: the live path — a
+// served page or the Preview — reflows with zero observers (the POC's CSS fallback).
+const viewCqName = `crtsplit-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+const childSizings = computed(() =>
+  props.node.type === 'split' ? props.node.children.map(c => deriveSizing(c, blocks.value)) : [],
+)
+const viewTracks = computed(() => {
+  if (props.node.type !== 'split') return ''
+  const horizontal = props.node.direction === 'horizontal'
+  const n = props.node.children.length
+  return props.node.children
+    .map((c, i) => {
+      if (hugAlongAxis.value[i]) return 'auto'
+      // Horizontal split → COLUMN widths keep their proportion (`fr`), floored at
+      // the block's min-width. Vertical split → ROW heights FLOW to content
+      // (`auto`, floored at min-height): a page render sizes to its content and
+      // scrolls as one document, rather than carving the frame into equal `fr`
+      // slabs (the admin fill). (#983 page render — the view path is `!interactive`.)
+      if (horizontal) {
+        const floor = Math.round(childSizings.value[i]!.hardMinWidth)
+        const size = c.defaultSize ?? (100 / n)
+        return `minmax(${floor}px, ${size}fr)`
+      }
+      return `minmax(${Math.round(childSizings.value[i]!.minHeight)}px, auto)`
+    })
+    .join(' ')
+})
+const viewGridStyle = computed(() => {
+  // `minHeight:100%` (not a fixed `height`) so a short page still fills its frame
+  // but a tall one grows past it and the frame (the served page / the board card)
+  // scrolls as one — no nested scrollbars. (#983)
+  const base = { display: 'grid', gap: '1px', minHeight: '100%', width: '100%' } as Record<string, string>
+  if (props.node.type !== 'split') return base
+  return props.node.direction === 'horizontal'
+    ? { ...base, gridTemplateColumns: viewTracks.value, gridAutoFlow: 'column' }
+    : { ...base, gridTemplateRows: viewTracks.value, gridAutoFlow: 'row' }
+})
+// Stack threshold: the split's own soft floor (only a HORIZONTAL split stacks — a
+// vertical one is already a column). Below it, collapse to a single column.
+const viewStackThreshold = computed(() =>
+  props.node.type === 'split' && props.node.direction === 'horizontal'
+    ? Math.round(deriveSizing(props.node, blocks.value).softMinWidth)
+    : 0,
+)
+const viewStackCss = computed(() =>
+  viewStackThreshold.value > 0
+    ? `@container ${viewCqName} (max-width:${viewStackThreshold.value}px){[data-cq="${viewCqName}"]{grid-template-columns:1fr!important;grid-template-rows:none!important;grid-auto-flow:row!important}}`
+    : '',
+)
+
 // --- FLIP reflow on structural change (#943) ------------------------------------
 // When this split's children change (a pane detached, a block inserted), reka-ui rebuilds
 // the panes at their final sizes — so the survivors would JUMP into place. useLayoutFlip
@@ -158,7 +233,12 @@ const hasHug = computed(() =>
 const childKeys = computed(() => (props.node.type === 'split' ? siblingKeys(props.node.children) : []))
 const flipEnabled = computed(() => props.node.type === 'split' && !inPlace.value)
 const flipPanels = (): HTMLElement[] => {
-  const g = unrefElement(groupRef) as HTMLElement | null
+  // The reka path attaches `groupRef`; the observer-free VIEW-mode grid path (#1178) does NOT
+  // (binding `groupRef` there would re-arm the ResizeObserver #1178 removed) — so fall back to
+  // `viewGridRef`, a plain element ref NOT fed to `useElementSize`, so FLIP also eases the view
+  // panes apart on a structural change. useLayoutFlip measures via getBoundingClientRect (no RO),
+  // so covering the view path adds no observer.
+  const g = (unrefElement(groupRef) ?? unrefElement(viewGridRef)) as HTMLElement | null
   if (!g) return []
   // reka-ui panes carry `data-panel`; stacked panes (own render path) carry `data-crouton-pane`.
   return Array.from(g.querySelectorAll<HTMLElement>(':scope > [data-panel], :scope > [data-crouton-pane]'))
@@ -214,7 +294,8 @@ watch(
        viewport. Every pane is its own container, so this composes recursively. -->
   <div
     v-if="node.type === 'leaf'"
-    class="croutonpane h-full w-full"
+    class="croutonpane w-full"
+    :class="interactive ? 'h-full' : ''"
   >
     <!-- Collapsed in place (WS6 #875): the block becomes its style's resting handle,
          in its own pane slot, click-to-expand. -->
@@ -225,11 +306,14 @@ watch(
       :block-id="node.blockId"
       @expand="collapseCtx.expand(node.blockId)"
     />
+    <!-- Admin (`interactive`): fill the pane + scroll internally. Page
+         (`!interactive`, #983): content-height, no internal scrollbar — the block
+         sizes to its content so the page flows and the frame scrolls as one. -->
     <component
       :is="componentName"
       v-else-if="componentName"
       v-bind="safeConfig"
-      class="h-full w-full overflow-auto"
+      :class="interactive ? 'h-full w-full overflow-auto' : 'w-full'"
     />
     <div
       v-else
@@ -244,7 +328,8 @@ watch(
        Read-only here; persisting a nested resize is part of nested authoring (WS4). -->
   <div
     v-else-if="node.type === 'nested'"
-    class="croutonpane h-full w-full"
+    class="croutonpane w-full"
+    :class="interactive ? 'h-full' : ''"
   >
     <CroutonLayoutRenderer
       :node="node.layout.root"
@@ -298,6 +383,41 @@ watch(
         @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
       />
     </div>
+  </div>
+
+  <!-- Split, VIEW mode (#1178) — a read-only render (`interactive=false`: a served page /
+       Preview) has nothing to drag, so it renders as pure CSS Grid built from the declared
+       sizing contract, with ZERO ResizeObserver: each child track is `minmax(<floor>px,
+       <size>fr)` (proportion + min-width in one) or `auto` for a hug pane, and the row→column
+       stack is a container query at the split's derived soft-floor (a per-split `@container`
+       rule, since queries can't read `var()`). No reka SplitterGroup (its internal observer
+       flooded the console) and no `useElementSize` (the JS stack-measurement that drifted from
+       the POC's CSS fallback, #983). The wrapper is the query container; the grid child carries
+       `data-cq` so the emitted rule targets it. Excludes in-place-collapse (still reka). -->
+  <div
+    v-else-if="node.type === 'split' && !interactive && !inPlace"
+    :style="{ containerType: 'inline-size', containerName: viewCqName, height: '100%', width: '100%' }"
+  >
+    <div
+      ref="viewGridRef"
+      class="croutonviewgrid"
+      :data-cq="viewCqName"
+      :style="viewGridStyle"
+    >
+      <div
+        v-for="(child, i) in node.children"
+        :key="i"
+        data-crouton-pane
+        class="croutonpane min-h-0 min-w-0 overflow-hidden"
+      >
+        <CroutonLayoutRenderer
+          :node="child"
+          :interactive="false"
+          @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
+        />
+      </div>
+    </div>
+    <component :is="'style'" v-if="viewStackCss">{{ viewStackCss }}</component>
   </div>
 
   <!-- Split -->
