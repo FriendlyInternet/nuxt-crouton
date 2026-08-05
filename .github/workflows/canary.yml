@@ -1,0 +1,135 @@
+name: Canary rig (worker pipeline)
+
+# The repeatable answer to "does the delegation pipeline still work?" (#1878).
+#
+# Before this, the only way to test the pi worker was to label a REAL ticket and watch — which is
+# how #1876's three defects were found, in production, after weeks of green CI. A canary is a fixed
+# issue whose correct outcome is known in advance (.github/canaries.json), so the question becomes
+# a dispatch instead of an afternoon.
+#
+# MANUAL ONLY, on purpose. Each canary costs a real worker run (up to 45 min on the shared
+# mac-mini), so this must never be a cron until it has proven quiet — a flaky canary that pages
+# nightly gets muted, and a muted canary is worse than none.
+#
+# TWO PHASES, because a worker run is asynchronous and can take 45 minutes. `dispatch` starts them;
+# `verify` reads the results whenever you come back. Trying to do both in one job would mean a
+# workflow sitting in a poll loop burning runner time for the entire window.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dispatch = reset + label the canaries; verify = check what they produced"
+        required: true
+        default: "verify"
+        type: choice
+        options: ["dispatch", "verify"]
+      only:
+        description: "Optional canary id (e.g. packages-locale-3-files). Blank = all wired canaries."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Fail early and loudly if the rig's own assertions are broken — a canary suite that can't
+      # be trusted is worse than none (the #1612 skipped-test lesson).
+      - name: Self-test the assertions
+        run: node --test scripts/canary.test.mjs
+
+      - name: Resolve wired canaries
+        id: resolve
+        env:
+          ONLY: ${{ inputs.only }}
+        run: |
+          set -uo pipefail
+          WIRED="$(node -e '
+            const c = require("./.github/canaries.json").canaries;
+            const only = process.env.ONLY || "";
+            const wired = c.filter(x => x.issue && (!only || x.id === only));
+            const unwired = c.filter(x => !x.issue).map(x => x.id);
+            if (unwired.length) console.error(`::warning::not wired to an issue yet, skipped: ${unwired.join(", ")}`);
+            console.log(JSON.stringify(wired));
+          ')"
+          echo "wired=$WIRED" >> "$GITHUB_OUTPUT"
+          echo "$WIRED" | node -e 'const w=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(`${w.length} wired canary(ies): ${w.map(x=>`${x.id}#${x.issue}`).join(", ") || "none"}`)'
+
+      # ── DISPATCH ───────────────────────────────────────────────────────────────────────────
+      # Reset each canary to its start state, then re-label it. Reset is what makes a canary
+      # REUSABLE rather than something that mints a new issue (and a new number) every run.
+      - name: Dispatch
+        if: inputs.mode == 'dispatch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIRED: ${{ steps.resolve.outputs.wired }}
+        run: |
+          set -uo pipefail
+          for n in $(echo "$WIRED" | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8")).forEach(c=>console.log(c.issue))'); do
+            echo "── canary #$n ──"
+            # Close any PR from the previous run and delete its branch, so the new run starts clean
+            # and its verdict describes THIS run rather than a leftover.
+            PR="$(gh pr list --head "work-$n" --json number -q '.[0].number' 2>/dev/null || true)"
+            [ -n "$PR" ] && gh pr close "$PR" --delete-branch 2>&1 | tail -1 || true
+            git push origin --delete "work-$n" 2>/dev/null || true
+            gh issue reopen "$n" 2>/dev/null || true
+            # Remove then re-add: the worker fires on the `labeled` EVENT, so re-adding a label
+            # that is already present does nothing at all (the #1874/#1875 re-dispatch lesson).
+            gh issue edit "$n" --remove-label work-this 2>/dev/null || true
+            sleep 2
+            gh issue edit "$n" --add-label work-this 2>&1 | tail -1 || true
+            echo "dispatched #$n"
+          done
+          echo "::notice::Canaries dispatched. Re-run this workflow with mode=verify once the runs finish (a worker takes 2–45 min)."
+
+      # ── VERIFY ─────────────────────────────────────────────────────────────────────────────
+      # Gather the observed shape per canary with `gh`, then hand it to the pure assertions.
+      # Nothing here interprets anything — that is the point.
+      - name: Gather + assert
+        if: inputs.mode == 'verify'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WIRED: ${{ steps.resolve.outputs.wired }}
+        run: |
+          set -uo pipefail
+          echo '{}' > /tmp/obs.json
+          for n in $(echo "$WIRED" | node -e 'JSON.parse(require("fs").readFileSync(0,"utf8")).forEach(c=>console.log(c.issue))'); do
+            ID="$(echo "$WIRED" | ISSUE="$n" node -e 'const w=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log((w.find(c=>String(c.issue)===process.env.ISSUE)||{}).id||"")')"
+            PR_JSON="$(gh pr list --head "work-$n" --state all --json number,isDraft,files,body -q '.[0]' 2>/dev/null || echo '')"
+            COMMENTS="$(gh issue view "$n" --json comments -q '[.comments[].body]' 2>/dev/null || echo '[]')"
+            PR_COMMENTS='[]'
+            PRNUM="$(printf '%s' "$PR_JSON" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{console.log(JSON.parse(s).number||"")}catch{console.log("")}})' || true)"
+            [ -n "$PRNUM" ] && PR_COMMENTS="$(gh pr view "$PRNUM" --json comments -q '[.comments[].body]' 2>/dev/null || echo '[]')"
+            PR_JSON="$PR_JSON" COMMENTS="$COMMENTS" PR_COMMENTS="$PR_COMMENTS" CID="$ID" node -e '
+              const fs = require("fs");
+              const obs = JSON.parse(fs.readFileSync("/tmp/obs.json", "utf8"));
+              let pr = null;
+              try {
+                const raw = JSON.parse(process.env.PR_JSON || "null");
+                if (raw) pr = { number: raw.number, draft: raw.isDraft, changedFiles: (raw.files||[]).map(f=>f.path), body: raw.body };
+              } catch {}
+              const issueComments = JSON.parse(process.env.COMMENTS || "[]");
+              const prComments = JSON.parse(process.env.PR_COMMENTS || "[]");
+              // The run record is the worker`s own factual note on the PR (#1849).
+              const runRecord = prComments.find(c => c.includes("pi worker — run record")) || "";
+              obs[process.env.CID] = { pr, runRecord, issueComments: [...issueComments, ...prComments] };
+              fs.writeFileSync("/tmp/obs.json", JSON.stringify(obs, null, 2));
+            '
+            echo "gathered $ID (#$n)"
+          done
+          node scripts/canary.mjs .github/canaries.json /tmp/obs.json | tee /tmp/report.md
+          echo "REPORT_EXIT=$?"
+
+      - name: Summarise
+        if: always() && inputs.mode == 'verify'
+        run: cat /tmp/report.md >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo "no report" >> "$GITHUB_STEP_SUMMARY"
