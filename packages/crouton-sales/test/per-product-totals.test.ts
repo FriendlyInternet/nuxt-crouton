@@ -39,14 +39,10 @@ import {
 } from '../server/utils/location-handover'
 import { buildPerProductTotals } from '../server/utils/per-product-totals'
 
-// Local-only, and that is a known gap — not a preference. Every ci.yml job installs with
-// `pnpm install --ignore-scripts`, so better-sqlite3's native binding is never built and
-// `new Database()` below throws "Could not locate the bindings file". Same reason
-// crouton-cli's seed-local-write test is local-only. The rebuild that fixes it is already
-// live in the three deploy workflows (#154) and just needs applying to ci.yml — tracked in
-// #1880, which also removes this guard. Until then the drift these tests catch is unguarded
-// on the PR path: run them locally before touching the outstanding rule.
-const describeLocal = describe.skipIf(process.env.CI)
+// These open a real SQLite DB, which needs better-sqlite3's native binding. ci.yml rebuilds
+// it after the --ignore-scripts install (#1880), so they run on the PR path — which is the
+// point: the drift they catch (locationBlocksDeliverySql vs isOrderDelivered) is only
+// guarded if CI actually runs them.
 
 // ---------------------------------------------------------------------------
 // Minimal mirrors of the generated tables — only the columns the query reads.
@@ -107,7 +103,7 @@ beforeEach(() => {
 // 1. The two halves of the same sentence must agree.
 // ---------------------------------------------------------------------------
 
-describeLocal('locationBlocksDeliverySql — agrees with the pure rule, row for row', () => {
+describe('locationBlocksDeliverySql — agrees with the pure rule, row for row', () => {
   // Every combination the database can actually hold. `null` is not a curiosity
   // here: it is what pre-migration rows read, and reading it as "nothing to
   // confirm" would mark every historical order delivered on sight.
@@ -222,7 +218,7 @@ const totals = () => buildPerProductTotals(db, tables, {
 const byTitle = (rows: Array<{ product: string }>, title: string) =>
   rows.find(r => r.product === title)
 
-describeLocal('buildPerProductTotals — sold', () => {
+describe('buildPerProductTotals — sold', () => {
   beforeEach(seedVenue)
 
   it('sums quantities rather than counting order lines', async () => {
@@ -264,7 +260,7 @@ describeLocal('buildPerProductTotals — sold', () => {
   })
 })
 
-describeLocal('buildPerProductTotals — outstanding', () => {
+describe('buildPerProductTotals — outstanding', () => {
   beforeEach(seedVenue)
 
   it('counts units a requiring location has not bumped', async () => {
@@ -357,7 +353,7 @@ describeLocal('buildPerProductTotals — outstanding', () => {
   })
 })
 
-describeLocal('buildPerProductTotals — scoping', () => {
+describe('buildPerProductTotals — scoping', () => {
   beforeEach(seedVenue)
 
   it('never reads another team\'s or another event\'s orders', async () => {
