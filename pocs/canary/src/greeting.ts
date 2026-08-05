@@ -32,3 +32,14 @@ export function greet(locale: Locale, name: string): Greeting {
 export function supportedLocales(): Locale[] {
   return Object.keys(GREETINGS) as Locale[]
 }
+
+const FAREWELLS: Record<Locale, string> = {
+  nl: 'Tot ziens',
+  en: 'Goodbye',
+  fr: 'Au revoir'
+}
+
+/** Say farewell in `locale`. Total over `Locale` by construction — no runtime fallback needed. */
+export function farewell(locale: Locale, name: string): Greeting {
+  return { locale, text: `${FAREWELLS[locale]}, ${name}!` }
+}
