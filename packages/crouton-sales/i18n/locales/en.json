@@ -207,7 +207,15 @@
       "avgOrder": "Avg. order",
       "topProducts": "Top products",
       "noSalesYet": "No sales yet",
-      "outstanding": "Still waiting"
+      "outstanding": "Still waiting",
+      "perProduct": {
+        "title": "Per product",
+        "sold": "Sold",
+        "outstanding": "Still out",
+        "allLocations": "All",
+        "stillOut": "{count} still out",
+        "directHandover": "This location hands over directly — nothing can be outstanding here"
+      }
     },
     "common": {
       "save": "Save",

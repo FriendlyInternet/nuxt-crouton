@@ -15,10 +15,11 @@
  * items and the row LEDs come from the `printqueues/status` poll, so the heavy
  * joins the generated collection GET does aren't needed here.
  */
-import { and, desc, eq, exists, inArray, isNull, ne, or, sql } from 'drizzle-orm'
+import { and, desc, eq, exists, inArray, ne, sql } from 'drizzle-orm'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { requireTeamEvent } from '../../../../../../utils/team-event'
 import { planOutstandingCount } from '../../../../../../utils/pass-tickets'
+import { locationBlocksDeliverySql } from '../../../../../../utils/location-handover'
 import {
   parseLocationRemarks,
   parseOrderFilters,
@@ -86,8 +87,10 @@ async function countOutstanding(db: any, salesOrders: any, teamId: string, event
   const { salesKdsbumps } = await import('~~/layers/sales/collections/kdsbumps/server/database/schema')
 
   // Still to deliver = at least one location that REQUIRES confirmation has no
-  // bump (#1851). A location that opted out can never hold an order open, and
-  // NULL predates the migration so it counts as requiring.
+  // bump (#1851). The rule is NOT spelled out here: it is the shared
+  // `locationBlocksDeliverySql`, which the per-product view (#1867) also uses.
+  // This query used to carry its own copy of the condition, so the pane counter
+  // and anything else asking the same question could drift apart silently.
   const [row] = await db
     .select({ count: sql<number>`count(distinct ${salesOrders.id})` })
     .from(salesOrders)
@@ -102,8 +105,10 @@ async function countOutstanding(db: any, salesOrders: any, teamId: string, event
       eq(salesOrders.teamId, plan.teamId),
       eq(salesOrders.eventId, plan.eventId),
       ne(salesOrders.status, 'cancelled'),
-      isNull(salesKdsbumps.id),
-      or(isNull(salesLocations.requiresHandover), eq(salesLocations.requiresHandover, true))
+      locationBlocksDeliverySql({
+        bumpId: salesKdsbumps.id,
+        requiresHandover: salesLocations.requiresHandover
+      })
     ))
 
   return Number(row?.count ?? 0)

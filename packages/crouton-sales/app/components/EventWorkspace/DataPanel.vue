@@ -106,6 +106,15 @@ onUnmounted(unhookMutation)
       />
     </div>
 
+    <!-- Per product: sold + still to deliver (#1867). Sits directly under the
+         summary because it answers the standing mid-event question ("do we need
+         to order more of this?") — the charts below are for looking back. -->
+    <SalesDashboardPerProductTotals
+      :team-param="teamParam"
+      :event-id="event.id"
+      :personnel="personnelMode"
+    />
+
     <!-- Product × day pivot (Units ⇄ Revenue toggle + CSV export) — the block
          renderer reused as-is; it scopes via attrs.eventScope -->
     <div class="rounded-2xl border border-default bg-elevated/40 p-4">
