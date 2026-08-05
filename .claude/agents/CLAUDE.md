@@ -180,7 +180,8 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
 - **The pi operating contract is canonical in one file (#1022).** `--skill` loads `.claude/skills/**`
   but not these agent contracts, so the non-negotiable subset pi must obey (never self-merge · sign-off
   as a **top-level** comment · idempotent `epic/<NN>-*` reuse · `.github/workflows/**` → embed-a-patch ·
-  every PR body opens with `Closes #N`) lives in **`.claude/agents/pi-operating-contract.md`** and is
+  every PR body opens with `Closes #N` · the **decide-vs-ask carve-out**, below) lives in
+  **`.claude/agents/pi-operating-contract.md`** and is
   `cat` verbatim into the pi prompt by both `decompose-on-issue-pidev.yml` and `work-issue-pidev.yml`.
   Edit the contract **there** (one place, so the two flows can't drift — they were byte-identical hand-
   maintained copies before). Keep that file **pure prose**: it is injected raw, so no frontmatter/headers.
@@ -202,6 +203,15 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   **When** to ask vs decide is the 3-part test in `AGENTS.md` → *Deciding vs asking* (ask only
   when the fork is irreversible/expensive **and** not derivable **and** genuinely the human's;
   else decide + log). Not "no assumptions" — assume the derivable/reversible, escalate the rest.
+  **This now binds pi too (#1745).** The pi contract used to carry the blunt `#1019` absolute —
+  *"NEVER … ask a question … asking what to do is a FAILED run"* — while the repo shipped an
+  `ask-human` skill and this very test, so a genuine owner-fork left pi no legal move. The
+  contract's in-run ban is unchanged (never pause, never `pi-ask-user` — nothing is listening);
+  the carve-out is only the **async comment** channel, and an asked-and-held run now counts as a
+  **successful** deliverable in the artifact-gate. The gate also **distinguishes the two held
+  shapes** in its result comment — "asked you a question" (needs an *answer*) vs "held for
+  sign-off" (needs an *approval*) — keyed off the ask-human template's mandatory
+  `## 🔀 Blocked —` first line, so a question can't read as an approval request.
 - **A block comment is a HANDOFF, not just a question (#639) — emit it via the `ask-human`
   skill (#1189).** The owner's reply spawns a **brand-new session** (`resume-on-comment.yml`)
   that has **zero memory** of your reasoning and checks out `main` — not your worktree, which
