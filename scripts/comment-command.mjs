@@ -65,6 +65,28 @@ const COMMANDS = [
  * @param {string} body Raw Markdown body of the issue comment.
  * @returns {'delegate-pi' | 'delegate' | 'work-this' | null}
  */
+/**
+ * A line that is NOTHING BUT rockets means "pick this up" — no lane, no vocabulary.
+ *
+ * This is the gesture to reach for; `/plan` and `/build` are the overrides for when you
+ * want to force a lane. It exists because choosing the lane was never the human's job:
+ * whether an issue needs planning or building is derivable from whether its work branch
+ * exists, and `resolveLane()` derives it. Asking a person to pick is how #1791 got sent
+ * to the decomposer twice.
+ *
+ * Why an emoji rather than a word: it cannot collide with prose. "pick this up" appears
+ * in ordinary sentences ("I'll pick this up tomorrow") and would re-create the #2004 bug
+ * in a new costume. A line of only rockets is never written by accident.
+ *
+ * Why the WHOLE line: a bare leading 🚀 does show up in celebration text ("🚀 shipped!").
+ * Requiring the line to contain nothing else removes the last ambiguity.
+ *
+ * The `u` flag is load-bearing: 🚀 is a surrogate pair, so without it `+` repeats only the
+ * low surrogate and `🚀🚀` fails to match while a single `🚀` passes — a bug that would have
+ * shipped looking like it worked, since the one-rocket case is the one you'd try first.
+ */
+const PICK_THIS_UP = /^[ \t]*🚀+[ \t]*$/mu
+
 export function parseCommand(body) {
   const text = stripNonCommandRegions(String(body || ''))
 
@@ -76,6 +98,11 @@ export function parseCommand(body) {
   for (const { label, words } of COMMANDS) {
     if (words.some(has)) return label
   }
+  // No explicit lane asked for. Rockets mean "pick this up" and let state decide, which
+  // `resolveLane` does — so return the planning label and let it be rerouted if a work
+  // branch already exists. (Returning 'delegate' here is not a preference for planning;
+  // it is the input `resolveLane` overrides.)
+  if (PICK_THIS_UP.test(text)) return 'delegate'
   return null
 }
 

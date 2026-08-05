@@ -96,6 +96,37 @@ test('FIXTURE: the #1791 explanation comment must NOT dispatch', () => {
   assert.equal(parseCommand(body), null)
 })
 
+// ── 🚀 "pick this up" — no lane, no vocabulary ───────────────────────────────────────
+
+test('a line of rockets means pick this up, and state picks the lane', () => {
+  // parseCommand returns the planning label as the INPUT to resolveLane, which overrides
+  // it when a work branch exists. The human never chooses.
+  assert.equal(parseCommand('🚀🚀'), 'delegate')
+  assert.equal(parseCommand('🚀'), 'delegate')
+  assert.deepEqual(resolveLane(parseCommand('🚀🚀'), true), { label: 'work-this', rerouted: true })
+  assert.deepEqual(resolveLane(parseCommand('🚀🚀'), false), { label: 'delegate', rerouted: false })
+})
+
+test('rockets still count after a steer paragraph', () => {
+  assert.equal(parseCommand('Finish the last three files.\n\n🚀🚀'), 'delegate')
+})
+
+test('a rocket in celebration prose is not a command', () => {
+  // The whole-line rule is what makes this safe — a leading 🚀 is common in release notes.
+  assert.equal(parseCommand('🚀 shipped!'), null)
+  assert.equal(parseCommand('Great work 🚀'), null)
+  assert.equal(parseCommand('🚀 Deployed to staging 🚀'), null)
+})
+
+test('a quoted or fenced rocket line does not fire', () => {
+  assert.equal(parseCommand('> 🚀🚀'), null)
+  assert.equal(parseCommand('```\n🚀🚀\n```'), null)
+})
+
+test('an explicit lane still wins over rockets', () => {
+  assert.equal(parseCommand('/build\n\n🚀🚀'), 'work-this')
+})
+
 // ── #2010: the vocabulary — named for what the lane DOES ─────────────────────────────
 
 test('/plan reaches the decomposer', () => {
