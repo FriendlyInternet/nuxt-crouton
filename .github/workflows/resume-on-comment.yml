@@ -210,7 +210,12 @@ jobs:
             const issue_number = context.payload.issue.number
             const body = context.payload.comment.body || ''
             // Approval only — a change-request reply must NOT merge anything.
-            if (!/\b(approve|approved|lgtm)\b/i.test(body)) {
+            // ONE definition of "approval" (#2051/#2094): isApproval() understands the
+            // whole-line ✅ gesture and strips code/quotes first, so a quoted or backticked
+            // `lgtm` can no longer merge a PR (the #2004 shape). The repo is checked out at
+            // the top of this job, so the tested module is importable here.
+            const { isApproval } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/approval.mjs`)
+            if (!isApproval(body)) {
               core.info('Comment is not an approval — nothing to merge.'); return
             }
 
@@ -482,24 +487,39 @@ jobs:
   # approval AND the issue actually has a pending gate PR (open, into an `epic/*`
   # branch). An approval word on an ordinary issue is ignored.
   explain-skipped-approval:
+    # The contains() tests are a CHEAP PRE-FILTER ONLY (#2004) — the decision is
+    # isApproval() below. The check emoji are listed too (#2094): a bare ✅ used to
+    # slip past this prefilter entirely, so a wasted check-approval got no explainer.
     if: |
       !github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
       !contains(github.event.issue.labels.*.name, 'status:blocked') &&
-      (contains(github.event.comment.body, 'lgtm') || contains(github.event.comment.body, 'approve'))
+      (contains(github.event.comment.body, 'lgtm') ||
+       contains(github.event.comment.body, 'approve') ||
+       contains(github.event.comment.body, '✅') ||
+       contains(github.event.comment.body, '✔') ||
+       contains(github.event.comment.body, '☑'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       issues: write
       pull-requests: read
     steps:
+      # Needed so the script can import the unit-tested matcher (scripts/approval.mjs) —
+      # same pattern as approve-draft-pr.yml (#2051/#2094).
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: actions/github-script@v7
         with:
           script: |
             const issue_number = context.payload.issue.number
             const body = context.payload.comment.body || ''
-            // Re-check precisely — the job `if` is a coarse prefilter.
-            if (!/\b(approve|approved|lgtm)\b/i.test(body)) return
+            // Re-check precisely — the job `if` is a coarse prefilter; one definition of
+            // "approval" everywhere (#2051/#2094), including the whole-line ✅ gesture.
+            const { isApproval } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/approval.mjs`)
+            if (!isApproval(body)) return
 
             // Is there really a gate waiting? Only then is silence a bug worth explaining.
             let gatePR = null
