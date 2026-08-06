@@ -258,7 +258,11 @@ jobs:
               for (const s of subs) {
                 let icon = '⏳', note = 'queued'
                 if (s.state === 'closed') { icon = '✅'; note = '' }
-                else if (names(s).includes('status:blocked')) { icon = '⏸️'; note = 'held' }
+                // Two different holds, two different asks (#2083): `blocked` wants a reply,
+                // `needs-merge` wants the merge button. A rollup that shows both as "held"
+                // tells the owner to go find out which — the thing the split exists to avoid.
+                else if (names(s).includes('status:blocked')) { icon = '⏸️'; note = 'held — needs your reply' }
+                else if (names(s).includes('status:needs-merge')) { icon = '🔀'; note = 'green — needs your merge' }
                 else {
                   const pr = await childPr(s.number)
                   if (pr && pr.merged_at) { icon = '✅'; note = `PR #${pr.number} merged` }

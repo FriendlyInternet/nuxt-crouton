@@ -200,7 +200,14 @@ jobs:
               const sharedCode = files.filter(f => f.filename.startsWith('packages/'))
               if (sharedCode.length) {
                 core.info(`#${pull_number} touches packages/ (${sharedCode.length} file(s)) — holding for a human.`)
-                try { await github.rest.issues.addLabels({ owner, repo, issue_number: pull_number, labels: ['status:blocked'] }) } catch (e) { core.warning(`addLabel #${pull_number}: ${e.message}`) }
+                // `status:needs-merge`, NOT `status:blocked` (#2083). The two holds ask for
+                // different things and used to share a label: a sign-off gate means "I asked
+                // you something and I'm waiting for a reply", this means "nothing to say —
+                // click merge". In a phone list view they were indistinguishable, so three
+                // PRs whose sign-off had been granted hours earlier still read as unanswered
+                // (#2039/#2041/#2044), and this guard's own "held for a human" comment landed
+                // under a label implying an open question.
+                try { await github.rest.issues.addLabels({ owner, repo, issue_number: pull_number, labels: ['status:needs-merge'] }) } catch (e) { core.warning(`addLabel #${pull_number}: ${e.message}`) }
                 const list = sharedCode.slice(0, 10).map(f => `- \`${f.filename}\``).join('\n')
                 const more = sharedCode.length > 10 ? `\n…and ${sharedCode.length - 10} more.` : ''
                 await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
