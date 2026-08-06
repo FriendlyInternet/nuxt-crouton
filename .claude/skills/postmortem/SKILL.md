@@ -58,7 +58,11 @@ sections:
 - **✅ What went well** — what was smooth / worth keeping. Name it concretely.
 - **⚠️ What was hard** — the friction, each line tied to a signal or a specific
   issue (e.g. *"#NN sat blocked 3 days waiting on a sibling; the schema gate took
-  2 revision rounds"*).
+  2 revision rounds"*). Also flag it here if any sub-issue's acceptance criteria or
+  "How to test" steps name a specific disposable `pocs/*` app or fixture instead of a
+  *class* of change (the github-tasks skill's rule, #2042) — that criterion becomes
+  unverifiable the moment the app is deleted (the #590 → #598 → #1279 chain). Naming a
+  launched `apps/*` surface is fine.
 - **🔧 Proposals (1–3)** — concrete, actionable changes to a **skill / agent /
   flow** that would remove that friction next time. Each proposal = a candidate
   `workflow` task with a one-line "why".

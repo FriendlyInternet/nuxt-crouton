@@ -90,6 +90,22 @@ Write it as:
 
 Keep it tight and skimmable. A `mermaid` flow is welcome when the steps branch or the state change is the point — never for decoration.
 
+**Name a class of change, not a disposable app.** Acceptance criteria (and "How to test" steps)
+that point at a specific `pocs/*` app or fixture inherit that app's lifespan — the moment it's
+deleted, the criterion is unverifiable and the epic can't be honestly closed. Write against a
+*class* of change instead: "the next UI-touching app PR", "any generated collection with a
+relation field", "any POC that boots with the default layout" — something that still exists after
+today's disposable app is gone. **Naming a launched `apps/*` surface is fine** — those are
+durable; the rule targets `pocs/*`, fixtures, and anything scaffolded to be thrown away.
+
+Worked cautionary example: epic #590's acceptance said *"run library-catalog through it."*
+`library-catalog` was deleted; its replacement, a quotes POC, was closed too — two dead ends, and
+the epic couldn't be honestly closed for six weeks (chain: #590 → #598 → #1279). *"The next
+UI-touching app PR"* would have survived both. Don't turn this into a validator — there's no
+reliable way to detect "this criterion names a disposable app" from text, and a wrong gate here
+would refuse good tickets (the exact failure mode `AGENTS.md` warns about for authoring gates).
+Guidance only.
+
 ### Epic acceptance rollup (the epic is the verification unit)
 
 Sub-issues are the **work** unit; the **epic** is the **verification** unit. When all of an epic's sub-issues have merged (the feature has "landed in the app"), post a single **`## 🧪 Verify the whole thing`** comment on the epic *before closing it* — so the owner does **one** QA pass instead of hunting across sub-issues:
