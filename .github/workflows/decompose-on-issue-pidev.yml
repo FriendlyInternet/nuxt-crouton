@@ -280,6 +280,11 @@ jobs:
       - id: t0
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # Stash the telemetry capture in RUNNER_TEMP BEFORE pi runs — pi creates and checks out
+      # the epic branch mid-run, which may not carry scripts/, and the capture step runs after
+      # pi. Same Pattern B as the worker lane's parser stash (#1764/#1782, #2056).
+      - run: cp scripts/pi-telemetry-capture.sh "$RUNNER_TEMP/pi-telemetry-capture.sh"
+
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
       # the worker PR) act as the Harness App and cascade. ANTHROPIC_API_KEY = the
@@ -495,7 +500,17 @@ jobs:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
             const since = '${{ steps.t0.outputs.ts }}'
+            // #2056 — an empty/unparseable `since` makes this gate FAIL OPEN, silently. The
+            // whole gate is "did anything appear AFTER the run started": with `since: ''` the
+            // comments API returns the issue's ENTIRE history, so `newComment` is true for any
+            // issue anyone ever commented on, and a run that produced nothing is waved through
+            // as a deliverable. That is worse than no gate, so refuse to run rather than guess.
             const sinceMs = new Date(since).getTime()
+            if (!since || Number.isNaN(sinceMs)) {
+              core.setFailed(`Artifact-gate cannot run: the run-start timestamp is ${since ? `unparseable (${since})` : 'empty'}. `
+                + 'Without it the gate would treat pre-existing comments as this run\'s output and pass a no-op (#2056).')
+              return
+            }
 
             const comments = await github.paginate(github.rest.issues.listComments, {
               ...context.repo, issue_number, since,
@@ -684,38 +699,20 @@ jobs:
 
       # ── Telemetry convergence capture (#944) — REAL data from this pi run ──────────
       # Proves the "one feed → both consumers" loop on a live run: locate this run's pi
-      # subagent telemetry (~/.pi/agent/sessions/.../subagent-artifacts) and run the
+      # subagent telemetry (a `subagent-artifacts` dir under the session root) and run the
       # adapter to emit BOTH a Loop Station WS2 trace AND the #883 ledger-row slice.
       # Non-fatal + artifact-only on purpose: it must never fail the headline code-writing
       # proof, and committing rows to the ledger file from CI is a separate follow-up — here
       # we surface them as an artifact + in the log so the convergence is verifiable.
+      #
+      # The body lives in scripts/pi-telemetry-capture.sh — SHARED with the worker lane, which
+      # carried a byte-identical copy of the same three defects (#2056). Read that file for
+      # what was broken and why it now says PROBE BROKEN instead of "none found".
       - name: Capture pi telemetry → WS2 trace + #883 ledger slice (artifacts; non-fatal)
         if: always()
         env:
           SINCE: ${{ steps.t0.outputs.ts }}
-        run: |
-          set +e
-          mkdir -p pi-telemetry-out
-          SESS_ROOT="$HOME/.pi/agent/sessions"
-          # The most-recently-modified subagent-artifacts dir MODIFIED DURING THIS RUN (#1019):
-          # `-newermt "$SINCE"` scopes to dirs touched at/after the run-start timestamp, so we
-          # never mis-attribute a PRIOR run's telemetry (the #839 stale-row bug). `-newermt`
-          # works on both BSD find (the mac-mini) and GNU find (ubuntu fallback).
-          # shellcheck disable=SC2038 # -I{} consumes whole LINES, so a path with spaces survives
-          TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" 2>/dev/null \
-            | xargs -I{} stat -f '%m {}' {} 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          if [ -z "$TELE_DIR" ]; then
-            TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
-          fi
-          if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then
-            echo "pi telemetry dir: $TELE_DIR"
-            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR"          > pi-telemetry-out/pi-trace.jsonl  2>/dev/null
-            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
-            echo "── #883 ledger-row slice from THIS pi run (model · cost · turns · wall) ──"
-            cat pi-telemetry-out/ledger-rows.jsonl || true
-          else
-            echo "no pi subagent telemetry found — a decompose-only run (sub-issues, no worker) writes none. Skipping."
-          fi
+        run: bash "$RUNNER_TEMP/pi-telemetry-capture.sh"
 
       - name: Upload pi telemetry artifact
         if: always()
