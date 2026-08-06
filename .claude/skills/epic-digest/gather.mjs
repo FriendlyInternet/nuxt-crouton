@@ -118,10 +118,11 @@ const parsePreviewUrl = (body) => {
   const m = String(body || '').match(/https?:\/\/[^\s)`"'<>]+\.(?:pmcp\.dev|friendlyinter\.net)[^\s)`"'<>]*/)
   return m ? m[0] : undefined
 }
-// A `fix · merged` / `feat · merged` badge from a conventional-commit title.
+// A `fix · needs QA` / `feat · needs QA` badge from a conventional-commit title —
+// these are OPEN PRs awaiting the owner's sign-off, not merged ones (#517).
 const prBadge = (title) => {
   const m = String(title || '').match(/^(\w+)(?:\([^)]*\))?!?:/)
-  return m ? `${m[1]} · merged` : 'merged'
+  return m ? `${m[1]} · needs QA` : 'needs QA'
 }
 // "Visual change" = the PR touched a UI surface or wears a UI sign-off label.
 const VISUAL_FILE = /\.(?:vue|css)$|app\/(?:components|layouts|pages)\//
