@@ -1546,6 +1546,14 @@ async function generateRegistryFiles(): Promise<void> {
 // Deterministic default layout (#709): arrange the generated collections into
 // a viable `layout_configs` tree the POC boots with (seeded by crouton-seed).
 async function composeDefaultLayoutStep(allCollections: Array<{ name: string; layer: string; fields: Field[] }>, config: Record<string, any>): Promise<void> {
+  if (config.features?.layout === false) {
+    console.log(`\n${'═'.repeat(60)}`)
+    console.log(`  DEFAULT LAYOUT`)
+    console.log(`${'═'.repeat(60)}\n`)
+    console.log(`⚠ Skipped default layout (features.layout === false)`)
+    return
+  }
+
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  DEFAULT LAYOUT`)
   console.log(`${'═'.repeat(60)}\n`)
