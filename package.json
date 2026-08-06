@@ -67,6 +67,7 @@
     "happy-dom": "^20.3.3",
     "nuxt": "catalog:",
     "publint": "^0.3.16",
+    "sharp": "^0.34.5",
     "typescript": "catalog:",
     "vitest": "^4.0.16"
   },

@@ -93,10 +93,60 @@ test('diffPixelBuffers: throws on mismatched buffer sizes rather than diffing ga
   assert.throws(() => diffPixelBuffers(a, b, WIDTH, HEIGHT))
 })
 
-test('defaultMasks: sized to the viewport, clamped when the viewport is smaller than the strip', () => {
-  const masks = defaultMasks(50, 20)
+test('defaultMasks: a viewport smaller than the strip gets NO mask, not a full-frame one', () => {
+  // This test previously asserted `masks.length === 1` here, which pinned the bug: clamping the
+  // 220x40 strip to a 50x20 image yields a mask covering 100% of it, so the diff came back
+  // `0%` over `consideredPixels: 0`. "Clamped to the viewport" sounded right and was wrong —
+  // there is no devtools badge on a 50x20 image, and masking everything is not a noise floor.
+  assert.deepEqual(defaultMasks(50, 20), [])
+})
+
+test('defaultMasks: a mask that stays a minority of the frame is kept and clamped', () => {
+  const masks = defaultMasks(100, 100)
   assert.equal(masks.length, 1)
-  assert.ok(masks[0].width <= 50)
-  assert.ok(masks[0].height <= 20)
+  assert.ok(masks[0].width <= 100)
+  assert.ok(masks[0].height <= 100)
   assert.ok(masks[0].y >= 0)
+  const covered = masks[0].width * masks[0].height
+  assert.ok(covered / (100 * 100) <= 0.5, `mask covered ${covered} of 10000`)
+})
+
+/* ── The mask must not swallow the image (found while fixing this PR's fallow gate) ──
+ *
+ * `defaultMasks` sized the strip with `Math.min(height, 40)` / `Math.min(width, 220)`, so on any
+ * image ≤40px tall (and ≤220 wide) the "devtools badge" mask covered EVERY pixel. The diff then
+ * returned `{ diffPixels: 0, consideredPixels: 0, diffPercent: 0 }` — a confident "no visual
+ * change" computed from nothing. That is the #2045 contaminated-measurement failure in the
+ * opposite direction, and it is worse than a false positive because it reports success.
+ */
+test('defaultMasks never covers the whole image — a badge is a small corner, not the frame', () => {
+  const masks = defaultMasks(60, 40)
+  const covered = masks.reduce((n, m) => n + m.width * m.height, 0)
+  assert.ok(covered < 60 * 40, `mask covered ${covered} of ${60 * 40} pixels`)
+})
+
+test('defaultMasks still masks the badge on a real viewport', () => {
+  const masks = defaultMasks(1280, 800)
+  assert.equal(masks.length, 1)
+  assert.deepEqual(masks[0], { x: 0, y: 760, width: 220, height: 40 })
+})
+
+test('a fully-masked diff THROWS instead of reporting a comfortable 0%', () => {
+  const a = solidBuffer(4, 4, [0, 0, 0])
+  const b = solidBuffer(4, 4, [255, 255, 255])
+  const all = [{ x: 0, y: 0, width: 4, height: 4 }]
+  assert.throws(
+    () => diffPixelBuffers(a, b, 4, 4, { masks: all }),
+    /every pixel is masked/,
+    'a diff over zero pixels must refuse, not return 0%',
+  )
+})
+
+test('a small image with no mask still measures the real difference', () => {
+  const a = solidBuffer(60, 40, [10, 20, 30])
+  const b = solidBuffer(60, 40, [10, 20, 30])
+  b[0] = 255
+  const r = diffPixelBuffers(a, b, 60, 40, { masks: defaultMasks(60, 40) })
+  assert.equal(r.consideredPixels, 2400)
+  assert.equal(r.diffPixels, 1)
 })
