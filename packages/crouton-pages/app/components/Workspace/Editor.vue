@@ -1181,41 +1181,24 @@ defineExpose({ state })
            input never loses state when switching tabs. -->
       <div class="flex-1 min-h-0 overflow-auto">
         <!-- ───────── Settings (title + slug + page setup) ───────── -->
-        <div v-show="activeTab === 'settings'" class="mx-auto w-full max-w-3xl px-4 py-4 space-y-6">
-          <!-- Page identity — title + slug. Tabs layout + the shared editing
-               locale (switcher hidden — the language bar drives it). -->
-          <CroutonI18nInput
-            v-model="state.translations"
-            :fields="metaFields"
-            layout="tabs"
-            :active-locale="editingLocale"
-            hide-locale-switcher
-            :show-ai-translate="hasAI"
-            field-type="page"
+        <!-- Bare wrapper: the extracted tab owns its own layout (`mx-auto max-w-3xl
+             px-4 py-4`), so repeating those classes here applied the padding TWICE and
+             shifted every control 16px down and right. Matches the SeoTab wrapper. -->
+        <div v-show="activeTab === 'settings'">
+          <CroutonPagesEditorSettingsTab
+            v-model:translations="state.translations"
+            :editing-locale="editingLocale"
+            :meta-fields="metaFields"
+            :has-ai="hasAI"
             :field-options="fieldOptions"
             :field-placeholders="docFieldPlaceholders"
-          >
-            <template v-if="hasMetadata" #header>
-              <div class="flex items-center gap-3 text-xs text-muted">
-                <span v-if="createdByName" class="flex items-center gap-1">
-                  <UIcon name="i-lucide-user-plus" class="size-3" />
-                  {{ createdByName }} {{ createdTimeAgo }}
-                </span>
-                <span v-if="updatedByName && updatedByName !== createdByName" class="flex items-center gap-1">
-                  <UIcon name="i-lucide-pencil" class="size-3" />
-                  {{ updatedByName }} {{ updatedTimeAgo }}
-                </span>
-                <span v-else-if="(state as any).updatedAt && (state as any).updatedAt !== (state as any).createdAt" class="flex items-center gap-1">
-                  <UIcon name="i-lucide-pencil" class="size-3" />
-                  {{ t('pages.editor.updated', { time: updatedTimeAgo }) }}
-                </span>
-              </div>
-            </template>
-          </CroutonI18nInput>
-
-          <USeparator />
-
-          <CroutonPagesEditorSettingsPanel
+            :has-metadata="hasMetadata"
+            :created-by-name="createdByName"
+            :created-time-ago="createdTimeAgo"
+            :updated-by-name="updatedByName"
+            :updated-time-ago="updatedTimeAgo"
+            :updated-at="(state as any).updatedAt"
+            :created-at="(state as any).createdAt"
             :action="action"
             :visibility="state.visibility"
             :show-in-navigation="state.showInNavigation"
