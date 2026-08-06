@@ -18,8 +18,9 @@
 // Output: screenshots/<name>.png (name defaults to a slug of the path).
 // All screenshots go in screenshots/ (repo HARD GATE) unless --out overrides.
 
-import { existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { colorsAreFlat, looksLikeErrorPage, sampleFlatness } from './lib/capture-validate.mjs'
 
 // Resolve an already-installed chromium WITHOUT pinning a build number. The
 // browsers live at /opt/pw-browsers/chromium-<build>/… and the build bumps with
@@ -106,9 +107,31 @@ for (const spec of specs) {
   const file = `${outDir}/${name || slug(path)}.png`
   const url = baseUrl.replace(/\/$/, '') + (path.startsWith('/') ? path : `/${path}`)
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 })
+    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 })
     await page.waitForTimeout(1500) // let client hydrate / fonts settle
-    await page.screenshot({ path: resolve(file), fullPage: true })
+
+    // Fail loud on a dev-server / framework error response (Nuxt error overlay, 4xx/5xx)
+    // rather than committing it as if it were real UI (#2044's 16.56% false-positive).
+    const [title, text] = await Promise.all([page.title(), page.evaluate(() => document.body?.innerText || '')])
+    if (looksLikeErrorPage({ status: response?.status(), text, title })) {
+      failures++
+      console.error(`✗ ${url}  →  looks like an error page (status ${response?.status()}), refusing to commit as evidence`)
+      continue
+    }
+
+    const buffer = await page.screenshot({ fullPage: true })
+
+    // Fail loud on a worthless capture — a single flat colour is always a bug,
+    // no legitimate UI screenshot is one colour.
+    const samples = await sampleFlatness(buffer, browser)
+    if (colorsAreFlat(samples)) {
+      failures++
+      console.error(`✗ ${url}  →  capture is a single flat colour, refusing to commit as evidence`)
+      continue
+    }
+
+    const { writeFileSync } = await import('node:fs')
+    writeFileSync(resolve(file), buffer)
     console.log(`✓ ${file}  ←  ${url}`)
   } catch (e) {
     failures++
