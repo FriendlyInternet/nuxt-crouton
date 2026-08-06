@@ -566,6 +566,14 @@ jobs:
             { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$UI_TOUCHED" = "1" ]; } && DRAFT_FLAG="--draft"
             HOLD_NOTE=""
             [ "$UI_TOUCHED" = "1" ] && HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `lgtm` to release it. Evidence should be attached above; if it is missing, that is a harness bug (#1748), not a reason to approve blind.')"
+            # #2054: a UI-held draft is invisible everywhere except the PR's draft flag —
+            # the board, the epic digest, and the issue-side `resume-on-comment.yml` route
+            # (which requires status:blocked) can't see it. Label the ISSUE too. State only —
+            # nothing triggers off this label (#572); the PR-side ✅/`lgtm` route (#2052)
+            # remains primary since that's where the reviewer is looking.
+            if [ "$UI_TOUCHED" = "1" ]; then
+              gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
+            fi
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$(git log -1 --format=%s)" \
@@ -718,8 +726,11 @@ jobs:
             // push (#1076), which needs the owner to ACT, not to answer.
             // The `**Needs:** answer | action | approval` line is the explicit discriminator.
             // Absent ⇒ 'answer', which is exactly today's behaviour, so older holds are unaffected.
-            const holdBody = comments.map(c => c.body || '')
-              .find(b => /^##\s*🔀\s*Blocked\b/m.test(b)) || ''
+            // Keep the COMMENT OBJECT, not just its body (#2096): the notification below
+            // links the ask directly, so the owner is one tap from it instead of scroll-
+            // hunting a long thread on a phone for "the 🔀 comment above".
+            const holdComment = comments.find(c => /^##\s*🔀\s*Blocked\b/m.test(c.body || '')) || null
+            const holdBody = holdComment ? (holdComment.body || '') : ''
             const needs = (holdBody.match(/^\s*\*\*Needs:\*\*\s*(answer|action|approval)\b/mi) || [])[1]
             const holdKind = holdBody ? (needs ? needs.toLowerCase() : 'answer') : null
             const askedQuestion = signoffHeld && holdKind === 'answer'
@@ -734,10 +745,12 @@ jobs:
                 const freshPR = prRefs
                   .filter(e => new Date(e.created_at).getTime() >= sinceMs)
                   .map(e => e.source.issue.number)[0]
+                // Link the ask itself (#2096) — holdComment is guaranteed non-null on both
+                // hold branches (holdKind requires a non-empty holdBody).
                 const what = freshPR
                   ? `done → PR #${freshPR}`
-                  : needsAction ? '**needs you to APPLY something** — not an answer, not an approval. The 🔀 comment above says what to do and why the agent could not; the patch is collapsed under it. Comment here when applied and the work resumes in a fresh run.'
-                  : askedQuestion ? '**asked you a question** — it needs an *answer*, not an approval. The 🔀 comment above leads with the recommendation; reply with your pick and the work resumes in a fresh run.'
+                  : needsAction ? `**needs you to APPLY something** — not an answer, not an approval. **[→ the ask](${holdComment.html_url})** says what to do and why the agent could not; the patch is collapsed under it. Comment here when applied and the work resumes in a fresh run.`
+                  : askedQuestion ? `**asked you a question** — it needs an *answer*, not an approval. **[→ the ask](${holdComment.html_url})** leads with the recommendation; reply with your pick and the work resumes in a fresh run.`
                   : (createdSubIssues ? 'decomposed → sub-issues created (see the tree)'
                     : signoffHeld ? 'held for sign-off (`status:blocked` + a review)'
                     : 'produced a deliverable — see the run')

@@ -1,0 +1,49 @@
+name: Clear status:blocked when a held PR closes unmerged
+
+# #2054 acceptance criterion 5 — the last leg of the issue-side hold state.
+# work-issue-pidev.yml labels the ISSUE `status:blocked` when it opens a UI-held
+# draft; approve-draft-pr.yml clears it on release. But a held PR can also be
+# CLOSED WITHOUT MERGING (superseded, abandoned, re-dispatched) — and then the
+# label would stick forever, leaving a permanently-"blocked" issue whose blocker
+# no longer exists (the same one-way-door shape as #1665).
+#
+# Deliberately narrow so it can never clear a legitimate block:
+#   • fires only on close-without-merge (a merged PR's `Closes #NN` closes the
+#     issue itself — no label left to worry about);
+#   • only for pipeline worker branches (`work-<N>`), and the issue is resolved
+#     from the BRANCH NAME — the same coupling work-issue-pidev.yml used to SET
+#     the label — never from body prose, so an unrelated PR mentioning an issue
+#     can't strip that issue's real hold.
+# Removing a label raises no `labeled` event and triggers nothing (#572) — this
+# is state cleanup, not a dispatch.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  issues: write
+  pull-requests: read
+
+jobs:
+  clear:
+    if: |
+      !github.event.pull_request.merged &&
+      startsWith(github.event.pull_request.head.ref, 'work-')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const head = context.payload.pull_request.head.ref
+            const m = head.match(/^work-(\d+)$/)
+            if (!m) { core.info(`head ${head} is not a work-<issue> branch — nothing to clear.`); return }
+            const issue_number = Number(m[1])
+            try {
+              await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' })
+              core.info(`Cleared status:blocked from #${issue_number} (PR #${context.payload.pull_request.number} closed unmerged).`)
+            } catch (e) {
+              // 404 = the label wasn't set (non-UI PR, or already cleared) — the normal case.
+              core.info(`No status:blocked to clear on #${issue_number} (${e.status || e.message}).`)
+            }
