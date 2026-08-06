@@ -61,60 +61,57 @@ function handleOpenPanel() {
         <div class="flex items-center justify-between mb-2">
           <div class="flex items-center gap-2">
             <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="6 9 6 2 18 2 18 9" />
-                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-                <rect x="6" y="14" width="12" height="8" />
-              </svg>
+              <UIcon name="i-lucide-printer" class="w-3 h-3" />
               {{ t('sales.block.printBridge') }}
             </span>
-            <span
+            <UBadge
               v-if="attrs.eventSlug"
-              class="inline-flex items-center text-[9px] font-mono font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary"
+              color="primary"
+              variant="subtle"
+              size="sm"
+              class="font-mono"
             >
               {{ attrs.eventSlug }}
-            </span>
-            <span
+            </UBadge>
+            <UBadge
               v-else
-              class="inline-flex items-center text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+              color="warning"
+              variant="subtle"
+              size="sm"
             >
               {{ t('sales.block.noEventPicked') }}
-            </span>
+            </UBadge>
           </div>
           <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
-            <button
-              type="button"
-              class="p-1 text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+            <UButton
+              icon="i-lucide-edit-3"
+              size="xs"
+              color="neutral"
+              variant="ghost"
               :title="t('sales.block.editBlock')"
               @click.stop="handleOpenPanel"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              class="p-1 text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
+            />
+            <UButton
+              icon="i-lucide-trash-2"
+              size="xs"
+              color="error"
+              variant="ghost"
               :title="t('sales.block.deleteBlock')"
               @click.stop="deleteNode"
-            >
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </button>
+            />
           </div>
         </div>
 
         <!-- Mini bridge preview: a row of ticket cards with a print button -->
-        <div class="bg-elevated/60 rounded-lg p-3 border border-default/60">
+        <UCard :ui="{ body: 'p-3' }">
           <div class="grid grid-cols-3 gap-2">
             <div v-for="tile in 3" :key="tile" class="rounded-md bg-default border border-default p-2 space-y-1.5">
               <div class="h-3 w-8 rounded bg-primary/30" />
-              <div class="h-2 w-full rounded bg-gray-300/60 dark:bg-gray-700/60" />
+              <div class="h-2 w-full rounded bg-accented" />
               <div class="h-4 w-full rounded bg-primary/40 mt-1" />
             </div>
           </div>
-        </div>
+        </UCard>
       </div>
     </div>
   </NodeViewWrapper>
