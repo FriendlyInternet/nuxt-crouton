@@ -114,6 +114,9 @@ importers:
       '@fyit/crouton-core':
         specifier: workspace:*
         version: link:../../packages/crouton-core
+      '@fyit/crouton-devtools':
+        specifier: workspace:*
+        version: link:../../packages/crouton-devtools
       '@fyit/crouton-email':
         specifier: workspace:*
         version: link:../../packages/crouton-email
@@ -172,6 +175,9 @@ importers:
       '@fyit/crouton-charts':
         specifier: workspace:*
         version: link:../../packages/crouton-charts
+      '@fyit/crouton-devtools':
+        specifier: workspace:*
+        version: link:../../packages/crouton-devtools
       '@fyit/crouton-triage':
         specifier: workspace:*
         version: link:../../packages/crouton-triage
@@ -215,6 +221,9 @@ importers:
       '@fyit/crouton-core':
         specifier: workspace:*
         version: link:../../packages/crouton-core
+      '@fyit/crouton-devtools':
+        specifier: workspace:*
+        version: link:../../packages/crouton-devtools
       '@fyit/crouton-email':
         specifier: workspace:*
         version: link:../../packages/crouton-email

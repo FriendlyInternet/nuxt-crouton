@@ -23,7 +23,7 @@ PR touches pocs/<name>/** (POC has a deploy.config.json)  →  deploy-pocs.yml (
 
 > **Review overlay is ON by default for all POC staging deploys (#596).** `deploy-pocs.yml` passes
 > `enable-review: true` to `deploy-app.yml`, so every POC preview is built with
-> `NUXT_PUBLIC_CROUTON_REVIEW=true` (the `@fyit/crouton-devtools` overlay + source stamper + `/api/_review`
+> `NUXT_PUBLIC_CROUTON_REVIEW=true` (the `@fyit/crouton-devtools` overlay + source stamper + `/api/_feedback`
 > bridge). The PR comment includes overlay usage instructions. For the bridge to post `🎯 Preview feedback`
 > comments, set the `NUXT_CROUTON_REVIEW_GITHUB_APP_*` repo-level secrets (see
 > `writeups/setup/review-bridge-token-setup.md`); the overlay still renders without them.

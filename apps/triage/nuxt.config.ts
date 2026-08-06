@@ -26,7 +26,12 @@ export default defineNuxtConfig({
   ],
 
   modules: [
-    '@fyit/crouton'
+    '@fyit/crouton',
+    // See apps/velo/nuxt.config.ts — crouton-devtools is what installs the review
+    // overlay under the `NUXT_PUBLIC_CROUTON_REVIEW` gate; without it a review
+    // preview has nothing to pin a comment on (#2073). Gates itself off in a
+    // normal production build.
+    '@fyit/crouton-devtools'
   ],
 
   croutonAuth: {

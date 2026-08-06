@@ -12,7 +12,11 @@ const isCloudflare = preset.startsWith('cloudflare')
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton'],
+  // See apps/velo/nuxt.config.ts — crouton-devtools is what installs the review
+  // overlay under the `NUXT_PUBLIC_CROUTON_REVIEW` gate; without it a review
+  // preview has nothing to pin a comment on (#2073). Gates itself off in a
+  // normal production build.
+  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
