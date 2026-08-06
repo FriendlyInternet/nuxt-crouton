@@ -13,7 +13,8 @@
 import { chromium } from 'playwright'
 import { pathToFileURL } from 'node:url'
 import { resolve, dirname, join } from 'node:path'
-import { existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs'
+import { colorsAreFlat, sampleFlatness } from '../../../scripts/lib/capture-validate.mjs'
 
 /**
  * Find an already-installed Chromium so we don't need network to download one.
