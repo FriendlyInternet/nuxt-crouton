@@ -271,7 +271,7 @@
   description: "Actively being worked on"
 - name: "status:blocked"
   color: "d93f0b"
-  description: "Waiting on an owner REPLY (a sign-off gate) — there is a question to answer"
+  description: "Parked and waiting — a sign-off reply, or a prerequisite issue. The blocking comment says which"
 - name: "status:needs-merge"
   color: "fbca04"
   description: "Green + approved, but auto-merge declined (shared packages/ code) — a human clicks merge"
