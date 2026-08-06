@@ -146,6 +146,82 @@ test('this run\'s OWN pr is ignored — a re-dispatch must not refuse itself', (
   assert.equal(v.action, 'proceed')
 })
 
+// ── #2027: the two halves of the wedge that made #1791 unworkable ────────────────────
+// Both branches below existed in `decideClaim` but could never fire in production, because
+// the workflow's facts step supplied neither `self` nor a `baseRef`. The result: every
+// re-dispatch of an issue whose work was in flight, or whose sub-PR had merged into its epic
+// branch, was refused — and the artifact-gate reported that refusal as a broken harness.
+
+test('a PR merged into its EPIC branch has not landed — the issue stays workable (#2027)', () => {
+  // `work-<n>` → `epic/<n>-<slug>` → `main`. PR #1987 merged into the middle rung; treating
+  // that as "done" wedged #1791 permanently and would wedge every epic-topology issue.
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 1987, state: 'closed', merged: true, baseRef: 'epic/1791-sales-block-editor-views' }],
+    defaultBranch: 'main',
+    now: T0,
+  })
+  assert.equal(v.action, 'proceed')
+})
+
+test('a PR merged into the DEFAULT branch still refuses — the work really did land', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 1987, state: 'closed', merged: true, baseRef: 'main' }],
+    defaultBranch: 'main',
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+  assert.equal(v.claimedBy, 1987)
+})
+
+test('an UNKNOWN base counts as landed — unfetchable facts keep the pre-#2027 default', () => {
+  // `pulls.get` can fail; refusing is the safe side of that coin, so absence of a baseRef
+  // must not silently unlock an issue.
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 1987, state: 'closed', merged: true }],
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+})
+
+test('the default branch is honoured even when it is not called main', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 42, state: 'closed', merged: true, baseRef: 'trunk' }],
+    defaultBranch: 'trunk',
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+})
+
+test('self-exemption survives a merged own-PR — a re-dispatch onto our branch is not a claim', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 1987, state: 'closed', merged: true, baseRef: 'main' }],
+    self: { pr: 1987 },
+    now: T0,
+  })
+  assert.equal(v.action, 'proceed')
+})
+
+test('a COMPETING open PR still refuses while our own branch PR is exempt', () => {
+  // The exemption must be surgical: exempting our branch cannot blind the guard to a genuine
+  // second runner, which is the whole point of #1890.
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [
+      { number: 1987, state: 'open', headRef: 'work-1791' },
+      { number: 1999, state: 'open', headRef: 'somebody-else' },
+    ],
+    self: { pr: 1987 },
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+  assert.equal(v.claimedBy, 1999)
+})
+
 test('a FRESH status:in-progress is refused', () => {
   const v = decideClaim({ issueState: 'open', inProgressSince: mins(-10), now: T0 })
   assert.equal(v.action, 'refuse')
