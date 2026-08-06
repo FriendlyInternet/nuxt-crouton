@@ -156,50 +156,14 @@ jobs:
         with:
           script: |
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
-            const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number })
-            // Linked PRs: anything whose body references this issue with a closing keyword.
-            const q = `repo:${context.repo.owner}/${context.repo.repo} is:pr ${issue_number} in:body`
-            const { data: found } = await github.rest.search.issuesAndPullRequests({ q, per_page: 20 })
-            const re = new RegExp(`(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))\\s+#${issue_number}\\b`, 'i')
-            // The search API does not return head/base refs, so fetch each candidate. Both
-            // are load-bearing (#2027): `head.ref` identifies THIS worker's own branch, and
-            // `base.ref` distinguishes "merged to main" from "merged into its epic branch".
-            // Candidates are few (<= 20 after the closing-keyword filter), so this is cheap.
-            const linkedPRs = []
-            let selfPr = null
-            for (const it of found.items || []) {
-              if (!re.test(it.body || '')) continue
-              let headRef = null, baseRef = null, merged = Boolean(it.pull_request?.merged_at)
-              try {
-                const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: it.number })
-                headRef = pr.head?.ref ?? null
-                baseRef = pr.base?.ref ?? null
-                merged = Boolean(pr.merged_at)
-              } catch (e) {
-                // Leave baseRef null — decideClaim then treats a merge as landed, the safer
-                // pre-#2027 default when we could not determine the base.
-                core.warning(`claim facts: could not fetch PR #${it.number} (${e.message})`)
-              }
-              // A PR on `work-<issue>` IS this worker's own branch, not a competitor. The
-              // decomposer routes a re-dispatch here precisely BECAUSE that branch exists
-              // (resolveLane, #2010) — without this the guard refuses the very lane that
-              // was chosen for it.
-              if (headRef === `work-${issue_number}`) selfPr = it.number
-              linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef })
-            }
-            // When status:in-progress was applied (weakest signal → needs its timestamp).
-            let inProgressSince = null
-            if ((issue.labels || []).some((l) => (l.name || l) === 'status:in-progress')) {
-              const events = await github.paginate(github.rest.issues.listEvents, { ...context.repo, issue_number, per_page: 100 })
-              const last = events.filter((e) => e.event === 'labeled' && e.label?.name === 'status:in-progress').pop()
-              inProgressSince = last?.created_at || null
-            }
-            const facts = {
-              issueState: issue.state, linkedPRs, inProgressSince,
-              now: new Date().toISOString(),
-              defaultBranch: context.payload.repository?.default_branch || 'main',
-              self: { pr: selfPr },
-            }
+            // Gathering lives in scripts/claim-facts.mjs so BOTH pi lanes share one
+            // implementation (#2027). It used to be a byte-identical block in each workflow,
+            // which is how the wedge got half-fixed: repairing the worker's copy left the
+            // decomposer refusing exactly what the worker no longer did. Unit-tested against a
+            // fake Octokit — the two subtle fields (`self.pr`, `baseRef`) are the ones whose
+            // absence refused #1791 five times. Contract: scripts/claim-facts.test.mjs.
+            const { gatherClaimFacts } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/claim-facts.mjs`)
+            const facts = await gatherClaimFacts({ github, context, issueNumber: issue_number, core })
             require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/claim-facts.json`, JSON.stringify(facts))
             core.info(`claim facts: ${JSON.stringify(facts)}`)
       - name: Claim guard
