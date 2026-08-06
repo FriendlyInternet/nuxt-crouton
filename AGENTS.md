@@ -13,6 +13,29 @@ Clarity over ceremony. Start simple; add complexity only when proven necessary (
 building — check the ecosystem first. Wrap async work in error handling, return `{ data, error }`.
 Write general-purpose solutions, not ones fitted to the example. Match the surrounding code's idiom.
 
+## Plain language (write for the owner, not the machine)
+
+Every message to the human — a chat reply, a GitHub comment, a handoff — is read fast, on a phone,
+by someone who did **not** build the mechanism you're describing. Write for that reader. This is the
+*word-choice* layer beneath the *structure* layer (the typed brief, below): pick the type and collapse
+the depth, then say the visible part **plainly**.
+
+- **No insider shorthand.** A word that only means something inside this repo — *re-dispatch,
+  artifact-gate, the filter converges, the sweep, needs-input* — is noise to the reader. Replace it
+  with plain words, or explain it in ≤3 words the first time. If you can't say it without the jargon,
+  you don't yet understand it well enough to say it at all.
+- **Lead with what they do or get, never the machinery.** "Your list will only show things that
+  need you" — not "the filter converges to the genuinely-yours set." Cut any sentence that only
+  describes how the plumbing works; the human doesn't operate the plumbing.
+- **One decision, ending in a plain choice.** Close an ask with `yes/no` or `A/B` on its own line —
+  never a compound, self-referential run-on question. If they have to re-read a sentence, it failed.
+- **Numbers are references, not the subject.** Say what changed; *link* the issue/PR number. "#2095
+  keeps it that way" tells the reader nothing.
+
+The test: read it aloud as if to someone who has never seen this repo. Any phrase that would make
+them ask "what does that mean?" gets rewritten. (This is judgment, like the quality pass — not a
+grep for banned words; the same term can be fine in a commit body and wrong to the owner.)
+
 ## The loop
 
 `issue-first → decompose → stage-gated work → sign-off gates → commit → observe → retro`

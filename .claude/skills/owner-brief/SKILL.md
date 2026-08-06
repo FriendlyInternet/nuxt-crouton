@@ -75,6 +75,24 @@ Visible part **≤700 chars and ≤10 non-empty lines**:
 **`**You:**` is the load-bearing line.** If you can't state one next action, you don't yet know
 what you're asking for — work that out before posting.
 
+## Say the visible part plainly (the word-choice layer)
+
+Structure is only half. A brief that is the right shape and still full of repo jargon fails just
+as hard — the owner said so, repeatedly: *"i have no idea what you said"*, *"thats unreadable"*,
+*"this is gibberish to me"*. The rule is in `AGENTS.md` (*Plain language*); here is what it looks
+like, from real messages this session:
+
+| ❌ what was written | ✅ plain |
+|---|---|
+| "work the second group down — re-dispatch the tasks, verify/close the stale ones — so the filter converges to just the 8 that are genuinely yours" | "8 of these aren't really waiting for you — they got the wrong label. Want me to clean them up? **yes / no**" |
+| "the sweep will tag the nine stranded PRs `status:needs-merge` for one-click merging" | "nine finished PRs will show up needing one tap to merge" |
+| "#2095 keeps it that way going forward" | *(cut it — the owner doesn't run the plumbing)* |
+| "re-dispatch the task to the pipeline" | "hand it back to run again" |
+
+The pattern in every miss: naming the **mechanism** (the sweep, the filter, the label, the issue
+number) instead of the **outcome** (what the owner sees or does). Read the visible part aloud as if
+to someone who's never seen this repo; any phrase that needs a footnote gets rewritten.
+
 ## What doesn't count against the limits
 
 Nothing inside `<details>`, a code fence, the provenance blockquote, an HTML comment marker, or
