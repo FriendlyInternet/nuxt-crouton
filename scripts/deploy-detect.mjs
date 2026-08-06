@@ -101,7 +101,27 @@ export function resolveChangedFiles({ event, baseSha, headSha, git }) {
     // A PR's base.sha is always a real, fetched commit — if it won't resolve, something is
     // genuinely wrong; don't paper over it.
     if (!git.isResolvable(baseSha)) throw new DetectError(`PR base sha not resolvable: ${baseSha || '(empty)'}`)
-    return { files: git.diff(baseSha, headSha), source: 'pr:base..head' }
+    // THREE-dot (#2087). `git diff A B` is the symmetric difference of two TREES, so a branch
+    // that has fallen behind `main` reports everything that landed on main meanwhile as its
+    // own change — in reverse. #2080 changed two files under packages/crouton-cli and the
+    // two-dot diff reported 21, including apps/{kassa,triage,velo}/nuxt.config.ts (which
+    // #2074 had just added to main). That scheduled all three app deploys for a PR that
+    // touches no app, and they went red — the visible cost is spurious failures on unrelated
+    // PRs. `A...B` diffs from the MERGE BASE, which is what "what did this PR change" means.
+    //
+    // It can only ever over-deploy, never under — so nothing was silently skipped, and the
+    // fix cannot introduce a missed deploy either.
+    if (!git.hasMergeBase(baseSha, headSha)) {
+      // No merge base (a shallow checkout that doesn't reach it). Fail loud rather than
+      // silently falling back to two-dot — that fallback IS this bug, and #1499's rule is
+      // that an unresolvable diff must never quietly become a wrong answer.
+      throw new DetectError(
+        `PR merge-base not resolvable for ${baseSha}...${headSha} — the checkout is probably too `
+        + `shallow. Refusing to fall back to a two-dot diff, which reports every commit that `
+        + `landed on the base branch since this one forked as if this PR made it (#2087).`,
+      )
+    }
+    return { files: git.diffFrom(baseSha, headSha), source: 'pr:base...head' }
   }
   // push-to-main: prefer the tip's first-parent diff — for a merge commit that IS the net PR
   // change, and it doesn't depend on github.event.before (which is wrong under concurrent
@@ -128,6 +148,26 @@ function realGit() {
     },
     diff(a, b) {
       return run(['diff', '--name-only', a, b]).split('\n').map(s => s.trim()).filter(Boolean)
+    },
+    // THREE-dot: from the merge base of a and b (#2087). A separate method, not a flag on
+    // `diff`, so the injected fake can answer the two differently — the old fake returned one
+    // canned list for `diff(a, b)` and therefore could not express the distinction at all,
+    // which is why every existing test passed against the wrong diff form.
+    diffFrom(a, b) {
+      return run(['diff', '--name-only', `${a}...${b}`]).split('\n').map(s => s.trim()).filter(Boolean)
+    },
+    // `git merge-base` is the only honest way to ask this. NOT `isResolvable('a...b')` —
+    // that runs `rev-parse --verify 'a...b^{commit}'`, which a RANGE can never satisfy, so
+    // the guard threw on every PR. The unit fake happily declared the range resolvable, so
+    // the tests agreed with the code and both were wrong; only running it against the real
+    // repo showed it. Twice in one change, the same lesson.
+    hasMergeBase(a, b) {
+      try {
+        run(['merge-base', a, b])
+        return true
+      } catch {
+        return false
+      }
     }
   }
 }

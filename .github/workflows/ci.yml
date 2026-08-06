@@ -309,22 +309,15 @@ jobs:
       - name: Build better-sqlite3's native binding
         run: pnpm rebuild better-sqlite3
 
-      - name: Cache layer builds
-        id: layer-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/crouton-auth/dist
-            packages/crouton-core/dist
-            packages/crouton/dist
-          key: layer-builds-${{ hashFiles('packages/crouton-auth/**/*.ts', 'packages/crouton-core/**/*.ts', 'packages/crouton/**/*.ts') }}
-
-      - name: Build layer packages
-        if: steps.layer-cache.outputs.cache-hit != 'true'
-        run: |
-          pnpm --filter '@fyit/crouton-auth' build
-          pnpm --filter '@fyit/crouton-core' build
-          pnpm --filter '@fyit/crouton' build
+      # Build ALL @fyit packages, not a hand-listed three (#2073). This step used to name
+      # crouton-auth / crouton-core / crouton explicitly, which silently assumed no app ever
+      # consumes another dist-built package. Adding `@fyit/crouton-devtools` to the apps broke
+      # `nuxt prepare` below with "Could not load `@fyit/crouton-devtools`. Is it installed?" —
+      # the exact failure `warm-packages` was written for ("a subset can miss a package the app
+      # transitively extends", #1222). Using the shared action means the next dist-consumed
+      # package needs no edit here, and it shares the content-addressed cache with the deploy
+      # jobs instead of maintaining a second, narrower one.
+      - uses: ./.github/actions/warm-packages
 
       - name: Prepare apps
         run: |

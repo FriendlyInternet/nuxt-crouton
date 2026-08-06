@@ -97,3 +97,60 @@ test('a non-numeric PR is refused rather than producing a junk Worker name', () 
   assert.throws(() => toPrPreview(built(), 'kassa', 'main'), TypeError)
   assert.throws(() => toPrPreview(built(), 'kassa', '../evil'), TypeError)
 })
+
+/**
+ * #2078 contract — a preview must be MIGRATABLE, not just isolated.
+ *
+ * The incident: the per-PR database name exists only in the rewritten config, but the migrate
+ * step ran with no `--config`, so wrangler read the committed `wrangler.jsonc` and errored
+ * "Couldn't find a D1 DB with the name or binding '<app>-pr<n>-db'". Every per-PR preview since
+ * #2020 came up with an empty database. The dangerous near-fix is passing `--config` alone:
+ * `migrations_dir` is relative to the config that declares it, and the built config lives in
+ * `.output/server/`, so the path doubles and wrangler reports success having migrated nothing
+ * (#138) — a silent no-op replacing a loud failure. These tests pin the absolute rewrite.
+ */
+const builtWithMigrations = () => ({
+  name: 'kassa',
+  d1_databases: [{
+    binding: 'DB',
+    database_name: 'kassa-staging-db',
+    database_id: 'REAL-STAGING-ID',
+    migrations_dir: 'server/db/migrations/sqlite',
+  }],
+})
+
+test('#2078: migrations_dir is made absolute against the app root', () => {
+  const { config } = toPrPreview(builtWithMigrations(), 'kassa', 2074, { migrationsBase: '/repo/apps/kassa' })
+  assert.equal(config.d1_databases[0].migrations_dir, '/repo/apps/kassa/server/db/migrations/sqlite')
+})
+
+test('#2078: an already-absolute migrations_dir is left alone', () => {
+  const cfg = builtWithMigrations()
+  cfg.d1_databases[0].migrations_dir = '/somewhere/else/migrations'
+  const { config } = toPrPreview(cfg, 'kassa', 2074, { migrationsBase: '/repo/apps/kassa' })
+  assert.equal(config.d1_databases[0].migrations_dir, '/somewhere/else/migrations')
+})
+
+test('#2078: a `./`-prefixed migrations_dir does not produce a doubled separator', () => {
+  const cfg = builtWithMigrations()
+  cfg.d1_databases[0].migrations_dir = './server/db/migrations/sqlite'
+  const { config } = toPrPreview(cfg, 'kassa', 2074, { migrationsBase: '/repo/apps/kassa/' })
+  assert.equal(config.d1_databases[0].migrations_dir, '/repo/apps/kassa/server/db/migrations/sqlite')
+})
+
+test('#2078: without migrationsBase the config is untouched — callers that never migrate are unaffected', () => {
+  const { config } = toPrPreview(builtWithMigrations(), 'kassa', 2074)
+  assert.equal(config.d1_databases[0].migrations_dir, 'server/db/migrations/sqlite')
+})
+
+test('#2078: the rewrite is reported, so a silent no-op is visible in the log', () => {
+  const { changed } = toPrPreview(builtWithMigrations(), 'kassa', 2074, { migrationsBase: '/repo/apps/kassa' })
+  assert.ok(changed.some((c) => c.includes('migrations_dir=/repo/apps/kassa/')), changed.join(' | '))
+})
+
+test('#2078: the isolation guarantees still hold alongside the rewrite', () => {
+  const { config } = toPrPreview(builtWithMigrations(), 'kassa', 2074, { migrationsBase: '/repo/apps/kassa' })
+  const db = config.d1_databases[0]
+  assert.ok(!('database_id' in db), 'still must provision fresh')
+  assert.equal(db.database_name, 'kassa-pr2074-db')
+})
