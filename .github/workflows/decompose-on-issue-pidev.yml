@@ -176,22 +176,103 @@ jobs:
         id: claim
         run: node scripts/pipeline-loop-guard.mjs claim-guard < "$RUNNER_TEMP/claim-facts.json"
 
+      # ── ALREADY DECOMPOSED? (#2048) ───────────────────────────────────────────────
+      # An issue with OPEN sub-issues is not a leaf — its children ARE the decomposition.
+      # The LEAF TEST is applied to the issue's PROSE and never to its sub-issues (and the
+      # prompt reads the issue with `gh issue view`, which does not list them), so epic #515
+      # — three open ready children — was classified a leaf and handed to the single-leaf
+      # worker, which burned eleven minutes and produced nothing.
+      #
+      # "Does this have open children" is a LOOKUP, not a judgement, so it is answered here
+      # rather than asked of pi. The same state was already paginated twice in this file by
+      # the artifact-gate's #1074 child-deliverable scan — just too late to affect anything.
+      # The DECISION is the pure, unit-tested `planResume` (scripts/resume-decomposed.mjs);
+      # this step is I/O only. Contract: scripts/resume-decomposed.test.mjs.
+      - name: Gather sub-issues
+        id: subs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
+            let children = []
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
+                { ...context.repo, issue_number, per_page: 100 })
+              // `hasOpenChildren` decides worker-vs-decomposer per child, so it needs each
+              // grandchild's state — one extra call per open child, and trees are small.
+              children = await Promise.all(subs.map(async (s) => {
+                let hasOpenChildren = false
+                if (s.state === 'open') {
+                  try {
+                    const g = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
+                      { ...context.repo, issue_number: s.number, per_page: 100 })
+                    hasOpenChildren = g.some((x) => x.state === 'open')
+                  } catch (e) { core.warning(`grandchild probe #${s.number}: ${e.message}`) }
+                }
+                return { number: s.number, state: s.state, body: s.body || '', hasOpenChildren }
+              }))
+            } catch (e) {
+              // Fail OPEN into normal classification — a gather glitch must not stop the pipeline.
+              core.warning(`sub-issue gather failed (${e.message}) — classifying normally.`)
+            }
+            require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/sub-issues.json`, JSON.stringify(children))
+            core.info(`sub-issues: ${children.length} (${children.filter(c => c.state === 'open').length} open)`)
+      - name: Resume an already-decomposed tree
+        id: resume
+        run: node scripts/resume-decomposed.mjs < "$RUNNER_TEMP/sub-issues.json"
+
+      - name: Dispatch the open children
+        if: ${{ steps.resume.outputs.resume == '1' }}
+        uses: actions/github-script@v7
+        env:
+          DISPATCH: ${{ steps.resume.outputs.dispatch }}
+          REASON: ${{ steps.resume.outputs.reason }}
+          ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const issue_number = Number(process.env.ISSUE_NUMBER)
+            const pairs = String(process.env.DISPATCH || '').split(',').filter(Boolean)
+              .map((p) => { const [n, label] = p.split(':'); return { number: Number(n), label } })
+            const done = []
+            for (const { number, label } of pairs) {
+              // Fire a FRESH `labeled` event — the workers trigger on the label being ADDED,
+              // never on it merely being present, so a re-dispatch must remove it first.
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number: number, name: label }) } catch (e) {}
+              await github.rest.issues.addLabels({ ...context.repo, issue_number: number, labels: [label] })
+              done.push(`#${number} → \`${label}\``)
+            }
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            await github.rest.issues.createComment({ ...context.repo, issue_number, body:
+              `🌳 **Already decomposed — resumed the tree instead of re-planning it.**\n\n`
+              + (done.length ? `Dispatched: ${done.join(' · ')}\n\n` : `Nothing dispatchable right now — every open child is waiting on a sibling.\n\n`)
+              + `_${process.env.REASON}_\n\n`
+              + `<sub>🤖 pi.dev harness (CI · mac-mini) · resume-decomposed #2048 · <a href="${runUrl}">run log</a></sub>` })
+            core.info(`Resumed #${issue_number}: ${done.join(', ') || '(all blocked)'}`)
+
+      # Everything below is the CLASSIFY path — skipped entirely once the tree was
+      # resumed (#2048), so a decomposed epic costs a few API calls instead of an
+      # install, a package warm and an eleven-minute pi run that cannot succeed.
       - uses: pnpm/action-setup@v4
+        if: ${{ steps.resume.outputs.resume != '1' }}
         with:
           # per-job dest — the default ~/setup-pnpm collides between the two
           # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
           dest: ${{ runner.temp }}/setup-pnpm
       - uses: actions/setup-node@v4
+        if: ${{ steps.resume.outputs.resume != '1' }}
         with:
           node-version: 22
           cache: pnpm
       - name: Install
+        if: ${{ steps.resume.outputs.resume != '1' }}
         run: pnpm install --frozen-lockfile
 
       # Warm @fyit/* dist so the agent's `crouton init`/generate/migrate doesn't cold-build
       # ~30 packages one-at-a-time mid-run (the #1213/#1247 tax — ~15-20 min). Content-addressed
       # cache + build-all on miss; a warm cache makes this ~seconds. (#1222)
       - name: Warm @fyit package builds
+        if: ${{ steps.resume.outputs.resume != '1' }}
         uses: ./.github/actions/warm-packages
 
       # Timestamp the run start so the artifact-gate distinguishes "produced this run"
@@ -204,6 +285,7 @@ jobs:
       # the worker PR) act as the Harness App and cascade. ANTHROPIC_API_KEY = the
       # funded metered key (NOT a subscription — subscription OAuth must not back CI).
       - id: pi
+        if: ${{ steps.resume.outputs.resume != '1' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -245,7 +327,7 @@ jobs:
             cat >> "$PROMPT_FILE" <<'PI_ED'
           EVENT-DRIVEN DECOMPOSE — PLAN ONLY. You are the task-decomposer. Do NOT run `/task-decompose`, do NOT spawn any subagent, and do NOT run any `gh`, `git`, or issue-mutating command. Your ONLY output is a plan file that a deterministic step will apply. Concretely:
           1. READ the target issue (use `gh issue view` to read only — reading is fine, mutating is not).
-          2. Apply the LEAF TEST: single coherent change, bounded file set, clear/testable acceptance, one focused run.
+          2. Apply the LEAF TEST: single coherent change, bounded file set, clear/testable acceptance, one focused run. AN ISSUE THAT ALREADY HAS OPEN SUB-ISSUES IS NEVER A LEAF (#2048) — its children ARE the decomposition, and `gh issue view` does NOT list them, so check explicitly before you judge. (A deterministic step normally intercepts this case before you are invoked; if you are seeing it anyway, that step failed open — emit a split plan for the remaining open children rather than {"leaf": true}.)
           3. Using your file-writing tool (NOT a shell heredoc — bodies contain emoji/backticks and shell quoting breaks, #1001), write a file named exactly `decompose-plan.json` in the current working directory, as valid JSON — ONE of these three shapes:
              - Single leaf: {"leaf": true}
              - Split: {"leaf": false, "children": [ {"title": "...", "body": "...markdown with ## 👤 For humans / ## 🤖 For agents / ## 🧪 How to test...", "labels": ["type:...","<component>"], "needsSplit": false, "blockedBy": []}, ... ]} — 2 to 6 children, one coherent concern each. Set needsSplit=true for a child that itself still needs decomposing, false for a ready leaf. Exactly one `type:*` label plus a real component label per child (unknown labels are dropped). Do NOT put a pipeline block or Dedup line in the body.
@@ -295,7 +377,7 @@ jobs:
       # .github/labels.yml, creates + links (sub-issues API) + labels each child. A missing/empty
       # plan is a loud, honest failure the artifact-gate then reports.
       - name: Apply decompose plan
-        if: ${{ env.PIPELINE_MODE == 'event-driven' }}
+        if: ${{ env.PIPELINE_MODE == 'event-driven' && steps.resume.outputs.resume != '1' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -399,7 +481,10 @@ jobs:
               + `<sub>🤖 pi.dev harness (CI · mac-mini) · claim guard #1890 · <a href="${runUrl}">run log</a></sub>` })
 
       - name: Artifact-gate — fail if the agent produced nothing
-        if: ${{ always() && steps.claim.outcome != 'failure' }}
+        # Also skipped on a resumed tree (#2048): that path reports its own
+        # deliverable, and its comment lands BEFORE t0 so the since-t0 scan
+        # would never see it and would false-fail a successful run.
+        if: ${{ always() && steps.claim.outcome != 'failure' && steps.resume.outputs.resume != '1' }}
         uses: actions/github-script@v7
         env:
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}
