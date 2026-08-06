@@ -70,6 +70,14 @@ function handleOpenPanel() {
   })
   document.dispatchEvent(event)
 }
+
+function handleWrapperClick() {
+  // Touch devices have no hover reveal, so a single tap opens the panel directly.
+  // Desktop keeps its dblclick-to-open + hover-reveal buttons behaviour unchanged.
+  if (window.matchMedia('(pointer: coarse)').matches) {
+    handleOpenPanel()
+  }
+}
 </script>
 
 <template>
@@ -78,6 +86,7 @@ function handleOpenPanel() {
     :class="{ 'border-l-2 border-l-primary/50': selected }"
     data-type="chart-block"
     @dblclick="handleOpenPanel"
+    @click="handleWrapperClick"
   >
     <div ref="innerRef" class="relative group rounded border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50 transition-colors">
       <!-- Block Content -->
@@ -93,7 +102,7 @@ function handleOpenPanel() {
             Chart
           </span>
           <!-- Action buttons -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <button
               type="button"
               class="p-1 text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
