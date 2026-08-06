@@ -55,8 +55,14 @@ function parseJsonc(text) {
  * Run a wrangler subcommand and parse its JSON output. Pass the FULL arg list —
  * note the two list commands differ: `d1 list` needs an explicit `--json` flag,
  * but `kv namespace list` already emits a JSON array and REJECTS `--json`.
+ *
+ * EXPORTED (#2085) so the per-PR preview path can ask the same question the same way.
+ * It needs the provisioned D1 id too, but writes it into the BUILT config rather than
+ * the source `wrangler.jsonc`, so it can't reuse `syncWranglerIds` wholesale — this is
+ * the one piece worth sharing, and a second copy of "how do we ask wrangler" is exactly
+ * the duplication that let one bug live in two places twice already (#2027, #2056).
  */
-function wranglerJson(appDir, args, injectEnvVar) {
+export function wranglerJson(appDir, args, injectEnvVar) {
   const injected = process.env[injectEnvVar]
   const raw = injected !== undefined
     ? injected
