@@ -14,9 +14,20 @@ import {
 } from './deploy-detect.mjs'
 
 // A stand-in for the injected git: declared-resolvable refs + canned diffs.
-const fakeGit = ({ resolvable = [], diffs = {} }) => ({
+//
+// `diffs` keys are the literal ref expression, so a test can give DIFFERENT answers for
+// `a..b` and `a...b` (#2087). The old fake had only `diff(a, b)` keyed `a..b`, so two-dot
+// and three-dot were indistinguishable to it — every test passed against the wrong diff
+// form because the fake shared the code's assumption. `isResolvable` covers `a...b` too,
+// which is how the merge-base guard is exercised.
+const fakeGit = ({ resolvable = [], diffs = {}, mergeBase = true }) => ({
   isResolvable: ref => resolvable.includes(ref),
-  diff: (a, b) => diffs[`${a}..${b}`] || []
+  diff: (a, b) => diffs[`${a}..${b}`] || [],
+  diffFrom: (a, b) => diffs[`${a}...${b}`] || [],
+  // Its own knob, because it is its own git question (`git merge-base`). The first cut of
+  // this fix expressed it as isResolvable('a...b'); the fake said yes, real git says no —
+  // a range is not a commit — and the guard threw on every PR (#2087).
+  hasMergeBase: () => mergeBase
 })
 
 const APPS = [
@@ -110,14 +121,94 @@ test('push with the all-zero before-sha and no HEAD~1 throws rather than emittin
   assert.throws(() => resolveChangedFiles({ event: 'push', baseSha: ZERO_SHA, headSha: 'head', git }), DetectError)
 })
 
-test('pull_request uses base..head', () => {
-  const git = fakeGit({ resolvable: ['prbase'], diffs: { 'prbase..prhead': ['apps/triage/x.vue'] } })
+// Was `pull_request uses base..head`, asserting the two-dot form — the test pinned the bug
+// (#2087). It passed because the old fake keyed everything as `a..b`, so it could not have
+// noticed the difference it was asserting. Now it pins the merge-base diff.
+test('pull_request uses base...head (merge base)', () => {
+  const git = fakeGit({
+    resolvable: ['prbase', 'prbase...prhead'],
+    diffs: { 'prbase...prhead': ['apps/triage/x.vue'] },
+  })
   const r = resolveChangedFiles({ event: 'pull_request', baseSha: 'prbase', headSha: 'prhead', git })
-  assert.equal(r.source, 'pr:base..head')
+  assert.equal(r.source, 'pr:base...head')
   assert.deepEqual(r.files, ['apps/triage/x.vue'])
 })
 
 test('pull_request throws when the PR base sha will not resolve (no silent empty)', () => {
   const git = fakeGit({ resolvable: [] })
   assert.throws(() => resolveChangedFiles({ event: 'pull_request', baseSha: 'ghost', headSha: 'head', git }), DetectError)
+})
+
+
+/* ── #2087: a PR that has fallen behind its base must not inherit the base's changes ──
+ *
+ * THE INCIDENT. #2080 changed two files under packages/crouton-cli. `git diff BASE HEAD`
+ * (two-dot) reported 21, including apps/{kassa,triage,velo}/nuxt.config.ts — files #2074 had
+ * just added to main, which this branch simply didn't have yet. That scheduled all three app
+ * deploys for a PR touching no app, and they failed, putting a red X on unrelated work.
+ *
+ * Two-dot is the symmetric difference of two TREES. "What did this PR change" is the diff
+ * from the MERGE BASE — three-dot. These pin that, and the fake above is what makes them
+ * capable of failing.
+ */
+test('#2087: a PR uses the THREE-dot diff, not two-dot', () => {
+  const r = resolveChangedFiles({
+    event: 'pull_request', baseSha: 'BASE', headSha: 'HEAD',
+    git: fakeGit({
+      resolvable: ['BASE', 'BASE...HEAD'],
+      diffs: {
+        // What main gained meanwhile (must NOT be attributed to this PR) …
+        'BASE..HEAD': ['apps/velo/nuxt.config.ts', 'apps/kassa/package.json', 'packages/crouton-cli/lib/x.ts'],
+        // … versus what the PR actually changed.
+        'BASE...HEAD': ['packages/crouton-cli/lib/x.ts'],
+      },
+    }),
+  })
+  assert.deepEqual(r.files, ['packages/crouton-cli/lib/x.ts'])
+  assert.equal(r.source, 'pr:base...head')
+})
+
+test('#2087 end to end: the stale-branch shape schedules NO deploys', () => {
+  const { files } = resolveChangedFiles({
+    event: 'pull_request', baseSha: 'BASE', headSha: 'HEAD',
+    git: fakeGit({
+      resolvable: ['BASE', 'BASE...HEAD'],
+      diffs: {
+        'BASE..HEAD': ['apps/velo/nuxt.config.ts', 'apps/triage/nuxt.config.ts', 'packages/crouton-cli/lib/x.ts'],
+        'BASE...HEAD': ['packages/crouton-cli/lib/x.ts'],
+      },
+    }),
+  })
+  const { include, any } = computeMatrix({ event: 'pull_request', changedFiles: files, apps: APPS })
+  assert.deepEqual(include, [], 'a crouton-cli-only PR must deploy nothing')
+  assert.equal(any, false)
+})
+
+test('#2087: an unresolvable merge base FAILS rather than falling back to two-dot', () => {
+  assert.throws(
+    () => resolveChangedFiles({
+      event: 'pull_request', baseSha: 'BASE', headSha: 'HEAD',
+      git: fakeGit({ resolvable: ['BASE'], diffs: { 'BASE..HEAD': ['apps/velo/x.ts'] }, mergeBase: false }),
+    }),
+    DetectError,
+    'silently using two-dot IS the bug — a shallow checkout must be loud',
+  )
+})
+
+test('#2087: a PR that really does touch an app still deploys it', () => {
+  const { files } = resolveChangedFiles({
+    event: 'pull_request', baseSha: 'BASE', headSha: 'HEAD',
+    git: fakeGit({ resolvable: ['BASE', 'BASE...HEAD'], diffs: { 'BASE...HEAD': ['apps/velo/app/x.vue'] } }),
+  })
+  const { include } = computeMatrix({ event: 'pull_request', changedFiles: files, apps: APPS })
+  assert.deepEqual(include.map(i => i.app), ['velo'])
+})
+
+test('#2087: the push path is untouched — still first-parent two-dot', () => {
+  const r = resolveChangedFiles({
+    event: 'push', baseSha: 'BEFORE', headSha: 'HEAD',
+    git: fakeGit({ resolvable: ['HEAD~1'], diffs: { 'HEAD~1..HEAD': ['apps/velo/x.ts'] } }),
+  })
+  assert.equal(r.source, 'push:first-parent')
+  assert.deepEqual(r.files, ['apps/velo/x.ts'])
 })
