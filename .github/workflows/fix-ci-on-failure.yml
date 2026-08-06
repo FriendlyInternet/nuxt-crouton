@@ -25,9 +25,17 @@ permissions: {}
 
 jobs:
   fixbot:
+    # Pipeline branches only — human PRs are never auto-edited. BOTH prefixes: `claude/issue-*`
+    # is the claude lane, `work-*` is the pi worker. This listed only the former, and since
+    # AGENT_HARNESS=pi made pi the live lane the condition could not be true for any PR: 1718
+    # runs, 100 of the last 100 `skipped`, zero that ever acted (#2089). A false job `if`
+    # reports `skipped`, which is indistinguishable from "nothing to do", so it was never red
+    # and nobody noticed. `pipeline-pr-status.yml` learned the same lesson in #1815; this
+    # sibling didn't — the definition now lives once, in scripts/lib/pipeline-branch.mjs.
     if: >
       github.event.workflow_run.conclusion == 'failure' &&
-      startsWith(github.event.workflow_run.head_branch, 'claude/issue-')
+      (startsWith(github.event.workflow_run.head_branch, 'claude/issue-') ||
+       startsWith(github.event.workflow_run.head_branch, 'work-'))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level — GitHub job-level `permissions` fully
