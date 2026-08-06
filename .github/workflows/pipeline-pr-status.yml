@@ -150,7 +150,13 @@ jobs:
               const marker = `<!-- ci-fail-ping:${pr.head.sha} -->`
               const comments = await github.paginate(github.rest.issues.listComments,
                 { owner, repo, issue_number: pr.number, per_page: 100 })
-              if (comments.some(c => (c.body || '').includes(marker))) return // already pinged this SHA
+              // Already pinged this SHA? The @MENTION stays one-shot (a mention doesn't re-fire on
+              // an edit, so re-creating would be pure spam) — but the BODY is refreshed below if
+              // more checks have gone red since (#2029). Checks finish minutes apart: on PR #2025
+              // the ping fired naming one failure and `Type Check Apps` went red 42s later, so the
+              // owner was left reading a permanently understated count while the sticky comment
+              // said three. A stale loud signal is worse than a quiet accurate one.
+              const existing = comments.find(c => (c.body || '').includes(marker))
               // Name the failing checks (#1909) AND quote what actually went wrong (#2015).
               // Names alone still meant leaving the notification, opening the checks tab, picking
               // a job and scrolling a log — on a phone that is the entire task.
@@ -172,15 +178,26 @@ jobs:
               // The distilled failure: a step's `::error::` output becomes a check-run annotation,
               // which is already the short form of the log. Two per check, truncated — enough to
               // diagnose, collapsed so the notification itself stays scannable.
+              //
+              // FILTER BY LEVEL (#2029). `listAnnotations` returns `notice`/`warning`/`failure`
+              // together, in creation order — and CI emits its noise first (the Node-20
+              // deprecation notice, "no files found for playwright-report/"). Taking the first two
+              // of ANY level therefore quoted two things that did not fail, under a heading that
+              // said "what failed". Fetch a page, keep the failures. Fall back to any level only
+              // when a check produced no failure annotation at all, and say so, so a reader is
+              // never told a warning is the cause.
               const excerpts = []
               for (const f of names) {
                 if (!f.id) continue // a commit status has no annotations
                 try {
                   const anns = (await github.rest.checks.listAnnotations(
-                    { owner, repo, check_run_id: f.id, per_page: 2 })).data
-                  for (const a of anns) {
+                    { owner, repo, check_run_id: f.id, per_page: 50 })).data
+                  const hard = anns.filter(a => a.annotation_level === 'failure')
+                  const use = hard.length ? hard : anns
+                  const label = hard.length ? f.name : `${f.name} (no error annotation — showing context)`
+                  for (const a of use.slice(0, 2)) {
                     const msg = String(a.message || '').trim().slice(0, 400)
-                    if (msg) excerpts.push(`${f.name}: ${msg}`)
+                    if (msg) excerpts.push(`${label}: ${msg}`)
                   }
                 } catch (e) { core.warning(`annotations for ${f.name}: ${e.message}`) }
               }
@@ -197,6 +214,12 @@ jobs:
                 `finished and waiting on your approval**.\n\n` +
                 `[Checks](${pr.html_url}/checks) · \`${pr.head.ref}\` → \`${pr.base.ref}\`.\n\n` +
                 `<sub>🤖 agent pipeline (CI) · failure notify (#1815/#1909)</sub>`
+              if (existing) {
+                if ((existing.body || '').trim() === body.trim()) return // nothing new to say
+                await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+                core.info(`Refreshed the red ping on #${pr.number} (${causes.length} failing now).`)
+                return
+              }
               await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body })
               core.info(`Pinged @${OWNER} on red #${pr.number} (${pr.head.sha.slice(0, 7)}).`)
             }
