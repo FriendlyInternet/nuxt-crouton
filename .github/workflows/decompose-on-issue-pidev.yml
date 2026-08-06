@@ -574,10 +574,28 @@ jobs:
                   // detections above; on the worker twin that guess sent the owner to rewrite two
                   // well-specified tickets while the actual bug was in the workflow's own shell.
                   why = 'pi ran to completion but no PR, sub-issues, or sign-off hold appeared — and none of the known causes matched'
-                  action = 'open the run log before changing anything. Only if the log shows pi genuinely had nothing to act on is the issue underspecified'
+                  action = 'read the log tail below first — it is what pi actually said. Only if it shows pi genuinely had nothing to act on is the issue underspecified'
+                  // ATTACH THE TAIL HERE ABOVE ALL (#2065). This branch means "I cannot explain
+                  // this run", and it was the ONLY branch that withheld the log — while sitting
+                  // inside `if (exists(logFile))`, so the log was read and then dropped. Three
+                  // alarms (#2055/#2056/#2058) were undiagnosable from outside the runner for
+                  // exactly this reason, each telling the owner to "open the run log" while the
+                  // relevant slice of it sat in `tail`.
+                  if (tail.trim()) detail = tail.trim()
                 }
               }
             } catch (e) { core.warning(`artifact-gate: could not read pi run log: ${e.message}`) }
+
+            // No log at all (#2065). "Open the run log" is misleading advice when the run
+            // never wrote one — and an empty PI_EXEC_LOG is itself evidence: the harness
+            // stopped before pi produced any output. Distinguish the two situations.
+            let hadLog = false
+            try { hadLog = Boolean(process.env.PI_EXEC_LOG) && fs.existsSync(process.env.PI_EXEC_LOG) } catch (e) { hadLog = false }
+            if (!why && !hadLog) {
+              why = 'pi produced NO run log at all — the harness stopped before pi wrote any output'
+              action = 'do not edit the issue. Open the run log and read the steps BEFORE the agent step; '
+                + 'an absent `PI_EXEC_LOG` means the failure is upstream of pi, in the workflow'
+            }
 
             // Fallback when the log is unreadable but the step itself failed.
             if (!why && failed) {
