@@ -711,8 +711,19 @@ jobs:
             // both as "held for sign-off" tells the owner to APPROVE when what is actually
             // needed is an ANSWER — the gate asserting a state it never distinguished (#1751).
             // The ask-human template's mandatory first line is the discriminator.
-            const askedQuestion = signoffHeld &&
-              comments.some(c => /^##\s*🔀\s*Blocked\b/m.test(c.body || ''))
+            // WHAT does the hold need? (#2067) The `🔀 Blocked` heading is a FAMILY marker —
+            // it cannot tell "pick A or B" from "apply this patch, I'm not allowed to". Reading
+            // only the heading is how #2054 announced "asked you a question" above 4,372
+            // characters that contained no question: a workflow-only fix the App token cannot
+            // push (#1076), which needs the owner to ACT, not to answer.
+            // The `**Needs:** answer | action | approval` line is the explicit discriminator.
+            // Absent ⇒ 'answer', which is exactly today's behaviour, so older holds are unaffected.
+            const holdBody = comments.map(c => c.body || '')
+              .find(b => /^##\s*🔀\s*Blocked\b/m.test(b)) || ''
+            const needs = (holdBody.match(/^\s*\*\*Needs:\*\*\s*(answer|action|approval)\b/mi) || [])[1]
+            const holdKind = holdBody ? (needs ? needs.toLowerCase() : 'answer') : null
+            const askedQuestion = signoffHeld && holdKind === 'answer'
+            const needsAction = signoffHeld && holdKind === 'action'
 
             if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues) {
               core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} askedQuestion=${askedQuestion} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues}`)
@@ -725,7 +736,8 @@ jobs:
                   .map(e => e.source.issue.number)[0]
                 const what = freshPR
                   ? `done → PR #${freshPR}`
-                  : askedQuestion ? '**asked you a question** — it needs an *answer*, not an approval. See the 🔀 comment above; replying on this issue resumes the work in a fresh run.'
+                  : needsAction ? '**needs you to APPLY something** — not an answer, not an approval. The 🔀 comment above says what to do and why the agent could not; the patch is collapsed under it. Comment here when applied and the work resumes in a fresh run.'
+                  : askedQuestion ? '**asked you a question** — it needs an *answer*, not an approval. The 🔀 comment above leads with the recommendation; reply with your pick and the work resumes in a fresh run.'
                   : (createdSubIssues ? 'decomposed → sub-issues created (see the tree)'
                     : signoffHeld ? 'held for sign-off (`status:blocked` + a review)'
                     : 'produced a deliverable — see the run')

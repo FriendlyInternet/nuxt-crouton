@@ -53,6 +53,15 @@ children that aren't yet worked, and stop (idempotent).
 
 ## Step 2 — Apply the LEAF TEST (all must be true)
 
+> **First, a hard precondition — an issue that already has OPEN sub-issues is never a
+> leaf (#2048).** Its children *are* the decomposition; the job is to resume the tree
+> (dispatch the open, unblocked children), not to re-plan it. This is a **lookup, not a
+> judgement**, and it is easy to miss because `gh issue view` does **not** list
+> sub-issues — so the four criteria below get applied to a well-written epic's *prose*
+> and it reads as "one coherent change". That is exactly how epic #515, with three open
+> ready children, was classified a leaf and handed to the single-leaf worker, which spent
+> eleven minutes on it and produced nothing. Check `/sub_issues` before judging.
+
 An issue is **leaf-sized** when:
 
 1. **Single coherent change** — one concern, one PR's worth of work.

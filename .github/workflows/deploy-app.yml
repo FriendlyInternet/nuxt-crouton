@@ -248,6 +248,15 @@ jobs:
           # BETTER_AUTH_* are only needed by the prerender pass at build time.
           BETTER_AUTH_SECRET: prerender-placeholder
           BETTER_AUTH_URL: ${{ inputs.environment == 'production' && inputs['production-url'] || inputs['staging-url'] }}
+          # REVIEW OVERLAY (#2070) — set HERE, not in each app's cf:staging script.
+          # The flag existed only in the CLI's scaffold template (scaffold-app.ts), so the
+          # three apps that predate it never had it: 0 of 3. The bridge-wiring steps below
+          # would then push their secrets to a Worker serving no overlay, the deploy would
+          # succeed, and every "walk the preview" ask had nothing behind it (#2037 sat
+          # unrunnable for weeks on exactly this). One place, so it cannot drift per app.
+          # Gated on `review-pr`: an ordinary staging deploy is the trunk preview and must
+          # stay overlay-free — and the bridge needs a PR to post to anyway.
+          NUXT_PUBLIC_CROUTON_REVIEW: ${{ (inputs.environment == 'staging' && inputs['review-pr'] != '') && 'true' || '' }}
         run: |
           set -o pipefail
           PR_NUM="${{ github.event.pull_request.number }}"
@@ -405,6 +414,29 @@ jobs:
           npx wrangler secret bulk "$RUNNER_TEMP/review-secrets.json" --env staging
           rm -f "$RUNNER_TEMP/review-secrets.json"
           echo "✓ Wired preview-review bridge → PR #$PR on $REPOSITORY (posts as nuxt-harness[bot])"
+
+      # ── PROVE the overlay is actually there (#2070) ─────────────────────────────
+      # Wiring the bridge's secrets says nothing about whether the deployed build SERVES
+      # the overlay — and for two years it didn't, silently: deploy green, secrets set,
+      # `/api/_review` 404, every "walk the preview" link inert. Same class as #2045's
+      # blank screenshot: an artifact that looks like a deliverable and isn't. Probe the
+      # live URL and FAIL, so a preview that can't be reviewed never gets handed over as
+      # one. Report-only would just re-create the silence.
+      - name: Verify the review overlay is live
+        if: ${{ inputs.environment == 'staging' && inputs['review-pr'] != '' }}
+        env:
+          URL: ${{ steps.deploy.outputs.url || inputs['staging-url'] }}
+        run: |
+          set -o pipefail
+          [ -z "$URL" ] && { echo "::error::review deploy has no URL to probe"; exit 1; }
+          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$URL/api/_review" || echo 000)"
+          if [ "$code" = "404" ] || [ "$code" = "000" ]; then
+            echo "::error::The review overlay is NOT live at $URL (/api/_review → $code)."
+            echo "::error::This preview cannot be reviewed — do not hand out the link. Check that"
+            echo "::error::NUXT_PUBLIC_CROUTON_REVIEW reached the build (#2070)."
+            exit 1
+          fi
+          echo "✓ review overlay live at $URL (/api/_review → $code)"
 
       # Guarantee a new app can AUTHENTICATE on first deploy with ZERO per-app setup.
       # A freshly provisioned Worker has no secrets, so member login 500s with
