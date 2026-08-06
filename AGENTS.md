@@ -168,6 +168,14 @@ confirmation. Human-action tasks are discrete **assigned** issues closed by a co
 (`> 🤖 **<tool>** · … · posted from <account> (not <human>) · _<context>_`); under a *bot* account,
 just name the source. **Link issues/PRs** as full URLs in chat (bare `#NN` isn't clickable).
 
+**An agent comment is a NOTIFICATION — lead with a typed brief, collapse the depth.** The
+reader is holding many threads on a phone, so the depth arriving *as* the ping makes every one
+cost a full read. One line saying which of **🔴 issue · 💡 proposal · ✅ done · 🔀 choice ·
+🛠 action · 👀 review** this is, one line saying what they must do, one link — then everything
+else inside `<details>`. **The depth is never cut, only moved**: if collapsing weren't a real
+escape hatch, agents would delete content instead, which is worse than the wall. A comment with
+no next action isn't ready to post — work out what you're asking for first.
+
 ## Commits
 
 `<type>(<scope>): <subject>` — `feat|fix|refactor|docs|test|chore|perf|style`; scopes are the stack
