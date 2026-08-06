@@ -24,7 +24,7 @@
  * `> 🤖 …` provenance header, and quoting somebody else's dispatch is a normal thing to
  * do in a thread. Neither should re-fire the pipeline.
  */
-function stripNonCommandRegions(body) {
+export function stripNonCommandRegions(body) {
   return body
     // Fenced blocks first — their content may contain backticks that would otherwise
     // confuse the inline-span pass.
