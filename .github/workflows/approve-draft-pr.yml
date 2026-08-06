@@ -1,0 +1,98 @@
+name: Approve a held draft PR
+
+# Release a UI-gated draft PR by commenting ON THE PR — ✅ (or `lgtm`). (#2051)
+#
+# THE GAP THIS CLOSES. The UI sign-off gate opens a `.vue`-touching PR as a DRAFT so it
+# cannot auto-merge, and the PR body says "reply `lgtm` to release it". Nothing listened.
+# Every approval workflow in this repo begins with `!github.event.issue.pull_request` —
+# `resume-on-comment.yml`, `close-epic-on-comment.yml`, `comment-dispatch.yml` — so a
+# comment on a PR reached nothing; and the issue-side route additionally requires
+# `status:blocked`, which the draft gate never set. Four PRs (#2039/#2041/#2044/#2025)
+# were held with no key, releasable only by hand-clicking "Ready for review" — precisely
+# the mobile friction the gate exists to remove. The hold worked; its release was never
+# asserted.
+#
+# THE GESTURE IS ✅. A REACTION CANNOT WORK: GitHub raises no webhook event for reactions,
+# so nothing can listen to one (#572, learned by watching a 👍 do nothing). A ✅ typed as a
+# comment is a real `issue_comment` event. Whole-line, like the 🚀 dispatch gesture — "✅ but
+# fix the spacing first" is a change request wearing a tick, and must not release anything.
+#
+# THIS DOES NOT MERGE. It only marks the PR ready for review; the existing green-gated
+# auto-merge (#2013/#339) takes it from there. Approving is not the same as bypassing CI.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  release:
+    # A collaborator's comment, on a PR (not an issue), that might be an approval.
+    if: |
+      github.event.issue.pull_request &&
+      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER' ||
+       github.event.comment.author_association == 'COLLABORATOR') &&
+      (contains(github.event.comment.body, '✅') ||
+       contains(github.event.comment.body, '✔') ||
+       contains(github.event.comment.body, '☑') ||
+       contains(github.event.comment.body, 'lgtm') ||
+       contains(github.event.comment.body, 'approve'))
+    # ⚠️ The `contains()` tests are a CHEAP PRE-FILTER ONLY, never the decision (#2004).
+    # They are unanchored and blind to Markdown, so they also match a comment that merely
+    # *mentions* approving — in backticks, a table cell, or a quote. The authoritative
+    # check is `isApproval()` below, which strips code and quotes first. Do not move the
+    # decision up here: GitHub expressions cannot express it.
+    runs-on: ubuntu-latest
+    steps:
+      # An App token so the ready-for-review event CASCADES into the downstream CI/
+      # auto-merge workflows — a GITHUB_TOKEN action does not re-trigger them (#572).
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      # Needed so the script can import the unit-tested matcher.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo
+            const pull_number = context.payload.issue.number
+
+            const { isApproval, approvalKind } = await import(
+              `${process.env.GITHUB_WORKSPACE}/scripts/approval.mjs`)
+            const body = context.payload.comment.body || ''
+            if (!isApproval(body)) {
+              core.info(`#${pull_number}: comment mentions approval but does not give it — ignoring.`)
+              return
+            }
+
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number })
+            if (!pr.draft) {
+              core.info(`#${pull_number} is not a draft — nothing to release.`)
+              return
+            }
+
+            // REST cannot un-draft; this is GraphQL-only. Same mutation resume-on-comment.yml
+            // already uses — it was reachable there and not here, which was the whole bug.
+            await github.graphql(
+              `mutation($id:ID!){ markPullRequestReadyForReview(input:{pullRequestId:$id}){ pullRequest { id } } }`,
+              { id: pr.node_id })
+
+            const kind = approvalKind(body) === 'check' ? '✅' : '`lgtm`'
+            await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body:
+              `✅ **Released — marked ready for review** (${kind} from @${context.payload.comment.user.login}).\n\n`
+              + `This does **not** merge it: the green-gated auto-merge takes over from here, so a red check still holds it.\n\n`
+              + `<sub>🤖 agent pipeline (CI) · approve-draft-pr #2051</sub>` })
+            core.info(`Released #${pull_number} (${approvalKind(body)}).`)
