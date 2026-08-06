@@ -51,3 +51,21 @@ skills-digest:
 eval-scoreboard:
   schedule: weekly:mon
   deliver: [issue]
+
+# Scheduled package-wide review sweep (#1588/#2100) — declares which packages/* opt in to a
+# recurring automated review, on what cadence, and whether findings only annotate or also file.
+# This block is config schema only: no workflow/gather/render script is wired here yet.
+#
+# Fields:
+#   packages:          array of packages/* names that opt in to the sweep
+#   cadence:            monthly:<dom> — same cadence grammar as `schedule` above (dom clamped to
+#                        the month's last day)
+#   maxPackagesPerRun:  cost ceiling — caps how many packages one run reviews, so a cadence bump
+#                        can't silently fan out the whole monorepo
+#   mode:               comment | file — comment annotates only; file upserts one rolling
+#                        backlog issue per package with the findings
+review-sweep:
+  packages: [crouton-printing]
+  cadence: monthly:1
+  maxPackagesPerRun: 3
+  mode: file
