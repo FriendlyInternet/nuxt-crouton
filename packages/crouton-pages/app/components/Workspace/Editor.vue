@@ -1181,7 +1181,10 @@ defineExpose({ state })
            input never loses state when switching tabs. -->
       <div class="flex-1 min-h-0 overflow-auto">
         <!-- ───────── Settings (title + slug + page setup) ───────── -->
-        <div v-show="activeTab === 'settings'" class="mx-auto w-full max-w-3xl px-4 py-4">
+        <!-- Bare wrapper: the extracted tab owns its own layout (`mx-auto max-w-3xl
+             px-4 py-4`), so repeating those classes here applied the padding TWICE and
+             shifted every control 16px down and right. Matches the SeoTab wrapper. -->
+        <div v-show="activeTab === 'settings'">
           <CroutonPagesEditorSettingsTab
             v-model:translations="state.translations"
             :editing-locale="editingLocale"
