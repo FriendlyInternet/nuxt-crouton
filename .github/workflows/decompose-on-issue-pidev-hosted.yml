@@ -183,7 +183,7 @@ jobs:
 
       # ── Artifact-gate (#461) — PASS/FAIL logic kept in sync with the mini variant ──
       # Harness-agnostic: PASS/FAIL is GitHub-state via GITHUB_TOKEN (comment / linked
-      # PR / sub-issues / status:blocked), incl. the child-deliverable check (#1074).
+      # PR / sub-issues / status:needs-input), incl. the child-deliverable check (#1074).
       # Differences from the mini variant: conclusion comes from the action's `success`
       # output instead of the CLI exit code, and the "why" classifier reads the exported
       # session JSONL instead of the tee'd CLI log. No result-comment-back — this
@@ -218,7 +218,7 @@ jobs:
             // a fresh-work run must yield a FRESH deliverable (see the mini variant).
 
             const issue = await github.rest.issues.get({ ...context.repo, issue_number })
-            const blocked = issue.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+            const blocked = issue.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:needs-input')
             const alreadyClosed = issue.data.state === 'closed'
 
             let createdSubIssues = false
@@ -252,7 +252,7 @@ jobs:
                     e.source.issue.pull_request && new Date(e.created_at).getTime() >= sinceMs)) {
                   childDeliverable = `PR linked to child #${s.number} this run`; break
                 }
-                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:needs-input')
                 if (childBlocked) {
                   const cc = await github.paginate(github.rest.issues.listComments, {
                     ...context.repo, issue_number: s.number, since,

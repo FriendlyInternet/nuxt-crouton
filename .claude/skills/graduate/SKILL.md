@@ -187,7 +187,7 @@ truth) and renders it as a required, signed-off gate. It certifies the app is a 
 - passes **`/frontend-review`** + **`/a11y`** + **`pnpm typecheck`** + **`/e2e-smoke`**
 - **docs updated** — package/app `CLAUDE.md`; new package ⇒ `node scripts/gen-package-catalog.mjs` + `pkg:*` label
 
-`/conformance` composes the existing probes and holds on `status:blocked` until a human signs off this
+`/conformance` composes the existing probes and holds on `status:needs-input` until a human signs off this
 axis. (C1 above is the *experience* axis — the side-by-side; C2 here is the *conformance* axis.)
 
 ### Done, checkpoints, promote

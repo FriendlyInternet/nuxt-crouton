@@ -67,7 +67,7 @@ line in the body. Then build:
 ```
 
 - **status** per node — `closed → done` · label `status:in-progress → in_progress` ·
-  `status:blocked → blocked` · otherwise `pending`.
+  `status:needs-input → blocked` · otherwise `pending`.
 - **edges** — `Blocked-by: #x` on child `C` ⇒ edge `{ "from": x, "to": C }` (arrow points from
   blocker to dependent; the generator lays blockers above dependents).
 - **goal** (optional) — add it when the epic's acceptance is a concrete artifact (e.g. a preview
@@ -142,7 +142,7 @@ human has hand-arranged the scene, prefer the importer in §4 to preserve their 
 |---|---|---|
 | `done` | 🟩 green | child issue closed |
 | `in_progress` | 🟦 blue | `status:in-progress` label |
-| `blocked` | 🟥 red | `status:blocked` label |
+| `blocked` | 🟥 red | `status:needs-input` label |
 | `pending` | 🟨 yellow | open, not started |
 | goal | 🟪 violet | the epic's concrete acceptance artifact |
 

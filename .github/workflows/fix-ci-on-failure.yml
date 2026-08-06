@@ -2,7 +2,7 @@ name: Fix CI on failure
 
 # Fix-bot (#338, epic #336): when a pipeline PR's CI fails, an agent wakes up, reads the
 # failure, and tries a minimal fix — for a few attempts. If it still can't, it tags the
-# owner and stands down (status:blocked on the issue) rather than guessing or looping
+# owner and stands down (status:needs-input on the issue) rather than guessing or looping
 # forever; the existing resume-on-comment.yml restarts it on a human reply.
 #
 # Guard rails (the whole point — provably no runaway):
@@ -65,7 +65,7 @@ jobs:
             }
             const labels = (full.labels || []).map(l => l.name)
             // Already escalated — don't pile on while a human is in the loop.
-            if (labels.includes('status:blocked')) {
+            if (labels.includes('status:needs-input')) {
               core.info('PR already blocked — standing down.'); core.setOutput('proceed', 'false'); return
             }
 
@@ -83,7 +83,7 @@ jobs:
                 `**Fix:** this one needs a human — take a look, then push a fix or reply to resume.` +
                 FOOTER(run.html_url) })
               if (issueNumber) {
-                try { await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['status:blocked'] }) } catch (e) { core.warning(`block #${issueNumber}: ${e.message}`) }
+                try { await github.rest.issues.addLabels({ owner, repo, issue_number: issueNumber, labels: ['status:needs-input'] }) } catch (e) { core.warning(`block #${issueNumber}: ${e.message}`) }
                 await github.rest.issues.createComment({ owner, repo, issue_number: issueNumber, body:
                   `🔴 **@pmcp — auto-fix couldn't get CI green on PR #${pr.number} after ${attempts} tries.**\n\n` +
                   `**Fix:** take a look, then reply here and the pipeline resumes.` +
@@ -152,13 +152,13 @@ jobs:
             3. HARD GATE — shared code: do NOT modify anything under `packages/`. If the only correct
                fix would require a `packages/` change, STOP: do not commit. Instead comment on issue
                #${{ steps.gate.outputs.issue_number }} explaining why, @mention @pmcp, apply the
-               `status:blocked` label to that issue, and end your run.
+               `status:needs-input` label to that issue, and end your run.
             4. Verify green: re-run the command from step 1 and confirm it passes.
             5. Commit with the /commit skill (reference the issue) and push to this branch. CI re-runs
                automatically; if it still fails, the fix-bot will get another attempt (up to the cap).
 
             If you cannot find a confident fix, do NOT guess or push a speculative change — comment on
-            issue #${{ steps.gate.outputs.issue_number }}, @mention @pmcp, apply `status:blocked`, and stop.
+            issue #${{ steps.gate.outputs.issue_number }}, @mention @pmcp, apply `status:needs-input`, and stop.
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
       - uses: ./.github/actions/loop-station-trace

@@ -3,7 +3,7 @@ name: Warn on a risky Closes
 # Two shapes of `Closes #NN` that fire the moment a PR merges and defeat a gate:
 #
 # (#1253, Fix B) A root-cause-fix PR that writes `Closes #<retest issue>` auto-closes a
-# `status:blocked` issue out from under the owner's pending reply — the #1233/#1234 race,
+# `status:needs-input` issue out from under the owner's pending reply — the #1233/#1234 race,
 # where the resume then ran against a closed, superseded issue.
 #
 # (#1690) An epic-integration PR that writes `Closes #<epic>` closes the epic on merge,
@@ -59,7 +59,7 @@ jobs:
                 const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
                 if (issue.pull_request) continue // a PR reference, not an issue
                 if (issue.state !== 'open') continue
-                if (has(issue, 'status:blocked')) blocked.push(issue_number)
+                if (has(issue, 'status:needs-input')) blocked.push(issue_number)
                 // #1690: an EPIC must not be auto-closed by its own integration PR —
                 // that fires the moment the PR merges and silently walks past the
                 // postmortem gate (`/close-epic`, gated on status:ready-to-close, #856).
@@ -69,7 +69,7 @@ jobs:
               } catch (e) { core.warning(`could not check #${issue_number}: ${e.message}`) }
             }
             if (!blocked.length && !epics.length) {
-              core.info('No open status:blocked or epic issues referenced.'); return
+              core.info('No open status:needs-input or epic issues referenced.'); return
             }
 
             // Warn once per PR — dedupe on the marker so `edited` events don't re-post.
@@ -87,7 +87,7 @@ jobs:
               const list = fmt(blocked)
               const plural = blocked.length > 1
               sections.push(
-                `🚫 **On merge this PR auto-closes ${list} — but ${plural ? 'they are' : 'it is'} \`status:blocked\` (awaiting an owner reply).**\n\n`
+                `🚫 **On merge this PR auto-closes ${list} — but ${plural ? 'they are' : 'it is'} \`status:needs-input\` (awaiting an owner reply).**\n\n`
                 + `**Fix:** if this is a root-cause fix rather than the blocked work itself, use \`Refs ${list}\` instead of \`Closes\` — so merging doesn't close ${plural ? 'them' : 'it'} out from under the pending reply (the #1233 race).`)
             }
 

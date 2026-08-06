@@ -47,7 +47,7 @@ Build the JSON object described in **Step 3** using these calls (all `owner: pmc
    `done` = children with `state: "closed"`, `total` = all children. Read each
    child's labels (or the `get_sub_issues` state) to set its `status`
    (`in-progress` / `blocked` from the `status:*` label) and `state`.
-   Mark the epic `blocked` if it carries `status:blocked` or any child is blocked.
+   Mark the epic `blocked` if it carries `status:needs-input` or any child is blocked.
    **Initiatives (super-epics).** Among the `label:epic` results, treat an issue as an
    **initiative** if it carries `label:initiative` **or** its title starts with `Initiative:`.
    An initiative *groups other epics*: parse its member epic numbers from the `#NN` links in

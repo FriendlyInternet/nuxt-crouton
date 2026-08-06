@@ -131,7 +131,7 @@ Rules that make it work:
   (`NOTIFY_HANDLE`). Pure FYIs get no mention.
 - **Push before you block.** If you've written anything, `git push -u origin <branch>` first
   and name that branch under *Status* — an unpushed worktree is lost on stop (#639).
-- Then apply `status:blocked` and **stop**.
+- Then apply `status:needs-input` and **stop**.
 
 ## Attach the right medium
 

@@ -49,7 +49,7 @@ export function parsePlan(raw) {
   // Design sign-off hold (#1821, Option C). When an epic has genuine design ambiguity, the
   // decomposer must NOT spawn "decide & sign off" worker children (they deadlock the code worker,
   // which has no render/hold tool). Instead it proposes the design and HOLDS on the epic: we render
-  // the artifacts (schema table / diagram / UI mockup) and post them + status:blocked, then the
+  // the artifacts (schema table / diagram / UI mockup) and post them + status:needs-input, then the
   // existing lgtm→resume-on-comment loop continues the decomposition into build children.
   if (p.signoff && typeof p.signoff === 'object') {
     const s = p.signoff
@@ -332,7 +332,7 @@ const ACTION_HANDLERS = {
     exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--body-file', f])
   },
   // Design sign-off hold (#1821): render the proposed artifacts, post them + the forks on the epic,
-  // and add status:blocked. Creates NO children — the lgtm→resume-on-comment loop continues later.
+  // and add status:needs-input. Creates NO children — the lgtm→resume-on-comment loop continues later.
   'signoff-hold'(a, state) {
     const { repo, exec, writeBody } = state
     const art = renderSignoffArtifacts(a.signoff, state)
@@ -359,12 +359,12 @@ const ACTION_HANDLERS = {
     lines.push('')
     lines.push('---')
     // @mention the owner: a hold is an ASK — it needs action, so it must notify (#1745). Without
-    // this the comment + status:blocked land silently and the hold waits on someone noticing it.
+    // this the comment + status:needs-input land silently and the hold waits on someone noticing it.
     // Per CLAUDE.md an @mention is a request for action, which is exactly what this is.
-    lines.push('@pmcp — reply **`lgtm`** / **`approve`** to proceed to build, or answer the forks above and I\'ll revise. Holding on `status:blocked`.')
+    lines.push('@pmcp — reply **`lgtm`** / **`approve`** to proceed to build, or answer the forks above and I\'ll revise. Holding on `status:needs-input`.')
     const f = writeBody(`signoff-${a.issue}`, lines.join('\n'))
     exec('gh', ['issue', 'comment', String(a.issue), '--repo', repo, '--body-file', f])
-    try { exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--add-label', 'status:blocked']) } catch (e) { state.log(`addLabel status:blocked: ${e.message}`) }
+    try { exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--add-label', 'status:needs-input']) } catch (e) { state.log(`addLabel status:needs-input: ${e.message}`) }
     state.held.push({ issue: a.issue, questions: a.signoff.questions.length, images: art.images.length })
   },
   'add-label'(a, { repo, exec, labelled }) {
@@ -458,7 +458,7 @@ function main(argv) {
   const summary = runActions(actions, { repo: args.repo })
   console.log(JSON.stringify(summary, null, 2))
   if (plan.signoff) {
-    // A design sign-off hold IS the deliverable (status:blocked + the posted forks/artifacts);
+    // A design sign-off hold IS the deliverable (status:needs-input + the posted forks/artifacts);
     // the artifact-gate recognises signoffHeld. Emit the rendered files so the workflow commits
     // them to the epic branch (their raw URLs are referenced in the posted comment).
     if (summary.artifacts.length) console.log(`SIGNOFF_ARTIFACTS ${summary.artifacts.join(' ')}`)

@@ -197,7 +197,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
 - **Async human-in-the-loop (`NOTIFY_HANDLE = @pmcp`).** Agents may run headless, so they
   **never block on `AskUserQuestion`** (it times out). On a real blocker they
   `add_issue_comment` with the question, **@mention `NOTIFY_HANDLE`** (so the owner gets a
-  GitHub/app notification), apply `status:blocked`, and stop — the human answers by
+  GitHub/app notification), apply `status:needs-input`, and stop — the human answers by
   replying on the issue. Small ambiguities are decided with a default + a noted
   assumption (no ping). Change the handle in this file and in the task-decompose skill.
   **When** to ask vs decide is the 3-part test in `AGENTS.md` → *Deciding vs asking* (ask only
@@ -237,7 +237,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   body (state `COMMENTED`) is a weak surface the owner misses: on #846 pi buried its
   `reply lgtm/approve` ping inside a review and it nearly went unseen. Put any detailed review
   or analysis in its own separate artifact; the actionable ask (the handoff block + `@mention` +
-  `status:blocked`) stands alone as a top-level comment.
+  `status:needs-input`) stands alone as a top-level comment.
 - **An @mention is a request for action, not a broadcast.** Only @mention `NOTIFY_HANDLE`
   when you need the human to *do* something: answer a blocking question, give a sign-off,
   or unblock you. **Pure progress/status updates** ("spawning the worker for #NN", "wave 2
@@ -248,7 +248,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   with `Closes #NN`. Workers obey the `packages/` HARD GATE and the `/commit` + no-squash
   merge policy.
 - **`Closes` only YOUR issue; `Refs` any other blocked issue (#1253).** A PR body's `Closes`
-  on someone else's `status:blocked` issue (e.g. a retest your fix unblocks) auto-closes it
+  on someone else's `status:needs-input` issue (e.g. a retest your fix unblocks) auto-closes it
   out from under the owner's pending reply — the #1233/#1234 race. Use `Refs #NN` for those;
   `warn-closes-blocked.yml` warns on violations (gate PRs on `epic/*` are exempt — closing
   their own blocked issue via merge-on-approval is the designed flow).

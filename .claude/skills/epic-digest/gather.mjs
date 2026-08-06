@@ -90,7 +90,7 @@ function parseKnowBy(body) {
 }
 const labelNames = (it) => (it.labels || []).map((l) => (typeof l === 'string' ? l : l.name))
 const statusOfLabels = (names) =>
-  names.includes('status:blocked') ? 'blocked'
+  names.includes('status:needs-input') ? 'blocked'
   : names.includes('status:in-progress') ? 'in-progress'
   : undefined
 const typeOfLabels = (names) => (names.find((n) => n.startsWith('type:')) || '').replace(/^type:/, '')
@@ -208,7 +208,7 @@ for (const e of epicItems) {
   })
   const total = children.length
   const epicNames = labelNames(e)
-  const blocked = anyBlocked || epicNames.includes('status:blocked')
+  const blocked = anyBlocked || epicNames.includes('status:needs-input')
   // "Finished but still open" state (#763), stamped on the epic by label-ready-epics.mjs —
   // the single source of truth. These REPLACE the old "done"-on-an-open-epic badge (which
   // read as a contradiction: an open epic showing "Done"). open/in-progress stay as-is:

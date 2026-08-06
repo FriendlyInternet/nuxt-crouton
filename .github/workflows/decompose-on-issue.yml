@@ -147,9 +147,9 @@ jobs:
             const linkedPR = prRefs.some(e => new Date(e.created_at).getTime() >= sinceMs) // a PR opened THIS run
             const alreadyLinkedPR = prRefs.length > 0 // issue ALREADY has a linked PR (a prior run finished it)
 
-            // (c) is the issue now HELD as a sign-off gate? (worker posted a review + status:blocked)
+            // (c) is the issue now HELD as a sign-off gate? (worker posted a review + status:needs-input)
             const issue = await github.rest.issues.get({ ...context.repo, issue_number })
-            const blocked = issue.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+            const blocked = issue.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:needs-input')
             const alreadyClosed = issue.data.state === 'closed' // already done
 
             // (d) did THIS run create sub-issues? An orchestrator/epic run's deliverable is a
@@ -170,7 +170,7 @@ jobs:
             } catch (e) { core.warning(`sub-issue check skipped: ${e.message}`) }
 
             // KIND-AWARE pass: a build/deploy issue must yield a PR; a sign-off gate must post a
-            // review AND hold (status:blocked + a comment); an orchestrator/epic run yields
+            // review AND hold (status:needs-input + a comment); an orchestrator/epic run yields
             // sub-issues. A bare progress comment with no PR, no hold, and no sub-issues is the
             // no-op → FAIL. BUT a re-dispatch of an ALREADY-satisfied issue (it already has a
             // linked PR, or is closed) correctly reports "already done" — pass it, don't red-flag
@@ -204,7 +204,7 @@ jobs:
                     e.source.issue.pull_request && new Date(e.created_at).getTime() >= sinceMs)) {
                   childDeliverable = `PR linked to child #${s.number} this run`; break
                 }
-                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:needs-input')
                 if (childBlocked) {
                   const cc = await github.paginate(github.rest.issues.listComments, {
                     ...context.repo, issue_number: s.number, since,

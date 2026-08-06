@@ -1,7 +1,7 @@
 name: Resume blocked decomposition
 
 # When an agent in the task-decomposition pipeline gets stuck it comments a question,
-# @mentions the owner, labels the issue `status:blocked`, and stops. This workflow lets
+# @mentions the owner, labels the issue `status:needs-input`, and stops. This workflow lets
 # the owner resume simply by REPLYING on that issue — no slash command, no @claude needed.
 on:
   issue_comment:
@@ -13,12 +13,20 @@ on:
 # ("Could not fetch an OIDC token"). A workflow-level block would be silently shadowed.
 jobs:
   resume:
-    # Resume only when: the issue carries `status:blocked`, the comment is a human's
+    # Resume only when: the issue carries `status:needs-input`, the comment is a human's
     # (not a bot — avoids the agent answering itself / loops), and it's an issue not a PR.
+    #
+    # The legacy `status:blocked` is accepted too (#2083). This guard is the one place where
+    # missing the label is FATAL rather than cosmetic: an owner replies, nothing happens, and
+    # there is no error anywhere to notice. The rename of the GitHub label is a separate,
+    # manual step from merging this code, so for the window between them issues still carry
+    # the old name — and a stale issue that never gets re-labelled would be stranded forever.
+    # Reading both costs one clause; getting it wrong costs a silent dead end.
     if: |
       !github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
-      contains(github.event.issue.labels.*.name, 'status:blocked')
+      (contains(github.event.issue.labels.*.name, 'status:needs-input') ||
+       contains(github.event.issue.labels.*.name, 'status:blocked'))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
@@ -90,7 +98,7 @@ jobs:
       # A pi decompose sign-off hold (Option C, #1821) is NOT a gate PR — it holds the EPIC
       # with a "🎨 Design sign-off" comment and no children. The generic claude `/task-decompose`
       # resume below does not build from it (it just re-blocks and says "still iterating"). So for
-      # that shape we instead re-run the PI decomposer: on any owner reply, remove status:blocked
+      # that shape we instead re-run the PI decomposer: on any owner reply, remove status:needs-input
       # and re-apply `delegate-pi` (remove-then-add → a fresh `labeled` event) so decompose-on-issue-
       # pidev re-runs — and with #1828's prompt change it now SPLITS into build children (it reads the
       # approval/answers in the thread). The label MUST be applied with the App token, or the
@@ -121,7 +129,7 @@ jobs:
             } catch (e) { core.warning(`sub-issue check: ${e.message}`) }
             if (!(hasHold && noChildren)) { core.setOutput('redispatch', 'false'); core.info('Not a pi design-hold — the claude resume path handles it.'); return }
             // Re-dispatch: clear the block, then remove-then-add delegate-pi for a fresh labeled event.
-            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
+            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:needs-input' }) } catch (e) {}
             try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'delegate-pi' }) } catch (e) {}
             await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['delegate-pi'] })
             await github.rest.issues.createComment({ ...context.repo, issue_number,
@@ -168,7 +176,7 @@ jobs:
             and a flag if an Excalidraw diagram was edited). **Read `.resume-answer.md` first** and
             treat it as their answer; if it flags an edited diagram, run
             `node scripts/ticket-excalidraw-import.mjs <png>` to decode the scene before acting.
-            Then incorporate the answer, remove the `status:blocked` label, and continue via
+            Then incorporate the answer, remove the `status:needs-input` label, and continue via
             /task-decompose #${{ github.event.issue.number }}.
           claude_args: "--model claude-sonnet-5 --max-turns 30"
           show_full_output: true
@@ -294,22 +302,22 @@ jobs:
             core.setOutput('skipped', skipped.join('\n'))
             // Clear the block ONLY on a real merge, so the issue can close cleanly (#1665).
             // This used to be unconditional ("defensively"), which made a failed resume a
-            // ONE-WAY DOOR: the job guard above requires `status:blocked`, so stripping it
+            // ONE-WAY DOOR: the job guard above requires `status:needs-input`, so stripping it
             // after a miss meant every later reply was SILENTLY SKIPPED — no run, hence no
             // artifact-gate, hence no explanation. #1655 needed the label restored by hand
             // before the owner's approval could execute at all. If nothing merged, the issue
             // genuinely IS still blocked; say so by leaving the label on.
             if (merged) {
-              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:needs-input' }) } catch (e) {}
               core.info('Gate PR merged — schedule-waves will advance the chain.')
             } else {
-              core.info('No gate PR merged (none matched / already merged) — leaving status:blocked ON so a re-approval can still trigger.')
+              core.info('No gate PR merged (none matched / already merged) — leaving status:needs-input ON so a re-approval can still trigger.')
             }
 
       # ── Artifact-gate (#603 P0) ────────────────────────────────────────────────
       # A resume must PRODUCE something — otherwise a no-op silently exits green and the
       # run looks done while nothing advanced. That exact failure bit #590: a plan-gate
-      # `approve` resumed, cleared `status:blocked`, but created ZERO sub-issues; the green
+      # `approve` resumed, cleared `status:needs-input`, but created ZERO sub-issues; the green
       # run hid it and it took a manual re-/delegate to notice. `decompose-on-issue` already
       # has this gate; the resume path didn't. Now a no-op resume goes RED (visible →
       # re-dispatch). Uses GITHUB_TOKEN (read-only check), never trips the bot-actor guard.
@@ -347,7 +355,7 @@ jobs:
             // (c) issue state now
             const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
             const closed = issue.state === 'closed'
-            const stillBlocked = issue.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+            const stillBlocked = issue.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:needs-input')
 
             // (d) a gate PR merged this run (a sign-off gate approved + merged)
             let mergedPR = false
@@ -383,9 +391,9 @@ jobs:
             // other path that does must not be able to strand the issue.)
             if (!stillBlocked) {
               try {
-                await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['status:blocked'] })
-                core.info('Re-applied status:blocked so a re-approval can trigger.')
-              } catch (e) { core.warning(`could not re-apply status:blocked: ${e.message}`) }
+                await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['status:needs-input'] })
+                core.info('Re-applied status:needs-input so a re-approval can trigger.')
+              } catch (e) { core.warning(`could not re-apply status:needs-input: ${e.message}`) }
             }
             const skipped = (process.env.MERGE_SKIPPED || '').trim()
             const remedy = skipped
@@ -472,7 +480,7 @@ jobs:
                 + `partially progressed. 🔗 [Run log](${runUrl}) — comment again to retry.` })
 
   # ── "Nothing happened" is never silence (#1665) ──────────────────────────────────
-  # The `resume` job above only runs while the issue carries `status:blocked`. So an
+  # The `resume` job above only runs while the issue carries `status:needs-input`. So an
   # approval reply on an issue that has LOST the label produces no run at all — no
   # artifact-gate, no comment, nothing. That's exactly how #1655 looked to the owner:
   # an lgtm that vanished. The label-clearing bug that caused it is fixed above; this
@@ -485,7 +493,7 @@ jobs:
     if: |
       !github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
-      !contains(github.event.issue.labels.*.name, 'status:blocked') &&
+      !contains(github.event.issue.labels.*.name, 'status:needs-input') &&
       (contains(github.event.comment.body, 'lgtm') || contains(github.event.comment.body, 'approve'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -525,7 +533,7 @@ jobs:
                 + '> 🤖 **Claude Code** · agent pipeline (CI) · _approval reply on a non-blocked issue_\n\n'
                 + `🤷 **Your approval did not start anything** — and that is a bug, not a decision. PR #${gatePR.number} `
                 + `is still open into \`${gatePR.base.ref}\`, so a gate IS pending here.\n\n`
-                + 'The resume workflow only runs while this issue carries `status:blocked`, and the label is gone. '
-                + 'Add `status:blocked` back and reply again, and it will run.\n\n'
+                + 'The resume workflow only runs while this issue carries `status:needs-input`, and the label is gone. '
+                + 'Add `status:needs-input` back and reply again, and it will run.\n\n'
                 + '<sub>Root cause of the label going missing: #1665.</sub>' })
             core.info(`Explained the skipped approval (pending gate PR #${gatePR.number}).`)

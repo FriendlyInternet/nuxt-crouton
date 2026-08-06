@@ -1,7 +1,7 @@
 ---
 name: crouton-change-control
 layer: stack
-description: The router for how a change legally happens in this repo — which sign-off gate fires for which kind of change, what counts as approval, how the packages-edit guard works, and how work is allowed to reach main. Use when starting ANY change and unsure which rules apply, when an Edit to packages/* gets BLOCKED, when a pipeline issue sits on status:blocked and you need to know what unblocks it, or when asked "do I need sign-off for this", "how do I get this merged", "can I deploy this", "who approves X", "why won't my approval label/reaction do anything".
+description: The router for how a change legally happens in this repo — which sign-off gate fires for which kind of change, what counts as approval, how the packages-edit guard works, and how work is allowed to reach main. Use when starting ANY change and unsure which rules apply, when an Edit to packages/* gets BLOCKED, when a pipeline issue sits on status:needs-input and you need to know what unblocks it, or when asked "do I need sign-off for this", "how do I get this merged", "can I deploy this", "who approves X", "why won't my approval label/reaction do anything".
 ---
 
 # Crouton Change Control — the router
@@ -12,7 +12,7 @@ One-line purpose: given "I want to change X", tell you which gates fire, which s
 
 | Situation | Go to |
 |---|---|
-| "Which rules apply to this change?" · blocked edit · stuck `status:blocked` · "how does this reach main?" | **this skill** |
+| "Which rules apply to this change?" · blocked edit · stuck `status:needs-input` · "how does this reach main?" | **this skill** |
 | Actually running a gate | `schema-review`, `ui-proposal`, `test-review`, `review` skills |
 | Issue/epic/label mechanics, epic walk-up | `github-tasks` skill |
 | Commit mechanics | `commit` skill (`/commit`) |
@@ -50,9 +50,9 @@ Verified 2026-07-02: `packages/*` → `stage: package, gates(required): test-fir
 
 ## 2. Approval semantics (#572) — one loop for every gate
 
-- **Hold state** = the `status:blocked` label on the issue. The gate PR (if any) is a **draft**.
-- **The ONLY resume signal is a reply comment** whose body matches `/\b(approve|approved|lgtm)\b/i`, posted by a human (non-Bot). Verified in `.github/workflows/resume-on-comment.yml`: it triggers **only** on `issue_comment: created`, on the blocked **ISSUE itself** — not a PR (`!github.event.issue.pull_request` in the job `if`) — + `status:blocked` + `comment.user.type != 'Bot'`. So an approval comment posted on the draft gate PR does **nothing** — reply on the issue. A 👍 reaction raises no event; the `ui-approved` label exists but nothing listens for it. **Reactions, labels, and PR comments do nothing.**
-- On approval, a deterministic step in that same workflow finds the draft gate PR (linked to the issue, base is `epic/*`), marks it ready, **merges with a merge commit — never squash**, and removes `status:blocked`. The link is matched from GitHub's own linked-issue relation first, then from a line-start `Closes` / `Fixes` / `Resolves` / `Sub-issue` / `Refs #<issue>` in the body (#1663 — it used to demand the literal `Closes #NN`, and a PR saying `Sub-issue: #NN` made the approval a silent no-op). **Write `Closes #<issue>` anyway** — it stays the canonical form, even on an `epic/*` PR where GitHub won't auto-close.
+- **Hold state** = the `status:needs-input` label on the issue. The gate PR (if any) is a **draft**.
+- **The ONLY resume signal is a reply comment** whose body matches `/\b(approve|approved|lgtm)\b/i`, posted by a human (non-Bot). Verified in `.github/workflows/resume-on-comment.yml`: it triggers **only** on `issue_comment: created`, on the blocked **ISSUE itself** — not a PR (`!github.event.issue.pull_request` in the job `if`) — + `status:needs-input` + `comment.user.type != 'Bot'`. So an approval comment posted on the draft gate PR does **nothing** — reply on the issue. A 👍 reaction raises no event; the `ui-approved` label exists but nothing listens for it. **Reactions, labels, and PR comments do nothing.**
+- On approval, a deterministic step in that same workflow finds the draft gate PR (linked to the issue, base is `epic/*`), marks it ready, **merges with a merge commit — never squash**, and removes `status:needs-input`. The link is matched from GitHub's own linked-issue relation first, then from a line-start `Closes` / `Fixes` / `Resolves` / `Sub-issue` / `Refs #<issue>` in the body (#1663 — it used to demand the literal `Closes #NN`, and a PR saying `Sub-issue: #NN` made the approval a silent no-op). **Write `Closes #<issue>` anyway** — it stays the canonical form, even on an `epic/*` PR where GitHub won't auto-close.
 - Any other reply = a change request: iterate and re-hold. A no-op resume goes red (artifact-gate, #603).
 - Who approves: this is a solo-dev repo — the owner (@pmcp). "Done" is *derived from a recorded sign-off*, never self-asserted (`AGENTS.md` "Done is signed off, not asserted"; the #988 incident — see `crouton-failure-archaeology`).
 - Epic close has its own comment signal: `/close-epic`, valid only when the epic already carries `status:ready-to-close` (postmortem ran first) — verified in `close-epic-on-comment.yml`.

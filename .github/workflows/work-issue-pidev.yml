@@ -274,7 +274,7 @@ jobs:
           if [ -n "${EPIC_BRANCH:-}" ]; then
             BRANCH_INSTR="branch off the integration branch '${EPIC_BRANCH}' and target the PR THERE (not main)"
           fi
-          printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s), then %s. For a scaffold/generate task, RUN the crouton generator (e.g. crouton config / generate_collection) — its output IS committed for you, so do NOT hand-write generated files. Author only the inputs (schema, config) with the edit/write tools (never shell redirects or heredocs) so they are captured. Run the touched app typecheck ONCE to sanity-check (pnpm --filter <app> typecheck), but do NOT loop trying to make typecheck fully green — a harness acceptance gate typechecks the result and reports failures, so stop after your change plus one check instead of grinding on it. Do NOT run git commit and do NOT open a pull request — the workflow commits your inputs AND the generator output and opens the PR, so you never need to. If you are genuinely blocked, do NOT guess: post a top-level comment on the issue explaining the blocker and add the status:blocked label, then stop. Making no file changes and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$BRANCH_INSTR" >> "$PROMPT_FILE"
+          printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s), then %s. For a scaffold/generate task, RUN the crouton generator (e.g. crouton config / generate_collection) — its output IS committed for you, so do NOT hand-write generated files. Author only the inputs (schema, config) with the edit/write tools (never shell redirects or heredocs) so they are captured. Run the touched app typecheck ONCE to sanity-check (pnpm --filter <app> typecheck), but do NOT loop trying to make typecheck fully green — a harness acceptance gate typechecks the result and reports failures, so stop after your change plus one check instead of grinding on it. Do NOT run git commit and do NOT open a pull request — the workflow commits your inputs AND the generator output and opens the PR, so you never need to. If you are genuinely blocked, do NOT guess: post a top-level comment on the issue explaining the blocker and add the status:needs-input label, then stop. Making no file changes and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$BRANCH_INSTR" >> "$PROMPT_FILE"
           # VISUAL EVIDENCE (#1748) — the owner reviews from a phone and cannot judge a layout
           # change from a diff. A .vue/CSS/theme change must therefore ARRIVE with something to
           # look at. `writeups/ui-proposals/` is un-ignored in .gitignore precisely so a PNG can be
@@ -624,7 +624,7 @@ jobs:
 
       # ── Artifact-gate (#461) — PASS/FAIL logic reused from decompose-on-issue.yml ────────
       # Harness-agnostic: PASS/FAIL is GitHub-state via GITHUB_TOKEN (comment / linked
-      # PR / sub-issues / status:blocked). Piece 3 (#1004) feeds it pi's PLAIN-TEXT run
+      # PR / sub-issues / status:needs-input). Piece 3 (#1004) feeds it pi's PLAIN-TEXT run
       # log (`PI_EXEC_LOG`) instead of claude's structured execution_file, so the failure
       # "why" is cause-aware (billing / error / underspecified) — parity with the claude
       # flow. PASS/FAIL is unchanged either way.
@@ -691,7 +691,7 @@ jobs:
             // genuinely closed issue — not a stale link. `alreadyLinkedPR` is intentionally unused.
 
             const issue = await github.rest.issues.get({ ...context.repo, issue_number })
-            const blocked = issue.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+            const blocked = issue.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:needs-input')
             const alreadyClosed = issue.data.state === 'closed'
 
             let createdSubIssues = false
@@ -739,7 +739,7 @@ jobs:
                   : needsAction ? '**needs you to APPLY something** — not an answer, not an approval. The 🔀 comment above says what to do and why the agent could not; the patch is collapsed under it. Comment here when applied and the work resumes in a fresh run.'
                   : askedQuestion ? '**asked you a question** — it needs an *answer*, not an approval. The 🔀 comment above leads with the recommendation; reply with your pick and the work resumes in a fresh run.'
                   : (createdSubIssues ? 'decomposed → sub-issues created (see the tree)'
-                    : signoffHeld ? 'held for sign-off (`status:blocked` + a review)'
+                    : signoffHeld ? 'held for sign-off (`status:needs-input` + a review)'
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
@@ -772,7 +772,7 @@ jobs:
                     e.source.issue.pull_request && new Date(e.created_at).getTime() >= sinceMs)) {
                   childDeliverable = `PR linked to child #${s.number} this run`; break
                 }
-                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+                const childBlocked = (s.labels || []).some(l => (typeof l === 'string' ? l : l.name) === 'status:needs-input')
                 if (childBlocked) {
                   const cc = await github.paginate(github.rest.issues.listComments, {
                     ...context.repo, issue_number: s.number, since,

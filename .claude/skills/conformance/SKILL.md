@@ -90,7 +90,7 @@ one-line reason) · `⏳ needs-human` (a probe you couldn't run here). Then:
 
 1. **Any `❌`** → the gate is **red**. Fix and re-run; do not present it as passable.
 2. **All `✅`/`⏳`** → post the checklist on the **graduation PR** (`--comment`) and **hold on
-   `status:blocked`** for sign-off. The conformance axis is "done" only on a reply comment
+   `status:needs-input`** for sign-off. The conformance axis is "done" only on a reply comment
    containing `lgtm`/`approve` that names this gate — not a green build, not your own read
    (the done-rule). A `⏳` line can't be signed off until a human runs it and flips it to `✅`.
 

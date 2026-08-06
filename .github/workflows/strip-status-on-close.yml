@@ -3,7 +3,7 @@ name: Strip status labels on close
 # (#641) When an issue closes, remove any `status:*` label it still carries.
 #
 # Why: project-status.yml moves the board card to Done on close, but it never
-# removes the `status:in-progress` / `status:blocked` LABEL — so closed issues
+# removes the `status:in-progress` / `status:needs-input` LABEL — so closed issues
 # linger wearing a stale status (all 5 closed children of #336 did). This is the
 # missing other half: the label is repo data, the board column is Projects data;
 # this workflow owns the label, project-status.yml owns the column.

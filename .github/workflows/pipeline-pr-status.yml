@@ -238,7 +238,7 @@ jobs:
               try { epic = (await github.rest.issues.get({ owner, repo, issue_number: epicNumber })).data }
               catch (e) { core.warning(`epic #${epicNumber}: ${e.message}`); return }
               const names = x => (x.labels || []).map(l => (typeof l === 'string' ? l : l.name))
-              const epicBlocked = names(epic).includes('status:blocked')
+              const epicBlocked = names(epic).includes('status:needs-input')
               const title = (epic.title || '').replace(/^(Epic|Initiative):\s*/i, '').trim()
 
               const total = subs.length
@@ -261,7 +261,7 @@ jobs:
                 // Two different holds, two different asks (#2083): `blocked` wants a reply,
                 // `needs-merge` wants the merge button. A rollup that shows both as "held"
                 // tells the owner to go find out which — the thing the split exists to avoid.
-                else if (names(s).includes('status:blocked')) { icon = '⏸️'; note = 'held — needs your reply' }
+                else if (names(s).includes('status:needs-input')) { icon = '⏸️'; note = 'held — needs your reply' }
                 else if (names(s).includes('status:needs-merge')) { icon = '🔀'; note = 'green — needs your merge' }
                 else {
                   const pr = await childPr(s.number)

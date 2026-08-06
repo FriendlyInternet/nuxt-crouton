@@ -80,7 +80,7 @@ a long report.
   closing (use `AskUserQuestion`). For a 🛑 you act on, post a comment with the evidence so the
   close is explained (lead with the 🤖 provenance header — see CLAUDE.md).
 - **Autonomous / pipeline** → post the verdict as a comment on the issue (provenance header)
-  so the chain is auditable, and for 🛑 set `status:blocked` + @mention rather than closing
+  so the chain is auditable, and for 🛑 set `status:needs-input` + @mention rather than closing
   silently.
 
 ## What this is not

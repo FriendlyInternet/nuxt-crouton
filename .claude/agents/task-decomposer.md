@@ -189,7 +189,7 @@ You may be running headless — do NOT use `AskUserQuestion` (it times out). If 
 **real blocker** (you genuinely can't decide how to split, or the issue's intent is
 contradictory): `add_issue_comment` on the issue with a concise question + the options
 you're weighing, **@mention the notify handle (`@pmcp` — `NOTIFY_HANDLE` in the
-task-decompose skill)** so they're notified, apply `status:blocked`, and **stop** this
+task-decompose skill)** so they're notified, apply `status:needs-input`, and **stop** this
 branch (don't spawn anything). The ping is a **top-level** `add_issue_comment`, never a PR
 *review* body (state `COMMENTED`) — a review body doesn't reliably notify the owner (#846). For
 ordinary judgement calls, decide with a sensible default and record the assumption in the issue

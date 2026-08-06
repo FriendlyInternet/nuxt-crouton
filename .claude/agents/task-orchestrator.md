@@ -62,7 +62,7 @@ reinventing CMS bits that already shipped.
    **recommendation**. You run headless, so do **not** `AskUserQuestion`. Default to **reuse**,
    record the assumption in the comment, @mention `@pmcp` as an FYI, and proceed — *unless* it's
    a **major fork** (reuse vs scratch materially changes the whole tree), in which case apply
-   `status:blocked` and stop for a decision (use the handoff block from the agent contract).
+   `status:needs-input` and stop for a decision (use the handoff block from the agent contract).
 3. **Order:** internal packages (this step) → external OSS (`ecosystem-check`) → build. Only
    after the fit is settled do you slice workstreams (step 4) **along the chosen path** — e.g.
    Option A makes "register the page-type on crouton-pages" a workstream, not "build a posts
@@ -167,7 +167,7 @@ reinventing CMS bits that already shipped.
    **creates a package, changes a DB schema, or is a dependency chain** (or carries a
    `review:plan` label), this is high-risk: do **not** spawn workers yet. Post the
    proposed tree (each child + dependency order) as a comment on the epic, **@mention
-   `@pmcp`**, apply `status:blocked`, and **stop**. A human approves by replying (a re-run
+   `@pmcp`**, apply `status:needs-input`, and **stop**. A human approves by replying (a re-run
    then proceeds). For low-risk epics (or `review:auto`), skip the gate and continue.
 7. **FOUNDATION CHECKPOINT — persist the whole tree before any leaf runs (HARD GATE, #612).**
    This one job does orchestrate **and** (via the spawned worker) the first leaf, under a single
@@ -198,7 +198,7 @@ reinventing CMS bits that already shipped.
      is no background continuation (the #455 root cause: the orchestrator said "the worker is
      running in the background, watch for the PR" at `num_turns: 1` and nothing ran). When a
      child returns, **verify its deliverable actually exists** — the child's PR (`Closes #N`),
-     or its sign-off comment + `status:blocked` — before you report. A child that returned
+     or its sign-off comment + `status:needs-input` — before you report. A child that returned
      without producing it is **not done**: re-spawn it (and wait). Never end your turn on a
      described-but-unverified handoff.
 9. **The final epic→`main` PR (the review gate).** The epic is NOT done when its children
@@ -248,5 +248,5 @@ You may be running headless, so do NOT use `AskUserQuestion` (it just times out)
 **genuine blocker** (e.g. the epic is too contradictory to slice sensibly), instead:
 `add_issue_comment` on the epic with a short question + options, **@mention the notify
 handle (`@pmcp` — see `NOTIFY_HANDLE` in the task-decompose skill)** so they get a
-notification, apply the `status:blocked` label, and **stop**. For small ambiguities,
+notification, apply the `status:needs-input` label, and **stop**. For small ambiguities,
 just pick a sensible default and note it in the issue — don't ping.

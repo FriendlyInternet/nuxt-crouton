@@ -81,7 +81,7 @@ the test code, so the reviewer agrees on *behaviour*, not syntax.
   re-show.
 - **Agent pipeline / PR:** commit the failing test (via `/commit`, scope = the package, e.g.
   `test(crouton-core): …`) so it lands in the PR's "Files changed". The reviewer comments inline on
-  any `it(...)` to change a case. Set the issue to `status:blocked` while holding. Approval is a
+  any `it(...)` to change a case. Set the issue to `status:needs-input` while holding. Approval is a
   **comment** containing `lgtm`/`approve` — **not** a reaction or label (#572) — and it unblocks
   implementation.
 

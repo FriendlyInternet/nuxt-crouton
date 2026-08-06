@@ -7,7 +7,7 @@ name: Project status automation
 #   - PR closed (merged or not)                 -> Done
 #   - Issue assigned or reopened                -> In progress
 #   - Issue labeled status:in-progress          -> In progress
-#   - Issue labeled status:blocked              -> Blocked
+#   - Issue labeled status:needs-input              -> Blocked
 #   - Issue closed                              -> Done
 # The label triggers are the reliable signal: the github-tasks flow (and
 # agents) mark "work started" by applying status:in-progress, not by
@@ -71,8 +71,8 @@ jobs:
             const labelToStatus = (name) => {
               switch ((name || '').toLowerCase()) {
                 case 'status:in-progress': return 'In progress'
-                case 'status:blocked':     return 'Blocked'
-                // #2083 — the auto-merge shared-code hold moved off `status:blocked` onto its
+                case 'status:needs-input':     return 'Blocked'
+                // #2083 — the auto-merge shared-code hold moved off `status:needs-input` onto its
                 // own label. This case is load-bearing: the switch returns null for anything
                 // unknown, which is a silent no-op, so without it those PRs would simply stop
                 // appearing on the board with nothing in the log to say so. Same column —

@@ -45,7 +45,7 @@ a feature branch.
      was supposed to create — a package, a module, a table, an exported symbol — and it
      **isn't there yet** (the sibling hasn't merged into your base), do **NOT** scaffold,
      stub, or re-create it yourself. That is exactly how parallel workers produce
-     conflicting duplicates. Treat it as a blocker: comment + `@mention` + `status:blocked`
+     conflicting duplicates. Treat it as a blocker: comment + `@mention` + `status:needs-input`
      + **stop** (see "Asking the human"). The pipeline (epic branch + dependency order)
      is supposed to give you the prerequisite; if it's absent, the right move is to wait,
      not to invent it.
@@ -57,7 +57,7 @@ a feature branch.
      #1213 pi run turned a one-command scaffold into **109 turns / $4.14** of manual work that was
      off-standard **and hid the real bug**. An unexpected failure of the *intended* path is a
      **stop signal**, not a puzzle to solve: comment the exact error + what you tried + what you'd
-     need to proceed, `@mention` `NOTIFY_HANDLE`, set `status:blocked`, and **stop**. Bounded cost
+     need to proceed, `@mention` `NOTIFY_HANDLE`, set `status:needs-input`, and **stop**. Bounded cost
      (~5 turns, not 100+), the real problem surfaced for a one-time fix, no non-conformant output.
    - **Don't silently diverge from the epic's design.** If implementing the issue as
      written would contradict the epic's stated model/invariant (e.g. the epic says "use
@@ -79,7 +79,7 @@ a feature branch.
      `app.config.ts`), or app CSS / Tailwind tokens. **Not** UI: pure `<script>`/types,
      `server/**`, config, tests, docs. → Run the **`ui-proposal`** skill. **Default**: deploy a
      rough build to staging with `NUXT_PUBLIC_CROUTON_REVIEW=true` (via `/poc-deploy` or
-     `cf:staging`), post the preview URL on the draft PR, hold on `status:blocked`. **Fallback
+     `cf:staging`), post the preview URL on the draft PR, hold on `status:needs-input`. **Fallback
      (`--static`)**: when staging is unavailable — generate a static mockup (`<slug>.html` +
      `<slug>.md` + PNG), commit, post the PNG as a `<!-- ui-proposal:<slug> -->` sticky comment.
    - **(b) Schema sign-off (data model).** Fires when the issue **creates or changes a collection
@@ -98,7 +98,7 @@ a feature branch.
      test is approved.
    - For whichever gate fired: **open the PR early as a draft** (same base rules as the "Open a
      PR" step), steer feedback to **inline comments on the committed `.md`** in the diff, apply
-     `status:blocked`, @mention `@pmcp` noting what's awaiting sign-off, and **STOP** — do not
+     `status:needs-input`, @mention `@pmcp` noting what's awaiting sign-off, and **STOP** — do not
      build/generate. The shared revision/approval loop (below, #310) iterates on feedback and
      resumes you on approval.
 6. **Implement** per the issue. Honour every CLAUDE.md rule:
@@ -106,7 +106,7 @@ a feature branch.
    - **`packages/` HARD GATE** — do NOT edit anything under `packages/` unless this epic
      was approved to (epic-scoped approval — see "Epic-scoped package approval" below; the
      gate honours `$CROUTON_PACKAGE_EDIT_APPROVED`). If the edit isn't covered by the
-     epic's approval, it's a **blocker**: comment + @mention + `status:blocked` + stop.
+     epic's approval, it's a **blocker**: comment + @mention + `status:needs-input` + stop.
      Do not work around the gate.
    - **Changed a `package.json` dependency? Run `pnpm install` and commit the lockfile
      (HARD RULE, #614).** Any add/remove/bump of a dep, devDep, or workspace `@fyit/*` link
@@ -143,7 +143,7 @@ a feature branch.
      PR won't — the epic→`main` PR closes them later. So the breadcrumb comment (above) is
      how the issue reflects "done-for-now," not the merge.
    - **`Closes` ONLY your own issue — `Refs`, never `Closes`, any OTHER blocked issue (#1253).**
-     A root-cause-fix PR that `Closes` a `status:blocked` retest/sibling issue auto-closes it
+     A root-cause-fix PR that `Closes` a `status:needs-input` retest/sibling issue auto-closes it
      out from under the owner's pending reply (PR #1234 closed the #1233 retest 2s before the
      owner's answer). Reference related blocked issues with `Refs #NN`; only the issue this PR
      implements gets `Closes`. `warn-closes-blocked.yml` flags violations on non-epic PRs.
@@ -180,10 +180,10 @@ skill for POC apps, or `pnpm cf:staging` for `apps/`). Run the **`ui-proposal`**
 (live-preview mode). Then:
 
 1. Post the preview URL on the draft PR: `🔍 Live preview: https://<name>.pmcp.dev`
-2. Apply `status:blocked`, @mention `@pmcp`, and **stop**.
+2. Apply `status:needs-input`, @mention `@pmcp`, and **stop**.
 3. On each `🎯 Preview feedback` comment (pinned by the reviewer on the running page): read
    the named source file, fix it, commit, redeploy. Reply to the comment when done.
-4. On `approve` / `lgtm` reply: remove `status:blocked`, note "approved → building" on the
+4. On `approve` / `lgtm` reply: remove `status:needs-input`, note "approved → building" on the
    PR, and resume implementation.
 
 ### Fallback: static mockup (`--static`)
@@ -198,16 +198,16 @@ deploy pipeline is down). Run the **`ui-proposal`** skill with `--static`. Then:
   "opens as code" on mobile (#569/#613). See the `ui-proposal` skill step 4 for the exact comment.
   **Steer feedback to inline comments on the committed `.md`** — the PNG is the glance, the
   `.md` diff is the actionable surface.
-- Apply `status:blocked`, @mention `@pmcp`, and **stop**.
+- Apply `status:needs-input`, @mention `@pmcp`, and **stop**.
 - On change requests: revise the mockup files, re-render the PNG, **edit the sticky comment
   in place** (never post a new one), and reply to/resolve each inline thread you addressed.
-- On `approve` / `lgtm` reply: remove `status:blocked` and resume.
+- On `approve` / `lgtm` reply: remove `status:needs-input` and resume.
 
 ### Both paths share these rules
 
 - **Conservative by design.** False-negative (treat borderline as non-UI) is cheaper than
   false-positive. When unsure, don't gate.
-- **The hold is `status:blocked`** — with an @mention of the notify handle so the owner is
+- **The hold is `status:needs-input`** — with an @mention of the notify handle so the owner is
   pinged. You stop after posting; you do not implement further.
 - **Where the loop continues:** the revision/approval loop (#310) watches the PR; the
   post-build before/after screenshot (#311) closes it.
@@ -216,7 +216,7 @@ deploy pipeline is down). Run the **`ui-proposal`** skill with `--static`. Then:
 - **The sign-off request is a TOP-LEVEL comment.** Post it with `add_issue_comment` on the draft
   PR/issue — **not** a PR *review* body (state `COMMENTED`), which the owner can miss (#846). The
   detailed review (preview URL, field table, test cases) can live in the PR; the actionable
-  `@mention` + `status:blocked` ask stands alone as a top-level comment so it notifies.
+  `@mention` + `status:needs-input` ask stands alone as a top-level comment so it notifies.
 
 ## Schema sign-off gate (#314)
 
@@ -232,7 +232,7 @@ expensive after generation. A task with no schema change skips this gate.
   table (one field per row) is the **actionable** surface — the reviewer inline-comments a field
   ("make this `decimal`", "add a `slug`") in "Files changed". The PNG (sticky comment marked
   `<!-- schema-review:<collection> -->`) is the at-a-glance visual.
-- **The hold is `status:blocked`** — you stop after posting and do **not** run `crouton config`
+- **The hold is `status:needs-input`** — you stop after posting and do **not** run `crouton config`
   or write any generated files.
 - **Same loop, same approval signal** as the UI gate (below). On approval, **generate** the
   collection (`crouton config`), then continue (typecheck → commit → PR ready).
@@ -257,7 +257,7 @@ write the implementation to make it green. The test is the contract; "done" = it
 - **Review happens on the diff.** The committed failing test (e.g. `*.test.ts` beside the source)
   is the **actionable** surface — the reviewer inline-comments an `it(...)` to change a case. State
   the plain-language edge-case list alongside it so sign-off is about behaviour, not syntax.
-- **The hold is `status:blocked`** — you stop after committing the test and do **not** write the
+- **The hold is `status:needs-input`** — you stop after committing the test and do **not** write the
   implementation.
 - **Same loop, same approval signal** as the UI/schema gates (below). On `lgtm`/`approve`, write
   the code to make the test green, then continue (typecheck → commit → PR ready). **Red before
@@ -274,7 +274,7 @@ human's session subscribes and drives it per the harness's "Handling PR Activity
 rules). Fully-headless, workflow-driven watching of the autonomous pipeline is tracked
 separately under #336 — don't build it here.
 
-While the PR is held (`status:blocked` + a `<!-- ui-proposal:<slug> -->` or
+While the PR is held (`status:needs-input` + a `<!-- ui-proposal:<slug> -->` or
 `<!-- schema-review:<collection> -->` sticky comment), each human (non-bot) reply is one of two
 things:
 
@@ -293,7 +293,7 @@ things:
   nothing listens for an `ui-approved` label, so neither one will unblock a gate (#572). Tell the
   reviewer to *reply* `lgtm`/`approve`, not react.
 
-  On approval: remove `status:blocked`, drop a short "approved → building/generating" note on the
+  On approval: remove `status:needs-input`, drop a short "approved → building/generating" note on the
   sticky comment, and **resume** (step 6 onward) — build the UI, or run `crouton config` to
   generate the collection. For a UI change the post-build before/after screenshot (#311) closes
   the loop; the draft PR is then marked ready.
@@ -331,7 +331,7 @@ also honours, inherited by this worker). You do **not** create or edit the
 `.claude/.package-edit-approved` file yourself — the gate denies that on purpose, and that
 file must never be committed (a CI guard fails any PR to `main` that contains it). If your
 package edit isn't covered by the epic's approval, that's a blocker — comment + @mention +
-`status:blocked` + stop.
+`status:needs-input` + stop.
 
 ## `.github/workflows/` boundary — embed-patch convention (#1076)
 
@@ -355,7 +355,7 @@ job):
   minimal — just the lines a maintainer needs to paste or `git apply`.
 - **Flag it, don't necessarily hold it.** `add_issue_comment` a plain top-level note (not a PR
   *review* body) naming the pending patch and @mentioning the notify handle. Only add
-  `status:blocked` if the omitted workflow change is load-bearing for the rest of the PR to work
+  `status:needs-input` if the omitted workflow change is load-bearing for the rest of the PR to work
   (e.g. new CI can't run without it) — if the rest of the PR stands on its own, this is an FYI,
   not a hold.
 - **This shape is a legitimate, complete deliverable — not a partial run.** "PR opened (with
@@ -385,7 +385,7 @@ You may be running headless — do NOT use `AskUserQuestion` (it times out). On 
 blocker** (the `packages/` gate, a missing decision, a failing approach you can't resolve
 on your own): `add_issue_comment` on the issue, **@mention the notify handle (`@pmcp` —
 `NOTIFY_HANDLE` in the task-decompose skill)** so they get a notification, apply
-`status:blocked`, and **stop**. Do not silently guess past a blocker. Small implementation
+`status:needs-input`, and **stop**. Do not silently guess past a blocker. Small implementation
 choices don't need a ping — make them and note them in the PR body.
 
 **The comment is a HANDOFF, not just a question (#639).** The owner's reply spawns a

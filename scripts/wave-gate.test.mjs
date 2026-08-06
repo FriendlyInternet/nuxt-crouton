@@ -162,7 +162,7 @@ test('releaseLabel honours a recorded dispatch, else falls back to delegate', ()
 
 test('an unrecognised dispatch value is NOT applied as a label', () => {
   // the body is model-authored and this value becomes a label that starts a run — allow-list only
-  for (const bad of ['status:blocked', 'epic', 'rm -rf', 'WORK-THIS', 'delegate-hard']) {
+  for (const bad of ['status:needs-input', 'epic', 'rm -rf', 'WORK-THIS', 'delegate-hard']) {
     assert.equal(releaseLabel(`<!-- pipeline: epic=1 dispatch=${bad} -->`), 'delegate', `must reject: ${bad}`)
   }
 })

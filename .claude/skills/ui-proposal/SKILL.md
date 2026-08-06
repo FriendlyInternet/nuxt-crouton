@@ -53,11 +53,11 @@ The loop (capture tooling provided by `@fyit/crouton-devtools`):
    Each pin posts a 🎯 Preview feedback comment here naming the source file.
    Reply `lgtm` or `approve` when satisfied.
    ```
-4. **Apply `status:blocked`**, @mention `@pmcp`, and **stop**. Do not build further until
+4. **Apply `status:needs-input`**, @mention `@pmcp`, and **stop**. Do not build further until
    approved.
 5. **On each `🎯 Preview feedback` comment:** read the named source file, make the change,
    commit, redeploy. Reply to the comment when done.
-6. **On `approve` / `lgtm` reply:** remove `status:blocked`, drop a short note on the PR,
+6. **On `approve` / `lgtm` reply:** remove `status:needs-input`, drop a short note on the PR,
    and resume building/generating (step 6 of `task-worker`).
 
 ### Env contract (already wired by WS2 of epic #590)
@@ -162,14 +162,14 @@ it lands in "Files changed" so the reviewer can inline-comment a specific change
    > URL can't detect. Re-post with an HTML `<img src="<raw-url>" alt="…" width="380">` tag (a URL
    > in an attribute can't be auto-wrapped) and re-read to confirm. (#1615)
 5. **Steer feedback to the `.md`** — inline comments in the diff (PR) or on the committed file.
-6. Apply `status:blocked`, @mention `@pmcp`, and **stop**.
+6. Apply `status:needs-input`, @mention `@pmcp`, and **stop**.
 
 ### Step 5 — Revision loop (both paths share this)
 On each change request: revise the proposal (mockup files for `--static`, source file for
 live-preview), re-render / redeploy, **edit the sticky comment in place** (never post a new
 one), and reply to/resolve each inline thread you addressed. Commit and push.
 
-On `approve` / `lgtm` reply: remove `status:blocked`, note "approved → building" on the
+On `approve` / `lgtm` reply: remove `status:needs-input`, note "approved → building" on the
 sticky comment, and resume.
 
 ---

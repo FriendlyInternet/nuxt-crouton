@@ -183,10 +183,10 @@ test('runActions on a signoff hold comments the forks + blocks the epic, never c
   // held, not created
   assert.equal(summary.held.length, 1)
   assert.equal(summary.created.length, 0)
-  // posted a comment on the target epic + added status:blocked
+  // posted a comment on the target epic + added status:needs-input
   const kinds = calls.map(c => c.slice(1, 4).join(' '))
   assert.ok(kinds.some(k => k.startsWith('issue comment 1706')), 'comments on the epic')
-  assert.ok(calls.some(c => c.includes('--add-label') && c.includes('status:blocked')), 'adds status:blocked')
+  assert.ok(calls.some(c => c.includes('--add-label') && c.includes('status:needs-input')), 'adds status:needs-input')
   // NEVER creates a worker child for a design decision
   assert.ok(!kinds.some(k => k.startsWith('issue create')), 'no children created')
   // the comment carries the forks + the hold instruction
@@ -213,10 +213,10 @@ test('runActions on a leaf edits the target body and labels it (mock exec)', () 
 // ── #1745: a hold is an ASK, so it must NOTIFY ────────────────────────────────────────
 // The pi contract now tells the agent that in plan-only mode the {"signoff"} shape IS its
 // asking channel, and promises the apply step "@mentions the owner and applies
-// status:blocked for you". That promise was false when written — the rendered comment had
+// status:needs-input for you". That promise was false when written — the rendered comment had
 // no mention, so a hold landed silently and waited on someone happening to notice it.
 // These pin the promise so it can't silently regress into a lie again.
-test('a signoff hold @mentions the owner and holds status:blocked (mock exec)', () => {
+test('a signoff hold @mentions the owner and holds status:needs-input (mock exec)', () => {
   const calls = []
   const exec = (file, args) => { calls.push(args); return '' }
   const acts = planToActions(parsePlan({ signoff: { summary: 'the cutoff is a policy call', questions: ['14, 30 or 90 days?', 'delete or warn?'] } }), CTX)
@@ -228,8 +228,8 @@ test('a signoff hold @mentions the owner and holds status:blocked (mock exec)', 
   assert.match(written, /14, 30 or 90 days\?/)
   assert.match(written, /delete or warn\?/)
   // and it must actually hold, or the artifact-gate sees no sign-off and calls the run a no-op
-  const labelCalls = calls.filter(c => Array.isArray(c) && c.includes('status:blocked'))
-  assert.ok(labelCalls.some(c => c.includes('--add-label')), 'must apply status:blocked')
+  const labelCalls = calls.filter(c => Array.isArray(c) && c.includes('status:needs-input'))
+  assert.ok(labelCalls.some(c => c.includes('--add-label')), 'must apply status:needs-input')
 })
 
 // ── #1750: sibling ordering — dependent leaves must not all fire at once ─────────────

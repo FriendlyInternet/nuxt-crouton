@@ -41,7 +41,7 @@ below lists **how** to get it and how **precise** it is — be honest about the 
 |---|---|---|
 | **Time-in-progress** | `get_sub_issues` → per child `created_at` → `closed_at` | rough (proxy for build effort) |
 | **Sign-off rounds** | `issue_read get_comments` on the child's PR → count revisions on the `<!-- ui-proposal:* -->` / `<!-- schema-review:* -->` sticky thread + review replies | good (markers are explicit) |
-| **Asked-for-help / blocks** | `get_comments` → count `@`-mention + "blocked" comments; `get_labels` → is `status:blocked` still on it | good for *count* |
+| **Asked-for-help / blocks** | `get_comments` → count `@`-mention + "blocked" comments; `get_labels` → is `status:needs-input` still on it | good for *count* |
 | **Blocked duration** | not exposed directly (label add/remove timestamps aren't in these MCP methods) → approximate from the gap between the blocking comment and the resuming comment | weak — **state it's an approximation** |
 | **Re-work / commit churn** | `list_commits` on the PR branch → many "fix"/"oops" rounds = friction | available now |
 | **Fix-bot attempts** | the `claude/issue-*` retry count (from #336 watch-to-merge) | only when #336 is live → say "n/a" otherwise |

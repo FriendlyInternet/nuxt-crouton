@@ -7,7 +7,7 @@ name: Approve a held draft PR
 # Every approval workflow in this repo begins with `!github.event.issue.pull_request` —
 # `resume-on-comment.yml`, `close-epic-on-comment.yml`, `comment-dispatch.yml` — so a
 # comment on a PR reached nothing; and the issue-side route additionally requires
-# `status:blocked`, which the draft gate never set. Four PRs (#2039/#2041/#2044/#2025)
+# `status:needs-input`, which the draft gate never set. Four PRs (#2039/#2041/#2044/#2025)
 # were held with no key, releasable only by hand-clicking "Ready for review" — precisely
 # the mobile friction the gate exists to remove. The hold worked; its release was never
 # asserted.

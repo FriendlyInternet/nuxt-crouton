@@ -200,7 +200,7 @@ jobs:
               const sharedCode = files.filter(f => f.filename.startsWith('packages/'))
               if (sharedCode.length) {
                 core.info(`#${pull_number} touches packages/ (${sharedCode.length} file(s)) — holding for a human.`)
-                // `status:needs-merge`, NOT `status:blocked` (#2083). The two holds ask for
+                // `status:needs-merge`, NOT `status:needs-input` (#2083). The two holds ask for
                 // different things and used to share a label: a sign-off gate means "I asked
                 // you something and I'm waiting for a reply", this means "nothing to say —
                 // click merge". In a phone list view they were indistinguishable, so three

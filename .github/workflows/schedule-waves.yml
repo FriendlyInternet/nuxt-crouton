@@ -191,12 +191,12 @@ jobs:
                 try {
                   const gi = await github.rest.issues.get({ owner, repo, issue_number: n })
                   if (gi.data.state === 'closed') continue
-                  // #1035 incident: never auto-close a HELD issue. `status:blocked` means a
+                  // #1035 incident: never auto-close a HELD issue. `status:needs-input` means a
                   // sign-off or human step is pending — closing it destroys the hold ("done
                   // is signed off, not asserted"). The human closes it when the hold clears.
-                  const held = gi.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:blocked')
+                  const held = gi.data.labels.some(l => (typeof l === 'string' ? l : l.name) === 'status:needs-input')
                   if (held) {
-                    core.info(`#${n} is status:blocked (held for a human) — NOT auto-closing.`); continue
+                    core.info(`#${n} is status:needs-input (held for a human) — NOT auto-closing.`); continue
                   }
                   await github.rest.issues.update({ owner, repo, issue_number: n, state: 'closed', state_reason: 'completed' })
                   core.info(`Closed #${n} (its PR merged into ${base}) — release runs on the issues:closed event.`)
