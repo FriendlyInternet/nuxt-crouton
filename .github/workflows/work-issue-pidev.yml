@@ -872,6 +872,17 @@ jobs:
                   why = 'the finish step failed before it could commit anything'
                   action = 'open the run log at the `finish` step — a workflow bug, not an underspecified issue'
                   if (tail.trim()) detail = tail.trim()
+                } else if (/PI_TASK_COMPLETE_NOTHING_LEFT/.test(log)) {
+                  // #2104 — pi DELIBERATELY concluded nothing was left to do (the completion-
+                  // enforcer's escape marker, .pi/extensions/complete-work.ts) and ended without
+                  // saying so on the issue. The usual cause is a STALE THREAD: an old 🔀 hold, or
+                  // a "blocked on #X" note whose blocker has since closed — on #2037, #2070 was
+                  // fixed 4h earlier and nothing updated the thread pi read. The contract now
+                  // requires pi to verify cited blockers live and to post its nothing-left
+                  // conclusion as a hold; this bucket names an occurrence that slipped through.
+                  why = 'pi deliberately concluded there was NOTHING left to do and ended without saying so on the issue (`PI_TASK_COMPLETE_NOTHING_LEFT` in the log)'
+                  action = 'the thread probably reads as stale — re-read the newest 🔀 hold and any "blocked on #X" claim; if the blocker is resolved or the hold answered, reply stating the current state (e.g. "#X is closed — proceed with option A"), then re-dispatch (#2104)'
+                  if (tail.trim()) detail = tail.trim()
                 } else {
                   // LAST RESORT — no known cause matched. Say exactly that (#1876). The old text
                   // asserted "the issue is likely underspecified", which is a GUESS printed in the
