@@ -22,19 +22,77 @@ async threads on their phone: the comment must be graspable in **~10 seconds**,
 Post this as a **top-level issue comment** (`add_issue_comment`) — never a PR *review* body
 (the owner misses those, #846). One decision per comment; batch related questions into it.
 
+### First: which of the THREE shapes is this? (#2067)
+
+A hold is not always a question. State which, on line 2, with a mandatory `**Needs:**`
+line — the gate reads it to word the follow-up, and guessing is what broke #2054:
+
+| `Needs:` | You are asking the owner to | Typical cause |
+|---|---|---|
+| `answer` | **pick** between real options | a genuine fork — taste, priority, product intent |
+| `action` | **do** something you are not permitted to | `.github/workflows/**` (the App token can't write it, #1076) |
+| `approval` | **review** a diff or a preview | the UI / schema / test sign-off gates |
+
+Getting this wrong tells the owner to answer a question that was never asked. #2054 posted
+a patch-to-apply under the question shape, and the gate dutifully announced *"asked you a
+question"* above 4,372 characters containing no question.
+
+### The one hard layout rule
+
+**Everything that is not the ask goes inside `<details>`.** The visible part is ~10 lines:
+heading, provenance, `Needs:`, recommendation, reply instruction. Patches, diffs, findings,
+status, stack traces — all collapsed. Context and findings are welcome; they must not sit
+*in front of* the ask. The owner is on a phone holding twenty threads.
+
+### `Needs: answer` — a real fork
+
 ```
 ## 🔀 Blocked — <the one decision, in one line>
 > 🤖 **Claude Code** · interactive agent · posted from @pmcp's account (not Maarten) · _<one-line context>_
+**Needs:** answer
 
-**TL;DR — recommend <X>:** <the decision restated + why X is your pick, in one or two lines>
-**Status:** <what's done · `branch-name` pushed? · what's NOT done>
+**Recommend <X>** — <why, one line>
+**Reply:** `A` or `B` · your reply spawns a fresh session that resumes from THIS ticket
+
+<details><summary>Options + context</summary>
+
+- **A) <label>** — <consequence> _(recommended)_
+- **B) <label>** — <consequence>
+
 **Why it came up:** <what cannot proceed until this is answered>
-**Options:**
-  - **A) <label>** — <consequence> _(recommended)_
-  - **B) <label>** — <consequence>
-**Reply:** `A` or `B` (or in-medium — see below). Your reply spawns a fresh session that
-resumes from THIS ticket; `lgtm`/`approve` if A-as-recommended is fine.
+**Status:** <what's done · `branch-name` pushed? · what's NOT done>
 **Don't lose:** <decisions/assumptions the next agent must carry forward>
+</details>
+```
+
+### `Needs: action` — you cannot do it; the owner must
+
+```
+## 🔀 Blocked — <the one thing to DO, in one line>
+> 🤖 **pi.dev harness** · agent pipeline (CI) · _<one-line context>_
+**Needs:** action — apply the patch below
+
+**Why me and not you:** <the permission//tooling reason, one line>
+**Reply:** comment here when applied · that resumes the work in a fresh run
+
+<details><summary>The patch (apply as-is)</summary>
+
+<the diffs — however long; they live here, never in the body>
+</details>
+```
+
+### `Needs: approval` — a sign-off gate
+
+```
+## 🔀 Blocked — <what you're being asked to look at, in one line>
+> 🤖 **pi.dev harness** · agent pipeline (CI) · _<one-line context>_
+**Needs:** approval
+
+**Reply:** ✅ (or `lgtm`) to release · anything else is a change request
+
+<details><summary>What changed + evidence</summary>
+…
+</details>
 ```
 
 Rules that make it work:
