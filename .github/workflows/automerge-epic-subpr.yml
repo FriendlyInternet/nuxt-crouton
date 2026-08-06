@@ -60,7 +60,23 @@ name: Auto-merge epic sub-PRs
 # `workflow_run` DOES fire for Actions-generated completions. `CI` owns `CI Gate`, so its
 # completion is precisely the moment the answer can change. Same cure #1884 applied to
 # pipeline-pr-status.yml.
+# LEVEL-TRIGGERED BACKSTOP (#2091). Everything above is EDGE-triggered — a PR event, or a
+# workflow completing. A PR held at a moment when the answer was legitimately "not yet" is
+# therefore never re-asked, because its edges have all already fired: the pi worker pushes
+# exactly once (no `synchronize`), `check_suite` never fires for our own CI, and its `CI` run
+# completed long ago. Ten green sub-PRs sat stranded that way — CI went green in the 39-minute
+# window before #2013's re-evaluation existed, and nothing retroactively re-asks. Nothing was
+# red; the stale "CI Gate never reported" comment even read like an explanation.
+#
+# #1698 also measured GitHub intermittently DROPPING `pull_request` events (1 in 16). Under a
+# purely edge-triggered design every dropped event is a permanent strand.
+#
+# So: ask again, on a clock. The sweep only supplies CANDIDATES — every gate below (draft,
+# green, presence, shared-code, App-token merge) applies identically, so a PR that should be
+# held is re-asked and held again, not waved through.
 on:
+  schedule:
+    - cron: '17 * * * *'   # hourly, off-the-hour so it doesn't pile onto :00 with everything else
   pull_request:
     types: [opened, ready_for_review, synchronize]
   check_suite:
@@ -76,7 +92,9 @@ jobs:
   automerge:
     # On a PR event, evaluate it directly; on a check_suite, only when it went green
     # (a red/again-pending suite will re-fire this when it next completes green).
+    # `schedule` always runs — it carries no conclusion to filter on; it IS the "ask again".
     if: >
+      github.event_name == 'schedule' ||
       github.event_name == 'pull_request' ||
       (github.event_name == 'check_suite' && github.event.check_suite.conclusion == 'success') ||
       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
@@ -127,7 +145,25 @@ jobs:
 
             // Resolve candidate PR numbers from whatever event fired.
             const candidates = new Set()
-            if (context.eventName === 'pull_request') {
+            if (context.eventName === 'schedule') {
+              // The level-triggered sweep (#2091): there is no event payload to read from, so
+              // enumerate the population directly — every open, non-draft PR targeting an epic
+              // branch. Drafts are the sign-off gates and are merged by resume-on-comment on
+              // approval, never here.
+              //
+              // The cap is stated out loud rather than silently truncating: a sweep that
+              // quietly stops halfway would strand exactly the PRs it exists to rescue, which
+              // is the bug in a new costume.
+              const SWEEP_MAX = 100
+              const open = await github.paginate(github.rest.pulls.list,
+                { owner, repo, state: 'open', per_page: 100 })
+              const subPrs = open.filter(p => !p.draft && p.base.ref.startsWith('epic/'))
+              for (const p of subPrs.slice(0, SWEEP_MAX)) candidates.add(p.number)
+              core.info(`Sweep: ${open.length} open PRs, ${subPrs.length} open non-draft sub-PRs on epic branches.`)
+              if (subPrs.length > SWEEP_MAX) {
+                core.warning(`Sweep cap ${SWEEP_MAX} reached — ${subPrs.length - SWEEP_MAX} sub-PR(s) NOT evaluated this tick. They will be picked up next hour, but if this recurs the cap needs raising.`)
+              }
+            } else if (context.eventName === 'pull_request') {
               candidates.add(context.payload.pull_request.number)
             } else {
               // check_suite and workflow_run carry the same two useful fields under
