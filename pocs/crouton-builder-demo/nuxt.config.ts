@@ -7,7 +7,7 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   // @fyit/crouton-devtools registers the dev/review launcher — Console (eruda) + Annotate (pin
-  // feedback → /api/_review → PR comment). Activated on staging by NUXT_PUBLIC_CROUTON_REVIEW=true
+  // feedback → /api/_feedback → PR comment). Activated on staging by NUXT_PUBLIC_CROUTON_REVIEW=true
   // (set in cf:staging); zero production footprint. Supersedes the deprecated /eruda extends layer.
   modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],

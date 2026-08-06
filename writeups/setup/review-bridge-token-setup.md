@@ -21,7 +21,7 @@
   live in the Worker; the central mint is the teams-era step (#519).
 - **App permission used:** *Pull requests: write* (PR conversation comment). The App also holds
   *Contents: write* for the ticket-editor (#503) — not used here.
-- **Consumer:** `@fyit/crouton-devtools` → `POST /api/_review`
+- **Consumer:** `@fyit/crouton-devtools` → `POST /api/_feedback`
   (`packages/crouton-devtools/src/runtime/server/api/review.post.ts`).
 - **Action:** `POST /repos/{owner}/{repo}/issues/{pr}/comments` (a `🎯 Preview feedback` comment).
 - **Gate:** staging only — behind `NUXT_PUBLIC_CROUTON_REVIEW=true`; absent from production builds.

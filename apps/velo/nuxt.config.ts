@@ -6,7 +6,13 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton'],
+  // crouton-devtools is what INSTALLS the review overlay (it gates + installs
+  // @fyit/crouton-feedback). Without it, `NUXT_PUBLIC_CROUTON_REVIEW=true` sets a
+  // flag no module reads and a "review preview" serves nothing to pin a comment on
+  // (#2073). In a production build the module gates itself off entirely — it
+  // returns before installing anything unless dev / the devtools flag / the review
+  // flag is set — so this costs a normal deploy nothing.
+  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },

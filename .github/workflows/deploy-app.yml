@@ -371,7 +371,8 @@ jobs:
 
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)
-      # but the bridge (`/api/_review`, @fyit/crouton-devtools) also needs RUNTIME config to
+      # but the bridge (`POST /api/_feedback`, installed by @fyit/crouton-devtools via
+      # @fyit/crouton-feedback — it was `/api/_review` before the #960 extraction) also needs RUNTIME config to
       # know which PR to post to and how to auth — which no deploy ever set, so every overlay
       # comment 4xx'd "Review bridge not configured". These two steps inject it on staging,
       # PR-tied deploys: routing (repo + PR) + the Nuxt Harness App creds (so the bridge mints
@@ -415,13 +416,28 @@ jobs:
           rm -f "$RUNNER_TEMP/review-secrets.json"
           echo "✓ Wired preview-review bridge → PR #$PR on $REPOSITORY (posts as nuxt-harness[bot])"
 
-      # ── PROVE the overlay is actually there (#2070) ─────────────────────────────
+      # ── PROVE the overlay is actually there (#2070, corrected in #2073) ────────
       # Wiring the bridge's secrets says nothing about whether the deployed build SERVES
-      # the overlay — and for two years it didn't, silently: deploy green, secrets set,
-      # `/api/_review` 404, every "walk the preview" link inert. Same class as #2045's
-      # blank screenshot: an artifact that looks like a deliverable and isn't. Probe the
-      # live URL and FAIL, so a preview that can't be reviewed never gets handed over as
-      # one. Report-only would just re-create the silence.
+      # the overlay — and it didn't, silently: deploy green, secrets set, no overlay,
+      # every "walk the preview" link inert. Same class as #2045's blank screenshot: an
+      # artifact that looks like a deliverable and isn't. So probe the live URL and FAIL,
+      # rather than hand over a preview that can't be reviewed.
+      #
+      # #2073 — the FIRST version of this probe checked `/api/_review`, a route that does
+      # not exist anywhere in the repo (the real handler is `/api/_feedback`, registered by
+      # @fyit/crouton-feedback). It would have failed on a perfectly good preview too, which
+      # is the "run the rule over the corpus, not just its tests" lesson in miniature: a
+      # gate authored from an imagined interface refuses correct builds. Both assertions
+      # below were run against a real app before landing.
+      #
+      # TWO independent signals, because each catches a different half:
+      #   • POST /api/_feedback   — the module is INSTALLED (the app must consume
+      #                             @fyit/crouton-devtools; velo/kassa/triage did not).
+      #                             POST, not GET: the handler is method-scoped, so a GET
+      #                             falls through to 404 even when it's registered.
+      #   • croutonReview in HTML — the review FLAG reached the build
+      #                             (`runtimeConfig.public.croutonReview = true`, set only
+      #                             when NUXT_PUBLIC_CROUTON_REVIEW === 'true').
       - name: Verify the review overlay is live
         if: ${{ inputs.environment == 'staging' && inputs['review-pr'] != '' }}
         env:
@@ -429,14 +445,32 @@ jobs:
         run: |
           set -o pipefail
           [ -z "$URL" ] && { echo "::error::review deploy has no URL to probe"; exit 1; }
-          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 "$URL/api/_review" || echo 000)"
+          fail=0
+
+          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+                    -X POST -H 'content-type: application/json' -d '{}' \
+                    "$URL/api/_feedback" || echo 000)"
           if [ "$code" = "404" ] || [ "$code" = "000" ]; then
-            echo "::error::The review overlay is NOT live at $URL (/api/_review → $code)."
-            echo "::error::This preview cannot be reviewed — do not hand out the link. Check that"
-            echo "::error::NUXT_PUBLIC_CROUTON_REVIEW reached the build (#2070)."
+            echo "::error::No feedback endpoint at $URL (POST /api/_feedback → $code)."
+            echo "::error::The app does not install the overlay — add '@fyit/crouton-devtools'"
+            echo "::error::to its nuxt.config modules + dependencies (#2073)."
+            fail=1
+          else
+            echo "✓ feedback endpoint live (POST /api/_feedback → $code)"
+          fi
+
+          if curl -s --max-time 30 "$URL/" | grep -q 'croutonReview'; then
+            echo "✓ review flag present in the served HTML"
+          else
+            echo "::error::The review flag did not reach the build at $URL."
+            echo "::error::NUXT_PUBLIC_CROUTON_REVIEW must be 'true' at BUILD time (#2070)."
+            fail=1
+          fi
+
+          if [ "$fail" = "1" ]; then
+            echo "::error::This preview cannot be reviewed — do not hand out the link."
             exit 1
           fi
-          echo "✓ review overlay live at $URL (/api/_review → $code)"
 
       # Guarantee a new app can AUTHENTICATE on first deploy with ZERO per-app setup.
       # A freshly provisioned Worker has no secrets, so member login 500s with
