@@ -58,9 +58,12 @@ function handleOpenPanel() {
     class="block-wrapper my-1 cursor-pointer"
     :class="{ 'border-l-2 border-l-primary/50': selected }"
     data-type="triage-block"
-    @dblclick="handleOpenPanel"
   >
-    <div ref="innerRef" class="relative group rounded border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50 transition-colors">
+    <div
+      ref="innerRef"
+      class="relative group rounded border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50 transition-colors"
+      @click="handleOpenPanel"
+    >
       <div class="p-3">
         <!-- Block Header -->
         <div class="flex items-center justify-between mb-2">
@@ -84,7 +87,7 @@ function handleOpenPanel() {
             </span>
           </div>
           <!-- Action buttons -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <button
               type="button"
               class="p-1 text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
