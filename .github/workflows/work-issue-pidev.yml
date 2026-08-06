@@ -566,6 +566,14 @@ jobs:
             { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$UI_TOUCHED" = "1" ]; } && DRAFT_FLAG="--draft"
             HOLD_NOTE=""
             [ "$UI_TOUCHED" = "1" ] && HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `lgtm` to release it. Evidence should be attached above; if it is missing, that is a harness bug (#1748), not a reason to approve blind.')"
+            # #2054: a UI-held draft is invisible everywhere except the PR's draft flag —
+            # the board, the epic digest, and the issue-side `resume-on-comment.yml` route
+            # (which requires status:blocked) can't see it. Label the ISSUE too. State only —
+            # nothing triggers off this label (#572); the PR-side ✅/`lgtm` route (#2052)
+            # remains primary since that's where the reviewer is looking.
+            if [ "$UI_TOUCHED" = "1" ]; then
+              gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
+            fi
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$(git log -1 --format=%s)" \

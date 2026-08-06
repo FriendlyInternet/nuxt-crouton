@@ -90,6 +90,16 @@ jobs:
               `mutation($id:ID!){ markPullRequestReadyForReview(input:{pullRequestId:$id}){ pullRequest { id } } }`,
               { id: pr.node_id })
 
+            // #2054: release the issue-side status:blocked the draft-open step (work-issue-pidev.yml)
+            // may have set. Resolve the issue from "Closes #NN" in the PR body — same pattern
+            // resume-on-comment.yml uses. Best-effort: a PR with no Closes line just has nothing to clear.
+            const closesMatch = (pr.body || '').match(/\bCloses\s+#(\d+)/i)
+            if (closesMatch) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number: Number(closesMatch[1]), name: 'status:blocked' })
+              } catch (e) { /* label may not have been set (non-UI PR) — fine */ }
+            }
+
             const kind = approvalKind(body) === 'check' ? '✅' : '`lgtm`'
             await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body:
               `✅ **Released — marked ready for review** (${kind} from @${context.payload.comment.user.login}).\n\n`
