@@ -18,7 +18,19 @@ name: Fix CI on failure
 
 on:
   workflow_run:
-    workflows: ["CI", "E2E"]
+    # `Deploy Apps (Cloudflare Workers)` added in #2089. The reflex is that a deploy failure is
+    # infrastructure, not code, so an agent shouldn't edit in response — but the evidence says
+    # otherwise: every deploy failure on 2026-08-06 was a genuine code bug (#2078 the migrate
+    # config, #2085 the missing database_id, #2087 the two-dot diff), and each sat red until a
+    # human read the log. A deploy that fails IS a failing check on the PR, and leaving one
+    # class of red out of the loop is how it stops being a loop.
+    #
+    # What bounds the risk is already here and unchanged: the `ci-fix-attempts:3` cap, the
+    # packages/ stop, and the pipeline-branch guard — so a genuinely transient Cloudflare blip
+    # costs at most three attempts and then hands over with `status:needs-input` rather than
+    # looping. The name must match the workflow's `name:` LITERALLY or this silently never
+    # fires, which is the exact bug #2089 is about.
+    workflows: ["CI", "E2E", "Deploy Apps (Cloudflare Workers)"]
     types: [completed]
 
 permissions: {}

@@ -55,7 +55,7 @@ test('the prefix list is exported so the workflows share one definition', () => 
  * So this test reads the actual workflow files and asserts they agree with the module. It
  * fails if someone adds a prefix here and forgets a workflow, or vice versa.
  */
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -77,3 +77,30 @@ for (const wf of WORKFLOWS) {
     }
   })
 }
+
+/* ── The fix-bot's trigger names must name REAL workflows ──────────────────────
+ *
+ * `workflow_run.workflows` matches on a workflow's `name:` STRING. A typo, or a workflow
+ * later renamed, doesn't error — the trigger just never fires again. That is the same silent
+ * class as the branch guard above: nothing red, nothing to notice, the loop simply stops.
+ * So assert every listed name resolves to an actual workflow file.
+ */
+test('every workflow the fix-bot listens to actually exists by that name', () => {
+  const wfDir = join(repoRoot, '.github/workflows')
+  const listed = readFileSync(join(wfDir, 'fix-ci-on-failure.yml'), 'utf8')
+    .match(/workflows:\s*\[([^\]]+)\]/)[1]
+    .split(',').map((s) => s.trim().replace(/^["']|["']$/g, ''))
+
+  const realNames = new Set(
+    readdirSync(wfDir)
+      .filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))
+      .map((f) => (readFileSync(join(wfDir, f), 'utf8').match(/^name:\s*(.+)$/m) || [])[1])
+      .filter(Boolean)
+      .map((n) => n.trim().replace(/^["']|["']$/g, '')),
+  )
+
+  assert.ok(listed.length > 0, 'the trigger list should not be empty')
+  for (const name of listed) {
+    assert.ok(realNames.has(name), `fix-ci-on-failure listens for "${name}", which no workflow is named — it would never fire`)
+  }
+})
