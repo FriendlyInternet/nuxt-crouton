@@ -16,7 +16,7 @@
  * <CroutonPagesEditorSettingsTab
  *   v-model:translations="state.translations"
  *   :editing-locale="editingLocale"
- *   :has-ai="hasAI"
+ *   :has-ai="hasAi"
  *   :field-options="fieldOptions"
  *   :field-placeholders="docFieldPlaceholders"
  *   :has-metadata="hasMetadata"
@@ -84,7 +84,7 @@ interface LayoutOption {
 interface Props {
   translations: Record<string, any>
   editingLocale: string
-  hasAI: boolean
+  hasAi: boolean
   fieldOptions: Record<string, any>
   fieldPlaceholders: Record<string, string>
   hasMetadata?: boolean
@@ -116,7 +116,10 @@ interface Props {
 defineProps<Props>()
 
 const emit = defineEmits<{
-  'update:translations': [value: Record<string, any>]
+  // Nullable on purpose: the underlying i18n input emits `TranslationsValue`, which
+  // includes `null` (a cleared field). Narrowing it to `Record<string, any>` is what
+  // broke typecheck when the extraction made this binding explicit.
+  'update:translations': [value: Record<string, any> | null]
   'update:pageType': [value: string]
   'update:showInNavigation': [value: boolean]
   'update:layout': [value: string]
@@ -143,7 +146,7 @@ const metaFields = ['title', 'slug']
       layout="tabs"
       :active-locale="editingLocale"
       hide-locale-switcher
-      :show-ai-translate="hasAI"
+      :show-ai-translate="hasAi"
       field-type="page"
       :field-options="fieldOptions"
       :field-placeholders="fieldPlaceholders"
