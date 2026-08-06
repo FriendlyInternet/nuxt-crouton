@@ -22,6 +22,30 @@ async threads on their phone: the comment must be graspable in **~10 seconds**,
 Post this as a **top-level issue comment** (`add_issue_comment`) — never a PR *review* body
 (the owner misses those, #846). One decision per comment; batch related questions into it.
 
+### Before any of this: could you just DO your own recommendation?
+
+If your recommended option is something you are **permitted and able to do**, and doing it
+is **reversible**, then it is not a question — **do it, log the assumption, and report the
+result.** The `AGENTS.md` decide-vs-ask test has three conditions and this fails at least
+two of them.
+
+The failure looks like this ([FRI-584](https://linear.app/pmcp/issue/FRI-584), verbatim):
+
+> **A)** Ride `apps/velo` staging … Reply here with the preview URL if one's already live,
+> or say "deploy velo staging with review on" and a follow-up run will do it. _(recommended)_
+> **B)** Pick one of the three in-flight sibling PRs and redeploy that branch …
+> **Reply:** A or B
+
+The issue was *"produce a walkable preview URL"*. The deliverable **was** the link. Both
+options are ordinary staging deploys — reversible, mechanical, no taste involved — and the
+agent could dispatch either. Asking converted a five-minute action into a round-trip, and
+handed back a wall of setup choices instead of the one thing that was wanted.
+
+**Rule:** an ask whose options are all things you could have done is not an ask. Pick the
+recommendation, do it, and report. Ask only about the part you genuinely cannot resolve —
+and if the whole task turns out to be blocked by something structural, that is a `Needs:
+action` hold naming *that*, not a menu.
+
 ### First: which of the THREE shapes is this? (#2067)
 
 A hold is not always a question. State which, on line 2, with a mandatory `**Needs:**`
