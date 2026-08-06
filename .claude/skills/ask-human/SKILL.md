@@ -72,7 +72,7 @@ status, stack traces — all collapsed. Context and findings are welcome; they m
 
 ```
 ## 🔀 Blocked — <the one decision, in one line>
-> 🤖 **Claude Code** · interactive agent · posted from @pmcp's account (not Maarten) · _<one-line context>_
+> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _<one-line context>_
 **Needs:** answer
 
 **Recommend <X>** — <why, one line>
@@ -127,8 +127,12 @@ Rules that make it work:
   agents post under @pmcp's account → use the "not Maarten" disclaimer above. A bot-account
   pipeline comment uses `> 🤖 **<tool>** · agent pipeline (CI) · _<context>_` instead (no
   @pmcp disclaimer — it'd be false).
-- **@mention only because action is needed.** This is an ask → `@mention @pmcp`
-  (`NOTIFY_HANDLE`). Pure FYIs get no mention.
+- **@mention only because action is needed.** This is an ask → mention `@pmcp`
+  (`NOTIFY_HANDLE`). Pure FYIs get no mention — and note the mandatory provenance disclaimer
+  writes the handle in a **code span** (`` `@pmcp` ``) precisely so it names the account
+  without notifying. GitHub linkifies mentions inside blockquotes and `<details>` too; code
+  spans and fenced blocks are the only places it doesn't. (#2081: 17 of the last 29
+  notifications were that disclaimer line and nothing else.)
 - **Push before you block.** If you've written anything, `git push -u origin <branch>` first
   and name that branch under *Status* — an unpushed worktree is lost on stop (#639).
 - Then apply `status:blocked` and **stop**.

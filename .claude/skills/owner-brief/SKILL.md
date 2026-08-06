@@ -18,17 +18,41 @@ So: **lead with a typed brief, collapse the rest.** Same comment, same content, 
 Pick exactly one. The last three are `ask-human`'s existing shapes — this is one vocabulary,
 not a parallel system; reach for that skill's templates when the brief is a hold.
 
-| | type | means | typical follow-up |
-|---|---|---|---|
-| 🔴 | **Issue** | something is broken or wrong | you decide whether it's worth fixing now |
-| 💡 | **Proposal** | a suggestion you can take or drop | yes / no / later |
-| ✅ | **Done** | landed and verified | nothing — do not @mention |
-| 🔀 | **Choice** | a real fork, needs your pick | `A` / `B` |
-| 🛠 | **Action** | you must do something the agent can't | do it, then comment |
-| 👀 | **Review** | approve or reject a diff/preview | ✅ / `lgtm` / changes |
+| | type | means | typical follow-up | may @mention? |
+|---|---|---|---|---|
+| 🔴 | **Issue** | something is broken or wrong | you decide whether it's worth fixing now | yes |
+| 💡 | **Proposal** | a suggestion you can take or drop | yes / no / later | yes |
+| ✅ | **Done** | landed and verified | nothing | **no** |
+| 🔀 | **Choice** | a real fork, needs your pick | `A` / `B` | yes |
+| 🛠 | **Action** | you must do something the agent can't | do it, then comment | yes |
+| 👀 | **Review** | approve or reject a diff/preview | ✅ / `lgtm` / changes | yes |
 
 If two apply, pick the one that describes **what you need back**, not what you did. A bug you
 already fixed is ✅, not 🔴.
+
+## The other half: don't spend a mention on nothing
+
+**An @mention is a request for action.** Spending one on an FYI teaches the owner to ignore
+mentions, which costs far more than the notification. The gate refuses a ✅ carrying a live
+mention.
+
+**Where the noise actually came from.** Over the last 100 comments, 29 would notify the owner
+and **17 of those carried no ask at all** — their only mention was the mandatory provenance
+disclaimer, `posted from @pmcp's account`. It sits in a blockquote, so a reader never sees it,
+and GitHub notifies anyway. That was **59% of every ping**.
+
+So the disclaimer now writes the handle in a **code span**:
+
+```
+> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten)
+```
+
+It renders identically and does not notify. Backticking it across the templates removes those
+17 pings; the 12 that remain are genuine asks.
+
+**GitHub notifies for a mention inside a blockquote and inside `<details>`.** Code spans and
+fenced blocks are the only places it doesn't. So "hide it in the collapsed section" does *not*
+make a mention silent — backtick it, or don't write it.
 
 ## The shape
 

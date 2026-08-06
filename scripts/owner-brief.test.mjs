@@ -11,13 +11,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  checkOwnerBrief, visiblePart, isAgentComment, explain,
+  checkOwnerBrief, visiblePart, isAgentComment, notifiesOwner, briefType, explain,
   MAX_VISIBLE_CHARS, MAX_VISIBLE_LINES, BRIEF_TYPES,
 } from './owner-brief.mjs'
 
 const brief = [
   '🔴 **The velo preview deploy failed on the overlay probe**',
-  '> 🤖 **Claude Code** · interactive agent · posted from @pmcp\'s account (not Maarten)',
+  '> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`\'s account (not Maarten)',
   '',
   '**You:** nothing yet — fix is in #2074, I\'ll report when it\'s green.',
   '**Depth:** https://github.com/FriendlyInternet/nuxt-crouton/pull/2074',
@@ -130,4 +130,66 @@ test('the block message names the fix, not only the violation', () => {
 test('an empty body is not an agent comment and does not throw', () => {
   assert.equal(checkOwnerBrief('').ok, true)
   assert.equal(checkOwnerBrief(undefined).ok, true)
+})
+
+/* ── The inverse rule: don't spend a mention on something that needs nothing ──
+ *
+ * An @mention is a request for action. Spending one on an FYI teaches the owner to ignore
+ * mentions, which costs far more than the individual notification.
+ *
+ * The measurement that drove this: over the last 100 comments, 29 would notify the owner and
+ * **17 of those carried no ask at all** — their only mention was the mandatory provenance
+ * disclaimer ("posted from @pmcp's account"), which sits in a blockquote, is invisible to the
+ * reader, and notifies anyway. That is 59% of all pings. The disclaimer now writes the handle
+ * in a code span, which renders the same and does not notify.
+ */
+
+test('✅ Done + a live mention is refused — an FYI must not ping', () => {
+  const v = checkOwnerBrief('✅ **landed**\n> 🤖 x\n\n@pmcp all four are on main now.')
+  assert.equal(v.ok, false)
+  assert.equal(v.reason, 'ping-without-ask')
+})
+
+test('✅ Done without a mention passes', () => {
+  assert.equal(checkOwnerBrief('✅ **landed**\n> 🤖 x\n\n**You:** nothing, FYI').ok, true)
+})
+
+test('types that need something back may mention freely', () => {
+  for (const t of BRIEF_TYPES.filter((x) => x.notifies)) {
+    const v = checkOwnerBrief(`${t.emoji} **thing**\n> 🤖 x\n\n@pmcp **You:** decide`)
+    assert.equal(v.ok, true, `${t.emoji} ${t.name} is allowed to ping`)
+  }
+})
+
+test('THE 59% CASE — a code-span handle names the account without notifying', () => {
+  const disclaimer = "> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten)"
+  assert.equal(notifiesOwner(disclaimer), false, 'this is what stops every comment pinging')
+  assert.equal(checkOwnerBrief(`✅ **done**\n${disclaimer}\n\n**You:** nothing`).ok, true)
+})
+
+test('the OLD disclaimer form did notify — pinning the bug being fixed', () => {
+  const old = "> 🤖 **Claude Code** · interactive agent · posted from @pmcp's account (not Maarten)"
+  assert.equal(notifiesOwner(old), true, 'a blockquote does NOT stop GitHub notifying')
+})
+
+test('notifiesOwner uses a DIFFERENT strip from visiblePart — blockquotes notify, code does not', () => {
+  // visiblePart drops the blockquote (nothing to read); notification does not (GitHub renders it).
+  assert.equal(visiblePart('> @pmcp'), '')
+  assert.equal(notifiesOwner('> @pmcp'), true)
+  // <details> is likewise invisible-but-notifying.
+  assert.equal(notifiesOwner('<details><summary>s</summary>@pmcp</details>'), true)
+  // Code is the only real silencer.
+  assert.equal(notifiesOwner('`@pmcp`'), false)
+  assert.equal(notifiesOwner('```\n@pmcp\n```'), false)
+})
+
+test('a handle that merely PREFIXES another does not count as a mention', () => {
+  assert.equal(notifiesOwner('@pmcp-bot filed this'), false)
+  assert.equal(notifiesOwner('mail@pmcp.dev'), false)
+})
+
+test('the ping-without-ask message offers both fixes', () => {
+  const msg = explain(checkOwnerBrief('✅ **done**\n> 🤖 x\n@pmcp'))
+  assert.match(msg, /drop the mention/)
+  assert.match(msg, /backtick/)
 })

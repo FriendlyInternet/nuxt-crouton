@@ -21,7 +21,7 @@ process.stdin.on('end', () => {
   process.stderr.write(
     'Blocked: agent GitHub comments must LEAD with a 🤖 provenance header (they post under ' +
     '@pmcp and must not be mistaken for the human). Prepend a first line, e.g.:\n\n' +
-    '> 🤖 **Claude Code** · interactive agent, posted from @pmcp’s account (not Maarten) · _<one-line context>_\n\n' +
+    '> 🤖 **Claude Code** · interactive agent, posted from `@pmcp`’s account (not Maarten) · _<one-line context>_\n\n' +
     'Then re-send the comment.\n'
   )
   process.exit(2)
