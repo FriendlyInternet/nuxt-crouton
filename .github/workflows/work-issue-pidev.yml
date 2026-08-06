@@ -161,10 +161,31 @@ jobs:
             const q = `repo:${context.repo.owner}/${context.repo.repo} is:pr ${issue_number} in:body`
             const { data: found } = await github.rest.search.issuesAndPullRequests({ q, per_page: 20 })
             const re = new RegExp(`(clos(e|es|ed)|fix(es|ed)?|resolv(e|es|ed))\\s+#${issue_number}\\b`, 'i')
+            // The search API does not return head/base refs, so fetch each candidate. Both
+            // are load-bearing (#2027): `head.ref` identifies THIS worker's own branch, and
+            // `base.ref` distinguishes "merged to main" from "merged into its epic branch".
+            // Candidates are few (<= 20 after the closing-keyword filter), so this is cheap.
             const linkedPRs = []
+            let selfPr = null
             for (const it of found.items || []) {
               if (!re.test(it.body || '')) continue
-              linkedPRs.push({ number: it.number, state: it.state, merged: Boolean(it.pull_request?.merged_at) })
+              let headRef = null, baseRef = null, merged = Boolean(it.pull_request?.merged_at)
+              try {
+                const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: it.number })
+                headRef = pr.head?.ref ?? null
+                baseRef = pr.base?.ref ?? null
+                merged = Boolean(pr.merged_at)
+              } catch (e) {
+                // Leave baseRef null — decideClaim then treats a merge as landed, the safer
+                // pre-#2027 default when we could not determine the base.
+                core.warning(`claim facts: could not fetch PR #${it.number} (${e.message})`)
+              }
+              // A PR on `work-<issue>` IS this worker's own branch, not a competitor. The
+              // decomposer routes a re-dispatch here precisely BECAUSE that branch exists
+              // (resolveLane, #2010) — without this the guard refuses the very lane that
+              // was chosen for it.
+              if (headRef === `work-${issue_number}`) selfPr = it.number
+              linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef })
             }
             // When status:in-progress was applied (weakest signal → needs its timestamp).
             let inProgressSince = null
@@ -173,10 +194,16 @@ jobs:
               const last = events.filter((e) => e.event === 'labeled' && e.label?.name === 'status:in-progress').pop()
               inProgressSince = last?.created_at || null
             }
-            const facts = { issueState: issue.state, linkedPRs, inProgressSince, now: new Date().toISOString() }
+            const facts = {
+              issueState: issue.state, linkedPRs, inProgressSince,
+              now: new Date().toISOString(),
+              defaultBranch: context.payload.repository?.default_branch || 'main',
+              self: { pr: selfPr },
+            }
             require('fs').writeFileSync(`${process.env.RUNNER_TEMP}/claim-facts.json`, JSON.stringify(facts))
             core.info(`claim facts: ${JSON.stringify(facts)}`)
       - name: Claim guard
+        id: claim
         run: node scripts/pipeline-loop-guard.mjs claim-guard < "$RUNNER_TEMP/claim-facts.json"
 
       # ── WS2 pipeline context (#1695) — read epic_branch/depth/epic OFF the issue body ──
@@ -331,7 +358,11 @@ jobs:
       # never edited them) — no reliance on .gitignore foreseeing them. Files a generator wrote via
       # `bash` (not an edit tool) are NOT in the ledger; they are REPORTED, never silently committed.
       - id: finish
-        if: ${{ !cancelled() }}
+        # `!cancelled()` deliberately keeps this running after a pi failure so partial work is
+        # still persisted — but NOT after a claim-guard refusal (#2027): pi never ran, there is
+        # nothing to finish, and the step's own failure then fed the artifact-gate a false
+        # "the harness crashed" signal.
+        if: ${{ !cancelled() && steps.claim.outcome != 'failure' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -633,8 +664,31 @@ jobs:
       # log (`PI_EXEC_LOG`) instead of claude's structured execution_file, so the failure
       # "why" is cause-aware (billing / error / underspecified) — parity with the claude
       # flow. PASS/FAIL is unchanged either way.
+      # A claim-guard refusal is a DELIBERATE stop, not a no-op run (#2027). The guard says so
+      # in its own error text; the gate used to ignore that and post "🔴 this run produced
+      # nothing", which reads as a broken pipeline and (pre-#1876) invited rewriting a perfectly
+      # good ticket. Five such alarms on #1791 were all this. The refusal still gets a comment —
+      # silence after comment-dispatch's "🟢 On it" would be its own mystery — just a calm one
+      # that names the blocker, posted by the step below.
+      - name: Not picked up — the issue is already claimed
+        if: ${{ always() && steps.claim.outcome == 'failure' }}
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
+          CLAIM_REASON: ${{ steps.claim.outputs.claim_reason }}
+        with:
+          script: |
+            const issue_number = Number(process.env.ISSUE_NUMBER)
+            const reason = process.env.CLAIM_REASON || 'another run already holds this issue'
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            await github.rest.issues.createComment({ ...context.repo, issue_number, body:
+              `⏸️ **Not picked up — ${reason}.**\n\n`
+              + `Nothing is broken and nothing was lost: the worker stopped before starting so two runs `
+              + `can't build the same issue. Resolve the blocker above, then dispatch again.\n\n`
+              + `<sub>🤖 pi.dev harness (CI · mac-mini) · claim guard #1890 · <a href="${runUrl}">run log</a></sub>` })
+
       - name: Artifact-gate — fail if the agent produced nothing
-        if: always()
+        if: ${{ always() && steps.claim.outcome != 'failure' }}
         uses: actions/github-script@v7
         env:
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}

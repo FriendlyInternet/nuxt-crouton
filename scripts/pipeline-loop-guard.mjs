@@ -32,7 +32,7 @@
 // `if:` blocks in the two `*-pidev.yml` workflows. This file is the single tested source.
 
 import { pathToFileURL } from 'node:url'
-import { readFileSync } from 'node:fs'
+import { appendFileSync, readFileSync } from 'node:fs'
 
 export const ALLOWED_BOT = 'nuxt-harness[bot]'
 export const MAX_DEPTH = 3
@@ -108,8 +108,17 @@ export function labelForChild({ depth = 0, isLeaf = false, maxDepth = MAX_DEPTH 
  * forever, so a stale stamp PROCEEDS (saying so), and an unparseable timestamp fails OPEN —
  * the three strong signals still gate. A closed-but-unmerged PR does not claim anything: a
  * rejected attempt should free the issue, not lock it.
+ *
+ * MERGED MEANS MERGED TO THE DEFAULT BRANCH (#2027). Our topology is `work-<n>` →
+ * `epic/<n>-<slug>` → `main`, so a sub-PR merging into its EPIC branch is mid-flight, not
+ * done. Reading it as "landed" refuses every re-dispatch from then on: it wedged #1791
+ * permanently after PR #1987 merged into `epic/1791-…`, and would wedge every issue in the
+ * epic topology the moment its first sub-PR merged. A PR whose `baseRef` is unknown still
+ * counts as landed — the caller may not have fetched it, and the pre-#2027 behaviour is the
+ * safer default when we cannot tell.
  */
 export const CLAIM_TTL_MINUTES = 90
+export const DEFAULT_BRANCH = 'main'
 
 export function decideClaim({
   issueState = 'open',
@@ -117,6 +126,7 @@ export function decideClaim({
   inProgressSince = null,
   now = null,
   ttlMinutes = CLAIM_TTL_MINUTES,
+  defaultBranch = DEFAULT_BRANCH,
   self = {},
 } = {}) {
   if (issueState === 'closed') {
@@ -125,7 +135,7 @@ export function decideClaim({
 
   // A PR of our own (a re-dispatch onto the same branch) is not a competing claim.
   const others = (linkedPRs || []).filter((pr) => pr && pr.number !== self?.pr)
-  const merged = others.find((pr) => pr.merged)
+  const merged = others.find((pr) => pr.merged && (pr.baseRef == null || pr.baseRef === defaultBranch))
   if (merged) {
     return { action: 'refuse', claimedBy: merged.number, reason: `PR #${merged.number} already merged for this issue` }
   }
@@ -155,6 +165,19 @@ export function decideClaim({
 //     → facts.json is { issueState, linkedPRs, inProgressSince, now, self } gathered by the
 //       workflow's API step. Exit 0 to proceed; exit 1 (with an ::error::) when the issue is
 //       already claimed, so the run stops before spending a build on duplicate work (#1890).
+/**
+ * Publish a refusal reason as a step output so the workflow can say WHY on the issue (#2027).
+ * Without it the owner sees only the artifact-gate's generic alarm and has to open step 6 of a
+ * run log to learn the run stopped on purpose. Reasons are single-line by construction; strip
+ * newlines anyway rather than corrupt the output file. Diagnostics only — never throws.
+ */
+function publishClaimReason(reason) {
+  if (!process.env.GITHUB_OUTPUT) return
+  try {
+    appendFileSync(process.env.GITHUB_OUTPUT, `claim_reason=${String(reason).replace(/[\r\n]+/g, ' ')}\n`)
+  } catch { /* the guard's verdict still stands; only the explanation is lost */ }
+}
+
 function main(argv) {
   const [cmd, ...rest] = argv
   if (cmd === 'claim-guard') {
@@ -173,6 +196,7 @@ function main(argv) {
       console.log(`Claim guard OK — ${verdict.reason}.`)
       return
     }
+    publishClaimReason(verdict.reason)
     console.log(`::error::Claim guard: refusing to work this issue — ${verdict.reason}. This is a deliberate stop, not a build failure (#1890).`)
     process.exit(1)
   }
