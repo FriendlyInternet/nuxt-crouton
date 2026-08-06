@@ -51,6 +51,14 @@ function handleOpenPanel() {
   })
   document.dispatchEvent(event)
 }
+
+// Touch devices have no hover, so the desktop double-click-to-open
+// path is unreachable there — a single tap must open the panel instead.
+function handleClick() {
+  if (window.matchMedia('(hover: none), (pointer: coarse)').matches) {
+    handleOpenPanel()
+  }
+}
 </script>
 
 <template>
@@ -58,6 +66,7 @@ function handleOpenPanel() {
     class="block-wrapper my-1 cursor-pointer"
     :class="{ 'border-l-2 border-l-primary/50': selected }"
     data-type="booking-block"
+    @click="handleClick"
     @dblclick="handleOpenPanel"
   >
     <div ref="innerRef" class="relative group rounded border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50 transition-colors">
@@ -98,8 +107,9 @@ function handleOpenPanel() {
             </span>
           </div>
           <!-- Action buttons — UButton so themes reach them (#1410, same
-               pattern as the crouton-pages block views) -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+               pattern as the crouton-pages block views). Visible by default
+               (touch has no hover); hover-capable devices reveal on hover only. -->
+          <div class="opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"
