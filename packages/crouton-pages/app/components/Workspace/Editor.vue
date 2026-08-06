@@ -1333,49 +1333,15 @@ defineExpose({ state })
         </div>
 
         <!-- ───────── SEO & social ───────── -->
-        <div v-show="activeTab === 'seo'" class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-4">
-          <!-- SEO title — placeholder is the real page title, so an empty SEO
-               title transparently falls back to it. -->
-          <UFormField :label="t('pages.fields.seoTitle', 'SEO title')" name="seoTitle">
-            <UInput
-              v-model="seoTitle"
-              size="sm"
-              class="w-full"
-              :placeholder="currentTitle || t('pages.editor.seoTitlePlaceholder', 'Defaults to the page title')"
-            />
-          </UFormField>
-          <UFormField :label="t('pages.fields.seoDescription', 'SEO description')" name="seoDescription">
-            <UTextarea v-model="seoDescription" :rows="3" size="sm" class="w-full" :placeholder="t('pages.editor.seoDescriptionPlaceholder', 'One-line summary for search & shares')" />
-            <!-- AI drafts the description from the title + page content (crouton-ai only) -->
-            <div v-if="hasAI" class="mt-2 flex justify-end">
-              <UButton
-                color="primary"
-                variant="soft"
-                size="xs"
-                icon="i-lucide-sparkles"
-                :loading="seoGenerating"
-                :label="t('pages.editor.seoGenerate', 'Generate with AI')"
-                @click="generateSeoDescription"
-              />
-            </div>
-          </UFormField>
-          <UFormField :label="t('pages.fields.ogImage')" name="ogImage">
-            <Suspense v-if="hasAssetsPicker">
-              <CroutonAssetsPicker v-model="selectedOgImageAssetId" @select="handleAssetSelect" />
-              <template #fallback>
-                <div class="h-20 rounded-lg border-2 border-dashed border-default animate-pulse" />
-              </template>
-            </Suspense>
-            <CroutonImageUpload v-else v-model="state.ogImage" size="sm" accept="image/*" />
-          </UFormField>
-          <UFormField :label="t('pages.fields.robots')" name="robots">
-            <USelect v-model="state.robots" :items="robotsOptions" value-key="value" size="sm" class="w-full" />
-          </UFormField>
-          <CroutonPagesEditorSeoPreview
+        <div v-show="activeTab === 'seo'">
+          <CroutonPagesEditorSeoTab
+            v-model:translations="state.translations"
+            v-model:og-image="state.ogImage"
+            v-model:robots="state.robots"
+            :editing-locale="editingLocale"
+            :current-title="currentTitle"
+            :has-ai="hasAI"
             :team-slug="teamSlugRef"
-            :translations="state.translations"
-            :og-image="state.ogImage"
-            :preview-locale="seoLocale"
           />
         </div>
       </div>
