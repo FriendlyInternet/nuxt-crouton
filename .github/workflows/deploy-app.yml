@@ -277,7 +277,20 @@ jobs:
             PREVIEW_DB="$(printf '%s\n' "$PREVIEW_OUT" | sed -n 's/^db=//p')"
             npx wrangler deploy --config .output/server/wrangler.json | tee deploy.log
             # Fresh DB every time, so migrations are the whole schema — not incremental.
-            [ -n "$PREVIEW_DB" ] && npx wrangler d1 migrations apply "$PREVIEW_DB" --remote 2>&1 | tail -5
+            # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
+            # rewritten built config; the committed wrangler.jsonc carries <app>-db /
+            # <app>-staging-db and structurally cannot know about <app>-pr<n>-db. Without it
+            # wrangler read the committed file and died with "Couldn't find a D1 DB with the name
+            # or binding '<app>-pr<n>-db'", so EVERY per-PR preview since #2020 served an
+            # unmigrated, empty database. pr-preview-wrangler.mjs makes migrations_dir absolute
+            # first, so passing --config cannot re-create #138's doubled path (a green step that
+            # migrates nothing) — the silent version of the same bug.
+            if [ -z "$PREVIEW_DB" ]; then
+              echo "::error::pr-preview-wrangler produced no db name — the preview would have NO schema."
+              exit 1
+            fi
+            npx wrangler d1 migrations apply "$PREVIEW_DB" \
+              --config .output/server/wrangler.json --remote
             (pnpm db:seed:staging || true)
           else
             pnpm run cf:staging | tee deploy.log

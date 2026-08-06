@@ -71,7 +71,46 @@ function scrubBindings(out, name, changed) {
   }
 }
 
-export function toPrPreview(config, app, pr) {
+/**
+ * Make `migrations_dir` ABSOLUTE so the built config can be handed to
+ * `wrangler d1 migrations apply --config` (#2078).
+ *
+ * WHY THIS IS NEEDED AT ALL. The per-PR database name exists ONLY in this rewritten config —
+ * the committed `wrangler.jsonc` carries `<app>-db` / `<app>-staging-db` and structurally
+ * cannot know about `<app>-pr<n>-db`. So the migrate step must read THIS file. It didn't: it
+ * ran with no `--config`, wrangler fell back to the committed one, and every per-PR preview
+ * since #2020 shipped an unmigrated, empty database while the deploy went green.
+ *
+ * WHY ABSOLUTE AND NOT JUST `--config`. `migrations_dir` resolves relative to the config file
+ * that declares it. The source config sits in the app root, so `server/db/migrations/sqlite`
+ * is right there — but the BUILT config sits in `.output/server/`, where the same relative
+ * path resolves to `.output/server/server/db/migrations/sqlite`. That is #138 exactly: wrangler
+ * finds no migrations, reports success, and migrates nothing. A silent no-op replacing a loud
+ * failure is not a fix, so the path is rewritten absolute at the one moment we still know the
+ * app root.
+ */
+function absolutizeMigrations(out, base, changed) {
+  if (!base) return
+  for (const b of out.d1_databases || []) {
+    const dir = b.migrations_dir
+    if (typeof dir !== 'string' || !dir || isAbsolutePath(dir)) continue
+    b.migrations_dir = joinPath(base, dir)
+    changed.push(`d1_databases.${b.binding}: migrations_dir=${b.migrations_dir}`)
+  }
+}
+
+const isAbsolutePath = (p) => p.startsWith('/')
+const joinPath = (a, b) => `${a.replace(/\/+$/, '')}/${b.replace(/^\.\//, '')}`
+
+/**
+ * @param {object} config  Parsed wrangler config (the BUILT one, e.g. .output/server/wrangler.json).
+ * @param {string} app     App name, e.g. "kassa".
+ * @param {number|string} pr  PR number.
+ * @param {{ migrationsBase?: string }} [opts]  Absolute app root; relative `migrations_dir`
+ *   values are rewritten against it so the built config is usable with `--config` (#2078).
+ * @returns {{ config: object, name: string, changed: string[] }}
+ */
+export function toPrPreview(config, app, pr, opts = {}) {
   if (!config || typeof config !== 'object') throw new TypeError('config must be an object')
   if (!app) throw new TypeError('app is required')
   if (!/^\d+$/.test(String(pr))) throw new TypeError(`pr must be a number, got ${JSON.stringify(pr)}`)
@@ -83,6 +122,7 @@ export function toPrPreview(config, app, pr) {
 
   detachFromRealEnvs(out, changed)
   scrubBindings(out, name, changed)
+  absolutizeMigrations(out, opts.migrationsBase, changed)
 
   return { config: out, name, changed }
 }
