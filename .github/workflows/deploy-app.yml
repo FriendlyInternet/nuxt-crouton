@@ -289,6 +289,11 @@ jobs:
               echo "::error::pr-preview-wrangler produced no db name — the preview would have NO schema."
               exit 1
             fi
+            # The deploy above just PROVISIONED that database, but the built config still
+            # carries no `database_id` — it is stripped on purpose so wrangler auto-provisions
+            # (#2020). Remote D1 operations need the id, so resolve it by name now that it
+            # exists. Without this the migrate fails "missing a database_id" (#2085).
+            node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
             npx wrangler d1 migrations apply "$PREVIEW_DB" \
               --config .output/server/wrangler.json --remote
             (pnpm db:seed:staging || true)
