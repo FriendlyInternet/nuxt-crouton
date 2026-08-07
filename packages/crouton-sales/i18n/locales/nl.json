@@ -296,8 +296,7 @@
       "noProducts": "Geen producten beschikbaar",
       "outOfStock": "Uitverkocht",
       "options": "Opties",
-      "addToCart": "Toevoegen aan winkelwagen",
-      "inCart": "Besteld"
+      "addToCart": "Toevoegen aan winkelwagen"
     },
     "categories": {
       "all": "Alles",
