@@ -66,7 +66,6 @@
               <UInputNumber
                 v-model="state.price"
                 class="w-full"
-                :min="0"
                 :step="0.01"
                 :format-options="{ style: 'currency', currency: 'EUR' }"
               />

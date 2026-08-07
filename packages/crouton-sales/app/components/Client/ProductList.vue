@@ -213,7 +213,7 @@
               <template #label="{ item }">
                 <span class="flex items-center justify-between w-full">
                   <span>{{ item.label }}</span>
-                  <span v-if="item.priceModifier > 0" class="text-xs text-muted ml-2">+{{ format(item.priceModifier) }}</span>
+                  <span v-if="item.priceModifier" class="text-xs text-muted ml-2">{{ item.priceModifier > 0 ? '+' : '' }}{{ format(item.priceModifier) }}</span>
                 </span>
               </template>
             </UCheckboxGroup>
@@ -232,7 +232,7 @@
               <template #label="{ item }">
                 <span class="flex items-center justify-between w-full">
                   <span>{{ item.label }}</span>
-                  <span v-if="item.priceModifier > 0" class="text-xs text-muted ml-2">+{{ format(item.priceModifier) }}</span>
+                  <span v-if="item.priceModifier" class="text-xs text-muted ml-2">{{ item.priceModifier > 0 ? '+' : '' }}{{ format(item.priceModifier) }}</span>
                 </span>
               </template>
             </URadioGroup>
@@ -249,8 +249,8 @@
                 class="flex items-center gap-2"
               >
                 <span class="flex-1 min-w-0 truncate text-sm">{{ option.label }}</span>
-                <span v-if="option.priceModifier > 0" class="shrink-0 text-xs text-muted">
-                  +{{ format(option.priceModifier) }}
+                <span v-if="option.priceModifier" class="shrink-0 text-xs text-muted">
+                  {{ option.priceModifier > 0 ? '+' : '' }}{{ format(option.priceModifier) }}
                 </span>
                 <UFieldGroup v-if="lineForOption(product, option.id)" size="sm">
                   <UButton
