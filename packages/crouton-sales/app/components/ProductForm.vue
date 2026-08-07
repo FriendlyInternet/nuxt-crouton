@@ -43,26 +43,24 @@
               <UTextarea v-model="state.description" class="w-full" size="xl" />
             </UFormField>
 
-            <div class="grid grid-cols-2 gap-4">
-              <UFormField :label="t('sales.form.category')" name="categoryId" required>
-                <CroutonFormReferenceSelect
-                  v-model="state.categoryId"
-                  collection="salesCategories"
-                  :label="t('sales.form.category')"
-                  :create-initial-data="{ eventId: state.eventId }"
-                  show-edit
-                />
-              </UFormField>
-              <UFormField :label="t('sales.form.prepLocation')" name="locationId" required>
-                <CroutonFormReferenceSelect
-                  v-model="state.locationId"
-                  collection="salesLocations"
-                  :label="t('sales.form.prepLocation')"
-                  :create-initial-data="{ eventId: state.eventId }"
-                  show-edit
-                />
-              </UFormField>
-            </div>
+            <UFormField :label="t('sales.form.category')" name="categoryId" required>
+              <CroutonFormReferenceSelect
+                v-model="state.categoryId"
+                collection="salesCategories"
+                :label="t('sales.form.category')"
+                :create-initial-data="{ eventId: state.eventId }"
+                show-edit
+              />
+            </UFormField>
+            <UFormField :label="t('sales.form.prepLocation')" name="locationId" required>
+              <CroutonFormReferenceSelect
+                v-model="state.locationId"
+                collection="salesLocations"
+                :label="t('sales.form.prepLocation')"
+                :create-initial-data="{ eventId: state.eventId }"
+                show-edit
+              />
+            </UFormField>
 
             <UFormField :label="t('sales.form.price')" name="price">
               <UInputNumber
