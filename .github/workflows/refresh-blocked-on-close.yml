@@ -1,0 +1,60 @@
+name: Refresh status:blocked holds when the cited blocker closes
+
+# #2112 (epic #2108 WS5) — the write side of #2104. #2104 taught a fresh run to check whether a
+# blocker it cites is still open before trusting an old thread. This is the push side: the moment
+# an issue closes, every OTHER open `status:blocked` issue that cites it by number gets a one-line
+# nudge, so the owner (and the next agent run) doesn't have to notice the closure on their own.
+#
+# Deliberately narrow:
+#   • Matches `#<n>` as a DISTINCT token in the body or in comments — not a substring match, so
+#     `#210` never matches an issue that only mentions `#2104`.
+#   • Never removes `status:blocked` or resolves the hold — that stays a human / resume-on-comment.yml
+#     call. This only surfaces that the cited state changed.
+
+on:
+  issues:
+    types: [closed]
+
+permissions:
+  issues: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const closedNumber = context.payload.issue.number
+            const tokenRe = new RegExp(`(^|[^\\d#])#${closedNumber}(?!\\d)`)
+
+            const blocked = await github.paginate(github.rest.issues.listForRepo, {
+              ...context.repo,
+              state: 'open',
+              labels: 'status:blocked',
+              per_page: 100,
+            })
+
+            for (const issue of blocked) {
+              if (issue.number === closedNumber) continue
+              if (issue.pull_request) continue
+
+              let cites = tokenRe.test(issue.body || '')
+              if (!cites) {
+                const comments = await github.paginate(github.rest.issues.listComments, {
+                  ...context.repo,
+                  issue_number: issue.number,
+                  per_page: 100,
+                })
+                cites = comments.some(c => tokenRe.test(c.body || ''))
+              }
+              if (!cites) continue
+
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: issue.number,
+                body: `🔄 the blocker this was waiting on (#${closedNumber}) has since closed — re-check whether this hold still applies.`,
+              })
+              core.info(`Posted refresh nudge on #${issue.number} (cites closed #${closedNumber}).`)
+            }
