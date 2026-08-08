@@ -51,3 +51,11 @@ skills-digest:
 eval-scoreboard:
   schedule: weekly:mon
   deliver: [issue]
+
+# WS6 of epic #2108 (#2113) — the "waiting on you" surface: every open issue/PR currently
+# holding on an owner gesture (status:blocked / status:needs-merge / a held draft PR),
+# grouped by the kind of action needed. Daily cadence keeps the one standing issue current;
+# report-only, upserts a single comment.
+waiting-on-you:
+  schedule: daily
+  deliver: [issue]
