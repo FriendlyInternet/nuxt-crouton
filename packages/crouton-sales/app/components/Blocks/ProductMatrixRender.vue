@@ -10,6 +10,7 @@
  * BlockContent.vue wraps this in <ClientOnly> (clientOnly: true in block def).
  */
 import type { TableColumn } from '@nuxt/ui'
+import { buildXlsx } from '../../utils/xlsx-writer'
 
 interface MatrixProduct {
   product: string
