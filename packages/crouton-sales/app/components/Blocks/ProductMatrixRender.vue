@@ -13,6 +13,8 @@ import type { TableColumn } from '@nuxt/ui'
 
 interface MatrixProduct {
   product: string
+  category: string | null
+  price: number | null
   units: Record<string, number>
   revenue: Record<string, number>
   totalUnits: number
@@ -78,6 +80,13 @@ onUnmounted(unhookMutation)
 function fmt(n: number) {
   return measure.value === 'revenue' ? n.toFixed(2) : String(Math.round(n))
 }
+function categoryLabel(category: string | null) {
+  return category ?? t('sales.block.noCategory')
+}
+// Unit price as a bare 2-decimal number — Excel-friendly, no currency symbol.
+function priceLabel(price: number | null) {
+  return price == null ? '' : price.toFixed(2)
+}
 // '2026-05-20' → '05-20'
 function shortDay(d: string) {
   return d.slice(5)
@@ -89,10 +98,16 @@ const columns = computed<TableColumn<Record<string, unknown>>[]>(() => {
   const numeric = { class: { th: 'text-right', td: 'text-right' } }
   return [
     {
+      accessorKey: 'category',
+      header: t('sales.block.category'),
+      meta: { class: { td: 'text-muted' } }
+    },
+    {
       accessorKey: 'product',
       header: t('sales.block.product'),
       meta: { class: { td: 'font-medium text-highlighted' } }
     },
+    { accessorKey: '__price', header: t('sales.block.price'), meta: numeric },
     ...matrix.value.days.map(d => ({ accessorKey: d, header: shortDay(d), meta: numeric })),
     {
       accessorKey: '__total',
@@ -111,14 +126,18 @@ const rows = computed<Record<string, unknown>[]>(() => {
   const key = measure.value
 
   const data = m.products.map((p) => {
-    const row: Record<string, unknown> = { product: p.product }
+    const row: Record<string, unknown> = {
+      category: categoryLabel(p.category),
+      product: p.product,
+      __price: priceLabel(p.price)
+    }
     for (const d of m.days) row[d] = fmt((key === 'units' ? p.units : p.revenue)[d] ?? 0)
     row.__total = fmt(key === 'units' ? p.totalUnits : p.totalRevenue)
     return row
   })
 
   // Column-totals row
-  const totalRow: Record<string, unknown> = { product: t('sales.block.total') }
+  const totalRow: Record<string, unknown> = { category: '', product: t('sales.block.total'), __price: '' }
   for (const d of m.days) totalRow[d] = fmt(m.dayTotals[d]?.[key] ?? 0)
   totalRow.__total = fmt(m.grandTotal[key])
   data.push(totalRow)
@@ -140,16 +159,22 @@ function downloadCsv() {
   if (!m) return
   const key = measure.value
 
-  const lines: (string | number)[][] = [['Product', ...m.days, 'Total']]
+  // Rows arrive grouped per category (server sort); price sits beside the
+  // product name so spreadsheet totals are price × units per row (#2126).
+  const lines: (string | number)[][] = [['Category', 'Product', 'Price', ...m.days, 'Total']]
   for (const p of m.products) {
     lines.push([
+      categoryLabel(p.category),
       p.product,
+      priceLabel(p.price),
       ...m.days.map(d => fmt((key === 'units' ? p.units : p.revenue)[d] ?? 0)),
       fmt(key === 'units' ? p.totalUnits : p.totalRevenue)
     ])
   }
   lines.push([
+    '',
     'Total',
+    '',
     ...m.days.map(d => fmt(m.dayTotals[d]?.[key] ?? 0)),
     fmt(m.grandTotal[key])
   ])
