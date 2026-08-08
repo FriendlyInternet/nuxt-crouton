@@ -1,0 +1,131 @@
+name: Re-arm dropped preview-deploy events & starved runs
+
+# The #2091 re-arm pattern (automerge-epic-subpr.yml's scheduled sweep) applied to a second
+# case: the POC/PR PREVIEW-DEPLOY workflow (deploy-pocs.yml / deploy-apps.yml on
+# pull_request) going silent for two reasons a plain red/green check can't see (#2110,
+# epic #2108):
+#
+#   1. A dropped `pull_request` webhook event — the preview-deploy check never STARTS at
+#      all. GitHub intermittently drops delivery (measured 1-in-16 on 2026-08-05,
+#      #1698/#1942) — there is nothing red to notice, and nothing green either.
+#   2. A starved/auto-cancelled run — a run sat queued past Actions' own concurrency cap
+#      and got cancelled before it ever started. Same silent-gap shape.
+#
+# Both are LEVEL-triggered problems (#2091's lesson): a PR event fired once, missed the
+# window, and its edges are gone — nothing re-asks unless something asks again on a clock.
+# So this workflow runs hourly (offset from :00/:17 to avoid piling on) and re-dispatches
+# each candidate ONCE (never in a retry loop — the decision in scripts/rearm-deploy.mjs
+# treats a later run for the same head SHA + workflow as proof a retry already happened).
+#
+# The DECISION is the pure, unit-tested scripts/rearm-deploy.mjs (mirrors
+# scripts/deploy-detect.mjs / scripts/deploy-failure-report.mjs); this workflow does only
+# the GitHub I/O: list open PRs + their check runs, list recent workflow runs, call the
+# decision functions, then re-dispatch via workflow_dispatch (dropped-event case) or
+# re-run-failed-jobs (starved-run case).
+
+on:
+  schedule:
+    - cron: '37 * * * *'   # hourly, offset so it doesn't pile onto :00/:17 with other sweeps
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  actions: write        # re-dispatch / re-run workflow runs
+  pull-requests: read
+  checks: read
+
+jobs:
+  rearm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo
+            const { findDroppedPreviewEvents, findStarvedRuns } =
+              await import(`${process.env.GITHUB_WORKSPACE}/scripts/rearm-deploy.mjs`)
+
+            const PREVIEW_WORKFLOWS = ['Deploy POCs (preview)', 'Deploy Apps (Cloudflare Workers)']
+            const WATCH_PREFIXES = ['pocs/', 'apps/']
+            const now = new Date().toISOString()
+
+            // ── 1. Dropped `pull_request` events ────────────────────────────
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100
+            })
+
+            const openPRs = []
+            const checkRuns = []
+            for (const pr of prs) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner, repo, pull_number: pr.number, per_page: 100
+              })
+              openPRs.push({
+                number: pr.number,
+                headSha: pr.head.sha,
+                updatedAt: pr.updated_at,
+                changedFiles: files.map(f => f.filename)
+              })
+              const runs = await github.paginate(github.rest.checks.listForRef, {
+                owner, repo, ref: pr.head.sha, per_page: 100
+              })
+              for (const r of runs) checkRuns.push({ headSha: pr.head.sha, workflowName: r.name })
+            }
+
+            let droppedCount = 0
+            for (const name of PREVIEW_WORKFLOWS) {
+              const dropped = findDroppedPreviewEvents({
+                openPRs, checkRuns, watchPathPrefixes: WATCH_PREFIXES,
+                workflowCheckName: name, nowIso: now
+              })
+              for (const pr of dropped) {
+                droppedCount++
+                core.warning(`PR #${pr.number} (${pr.headSha}) looks like a dropped pull_request event for "${name}" — no check ever started. Dispatching manually is out of scope here (needs the app name); flagging only.`)
+              }
+            }
+
+            // ── 2. Starved / auto-cancelled runs ────────────────────────────
+            let starvedCount = 0
+            for (const wf of PREVIEW_WORKFLOWS) {
+              const workflowRuns = await github.paginate(github.rest.actions.listWorkflowRuns, {
+                owner, repo, workflow_id: `${wf.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.yml`.replace(/^-|-$/g, ''),
+                per_page: 50
+              }).catch(() => [])
+
+              const runs = (workflowRuns || []).map(r => ({
+                id: r.id,
+                workflowId: r.workflow_id,
+                headSha: r.head_sha,
+                conclusion: r.conclusion,
+                createdAt: r.created_at,
+                updatedAt: r.updated_at,
+                runStartedAt: r.run_started_at
+              }))
+
+              const starved = findStarvedRuns({ runs })
+              for (const r of starved) {
+                starvedCount++
+                try {
+                  await github.rest.actions.reRunWorkflow({ owner, repo, run_id: r.id })
+                  core.notice(`Re-dispatched starved run ${r.id} (${wf}, sha ${r.headSha})`)
+                } catch (e) {
+                  core.warning(`Failed to re-run starved run ${r.id}: ${e.message}`)
+                }
+              }
+            }
+
+            core.summary
+              .addHeading('Re-arm sweep')
+              .addRaw(`Dropped-event candidates flagged: ${droppedCount}\n\n`)
+              .addRaw(`Starved runs re-dispatched: ${starvedCount}\n`)
+              .write()
