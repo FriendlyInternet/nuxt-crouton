@@ -3,21 +3,28 @@ import { buildXlsx } from '../app/utils/xlsx-writer'
 
 // buildXlsx hand-rolls a STORE (uncompressed) zip, so each part's raw bytes
 // sit verbatim after its local file header — no zlib needed to read them back.
+// Walk the local file headers by their PK\x03\x04 signature and match on the
+// header's own name field. (Never scan for the part name as a raw byte
+// needle: "sheet1.xml" also occurs INSIDE [Content_Types].xml's data, and a
+// match there decodes garbage offsets.)
 function extractPart(zip: Uint8Array, name: string): string {
   const decoder = new TextDecoder()
-  const needle = new TextEncoder().encode(name)
-  for (let i = 0; i < zip.length - needle.length; i++) {
-    if (zip[i] === needle[0] && zip.subarray(i, i + needle.length).every((b, j) => b === needle[j])) {
-      // Local file header: sig(4) ver(2) flags(2) method(2) time(2) date(2)
-      // crc(4) compSize(4) uncompSize(4) nameLen(2) extraLen(2) name(nameLen) data
-      const headerStart = i - 26
-      const nameLen = zip[headerStart + 26]! | (zip[headerStart + 27]! << 8)
-      const extraLen = zip[headerStart + 28]! | (zip[headerStart + 29]! << 8)
-      const compSize = zip[headerStart + 18]! | (zip[headerStart + 19]! << 8)
-        | (zip[headerStart + 20]! << 16) | (zip[headerStart + 21]! << 24)
-      const dataStart = headerStart + 30 + nameLen + extraLen
+  let offset = 0
+  // Local file header: sig(4) ver(2) flags(2) method(2) time(2) date(2)
+  // crc(4) compSize(4) uncompSize(4) nameLen(2) extraLen(2) name(nameLen) data
+  while (offset + 30 <= zip.length) {
+    const sig = zip[offset]! | (zip[offset + 1]! << 8) | (zip[offset + 2]! << 16) | ((zip[offset + 3]! << 24) >>> 0)
+    if (sig !== 0x04034b50) break // central directory reached
+    const compSize = zip[offset + 18]! | (zip[offset + 19]! << 8)
+      | (zip[offset + 20]! << 16) | (zip[offset + 21]! << 24)
+    const nameLen = zip[offset + 26]! | (zip[offset + 27]! << 8)
+    const extraLen = zip[offset + 28]! | (zip[offset + 29]! << 8)
+    const entryName = decoder.decode(zip.subarray(offset + 30, offset + 30 + nameLen))
+    const dataStart = offset + 30 + nameLen + extraLen
+    if (entryName === name || entryName.endsWith(`/${name}`)) {
       return decoder.decode(zip.subarray(dataStart, dataStart + compSize))
     }
+    offset = dataStart + compSize
   }
   throw new Error(`part not found: ${name}`)
 }
