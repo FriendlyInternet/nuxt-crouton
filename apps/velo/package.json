@@ -27,6 +27,7 @@
     "@fyit/crouton-assets": "workspace:*",
     "@fyit/crouton-bookings": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-email": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",

@@ -259,6 +259,9 @@
       "noHelperPinTitle": "Geen helper-pincode ingesteld voor dit evenement",
       "noHelperPinDescription": "Op een afgeschermde pagina wordt dit blok ontgrendeld met de helper-pincode van het evenement — zonder pincode kunnen vrijwilligers niet inloggen. Stel de pincode in bij de instellingen van het evenement.",
       "product": "Product",
+      "category": "Categorie",
+      "price": "Prijs",
+      "noCategory": "Zonder categorie",
       "total": "Totaal",
       "kitchenDisplay": "Keukenscherm",
       "orders": "Bestellingen",
@@ -296,8 +299,7 @@
       "noProducts": "Geen producten beschikbaar",
       "outOfStock": "Uitverkocht",
       "options": "Opties",
-      "addToCart": "Toevoegen aan winkelwagen",
-      "inCart": "Besteld"
+      "addToCart": "Toevoegen aan winkelwagen"
     },
     "categories": {
       "all": "Alles",

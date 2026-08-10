@@ -168,7 +168,6 @@
             v-if="variantLinesFor(product).length"
             class="pb-2.5 border-b border-default space-y-1.5"
           >
-            <p class="text-xs font-medium text-muted">{{ t('sales.products.inCart') }}</p>
             <div
               v-for="line in variantLinesFor(product)"
               :key="line.index"
@@ -214,7 +213,7 @@
               <template #label="{ item }">
                 <span class="flex items-center justify-between w-full">
                   <span>{{ item.label }}</span>
-                  <span v-if="item.priceModifier > 0" class="text-xs text-muted ml-2">+{{ format(item.priceModifier) }}</span>
+                  <span v-if="item.priceModifier" class="text-xs text-muted ml-2">{{ item.priceModifier > 0 ? '+' : '' }}{{ format(item.priceModifier) }}</span>
                 </span>
               </template>
             </UCheckboxGroup>
@@ -233,7 +232,7 @@
               <template #label="{ item }">
                 <span class="flex items-center justify-between w-full">
                   <span>{{ item.label }}</span>
-                  <span v-if="item.priceModifier > 0" class="text-xs text-muted ml-2">+{{ format(item.priceModifier) }}</span>
+                  <span v-if="item.priceModifier" class="text-xs text-muted ml-2">{{ item.priceModifier > 0 ? '+' : '' }}{{ format(item.priceModifier) }}</span>
                 </span>
               </template>
             </URadioGroup>
@@ -250,8 +249,8 @@
                 class="flex items-center gap-2"
               >
                 <span class="flex-1 min-w-0 truncate text-sm">{{ option.label }}</span>
-                <span v-if="option.priceModifier > 0" class="shrink-0 text-xs text-muted">
-                  +{{ format(option.priceModifier) }}
+                <span v-if="option.priceModifier" class="shrink-0 text-xs text-muted">
+                  {{ option.priceModifier > 0 ? '+' : '' }}{{ format(option.priceModifier) }}
                 </span>
                 <UFieldGroup v-if="lineForOption(product, option.id)" size="sm">
                   <UButton
@@ -329,29 +328,7 @@
                a `+` says it. At 0 it's the lone `+`; single-select still gates
                it until an option is picked. -->
           <div v-if="needsConfirm(product)" class="flex justify-end">
-            <UFieldGroup v-if="activePendingLine" size="lg">
-              <UButton
-                icon="i-lucide-minus"
-                color="error"
-                variant="soft"
-                square
-                :aria-label="t('sales.cart.remove', 'Remove one')"
-                @click="emit('variantQuantity', activePendingLine.index, activePendingLine.quantity - 1)"
-              />
-              <UBadge color="neutral" variant="soft" class="w-12 justify-center tabular-nums">
-                <span :key="activePendingLine.quantity" class="animate-pop">{{ activePendingLine.quantity }}</span>
-              </UBadge>
-              <UButton
-                icon="i-lucide-plus"
-                color="success"
-                variant="soft"
-                square
-                :aria-label="t('sales.cart.add', 'Add one')"
-                @click="emit('variantQuantity', activePendingLine.index, activePendingLine.quantity + 1)"
-              />
-            </UFieldGroup>
             <UButton
-              v-else
               size="lg"
               color="success"
               square
@@ -418,18 +395,18 @@ function linesFor(product: SalesProduct) {
   return props.cartLines?.[product.id] ?? []
 }
 
-// The lines listed under "in cart" inside the expandable: the ones no OTHER
-// control in this panel already steps. Two are excluded — the combo the panel's
-// own stepper targets, and (single-select) the lines their option rows step —
-// because either would otherwise render as the same line twice.
+// The lines listed under "in cart" inside the expandable: every line except
+// (single-select) the ones their own option rows already step — that's the
+// one place a line would otherwise render twice. The combo composed in the
+// big add button below is no longer excluded: with that button now always a
+// plain `+` (never a stepper of its own, #1980), this list is the ONLY place
+// its line appears.
 // Which lines belong to a configurable product at all stays `cartLinesByProduct`'s
 // call: an options-less line belongs when options are optional (#1753), and this
 // is deliberately NOT the place to re-filter that.
 function variantLinesFor(product: SalesProduct) {
   const stepped = inlineOptionLineIndexes(product)
-  return linesFor(product).filter(line =>
-    line.index !== activePendingLine.value?.index && !stepped.has(line.index)
-  )
+  return linesFor(product).filter(line => !stepped.has(line.index))
 }
 
 // Only the single-select-no-remark branch renders a stepper per option: there one

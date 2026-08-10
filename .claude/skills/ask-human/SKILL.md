@@ -22,19 +22,101 @@ async threads on their phone: the comment must be graspable in **~10 seconds**,
 Post this as a **top-level issue comment** (`add_issue_comment`) — never a PR *review* body
 (the owner misses those, #846). One decision per comment; batch related questions into it.
 
+### Before any of this: could you just DO your own recommendation?
+
+If your recommended option is something you are **permitted and able to do**, and doing it
+is **reversible**, then it is not a question — **do it, log the assumption, and report the
+result.** The `AGENTS.md` decide-vs-ask test has three conditions and this fails at least
+two of them.
+
+The failure looks like this ([FRI-584](https://linear.app/pmcp/issue/FRI-584), verbatim):
+
+> **A)** Ride `apps/velo` staging … Reply here with the preview URL if one's already live,
+> or say "deploy velo staging with review on" and a follow-up run will do it. _(recommended)_
+> **B)** Pick one of the three in-flight sibling PRs and redeploy that branch …
+> **Reply:** A or B
+
+The issue was *"produce a walkable preview URL"*. The deliverable **was** the link. Both
+options are ordinary staging deploys — reversible, mechanical, no taste involved — and the
+agent could dispatch either. Asking converted a five-minute action into a round-trip, and
+handed back a wall of setup choices instead of the one thing that was wanted.
+
+**Rule:** an ask whose options are all things you could have done is not an ask. Pick the
+recommendation, do it, and report. Ask only about the part you genuinely cannot resolve —
+and if the whole task turns out to be blocked by something structural, that is a `Needs:
+action` hold naming *that*, not a menu.
+
+### First: which of the THREE shapes is this? (#2067)
+
+A hold is not always a question. State which, on line 2, with a mandatory `**Needs:**`
+line — the gate reads it to word the follow-up, and guessing is what broke #2054:
+
+| `Needs:` | You are asking the owner to | Typical cause |
+|---|---|---|
+| `answer` | **pick** between real options | a genuine fork — taste, priority, product intent |
+| `action` | **do** something you are not permitted to | `.github/workflows/**` (the App token can't write it, #1076) |
+| `approval` | **review** a diff or a preview | the UI / schema / test sign-off gates |
+
+Getting this wrong tells the owner to answer a question that was never asked. #2054 posted
+a patch-to-apply under the question shape, and the gate dutifully announced *"asked you a
+question"* above 4,372 characters containing no question.
+
+### The one hard layout rule
+
+**Everything that is not the ask goes inside `<details>`.** The visible part is ~10 lines:
+heading, provenance, `Needs:`, recommendation, reply instruction. Patches, diffs, findings,
+status, stack traces — all collapsed. Context and findings are welcome; they must not sit
+*in front of* the ask. The owner is on a phone holding twenty threads.
+
+### `Needs: answer` — a real fork
+
 ```
 ## 🔀 Blocked — <the one decision, in one line>
-> 🤖 **Claude Code** · interactive agent · posted from @pmcp's account (not Maarten) · _<one-line context>_
+> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten) · _<one-line context>_
+**Needs:** answer
 
-**TL;DR — recommend <X>:** <the decision restated + why X is your pick, in one or two lines>
-**Status:** <what's done · `branch-name` pushed? · what's NOT done>
+**Recommend <X>** — <why, one line>
+**Reply:** `A` or `B` · your reply spawns a fresh session that resumes from THIS ticket
+
+<details><summary>Options + context</summary>
+
+- **A) <label>** — <consequence> _(recommended)_
+- **B) <label>** — <consequence>
+
 **Why it came up:** <what cannot proceed until this is answered>
-**Options:**
-  - **A) <label>** — <consequence> _(recommended)_
-  - **B) <label>** — <consequence>
-**Reply:** `A` or `B` (or in-medium — see below). Your reply spawns a fresh session that
-resumes from THIS ticket; `lgtm`/`approve` if A-as-recommended is fine.
+**Status:** <what's done · `branch-name` pushed? · what's NOT done>
 **Don't lose:** <decisions/assumptions the next agent must carry forward>
+</details>
+```
+
+### `Needs: action` — you cannot do it; the owner must
+
+```
+## 🔀 Blocked — <the one thing to DO, in one line>
+> 🤖 **pi.dev harness** · agent pipeline (CI) · _<one-line context>_
+**Needs:** action — apply the patch below
+
+**Why me and not you:** <the permission//tooling reason, one line>
+**Reply:** comment here when applied · that resumes the work in a fresh run
+
+<details><summary>The patch (apply as-is)</summary>
+
+<the diffs — however long; they live here, never in the body>
+</details>
+```
+
+### `Needs: approval` — a sign-off gate
+
+```
+## 🔀 Blocked — <what you're being asked to look at, in one line>
+> 🤖 **pi.dev harness** · agent pipeline (CI) · _<one-line context>_
+**Needs:** approval
+
+**Reply:** ✅ (or `lgtm`) to release · anything else is a change request
+
+<details><summary>What changed + evidence</summary>
+…
+</details>
 ```
 
 Rules that make it work:
@@ -45,8 +127,12 @@ Rules that make it work:
   agents post under @pmcp's account → use the "not Maarten" disclaimer above. A bot-account
   pipeline comment uses `> 🤖 **<tool>** · agent pipeline (CI) · _<context>_` instead (no
   @pmcp disclaimer — it'd be false).
-- **@mention only because action is needed.** This is an ask → `@mention @pmcp`
-  (`NOTIFY_HANDLE`). Pure FYIs get no mention.
+- **@mention only because action is needed.** This is an ask → mention `@pmcp`
+  (`NOTIFY_HANDLE`). Pure FYIs get no mention — and note the mandatory provenance disclaimer
+  writes the handle in a **code span** (`` `@pmcp` ``) precisely so it names the account
+  without notifying. GitHub linkifies mentions inside blockquotes and `<details>` too; code
+  spans and fenced blocks are the only places it doesn't. (#2081: 17 of the last 29
+  notifications were that disclaimer line and nothing else.)
 - **Push before you block.** If you've written anything, `git push -u origin <branch>` first
   and name that branch under *Status* — an unpushed worktree is lost on stop (#639).
 - Then apply `status:blocked` and **stop**.

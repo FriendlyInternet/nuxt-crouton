@@ -248,6 +248,15 @@ jobs:
           # BETTER_AUTH_* are only needed by the prerender pass at build time.
           BETTER_AUTH_SECRET: prerender-placeholder
           BETTER_AUTH_URL: ${{ inputs.environment == 'production' && inputs['production-url'] || inputs['staging-url'] }}
+          # REVIEW OVERLAY (#2070) — set HERE, not in each app's cf:staging script.
+          # The flag existed only in the CLI's scaffold template (scaffold-app.ts), so the
+          # three apps that predate it never had it: 0 of 3. The bridge-wiring steps below
+          # would then push their secrets to a Worker serving no overlay, the deploy would
+          # succeed, and every "walk the preview" ask had nothing behind it (#2037 sat
+          # unrunnable for weeks on exactly this). One place, so it cannot drift per app.
+          # Gated on `review-pr`: an ordinary staging deploy is the trunk preview and must
+          # stay overlay-free — and the bridge needs a PR to post to anyway.
+          NUXT_PUBLIC_CROUTON_REVIEW: ${{ (inputs.environment == 'staging' && inputs['review-pr'] != '') && 'true' || '' }}
         run: |
           set -o pipefail
           PR_NUM="${{ github.event.pull_request.number }}"
@@ -268,7 +277,25 @@ jobs:
             PREVIEW_DB="$(printf '%s\n' "$PREVIEW_OUT" | sed -n 's/^db=//p')"
             npx wrangler deploy --config .output/server/wrangler.json | tee deploy.log
             # Fresh DB every time, so migrations are the whole schema — not incremental.
-            [ -n "$PREVIEW_DB" ] && npx wrangler d1 migrations apply "$PREVIEW_DB" --remote 2>&1 | tail -5
+            # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
+            # rewritten built config; the committed wrangler.jsonc carries <app>-db /
+            # <app>-staging-db and structurally cannot know about <app>-pr<n>-db. Without it
+            # wrangler read the committed file and died with "Couldn't find a D1 DB with the name
+            # or binding '<app>-pr<n>-db'", so EVERY per-PR preview since #2020 served an
+            # unmigrated, empty database. pr-preview-wrangler.mjs makes migrations_dir absolute
+            # first, so passing --config cannot re-create #138's doubled path (a green step that
+            # migrates nothing) — the silent version of the same bug.
+            if [ -z "$PREVIEW_DB" ]; then
+              echo "::error::pr-preview-wrangler produced no db name — the preview would have NO schema."
+              exit 1
+            fi
+            # The deploy above just PROVISIONED that database, but the built config still
+            # carries no `database_id` — it is stripped on purpose so wrangler auto-provisions
+            # (#2020). Remote D1 operations need the id, so resolve it by name now that it
+            # exists. Without this the migrate fails "missing a database_id" (#2085).
+            node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
+            npx wrangler d1 migrations apply "$PREVIEW_DB" \
+              --config .output/server/wrangler.json --remote
             (pnpm db:seed:staging || true)
           else
             pnpm run cf:staging | tee deploy.log
@@ -362,7 +389,8 @@ jobs:
 
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)
-      # but the bridge (`/api/_review`, @fyit/crouton-devtools) also needs RUNTIME config to
+      # but the bridge (`POST /api/_feedback`, installed by @fyit/crouton-devtools via
+      # @fyit/crouton-feedback — it was `/api/_review` before the #960 extraction) also needs RUNTIME config to
       # know which PR to post to and how to auth — which no deploy ever set, so every overlay
       # comment 4xx'd "Review bridge not configured". These two steps inject it on staging,
       # PR-tied deploys: routing (repo + PR) + the Nuxt Harness App creds (so the bridge mints
@@ -405,6 +433,62 @@ jobs:
           npx wrangler secret bulk "$RUNNER_TEMP/review-secrets.json" --env staging
           rm -f "$RUNNER_TEMP/review-secrets.json"
           echo "✓ Wired preview-review bridge → PR #$PR on $REPOSITORY (posts as nuxt-harness[bot])"
+
+      # ── PROVE the overlay is actually there (#2070, corrected in #2073) ────────
+      # Wiring the bridge's secrets says nothing about whether the deployed build SERVES
+      # the overlay — and it didn't, silently: deploy green, secrets set, no overlay,
+      # every "walk the preview" link inert. Same class as #2045's blank screenshot: an
+      # artifact that looks like a deliverable and isn't. So probe the live URL and FAIL,
+      # rather than hand over a preview that can't be reviewed.
+      #
+      # #2073 — the FIRST version of this probe checked `/api/_review`, a route that does
+      # not exist anywhere in the repo (the real handler is `/api/_feedback`, registered by
+      # @fyit/crouton-feedback). It would have failed on a perfectly good preview too, which
+      # is the "run the rule over the corpus, not just its tests" lesson in miniature: a
+      # gate authored from an imagined interface refuses correct builds. Both assertions
+      # below were run against a real app before landing.
+      #
+      # TWO independent signals, because each catches a different half:
+      #   • POST /api/_feedback   — the module is INSTALLED (the app must consume
+      #                             @fyit/crouton-devtools; velo/kassa/triage did not).
+      #                             POST, not GET: the handler is method-scoped, so a GET
+      #                             falls through to 404 even when it's registered.
+      #   • croutonReview in HTML — the review FLAG reached the build
+      #                             (`runtimeConfig.public.croutonReview = true`, set only
+      #                             when NUXT_PUBLIC_CROUTON_REVIEW === 'true').
+      - name: Verify the review overlay is live
+        if: ${{ inputs.environment == 'staging' && inputs['review-pr'] != '' }}
+        env:
+          URL: ${{ steps.deploy.outputs.url || inputs['staging-url'] }}
+        run: |
+          set -o pipefail
+          [ -z "$URL" ] && { echo "::error::review deploy has no URL to probe"; exit 1; }
+          fail=0
+
+          code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+                    -X POST -H 'content-type: application/json' -d '{}' \
+                    "$URL/api/_feedback" || echo 000)"
+          if [ "$code" = "404" ] || [ "$code" = "000" ]; then
+            echo "::error::No feedback endpoint at $URL (POST /api/_feedback → $code)."
+            echo "::error::The app does not install the overlay — add '@fyit/crouton-devtools'"
+            echo "::error::to its nuxt.config modules + dependencies (#2073)."
+            fail=1
+          else
+            echo "✓ feedback endpoint live (POST /api/_feedback → $code)"
+          fi
+
+          if curl -s --max-time 30 "$URL/" | grep -q 'croutonReview'; then
+            echo "✓ review flag present in the served HTML"
+          else
+            echo "::error::The review flag did not reach the build at $URL."
+            echo "::error::NUXT_PUBLIC_CROUTON_REVIEW must be 'true' at BUILD time (#2070)."
+            fail=1
+          fi
+
+          if [ "$fail" = "1" ]; then
+            echo "::error::This preview cannot be reviewed — do not hand out the link."
+            exit 1
+          fi
 
       # Guarantee a new app can AUTHENTICATE on first deploy with ZERO per-app setup.
       # A freshly provisioned Worker has no secrets, so member login 500s with

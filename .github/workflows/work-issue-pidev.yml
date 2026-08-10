@@ -239,10 +239,13 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           # Everything on the Claude SUBSCRIPTION (#1669). delegate-hard still escalates,
-          # but now by MODEL (sonnet → opus) on the same subscription provider — no metered
-          # lane. NO ANTHROPIC_API_KEY: pi-claude-cli uses the mini's `claude` login.
+          # but now by MODEL (sonnet → opus) on the same provider — no metered lane.
+          # Headless subscription auth: the mini's runner runs `claude` in a session that
+          # can't reach the macOS Keychain, so CLAUDE_CODE_OAUTH_TOKEN (claude setup-token, 1y)
+          # authenticates the CLI from env instead of the keychain login (#2119).
           PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-6') || 'claude-sonnet-5' }}
           PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           # WS2 (#1695): the integration branch parsed off the issue's pipeline block (empty → main).
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
@@ -566,6 +569,14 @@ jobs:
             { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$UI_TOUCHED" = "1" ]; } && DRAFT_FLAG="--draft"
             HOLD_NOTE=""
             [ "$UI_TOUCHED" = "1" ] && HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `lgtm` to release it. Evidence should be attached above; if it is missing, that is a harness bug (#1748), not a reason to approve blind.')"
+            # #2054: a UI-held draft is invisible everywhere except the PR's draft flag —
+            # the board, the epic digest, and the issue-side `resume-on-comment.yml` route
+            # (which requires status:blocked) can't see it. Label the ISSUE too. State only —
+            # nothing triggers off this label (#572); the PR-side ✅/`lgtm` route (#2052)
+            # remains primary since that's where the reviewer is looking.
+            if [ "$UI_TOUCHED" = "1" ]; then
+              gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
+            fi
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$(git log -1 --format=%s)" \
@@ -711,8 +722,22 @@ jobs:
             // both as "held for sign-off" tells the owner to APPROVE when what is actually
             // needed is an ANSWER — the gate asserting a state it never distinguished (#1751).
             // The ask-human template's mandatory first line is the discriminator.
-            const askedQuestion = signoffHeld &&
-              comments.some(c => /^##\s*🔀\s*Blocked\b/m.test(c.body || ''))
+            // WHAT does the hold need? (#2067) The `🔀 Blocked` heading is a FAMILY marker —
+            // it cannot tell "pick A or B" from "apply this patch, I'm not allowed to". Reading
+            // only the heading is how #2054 announced "asked you a question" above 4,372
+            // characters that contained no question: a workflow-only fix the App token cannot
+            // push (#1076), which needs the owner to ACT, not to answer.
+            // The `**Needs:** answer | action | approval` line is the explicit discriminator.
+            // Absent ⇒ 'answer', which is exactly today's behaviour, so older holds are unaffected.
+            // Keep the COMMENT OBJECT, not just its body (#2096): the notification below
+            // links the ask directly, so the owner is one tap from it instead of scroll-
+            // hunting a long thread on a phone for "the 🔀 comment above".
+            const holdComment = comments.find(c => /^##\s*🔀\s*Blocked\b/m.test(c.body || '')) || null
+            const holdBody = holdComment ? (holdComment.body || '') : ''
+            const needs = (holdBody.match(/^\s*\*\*Needs:\*\*\s*(answer|action|approval)\b/mi) || [])[1]
+            const holdKind = holdBody ? (needs ? needs.toLowerCase() : 'answer') : null
+            const askedQuestion = signoffHeld && holdKind === 'answer'
+            const needsAction = signoffHeld && holdKind === 'action'
 
             if (linkedPR || signoffHeld || alreadyClosed || createdSubIssues) {
               core.info(`Artifact-gate OK for #${issue_number}: linkedPR=${linkedPR} signoffHeld=${signoffHeld} askedQuestion=${askedQuestion} alreadyClosed=${alreadyClosed} createdSubIssues=${createdSubIssues}`)
@@ -723,9 +748,12 @@ jobs:
                 const freshPR = prRefs
                   .filter(e => new Date(e.created_at).getTime() >= sinceMs)
                   .map(e => e.source.issue.number)[0]
+                // Link the ask itself (#2096) — holdComment is guaranteed non-null on both
+                // hold branches (holdKind requires a non-empty holdBody).
                 const what = freshPR
                   ? `done → PR #${freshPR}`
-                  : askedQuestion ? '**asked you a question** — it needs an *answer*, not an approval. See the 🔀 comment above; replying on this issue resumes the work in a fresh run.'
+                  : needsAction ? `**needs you to APPLY something** — not an answer, not an approval. **[→ the ask](${holdComment.html_url})** says what to do and why the agent could not; the patch is collapsed under it. Comment here when applied and the work resumes in a fresh run.`
+                  : askedQuestion ? `**asked you a question** — it needs an *answer*, not an approval. **[→ the ask](${holdComment.html_url})** leads with the recommendation; reply with your pick and the work resumes in a fresh run.`
                   : (createdSubIssues ? 'decomposed → sub-issues created (see the tree)'
                     : signoffHeld ? 'held for sign-off (`status:blocked` + a review)'
                     : 'produced a deliverable — see the run')
@@ -846,13 +874,32 @@ jobs:
                   // The finish step failed but pushed nothing — still a harness fault, not the ticket.
                   why = 'the finish step failed before it could commit anything'
                   action = 'open the run log at the `finish` step — a workflow bug, not an underspecified issue'
+                  if (tail.trim()) detail = tail.trim()
+                } else if (/PI_TASK_COMPLETE_NOTHING_LEFT/.test(log)) {
+                  // #2104 — pi DELIBERATELY concluded nothing was left to do (the completion-
+                  // enforcer's escape marker, .pi/extensions/complete-work.ts) and ended without
+                  // saying so on the issue. The usual cause is a STALE THREAD: an old 🔀 hold, or
+                  // a "blocked on #X" note whose blocker has since closed — on #2037, #2070 was
+                  // fixed 4h earlier and nothing updated the thread pi read. The contract now
+                  // requires pi to verify cited blockers live and to post its nothing-left
+                  // conclusion as a hold; this bucket names an occurrence that slipped through.
+                  why = 'pi deliberately concluded there was NOTHING left to do and ended without saying so on the issue (`PI_TASK_COMPLETE_NOTHING_LEFT` in the log)'
+                  action = 'the thread probably reads as stale — re-read the newest 🔀 hold and any "blocked on #X" claim; if the blocker is resolved or the hold answered, reply stating the current state (e.g. "#X is closed — proceed with option A"), then re-dispatch (#2104)'
+                  if (tail.trim()) detail = tail.trim()
                 } else {
                   // LAST RESORT — no known cause matched. Say exactly that (#1876). The old text
                   // asserted "the issue is likely underspecified", which is a GUESS printed in the
                   // same confident voice as the real detections above; it sent the owner to rewrite
                   // two well-specified tickets while the actual bug was in this workflow.
                   why = 'pi ran to completion but no PR, sub-issues, or sign-off hold appeared — and none of the known causes matched'
-                  action = 'open the run log before changing anything. Only if the log shows pi genuinely had nothing to act on is the issue underspecified'
+                  action = 'read the log tail below first — it is what pi actually said. Only if it shows pi genuinely had nothing to act on is the issue underspecified'
+                  // ATTACH THE TAIL HERE ABOVE ALL (#2065). This branch means "I cannot explain
+                  // this run", and it was the ONLY branch that withheld the log — while sitting
+                  // inside `if (exists(logFile))`, so the log was read and then dropped. Three
+                  // alarms (#2055/#2056/#2058) were undiagnosable from outside the runner for
+                  // exactly this reason, each telling the owner to "open the run log" while the
+                  // relevant slice of it sat in `tail`.
+                  if (tail.trim()) detail = tail.trim()
                 }
               }
             } catch (e) { core.warning(`artifact-gate: could not read pi run log: ${e.message}`) }
@@ -875,6 +922,17 @@ jobs:
             if (!why && process.env.PI_LEFT_DIRTY === '1') {
               why = 'the deterministic finish step could not persist pi\'s edits — the working tree is still dirty (#1764)'
               action = 'open the run log for the finish step git error; not an underspecified issue (see #1764)'
+            }
+
+            // No log at all (#2065). "Open the run log" is misleading advice when the run
+            // never wrote one — and an empty PI_EXEC_LOG is itself evidence: the harness
+            // stopped before pi produced any output. Distinguish the two situations.
+            let hadLog = false
+            try { hadLog = Boolean(process.env.PI_EXEC_LOG) && fs.existsSync(process.env.PI_EXEC_LOG) } catch (e) { hadLog = false }
+            if (!why && !hadLog) {
+              why = 'pi produced NO run log at all — the harness stopped before pi wrote any output'
+              action = 'do not edit the issue. Open the run log and read the steps BEFORE the agent step; '
+                + 'an absent `PI_EXEC_LOG` means the failure is upstream of pi, in the workflow'
             }
 
             // Fallback when the log is unreadable but the step itself failed.

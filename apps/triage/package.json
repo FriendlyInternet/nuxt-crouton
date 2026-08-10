@@ -25,6 +25,7 @@
   "dependencies": {
     "@fyit/crouton": "workspace:*",
     "@fyit/crouton-charts": "workspace:*",
+    "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-triage": "workspace:*",
     "@vue-flow/core": "^1.41.2",
     "@vue-flow/node-resizer": "^1.5.1",

@@ -259,6 +259,9 @@
       "noHelperPinTitle": "No helper PIN set for this event",
       "noHelperPinDescription": "On a scoped page this block is unlocked with the event’s helper PIN — without one, volunteers cannot log in. Set the PIN in the event’s settings.",
       "product": "Product",
+      "category": "Category",
+      "price": "Price",
+      "noCategory": "No category",
       "total": "Total",
       "kitchenDisplay": "Kitchen Display",
       "orders": "Orders",
@@ -296,8 +299,7 @@
       "noProducts": "No products available",
       "outOfStock": "Out of stock",
       "options": "Options",
-      "addToCart": "Add to Cart",
-      "inCart": "Ordered"
+      "addToCart": "Add to Cart"
     },
     "categories": {
       "all": "All",

@@ -102,6 +102,10 @@ jobs:
         env:
           PI_MODEL: ${{ inputs.model || 'claude-haiku-4-5' }}
           PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
+          # Headless subscription auth: the mini's runner runs `claude` in a session that can't
+          # reach the macOS Keychain, so pass a long-lived OAuth token (claude setup-token, 1y)
+          # the CLI reads from env instead of the keychain login (#2119).
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -uo pipefail
           command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent

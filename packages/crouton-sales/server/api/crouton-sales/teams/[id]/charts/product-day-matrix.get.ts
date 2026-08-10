@@ -6,15 +6,21 @@
  * totals, per-day column totals, and a grand total. Optional ?eventId=
  * narrows to a single event. Team-members only.
  *
+ * Products are grouped per category (category displayOrder, units-desc
+ * within) and carry their category title + unit price, so the table's CSV
+ * download reads per category with the price beside each product (#2126).
+ *
  * The table renders both measures and toggles client-side, so this returns
  * units and revenue together rather than one measure.
  */
 import { eq } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { chartOrderScope, salesOrderDay } from '../../../../../utils/chart-scope'
+import { buildProductDayMatrix } from '../../../../../utils/product-day-matrix'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
+import { salesCategories } from '~~/layers/sales/collections/categories/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
@@ -28,52 +34,22 @@ export default defineEventHandler(async (event) => {
     .select({
       date: dateExpr,
       product: salesProducts.title,
+      category: salesCategories.title,
+      // Aggregates because only date/product/category are grouping keys; both
+      // are constant within a group in practice (per-category displayOrder,
+      // per-product price — max() just keeps SQLite happy).
+      categoryOrder: sql<number | null>`max(${salesCategories.displayOrder})`,
+      price: sql<number | null>`max(${salesProducts.price})`,
       units: sql<number>`sum(cast(${salesOrderitems.quantity} as real))`,
       revenue: sql<number>`sum(${salesOrderitems.totalPrice})`
     })
     .from(salesOrderitems)
     .innerJoin(salesOrders, eq(salesOrderitems.orderId, salesOrders.id))
     .innerJoin(salesProducts, eq(salesOrderitems.productId, salesProducts.id))
+    .leftJoin(salesCategories, eq(salesProducts.categoryId, salesCategories.id))
     .where(chartOrderScope(salesOrders, { teamId: team.id, eventId, personnel }))
-    .groupBy(dateExpr, salesProducts.title)
+    .groupBy(dateExpr, salesProducts.title, salesCategories.title)
     .orderBy(dateExpr)
 
-  interface Cell { units: number, revenue: number }
-  const days = [...new Set((rows as { date: string }[]).map(r => r.date))].sort()
-  const productMap = new Map<string, { units: Record<string, number>, revenue: Record<string, number>, totalUnits: number, totalRevenue: number }>()
-  const dayTotals: Record<string, Cell> = {}
-  let grandUnits = 0
-  let grandRevenue = 0
-
-  for (const r of rows as { date: string, product: string, units: number, revenue: number }[]) {
-    const u = Number(r.units) || 0
-    const rev = Number(r.revenue) || 0
-
-    if (!productMap.has(r.product)) {
-      productMap.set(r.product, { units: {}, revenue: {}, totalUnits: 0, totalRevenue: 0 })
-    }
-    const p = productMap.get(r.product)!
-    p.units[r.date] = u
-    p.revenue[r.date] = rev
-    p.totalUnits += u
-    p.totalRevenue += rev
-
-    if (!dayTotals[r.date]) dayTotals[r.date] = { units: 0, revenue: 0 }
-    dayTotals[r.date]!.units += u
-    dayTotals[r.date]!.revenue += rev
-
-    grandUnits += u
-    grandRevenue += rev
-  }
-
-  const products = [...productMap.entries()]
-    .map(([product, v]) => ({ product, ...v }))
-    .sort((a, b) => b.totalUnits - a.totalUnits)
-
-  return {
-    days,
-    products,
-    dayTotals,
-    grandTotal: { units: grandUnits, revenue: grandRevenue }
-  }
+  return buildProductDayMatrix(rows)
 })
