@@ -124,6 +124,7 @@
           "active": "{count} actives",
           "allCaughtUp": "Rien à remettre — tout est parti.",
           "bump": "Remis",
+          "tapToConfirm": "Touchez pour confirmer",
           "staff": "personnel",
           "eventNotFound": "Événement introuvable",
           "stale": "Non actualisé",
