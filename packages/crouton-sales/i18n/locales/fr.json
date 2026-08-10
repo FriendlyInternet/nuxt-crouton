@@ -606,6 +606,7 @@
         "settingsStat": "imprimantes"
       },
       "outstanding": "{count} en préparation",
+      "outstandingActive": "{count} en préparation (filtré)",
       "outstandingNone": "Rien en préparation",
       "outstandingFilter": "Afficher seulement celles-ci",
       "outstandingFilterClear": "Afficher toutes les commandes"

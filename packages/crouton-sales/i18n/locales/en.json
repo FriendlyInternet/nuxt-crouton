@@ -607,6 +607,7 @@
         "settingsStat": "printers"
       },
       "outstanding": "{count} in progress",
+      "outstandingActive": "{count} in progress (filtered)",
       "outstandingNone": "Nothing in progress",
       "outstandingFilter": "Show only these",
       "outstandingFilterClear": "Show all orders"
