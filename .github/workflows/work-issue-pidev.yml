@@ -557,6 +557,26 @@ jobs:
             echo "::warning::tests gate (#1885): ${PKG_LOGIC} packages/ logic file(s) committed with no test — opening the PR as a DRAFT"
           fi
 
+          # 6c) VISUAL EVIDENCE GATE (#2057, epic #2045) — the worker prompt ASKS pi to capture
+          # a screenshot for a UI-touching change and commit it to writeups/ui-proposals/, but
+          # asking is not enforcing: three real PRs (#2132/#2133/#2134) opened with the
+          # "evidence should be attached above" hold note and NOTHING attached — the owner had
+          # no way to distinguish "reviewed the capture" from "trusting the pipeline blind"
+          # except opening the PR and finding nothing there. Read this off the COMMITTED diff,
+          # the same way UI_TOUCHED and TESTS_MISSING already are, rather than trusting pi's
+          # own narration that it captured something (the #1849 reasoning, again).
+          #
+          # This is deliberately a CHECK, not a new capture mechanism — the actual capture
+          # (and its blank/error-page validation, #2055/#2061) lives in the claude lane's
+          # ui-proposal skill; the pi lane has no equivalent capture step yet. Until it does,
+          # the honest thing is to say so loudly rather than repeat a claim that was already
+          # proven false three times.
+          EVIDENCE_ATTACHED=0
+          if [ "$UI_TOUCHED" = "1" ] && git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '^writeups/ui-proposals/'; then
+            EVIDENCE_ATTACHED=1
+          fi
+          [ "$UI_TOUCHED" = "1" ] && echo "visual evidence attached: $EVIDENCE_ATTACHED"
+
           # 7) Open the PR. On a FAILED acceptance or a missing test, open it as a DRAFT (automerge skips drafts, #339) —
           #    creating it draft-from-the-start avoids a race where automerge lands it before we convert.
           if [ "$HAVE_COMMITS" = "1" ]; then
@@ -568,7 +588,15 @@ jobs:
             DRAFT_FLAG=""
             { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$UI_TOUCHED" = "1" ]; } && DRAFT_FLAG="--draft"
             HOLD_NOTE=""
-            [ "$UI_TOUCHED" = "1" ] && HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `lgtm` to release it. Evidence should be attached above; if it is missing, that is a harness bug (#1748), not a reason to approve blind.')"
+            if [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "1" ]; then
+              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `lgtm` to release it. A capture is attached in the run-record comment below.')"
+            elif [ "$UI_TOUCHED" = "1" ]; then
+              # Honest version (#2057): the old text here always said "evidence should be
+              # attached above", even when nothing was — which is exactly what happened on
+              # #2115/#2118/#2119. Say plainly that nothing was captured, so a phone reviewer
+              # never mistakes an empty PR for a reviewed one.
+              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off, but NO evidence was captured this run.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge — but no screenshot landed in `writeups/ui-proposals/`. This is a known harness gap (#2057), not a reason to approve blind: ask for a screenshot or a staging preview before replying `lgtm`.')"
+            fi
             # #2054: a UI-held draft is invisible everywhere except the PR's draft flag —
             # the board, the epic digest, and the issue-side `resume-on-comment.yml` route
             # (which requires status:blocked) can't see it. Label the ISSUE too. State only —
@@ -619,6 +647,13 @@ jobs:
                 echo
                 echo "🧪 **tests: MISSING** — ${PKG_LOGIC} \`packages/\` logic file(s) landed with no test file."
                 echo "Opened as a DRAFT so it can't auto-merge. Add the test (or say on the issue why it can't run here), then re-dispatch."
+              }
+              # #2057 — make a missing capture LOUD in the one comment a reviewer actually
+              # reads, not just a line in the PR body nobody re-checks after the first read.
+              [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "0" ] && {
+                echo
+                echo "👁 **visual evidence: MISSING** — this PR touches a surface you have to look at, but no capture landed in \`writeups/ui-proposals/\` this run."
+                echo "This is a harness gap (#2057), not a signal that it's safe to approve blind — ask for a screenshot or staging preview before replying \`lgtm\`."
               }
             } > "$REC"
             gh pr comment "$PRNUM" --body-file "$REC" 2>&1 | tail -1 || true
