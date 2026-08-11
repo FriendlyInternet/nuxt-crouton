@@ -588,14 +588,21 @@ jobs:
             DRAFT_FLAG=""
             { [ "$ACCEPT" = "fail" ] || [ "$TESTS_MISSING" = "1" ] || [ "$UI_TOUCHED" = "1" ]; } && DRAFT_FLAG="--draft"
             HOLD_NOTE=""
+            # Trailing HTML comment on BOTH branches is a MACHINE marker, not owner-facing prose:
+            # deploy-detect.mjs (#2140) greps the PR body for it to opt this PR into a real
+            # staging preview (the #2020 isolated per-PR Worker) instead of the PR-restricted
+            # apps/<app>/** matching #1297 uses for everything else. It belongs on both branches
+            # below — the live preview is independent of whether the local screenshot capture
+            # (#2057) happened to succeed this run. Keep in sync with UI_SIGNOFF_MARKER there.
             if [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "1" ]; then
-              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `lgtm` to release it. A capture is attached in the run-record comment below.')"
+              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `lgtm` to release it. A capture is attached in the run-record comment below; a live preview link should also follow in a separate comment once the staging deploy finishes.\n\n<!-- deploy-preview: full-watch -->')"
             elif [ "$UI_TOUCHED" = "1" ]; then
               # Honest version (#2057): the old text here always said "evidence should be
               # attached above", even when nothing was — which is exactly what happened on
               # #2115/#2118/#2119. Say plainly that nothing was captured, so a phone reviewer
-              # never mistakes an empty PR for a reviewed one.
-              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off, but NO evidence was captured this run.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge — but no screenshot landed in `writeups/ui-proposals/`. This is a known harness gap (#2057), not a reason to approve blind: ask for a screenshot or a staging preview before replying `lgtm`.')"
+              # never mistakes an empty PR for a reviewed one. A live preview (#2140) should
+              # still follow separately, so this is a lesser gap than it used to be.
+              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off, but NO screenshot was captured this run.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge — no capture landed in `writeups/ui-proposals/`. A live preview link should still follow in a separate comment once the staging deploy finishes; if neither that nor a screenshot ever shows up, that is a harness bug (#2057), not a reason to approve blind.\n\n<!-- deploy-preview: full-watch -->')"
             fi
             # #2054: a UI-held draft is invisible everywhere except the PR's draft flag —
             # the board, the epic digest, and the issue-side `resume-on-comment.yml` route

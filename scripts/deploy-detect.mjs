@@ -29,6 +29,15 @@ import { pathToFileURL } from 'node:url'
 
 export const ZERO_SHA = '0000000000000000000000000000000000000000'
 
+// #2140: the ONE carve-out from #1297's "PRs only deploy their own app" rule. A PR the pi
+// worker opened as a UI-sign-off hold (work-issue-pidev.yml, #1748) is never a fan-out — it's
+// exactly one known app, held specifically so a human can look at it — so it opts back into
+// the app's full watchPaths instead of the PR-restricted `apps/<app>/**`. Kept as a literal
+// HTML-comment marker (not a label) so no extra GitHub API call is needed: the PR body is
+// already on the `pull_request` event payload. Must match the marker work-issue-pidev.yml
+// appends to HOLD_NOTE — grep both on change.
+export const UI_SIGNOFF_MARKER = '<!-- deploy-preview: full-watch -->'
+
 export class DetectError extends Error {}
 
 // Translate a watchPath pattern into a RegExp with the SAME semantics as bash `[[ $f == $pat ]]`
@@ -52,7 +61,10 @@ export function fileMatchesAny(file, patterns = []) {
  *   "production" choice reaches production; anything else → staging — the #318 whitelist).
  * - push / pull_request: STAGING only (#318). A pull_request deploys ONLY the app whose OWN
  *   paths (`apps/<app>/**`) changed (#1297 — a shared-package break is caught by the fixture
- *   smoke + the rung-2 push deploy, not a per-PR fan-out). A push keeps the full watchPaths.
+ *   smoke + the rung-2 push deploy, not a per-PR fan-out) — UNLESS the PR carries the
+ *   UI_SIGNOFF_MARKER (#2140), in which case it matches the full watchPaths like a push does,
+ *   so the app it needs sign-off on actually gets a live preview. A push always keeps the full
+ *   watchPaths.
  */
 function toEntry(a, environment) {
   return {
@@ -73,21 +85,22 @@ function dispatchInclude(dispatchApp, dispatchEnv, apps) {
   return [toEntry(a, dispatchEnv === 'production' ? 'production' : 'staging')]
 }
 
-// push / pull_request → STAGING only. A pull_request matches only the app's OWN paths (#1297);
-// a push matches its full watchPaths (incl. shared packages).
-function changeInclude(event, changedFiles, apps) {
+// push / pull_request → STAGING only. A pull_request matches only the app's OWN paths (#1297),
+// unless it's a UI-sign-off hold (fullWatchPr, #2140) — then, like a push, it matches the full
+// watchPaths (incl. shared packages).
+function changeInclude(event, changedFiles, apps, fullWatchPr) {
   const include = []
   for (const a of apps) {
-    const patterns = event === 'pull_request' ? [`apps/${a.app}/**`] : (a.watchPaths || [])
+    const patterns = (event === 'pull_request' && !fullWatchPr) ? [`apps/${a.app}/**`] : (a.watchPaths || [])
     if (changedFiles.some(f => f && fileMatchesAny(f, patterns))) include.push(toEntry(a, 'staging'))
   }
   return include
 }
 
-export function computeMatrix({ event, changedFiles = [], dispatchApp = '', dispatchEnv = '', apps = [] }) {
+export function computeMatrix({ event, changedFiles = [], dispatchApp = '', dispatchEnv = '', apps = [], fullWatchPr = false }) {
   const include = event === 'workflow_dispatch'
     ? dispatchInclude(dispatchApp, dispatchEnv, apps)
-    : changeInclude(event, changedFiles, apps)
+    : changeInclude(event, changedFiles, apps, fullWatchPr)
   return { include, any: include.length > 0 }
 }
 
@@ -221,12 +234,20 @@ function main() {
     }
   }
 
+  // #2140: a UI-sign-off-held PR (work-issue-pidev.yml) carries this marker in its body so it
+  // opts into the full watchPaths instead of the PR-restricted apps/<app>/** — see
+  // UI_SIGNOFF_MARKER above. github.event.pull_request.body is already on the event payload,
+  // so this needs no extra API call.
+  const fullWatchPr = event === 'pull_request' && (process.env.PR_BODY || '').includes(UI_SIGNOFF_MARKER)
+  if (fullWatchPr) console.log('UI sign-off hold marker found on the PR body — matching full watchPaths (#2140)')
+
   const { include, any } = computeMatrix({
     event,
     changedFiles,
     dispatchApp: process.env.DISPATCH_APP || '',
     dispatchEnv: process.env.DISPATCH_ENV || '',
-    apps
+    apps,
+    fullWatchPr
   })
   const matrix = JSON.stringify({ include })
   const out = process.env.GITHUB_OUTPUT
