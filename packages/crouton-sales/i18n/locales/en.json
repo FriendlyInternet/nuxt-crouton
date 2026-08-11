@@ -125,6 +125,7 @@
           "active": "{count} active",
           "allCaughtUp": "Nothing to send out — everything has gone out.",
           "bump": "Sent out",
+          "tapToConfirm": "Tap to confirm",
           "staff": "staff",
           "eventNotFound": "Event not found",
           "stale": "Not updating",
