@@ -13,10 +13,11 @@
  * The table renders both measures and toggles client-side, so this returns
  * units and revenue together rather than one measure.
  */
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { chartOrderScope, salesOrderDay } from '../../../../../utils/chart-scope'
 import { buildProductDayMatrix } from '../../../../../utils/product-day-matrix'
+import { productCategoryCondition } from '../../../../../utils/product-category-filter'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
 import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
@@ -26,7 +27,7 @@ export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
   const db = useDB()
 
-  const { eventId, personnel } = getQuery(event)
+  const { eventId, personnel, productIds, categoryIds } = getQuery(event)
 
   const dateExpr = salesOrderDay(salesOrders)
 
@@ -47,7 +48,10 @@ export default defineEventHandler(async (event) => {
     .innerJoin(salesOrders, eq(salesOrderitems.orderId, salesOrders.id))
     .innerJoin(salesProducts, eq(salesOrderitems.productId, salesProducts.id))
     .leftJoin(salesCategories, eq(salesProducts.categoryId, salesCategories.id))
-    .where(chartOrderScope(salesOrders, { teamId: team.id, eventId, personnel }))
+    .where(and(
+      chartOrderScope(salesOrders, { teamId: team.id, eventId, personnel }),
+      productCategoryCondition(salesProducts.id, salesProducts.categoryId, { productIds, categoryIds })
+    ))
     .groupBy(dateExpr, salesProducts.title, salesCategories.title)
     .orderBy(dateExpr)
 

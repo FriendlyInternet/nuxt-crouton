@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
   const db = useDB()
 
-  const { eventId, personnel } = getQuery(event)
+  const { eventId, personnel, productIds, categoryIds } = getQuery(event)
   if (!eventId) {
     // Unlike the other chart endpoints this is event-scoped by nature: a
     // backlog is a property of one running event, and summing "still to
@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
       locations: salesLocations,
       kdsbumps: salesKdsbumps
     },
-    { teamId: team.id, eventId: String(eventId), personnel }
+    { teamId: team.id, eventId: String(eventId), personnel, productIds, categoryIds }
   )
 
   return { items }

@@ -38,6 +38,7 @@ import { and, desc, eq, sql } from 'drizzle-orm'
 import { locationBlocksDeliverySql } from './location-handover'
 import { excludesCancelledOrders } from './order-status'
 import { personnelConditionOn } from './personnel-condition'
+import { productCategoryCondition } from './product-category-filter'
 
 export interface PerProductTables {
   orders: any
@@ -67,6 +68,9 @@ export interface PerProductTotalsInput {
   eventId: string
   /** `all` | `exclude` | `only` — the Data pane's staff toggle. */
   personnel?: unknown
+  /** Optional product/category narrowing (#2146) — see `product-category-filter.ts`. */
+  productIds?: unknown
+  categoryIds?: unknown
 }
 
 export async function buildPerProductTotals(
@@ -87,7 +91,11 @@ export async function buildPerProductTotals(
     eq(orders.teamId, input.teamId),
     eq(orders.eventId, input.eventId),
     excludesCancelledOrders(orders),
-    personnelConditionOn(orders.isPersonnel, input.personnel)
+    personnelConditionOn(orders.isPersonnel, input.personnel),
+    productCategoryCondition(products.id, products.categoryId, {
+      productIds: input.productIds,
+      categoryIds: input.categoryIds
+    })
   )
 
   // --- sold -----------------------------------------------------------------
