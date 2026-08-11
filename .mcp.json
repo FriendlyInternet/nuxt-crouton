@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "crouton-mcp": {
+      "command": "node",
+      "args": ["packages/crouton-mcp/dist/index.js"],
+      "lifecycle": "lazy"
+    },
+    "fallow-mcp": {
+      "command": "node_modules/.bin/fallow-mcp",
+      "lifecycle": "lazy"
+    }
+  }
+}
