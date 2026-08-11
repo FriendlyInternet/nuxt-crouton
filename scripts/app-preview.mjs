@@ -8,11 +8,12 @@
  * login attached to the seeded `test1` team, and prints the PREFILLED one-click
  * URL. The dev server stays in the foreground — Ctrl-C stops everything.
  *
- * Why this exists: a `packages/*` change gets NO deploy preview by design
- * (scripts/deploy-detect.mjs matches only `apps/<app>/**` on a pull_request), so
- * the only way to see it was four manual steps — boot, seed, create a user,
- * attach it to the seeded team. Sessions skipped them and fell back on a stale
- * fixed account plus hand-written SQL test data.
+ * Why this exists: an ordinary `packages/*` PR gets NO deploy preview by design
+ * (scripts/deploy-detect.mjs matches only `apps/<app>/**` on a pull_request, unless
+ * the PR carries the UI-sign-off marker — #2140), so the only way to see most
+ * package changes was four manual steps — boot, seed, create a user, attach it to
+ * the seeded team. Sessions skipped them and fell back on a stale fixed account
+ * plus hand-written SQL test data.
  *
  * Deliberately reuses the deploy path's pieces rather than re-implementing them:
  * the app's own `db:seed` script (crouton-seed writes `.data/db/sqlite.db`, the

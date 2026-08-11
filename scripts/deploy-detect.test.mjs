@@ -85,6 +85,37 @@ test('a PR deploys ONLY the app whose own paths changed, ignoring shared-package
   assert.deepEqual(names(r), ['triage']) // NOT fanfare — PRs don't fan out on shared pkgs
 })
 
+// ── computeMatrix: pull_request + UI-sign-off hold (#2140) ────────────────────
+test('#2140: a UI-sign-off-held PR (fullWatchPr) matches the full watchPaths, like a push', () => {
+  const r = computeMatrix({
+    event: 'pull_request',
+    changedFiles: ['packages/crouton-sales/app/x.vue'],
+    apps: APPS,
+    fullWatchPr: true
+  })
+  assert.deepEqual(names(r), ['fanfare'])
+  assert.equal(r.any, true)
+  assert.equal(r.include[0].environment, 'staging') // still staging-only (#318), never production
+})
+
+test('#2140: without the marker, the same PR still deploys nothing (#1297 unaffected)', () => {
+  const r = computeMatrix({
+    event: 'pull_request',
+    changedFiles: ['packages/crouton-sales/app/x.vue'],
+    apps: APPS,
+    fullWatchPr: false
+  })
+  assert.deepEqual(names(r), [])
+})
+
+test('#2140: fullWatchPr does not affect push or workflow_dispatch (pull_request-only knob)', () => {
+  const push = computeMatrix({ event: 'push', changedFiles: ['packages/crouton-sales/x.ts'], apps: APPS, fullWatchPr: true })
+  assert.deepEqual(names(push), ['fanfare']) // same as the non-marker push test above
+
+  const dispatch = computeMatrix({ event: 'workflow_dispatch', dispatchApp: 'fanfare', dispatchEnv: '', apps: APPS, fullWatchPr: true })
+  assert.equal(dispatch.include[0].environment, 'staging') // unchanged — #318 whitelist still governs
+})
+
 // ── computeMatrix: workflow_dispatch ──────────────────────────────────────────
 test('dispatch honours production only for the explicit choice (#318 whitelist)', () => {
   assert.equal(computeMatrix({ event: 'workflow_dispatch', dispatchApp: 'fanfare', dispatchEnv: 'production', apps: APPS }).include[0].environment, 'production')

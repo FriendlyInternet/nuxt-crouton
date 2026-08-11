@@ -98,6 +98,10 @@ jobs:
           DISPATCH_ENV: ${{ github.event.inputs.environment }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.after }}
+          # #2140: a UI-sign-off-held PR carries a marker in its body so deploy-detect.mjs
+          # opts it into the full watchPaths (the #2020 isolated per-PR preview) instead of
+          # the PR-restricted apps/<app>/** that #1297 set for everything else.
+          PR_BODY: ${{ github.event.pull_request.body }}
         # The decision lives in the pure, unit-tested scripts/deploy-detect.mjs (mirrors
         # scripts/packages-guard.mjs). It fixes #1499: the old inline bash used
         # `git diff … 2>/dev/null || true`, which turned a FAILED diff into an empty one —
