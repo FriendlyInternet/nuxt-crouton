@@ -5,17 +5,19 @@
  * Optional ?eventId= narrows to a single event; omitted ⇒ team-wide.
  * Used by the salesChartBlock's `revenue-by-day` chart kind.
  */
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { chartOrderScope, salesOrderDay } from '../../../../../utils/chart-scope'
+import { productCategoryCondition } from '../../../../../utils/product-category-filter'
 import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
 import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
+import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
   const db = useDB()
 
-  const { eventId, personnel } = getQuery(event)
+  const { eventId, personnel, productIds, categoryIds } = getQuery(event)
 
   const dateExpr = salesOrderDay(salesOrders)
 
@@ -26,7 +28,11 @@ export default defineEventHandler(async (event) => {
     })
     .from(salesOrderitems)
     .innerJoin(salesOrders, eq(salesOrderitems.orderId, salesOrders.id))
-    .where(chartOrderScope(salesOrders, { teamId: team.id, eventId, personnel }))
+    .innerJoin(salesProducts, eq(salesOrderitems.productId, salesProducts.id))
+    .where(and(
+      chartOrderScope(salesOrders, { teamId: team.id, eventId, personnel }),
+      productCategoryCondition(salesProducts.id, salesProducts.categoryId, { productIds, categoryIds })
+    ))
     .groupBy(dateExpr)
     .orderBy(dateExpr)
 
