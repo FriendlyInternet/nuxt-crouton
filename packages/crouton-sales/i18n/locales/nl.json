@@ -215,7 +215,8 @@
         "outstanding": "Nog uit",
         "allLocations": "Alles",
         "stillOut": "{count} nog uit",
-        "directHandover": "Deze locatie geeft direct mee — hier kan niets blijven staan"
+        "directHandover": "Deze locatie geeft direct mee — hier kan niets blijven staan",
+        "total": "Totaal"
       }
     },
     "common": {
