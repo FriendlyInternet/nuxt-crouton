@@ -107,11 +107,14 @@ jobs:
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
       - uses: actions/github-script@v7
+        env:
+          OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { owner, repo } = context.repo
             const BOTS = ['claude[bot]', 'nuxt-harness[bot]']
+            const OWNER = process.env.OWNER_LOGIN || 'pmcp'
 
             // The check that must have REPORTED before we merge (#1698). ci.yml's `gate`
             // job — its display name, which is what the checks API returns.
@@ -235,6 +238,13 @@ jobs:
               const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })
               const sharedCode = files.filter(f => f.filename.startsWith('packages/'))
               if (sharedCode.length) {
+                // #2150: announce this hold ONCE. The hourly sweep re-evaluates every open sub-PR
+                // on an epic branch, and without this guard it re-posted the identical "held for a
+                // human" comment every hour (observed twice, 7 minutes apart, on PR #2148) and
+                // would re-request review just as repeatedly. The label added below (first time
+                // only) is the durable "already held" marker for later sweeps to check.
+                const alreadyHeld = (pr.labels || []).some(l => l.name === 'status:needs-merge')
+                if (alreadyHeld) { core.info(`#${pull_number} already held for shared-code review — not re-announcing.`); continue }
                 core.info(`#${pull_number} touches packages/ (${sharedCode.length} file(s)) — holding for a human.`)
                 // `status:needs-merge`, NOT `status:blocked` (#2083). The two holds ask for
                 // different things and used to share a label: a sign-off gate means "I asked
@@ -244,10 +254,15 @@ jobs:
                 // (#2039/#2041/#2044), and this guard's own "held for a human" comment landed
                 // under a label implying an open question.
                 try { await github.rest.issues.addLabels({ owner, repo, issue_number: pull_number, labels: ['status:needs-merge'] }) } catch (e) { core.warning(`addLabel #${pull_number}: ${e.message}`) }
+                // #2150: request review so the PR surfaces in the owner's native "Review
+                // requested" list — a plain comment produces neither a push notification nor a
+                // native GitHub surface pointing at the owner (confirmed absent from both, live,
+                // on PR #2148 — it showed up under neither "Created by me" nor "Review requested").
+                try { await github.rest.pulls.requestReviewers({ owner, repo, pull_number, reviewers: [OWNER] }) } catch (e) { core.warning(`requestReviewers #${pull_number}: ${e.message}`) }
                 const list = sharedCode.slice(0, 10).map(f => `- \`${f.filename}\``).join('\n')
                 const more = sharedCode.length > 10 ? `\n…and ${sharedCode.length - 10} more.` : ''
                 await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                  body: '⏸️ **Held for a human — this build PR changes shared code under `packages/`.**\n\n'
+                  body: `⏸️ **Held for a human — this build PR changes shared code under \`packages/\`.** @${OWNER}\n\n`
                     + '**Fix:** a change here ripples across every consuming app (the `packages/` HARD GATE, #350), so it is not auto-merged — review it, confirm `pnpm typecheck` across apps, then merge.\n\n'
                     + `<details><summary>shared-code files (${sharedCode.length})</summary>\n\n${list}${more}\n</details>\n\n`
                     + '<sub>🤖 agent pipeline (CI) · auto-merge shared-code guard (#339)</sub>' })
