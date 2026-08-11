@@ -214,7 +214,8 @@
         "outstanding": "Still out",
         "allLocations": "All",
         "stillOut": "{count} still out",
-        "directHandover": "This location hands over directly — nothing can be outstanding here"
+        "directHandover": "This location hands over directly — nothing can be outstanding here",
+        "total": "Total"
       }
     },
     "common": {

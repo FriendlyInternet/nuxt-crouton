@@ -96,6 +96,11 @@ const totalOutstanding = computed(() =>
   visibleRows.value.reduce((s, r) => s + (r.outstanding ?? 0), 0)
 )
 
+/** Sum of Verkocht for the rows currently visible (respects the location filter). */
+const totalSold = computed(() =>
+  visibleRows.value.reduce((s, r) => s + r.sold, 0)
+)
+
 /**
  * How each row reads, decided here so the template stays a flat list.
  * The null case is the meaningful one — see the block comment above.
@@ -195,6 +200,12 @@ watch(() => props.personnel, () => fetchTotals())
           >{{ r.outstandingText }}</span>
         </li>
       </ul>
+
+      <div class="flex items-center gap-3 pt-2 mt-1 border-t border-default text-sm font-semibold">
+        <span class="flex-1">{{ t('sales.dashboard.perProduct.total') }}</span>
+        <span class="w-12 shrink-0 text-right tabular-nums">{{ totalSold }}</span>
+        <span class="w-12 shrink-0 text-right tabular-nums">{{ totalOutstanding }}</span>
+      </div>
     </template>
   </div>
 </template>
