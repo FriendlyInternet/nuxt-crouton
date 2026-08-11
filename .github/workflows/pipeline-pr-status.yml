@@ -224,6 +224,31 @@ jobs:
               core.info(`Pinged @${OWNER} on red #${pr.number} (${pr.head.sha.slice(0, 7)}).`)
             }
 
+            // #2135: one-shot @mention the moment an epic shows "Awaiting your sign-off" — the
+            // rollup card above is silent otherwise, so a fresh sign-off hold produced ZERO signal
+            // an owner would notice (three real PRs — #2132/#2133/#2134 — sat unpinged until asked
+            // about directly). Keyed by epic number only, deduped like pingOnRed's SHA marker: a
+            // repeat status refresh on the SAME still-held epic must never re-ping. Known
+            // limitation, accepted deliberately: if this epic is unblocked and later blocked again
+            // by a second, unrelated hold, it will NOT re-ping — pingOnRed's per-SHA key can afford
+            // per-instance precision because a SHA changes; a sign-off hold has no equally cheap
+            // "which instance" signal, and a false skip here is safe (the rollup card still shows
+            // it), while spamming on every sweep re-evaluation would not be.
+            async function pingOnSignoffHold(epicNumber, title) {
+              const marker = `<!-- signoff-ping:${epicNumber} -->`
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: epicNumber, per_page: 100 })
+              if (comments.some(c => (c.body || '').includes(marker))) return // already pinged this hold
+              const body =
+                `${marker}\n` +
+                `🎨 **@${OWNER} — this needs your sign-off** (${title}).\n\n` +
+                `A draft PR is waiting on your \`lgtm\`/\`approve\` reply before it can build or ` +
+                `merge — open this issue's latest comment (or its PR) to see what changed.\n\n` +
+                `<sub>🤖 agent pipeline (CI) · sign-off notify (#1815/#2135)</sub>`
+              await github.rest.issues.createComment({ owner, repo, issue_number: epicNumber, body })
+              core.info(`Pinged @${OWNER} on fresh sign-off hold for epic #${epicNumber}.`)
+            }
+
             // A live flow-status CARD on the epic (#1838) — stage + child tree + current activity,
             // computed deterministically from sub-issue state + each child's work-<n> PR. Replaces
             // the old thin count line. Renders even with 0 children (the sign-off / decompose stages).
@@ -281,6 +306,7 @@ jobs:
               if (total === 0) {
                 head = epicBlocked ? `## 🎨 Awaiting your sign-off — ${title}` : `## ⏳ Decomposing — ${title}`
                 activity = epicBlocked ? '_now: waiting for your `lgtm` / answer on the design_' : '_now: the decomposer is planning this epic_'
+                if (epicBlocked) await pingOnSignoffHold(epicNumber, title)
               } else if (done < total) {
                 head = `## 🔨 Building — ${title}  (${done}/${total})`
                 activity = `_now: ${total - done} of ${total} in flight — reply here or on a PR to steer_`
