@@ -431,40 +431,47 @@ function toggleExpand(id: string) {
     <!-- The backlog, stated plainly. Deliberately ABOVE the filters: it is the
          one number that does NOT follow them, and putting it below would imply
          it did. Zero is worth showing too — "nothing waiting" is the answer
-         someone walked over to get. -->
-    <UButton
-      v-if="outstanding > 0"
-      :color="outstandingOnly ? 'warning' : 'neutral'"
-      :variant="outstandingOnly ? 'subtle' : 'ghost'"
-      size="sm"
-      icon="i-lucide-hourglass"
-      :label="t('sales.workspace.outstanding', { count: outstanding })"
-      :aria-pressed="outstandingOnly"
-      :title="outstandingOnly ? t('sales.workspace.outstandingFilterClear') : t('sales.workspace.outstandingFilter')"
-      class="-ms-2"
-      :ui="{ leadingIcon: outstandingOnly ? '' : 'text-warning' }"
-      @click="toggleOutstandingOnly"
-    >
-      <template #trailing>
-        <UIcon
-          v-if="outstandingOnly"
-          name="i-lucide-x"
-          class="size-3.5 opacity-70"
-        />
-      </template>
-    </UButton>
+         someone walked over to get.
 
-    <!-- Nothing outstanding: a statement, not a control — there is no slice to
-         filter to, so offering a button would be a dead end. -->
-    <div
-      v-else
-      class="flex items-center gap-2 text-sm text-muted"
-    >
-      <UIcon
-        name="i-lucide-check-check"
-        class="size-4 text-success"
-      />
-      {{ t('sales.workspace.outstandingNone') }}
+         Wrapped in the same px-4 as the pane header / order rows below (#2118):
+         previously this sat outside that padding with a `-ms-2` offset trying
+         to compensate, which drifted out of alignment. -->
+    <div class="px-4">
+      <UButton
+        v-if="outstanding > 0"
+        :color="outstandingOnly ? 'warning' : 'neutral'"
+        :variant="outstandingOnly ? 'subtle' : 'soft'"
+        size="sm"
+        icon="i-lucide-hourglass"
+        :label="outstandingOnly
+          ? t('sales.workspace.outstandingActive', { count: outstanding })
+          : t('sales.workspace.outstanding', { count: outstanding })"
+        :aria-pressed="outstandingOnly"
+        :title="outstandingOnly ? t('sales.workspace.outstandingFilterClear') : t('sales.workspace.outstandingFilter')"
+        :ui="{ leadingIcon: outstandingOnly ? '' : 'text-warning' }"
+        @click="toggleOutstandingOnly"
+      >
+        <template #trailing>
+          <UIcon
+            v-if="outstandingOnly"
+            name="i-lucide-x"
+            class="size-3.5 opacity-70"
+          />
+        </template>
+      </UButton>
+
+      <!-- Nothing outstanding: a statement, not a control — there is no slice to
+           filter to, so offering a button would be a dead end. -->
+      <div
+        v-else
+        class="flex items-center gap-2 text-sm text-muted"
+      >
+        <UIcon
+          name="i-lucide-check-check"
+          class="size-4 text-success"
+        />
+        {{ t('sales.workspace.outstandingNone') }}
+      </div>
     </div>
 
     <!-- Filters live behind a toggle (in the pane header when the parent

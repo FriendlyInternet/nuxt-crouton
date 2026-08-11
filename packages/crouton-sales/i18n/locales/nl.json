@@ -608,6 +608,7 @@
         "settingsStat": "printers"
       },
       "outstanding": "{count} in bereiding",
+      "outstandingActive": "{count} in bereiding (gefilterd)",
       "outstandingNone": "Niets in bereiding",
       "outstandingFilter": "Toon alleen deze",
       "outstandingFilterClear": "Toon alle bestellingen"
