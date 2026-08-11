@@ -16,6 +16,32 @@ export function parseEpicNumber(ref) {
 }
 
 /**
+ * Resolve which issue number to treat as "the epic" for a just-closed pipeline issue, and
+ * whether it's a genuine multi-child epic or a SOLO LEAF using itself as its own integration
+ * branch (#1686's single-use worker: `EPIC="${EPIC:-$ISSUE}"`, the same default every other
+ * pipeline step already applies when a target has no parent). PURE — #2152.
+ *
+ * A solo leaf's pipeline-block `epic=` field (when it survives to close-time at all — often
+ * absent, #2152) equals its OWN issue number, exactly like a genuine multi-child epic closing
+ * directly instead of via `/close-epic`. The only thing that tells them apart is whether the
+ * resolved epic number actually has real GitHub sub-issues — a solo leaf never does.
+ *
+ *   closedIssueNumber: number        — the issue whose `issues: closed` event fired this
+ *   blockEpicNumber:   number|null   — `epic=` from its pipeline block, if any
+ *   subIssueCount:     number        — real sub-issues already fetched for the resolved epic number
+ *
+ * Returns { epicNumber, isSolo }. When isSolo is true, the caller should treat the closed issue
+ * itself as its epic's one completed child (`subIssues = [{ state: 'closed' }]`) rather than
+ * skipping — that's the #2152 fix. When isSolo is false and epicNumber === closedIssueNumber,
+ * the caller should keep the original #1815 behaviour: skip, defer to `/close-epic` (#856).
+ */
+export function resolveEpicTarget({ closedIssueNumber, blockEpicNumber = null, subIssueCount = 0 }) {
+  const epicNumber = blockEpicNumber ?? closedIssueNumber
+  const isSolo = epicNumber === closedIssueNumber && subIssueCount === 0
+  return { epicNumber, isSolo }
+}
+
+/**
  * Decide whether to open the epic→main PR. PURE.
  *   subIssues:           [{ state: 'open'|'closed' }]  — the epic's DIRECT sub-issues
  *   existingEpicMainPrs: [ ... ]                        — OPEN PRs already head=epic-branch base=main

@@ -57,25 +57,31 @@ jobs:
             const OWNER = process.env.OWNER_LOGIN || 'pmcp'
             const ws = process.env.GITHUB_WORKSPACE
             const { parsePipelineBlock } = await import(`${ws}/scripts/pipeline-context.mjs`)
-            const { parseEpicNumber, decideOpen } = await import(`${ws}/scripts/epic-ready.mjs`)
+            const { parseEpicNumber, decideOpen, resolveEpicTarget } = await import(`${ws}/scripts/epic-ready.mjs`)
 
             // Resolve (epicNumber, epicBranch) from either the closed child's pipeline block
-            // or a manual dispatch's branch input.
-            let epicNumber, epicBranch
+            // or a manual dispatch's branch input. When no block/epic is recorded, default
+            // epicNumber to the closed issue's OWN number — mirrors the EPIC="${EPIC:-$ISSUE}"
+            // convention every other pipeline step uses for a solo leaf dispatched directly via
+            // `work-this` (#1686) rather than through a real multi-child epic. Resolution must
+            // not depend on the pipeline block surviving to close-time — empirically it often
+            // doesn't (#2152).
+            let epicNumber, epicBranch, closedIssueNumber = null, blockEpicNumber = null
             if (context.eventName === 'workflow_dispatch') {
               epicBranch = process.env.DISPATCH_BRANCH
               epicNumber = parseEpicNumber(epicBranch)
+              if (!epicNumber) { core.info(`could not resolve an epic number from ${epicBranch}; skip.`); return }
             } else {
               const closed = context.payload.issue
+              closedIssueNumber = closed.number
               const block = parsePipelineBlock(closed.body || '')
-              epicNumber = block.epic
+              blockEpicNumber = block.epic
+              epicNumber = block.epic ?? closed.number
               epicBranch = block.epic_branch
-              if (!epicNumber) { core.info(`#${closed.number} has no pipeline block — not a pipeline child; skip.`); return }
-              if (epicNumber === closed.number) { core.info(`#${closed.number} is the epic itself — closed via /close-epic, not here; skip.`); return }
             }
-            if (!epicNumber) { core.info(`could not resolve an epic number from ${epicBranch}; skip.`); return }
 
-            // Fall back to matching-refs if the block carried no branch (older children).
+            // Fall back to matching-refs if the block carried no branch (older children, or a
+            // solo leaf whose block never persisted).
             if (!epicBranch) {
               try {
                 const refs = await github.paginate('GET /repos/{owner}/{repo}/git/matching-refs/heads/{prefix}',
@@ -91,6 +97,21 @@ jobs:
               subIssues = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues',
                 { owner, repo, issue_number: epicNumber, per_page: 100 })
             } catch (e) { core.warning(`sub-issues for #${epicNumber}: ${e.message}`); return }
+
+            // #2152: a genuine multi-child epic that closed directly (not via a sub-issue's PR
+            // merging) is NOT this workflow's job — it closes via /close-epic (#856), so keep the
+            // original skip. But a SOLO leaf using itself as its own integration branch (#1686)
+            // also resolves epicNumber to its own number, with zero real sub-issues — that used to
+            // be indistinguishable from the genuine-epic case and always skipped. Treat it as its
+            // epic's one completed child instead.
+            if (closedIssueNumber !== null) {
+              const { isSolo } = resolveEpicTarget({ closedIssueNumber, blockEpicNumber, subIssueCount: subIssues.length })
+              if (epicNumber === closedIssueNumber) {
+                if (!isSolo) { core.info(`#${closedIssueNumber} is a genuine epic (${subIssues.length} sub-issue(s)) — closed via /close-epic, not here; skip.`); return }
+                core.info(`#${closedIssueNumber} is a solo leaf (its own epic branch, no real sub-issues) — treating its own closure as the completion signal.`)
+                subIssues = [{ number: closedIssueNumber, state: 'closed' }]
+              }
+            }
 
             // 2) any existing OPEN epic→main PR (idempotency guard)
             const existing = await github.paginate(github.rest.pulls.list,

@@ -3,7 +3,7 @@
 //   node --test scripts/epic-ready.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseEpicNumber, decideOpen } from './epic-ready.mjs'
+import { parseEpicNumber, decideOpen, resolveEpicTarget } from './epic-ready.mjs'
 
 test('parseEpicNumber pulls the number from an epic branch, else null', () => {
   assert.equal(parseEpicNumber('epic/1701-cold-scaffold-first-run'), 1701)
@@ -48,4 +48,30 @@ test('does NOT open when the branch is not ahead of main (nothing to land)', () 
 
 test('defaults are safe — empty call never opens', () => {
   assert.equal(decideOpen().open, false)
+})
+
+// ── resolveEpicTarget (#2152: solo leaf vs genuine epic) ──────────────────────
+test('a real child of a distinct epic: epicNumber from the block, never solo', () => {
+  const r = resolveEpicTarget({ closedIssueNumber: 42, blockEpicNumber: 10, subIssueCount: 0 })
+  assert.deepEqual(r, { epicNumber: 10, isSolo: false })
+})
+
+test('a solo leaf with no pipeline block at all defaults epicNumber to its own number', () => {
+  const r = resolveEpicTarget({ closedIssueNumber: 2146, blockEpicNumber: null, subIssueCount: 0 })
+  assert.deepEqual(r, { epicNumber: 2146, isSolo: true })
+})
+
+test('a solo leaf whose block DID survive (epic=self) is still solo when it has no real sub-issues', () => {
+  const r = resolveEpicTarget({ closedIssueNumber: 2146, blockEpicNumber: 2146, subIssueCount: 0 })
+  assert.deepEqual(r, { epicNumber: 2146, isSolo: true })
+})
+
+test('a genuine multi-child epic closing directly (epic=self, real sub-issues) is NOT solo', () => {
+  const r = resolveEpicTarget({ closedIssueNumber: 100, blockEpicNumber: 100, subIssueCount: 5 })
+  assert.deepEqual(r, { epicNumber: 100, isSolo: false })
+})
+
+test('a genuine epic with no block at all (defaults to self) but real sub-issues is NOT solo', () => {
+  const r = resolveEpicTarget({ closedIssueNumber: 100, blockEpicNumber: null, subIssueCount: 3 })
+  assert.deepEqual(r, { epicNumber: 100, isSolo: false })
 })
