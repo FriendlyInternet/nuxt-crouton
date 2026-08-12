@@ -183,7 +183,12 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.app-token.outputs.token }}
-          claude_args: "--model claude-sonnet-5 --max-turns 30"
+          # bypassPermissions REQUIRED (#834/#2165): headless CI denies un-allowlisted tools, so
+          # WITHOUT this the fix-bot's every pnpm/git/gh command is permission-denied — it burns all
+          # its turns on denials and crashes with max_turns, never reaching the fix (the first real
+          # live-lane run, 31589320044, did exactly this). Same reason red-team-daily.yml sets it.
+          # max-turns 40 (was 30): a full pnpm install + typecheck + fix + verify cycle is turn-hungry.
+          claude_args: "--model claude-sonnet-5 --max-turns 40 --permission-mode bypassPermissions"
           show_full_output: true
           prompt: |
             CI failed on this pipeline PR — you are the fix-bot. This is auto-fix attempt
