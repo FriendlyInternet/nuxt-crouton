@@ -433,7 +433,22 @@ jobs:
               NUXT_CROUTON_REVIEW_GITHUB_APP_INSTALLATION_ID: $inst,
               NUXT_CROUTON_REVIEW_GITHUB_APP_PRIVATE_KEY: $key
             }' > "$RUNNER_TEMP/review-secrets.json"
-          npx wrangler secret bulk "$RUNNER_TEMP/review-secrets.json" --env staging
+          # Target the Worker the deploy published. A per-PR preview (#2020) is a SEPARATE
+          # top-level Worker, so `--env staging` would write the bridge secrets to the SHARED
+          # staging Worker and the preview's /api/_feedback stays "GitHub sink not configured"
+          # (#2175 — the annotation sibling of #2167's auth-secret targeting). Point at the
+          # preview's own config in that case; a dispatch review_pr (no PR event) stays --env staging.
+          # Assign the PR-number expression to a var BEFORE testing it: the shellcheck-workflows
+          # extractor replaces the GitHub expression with a literal, so testing it inline trips
+          # SC2157 ("always true"). Testing $PR_NUM is what #2167's auth-secret step does too.
+          # (Do NOT write a literal double-brace expression in this comment — Actions parses it
+          # even inside a run-block comment, which fails the whole workflow to load.)
+          PR_NUM="${{ github.event.pull_request.number }}"
+          BRIDGE_TARGET="--env staging"
+          if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then
+            BRIDGE_TARGET="--config .output/server/wrangler.json"
+          fi
+          npx wrangler secret bulk "$RUNNER_TEMP/review-secrets.json" $BRIDGE_TARGET
           rm -f "$RUNNER_TEMP/review-secrets.json"
           echo "✓ Wired preview-review bridge → PR #$PR on $REPOSITORY (posts as nuxt-harness[bot])"
 
@@ -614,6 +629,66 @@ jobs:
           else
             echo "::warning::Review-login seed FAILED for ${APP} at ${DEPLOY_URL} — not advertising a login that doesn't work (#1369)."
             echo "### ⚠️ Review login unavailable (${APP}) — the seed step failed; no working login for this preview." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # ── Capture the review surfaces so the flow can SHOW the change (#2173) ──────────
+      # Deploy-side on purpose: THIS env boots the app; the pi worker's often can't ("could not
+      # typecheck the touched app"). Logs into the live preview, drives the app to each DECLARED
+      # review surface (deploy.config.json `reviewSurfaces`, else reviewLogin.landing), validates
+      # the shot isn't blank/error, and commits the PNG(s) to writeups/ui-proposals/ — where the
+      # #2172 sign-off gate looks. The push (App token) re-runs CI so that gate re-evaluates and
+      # finds the evidence; a ui-proposals-only change matches NO app watchPaths, so it does NOT
+      # re-deploy (no loop). Never fails the deploy — no capture ⇒ the gate withholds (honest).
+      - name: Mint token for review-capture push
+        id: capture-token
+        if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && steps.seed.outputs.email != '' }}
+        continue-on-error: true
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - name: Capture + commit review-surface evidence (#2173)
+        if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && steps.seed.outputs.email != '' && steps.capture-token.outputs.token != '' }}
+        env:
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+          EMAIL: ${{ steps.seed.outputs.email }}
+          PASSWORD: ${{ steps.seed.outputs.password }}
+          APP: ${{ inputs.app }}
+          WORKSPACE: ${{ inputs.workspace }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_REF: ${{ github.head_ref }}
+          REPO: ${{ github.repository }}
+          GH_TOKEN_PUSH: ${{ steps.capture-token.outputs.token }}
+        run: |
+          set -o pipefail
+          [ -n "$DEPLOY_URL" ] || { echo "no deploy url — skipping capture"; exit 0; }
+          npx playwright install chromium >/dev/null 2>&1 || true
+          # Capture to a temp dir so the commit is done in a CLEAN clone, never the dirty deploy
+          # workspace (build output / sync:ids-modified wrangler.jsonc would otherwise ride along).
+          OUT="$RUNNER_TEMP/uip"; rm -rf "$OUT"; mkdir -p "$OUT"
+          node scripts/capture-review-surfaces.mjs \
+            --url "$DEPLOY_URL" --email "$EMAIL" --password "$PASSWORD" \
+            --manifest "$WORKSPACE/$APP/deploy.config.json" --pr "$PR_NUMBER" --out "$OUT" || true
+          shopt -s nullglob; PNGS=("$OUT"/*.png)
+          if [ ${#PNGS[@]} -eq 0 ]; then
+            echo "no valid captures — the sign-off gate will withhold (nothing to show)"; exit 0
+          fi
+          BR="$RUNNER_TEMP/uip-branch"; rm -rf "$BR"
+          git clone --depth=1 --branch "$HEAD_REF" \
+            "https://x-access-token:${GH_TOKEN_PUSH}@github.com/${REPO}.git" "$BR" 2>/dev/null || {
+              echo "::warning::could not clone $HEAD_REF for capture commit — skipping (non-fatal)"; exit 0; }
+          mkdir -p "$BR/writeups/ui-proposals"
+          cp "$OUT"/*.png "$BR/writeups/ui-proposals/"
+          cd "$BR" || { echo "::warning::could not cd into the capture clone — skipping (non-fatal)"; exit 0; }
+          git config user.name "nuxt-harness[bot]"
+          git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
+          git add writeups/ui-proposals/*.png
+          if git commit -q -m "chore(review): capture ${APP} review surface(s) for PR #${PR_NUMBER} (#2173)"; then
+            git push origin "HEAD:${HEAD_REF}" && echo "✓ committed ${#PNGS[@]} capture(s) → the sign-off gate can now show them"
+          else
+            echo "captures unchanged — nothing to commit"
           fi
 
       # Prove the DEPLOYED preview actually works — log in with the seeded account, run
