@@ -1,7 +1,30 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import * as compiler from '@vue/compiler-sfc'
 import { isVueFile, vueFilesOnly, sfcErrors, errText } from './verify-touched-compiles.mjs'
+
+// This suite runs in the dependency-free `scripts-tests` CI job (no `pnpm install`), so it must
+// NOT import `@vue/compiler-sfc`. `sfcErrors` takes an INJECTED compiler precisely so its
+// composition (parse errors + template errors, throws, no-template) is unit-tested with a mock.
+// The REAL compiler catching a real unbalanced tag is covered by the `compile-check` CI job
+// (which installs deps and runs scripts/verify-touched-compiles.mjs on the diff) + the manual
+// end-to-end in the PR.
+
+/** A configurable stand-in for @vue/compiler-sfc. */
+function mockCompiler({ parseErrs = [], parseThrows = false, template = null, tmplErrs = [], tmplThrows = false } = {}) {
+  return {
+    parse() {
+      if (parseThrows) throw new Error('parse boom')
+      return {
+        descriptor: template != null ? { template: { content: template } } : {},
+        errors: parseErrs.map(m => ({ message: m }))
+      }
+    },
+    compileTemplate() {
+      if (tmplThrows) throw new Error('compile boom')
+      return { errors: tmplErrs.map(m => ({ message: m })) }
+    }
+  }
+}
 
 test('isVueFile: only .vue paths', () => {
   assert.equal(isVueFile('a/b/Foo.vue'), true)
@@ -25,43 +48,32 @@ test('errText: object or string → single trimmed line', () => {
   assert.equal(errText(new Error('x\ty')), 'x y')
 })
 
-test('sfcErrors: an unbalanced tag (the #2179 case) is caught', () => {
-  // The exact shape PR #2180 shipped: a #content wrapper <div> with no closing </div>.
-  const broken = `<template>
-  <div>
-    <UPopover>
-      <template #content>
-        <div style="z-index: 2147483647; position: relative">
-        <div class="w-64 p-1">rows</div>
-      </template>
-    </UPopover>
-  </div>
-</template>`
-  const errs = sfcErrors(broken, 'FeedbackLauncher.vue', compiler)
-  assert.ok(errs.length >= 1, 'expected at least one compile error')
-  assert.ok(errs.some(e => /missing end tag/i.test(e)), `expected a missing-end-tag error, got: ${errs.join(' | ')}`)
+test('sfcErrors: surfaces PARSE errors (the unbalanced-tag / #2179 class)', () => {
+  const c = mockCompiler({ parseErrs: ['Element is missing end tag.'] })
+  assert.deepEqual(sfcErrors('<template>…</template>', 'Foo.vue', c), ['Element is missing end tag.'])
 })
 
-test('sfcErrors: a well-formed SFC compiles clean', () => {
-  const ok = `<template>
-  <div>
-    <UPopover>
-      <template #content>
-        <div style="z-index: 2147483647; position: relative">
-          <div class="w-64 p-1">rows</div>
-        </div>
-      </template>
-    </UPopover>
-  </div>
-</template>
-<script setup lang="ts">
-const x = 1
-</script>`
-  assert.deepEqual(sfcErrors(ok, 'Fine.vue', compiler), [])
+test('sfcErrors: a clean SFC (no template) → no errors', () => {
+  assert.deepEqual(sfcErrors('<script>const x=1</script>', 'Fine.vue', mockCompiler()), [])
 })
 
-test('sfcErrors: a malformed template expression is caught', () => {
-  const bad = `<template><div :class="{ ">x</div></template>`
-  const errs = sfcErrors(bad, 'Bad.vue', compiler)
-  assert.ok(errs.length >= 1, `expected a template compile error, got: ${errs.join(' | ')}`)
+test('sfcErrors: surfaces TEMPLATE compile errors when a <template> is present', () => {
+  const c = mockCompiler({ template: '<div :class="{ ">x</div>', tmplErrs: ['Error parsing JavaScript expression'] })
+  assert.deepEqual(sfcErrors('<template>…</template>', 'Bad.vue', c), ['Error parsing JavaScript expression'])
+})
+
+test('sfcErrors: MERGES parse + template errors', () => {
+  const c = mockCompiler({ parseErrs: ['p1'], template: '<div/>', tmplErrs: ['t1', 't2'] })
+  assert.deepEqual(sfcErrors('x', 'M.vue', c), ['p1', 't1', 't2'])
+})
+
+test('sfcErrors: a thrown parse becomes one error and skips the template compile', () => {
+  const errs = sfcErrors('x', 'Throw.vue', mockCompiler({ parseThrows: true }))
+  assert.equal(errs.length, 1)
+  assert.match(errs[0], /parse boom/)
+})
+
+test('sfcErrors: a thrown template compile is caught as an error, not a crash', () => {
+  const errs = sfcErrors('x', 'T.vue', mockCompiler({ template: '<div/>', tmplThrows: true }))
+  assert.ok(errs.some(e => /compile boom/.test(e)), `expected the caught template throw, got: ${errs.join(' | ')}`)
 })
