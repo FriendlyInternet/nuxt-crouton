@@ -439,8 +439,10 @@ jobs:
           # (#2175 — the annotation sibling of #2167's auth-secret targeting). Point at the
           # preview's own config in that case; a dispatch review_pr (no PR event) stays --env staging.
           # Assign the PR-number expression to a var BEFORE testing it: the shellcheck-workflows
-          # extractor substitutes `${{ }}` with a literal, so an inline `[ -n "${{ … }}" ]` trips
+          # extractor replaces the GitHub expression with a literal, so testing it inline trips
           # SC2157 ("always true"). Testing $PR_NUM is what #2167's auth-secret step does too.
+          # (Do NOT write a literal double-brace expression in this comment — Actions parses it
+          # even inside a run-block comment, which fails the whole workflow to load.)
           PR_NUM="${{ github.event.pull_request.number }}"
           BRIDGE_TARGET="--env staging"
           if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then
