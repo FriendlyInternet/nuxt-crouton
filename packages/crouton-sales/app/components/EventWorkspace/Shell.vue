@@ -207,6 +207,13 @@ const hasGutter = computed(() =>
 const ordersFiltersOpen = ref(false)
 const ordersFilterCount = ref(0)
 
+// Data-pane filters (#2147): same pattern — product/category selects + the
+// personnel toggle live in DataPanel, the toggle button lives in the pane
+// header, state is lifted here so the chip count is visible even while the
+// panel itself is collapsed.
+const dataFiltersOpen = ref(false)
+const dataFilterCount = ref(0)
+
 // Kassa height: fill the viewport from wherever the module actually starts —
 // hosts differ wildly (admin page with navbar, chrome-less full-screen CMS
 // page, fullscreen modal), so a hardcoded budget always wastes space in one
@@ -437,9 +444,25 @@ const kassaHeightStyle = computed(() =>
               icon="i-lucide-chart-line"
               :title="t('sales.workspace.dataPanel.title')"
               @close="dataOpen = false"
-            />
+            >
+              <UChip :show="dataFilterCount > 0" :text="dataFilterCount" size="xl" inset>
+                <UButton
+                  icon="i-lucide-filter"
+                  size="xs"
+                  color="neutral"
+                  :variant="dataFiltersOpen ? 'soft' : 'ghost'"
+                  :aria-label="t('sales.workspace.filters')"
+                  @click="dataFiltersOpen = !dataFiltersOpen"
+                />
+              </UChip>
+            </SalesEventWorkspacePaneHeader>
             <div class="flex-1 overflow-y-auto min-w-0 flex flex-col">
-              <SalesEventWorkspaceDataPanel :event="event" :team-param="teamParam" />
+              <SalesEventWorkspaceDataPanel
+                v-model:filters-open="dataFiltersOpen"
+                :event="event"
+                :team-param="teamParam"
+                @update:active-filter-count="dataFilterCount = $event"
+              />
             </div>
           </SplitterPanel>
         </template>
@@ -651,9 +674,25 @@ const kassaHeightStyle = computed(() =>
             icon="i-lucide-chart-line"
             :title="t('sales.workspace.dataPanel.title')"
             @close="dataSlideoverOpen = false"
-          />
+          >
+            <UChip :show="dataFilterCount > 0" :text="dataFilterCount" size="xl" inset>
+              <UButton
+                icon="i-lucide-filter"
+                size="xs"
+                color="neutral"
+                :variant="dataFiltersOpen ? 'soft' : 'ghost'"
+                :aria-label="t('sales.workspace.filters')"
+                @click="dataFiltersOpen = !dataFiltersOpen"
+              />
+            </UChip>
+          </SalesEventWorkspacePaneHeader>
           <div class="flex-1 overflow-y-auto p-4 pt-2">
-            <SalesEventWorkspaceDataPanel :event="event" :team-param="teamParam" />
+            <SalesEventWorkspaceDataPanel
+              v-model:filters-open="dataFiltersOpen"
+              :event="event"
+              :team-param="teamParam"
+              @update:active-filter-count="dataFilterCount = $event"
+            />
           </div>
         </div>
       </template>
