@@ -230,6 +230,19 @@ jobs:
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
 
+      # Resolve the pipeline's models from the ONE editable knob (#2161): .claude/pipeline-
+      # models.json, read via scripts/resolve-pipeline-model.mjs. Switch a model there — no
+      # workflow edit. The `|| echo <fallback>` keeps the current defaults VISIBLE here, so a
+      # missing/broken config can never produce an empty PI_MODEL that would break pi; the
+      # resolver exits non-zero (never prints a partial) precisely so this fallback is clean.
+      - id: model
+        run: |
+          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default 2>/dev/null || echo claude-sonnet-5)"
+          HARD="$(node scripts/resolve-pipeline-model.mjs hard 2>/dev/null || echo claude-opus-4-8)"
+          echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
+          echo "hard=$HARD" >> "$GITHUB_OUTPUT"
+          echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"
+
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
       # the worker PR) act as the Harness App and cascade. ANTHROPIC_API_KEY = the
@@ -239,15 +252,13 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           # Everything on the Claude SUBSCRIPTION (#1669). delegate-hard still escalates,
-          # but now by MODEL (sonnet → opus) on the same provider — no metered lane.
+          # but now by MODEL (default → hard) on the same provider — no metered lane.
           # Headless subscription auth: the mini's runner runs `claude` in a session that
           # can't reach the macOS Keychain, so CLAUDE_CODE_OAUTH_TOKEN (claude setup-token, 1y)
           # authenticates the CLI from env instead of the keychain login (#2119).
-          # #2160: the hard tier is claude-opus-4-8 — the value routing.json's `large` tier
-          # already declared. This env drifted to the stale 4-6 because routing.json's --check
-          # guards agent frontmatter, not these pi workflow model envs. Keep in sync with
-          # .claude/routing.json (`large`) + scripts/gen-routing.mjs (`FULL.opus`).
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-8') || 'claude-sonnet-5' }}
+          # #2161: the two models come from the resolve step (.claude/pipeline-models.json), not
+          # a hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
+          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
@@ -340,9 +351,9 @@ jobs:
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
           SINCE: ${{ steps.t0.outputs.ts }}
-          # #2161: same expression as the pi-run step's PI_MODEL/PI_PROVIDER, so the run-record
-          # can state which model actually built this PR (provenance on the ticket).
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-8') || 'claude-sonnet-5' }}
+          # #2161: same resolved model as the pi-run step, so the run-record states which model
+          # actually built this PR (provenance on the ticket).
+          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
         run: |
           set -uo pipefail

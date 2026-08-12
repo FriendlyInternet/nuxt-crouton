@@ -1,0 +1,6 @@
+{
+  "_about": "The LIVE model knob for the pi pipeline (the mac-mini worker + decomposer, running on the Claude subscription via `claude` login — #1669). Edit these values to switch what the pipeline runs on; the workflows read this file at dispatch time via scripts/resolve-pipeline-model.mjs, so no workflow edit is needed to change a model (#2161). This is the PRESCRIPTIVE 'what runs now' list; .claude/routing.json is the DESCRIPTIVE per-agent tier registry + eval history (its `pi` column records the retired GLM-Coding-Plan era, superseded by #1669 — everything is Claude subscription on pi for now).",
+  "provider": "pi-claude-cli",
+  "default": "claude-sonnet-5",
+  "hard": "claude-opus-4-8"
+}
