@@ -495,7 +495,13 @@ jobs:
             echo "✓ feedback endpoint live (POST /api/_feedback → $code)"
           fi
 
-          if curl -s --max-time 30 "$URL/" | grep -q 'croutonReview'; then
+          # -L FOLLOWS REDIRECTS (#2178). An auth-gated app answers `/` with a 302 to its
+          # login route (kassa: `/` → `/auth/login`); without -L, curl returns the ~97-byte
+          # redirect stub — which never contains `croutonReview` — and this step false-failed a
+          # correct build ("This preview cannot be reviewed") for every such app. The flag lives
+          # in the public runtime config of the real page a reviewer actually lands on, so follow
+          # the redirect and grep THAT. Strictly safer: a non-redirecting `/` (200) is unaffected.
+          if curl -sL --max-time 30 "$URL/" | grep -q 'croutonReview'; then
             echo "✓ review flag present in the served HTML"
           else
             echo "::error::The review flag did not reach the build at $URL."
