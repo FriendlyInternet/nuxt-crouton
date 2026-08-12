@@ -232,6 +232,48 @@ jobs:
       - name: Check app↔package schema drift
         run: node scripts/check-schema-drift.mjs
 
+  # Does every CHANGED .vue actually compile? (#2182) The pi worker self-heals its OWN broken
+  # SFCs in-run (work-issue-pidev.yml), but a hand-written or other-lane PR has no such guard —
+  # and an uncompilable `.vue` (an unbalanced/unclosed tag) reaches CI only INDIRECTLY (a build
+  # or E2E dev-server 500), never as a clear "this file doesn't parse". This is the direct gate:
+  # a deterministic `@vue/compiler-sfc` parse of the diff's `.vue`, ~ms, no app boot — the same
+  # scripts/verify-touched-compiles.mjs the worker uses, so the two can't drift.
+  compile-check:
+    name: Compile changed .vue
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      # --ignore-scripts skips postinstall (nuxt prepare); we only need @vue/compiler-sfc on disk.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Compile every changed .vue
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+            BASE="$(git merge-base "origin/$BASE_REF" HEAD)"
+          else
+            BASE="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+          fi
+          node scripts/verify-touched-compiles.mjs --base "$BASE"
+
   sync-validation:
     name: Sync Validation
     needs: changes
@@ -592,8 +634,8 @@ jobs:
     name: CI Gate
     if: always()
     needs: [changes, typecheck-mcp, typecheck-apps, build-kassa, docs-check, schema-drift-check,
-            sync-validation, mcp-server-tests, test, changeset-check, package-check, scripts-tests,
-            fallow-audit, shellcheck-workflows]
+            compile-check, sync-validation, mcp-server-tests, test, changeset-check, package-check,
+            scripts-tests, fallow-audit, shellcheck-workflows]
     runs-on: ubuntu-latest
     steps:
       - name: Every needed job succeeded or was legitimately skipped
