@@ -511,6 +511,8 @@
       "filters": "Filters",
       "resetFilters": "Filters wissen",
       "allClients": "Alle klanten",
+      "allProducts": "Alle producten",
+      "allCategories": "Alle categorieën",
       "allPrintStatuses": "Alle statussen",
       "printBusy": "Bezig",
       "addPrinter": "Printer toevoegen",

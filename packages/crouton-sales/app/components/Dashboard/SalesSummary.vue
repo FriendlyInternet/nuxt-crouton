@@ -26,6 +26,9 @@ const props = withDefaults(defineProps<{
   pollMs?: number
   /** Personnel (staff) order filter: exclude / only / all (default all). */
   personnel?: 'all' | 'exclude' | 'only'
+  /** Product / category filter (#2147 Data pane unified filter panel). */
+  productIds?: string[]
+  categoryIds?: string[]
 }>(), {
   currency: 'EUR',
   pollMs: 15000,
@@ -41,7 +44,12 @@ const productRows = ref<ProductRow[]>([])
 const loaded = ref(false)
 
 const base = computed(() => `/api/crouton-sales/teams/${props.teamParam}/charts`)
-const query = computed(() => ({ eventId: props.eventId, personnel: props.personnel }))
+const query = computed(() => ({
+  eventId: props.eventId,
+  personnel: props.personnel,
+  productIds: props.productIds,
+  categoryIds: props.categoryIds
+}))
 
 /**
  * The backlog (#1763). Read from the orders endpoint rather than a chart
@@ -107,8 +115,9 @@ onMounted(() => {
   useIntervalFn(fetchAll, props.pollMs)
 })
 
-// Refetch immediately when the personnel filter flips (don't wait for the poll).
-watch(() => props.personnel, () => fetchAll())
+// Refetch immediately when the personnel/product/category filters change
+// (don't wait for the poll).
+watch(() => [props.personnel, props.productIds, props.categoryIds], () => fetchAll())
 </script>
 
 <template>

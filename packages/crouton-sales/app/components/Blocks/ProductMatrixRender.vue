@@ -32,6 +32,9 @@ interface SalesProductMatrixAttrs {
   measure?: 'units' | 'revenue'
   /** Personnel (staff) order filter: exclude / only / all (default all). */
   personnel?: 'all' | 'exclude' | 'only'
+  /** Product / category filter (#2147) — ephemeral, from the Data pane filter panel. */
+  productIds?: string[]
+  categoryIds?: string[]
   title?: string
 }
 
@@ -53,6 +56,8 @@ async function load() {
     const query: Record<string, string> = {}
     if (props.attrs.eventScope) query.eventId = props.attrs.eventScope
     if (props.attrs.personnel) query.personnel = props.attrs.personnel
+    if (props.attrs.productIds?.length) query.productIds = props.attrs.productIds.join(',')
+    if (props.attrs.categoryIds?.length) query.categoryIds = props.attrs.categoryIds.join(',')
     matrix.value = await $fetch<Matrix>(
       `/api/crouton-sales/teams/${toValue(teamId)}/charts/product-day-matrix`,
       { query }
@@ -65,7 +70,12 @@ async function load() {
 }
 
 onMounted(load)
-watch(() => [props.attrs.eventScope, props.attrs.personnel], load)
+watch(() => [
+  props.attrs.eventScope,
+  props.attrs.personnel,
+  props.attrs.productIds?.join(','),
+  props.attrs.categoryIds?.join(',')
+], load)
 
 // Live beside the kassa (Data pane): checkout emits the salesOrders mutation
 // hook, so a fresh order re-pivots the table — otherwise it only loaded on
