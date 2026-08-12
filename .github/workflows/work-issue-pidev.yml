@@ -243,7 +243,11 @@ jobs:
           # Headless subscription auth: the mini's runner runs `claude` in a session that
           # can't reach the macOS Keychain, so CLAUDE_CODE_OAUTH_TOKEN (claude setup-token, 1y)
           # authenticates the CLI from env instead of the keychain login (#2119).
-          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-6') || 'claude-sonnet-5' }}
+          # #2160: the hard tier is claude-opus-4-8 — the value routing.json's `large` tier
+          # already declared. This env drifted to the stale 4-6 because routing.json's --check
+          # guards agent frontmatter, not these pi workflow model envs. Keep in sync with
+          # .claude/routing.json (`large`) + scripts/gen-routing.mjs (`FULL.opus`).
+          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-8') || 'claude-sonnet-5' }}
           PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
@@ -336,6 +340,10 @@ jobs:
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
           SINCE: ${{ steps.t0.outputs.ts }}
+          # #2161: same expression as the pi-run step's PI_MODEL/PI_PROVIDER, so the run-record
+          # can state which model actually built this PR (provenance on the ticket).
+          PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && 'claude-opus-4-8') || 'claude-sonnet-5' }}
+          PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
         run: |
           set -uo pipefail
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
@@ -638,7 +646,7 @@ jobs:
             esac
             REC="$RUNNER_TEMP/run-record.md"
             {
-              echo "> 🤖 **pi worker — run record** · _facts from the commit + git + typecheck, not pi's narration (#1849)_"
+              echo "> 🤖 **pi worker — run record** · model \`${PI_MODEL:-?}\` (${PI_PROVIDER:-?}) · _facts from the commit + git + typecheck, not pi's narration (#1849)_"
               echo
               echo "**Committed ${N} file(s)** onto \`${BR}\` → \`${BASE}\`:"
               echo "- 📝 inputs (hand-authored — schema/config): **${NIN}**"

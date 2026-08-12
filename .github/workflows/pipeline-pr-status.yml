@@ -306,7 +306,26 @@ jobs:
               if (total === 0) {
                 head = epicBlocked ? `## 🎨 Awaiting your sign-off — ${title}` : `## ⏳ Decomposing — ${title}`
                 activity = epicBlocked ? '_now: waiting for your `lgtm` / answer on the design_' : '_now: the decomposer is planning this epic_'
-                if (epicBlocked) await pingOnSignoffHold(epicNumber, title)
+                // #2156: only ASK for sign-off once the held PR is actually reviewable — its CI
+                // is green. Pinging the instant the draft opens asks for a decision that can't be
+                // made yet: on #2156 the sign-off ping fired 4 minutes BEFORE CI went red on a
+                // real type error, so the owner got "needs your sign-off" and "CI failed" back to
+                // back. A red or still-running draft is the red-ping's / fix-bot's job, not a
+                // sign-off ask. This re-fires on the next CI-completion event (workflow_run,
+                // above), so a later green still pings — and the signoff-ping marker keeps it
+                // one-shot. A design-only hold (#1821) has no work-<n> PR yet and already
+                // @mentions the owner at creation (apply-decompose-plan.mjs), so skipping it here
+                // avoids a double-ping rather than dropping a signal.
+                if (epicBlocked) {
+                  const heldPr = await childPr(epicNumber)
+                  if (!heldPr) {
+                    core.info(`epic #${epicNumber}: sign-off hold with no work-<n> PR (design hold?) — owner already @mentioned at creation; not double-pinging.`)
+                  } else {
+                    const heldSt = await ciState(heldPr.head.sha)
+                    if (heldSt.word === 'passing') await pingOnSignoffHold(epicNumber, title)
+                    else core.info(`epic #${epicNumber}: held PR #${heldPr.number} CI is ${heldSt.word} — deferring sign-off ping until green.`)
+                  }
+                }
               } else if (done < total) {
                 head = `## 🔨 Building — ${title}  (${done}/${total})`
                 activity = `_now: ${total - done} of ${total} in flight — reply here or on a PR to steer_`

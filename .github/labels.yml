@@ -227,7 +227,7 @@
   description: "Force the pi.dev pipeline regardless of AGENT_HARNESS. Redundant while AGENT_HARNESS=pi — plain 'delegate' already routes here"
 - name: "delegate-hard"
   color: "b60205"
-  description: "Escalate this leaf to the METERED Claude lane (provider=anthropic, claude-sonnet-5) instead of GLM — for the rare task GLM can't finish (#1496)"
+  description: "Escalate this leaf to the hard model tier (claude-opus-4-8, routing.json `large`) instead of the default claude-sonnet-5 — for the rare task the default can't finish (#1496/#2160)"
 - name: "work-this"
   color: "0e8a16"
   description: "Single-use worker: implement this ONE leaf issue and open a PR (work-issue-pidev.yml, #1685/#1686) — no decompose"
