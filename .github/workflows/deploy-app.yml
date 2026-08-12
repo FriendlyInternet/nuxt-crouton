@@ -505,8 +505,21 @@ jobs:
           ENVIRONMENT: ${{ inputs.environment }}
         run: |
           set -o pipefail
+          # Target the Worker the deploy actually published. Prod → default env; a per-PR
+          # preview (#2020) is a SEPARATE top-level Worker (<app>-pr<n>) built into the
+          # rewritten .output config, so `--env staging` would set the secret on the SHARED
+          # staging Worker and leave the preview with none — "BETTER_AUTH_SECRET is required"
+          # on every preview login (#2167). Point at the preview's own config in that case;
+          # prod + normal-staging targeting is unchanged.
           ENV_FLAG=""
-          if [ "$ENVIRONMENT" != "production" ]; then ENV_FLAG="--env staging"; fi
+          PR_NUM="${{ github.event.pull_request.number }}"
+          if [ "$ENVIRONMENT" = "production" ]; then
+            ENV_FLAG=""
+          elif [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then
+            ENV_FLAG="--config .output/server/wrangler.json"
+          else
+            ENV_FLAG="--env staging"
+          fi
           if ! existing=$(npx wrangler secret list $ENV_FLAG 2>/dev/null); then
             echo "::warning::Could not list Worker secrets for ${{ inputs.app }} ($ENVIRONMENT) — skipping auto-generate to avoid clobbering an existing BETTER_AUTH_SECRET."
             exit 0
