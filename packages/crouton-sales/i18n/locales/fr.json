@@ -509,6 +509,8 @@
       "filters": "Filtres",
       "resetFilters": "Réinitialiser les filtres",
       "allClients": "Tous les clients",
+      "allProducts": "Tous les produits",
+      "allCategories": "Toutes les catégories",
       "allPrintStatuses": "Tous les statuts",
       "printBusy": "En cours",
       "addPrinter": "Ajouter une imprimante",

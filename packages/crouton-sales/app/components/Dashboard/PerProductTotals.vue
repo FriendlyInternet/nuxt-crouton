@@ -37,6 +37,9 @@ const props = withDefaults(defineProps<{
   pollMs?: number
   /** Personnel (staff) order filter: exclude / only / all (default all). */
   personnel?: 'all' | 'exclude' | 'only'
+  /** Product / category filter (#2147) — ephemeral, from the Data pane filter panel. */
+  productIds?: string[]
+  categoryIds?: string[]
 }>(), {
   pollMs: 15000
 })
@@ -52,7 +55,14 @@ async function fetchTotals() {
   try {
     const res = await $fetch<{ items: Row[] }>(
       `/api/crouton-sales/teams/${props.teamParam}/charts/per-product-totals`,
-      { query: { eventId: props.eventId, personnel: props.personnel } }
+      {
+        query: {
+          eventId: props.eventId,
+          personnel: props.personnel,
+          productIds: props.productIds,
+          categoryIds: props.categoryIds
+        }
+      }
     )
     rows.value = res.items ?? []
   } catch {

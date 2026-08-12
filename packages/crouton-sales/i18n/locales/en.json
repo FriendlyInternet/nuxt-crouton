@@ -508,6 +508,8 @@
       "noOrders": "No orders yet",
       "noOrdersFiltered": "No orders match these filters",
       "allPrinters": "All printers",
+      "allProducts": "All products",
+      "allCategories": "All categories",
       "filters": "Filters",
       "resetFilters": "Reset filters",
       "allClients": "All clients",
