@@ -289,6 +289,9 @@ jobs:
               echo "::error::pr-preview-wrangler produced no db name — the preview would have NO schema."
               exit 1
             fi
+            # Expose the preview DB so the seed + review-login steps target IT, not shared
+            # staging (#2169 — the seed-side sibling of #2167's secret targeting).
+            echo "preview_db=$PREVIEW_DB" >> "$GITHUB_OUTPUT"
             # The deploy above just PROVISIONED that database, but the built config still
             # carries no `database_id` — it is stripped on purpose so wrangler auto-provisions
             # (#2020). Remote D1 operations need the id, so resolve it by name now that it
@@ -542,8 +545,11 @@ jobs:
         if: ${{ inputs.environment != 'production' }}
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         run: |
-          if pnpm exec crouton-seed --db "${{ inputs.app }}-staging-db" --remote; then
-            echo "✓ seeded ${{ inputs.app }}-staging-db (collection fixtures + demo team)"
+          # Per-PR preview seeds its OWN DB (#2169); non-preview staging falls back to the
+          # shared staging DB exactly as before (preview_db is empty off the preview path).
+          DB="${{ steps.deploy.outputs.preview_db }}"; [ -n "$DB" ] || DB="${{ inputs.app }}-staging-db"
+          if pnpm exec crouton-seed --db "$DB" --remote; then
+            echo "✓ seeded $DB (collection fixtures + demo team)"
           else
             echo "::warning::content seed skipped/failed for ${{ inputs.app }} — crouton-seed unresolvable or errored; the preview may be empty (#1370)."
           fi
@@ -565,6 +571,9 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REF_NAME: ${{ github.ref_name }}
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          # Per-PR preview: attach the review login's team membership to the preview's OWN
+          # DB (#2169), not shared staging — else the account exists but has no team/data.
+          PREVIEW_DB: ${{ steps.deploy.outputs.preview_db }}
         run: |
           set -o pipefail
           # Stable per-preview key: the PR number when this is a PR, else the ref.
@@ -581,8 +590,9 @@ jobs:
           # printed a working-looking login for a user that was never created (the seed POSTed to a
           # dead URL → failed silently → 401 on login). Only surface the creds when the seed actually
           # succeeded; otherwise emit a loud warning and NO login (a broken preview must look broken).
+          SEED_DB="${PREVIEW_DB:-${APP}-staging-db}"
           if node scripts/seed-review-login.mjs --url "$DEPLOY_URL" --email "$EMAIL" --password "$PW" \
-               --seed-team test1 --db "${APP}-staging-db"; then
+               --seed-team test1 --db "$SEED_DB"; then
             echo "email=$EMAIL" >> "$GITHUB_OUTPUT"
             echo "password=$PW" >> "$GITHUB_OUTPUT"
             # One-click link: crouton-auth prefills the login form from ?email=&password=
