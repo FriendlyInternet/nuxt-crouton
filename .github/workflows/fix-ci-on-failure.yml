@@ -127,12 +127,31 @@ jobs:
             const next = attempts + 1
             await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: [`ci-fix-attempts:${next}`] })
 
+            // #2163 (the #2157 packages/ follow-up): normally the fix-bot's prompt STOPS at a
+            // packages/ change (the shared-code HARD GATE). But when the linked issue is a `pkg:*`
+            // issue, the owner already approved shared-code work by dispatching it — so the bot MAY
+            // fix packages/ (the PR still holds for a human merge behind the packages guard, #339).
+            // Resolve the package name(s) from the ISSUE's labels so the prompt can unlock exactly
+            // those and no others.
+            let packagesAllowed = 'false', pkgNames = ''
+            if (issueNumber) {
+              try {
+                const iss = (await github.rest.issues.get({ owner, repo, issue_number: issueNumber })).data
+                const pkgs = (iss.labels || [])
+                  .map(l => (typeof l === 'string' ? l : l.name))
+                  .filter(n => /^pkg:/.test(n)).map(n => n.slice(4))
+                if (pkgs.length) { packagesAllowed = 'true'; pkgNames = pkgs.join(' ') }
+              } catch (e) { core.warning(`pkg-label check #${issueNumber}: ${e.message}`) }
+            }
+
             core.setOutput('proceed', 'true')
             core.setOutput('pr_number', String(pr.number))
             core.setOutput('issue_number', issueNumber ? String(issueNumber) : '')
             core.setOutput('head_branch', full.head.ref)
             core.setOutput('attempt', String(next))
-            core.info(`Fix attempt ${next}/${MAX} for PR #${pr.number} (issue #${issueNumber}).`)
+            core.setOutput('packages_allowed', packagesAllowed)
+            core.setOutput('packages_names', pkgNames)
+            core.info(`Fix attempt ${next}/${MAX} for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
 
       # Mint a Harness App token so the fix PUSH is App-authored. CRUCIAL: a push made with
       # the default GITHUB_TOKEN does NOT re-trigger workflows (GitHub's loop guard), so a
@@ -179,10 +198,19 @@ jobs:
                `pnpm lint`, or the failing test/e2e) to see the actual error. Read the failing job's logs if you need to.
             2. Diagnose the root cause and make the MINIMAL fix on this branch. Keep it tightly
                scoped to the failure — do not refactor, do not touch unrelated files.
-            3. HARD GATE — shared code: do NOT modify anything under `packages/`. If the only correct
-               fix would require a `packages/` change, STOP: do not commit. Instead comment on issue
-               #${{ steps.gate.outputs.issue_number }} explaining why, @mention @pmcp, apply the
-               `status:blocked` label to that issue, and end your run.
+            3. SHARED CODE (`packages/`) — read this carefully, it depends on the issue:
+               - packages_allowed for this run: ${{ steps.gate.outputs.packages_allowed }} (packages: ${{ steps.gate.outputs.packages_names }}).
+               - If packages_allowed is `false`: do NOT modify anything under `packages/`. If the only
+                 correct fix would require one, STOP: do not commit. Instead comment on issue
+                 #${{ steps.gate.outputs.issue_number }} explaining why, @mention @pmcp, apply the
+                 `status:blocked` label to that issue, and end your run.
+               - If packages_allowed is `true`: this is a `pkg:*` issue — the owner already approved
+                 shared-code work by dispatching it, so you MAY edit ONLY the listed package(s). Before
+                 your first edit under `packages/`, unlock the gate for exactly those packages, one per
+                 line: `for p in ${{ steps.gate.outputs.packages_names }}; do echo "$p" >> .claude/.package-edit-approved; done`.
+                 Keep the change minimal and scoped to the failure; do NOT touch any other package. The
+                 PR still holds for a human to merge (the shared-code merge guard), so you are producing
+                 the fix, not landing it. Do NOT commit `.claude/.package-edit-approved` (it is gitignored).
             4. Verify green: re-run the command from step 1 and confirm it passes.
             5. Commit with the /commit skill (reference the issue) and push to this branch. CI re-runs
                automatically; if it still fails, the fix-bot will get another attempt (up to the cap).
