@@ -438,8 +438,12 @@ jobs:
           # staging Worker and the preview's /api/_feedback stays "GitHub sink not configured"
           # (#2175 — the annotation sibling of #2167's auth-secret targeting). Point at the
           # preview's own config in that case; a dispatch review_pr (no PR event) stays --env staging.
+          # Assign the PR-number expression to a var BEFORE testing it: the shellcheck-workflows
+          # extractor substitutes `${{ }}` with a literal, so an inline `[ -n "${{ … }}" ]` trips
+          # SC2157 ("always true"). Testing $PR_NUM is what #2167's auth-secret step does too.
+          PR_NUM="${{ github.event.pull_request.number }}"
           BRIDGE_TARGET="--env staging"
-          if [ -n "${{ github.event.pull_request.number }}" ] && [ -f .output/server/wrangler.json ]; then
+          if [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then
             BRIDGE_TARGET="--config .output/server/wrangler.json"
           fi
           npx wrangler secret bulk "$RUNNER_TEMP/review-secrets.json" $BRIDGE_TARGET
@@ -675,7 +679,7 @@ jobs:
               echo "::warning::could not clone $HEAD_REF for capture commit — skipping (non-fatal)"; exit 0; }
           mkdir -p "$BR/writeups/ui-proposals"
           cp "$OUT"/*.png "$BR/writeups/ui-proposals/"
-          cd "$BR"
+          cd "$BR" || { echo "::warning::could not cd into the capture clone — skipping (non-fatal)"; exit 0; }
           git config user.name "nuxt-harness[bot]"
           git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
           git add writeups/ui-proposals/*.png
