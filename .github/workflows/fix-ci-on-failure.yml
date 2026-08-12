@@ -6,7 +6,8 @@ name: Fix CI on failure
 # forever; the existing resume-on-comment.yml restarts it on a human reply.
 #
 # Guard rails (the whole point — provably no runaway):
-#   - Scope: only head branches `claude/issue-*` (pipeline PRs). Human PRs are never touched.
+#   - Scope: only pipeline head branches `claude/issue-*` (claude lane) + `work-*` (pi worker,
+#     #2157). Human PRs are never touched.
 #   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at MAX (3). On exhaustion →
 #     stop, @mention the owner, block the linked issue.
 #   - Shared-code stop: the agent must NOT touch packages/ (the HARD GATE) — if a fix needs
@@ -80,7 +81,15 @@ jobs:
             if (!pr) { core.info('No open PR for branch — nothing to fix.'); core.setOutput('proceed', 'false'); return }
 
             const full = (await github.rest.pulls.get({ owner, repo, pull_number: pr.number })).data
-            if (full.state !== 'open' || !full.head.ref.startsWith('claude/issue-')) {
+            // #2157: the job `if` above was widened to both lanes (#2089), but THIS inner
+            // re-check still only accepted `claude/issue-*` — so every `work-*` PR (the pi
+            // worker, which AGENT_HARNESS=pi makes the LIVE lane) bailed here and the fix-bot
+            // never acted on a real PR. Same #2089 bug, one spot the fix missed. The two-prefix
+            // predicate lives once in scripts/lib/pipeline-branch.mjs; inline it here to match
+            // the job `if` (a github-script gate can't import without a checkout, and this runs
+            // pre-checkout). Keep these three in lockstep: the helper, the job `if`, this line.
+            const isPipelineRef = r => /^(claude\/issue-|work-)/.test(String(r || ''))
+            if (full.state !== 'open' || !isPipelineRef(full.head.ref)) {
               core.info('Not an open pipeline PR — skipping.'); core.setOutput('proceed', 'false'); return
             }
             const labels = (full.labels || []).map(l => l.name)
@@ -94,7 +103,8 @@ jobs:
             const attempts = attemptLabel ? Number(attemptLabel.split(':')[1]) : 0
 
             // The linked issue (from the branch name) is the resume surface for resume-on-comment.
-            const m = /^claude\/issue-(\d+)-/.exec(full.head.ref)
+            // Both lanes (#2157): `claude/issue-<n>-<slug>` and the pi worker's `work-<n>`.
+            const m = /^(?:claude\/issue-|work-)(\d+)/.exec(full.head.ref)
             const issueNumber = m ? Number(m[1]) : null
 
             if (attempts >= MAX) {
