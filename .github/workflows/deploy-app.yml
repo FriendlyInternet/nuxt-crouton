@@ -433,7 +433,16 @@ jobs:
               NUXT_CROUTON_REVIEW_GITHUB_APP_INSTALLATION_ID: $inst,
               NUXT_CROUTON_REVIEW_GITHUB_APP_PRIVATE_KEY: $key
             }' > "$RUNNER_TEMP/review-secrets.json"
-          npx wrangler secret bulk "$RUNNER_TEMP/review-secrets.json" --env staging
+          # Target the Worker the deploy published. A per-PR preview (#2020) is a SEPARATE
+          # top-level Worker, so `--env staging` would write the bridge secrets to the SHARED
+          # staging Worker and the preview's /api/_feedback stays "GitHub sink not configured"
+          # (#2175 — the annotation sibling of #2167's auth-secret targeting). Point at the
+          # preview's own config in that case; a dispatch review_pr (no PR event) stays --env staging.
+          BRIDGE_TARGET="--env staging"
+          if [ -n "${{ github.event.pull_request.number }}" ] && [ -f .output/server/wrangler.json ]; then
+            BRIDGE_TARGET="--config .output/server/wrangler.json"
+          fi
+          npx wrangler secret bulk "$RUNNER_TEMP/review-secrets.json" $BRIDGE_TARGET
           rm -f "$RUNNER_TEMP/review-secrets.json"
           echo "✓ Wired preview-review bridge → PR #$PR on $REPOSITORY (posts as nuxt-harness[bot])"
 
