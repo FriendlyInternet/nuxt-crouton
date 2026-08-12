@@ -249,6 +249,45 @@ jobs:
               core.info(`Pinged @${OWNER} on fresh sign-off hold for epic #${epicNumber}.`)
             }
 
+            // #2171: never ASK for a visual sign-off the flow can't SHOW. Read the PR's OWN
+            // committed files (not a body claim — the #1849 rule). `isVisual` mirrors
+            // work-issue-pidev.yml's UI_TOUCHED EXACTLY — a looser match would wrongly FREEZE a
+            // non-visual sign-off. `hasEvidence` = a capture under writeups/ui-proposals/ (the
+            // worker's EVIDENCE_ATTACHED signal).
+            async function visualEvidenceState(prNumber) {
+              const files = await github.paginate(github.rest.pulls.listFiles,
+                { owner, repo, pull_number: prNumber, per_page: 100 })
+              const paths = files.map(f => f.filename || '')
+              const isVisual = paths.some(p =>
+                /\.(vue|css)$/.test(p) || /\/app\/(components|layouts|pages)\//.test(p) || /app\.config\.ts$/.test(p))
+              const hasEvidence = paths.some(p => /^writeups\/ui-proposals\//.test(p))
+              return { isVisual, hasEvidence }
+            }
+
+            // A visual PR with NO capture must not become a sign-off ASK — that sends the owner to
+            // approve a surface the flow never showed them (#2057). Say so ONCE, and do NOT
+            // @mention: there is no action for the owner here — closing the gap (a capture, or a
+            // real preview of the changed surface) is the flow's job. When a capture later lands,
+            // pingOnSignoffHold fires normally (its marker is independent of this one), so this
+            // self-heals rather than wedging the PR.
+            async function withholdSignoffNoCapture(epicNumber, prNumber, title) {
+              const marker = `<!-- signoff-withheld-nocapture:${epicNumber} -->`
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: epicNumber, per_page: 100 })
+              if (comments.some(c => (c.body || '').includes(marker))) return
+              const body =
+                `${marker}\n` +
+                `🚫 **Sign-off withheld — nothing to show yet** (${title}).\n\n` +
+                `PR #${prNumber} changes a visual surface, but no screenshot was captured this run ` +
+                `(none under \`writeups/ui-proposals/\`). The flow will not ask you to approve a ` +
+                `surface it hasn't shown you — a capture (or a working preview of the changed ` +
+                `surface) has to land first. Nothing for you to do here; the gap is the flow's to ` +
+                `close (#2057).\n\n` +
+                `<sub>🤖 agent pipeline (CI) · visual sign-off gate (#2171)</sub>`
+              await github.rest.issues.createComment({ owner, repo, issue_number: epicNumber, body })
+              core.info(`Withheld sign-off for epic #${epicNumber}: visual PR #${prNumber} has no capture.`)
+            }
+
             // A live flow-status CARD on the epic (#1838) — stage + child tree + current activity,
             // computed deterministically from sub-issue state + each child's work-<n> PR. Replaces
             // the old thin count line. Renders even with 0 children (the sign-off / decompose stages).
@@ -322,8 +361,14 @@ jobs:
                     core.info(`epic #${epicNumber}: sign-off hold with no work-<n> PR (design hold?) — owner already @mentioned at creation; not double-pinging.`)
                   } else {
                     const heldSt = await ciState(heldPr.head.sha)
-                    if (heldSt.word === 'passing') await pingOnSignoffHold(epicNumber, title)
-                    else core.info(`epic #${epicNumber}: held PR #${heldPr.number} CI is ${heldSt.word} — deferring sign-off ping until green.`)
+                    if (heldSt.word !== 'passing') {
+                      core.info(`epic #${epicNumber}: held PR #${heldPr.number} CI is ${heldSt.word} — deferring sign-off ping until green.`)
+                    } else {
+                      // Green — but never ASK for a visual sign-off the flow can't SHOW (#2171/#2057).
+                      const vis = await visualEvidenceState(heldPr.number)
+                      if (vis.isVisual && !vis.hasEvidence) await withholdSignoffNoCapture(epicNumber, heldPr.number, title)
+                      else await pingOnSignoffHold(epicNumber, title)
+                    }
                   }
                 }
               } else if (done < total) {
