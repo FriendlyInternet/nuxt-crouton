@@ -9,12 +9,14 @@ export function browserCandidates() {
   return [
     process.env.PLAYWRIGHT_CHROMIUM_PATH,
     '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
-    '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell',
+    '/opt/pw-browsers/chromium_headless_shell-1194/chrome-linux/headless_shell'
   ].filter(Boolean)
 }
 
-/** Launch chromium (playwright-core, falling back to playwright). Returns the browser, or null
- *  (with a warn via `log`) when playwright or a launchable build is absent — never throws. */
+/**
+ * Launch chromium (playwright-core, falling back to playwright). Returns the browser, or null
+ *  (with a warn via `log`) when playwright or a launchable build is absent — never throws.
+ */
 export async function launchChromium(log = () => {}) {
   let chromium
   try {
@@ -23,7 +25,7 @@ export async function launchChromium(log = () => {}) {
     log(`no playwright available — skipping (${e.message.split('\n')[0]})`)
     return null
   }
-  const execPath = browserCandidates().find((p) => p && existsSync(p))
+  const execPath = browserCandidates().find(p => p && existsSync(p))
   const opts = { args: ['--no-sandbox', '--disable-gpu'], ...(execPath ? { executablePath: execPath } : {}) }
   try {
     return await chromium.launch(opts)

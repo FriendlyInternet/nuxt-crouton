@@ -24,23 +24,29 @@ export function cookieHeader(jar) {
 export function jarToContextCookies(jar, origin) {
   const { hostname, protocol } = new URL(origin)
   return Array.from(jar.entries()).map(([name, value]) => ({
-    name, value, domain: hostname, path: '/', httpOnly: true, secure: protocol === 'https:',
+    name, value, domain: hostname, path: '/', httpOnly: true, secure: protocol === 'https:'
   }))
 }
 
 /** POST /api/auth/sign-in/email and collect the session cookies. Never throws. */
 export async function signIn(origin, email, password, log = () => {}) {
   const jar = new Map()
-  if (!email || !password) { log('no creds — anonymous only'); return { loggedIn: false, jar } }
+  if (!email || !password) {
+    log('no creds — anonymous only')
+    return { loggedIn: false, jar }
+  }
   try {
     const res = await fetch(`${origin}/api/auth/sign-in/email`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', origin },
       redirect: 'manual',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password })
     })
     mergeCookies(jar, res)
-    if (!res.ok) { log(`login: sign-in HTTP ${res.status} — anonymous`); return { loggedIn: false, jar } }
+    if (!res.ok) {
+      log(`login: sign-in HTTP ${res.status} — anonymous`)
+      return { loggedIn: false, jar }
+    }
     return { loggedIn: true, jar }
   } catch (e) {
     log(`login failed (${e.message}) — anonymous`)

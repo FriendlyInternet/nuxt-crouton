@@ -42,7 +42,7 @@ export function slug(s) {
 
 /** The committed filename for one surface of one PR. */
 export function outName(pr, name) {
-  return `pr${String(pr).replace(/[^0-9]/g, '')}-${slug(name)}.png`
+  return `pr${String(pr).replace(/\D/g, '')}-${slug(name)}.png`
 }
 
 /**
@@ -93,7 +93,7 @@ export function isFlatFrame({ data, width, height, channels }) {
 }
 
 // ── runtime (skipped when imported, e.g. by the test) ────────────────────────
-const log = (m) => console.log(`[capture] ${m}`)
+const log = m => console.log(`[capture] ${m}`)
 if (import.meta.url === `file://${process.argv[1]}`) await main()
 
 async function main() {
@@ -131,8 +131,10 @@ async function main() {
   if (!kept.length) log('no valid captures — the sign-off gate will withhold (nothing to show)')
 }
 
-/** Drive one surface (navigate → interact → screenshot → validate). Returns the kept file, or
- *  null when the capture is missing, an error page, or blank. Never throws. */
+/**
+ * Drive one surface (navigate → interact → screenshot → validate). Returns the kept file, or
+ *  null when the capture is missing, an error page, or blank. Never throws.
+ */
 async function captureSurface(context, origin, surface, file) {
   let page
   try {
@@ -144,7 +146,7 @@ async function captureSurface(context, origin, surface, file) {
     await runInteractions(page, surface, log)
     await page.waitForTimeout(600)
     const title = await page.title().catch(() => '')
-    const bodyText = await page.evaluate(() => document.body?.innerText?.slice(0, 400) || '').catch(() => '')
+    const bodyText = await page.evaluate(() => document.body?.textContent?.slice(0, 400) || '').catch(() => '')
     await page.screenshot({ path: resolve(file), fullPage: true })
     if (looksLikeErrorPage({ status, text: bodyText, title })) {
       log(`✗ ${surface.name}: looks like an error page (status ${status}, "${title}") — discarding`)
@@ -169,8 +171,11 @@ async function captureSurface(context, origin, surface, file) {
 async function runInteractions(page, surface, logFn) {
   for (const step of surface.do.map(parseAction)) {
     if (step.verb === 'click') {
-      try { await page.click(step.selector, { timeout: 6000 }) }
-      catch (e) { logFn(`⚠ ${surface.name}: click '${step.selector}' failed (${e.message.split('\n')[0]}) — capturing as-is`) }
+      try {
+        await page.click(step.selector, { timeout: 6000 })
+      } catch (e) {
+        logFn(`⚠ ${surface.name}: click '${step.selector}' failed (${e.message.split('\n')[0]}) — capturing as-is`)
+      }
     } else if (step.verb === 'wait') {
       await page.waitForTimeout(step.ms)
     }
@@ -179,7 +184,11 @@ async function runInteractions(page, surface, logFn) {
 
 function loadManifest(path) {
   if (!path || !existsSync(path)) return {}
-  try { return JSON.parse(readFileSync(path, 'utf8')) } catch { return {} }
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return {}
+  }
 }
 
 async function loadPng(file) {
