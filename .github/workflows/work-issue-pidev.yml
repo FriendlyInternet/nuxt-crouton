@@ -341,6 +341,11 @@ jobs:
           # pattern) — GitHub's API cannot upload an image to a comment, so committing is the only
           # way to get a picture in front of a phone.
           printf 'VISUAL EVIDENCE — if your change touches a .vue file, app/components|layouts|pages, CSS or a theme: capture the changed surface with the pre-installed headless chromium (node scripts/app-shots.mjs <baseUrl> <path:name>, booting the app first) and SAVE the PNGs to writeups/ui-proposals/%s-<surface>.png. Author them with the write tool so they are committed. Then post ONE comment on the issue embedding each as ![surface](https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/work-%s/writeups/ui-proposals/%s-<surface>.png), and say in one line what changed visually. A visual PR opens as a DRAFT and waits for the owner to reply lgtm — so a screenshot is not optional politeness, it is the only thing that lets them answer. If the app cannot be booted, say so explicitly in that comment rather than opening a visual PR with no evidence.\n' "$ISSUE" "$ISSUE" "$ISSUE" >> "$PROMPT_FILE"
+          # COMPILE SELF-CHECK (#2182) — the finish gate only typechecks the touched APP, so a
+          # packages/-only .vue that does not even parse (an unclosed tag, the #2179 incident)
+          # slipped through as "acceptance: not verified". Have pi verify its OWN edits compile;
+          # a deterministic re-drive after the run (below) enforces it even if pi forgets.
+          printf 'COMPILE CHECK — after editing, run `node scripts/verify-touched-compiles.mjs` and read its output. If it reports errors, the .vue file(s) you changed DO NOT COMPILE (usually an unbalanced/unclosed tag — every tag you open needs its matching close). Fixing that is MANDATORY before you finish: a non-compiling file is broken, not a typecheck nitpick.\n' >> "$PROMPT_FILE"
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
           # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
           # So the instant `pi | tee` fails (pipefail), -e aborts the script BEFORE
@@ -362,6 +367,35 @@ jobs:
             "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           set -e
+
+          # ── COMPILE SELF-HEAL (#2182) — did pi's edits actually compile? ──────────────
+          # The finish gate only typechecks the touched APP, so a packages/-only change that does
+          # not even parse (an unbalanced .vue tag) used to open a PR as "acceptance: not verified"
+          # and fail CI only INDIRECTLY (an E2E dev-server 500 → auth-setup timeout), with the
+          # packages/-barred fix-bot unable to touch it — so a human had to notice (#2179/#2180).
+          # Compile the TOUCHED .vue right here (deterministic, ~ms, no app boot) and, if any fails,
+          # re-drive pi ONCE — same session, so it has the context — to fix EXACTLY that. This is the
+          # "fix during the flow": the break is closed in the same run, not hours later by a human.
+          # Reuses the in-scope pi env (PI_MODEL/PI_PROVIDER/PI_SESSION_DIR) — no second env block.
+          HEAL_ERRS="$RUNNER_TEMP/compile-errors.txt"
+          if ! node scripts/verify-touched-compiles.mjs > "$HEAL_ERRS" 2>&1; then
+            echo "::warning::touched .vue do not compile — re-driving pi once to fix (#2182)"
+            cat "$HEAL_ERRS" || true
+            HEAL_PROMPT="$RUNNER_TEMP/heal-prompt.txt"
+            printf 'The Vue file(s) you just edited DO NOT COMPILE. This is a BROKEN build, not a typecheck nitpick — fix ONLY these compile errors and change nothing else. Most are an unbalanced/unclosed tag: every <tag> you opened needs its matching close. Do NOT run git commit and do NOT open a PR. The exact errors:\n\n' > "$HEAL_PROMPT"
+            cat "$HEAL_ERRS" >> "$HEAL_PROMPT"
+            set +e
+            pi --print --approve --session-dir "$PI_SESSION_DIR" --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills \
+              "$(cat "$HEAL_PROMPT")" 2>&1 | tee -a "$LOG"
+            set -e
+            if node scripts/verify-touched-compiles.mjs > "$HEAL_ERRS" 2>&1; then
+              echo "compile self-heal: touched .vue now compile ✓"
+            else
+              echo "::error::compile self-heal did not resolve every error — the finish gate will hard-fail this (#2182):"
+              cat "$HEAL_ERRS" || true
+            fi
+          fi
+
           END=$(date +%s)
           echo "wall=$((END-START))" >> "$GITHUB_OUTPUT"
           echo "conclusion=$([ "$RC" -eq 0 ] && echo success || echo failure)" >> "$GITHUB_OUTPUT"
@@ -593,6 +627,21 @@ jobs:
                 else
                   ACCEPT="neutral"; ACCEPT_MSG="typecheck could not run for ${APP_DIR} — not verified"
                 fi
+              fi
+            fi
+            # COMPILE HARD-FAIL (#2182) — a committed .vue that does not parse is a BROKEN build,
+            # whatever the app typecheck said. A packages/-only change has no app to typecheck, so it
+            # would otherwise land as "not verified" and open a clean-looking draft (the #2179 hole).
+            # Deterministic backstop UNDER the pi self-heal above: if a committed .vue STILL will not
+            # compile, fail hard so the PR opens flagged (never auto-merges), not silently unverified.
+            VUE_COMMITTED="$(grep -E '\.vue$' "$COMMITTED" 2>/dev/null || true)"
+            if [ -n "$VUE_COMMITTED" ]; then
+              if node scripts/verify-touched-compiles.mjs $VUE_COMMITTED > "$RUNNER_TEMP/compile-final.txt" 2>&1; then
+                echo "compile gate (#2182): committed .vue compile ✓"
+              else
+                ACCEPT="fail"; ACCEPT_MSG="committed .vue do not compile (#2182)"
+                echo "::error::acceptance failed for #${ISSUE} — $ACCEPT_MSG"
+                cat "$RUNNER_TEMP/compile-final.txt" || true
               fi
             fi
             echo "acceptance verdict: $ACCEPT — $ACCEPT_MSG"
