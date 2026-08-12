@@ -170,6 +170,47 @@ jobs:
         id: claim
         run: node scripts/pipeline-loop-guard.mjs claim-guard < "$RUNNER_TEMP/claim-facts.json"
 
+      # ── FOLLOW-ALONG BREADCRUMB (#2176) — post a live run link ON the ticket ──────────
+      # The owner couldn't follow a run from its issue: the worker only comments at the ENDS
+      # ("done → PR #N" on success, the red no-op box on failure), so a run in flight was
+      # invisible with no link — you had to dig through the Actions tab. Post ONE breadcrumb
+      # here, AFTER the claim guard, so only a real (non-refused) run announces itself. UPSERT
+      # by a hidden marker so a re-dispatch EDITS the same comment instead of spamming a new one.
+      # github-script (not gh) for the same reason the body fetch below uses it: gh isn't
+      # guaranteed per-step on these self-hosted runners. FYI only → NO @mention (owner-brief).
+      # Wrapped in try/catch + continue-on-error: a cosmetic breadcrumb must NEVER fail the job
+      # and block the actual work — evidence, not a gate.
+      - name: Follow-along breadcrumb
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            try {
+              const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
+              const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+              const marker = `<!-- work-run:${issue_number} -->`
+              const body = [
+                marker,
+                '> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _single-use worker_',
+                '',
+                `🏗️ **Working this now** — follow the run live: ${runUrl}`,
+                '',
+                'Its PR + preview land here when it finishes.'
+              ].join('\n')
+              const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number, per_page: 100 })
+              const existing = comments.find(c => (c.body || '').includes(marker))
+              if (existing) {
+                await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body })
+                core.info(`updated breadcrumb comment ${existing.id}`)
+              } else {
+                await github.rest.issues.createComment({ ...context.repo, issue_number, body })
+                core.info('posted breadcrumb comment')
+              }
+            } catch (e) {
+              core.warning(`follow-along breadcrumb failed (non-fatal): ${e.message}`)
+            }
+
       # ── WS2 pipeline context (#1695) — read epic_branch/depth/epic OFF the issue body ──
       # The single-use worker has no Agent-prompt channel; the parent wrote the context into a
       # `<!-- pipeline: epic=.. depth=.. epic_branch=.. -->` block on the issue. Fetch the body via
