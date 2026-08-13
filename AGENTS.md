@@ -13,6 +13,15 @@ Clarity over ceremony. Start simple; add complexity only when proven necessary (
 building — check the ecosystem first. Wrap async work in error handling, return `{ data, error }`.
 Write general-purpose solutions, not ones fitted to the example. Match the surrounding code's idiom.
 
+**Remove what you orphan.** A change that removes the last caller of a symbol, translation key, or
+route removes the callee too — or states, on the issue/PR, why it stays. Leanness is a *checked* step,
+not a courtesy: the run-record for any change that deletes a caller must say **what was removed with
+it**, or **"nothing orphaned"** plus the grep/search that proves it. This closes the gap where a
+button goes but its `t(...)` key and its `/route` page linger (the #2186 miss): a static import graph
+can't see a JSON locale key or an auto-registered page, so the human ends up policing the dead weight.
+A report-only check may surface net-new orphans as *candidates* — it never auto-deletes (a
+zero-reference finding is a hypothesis; rule out a dynamic loader first, per *Authoring a gate*).
+
 ## Plain language (write for the owner, not the machine)
 
 Every message to the human — a chat reply, a GitHub comment, a handoff — is read fast, on a phone,

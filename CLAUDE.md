@@ -300,6 +300,24 @@ When generating UI: include hover states, transitions, micro-interactions. Apply
 ### 5. General Solutions
 Write high-quality, general-purpose solutions that work for all valid inputs, not just specific test cases.
 
+### 6. Remove What You Orphan (Keep It Lean)
+The universal rule is in [`AGENTS.md`](./AGENTS.md) (*Working style → Remove what you orphan*): a change
+that removes the last caller of a symbol / key / route removes the callee too — or states, on the
+issue/PR, why it stays. Crouton specifics — the two orphan kinds that sit **outside** a JS import graph
+so `fallow-audit` (#1120) can't see them (the #2186 / PR #2187 miss):
+
+- an **orphaned i18n key** in `**/i18n/locales/*.json` after its last `t('<key>')` caller was deleted;
+- a **stranded Nuxt page** under `app/pages/**` after its only inbound link went away (a page is an
+  auto-registered *entry point*, so a static importer graph never calls it dead).
+
+**`scripts/lean-check.mjs`** surfaces both as **candidates** — report-only, never blocks, never
+auto-deletes (a zero-reference finding is a hypothesis, #1149). Run it diff-scoped after a removal
+(`node scripts/lean-check.mjs --base origin/main`) or repo-wide (`node scripts/lean-check.mjs
+--corpus`); it handles the #1957 false-refusal cases (a key reached via a dynamic `t('a.b.' + x)`,
+a page still linked by a string-built route). Confirm each candidate by hand — rule out the loader —
+then remove the callee or state why it stays. Design notes + the whole-repo corpus baseline:
+`writeups/reports/lean-check-design.md`. (#2190)
+
 ## Nuxt Layers Architecture
 
 ```

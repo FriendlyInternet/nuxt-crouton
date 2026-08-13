@@ -131,6 +131,18 @@ a feature branch.
      `package.json` changed but `pnpm-lock.yaml` did not, run `pnpm install`, then commit the
      updated lockfile (same PR). A dep change without a matching lockfile change is a broken
      PR — the deploy's frozen-lockfile install will reject it.
+   - **Evidenced leanness line — REQUIRED, not an optional checkbox (#2190).** If your diff
+     removed the last caller of anything — a component/button, an `t('<key>')` translation key,
+     a route/page — the run-record (the PR body's `## 🧪 How to test` or a dedicated line) MUST
+     state **what you removed with it**, or **"nothing orphaned" + the grep/search that proves
+     it**. A static import graph can't see a JSON locale key or an auto-registered Nuxt page, so
+     `fallow-audit` misses them (the #2186 miss: a deleted button left `sales.events.openPos` +
+     an `/order` page behind). Surface net-new candidates with
+     `node scripts/lean-check.mjs --base origin/<base>` (report-only, never blocks, never
+     auto-deletes — a zero-reference finding is a hypothesis, #1149: rule out a dynamic
+     `t('a.b.' + x)` key or a string-built `NuxtLink` before removing). Then remove the callee,
+     or say on the PR why it stays. This is the AGENTS.md *Remove what you orphan* rule made a
+     required step.
 9. **Open a PR, then leave a breadcrumb on the issue.** `mcp__github__create_pull_request`
    **into the epic branch** when one was passed (else the repo base). The body MUST contain
    `Closes #<issue_number>` (for linkage). **Then `add_issue_comment` on the issue itself
