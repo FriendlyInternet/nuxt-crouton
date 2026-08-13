@@ -13,6 +13,15 @@ Clarity over ceremony. Start simple; add complexity only when proven necessary (
 building — check the ecosystem first. Wrap async work in error handling, return `{ data, error }`.
 Write general-purpose solutions, not ones fitted to the example. Match the surrounding code's idiom.
 
+## Keep it lean
+
+A change that removes the last caller of a symbol, i18n key, or route removes the callee too — or
+states why it stays. This is a first-class principle, not a gate: nothing enforces it automatically
+yet, so it depends on the person (or agent) making the change actually checking. A translation key
+and a route were once left behind after their only caller was deleted, and it was caught only because
+a human happened to ask (#2186). Before calling a change done, grep for what it orphaned; if
+something's left dangling on purpose, say why.
+
 ## Plain language (write for the owner, not the machine)
 
 Every message to the human — a chat reply, a GitHub comment, a handoff — is read fast, on a phone,

@@ -279,6 +279,9 @@ session catches what the PR would, not after:
    covers **Nuxt UI 4 conventions**, not general Vue/reactivity smells, so **you** are the
    reviewer for those: run `/simplify` (quality-only) or `/code-review` on any non-trivial
    change before committing. If a reviewer would raise it, raise it on yourself first.
+4. **Keep it lean (`AGENTS.md`'s "Keep it lean" rule).** `fallow audit` catches dead code
+   that's *already* unreferenced; it won't catch what your own diff just orphaned. Before
+   calling a change done, grep for what it orphaned — see `AGENTS.md` for the rule.
 
 ## Core Principles
 
