@@ -131,6 +131,13 @@ a feature branch.
      `package.json` changed but `pnpm-lock.yaml` did not, run `pnpm install`, then commit the
      updated lockfile (same PR). A dep change without a matching lockfile change is a broken
      PR — the deploy's frozen-lockfile install will reject it.
+   - **Evidenced leanness line (AGENTS.md "Keep it lean", #2191) — REQUIRED, not a checkbox.**
+     If your diff removes the last caller of a symbol, i18n key, or route, remove the callee
+     too — or state why it stays. Either way, the commit or PR body MUST carry a concrete
+     line proving you checked: either **what you removed** (symbol/key/route + why it was
+     orphaned), or **"nothing orphaned"** plus the actual grep/search you ran to confirm it
+     (e.g. `grep -r "oldHelper" --include=*.ts .` → no hits). A bare "cleaned up unused code"
+     or an unchecked checklist item does not satisfy this — it must name the check or the removal.
 9. **Open a PR, then leave a breadcrumb on the issue.** `mcp__github__create_pull_request`
    **into the epic branch** when one was passed (else the repo base). The body MUST contain
    `Closes #<issue_number>` (for linkage). **Then `add_issue_comment` on the issue itself
