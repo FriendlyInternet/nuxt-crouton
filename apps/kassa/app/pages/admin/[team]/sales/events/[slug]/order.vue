@@ -1,39 +1,24 @@
 <script setup lang="ts">
 /**
- * Admin POS page
+ * Admin `/order` route → the ONE unified workspace experience.
  *
- * Full-page ordering interface for one event inside the admin (Kassa tab).
- * <SalesPosPanel> owns the whole flow: logged-in team members get an admin
- * helper token automatically (no PIN form) and editing affordances (add
- * category / add product); anonymous visitors fall back to PIN login.
+ * This legacy path used to render a standalone <SalesPosPanel> — a *different*
+ * kassa from the workspace block. That split is exactly what #2186 removes:
+ * any link/bookmark to `/order` now lands on the IDENTICAL adaptive block the
+ * workspace page (`/…/<slug>`) and the CMS pages use — desktop = the multi-pane
+ * shell inline, mobile = the "Open kassa" launcher + pane-opening buttons.
+ * The POS itself is still reachable: the block's own "Open kassa" opens it.
  *
  * @route /admin/[team]/sales/events/[slug]/order
  */
 definePageMeta({ middleware: ['auth'] })
 
-const { t } = useT()
 const route = useRoute()
-
-const teamSlug = computed(() => String(route.params.team || ''))
 const eventSlug = computed(() => String(route.params.slug || ''))
-const workspacePath = computed(() => `/admin/${teamSlug.value}/sales/events/${eventSlug.value}`)
 </script>
 
 <template>
-  <div class="p-6 space-y-4">
-    <div class="flex items-center gap-2">
-      <UButton
-        icon="i-lucide-arrow-left"
-        color="neutral"
-        variant="ghost"
-        size="sm"
-        :label="t('sales.events.workspace')"
-        :to="workspacePath"
-      />
-    </div>
-
-    <div class="rounded-xl border border-default overflow-clip bg-default h-[calc(100dvh-12rem)]">
-      <SalesPosPanel :event-slug="eventSlug" :team-param="teamSlug" />
-    </div>
+  <div class="p-6">
+    <SalesBlocksEventWorkspaceRender :attrs="{ eventSlug }" />
   </div>
 </template>

@@ -2,9 +2,10 @@
 /**
  * Fanfare Events Dashboard
  *
- * Grid of event cards. Clicking a card opens the event workspace
- * (products / orders / printers / settings tabs from crouton-sales);
- * each card also exposes the POS ("Kassa openen") and the edit form.
+ * Grid of event cards. Clicking a card opens the ONE event-workspace
+ * experience (the adaptive block: kassa + orders / clients / data / settings).
+ * No separate "Kassa openen" vs "Werkruimte" split anymore — the card is the
+ * single entry, and the block's own "Open kassa" reaches the POS (#2186).
  *
  * @route /admin/[team]/sales/events
  */
@@ -28,9 +29,6 @@ const statusColor = (status?: string) => {
 
 const workspacePath = (event: SalesEvent) =>
   `/admin/${teamSlug.value}/sales/events/${event.slug}`
-
-const orderPath = (event: SalesEvent) =>
-  `/admin/${teamSlug.value}/sales/events/${event.slug}/order`
 </script>
 
 <template>
@@ -76,24 +74,13 @@ const orderPath = (event: SalesEvent) =>
           </UBadge>
         </div>
 
-        <div class="flex items-center gap-2 mt-4">
-          <UButton
-            icon="i-lucide-store"
-            size="sm"
-            color="primary"
-            variant="soft"
-            :label="t('sales.events.openPos')"
-            @click.stop="navigateTo(orderPath(event))"
-          />
-          <UButton
-            icon="i-lucide-layout-dashboard"
-            size="sm"
-            color="neutral"
-            variant="ghost"
-            :label="t('sales.events.workspace')"
-            @click.stop="navigateTo(workspacePath(event))"
-          />
-        </div>
+        <!-- One entry: the card click opens the unified workspace (#2186).
+             The block's own "Open kassa" reaches the POS from there — no
+             separate "Kassa openen" shortcut, no "Werkruimte" duplicate. -->
+        <p class="text-muted text-sm mt-4 inline-flex items-center gap-1.5 group-hover:text-primary transition-colors">
+          <UIcon name="i-lucide-arrow-right" class="size-4" />
+          {{ t('sales.events.workspace') }}
+        </p>
       </div>
     </div>
 
