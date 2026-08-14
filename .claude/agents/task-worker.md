@@ -374,6 +374,14 @@ job):
 
 ## Guardrails
 
+- **Remove what you orphan — REQUIRED + EVIDENCED, not an optional checkbox (#2190).** A change
+  that removes the *last* caller of a symbol, i18n key, or route removes the callee too. Your
+  run-record (the PR body's 🤖 section) MUST state one of two things: **(a)** what dead leftover you
+  removed and the deleted caller that orphaned it, or **(b)** "nothing orphaned" **plus the proving
+  grep** you ran (e.g. the surviving `t('<key>')` caller, or the surviving `to="/route"` link).
+  `scripts/lean-check.mjs` (report-only, never blocks) surfaces the two orphan shapes a JS import
+  graph can't see — a dead i18n key and a stranded Nuxt page: run
+  `node scripts/lean-check.mjs --base origin/<base>` and act on any candidate, or record why it stays.
 - Green typecheck is non-negotiable before the PR is "ready".
 - **Dep change ⇒ lockfile change (#614).** Touched a `package.json` dependency? `pnpm install`
   and commit `pnpm-lock.yaml` in the same PR, or the frozen-lockfile deploy install fails.

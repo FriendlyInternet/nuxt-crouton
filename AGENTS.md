@@ -13,6 +13,13 @@ Clarity over ceremony. Start simple; add complexity only when proven necessary (
 building — check the ecosystem first. Wrap async work in error handling, return `{ data, error }`.
 Write general-purpose solutions, not ones fitted to the example. Match the surrounding code's idiom.
 
+**Remove what you orphan.** A change that removes the *last* caller of a symbol, i18n key, or route
+removes the callee too — or states on the issue/PR why it stays. Deleting a button that was the only
+user of a translation, or the only link to a page, leaves that translation and that page dead; the
+now-unused leftover is part of your diff, not a later cleanup. The two orphan shapes a JS import
+graph can't see — a dead i18n key and a stranded Nuxt page — are surfaced (report-only, never
+blocking) by `scripts/lean-check.mjs`; run it, remove the leftover, or record why it stays.
+
 ## Plain language (write for the owner, not the machine)
 
 Every message to the human — a chat reply, a GitHub comment, a handoff — is read fast, on a phone,
