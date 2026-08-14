@@ -300,6 +300,9 @@ When generating UI: include hover states, transitions, micro-interactions. Apply
 ### 5. General Solutions
 Write high-quality, general-purpose solutions that work for all valid inputs, not just specific test cases.
 
+### 6. Remove What You Orphan
+A change that removes the *last* caller of a symbol, i18n key, or route removes the callee too — or states on the issue/PR why it stays. Deleting the only button that used a translation, or the only link to a page, leaves that translation and that page dead; the leftover is part of *your* diff, not a later cleanup. The two orphan shapes a JS import graph can't see — a dead i18n key and a stranded Nuxt page — are surfaced report-only (never blocking) by `scripts/lean-check.mjs`; run it, remove the leftover, or record why it stays. (AGENTS.md → *Working style*; #2190.)
+
 ## Nuxt Layers Architecture
 
 ```
