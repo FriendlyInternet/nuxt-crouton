@@ -9,3 +9,4 @@
 {"schema":1,"generatedAt":"2026-08-31T14:23:55.795Z","windowDays":7,"source":"ci-rollup","scope":"pipeline","runs":0,"workflows":[],"events":0,"cost":{"usd":0,"tokens":0,"runs":0,"byWorkflow":{}},"byName":{},"note":"no trace events in window"}
 {"schema":1,"generatedAt":"2026-09-07T13:00:14.453Z","windowDays":7,"source":"ci-rollup","scope":"pipeline","runs":0,"workflows":[],"events":0,"cost":{"usd":0,"tokens":0,"runs":0,"byWorkflow":{}},"byName":{},"note":"no trace events in window"}
 {"schema":1,"generatedAt":"2026-09-14T13:19:29.179Z","windowDays":7,"source":"ci-rollup","scope":"pipeline","runs":0,"workflows":[],"events":0,"cost":{"usd":0,"tokens":0,"runs":0,"byWorkflow":{}},"byName":{},"note":"no trace events in window"}
+{"schema":1,"generatedAt":"2026-09-21T13:19:19.242Z","windowDays":7,"source":"ci-rollup","scope":"pipeline","runs":0,"workflows":[],"events":0,"cost":{"usd":0,"tokens":0,"runs":0,"byWorkflow":{}},"byName":{},"note":"no trace events in window"}
