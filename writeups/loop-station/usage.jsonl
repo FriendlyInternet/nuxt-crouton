@@ -12,3 +12,4 @@
 {"schema":1,"generatedAt":"2026-09-21T13:19:19.242Z","windowDays":7,"source":"ci-rollup","scope":"pipeline","runs":0,"workflows":[],"events":0,"cost":{"usd":0,"tokens":0,"runs":0,"byWorkflow":{}},"byName":{},"note":"no trace events in window"}
 {"schema":1,"generatedAt":"2026-09-28T14:26:32.634Z","windowDays":7,"source":"ci-rollup","scope":"pipeline","runs":0,"workflows":[],"events":0,"cost":{"usd":0,"tokens":0,"runs":0,"byWorkflow":{}},"byName":{},"note":"no trace events in window"}
 {"schema":1,"generatedAt":"2026-10-05T15:14:56.240Z","windowDays":7,"source":"ci-rollup","scope":"pipeline","runs":0,"workflows":[],"events":0,"cost":{"usd":0,"tokens":0,"runs":0,"byWorkflow":{}},"byName":{},"note":"no trace events in window"}
+{"schema":1,"generatedAt":"2026-10-12T16:04:43.499Z","windowDays":7,"source":"ci-rollup","scope":"pipeline","runs":0,"workflows":[],"events":0,"cost":{"usd":0,"tokens":0,"runs":0,"byWorkflow":{}},"byName":{},"note":"no trace events in window"}
