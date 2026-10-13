@@ -88,6 +88,8 @@ defineExpose({ playSrc })
       </div>
       <p v-else class="text-xs text-warning">No audio for this track in Dropbox</p>
 
+      <slot name="hints" />
+
       <CrateInRow :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" @remove="(p) => emit('remove', p)" />
 
       <div class="flex items-center justify-between">
