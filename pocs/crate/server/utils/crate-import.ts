@@ -12,8 +12,10 @@ export interface LookupIn { rekordboxId: string, fetchedAt: Date, results: unkno
 const MAX_PARAMS = 100
 const chunk = <T>(rows: T[], size: number) =>
   Array.from({ length: Math.ceil(rows.length / size) }, (_, i) => rows.slice(i * size, (i + 1) * size))
-const rowsPerInsert = (row: object, generatedColumns: number) =>
-  Math.max(1, Math.floor(MAX_PARAMS / (Object.keys(row).length + generatedColumns)))
+// `generatedColumns`: ids/timestamps drizzle adds per row; `fixedParams`: params bound once
+// per statement (e.g. the values in an onConflictDoUpdate `set`).
+const rowsPerInsert = (row: object, generatedColumns: number, fixedParams = 0) =>
+  Math.max(1, Math.floor((MAX_PARAMS - fixedParams) / (Object.keys(row).length + generatedColumns)))
 
 async function existingTracks(teamId: string, rekordboxIds: string[]) {
   const db = useDB()
@@ -41,7 +43,7 @@ export async function upsertTracks(audit: ImportAudit, tracks: TrackIn[]) {
     return { ...audit, ...t }
   })
   const db = useDB()
-  for (const part of chunk(rows, rowsPerInsert(rows[0]!, 3))) {
+  for (const part of chunk(rows, rowsPerInsert(rows[0]!, 3, 2))) {
     await db.insert(crateTracks).values(part).onConflictDoUpdate({
       target: [crateTracks.teamId, crateTracks.rekordboxId],
       set: {
@@ -91,7 +93,7 @@ export async function upsertLookups(audit: ImportAudit, lookups: LookupIn[]) {
     return t ? [{ ...audit, trackId: t.id, fetchedAt: l.fetchedAt, results: l.results }] : []
   })
   const db = useDB()
-  for (const part of chunk(rows, rows.length ? rowsPerInsert(rows[0]!, 3) : 1)) {
+  for (const part of chunk(rows, rows.length ? rowsPerInsert(rows[0]!, 3, 2) : 1)) {
     await db.insert(crateLookups).values(part).onConflictDoUpdate({
       target: [crateLookups.teamId, crateLookups.trackId],
       set: { fetchedAt: sql`excluded.fetchedAt`, results: sql`excluded.results`, updatedBy: audit.updatedBy, updatedAt: new Date() }
