@@ -8,29 +8,33 @@ const emit = defineEmits<{ toggle: [], open: [] }>()
 </script>
 
 <template>
-  <div class="flex min-w-0 items-stretch gap-1">
+  <!-- One slim row inside the pile list card (kassa line-item density): tap the row to file,
+       › to open the pile. -->
+  <div class="flex min-w-0 items-center" :class="ticked ? 'bg-primary/10' : ''">
     <UButton
-      block
-      :variant="ticked ? 'subtle' : 'outline'"
       :color="ticked || strong ? 'primary' : 'neutral'"
-      class="min-w-0 flex-1 justify-between py-2.5"
+      variant="ghost"
+      class="min-w-0 flex-1 justify-between rounded-none px-3 py-2"
       :disabled="disabled"
       @click="emit('toggle')"
     >
       <span class="flex min-w-0 items-center gap-2">
         <UIcon :name="ticked ? 'i-lucide-check-circle-2' : 'i-lucide-circle'" class="size-4 shrink-0" />
         <span class="truncate">{{ pile.name }}</span>
-        <span v-if="glow && !ticked" class="shrink-0 truncate text-xs" :class="strong ? 'text-primary' : 'text-dimmed'">✦ via {{ glow.via }}</span>
+        <span v-if="glow && !ticked" class="shrink-0 truncate text-xs" :class="strong ? 'text-primary' : 'text-dimmed'">✦ {{ glow.via }}</span>
       </span>
       <span class="shrink-0 text-xs tabular-nums text-muted">{{ count }}</span>
     </UButton>
     <UButton
       v-if="canOpen"
       icon="i-lucide-chevron-right"
+      size="sm"
       variant="ghost"
       color="neutral"
+      class="me-1"
       :aria-label="`Open ${pile.name}`"
       @click="emit('open')"
     />
+    <span v-else class="w-9 shrink-0" />
   </div>
 </template>
