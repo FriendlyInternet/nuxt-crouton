@@ -46,17 +46,22 @@ function togglePile(pile: CratePile) {
 const deck = ref<{ playSrc: (url: string) => void, pause: () => void }>()
 
 // ── Listen to a pile (#2221) ──────────────────────────────────────────────
-const audition = ref<{ start: (p: CratePile, tracks: CrateTrack[]) => void, stop: () => void }>()
-function listen() {
-  const pile = level.value
+const listener = ref<{ show: (p: CratePile, tracks: CrateTrack[]) => void, start: () => void }>()
+/** Open the listening sheet for `pile` (the current level by default). */
+function openListen(pile: CratePile | null = level.value) {
   if (!pile) return
   const playable = tracks.value.filter(t => t.hasAudio && t.id !== current.value?.id && isIn(t, pile))
   if (!playable.length) return toast.add({ title: `Nothing to play in ${pile.name} yet` })
-  audition.value?.start(pile, playable)
+  listener.value?.show(pile, playable)
 }
+/** Header 🎧: open + play at once — it's a tap, so iOS lets it start. */
+function listen() {
+  openListen()
+  listener.value?.start()
+}
+
 function show(track: CrateTrack | undefined, autoplay: boolean) {
   if (!track) return
-  if (autoplay) audition.value?.stop()
   currentId.value = track.id
   const at = trayTracks.value.findIndex(t => t.id === track.id)
   if (at >= 0) trayIndex.value = at
@@ -149,8 +154,6 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
       </UCard>
     </main>
 
-    <CrateAudition ref="audition" :audio-url="audioUrl" @started="deck?.pause()" />
-
     <CrateDeck
       ref="deck"
       :track="current"
@@ -160,7 +163,6 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
       :path-label="pathLabel"
       :can-next="inPiles.length > 0"
       @next="next"
-      @play="audition?.stop()"
       @remove="removeFromDeck"
     >
       <template #hints>
@@ -171,9 +173,13 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
           :is-in-pile="(id) => !!current && isIn(current, crate.piles.value.find(p => p.id === id)!)"
           @word="onWord"
           @file="fileSuggestion"
+          @hold="openListen"
+          @listen="listener?.start()"
         />
       </template>
     </CrateDeck>
+
+    <CratePileListen ref="listener" :audio-url="audioUrl" :path-label="pathLabel" @started="deck?.pause()" />
 
     <CrateNewPile ref="newPile" v-model:open="newPileOpen" :piles="crate.piles.value" :path-label="pathLabel" :track="current" @create="onCreate" />
 
