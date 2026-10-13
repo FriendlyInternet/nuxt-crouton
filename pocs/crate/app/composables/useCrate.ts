@@ -130,5 +130,19 @@ export function useCrate() {
 
   const audioUrl = (t: CrateTrack) => api(`/tracks/${t.id}/audio`)
 
-  return { status, refresh, piles, tracks, children, ancestors, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, takeOutOf, undo, audioUrl }
+  /** Create a pile (optionally inside another) and, if given, file `track` into it. */
+  async function createPile(name: string, parentId: string | null, track: CrateTrack | null) {
+    try {
+      const pile = await $fetch<CratePile>(`/api/teams/${getTeamId()}/crate-piles`, { method: 'POST', body: { name, parentId } })
+      data.value.piles.push({ id: pile.id, name: pile.name, parentId: pile.parentId ?? null, order: pile.order ?? 0 })
+      if (track) await fileInto(track, data.value.piles.at(-1)!)
+      return pile
+    }
+    catch (error) {
+      toast.add({ title: 'Couldn’t create the pile', description: String((error as Error).message ?? error), color: 'error' })
+      return null
+    }
+  }
+
+  return { api, status, refresh, piles, tracks, children, ancestors, descendants, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, fileInto, takeOutOf, undo, audioUrl, createPile }
 }
