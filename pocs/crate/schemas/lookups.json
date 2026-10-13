@@ -1,0 +1,5 @@
+{
+  "trackId": { "type": "string", "refTarget": "tracks", "meta": { "required": true, "unique": true, "label": "Track" } },
+  "fetchedAt": { "type": "date", "meta": { "required": true } },
+  "results": { "type": "json", "meta": { "label": "Per-source results [{ source, level, verified, styles: [[word, weight]], genres, url, match }]" } }
+}
