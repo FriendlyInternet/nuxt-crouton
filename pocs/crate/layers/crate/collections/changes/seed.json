@@ -1,0 +1,39 @@
+{
+  "table": "crate_changes",
+  "key": null,
+  "rows": [
+    {
+      "groupId": "Sample groupId 1",
+      "before": [
+        "sample"
+      ],
+      "after": [
+        "sample"
+      ],
+      "summary": "Sample summary 1",
+      "undoOf": "Sample undoOf 1"
+    },
+    {
+      "groupId": "Sample groupId 2",
+      "before": [
+        "sample"
+      ],
+      "after": [
+        "sample"
+      ],
+      "summary": "Sample summary 2",
+      "undoOf": "Sample undoOf 2"
+    },
+    {
+      "groupId": "Sample groupId 3",
+      "before": [
+        "sample"
+      ],
+      "after": [
+        "sample"
+      ],
+      "summary": "Sample summary 3",
+      "undoOf": "Sample undoOf 3"
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+[
+  {
+    "collection": "changes",
+    "fields": [
+      "groupId",
+      "trackId",
+      "before",
+      "after",
+      "summary",
+      "undoOf"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-10-13T14:36:35.709Z",
+    "layer": "crate",
+    "gitSha": "6b05a0834"
+  },
+  {
+    "collection": "lookups",
+    "fields": [
+      "trackId",
+      "fetchedAt",
+      "results"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-10-13T14:36:35.690Z",
+    "layer": "crate",
+    "gitSha": "6b05a0834"
+  },
+  {
+    "collection": "piles",
+    "fields": [
+      "name"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-10-13T14:36:35.671Z",
+    "layer": "crate",
+    "gitSha": "6b05a0834"
+  },
+  {
+    "collection": "tracks",
+    "fields": [
+      "rekordboxId",
+      "name",
+      "artist",
+      "album",
+      "genre",
+      "year",
+      "bpm",
+      "tonality",
+      "durationSec",
+      "label",
+      "dateAdded",
+      "location",
+      "audioPath",
+      "tags",
+      "originalComments"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-10-13T14:36:35.650Z",
+    "layer": "crate",
+    "gitSha": "6b05a0834"
+  },
+  {
+    "collection": "changes",
+    "fields": [
+      "groupId",
+      "trackId",
+      "before",
+      "after",
+      "summary",
+      "undoOf"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-10-13T14:35:29.417Z",
+    "layer": "crate",
+    "gitSha": "6b05a0834"
+  },
+  {
+    "collection": "lookups",
+    "fields": [
+      "trackId",
+      "fetchedAt",
+      "results"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-10-13T14:35:29.398Z",
+    "layer": "crate",
+    "gitSha": "6b05a0834"
+  },
+  {
+    "collection": "piles",
+    "fields": [
+      "name"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-10-13T14:35:29.378Z",
+    "layer": "crate",
+    "gitSha": "6b05a0834"
+  },
+  {
+    "collection": "tracks",
+    "fields": [
+      "rekordboxId",
+      "name",
+      "artist",
+      "album",
+      "genre",
+      "year",
+      "bpm",
+      "tonality",
+      "durationSec",
+      "label",
+      "dateAdded",
+      "location",
+      "audioPath",
+      "tags",
+      "originalComments"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-10-13T14:35:29.358Z",
+    "layer": "crate",
+    "gitSha": "6b05a0834"
+  }
+]

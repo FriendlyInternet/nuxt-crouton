@@ -1,0 +1,18 @@
+{
+  "table": "crate_lookups",
+  "key": null,
+  "rows": [
+    {
+      "fetchedAt": 1791902195,
+      "results": {}
+    },
+    {
+      "fetchedAt": 1791815795,
+      "results": {}
+    },
+    {
+      "fetchedAt": 1791729395,
+      "results": {}
+    }
+  ]
+}

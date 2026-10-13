@@ -12,7 +12,10 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   extends: [
     '@fyit/crouton-core',
-    '@fyit/crouton-i18n'
+    '@fyit/crouton-layout',
+    '@fyit/crouton-i18n',
+    // Generated collection layers must come last
+    './layers/crate'
   ],
   hub: {
     db: 'sqlite',
