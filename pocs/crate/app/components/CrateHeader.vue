@@ -2,7 +2,7 @@
 import type { CratePile } from '~/composables/useCrate'
 
 defineProps<{ trail: CratePile[], trayLabel: string, trayCount: number }>()
-const emit = defineEmits<{ open: [pile: CratePile | null], up: [], undo: [], list: [] }>()
+const emit = defineEmits<{ open: [pile: CratePile | null], up: [], undo: [], list: [], listen: [] }>()
 </script>
 
 <template>
@@ -17,7 +17,8 @@ const emit = defineEmits<{ open: [pile: CratePile | null], up: [], undo: [], lis
         </UButton>
       </template>
     </nav>
+    <UButton v-if="trail.length" icon="i-lucide-headphones" size="sm" variant="ghost" color="primary" :aria-label="`Listen to ${trail.at(-1)!.name}`" class="shrink-0" @click="emit('listen')" />
     <UButton icon="i-lucide-undo-2" size="sm" variant="ghost" color="neutral" aria-label="Undo last change" class="shrink-0" @click="emit('undo')" />
-    <UButton :label="`${trayLabel} · ${trayCount}`" icon="i-lucide-inbox" size="sm" variant="soft" color="neutral" class="shrink-0" @click="emit('list')" />
+    <UButton :label="String(trayCount)" icon="i-lucide-inbox" size="sm" variant="soft" color="neutral" class="shrink-0 tabular-nums" :aria-label="`${trayLabel}: ${trayCount} tracks`" @click="emit('list')" />
   </header>
 </template>

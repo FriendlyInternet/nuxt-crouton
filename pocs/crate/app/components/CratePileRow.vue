@@ -2,14 +2,14 @@
 import type { CratePile } from '~/composables/useCrate'
 import type { PileScore } from '~/composables/useCrateHints'
 
-const props = defineProps<{ pile: CratePile, count: number, ticked: boolean, canOpen: boolean, disabled: boolean, glow: PileScore | null }>()
+const props = defineProps<{ pile: CratePile, count: number, ticked: boolean, disabled: boolean, glow: PileScore | null }>()
 const strong = computed(() => (props.glow?.score ?? 0) >= STRONG)
 const emit = defineEmits<{ toggle: [], open: [] }>()
 </script>
 
 <template>
   <!-- One slim row inside the pile list card (kassa line-item density): tap the row to file,
-       › to open the pile. -->
+       › to open the pile (any pile, so its tracks can be heard — #2221). -->
   <div class="flex min-w-0 items-center" :class="ticked ? 'bg-primary/10' : ''">
     <UButton
       :color="ticked || strong ? 'primary' : 'neutral'"
@@ -26,7 +26,6 @@ const emit = defineEmits<{ toggle: [], open: [] }>()
       <span class="shrink-0 text-xs tabular-nums text-muted">{{ count }}</span>
     </UButton>
     <UButton
-      v-if="canOpen"
       icon="i-lucide-chevron-right"
       size="sm"
       variant="ghost"
@@ -35,6 +34,5 @@ const emit = defineEmits<{ toggle: [], open: [] }>()
       :aria-label="`Open ${pile.name}`"
       @click="emit('open')"
     />
-    <span v-else class="w-9 shrink-0" />
   </div>
 </template>

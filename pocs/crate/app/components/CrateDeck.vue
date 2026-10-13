@@ -9,7 +9,7 @@ const props = defineProps<{
   pathLabel: (p: CratePile) => string
   canNext: boolean
 }>()
-const emit = defineEmits<{ next: [], remove: [pile: CratePile] }>()
+const emit = defineEmits<{ next: [], remove: [pile: CratePile], play: [] }>()
 
 const audio = ref<HTMLAudioElement>()
 const playing = ref(false)
@@ -60,17 +60,17 @@ watch(() => props.src, () => {
   duration.value = 0
 })
 
-defineExpose({ playSrc })
+defineExpose({ playSrc, pause: () => audio.value?.pause() })
 </script>
 
 <template>
   <!-- Bottom pane, kassa-cart style: a borderless UCard, tight padding — every saved pixel
        goes to the pile list above. -->
-  <UCard :ui="{ root: 'rounded-none ring-0 border-t border-default bg-elevated', body: 'space-y-1 px-3 py-2 sm:px-3 sm:py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]' }">
+  <UCard :ui="{ root: 'rounded-none ring-0 border-t border-default bg-elevated', body: 'space-y-2.5 px-3 py-3 sm:px-3 sm:py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]' }">
     <template v-if="track">
       <CrateNowPlaying :track="track" :meta="meta" :playing="playing" :has-audio="!!src" :can-next="canNext" @toggle="toggle" @skip="skip" @next="emit('next')" />
 
-      <USlider v-if="src" :model-value="position" :max="duration || 1" :step="1" size="xs" aria-label="Seek" @update:model-value="(v) => v !== undefined && seek(v)" />
+      <USlider v-if="src" :model-value="position" :max="duration || 1" :step="1" size="sm" aria-label="Seek" @update:model-value="(v) => v !== undefined && seek(v)" />
 
       <slot name="hints" />
 
@@ -84,7 +84,7 @@ defineExpose({ playSrc })
       preload="metadata"
       @loadedmetadata="onLoaded"
       @timeupdate="position = audio?.currentTime ?? 0"
-      @play="playing = true"
+      @play="playing = true; emit('play')"
       @pause="playing = false"
       @ended="playing = false"
     />
