@@ -35,11 +35,15 @@
         {
           "binding": "DB",
           "database_name": "crate-staging-db",
-          "migrations_dir": "server/db/migrations/sqlite"
+          "migrations_dir": "server/db/migrations/sqlite",
+          "database_id": "2381e2df-be6b-4b79-bdf4-5fb34e1745dd"
         }
       ],
       "kv_namespaces": [
-        { "binding": "KV" }
+        {
+          "binding": "KV",
+          "id": "76d7981aca854f5d96659e2441ce8e38"
+        }
       ]
     }
   }
