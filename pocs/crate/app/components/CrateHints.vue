@@ -8,7 +8,7 @@ defineProps<{
   pathLabel: (p: CratePile) => string
   isInPile: (pileId: string) => boolean
 }>()
-const emit = defineEmits<{ word: [word: HintWord], file: [pile: CratePile] }>()
+const emit = defineEmits<{ word: [word: HintWord], file: [pile: CratePile], hold: [pile: CratePile], listen: [] }>()
 </script>
 
 <template>
@@ -16,17 +16,15 @@ const emit = defineEmits<{ word: [word: HintWord], file: [pile: CratePile] }>()
        The right edge fades out to show there's more — a hard cut read as "cut off" before. -->
   <div class="min-w-0 space-y-2">
     <CrateScrollRow v-if="suggestions.length">
-      <UButton
+      <CrateSuggestionChip
         v-for="p in suggestions"
         :key="p.id"
-        size="sm"
-        variant="soft"
+        :pile="p"
         :title="pathLabel(p)"
-        class="shrink-0"
-        @click="emit('file', p)"
-      >
-        {{ p.name }}
-      </UButton>
+        @file="emit('file', p)"
+        @hold="emit('hold', p)"
+        @release="emit('listen')"
+      />
     </CrateScrollRow>
     <CrateScrollRow v-if="sources.length" class="text-xs">
       <template v-for="s in sources" :key="s.label">

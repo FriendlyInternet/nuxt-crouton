@@ -9,7 +9,7 @@ const props = defineProps<{
   pathLabel: (p: CratePile) => string
   canNext: boolean
 }>()
-const emit = defineEmits<{ next: [], remove: [pile: CratePile], play: [] }>()
+const emit = defineEmits<{ next: [], remove: [pile: CratePile] }>()
 
 const audio = ref<HTMLAudioElement>()
 const playing = ref(false)
@@ -84,7 +84,7 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
       preload="metadata"
       @loadedmetadata="onLoaded"
       @timeupdate="position = audio?.currentTime ?? 0"
-      @play="playing = true; emit('play')"
+      @play="playing = true"
       @pause="playing = false"
       @ended="playing = false"
     />
