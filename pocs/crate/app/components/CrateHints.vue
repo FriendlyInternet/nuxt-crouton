@@ -12,23 +12,27 @@ const emit = defineEmits<{ word: [word: HintWord], file: [pile: CratePile] }>()
 </script>
 
 <template>
-  <div class="min-w-0 space-y-1">
-    <div v-if="suggestions.length" class="flex min-w-0 flex-wrap gap-1">
+  <!-- Two fixed-height rows that scroll sideways (owner's call), so the card never grows.
+       The right edge fades out to show there's more — a hard cut read as "cut off" before. -->
+  <div class="min-w-0 space-y-2">
+    <CrateScrollRow v-if="suggestions.length">
       <UButton
         v-for="p in suggestions"
         :key="p.id"
-        size="xs"
+        size="sm"
         variant="soft"
         :title="pathLabel(p)"
-        class="max-w-full px-2 py-0.5"
+        class="shrink-0"
         @click="emit('file', p)"
       >
-        <span class="truncate">{{ p.name }}</span>
+        {{ p.name }}
       </UButton>
-    </div>
-    <p v-for="s in sources" :key="s.label" class="flex min-w-0 flex-wrap items-center gap-x-0.5 text-xs">
-      <ULink :to="s.url ?? undefined" target="_blank" class="text-muted underline-offset-2 hover:underline">{{ s.label }}</ULink>
-      <CrateHintWord v-for="w in s.words" :key="w.word" :word="w" :ticked="!!w.pileId && isInPile(w.pileId)" @pick="emit('word', w)" />
-    </p>
+    </CrateScrollRow>
+    <CrateScrollRow v-if="sources.length" class="text-xs">
+      <template v-for="s in sources" :key="s.label">
+        <ULink :to="s.url ?? undefined" target="_blank" class="shrink-0 ps-1 text-muted underline-offset-2 hover:underline">{{ s.label }}</ULink>
+        <CrateHintWord v-for="w in s.words" :key="w.word" :word="w" :ticked="!!w.pileId && isInPile(w.pileId)" class="shrink-0" @pick="emit('word', w)" />
+      </template>
+    </CrateScrollRow>
   </div>
 </template>
