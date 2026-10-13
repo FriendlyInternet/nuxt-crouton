@@ -27,7 +27,7 @@ export function useCrateHints(crate: ReturnType<typeof useCrate>, track: Ref<Cra
     return best && best.score >= WEAK ? best : null
   }
 
-  /** Up to 3 one-tap suggestions the track isn't in yet. */
+  /** Up to 4 one-tap suggestions the track isn't in yet. */
   const suggestions = computed(() => {
     const t = track.value
     if (!t) return []
@@ -36,7 +36,7 @@ export function useCrateHints(crate: ReturnType<typeof useCrate>, track: Ref<Cra
       .map(s => crate.piles.value.find(p => p.id === s.pileId))
       .filter((p): p is CratePile => !!p && !crate.isIn(t, p))
     // A suggested sub-pile already files into its parents — drop parents that add nothing.
-    return picks.filter(p => !picks.some(other => other !== p && crate.ancestors(other).some(a => a.id === p.id))).slice(0, 3)
+    return picks.filter(p => !picks.some(other => other !== p && crate.ancestors(other).some(a => a.id === p.id))).slice(0, 4)
   })
 
   return { sources, glow, suggestions }
