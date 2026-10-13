@@ -101,7 +101,9 @@
   // Generated per-POC/app type aggregator: re-exports layer collection types resolved via Nuxt's
   // .nuxt/tsconfig path aliases, which aren't built at audit time (fallback "resolver-less") — #1252
   "ignoreUnresolvedImports": [
-    "**/collections/**/types"
+    "**/collections/**/types",
+    // NuxtHub v0.10 virtual modules (hub:db / hub:kv / hub:blob), generated at build time
+    "hub:*"
   ],
   // Deps that ARE used, via mechanisms invisible to import analysis (verified #1144)
   "ignoreDependencies": [

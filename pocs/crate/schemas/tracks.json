@@ -1,0 +1,17 @@
+{
+  "rekordboxId": { "type": "string", "meta": { "required": true, "unique": true, "maxLength": 32, "label": "rekordbox TrackID" } },
+  "name": { "type": "string", "meta": { "required": true, "maxLength": 500 } },
+  "artist": { "type": "string", "meta": { "maxLength": 500 } },
+  "album": { "type": "string", "meta": { "maxLength": 500 } },
+  "genre": { "type": "string", "meta": { "maxLength": 200, "label": "rekordbox genre" } },
+  "year": { "type": "number" },
+  "bpm": { "type": "decimal", "meta": { "precision": 6, "scale": 2 } },
+  "tonality": { "type": "string", "meta": { "maxLength": 16, "label": "Key" } },
+  "durationSec": { "type": "number", "meta": { "label": "Duration (s)" } },
+  "label": { "type": "string", "meta": { "maxLength": 300 } },
+  "dateAdded": { "type": "date" },
+  "location": { "type": "text", "meta": { "required": true, "label": "rekordbox Location (file:// URL, verbatim)" } },
+  "audioPath": { "type": "string", "meta": { "maxLength": 1024, "label": "Dropbox path (empty = no audio)" } },
+  "tags": { "type": "array", "meta": { "label": "Comment tags (source of truth)" } },
+  "originalComments": { "type": "text", "meta": { "label": "Comments at import" } }
+}

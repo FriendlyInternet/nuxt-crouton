@@ -1,0 +1,63 @@
+{
+  "table": "crate_tracks",
+  "key": "name",
+  "rows": [
+    {
+      "rekordboxId": "Sample rekordboxId 1",
+      "name": "Sample name 1",
+      "artist": "Sample artist 1",
+      "album": "Sample album 1",
+      "genre": "Sample genre 1",
+      "year": 1,
+      "bpm": 1,
+      "tonality": "Sample tonality 1",
+      "durationSec": 1,
+      "label": "Sample label 1",
+      "dateAdded": 1791902195,
+      "location": "Sample location content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "audioPath": "Sample audioPath 1",
+      "tags": [
+        "sample"
+      ],
+      "originalComments": "Sample originalComments content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "rekordboxId": "Sample rekordboxId 2",
+      "name": "Sample name 2",
+      "artist": "Sample artist 2",
+      "album": "Sample album 2",
+      "genre": "Sample genre 2",
+      "year": 2,
+      "bpm": 2,
+      "tonality": "Sample tonality 2",
+      "durationSec": 2,
+      "label": "Sample label 2",
+      "dateAdded": 1791815795,
+      "location": "Sample location content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "audioPath": "Sample audioPath 2",
+      "tags": [
+        "sample"
+      ],
+      "originalComments": "Sample originalComments content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "rekordboxId": "Sample rekordboxId 3",
+      "name": "Sample name 3",
+      "artist": "Sample artist 3",
+      "album": "Sample album 3",
+      "genre": "Sample genre 3",
+      "year": 3,
+      "bpm": 3,
+      "tonality": "Sample tonality 3",
+      "durationSec": 3,
+      "label": "Sample label 3",
+      "dateAdded": 1791729395,
+      "location": "Sample location content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
+      "audioPath": "Sample audioPath 3",
+      "tags": [
+        "sample"
+      ],
+      "originalComments": "Sample originalComments content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    }
+  ]
+}
