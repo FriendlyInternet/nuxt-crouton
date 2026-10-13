@@ -126,7 +126,7 @@ jobs:
     # drops the flaky `playwright install --with-deps` apt step that
     # intermittently hung CI for ~an hour. The tag must track @playwright/test
     # ^1.57 — keep them in sync (#395).
-    container: mcr.microsoft.com/playwright:v1.57.0-jammy
+    container: mcr.microsoft.com/playwright:v1.64.0-jammy
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
