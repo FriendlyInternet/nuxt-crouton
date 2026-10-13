@@ -49,13 +49,13 @@ function show(track: CrateTrack | undefined, autoplay: boolean) {
   if (at >= 0) trayIndex.value = at
   if (autoplay && track.hasAudio) deck.value?.playSrc(audioUrl(track))
 }
-function step(delta: 1 | -1) {
+function next() {
   pin()
   const list = trayTracks.value
   const at = list.findIndex(t => t.id === currentId.value)
-  // Still in the tray → its neighbour; filed away → whatever now sits where it was.
-  const target = at >= 0 ? at + delta : (delta === 1 ? trayIndex.value : trayIndex.value - 1)
-  show(list[Math.max(0, Math.min(list.length - 1, target))], true)
+  // Still in the tray → the one after it; filed away → whatever now sits where it was.
+  const target = at >= 0 ? at + 1 : trayIndex.value
+  show(list[Math.min(list.length - 1, target)], true)
 }
 
 // ── Genre hints + new piles (#2212) ───────────────────────────────────────
@@ -144,9 +144,7 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
       :other-tags="deckOther"
       :path-label="pathLabel"
       :can-next="inPiles.length > 0"
-      @next="step(1)"
-      @prev="step(-1)"
-      @list="listOpen = true"
+      @next="next"
       @remove="removeFromDeck"
     >
       <template #hints>
