@@ -19,11 +19,11 @@ const emit = defineEmits<{ word: [word: HintWord], file: [pile: CratePile] }>()
         :key="p.id"
         size="xs"
         variant="soft"
-        icon="i-lucide-sparkles"
-        class="max-w-full"
+        :title="pathLabel(p)"
+        class="max-w-full px-2 py-0.5"
         @click="emit('file', p)"
       >
-        <span class="truncate">{{ pathLabel(p) }}</span>
+        <span class="truncate">{{ p.name }}</span>
       </UButton>
     </div>
     <p v-for="s in sources" :key="s.label" class="flex min-w-0 flex-wrap items-center gap-x-0.5 text-xs">
