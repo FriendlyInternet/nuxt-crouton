@@ -6,6 +6,7 @@ definePageMeta({ layout: false, middleware: ['auth'] })
 useHead({ title: 'Crate', meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }] })
 
 const crate = useCrate()
+const toast = useToast()
 const { status, children, ancestors, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, takeOutOf, audioUrl, tracks } = crate
 
 // ── Level (which pile we're inside) ───────────────────────────────────────
@@ -20,6 +21,7 @@ function goUp() {
   openLevel(parentId ? crate.piles.value.find(p => p.id === parentId) ?? null : null)
 }
 function openLevel(pile: CratePile | null) {
+  pin() // the deck keeps its track while you look around other piles
   levelId.value = pile?.id ?? null
   main.value?.scrollTo({ top: 0 })
 }
@@ -31,7 +33,7 @@ const trayIndex = ref(0) // where the current track sat in the tray, so Next con
 const current = computed<CrateTrack | null>(() => currentId.value
   ? tracks.value.find(t => t.id === currentId.value) ?? null
   : trayTracks.value[0] ?? null)
-/** Pin the shown track before acting on it, so filing it doesn't swap the deck. */
+/** Pin the shown track before acting on it or navigating, so the deck never swaps by itself. */
 function pin() {
   if (!currentId.value && current.value) currentId.value = current.value.id
 }
@@ -41,9 +43,20 @@ function togglePile(pile: CratePile) {
   toggle(current.value, pile)
 }
 
-const deck = ref<{ playSrc: (url: string) => void }>()
+const deck = ref<{ playSrc: (url: string) => void, pause: () => void }>()
+
+// ── Listen to a pile (#2221) ──────────────────────────────────────────────
+const audition = ref<{ start: (p: CratePile, tracks: CrateTrack[]) => void, stop: () => void }>()
+function listen() {
+  const pile = level.value
+  if (!pile) return
+  const playable = tracks.value.filter(t => t.hasAudio && t.id !== current.value?.id && isIn(t, pile))
+  if (!playable.length) return toast.add({ title: `Nothing to play in ${pile.name} yet` })
+  audition.value?.start(pile, playable)
+}
 function show(track: CrateTrack | undefined, autoplay: boolean) {
   if (!track) return
+  if (autoplay) audition.value?.stop()
   currentId.value = track.id
   const at = trayTracks.value.findIndex(t => t.id === track.id)
   if (at >= 0) trayIndex.value = at
@@ -103,6 +116,7 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
       @up="goUp"
       @undo="crate.undo()"
       @list="listOpen = true"
+      @listen="listen"
     />
 
     <main ref="main" class="flex-1 overflow-y-auto p-2">
@@ -118,8 +132,7 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
             :pile="pile"
             :count="counts.get(pile.id) ?? 0"
             :ticked="!!current && isIn(current, pile)"
-            :can-open="children(pile.id).length > 0"
-            :disabled="!current"
+              :disabled="!current"
             :glow="hints.glow(pile)"
             @toggle="togglePile(pile)"
             @open="openLevel(pile)"
@@ -136,6 +149,8 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
       </UCard>
     </main>
 
+    <CrateAudition ref="audition" :audio-url="audioUrl" @started="deck?.pause()" />
+
     <CrateDeck
       ref="deck"
       :track="current"
@@ -145,6 +160,7 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
       :path-label="pathLabel"
       :can-next="inPiles.length > 0"
       @next="next"
+      @play="audition?.stop()"
       @remove="removeFromDeck"
     >
       <template #hints>
