@@ -151,7 +151,7 @@ const tracks = xmlTracks.map(t => ({
 const piles = Object.entries(layout.piles).map(([key, p]) => ({ key, name: p.name, parentKey: p.parent ?? null, order: p.order ?? 0 }))
 const lookupRows = Object.entries(lookups).map(([rekordboxId, l]) => ({ rekordboxId, fetchedAt: new Date(l.at * 1000).toISOString(), results: l.results }))
 
-const inbox = tracks.filter(t => t.tags.length === 0 || (t.tags.length === 1 && t.tags[0] === 'NEW'))
+const inbox = tracks.filter(t => t.tags.every(tag => tag === 'NEW'))
 const withAudio = tracks.filter(t => t.audioPath)
 console.log(`XML: ${tracks.length} tracks · ${inbox.length} need tags · audio found for ${withAudio.length} (${inbox.filter(t => t.audioPath).length}/${inbox.length} of the inbox)`)
 console.log(`Prototype: ${piles.length} piles · ${Object.keys(edits).length} re-tags · ${lookupRows.length} lookups`)
