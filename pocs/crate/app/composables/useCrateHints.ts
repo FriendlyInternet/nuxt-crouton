@@ -31,11 +31,12 @@ export function useCrateHints(crate: ReturnType<typeof useCrate>, track: Ref<Cra
   const suggestions = computed(() => {
     const t = track.value
     if (!t) return []
-    return data.value.scores
+    const picks = data.value.scores
       .filter(s => s.score >= WEAK)
       .map(s => crate.piles.value.find(p => p.id === s.pileId))
       .filter((p): p is CratePile => !!p && !crate.isIn(t, p))
-      .slice(0, 4)
+    // A suggested sub-pile already files into its parents — drop parents that add nothing.
+    return picks.filter(p => !picks.some(other => other !== p && crate.ancestors(other).some(a => a.id === p.id))).slice(0, 4)
   })
 
   return { sources, glow, suggestions }
