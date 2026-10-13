@@ -95,5 +95,58 @@
     "howToTest": "1. open on the iPhone → one column, no sideways scroll",
     "status": "settled",
     "signedOff": "seems to work — owner, chat 2026-10-13 (PR #2216)"
+  },
+  {
+    "id": "hint-words",
+    "behaviour": "Genre words from Discogs and Bandcamp, labelled by where they come from",
+    "when": "a track with a cached lookup is on the deck",
+    "expect": "each source shows its words: 'Discogs (<album>)' = the release's styles, 'Bandcamp (artist)' = the artist's tags; the source name links to the matched page; words that are already piles show in green",
+    "hook": "",
+    "howToTest": "1. pick 3Phaz – Sharayet  2. see Discogs (Ends Meet): Grime · Shaabi · … and Bandcamp: Post-Shaabi  3. Grime/Experimental/Post-Shaabi are green",
+    "status": "settled",
+    "signedOff": "lgtm — owner, chat 2026-10-13 (PR #2219)",
+    "consideredRejected": [
+      "suggestions from the owner's own metadata (artist/genre/decade) → ❌ near-random for new artists — exactly the inbox case ('not even close')"
+    ]
+  },
+  {
+    "id": "tap-word",
+    "behaviour": "Every genre word is tappable",
+    "when": "tap a genre word on the card",
+    "expect": "a word that's a pile toggles the track in it; any other word opens 'New pile' prefilled with the word and a guessed parent",
+    "hook": "",
+    "howToTest": "1. tap Grime → filed into Hiphop › Grime  2. tap Shaabi → New pile, Inside: Latin & World › Arabic",
+    "status": "settled",
+    "signedOff": "lgtm — owner, chat 2026-10-13 (PR #2219)"
+  },
+  {
+    "id": "suggestions",
+    "behaviour": "Up to 4 ✦ suggestions file with one tap",
+    "when": "hints score a pile ≥ 0.3 that the track isn't in",
+    "expect": "up to 4 ✦ chips with the pile's full path; one tap files into that exact pile from any level",
+    "hook": "",
+    "howToTest": "1. Sharayet → ✦ Hiphop › Grime, ✦ Experimental  2. tap one → ticked, card stays",
+    "status": "settled",
+    "signedOff": "lgtm — owner, chat 2026-10-13 (PR #2219)"
+  },
+  {
+    "id": "pile-glow",
+    "behaviour": "Matching piles glow",
+    "when": "piles are on screen while a track with hints is on the deck",
+    "expect": "a pile glows when it or anything inside it matches (strong ≥0.6 in primary, weak ≥0.3 dimmed) with '✦ via <word>'",
+    "hook": "",
+    "howToTest": "1. Sharayet at top level → Hiphop shows '✦ via Grime'",
+    "status": "settled",
+    "signedOff": "lgtm — owner, chat 2026-10-13 (PR #2219)"
+  },
+  {
+    "id": "new-pile",
+    "behaviour": "Make a new pile anywhere",
+    "when": "tap '+ New pile' at the end of a pile list (or a genre word with ＋)",
+    "expect": "a dialog asks for a name, where it goes (any pile or top level, default: the current level) and whether to put the current track in it (on by default)",
+    "hook": "",
+    "howToTest": "1. inside House tap + New pile → Inside defaults to House  2. Create with the toggle on → the track is in the new pile",
+    "status": "settled",
+    "signedOff": "lgtm — owner, chat 2026-10-13 (PR #2219)"
   }
 ]
