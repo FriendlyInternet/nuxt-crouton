@@ -90,7 +90,9 @@
       "@better-auth/i18n": "~1.6.33",
       "@better-auth/passkey": "~1.6.33",
       "drizzle-orm": "^0.45.4",
-      "@unhead/vue": "^2.1.15"
+      "@unhead/vue": "^2.1.15",
+      "@nuxtjs/i18n": "^10.6.0",
+      "@fyit/crouton-sales>vue-i18n": "^11.4.14"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3"

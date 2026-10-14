@@ -43,7 +43,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@nuxtjs/i18n": "^9.0.0",
+    "@nuxtjs/i18n": "^10.6.0",
     "jiti": "^2.4.0"
   },
   "peerDependencies": {

@@ -72,9 +72,6 @@ export default defineNuxtConfig({
 
   // i18n configuration — locales driven by crouton.config.js
   i18n: {
-    bundle: {
-      optimizeTranslationDirective: false
-    },
     locales: croutonLocales.map(l => ({ code: l.code, name: l.name, file: l.file })) as LocaleObject[],
     langDir: '../locales', // Relative to srcDir (app/)
     defaultLocale: croutonDefaultLocale as any,
