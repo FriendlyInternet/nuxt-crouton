@@ -308,7 +308,7 @@ const alternateLinks = computed(() => {
     const translatedSlug = parsedTranslations?.[loc.code]?.slug || baseSlug
     const localePath = ancestorPrefix ? `${ancestorPrefix}/${translatedSlug}` : translatedSlug
     return {
-      rel: 'alternate',
+      rel: 'alternate' as const,
       hreflang: loc.code,
       href: buildSeoUrl(loc.code, localePath)
     }
@@ -318,7 +318,7 @@ const alternateLinks = computed(() => {
 // Page title and hreflang links for head
 useHead({
   title: () => page.value?.title || 'Page',
-  link: () => [
+  link: computed(() => [
     // Canonical URL (absolute)
     {
       rel: 'canonical',
@@ -326,7 +326,7 @@ useHead({
     },
     // hreflang alternatives
     ...alternateLinks.value
-  ]
+  ])
 })
 </script>
 

@@ -75,9 +75,9 @@
   "pnpm": {
     "overrides": {
       "vue": "^3.5.44",
-      "nuxt": "^4.4.8",
-      "@nuxt/schema": "^4.4.8",
-      "@nuxt/ui": "~4.10.0",
+      "nuxt": "^4.6.1",
+      "@nuxt/schema": "^4.6.1",
+      "@nuxt/ui": "^4.11.3",
       "@nuxt/devtools": "^3.4.2",
       "@nuxt/devtools-kit": "^3.4.2",
       "unimport": "4.1.1",
@@ -90,7 +90,6 @@
       "@better-auth/i18n": "~1.6.33",
       "@better-auth/passkey": "~1.6.33",
       "drizzle-orm": "^0.45.4",
-      "@unhead/vue": "^2.1.15",
       "@nuxtjs/i18n": "^10.6.0",
       "@fyit/crouton-sales>vue-i18n": "^11.4.14"
     },
