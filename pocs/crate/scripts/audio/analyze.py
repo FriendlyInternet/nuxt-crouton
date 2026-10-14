@@ -88,9 +88,23 @@ print(f'{len(files)} audio files, {len(files) - len(todo)} already done, {len(to
 if args.limit:
     todo = todo[:args.limit]
 
+# A file can take the whole process down (a decoder crash, or Dropbox dying mid-download of
+# an online-only file), which no try/except catches. So note the file before reading it: if
+# the last run died on it, skip it this time instead of dying on it again.
+current = os.path.join(args.out, '.current')
+if os.path.exists(current):
+    bad = open(current).read()
+    for _, rel, st in [t for t in todo if t[1] == bad]:
+        print(f'  ✗ {bad}: the last run stopped on this file, skipping it', flush=True)
+        index[bad] = dict(npz=None, crashed=True, mtime=int(st.st_mtime), size=st.st_size)
+        todo = [t for t in todo if t[1] != bad]
+        save_index()
+
 t0, done, failed = time.time(), 0, 0
 for f, rel, st in todo:
     key = hashlib.sha1(rel.encode()).hexdigest()[:16]
+    with open(current, 'w') as c:
+        c.write(rel)
     try:
         feats = analyse(f)
     except Exception as e:  # a broken or cloud-only file shouldn't stop the run
@@ -108,4 +122,5 @@ for f, rel, st in todo:
         rate = (time.time() - t0) / done
         print(f'  {done}/{len(todo)} · {rate:.1f}s/track · ~{(len(todo) - done) * rate / 60:.0f} min left', flush=True)
 save_index()
+os.remove(current)
 print(f'Done: {done} analysed, {failed} failed, {time.time() - t0:.0f}s', flush=True)
