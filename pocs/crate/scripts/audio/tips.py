@@ -10,7 +10,7 @@ Re-run any time: votes improve as more tracks get filed.
 
 Env (pocs/crate/.env): CRATE_EMAIL, CRATE_PASSWORD, optional CRATE_URL.
 """
-import argparse, http.cookiejar, json, os, urllib.request
+import argparse, http.cookiejar, json, os, unicodedata, urllib.request
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -22,6 +22,7 @@ for line in open(os.path.join(HERE, '..', '..', '.env')):
 p = argparse.ArgumentParser()
 p.add_argument('--url', default=os.environ.get('CRATE_URL', 'https://crate-staging.pmcp.dev'))
 p.add_argument('--features', default='/Users/Shared/crate/features')
+p.add_argument('--library-list', default='/Users/Shared/crate/library.txt')
 p.add_argument('--styles', default='/Users/Shared/crate/models/discogs-effnet-bs64-1.json')
 p.add_argument('--team')
 p.add_argument('-k', type=int, default=10)
@@ -48,10 +49,15 @@ paths = {r['id']: r['audioPath'] for r in api(base + '/audio-paths')}
 
 # Features are keyed by the path under the rekordbox contents folder; audioPath carries the
 # Dropbox prefix (/rekordbox/contents_…/) in front of the same path.
-index = json.load(open(os.path.join(args.features, 'index.json')))
+norm = lambda s: unicodedata.normalize('NFC', s).lower()
+rel_of = {i: norm(a.split('/', 3)[-1]) for i, a in paths.items() if a}
+# Tell analyze.py which files rekordbox actually uses, so it skips the copies next to them.
+with open(args.library_list, 'w') as out:
+    out.writelines(r + '\n' for r in sorted(set(rel_of.values())))
+index = {norm(k): v for k, v in json.load(open(os.path.join(args.features, 'index.json'))).items()}
 def features_for(track_id):
-    rel = paths.get(track_id)
-    entry = rel and index.get(rel.split('/', 3)[-1])
+    rel = rel_of.get(track_id)
+    entry = rel and index.get(rel)
     return entry and entry.get('npz') and np.load(os.path.join(args.features, entry['npz']))
 
 piles = {pl['name'].lower(): pl['name'] for pl in lib['piles']}

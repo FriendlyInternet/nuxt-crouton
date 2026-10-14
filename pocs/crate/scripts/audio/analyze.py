@@ -11,7 +11,7 @@ so a nightly run only does new tracks.
 
 It only reads music and writes features; matching tracks to piles happens elsewhere.
 """
-import argparse, fcntl, hashlib, json, os, sys, time
+import argparse, fcntl, hashlib, json, os, sys, time, unicodedata
 import numpy as np
 
 AUDIO = {'.mp3', '.m4a', '.aac', '.aif', '.aiff', '.wav', '.flac', '.ogg', '.alac'}
@@ -24,6 +24,8 @@ p.add_argument('--music', required=True)
 p.add_argument('--out', default='/Users/Shared/crate/features')
 p.add_argument('--model', default=os.path.join(HERE, 'models'))
 p.add_argument('--limit', type=int, default=0, help='stop after N new tracks (0 = all)')
+p.add_argument('--only', default=os.path.join(HERE, 'library.txt'),
+               help='list of paths (one per line) that are in rekordbox; other files are skipped')
 args = p.parse_args()
 
 os.makedirs(args.out, exist_ok=True)
@@ -69,6 +71,12 @@ def analyse(path):
 
 files = sorted(os.path.join(d, f) for d, _, fs in os.walk(args.music) for f in fs
                if os.path.splitext(f)[1].lower() in AUDIO and not f.startswith('._'))
+# The contents folder also holds copies rekordbox doesn't use ("… (2).mp3" and the like —
+# about half the folder). When tips.py has written the library list, only those are analysed.
+norm = lambda s: unicodedata.normalize('NFC', s).lower()
+wanted = {norm(l.rstrip('\n')) for l in open(args.only)} if os.path.exists(args.only) else None
+if wanted:
+    files = [f for f in files if norm(os.path.relpath(f, args.music)) in wanted]
 todo = []
 for f in files:
     rel = os.path.relpath(f, args.music)
