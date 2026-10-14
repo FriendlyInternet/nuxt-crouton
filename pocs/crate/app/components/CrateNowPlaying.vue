@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import type { CrateTrack } from '~/composables/useCrate'
 
-defineProps<{ track: CrateTrack, meta: string, playing: boolean, hasAudio: boolean, canNext: boolean }>()
-const emit = defineEmits<{ toggle: [], skip: [seconds: number], next: [] }>()
+defineProps<{ track: CrateTrack, meta: string, playing: boolean, hasAudio: boolean, canNext: boolean, checked: boolean }>()
+const emit = defineEmits<{ toggle: [], skip: [seconds: number], next: [], done: [] }>()
 </script>
 
 <template>
@@ -19,6 +19,6 @@ const emit = defineEmits<{ toggle: [], skip: [seconds: number], next: [] }>()
       <p class="truncate font-semibold">{{ track.name }} <span class="font-normal text-muted">· {{ track.artist || 'Unknown artist' }}</span></p>
       <p class="mt-0.5 truncate text-xs tabular-nums text-dimmed">{{ meta }}</p>
     </div>
-    <CrateTransport :has-audio="hasAudio" :can-next="canNext" @skip="(s) => emit('skip', s)" @next="emit('next')" />
+    <CrateTransport :has-audio="hasAudio" :can-next="canNext" :checked="checked" @skip="(s) => emit('skip', s)" @next="emit('next')" @done="emit('done')" />
   </div>
 </template>

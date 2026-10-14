@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { CratePile, CrateTrack } from '~/composables/useCrate'
+import type { CratePile, CrateTrack, TopTray } from '~/composables/useCrate'
+import { isChecked } from '~/composables/useCrate'
 import type { HintWord } from '~/composables/useCrateHints'
 
 definePageMeta({ layout: false, middleware: ['auth'] })
@@ -14,7 +15,9 @@ const levelId = ref<string | null>(null)
 const level = computed(() => crate.piles.value.find(p => p.id === levelId.value) ?? null)
 const shownPiles = computed(() => children(levelId.value))
 const trail = computed(() => level.value ? [...ancestors(level.value), level.value] : [])
-const trayTracks = computed(() => tray(level.value))
+// Top level shows the inbox, or every track not yet checked in crate (#2237) — remembered per device.
+const topTray = useLocalStorage<TopTray>('crate:top-tray', 'inbox')
+const trayTracks = computed(() => tray(level.value, topTray.value))
 const main = ref<HTMLElement>()
 function goUp() {
   const parentId = level.value?.parentId
@@ -67,6 +70,12 @@ function show(track: CrateTrack | undefined, autoplay: boolean) {
   if (at >= 0) trayIndex.value = at
   if (autoplay && track.hasAudio) deck.value?.playSrc(audioUrl(track))
 }
+/** ✓ Done: mark the shown track as checked in crate, then move on like Next. */
+async function done() {
+  pin()
+  if (current.value) await crate.markChecked(current.value)
+  next()
+}
 function next() {
   pin()
   const list = trayTracks.value
@@ -108,7 +117,7 @@ function pick(track: CrateTrack) {
   listOpen.value = false
   show(track, true)
 }
-const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 'Inbox')
+const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : topTray.value === 'inbox' ? 'Inbox' : 'To check')
 
 // ── Add new tracks (#2237): upload → inbox; the deck jumps to the first new one ──
 const { upload, progress: uploadProgress } = useCrateUpload(crate)
@@ -185,7 +194,9 @@ async function onFiles(event: Event) {
       :other-tags="deckOther"
       :path-label="pathLabel"
       :can-next="inPiles.length > 0"
+      :checked="!!current && isChecked(current)"
       @next="next"
+      @done="done"
       @remove="removeFromDeck"
     >
       <template #hints>
@@ -212,6 +223,8 @@ async function onFiles(event: Event) {
       v-model:open="listOpen"
       :title="trayLabel"
       :tray="trayTracks"
+      v-model:top-tray="topTray"
+      :at-top="!level"
       :search-pool="level ? null : tracks"
       :current-id="currentId"
       @pick="pick"

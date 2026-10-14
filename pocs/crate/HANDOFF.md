@@ -13,6 +13,7 @@ Tag a rekordbox library into genre **piles** on the phone. Epic #2204. Brief: th
 - Playback is the native `<audio>`. It starts at 30%, and Next plays inside the tap (iOS gesture rule). Dropbox links are `Content-Disposition: attachment`: opening one in a tab downloads it, while an `<audio>` element plays it.
 - Undo = server-side `crate_changes` groups. An undo is itself a group with `undoOf`, and undos are never undone.
 - The library loads client-only (`server: false`): ~6.5k tracks is too big to inline into SSR HTML, and the team id only resolves after the session loads.
+- "Checked in crate" is the Comments word `crateapp` (owner, 2026-10-14, #2237). It's added only by ✓ Done on the deck, which works even when nothing changed, so tracks tagged before crate can be confirmed too. Next just skips. At the top level, the track list switches between Inbox (only `NEW`) and To check (no `crateapp` yet); the choice is remembered per device. rekordbox can filter on `crateapp`.
 - New music is uploaded into crate first, and goes into rekordbox last (owner, 2026-10-14, #2237): you file on the phone before rekordbox ever sees the track. An uploaded track's `rekordboxId` is `up_<29 hex of SHA-256>`, so the same file can't be uploaded twice. Its `audioPath` is `blob:crate/<team>/<hash>.<ext>`, and its `location` is `upload://<file name>`. The upload is refused when artist + title already exist (case, accents and "Original/Extended Mix" are ignored). The export will move filed uploads into `~/DJ/library/<Artist>/` and write them into the XML.
 
 ## Gotchas
