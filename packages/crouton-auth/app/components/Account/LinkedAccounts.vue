@@ -28,7 +28,7 @@ const notify = useNotify()
 // Get auth client
 function useAuthClient() {
   const nuxtApp = useNuxtApp()
-  return nuxtApp.$authClient as ReturnType<typeof import('better-auth/vue').createAuthClient>
+  return nuxtApp.$authClient as unknown as ReturnType<typeof import('better-auth/vue').createAuthClient>
 }
 const authClient = useAuthClient()
 
