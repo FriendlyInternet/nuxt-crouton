@@ -52,7 +52,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # List recent candidate artifacts. A listing failure fails the job loudly
       # (an outage must not read as "no defects"), mirroring the usage rollup.
