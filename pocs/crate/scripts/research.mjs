@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Crate research agent (#2229) — look up a handful of inbox tracks on the web, as a DJ would.
+// Crate research agent (#2229) — look up up to 100 inbox tracks per run on the web, as a DJ would.
 //
-//   node pocs/crate/scripts/research.mjs [--limit 25] [--url …] [--model sonnet] [--dry-run]
+//   node pocs/crate/scripts/research.mjs [--limit 100] [--url …] [--model sonnet] [--dry-run]
 //
 // For each inbox track without a research tip yet: clean the title for searching, add what we
 // already know (BPM, key, label, a Beatport ID in the file name, a measured energy, and how the
@@ -24,7 +24,7 @@ if (existsSync(envFile)) process.loadEnvFile(envFile)
 const { values: args } = parseArgs({
   options: {
     'url': { type: 'string', default: process.env.CRATE_URL || 'https://crate-staging.pmcp.dev' },
-    'limit': { type: 'string', default: '25' },
+    'limit': { type: 'string', default: '100' },
     'model': { type: 'string', default: 'sonnet' },
     'parallel': { type: 'string', default: '3' },
     'team': { type: 'string' },
