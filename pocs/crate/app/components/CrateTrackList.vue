@@ -12,7 +12,7 @@ const props = defineProps<{
 }>()
 const open = defineModel<boolean>('open', { required: true })
 const topTray = defineModel<TopTray>('topTray', { required: true })
-const trayModes = [{ label: 'Inbox', value: 'inbox' }, { label: 'To check', value: 'unchecked' }]
+const trayModes = [{ label: 'Inbox', value: 'inbox' }, { label: 'To check', value: 'unchecked' }, { label: 'Uploads', value: 'uploads' }]
 const emit = defineEmits<{ pick: [track: CrateTrack] }>()
 
 const search = ref('')

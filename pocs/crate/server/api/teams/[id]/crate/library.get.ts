@@ -17,6 +17,6 @@ export default defineEventHandler(async (event) => {
   ])
   return {
     piles,
-    tracks: (tracks as (Omit<typeof crateTracks.$inferSelect, 'tags'> & { tags: string[] | null })[]).map(({ audioPath, ...t }) => ({ ...t, tags: (t.tags ?? []) as string[], hasAudio: !!audioPath }))
+    tracks: (tracks as (Omit<typeof crateTracks.$inferSelect, 'tags'> & { tags: string[] | null })[]).map(({ audioPath, ...t }) => ({ ...t, tags: (t.tags ?? []) as string[], hasAudio: !!audioPath, uploaded: !!audioPath?.startsWith('blob:') }))
   }
 })

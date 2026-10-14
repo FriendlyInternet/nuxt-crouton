@@ -41,5 +41,5 @@ export default defineEventHandler(async (event) => {
   }).onConflictDoNothing({ target: [crateTracks.teamId, crateTracks.rekordboxId] }).returning()
   if (!row) throw createError({ status: 409, statusText: 'Already in crate' })
 
-  return { id: row.id, name: row.name, artist: row.artist, genre: null, year: null, bpm: null, tonality: null, durationSec: row.durationSec, hasAudio: true, tags: ['NEW'] }
+  return { id: row.id, name: row.name, artist: row.artist, genre: null, year: null, bpm: null, tonality: null, durationSec: row.durationSec, hasAudio: true, uploaded: true, tags: ['NEW'] }
 })

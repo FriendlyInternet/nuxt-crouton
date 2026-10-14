@@ -10,7 +10,7 @@ const props = defineProps<{
   canNext: boolean
   checked: boolean
 }>()
-const emit = defineEmits<{ next: [], done: [], remove: [pile: CratePile] }>()
+const emit = defineEmits<{ next: [], done: [], edit: [], remove: [pile: CratePile] }>()
 
 const audio = ref<HTMLAudioElement>()
 const playing = ref(false)
@@ -69,7 +69,7 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
        goes to the pile list above. -->
   <UCard :ui="{ root: 'rounded-none ring-0 border-t border-default bg-elevated', body: 'space-y-2.5 px-3 py-3 sm:px-3 sm:py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]' }">
     <template v-if="track">
-      <CrateNowPlaying :track="track" :meta="meta" :playing="playing" :has-audio="!!src" :can-next="canNext" :checked="checked" @toggle="toggle" @skip="skip" @next="emit('next')" @done="emit('done')" />
+      <CrateNowPlaying :track="track" :meta="meta" :playing="playing" :has-audio="!!src" :can-next="canNext" :checked="checked" @toggle="toggle" @skip="skip" @next="emit('next')" @done="emit('done')" @edit="emit('edit')" />
 
       <USlider v-if="src" :model-value="position" :max="duration || 1" :step="1" size="sm" aria-label="Seek" @update:model-value="(v) => v !== undefined && seek(v)" />
 

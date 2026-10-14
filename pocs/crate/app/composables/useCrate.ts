@@ -13,6 +13,8 @@ export interface CrateTrack {
   tonality: string | null
   durationSec: number | null
   hasAudio: boolean
+  /** Uploaded into crate (#2237), not yet in rekordbox — can be renamed or deleted here. */
+  uploaded?: boolean
   tags: string[]
 }
 
@@ -24,7 +26,7 @@ const isInbox = (t: CrateTrack) => t.tags.every(tag => tag === NEW_TAG)
 export const CHECKED_TAG = 'crateapp'
 export const isChecked = (t: CrateTrack) => t.tags.includes(CHECKED_TAG)
 /** Which tracks wait at the top level: the untagged inbox, or everything not yet checked in crate. */
-export type TopTray = 'inbox' | 'unchecked'
+export type TopTray = 'inbox' | 'unchecked' | 'uploads'
 
 export function useCrate() {
   const { getTeamId } = useTeamContext()
@@ -90,7 +92,7 @@ export function useCrate() {
    *  checked in crate), else tracks in the pile but in none of its sub-piles. */
   const tray = (level: CratePile | null, top: TopTray = 'inbox') => level
     ? tracks.value.filter(t => isIn(t, level) && !children(level.id).some(c => isIn(t, c)))
-    : tracks.value.filter(t => top === 'inbox' ? isInbox(t) : !isChecked(t))
+    : tracks.value.filter(t => top === 'inbox' ? isInbox(t) : top === 'uploads' ? !!t.uploaded : !isChecked(t))
 
   // ── Writes (optimistic, recorded server-side for undo) ──────────────────
   function setLocalTags(trackId: string, tags: string[]) {
@@ -146,6 +148,34 @@ export function useCrate() {
   /** A freshly uploaded track (#2237) joins the library without a reload. */
   const addTrack = (track: CrateTrack) => data.value.tracks.push(track)
 
+  /** Rename an upload (artist + title). Returns false when the server refused. */
+  async function renameUpload(track: CrateTrack, artist: string, name: string) {
+    try {
+      await $fetch(api(`/uploads/tracks/${track.id}`), { method: 'PATCH', body: { artist, name } })
+      Object.assign(track, { artist: artist || null, name })
+      toast.add({ title: 'Renamed', duration: 2500 })
+      return true
+    }
+    catch (error) {
+      toast.add({ title: 'Couldn’t rename', description: String((error as Error).message ?? error), color: 'error' })
+      return false
+    }
+  }
+
+  /** Delete an upload: the file, the track and its history. */
+  async function deleteUpload(track: CrateTrack) {
+    try {
+      await $fetch(api(`/uploads/tracks/${track.id}`), { method: 'DELETE' })
+      data.value.tracks = data.value.tracks.filter(t => t.id !== track.id)
+      toast.add({ title: `Deleted ${track.name}`, duration: 2500 })
+      return true
+    }
+    catch (error) {
+      toast.add({ title: 'Couldn’t delete', description: String((error as Error).message ?? error), color: 'error' })
+      return false
+    }
+  }
+
   /** Create a pile (optionally inside another) and, if given, file `track` into it. */
   async function createPile(name: string, parentId: string | null, track: CrateTrack | null) {
     try {
@@ -160,5 +190,5 @@ export function useCrate() {
     }
   }
 
-  return { api, status, refresh, piles, tracks, children, ancestors, descendants, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, fileInto, takeOutOf, undo, audioUrl, addTrack, markChecked, createPile }
+  return { api, status, refresh, piles, tracks, children, ancestors, descendants, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, fileInto, takeOutOf, undo, audioUrl, addTrack, renameUpload, deleteUpload, markChecked, createPile }
 }

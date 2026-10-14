@@ -50,6 +50,7 @@ interface R2Bucket {
   get: (key: string, opts?: { range?: R2Range }) => Promise<R2Object | null>
   head: (key: string) => Promise<{ size: number } | null>
   put: (key: string, body: ReadableStream | ArrayBuffer, opts?: { httpMetadata?: { contentType?: string } }) => Promise<unknown>
+  delete: (key: string) => Promise<void>
 }
 /** The raw R2 binding on Cloudflare (streams + ranges); undefined in local dev, where hub:blob's fs driver stands in. */
 const r2 = (event: H3Event) => (event.context.cloudflare?.env as { BLOB?: R2Bucket } | undefined)?.BLOB
@@ -69,6 +70,13 @@ export async function storeUpload(event: H3Event, key: string, contentType: stri
   const body = await readRawBody(event, false)
   if (!body?.length) throw createError({ status: 400, statusText: 'Empty upload' })
   await blob.put(key, new Blob([new Uint8Array(body)], { type: contentType }), { contentType })
+}
+
+/** Remove an uploaded file from storage. */
+export async function deleteUpload(event: H3Event, key: string) {
+  const bucket = r2(event)
+  if (bucket) await bucket.delete(key)
+  else await blob.del(key)
 }
 
 /** Play `key` with Range support, so the deck can start at 30% and Safari can seek. */

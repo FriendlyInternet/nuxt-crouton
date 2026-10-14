@@ -117,7 +117,21 @@ function pick(track: CrateTrack) {
   listOpen.value = false
   show(track, true)
 }
-const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : topTray.value === 'inbox' ? 'Inbox' : 'To check')
+const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : { inbox: 'Inbox', unchecked: 'To check', uploads: 'Uploads' }[topTray.value])
+
+// ── Your uploads (#2237): rename or delete the track on the deck ──
+const editOpen = ref(false)
+async function saveUpload(artist: string, name: string) {
+  if (current.value && await crate.renameUpload(current.value, artist, name)) editOpen.value = false
+}
+async function removeUpload() {
+  const track = current.value
+  if (!track) return
+  pin()
+  if (!await crate.deleteUpload(track)) return
+  editOpen.value = false
+  currentId.value = null // the deck falls back to the first track in the tray
+}
 
 // ── Add new tracks (#2237): upload → inbox; the deck jumps to the first new one ──
 const { upload, progress: uploadProgress } = useCrateUpload(crate)
@@ -197,6 +211,7 @@ async function onFiles(event: Event) {
       :checked="!!current && isChecked(current)"
       @next="next"
       @done="done"
+      @edit="editOpen = true"
       @remove="removeFromDeck"
     >
       <template #hints>
@@ -216,6 +231,8 @@ async function onFiles(event: Event) {
     </CrateDeck>
 
     <CratePileListen ref="listener" :audio-url="audioUrl" :path-label="pathLabel" @started="deck?.pause()" />
+
+    <CrateUploadEdit v-model:open="editOpen" :track="current" @save="saveUpload" @delete="removeUpload" />
 
     <CrateNewPile ref="newPile" v-model:open="newPileOpen" :piles="crate.piles.value" :path-label="pathLabel" :track="current" @create="onCreate" />
 
