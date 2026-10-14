@@ -267,7 +267,7 @@
 <script lang="ts" setup>
 import { computed, resolveComponent, getCurrentInstance, provide, inject, type Component } from 'vue'
 import { CROUTON_ITEM_ACTION_KEY } from '../types/table'
-import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
+import { useBreakpoints, breakpointsTailwind, useMounted } from '@vueuse/core'
 import type { ListProps, LayoutType, ResponsiveLayout, layoutPresets, HierarchyConfig, SortableOptions, KanbanConfig, CollabPresenceConfig, GridSize } from '../types/table'
 import { layoutPresets as presets } from '../types/table'
 
@@ -432,8 +432,13 @@ function getCollabRoomId(row: any): string {
   return `${props.collection}-${row.id}`
 }
 
-// Responsive breakpoint detection
+// Responsive breakpoint detection. The server has no viewport (every breakpoint
+// is false), so until mount we render `base` like the server did — otherwise a wide
+// client hydrates a table over server-rendered list HTML (#2241). Not
+// `nuxtApp.isHydrating`: lazy list components hydrate after it flips to false. On a
+// client-side navigation the post-mount re-render lands before the first paint.
 const breakpoints = useBreakpoints(breakpointsTailwind)
+const isMounted = useMounted()
 
 // Normalize layout prop to ResponsiveLayout format
 const normalizedLayout = computed((): ResponsiveLayout => {
@@ -461,6 +466,7 @@ const normalizedLayout = computed((): ResponsiveLayout => {
 // Determine active layout based on current breakpoint
 const activeLayout = computed<LayoutType>(() => {
   const layout = normalizedLayout.value
+  if (!isMounted.value) return layout.base
 
   // Check breakpoints from largest to smallest
   if (breakpoints['2xl'].value && layout['2xl']) return layout['2xl']
