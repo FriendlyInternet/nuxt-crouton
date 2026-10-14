@@ -137,7 +137,7 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
             :pile="pile"
             :count="counts.get(pile.id) ?? 0"
             :ticked="!!current && isIn(current, pile)"
-              :disabled="!current"
+            :disabled="!current"
             :glow="hints.glow(pile)"
             @toggle="togglePile(pile)"
             @open="openLevel(pile)"
@@ -171,10 +171,12 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
           :suggestions="hints.suggestions.value"
           :path-label="pathLabel"
           :is-in-pile="(id) => !!current && isIn(current, crate.piles.value.find(p => p.id === id)!)"
+          :empty="hints.empty.value"
           @word="onWord"
           @file="fileSuggestion"
           @hold="openListen"
           @listen="listener?.start()"
+          @new="newPile?.start({ parentId: levelId })"
         />
       </template>
     </CrateDeck>
