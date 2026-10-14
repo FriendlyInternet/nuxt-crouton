@@ -174,7 +174,7 @@ async function onFiles(event: Event) {
       <div v-if="status === 'error'" class="py-10 text-center text-error">
         Couldn’t load your library. <UButton variant="link" label="Retry" @click="crate.refresh()" />
       </div>
-      <div v-else-if="!crate.piles.value.length" class="py-10 text-center text-muted">Loading your library…</div>
+      <div v-else-if="status !== 'success' && !crate.piles.value.length" class="py-10 text-center text-muted">Loading your library…</div>
       <UCard v-else variant="soft" :ui="{ body: 'p-0 sm:p-0' }">
         <div class="divide-y divide-default/60 md:grid md:grid-cols-2 md:divide-y-0 lg:grid-cols-3">
           <CratePileRow
