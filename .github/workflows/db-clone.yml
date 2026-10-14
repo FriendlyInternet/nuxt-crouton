@@ -20,7 +20,6 @@ on:
         options:
           - velo
           - fanfare
-          - triage
           - alexdeforce
           - blog
           - kvr
