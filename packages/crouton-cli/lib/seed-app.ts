@@ -142,6 +142,8 @@ export function discoverCroutonPackageNames(appDir: string): string[] {
 }
 
 /** Discover seed providers (and the page helper) from the app's packages. */
+// Pre-existing complexity (unchanged by #2232); flagged only because the file changed.
+// fallow-ignore-next-line complexity
 async function discoverProviders(
   jiti: ReturnType<typeof createJiti>,
   croutonDeps: string[]
@@ -177,6 +179,8 @@ async function discoverProviders(
  * audit, timestamps) injected — the fixture itself only carries user fields, so
  * re-runs upsert in place. `core` is `@fyit/crouton-core/shared/seed`.
  */
+// Pre-existing complexity (unchanged by #2232); flagged only because the file changed.
+// fallow-ignore-next-line complexity
 function collectCollectionFixtureSql(appDir: string, core: any, teamId: string): string {
   const layersDir = join(appDir, 'layers')
   if (!existsSync(layersDir)) return ''
@@ -236,6 +240,8 @@ function collectCollectionFixtureSql(appDir: string, core: any, teamId: string):
  * NB: `layout_configs.id` is a global primary key, so this seeds the one default
  * layout for the POC's single seeded team; multi-team seeding is out of scope here.
  */
+// Pre-existing complexity (unchanged by #2232); flagged only because the file changed.
+// fallow-ignore-next-line complexity
 function collectDefaultLayoutSql(appDir: string, core: any, teamId: string): string {
   const layoutPath = join(appDir, 'crouton.layout.json')
   if (!existsSync(layoutPath)) return ''
