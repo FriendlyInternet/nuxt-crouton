@@ -36,6 +36,8 @@ export default defineNuxtConfig({
 
   // Disable OG Image to reduce bundle size for Cloudflare (saves ~4MB)
   ogImage: { enabled: false },
+  // og:site_name + schema-org site name — Site Config v4 no longer infers it
+  site: { name: 'Velotheek' },
 
   // Enable booking email notifications
   runtimeConfig: {
