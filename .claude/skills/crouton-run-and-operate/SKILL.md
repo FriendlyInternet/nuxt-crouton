@@ -41,7 +41,7 @@ pnpm --filter velo dev                              # or: cd apps/velo && pnpm d
 
 | App | Port | | POC | Port |
 |---|---|---|---|---|
-| apps/triage | 3005 | | pocs/alexdeforce | 3001 |
+| — | | | pocs/alexdeforce | 3001 |
 | apps/velo | 3006 | | pocs/sintlukas | 3003 |
 | apps/kassa | 3007 | | pocs/crouton-builder-demo | 3010 |
 | e2e fixtures | 3000 | | pocs/crouton-builder **and** pocs/kvr | **3011 — collision**; run one with `--port` |
