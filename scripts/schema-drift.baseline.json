@@ -1,33 +1,5 @@
 {
   "$comment": "Declared app↔package schema divergences (#1769). Each entry says WHY a consumer copy differs from packages/*/schemas. Undeclared behavioural drift fails CI. Regenerate with: node scripts/check-schema-drift.mjs --update — it preserves these reasons.",
-  "apps/triage/schemas/input.json": {
-    "package": "packages/crouton-triage/schemas/input.json",
-    "reason": "NEEDS REVIEW — `+name` is plausible app-specific customisation, but `accountId.refTarget` is not: the package points it at `accounts` and triage's copy declares no refTarget at all, so triage generates the column without the relation. Captured, not blessed (#1769).",
-    "fields": [
-      "+name",
-      "accountId.refTarget"
-    ]
-  },
-  "apps/triage/schemas/output.json": {
-    "package": "packages/crouton-triage/schemas/output.json",
-    "reason": "NEEDS REVIEW — same pair as input.json: `+name` is app-specific, `accountId.refTarget` drops the package's `accounts` relation. Captured, not blessed (#1769).",
-    "fields": [
-      "+name",
-      "accountId.refTarget"
-    ]
-  },
-  "apps/triage/schemas/pages.json": {
-    "package": "packages/crouton-pages/schemas/pages.json",
-    "reason": "Intentional — triage runs a deliberately reduced pages model (no ogImage/robots SEO fields, its own hierarchy config and required-ness). The `visibility.options` entry is the shared stale-copy cause below.",
-    "fields": [
-      "-ogImage",
-      "-robots",
-      "$hierarchy",
-      "slug.required",
-      "title.required",
-      "visibility.options"
-    ]
-  },
   "apps/velo/schemas/pages.json": {
     "package": "packages/crouton-pages/schemas/pages.json",
     "reason": "Stale copy, inert — predates the `admin`/`scoped` visibility options. Harmless today because the option list the UI renders is hardcoded in crouton-pages' Workspace/Editor.vue, not read from this file. kassa's identical case was reconciled in #1769; velo and the pocs below are the same one-line fix, left out of that issue's scope.",

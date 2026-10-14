@@ -41,4 +41,3 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-sales` | `packages/crouton-sales` | POS/Sales system for Nuxt Crouton - products, categories, orders, and optional thermal receipt printing |
 | `@fyit/crouton-themes` | `packages/crouton-themes` | Swappable themes for Nuxt UI applications |
 | `@fyit/crouton-three` | `packages/crouton-three` | TresJS (Three.js for Vue) integration for Nuxt Crouton — 3D scenes, glTF model viewer, keyboard controls, and a pages block for interactive 3D content and games |
-| `@fyit/crouton-triage` | `packages/crouton-triage` | Discussion-to-task triage system for Nuxt Crouton - AI analysis, multi-source adapters (Slack, Figma, Notion), domain routing |

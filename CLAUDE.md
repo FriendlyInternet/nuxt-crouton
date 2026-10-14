@@ -117,7 +117,7 @@ For a big/fuzzy initiative, you can let agents do the epic→sub-issue breakdown
 
 ### Commit Format (enforced by /commit skill)
 
-Format `<type>(<scope>): <description>` + the 👤/🤖 body convention live in [`AGENTS.md`](./AGENTS.md) (*Commits*). The crouton **scopes** (canonical list in the `/commit` skill): `crouton` | `crouton-core` | `crouton-cli` | `crouton-i18n` | `crouton-editor` | `crouton-flow` | `crouton-assets` | `crouton-devtools` | `crouton-auth` | `crouton-triage` | `crouton-pages` | `crouton-bookings` | `docs` | `playground` | `rakim` | `root`
+Format `<type>(<scope>): <description>` + the 👤/🤖 body convention live in [`AGENTS.md`](./AGENTS.md) (*Commits*). The crouton **scopes** (canonical list in the `/commit` skill): `crouton` | `crouton-core` | `crouton-cli` | `crouton-i18n` | `crouton-editor` | `crouton-flow` | `crouton-assets` | `crouton-devtools` | `crouton-auth` | `crouton-pages` | `crouton-bookings` | `docs` | `playground` | `rakim` | `root`
 
 ### Merge Policy (preserve curated commits — don't squash by default)
 
