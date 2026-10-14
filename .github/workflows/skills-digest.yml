@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # Cadence gate — send only on the configured day-of-month. A manual dispatch forces it.
       - name: Decide if today is a send day

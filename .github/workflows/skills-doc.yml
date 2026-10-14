@@ -34,7 +34,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Verify skills doc is up to date
         run: node scripts/gen-skills-doc.mjs --check
       - name: Verify every skill/agent carries a layer tag (#1098)

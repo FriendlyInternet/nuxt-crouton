@@ -32,7 +32,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # Cadence gate: is today a send day for `housekeeping` per .github/digests.yml?
       # Manual dispatch forces a send. Everything below is skipped when send=false.

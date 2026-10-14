@@ -45,7 +45,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # List this window's trace artifacts. `gh api` exits non-zero on API
       # failure → the job fails loudly instead of recording a false quiet week.
