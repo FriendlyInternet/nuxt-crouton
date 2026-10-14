@@ -81,25 +81,50 @@ function findPackageDir(name: string, fromDir: string): string | null {
   }
 }
 
+/** The umbrella package: its dependencies list EVERY addon, not what an app uses. */
+const UMBRELLA = '@fyit/crouton'
+
 /**
- * Discover every `@fyit/crouton-*` package reachable from the app — its direct
- * deps plus the packages those pull in (e.g. crouton-auth is bundled via
- * crouton-core, so it isn't a direct app dependency). BFS over deps + peerDeps.
+ * The `@fyit/crouton-*` layers named in the app's nuxt.config `extends` array —
+ * what the app actually uses. `null` when there's no config or no literal
+ * `extends` array (the caller then falls back to walking the umbrella).
  */
-function discoverCroutonPackageNames(appDir: string): string[] {
+function extendedCroutonPackages(appDir: string): string[] | null {
+  const configPath = ['nuxt.config.ts', 'nuxt.config.js', 'nuxt.config.mjs']
+    .map(file => join(appDir, file))
+    .find(path => existsSync(path))
+  if (!configPath) return null
+  const block = readFileSync(configPath, 'utf8').match(/extends:\s*\[([\s\S]*?)\]/)
+  if (!block) return null
+  return [...block[1]!.matchAll(/['"](@fyit\/crouton-[\w-]+)['"]/g)].map(m => m[1]!)
+}
+
+/**
+ * Discover every `@fyit/crouton-*` package the app uses — its direct deps, the
+ * layers its nuxt.config extends, plus the packages those pull in (e.g.
+ * crouton-auth is bundled via crouton-core, so it isn't a direct app
+ * dependency). BFS over deps + peerDeps.
+ *
+ * The umbrella `@fyit/crouton` is not expanded when `extends` is readable: it
+ * depends on every addon, so walking it made each app seed sales/bookings demo
+ * rows into tables its database doesn't have (#2232).
+ */
+export function discoverCroutonPackageNames(appDir: string): string[] {
   const appPkgPath = join(appDir, 'package.json')
   if (!existsSync(appPkgPath)) {
     throw new Error(`No package.json found in ${appDir}`)
   }
   const appPkg = JSON.parse(readFileSync(appPkgPath, 'utf8'))
 
+  const extended = extendedCroutonPackages(appDir)
   const seen = new Set<string>()
-  const queue = croutonDepNames(appPkg)
+  const queue = [...croutonDepNames(appPkg), ...(extended ?? [])]
 
   while (queue.length > 0) {
     const name = queue.shift()!
     if (seen.has(name)) continue
     seen.add(name)
+    if (name === UMBRELLA && extended) continue
 
     const pkgDir = findPackageDir(name, appDir)
     if (!pkgDir) continue
