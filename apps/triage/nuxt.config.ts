@@ -60,6 +60,8 @@ export default defineNuxtConfig({
 
   // Disable OG Image to reduce bundle size for Cloudflare
   ogImage: { enabled: false },
+  // og:site_name + schema-org site name — Site Config v4 no longer infers it
+  site: { name: 'Triage' },
 
   vite: {
     server: {
