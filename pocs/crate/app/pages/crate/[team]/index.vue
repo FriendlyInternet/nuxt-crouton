@@ -109,6 +109,19 @@ function pick(track: CrateTrack) {
   show(track, true)
 }
 const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 'Inbox')
+
+// ── Add new tracks (#2237): upload → inbox; the deck jumps to the first new one ──
+const { upload, progress: uploadProgress } = useCrateUpload(crate)
+const fileInput = ref<HTMLInputElement>()
+async function onFiles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const added = await upload([...(input.files ?? [])])
+  input.value = ''
+  if (added.length) {
+    openLevel(null)
+    show(tracks.value.find(t => t.id === added[0]!.id), false)
+  }
+}
 </script>
 
 <template>
@@ -117,11 +130,21 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
       :trail="trail"
       :tray-label="trayLabel"
       :tray-count="trayTracks.length"
+      :uploading="uploadProgress"
       @open="openLevel"
       @up="goUp"
       @undo="crate.undo()"
       @list="listOpen = true"
       @listen="listen"
+      @upload="fileInput?.click()"
+    />
+    <input ref="fileInput" type="file" accept="audio/*,.mp3,.m4a,.aac,.aif,.aiff,.wav,.flac,.ogg" multiple class="hidden" @change="onFiles">
+    <UProgress
+      v-if="uploadProgress"
+      :model-value="uploadProgress.total ? uploadProgress.done : null"
+      :max="uploadProgress.total || 1"
+      size="xs"
+      :aria-label="`Uploading ${uploadProgress.name}`"
     />
 
     <main ref="main" class="flex-1 overflow-y-auto p-2">

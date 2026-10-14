@@ -130,6 +130,9 @@ export function useCrate() {
 
   const audioUrl = (t: CrateTrack) => api(`/tracks/${t.id}/audio`)
 
+  /** A freshly uploaded track (#2237) joins the library without a reload. */
+  const addTrack = (track: CrateTrack) => data.value.tracks.push(track)
+
   /** Create a pile (optionally inside another) and, if given, file `track` into it. */
   async function createPile(name: string, parentId: string | null, track: CrateTrack | null) {
     try {
@@ -144,5 +147,5 @@ export function useCrate() {
     }
   }
 
-  return { api, status, refresh, piles, tracks, children, ancestors, descendants, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, fileInto, takeOutOf, undo, audioUrl, createPile }
+  return { api, status, refresh, piles, tracks, children, ancestors, descendants, pathLabel, counts, isIn, leafPiles, otherTags, tray, toggle, fileInto, takeOutOf, undo, audioUrl, addTrack, createPile }
 }
