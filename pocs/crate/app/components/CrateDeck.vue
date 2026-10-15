@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import type { CratePile, CrateTrack } from '~/composables/useCrate'
+import { isChecked } from '~/composables/useCrate'
 
 const props = defineProps<{
   track: CrateTrack | null
+  /** The neighbours either side of the card, so a swipe shows them sliding in (null = none). */
+  prevTrack: CrateTrack | null
+  nextTrack: CrateTrack | null
   src: string | null
   inPiles: CratePile[]
   otherTags: string[]
@@ -10,7 +14,7 @@ const props = defineProps<{
   canNext: boolean
   checked: boolean
 }>()
-const emit = defineEmits<{ next: [], done: [], edit: [], remove: [pile: CratePile] }>()
+const emit = defineEmits<{ next: [], previous: [], done: [], edit: [], remove: [pile: CratePile] }>()
 
 const audio = ref<HTMLAudioElement>()
 const playing = ref(false)
@@ -45,12 +49,26 @@ function skip(seconds: number) {
 }
 
 const time = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
-const meta = computed(() => {
-  const t = props.track
-  if (!t) return ''
-  const clock = props.src ? `${time(position.value)} / ${time(duration.value)}` : 'no audio in Dropbox'
+/** The meta line; only the card on the deck has a live clock. */
+function metaFor(t: CrateTrack, live: boolean) {
+  const clock = live ? (props.src ? `${time(position.value)} / ${time(duration.value)}` : 'no audio in Dropbox') : null
   return [clock, t.bpm ? `${Math.round(t.bpm)} BPM` : null, t.tonality, t.year, t.genre].filter(Boolean).join(' · ')
-})
+}
+
+// ── The track is a card: swipe left for the next one, right for the previous one ──
+// Always three slides [previous, current, next] (an empty slot is null), so the count never
+// changes and Embla never re-inits under the finger. After a swipe the deck moves on, the
+// neighbours shift and the carousel jumps back to the middle without animating.
+const carousel = useTemplateRef('carousel')
+const slides = computed(() => [props.prevTrack, props.track, props.nextTrack])
+function onSlide(index: number) {
+  if (index === 1) return
+  // Runs inside the pointer-up, so Next can still start audio (iOS gesture rule).
+  if (!slides.value[index]) carousel.value?.emblaApi?.scrollTo(1)
+  else if (index === 2) emit('next')
+  else emit('previous')
+}
+watch(() => props.track?.id, () => carousel.value?.emblaApi?.scrollTo(1, true), { flush: 'post' })
 
 function seek(seconds: number) {
   if (audio.value) audio.value.currentTime = seconds
@@ -69,7 +87,35 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
        goes to the pile list above. -->
   <UCard :ui="{ root: 'rounded-none ring-0 border-t border-default bg-elevated', body: 'space-y-2.5 px-3 py-3 sm:px-3 sm:py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]' }">
     <template v-if="track">
-      <CrateNowPlaying :track="track" :meta="meta" :playing="playing" :has-audio="!!src" :can-next="canNext" :checked="checked" @toggle="toggle" @skip="skip" @next="emit('next')" @done="emit('done')" @edit="emit('edit')" />
+      <UCarousel ref="carousel" :items="slides" @select="onSlide" :start-index="1" :ui="{ container: '-ms-6', item: 'ps-6' }">
+        <template #default="{ item, index }">
+          <CrateNowPlaying
+            v-if="item && index === 1"
+            :track="item"
+            :meta="metaFor(item, true)"
+            :playing="playing"
+            :has-audio="!!src"
+            :can-next="canNext"
+            :checked="checked"
+            @toggle="toggle"
+            @skip="skip"
+            @next="emit('next')"
+            @done="emit('done')"
+            @edit="emit('edit')"
+          />
+          <!-- A neighbour, shown while it slides in: same card, controls inert. -->
+          <CrateNowPlaying
+            v-else-if="item"
+            :track="item"
+            :meta="metaFor(item, false)"
+            :playing="false"
+            :has-audio="item.hasAudio"
+            :can-next="false"
+            :checked="isChecked(item)"
+            inert
+          />
+        </template>
+      </UCarousel>
 
       <USlider v-if="src" :model-value="position" :max="duration || 1" :step="1" size="sm" aria-label="Seek" @update:model-value="(v) => v !== undefined && seek(v)" />
 

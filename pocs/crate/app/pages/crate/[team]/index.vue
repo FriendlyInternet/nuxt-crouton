@@ -63,8 +63,26 @@ function listen() {
   listener.value?.start()
 }
 
-function show(track: CrateTrack | undefined, autoplay: boolean) {
+// Previous = the tracks you actually came through (a filed one has left the tray, but you
+// can still swipe back to it); with no history yet, the one above it in the tray.
+const history = ref<string[]>([])
+const prevTrack = computed(() => {
+  const id = history.value.at(-1)
+  if (id) return tracks.value.find(t => t.id === id) ?? null
+  const at = trayTracks.value.findIndex(t => t.id === current.value?.id)
+  return at > 0 ? trayTracks.value[at - 1]! : null
+})
+const nextTrack = computed(() => {
+  const list = trayTracks.value
+  const at = list.findIndex(t => t.id === current.value?.id)
+  // Still in the tray → the one after it; filed away → whatever now sits where it was.
+  const target = list[at >= 0 ? at + 1 : trayIndex.value]
+  return target && target.id !== current.value?.id ? target : null
+})
+
+function show(track: CrateTrack | undefined, autoplay: boolean, remember = true) {
   if (!track) return
+  if (remember && current.value && current.value.id !== track.id) history.value = [...history.value.slice(-49), current.value.id]
   currentId.value = track.id
   const at = trayTracks.value.findIndex(t => t.id === track.id)
   if (at >= 0) trayIndex.value = at
@@ -78,11 +96,13 @@ async function done() {
 }
 function next() {
   pin()
-  const list = trayTracks.value
-  const at = list.findIndex(t => t.id === currentId.value)
-  // Still in the tray → the one after it; filed away → whatever now sits where it was.
-  const target = at >= 0 ? at + 1 : trayIndex.value
-  show(list[Math.min(list.length - 1, target)], true)
+  show(nextTrack.value ?? undefined, true)
+}
+function previous() {
+  pin()
+  const target = prevTrack.value
+  if (history.value.at(-1) === target?.id) history.value = history.value.slice(0, -1)
+  show(target ?? undefined, true, false)
 }
 
 // ── Genre hints + new piles (#2212) ───────────────────────────────────────
@@ -203,6 +223,8 @@ async function onFiles(event: Event) {
     <CrateDeck
       ref="deck"
       :track="current"
+      :prev-track="prevTrack"
+      :next-track="nextTrack"
       :src="current?.hasAudio ? audioUrl(current) : null"
       :in-piles="inPiles"
       :other-tags="deckOther"
@@ -210,6 +232,7 @@ async function onFiles(event: Event) {
       :can-next="inPiles.length > 0"
       :checked="!!current && isChecked(current)"
       @next="next"
+      @previous="previous"
       @done="done"
       @edit="editOpen = true"
       @remove="removeFromDeck"
