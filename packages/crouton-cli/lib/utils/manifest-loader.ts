@@ -450,3 +450,19 @@ export async function findPackagesDir(startDir: string): Promise<string | null> 
 
   return null
 }
+
+// ── Convenience helpers (discover + compute in one call) ──────────
+// Moved here from the deleted manifest-bridge.ts (#2290): every caller is .ts,
+// so the jiti hop (and its second manifest cache) bought nothing.
+
+export async function loadTypeMapping(rootDir?: string) {
+  return getTypeMapping(await discoverManifests(rootDir))
+}
+
+export async function loadModuleRegistryMap(rootDir?: string) {
+  return getModuleRegistryMap(await discoverManifests(rootDir))
+}
+
+export async function loadModuleRegistry(rootDir?: string) {
+  return getModuleRegistry(await discoverManifests(rootDir))
+}

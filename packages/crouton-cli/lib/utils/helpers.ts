@@ -104,5 +104,5 @@ export function getSeedGenerator(field: Field): string {
   return typeMap[type] || 'f.loremIpsum({ sentencesCount: 1 })'
 }
 
-// typeMapping has been removed — use loadTypeMapping() from manifest-bridge.ts
+// typeMapping has been removed — use loadTypeMapping() from manifest-loader.ts
 // The canonical type definitions now live in crouton-core/crouton.manifest.ts
