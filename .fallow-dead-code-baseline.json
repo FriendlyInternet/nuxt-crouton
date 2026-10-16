@@ -245,7 +245,6 @@
     "packages/crouton-core/app/components/stubs/CroutonMapsMap.vue:style",
     "packages/crouton-core/app/components/stubs/CroutonMapsMap.vue:height",
     "packages/crouton-core/app/components/stubs/CroutonMapsMap.vue:width",
-    "packages/crouton-designer/app/components/FieldList.vue:collectionId",
     "packages/crouton-i18n/app/components/AITranslateButton.vue:sourceText",
     "packages/crouton-i18n/app/components/AITranslateButton.vue:sourceLanguage",
     "packages/crouton-i18n/app/components/AITranslateButton.vue:targetLanguage",
