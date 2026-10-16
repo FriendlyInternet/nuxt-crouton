@@ -51,7 +51,7 @@ jobs:
     steps:
       # An App token so the ready-for-review event CASCADES into the downstream CI/
       # auto-merge workflows — a GITHUB_TOKEN action does not re-trigger them (#572).
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
@@ -59,11 +59,11 @@ jobs:
           owner: FriendlyInternet
 
       # Needed so the script can import the unit-tested matcher.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |

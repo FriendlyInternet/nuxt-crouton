@@ -393,7 +393,6 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/utils/owned-collections.ts` | `findCollectionOwner` / `findOwnedCollectionConflicts` / `assertNoOwnedCollections` / `OwnedCollectionError` — refuse a collection a manifest with `ownsCollections: true` ships itself (#2278). Called from `runConfig` + `writeScaffold` |
 | `lib/utils/validate-ref-targets.ts` | `validateRefTargets` / `RefTargetError` — refuse an unknown `refTarget` before any file is written; person-shaped targets get a message pointing at #1958 (#1957) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
-| `lib/utils/dialects.ts` | PostgreSQL/SQLite configs |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
 | `lib/utils/update-nuxt-config.ts` | Add/remove a package in nuxt.config.ts extends, add runtimeConfig |
 | `lib/utils/extended-packages.ts` | `resolveExtendedPackages(appDir)` — the crouton package ids an app extends, transitively; the ONE package on-switch the generator reads (#2286) |

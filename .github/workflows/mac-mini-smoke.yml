@@ -35,7 +35,7 @@ jobs:
           uname -a
 
       # Proves git + a clean workspace checkout work on the box.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 

@@ -230,25 +230,8 @@ const addCmd = defineCommand({
       return
     }
 
-    // Import module registry to check if items are modules
-    const registryPath = join(__dirname, '..', 'lib', 'module-registry.ts')
-    const { getModule } = await tsImport(registryPath)
+    const modules = items
 
-    // Separate modules from features
-    const modules = []
-    const features = []
-
-    for (const item of items) {
-      if (await getModule(item)) {
-        modules.push(item)
-      } else if (item === 'events') {
-        features.push(item)
-      } else {
-        modules.push(item)
-      }
-    }
-
-    // Add modules if any
     if (modules.length > 0) {
       const addModulePath = join(__dirname, '..', 'lib', 'add-module.ts')
       const { addModules } = await tsImport(addModulePath)
@@ -265,18 +248,6 @@ const addCmd = defineCommand({
       }
     }
 
-    // Add features if any
-    for (const feature of features) {
-      if (feature === 'events') {
-        const addEventsPath = join(__dirname, '..', 'lib', 'add-events.ts')
-        if (!existsSync(addEventsPath)) {
-          consola.error('add-events script not found. Please ensure the package is properly installed.')
-          process.exit(1)
-        }
-        const { addEvents } = await tsImport(addEventsPath)
-        await addEvents({ dryRun: args.dryRun, force: args.force })
-      }
-    }
   }
 })
 
@@ -477,22 +448,6 @@ const dbPullCmd = defineCommand({
   }
 })
 
-// ─── deploy-setup ─────────────────────────────────────────────────
-
-// Retired (#1137): this command set up the Cloudflare PAGES deploy the crouton
-// standard migrated away from (Workers + auto-provisioning, #108/#114). A fresh
-// `crouton init` already ships the Workers setup; a second scaffold path is drift.
-const deploySetupCmd = defineCommand({
-  meta: { name: 'deploy-setup', description: '(deprecated) Cloudflare Pages setup — retired; use `crouton init` (Workers) instead' },
-  async run() {
-    console.error('crouton deploy-setup is retired: it set up the deprecated Cloudflare Pages deploy.')
-    console.error('The Workers deploy needs no setup command — a fresh `crouton init` app ships the')
-    console.error('id-less wrangler.jsonc + cf:deploy/cf:staging scripts, and the first deploy')
-    console.error('auto-provisions D1/KV. See the deployment guide: https://nuxt-crouton.dev/guides/deployment')
-    process.exit(1)
-  }
-})
-
 // ─── deploy-check ─────────────────────────────────────────────────
 
 const deployCheckCmd = defineCommand({
@@ -527,7 +482,6 @@ const main = defineCommand({
     'rollback-bulk': rollbackBulkCmd,
     'rollback-interactive': rollbackInteractiveCmd,
     doctor: doctorCmd,
-    'deploy-setup': deploySetupCmd,
     'deploy-check': deployCheckCmd,
     'scaffold-app': scaffoldAppCmd,
     'seed-translations': seedTranslationsCmd,

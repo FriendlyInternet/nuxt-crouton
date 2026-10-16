@@ -9,7 +9,7 @@ import { loadConfig } from 'c12'
 
 // Import utilities
 import { toCase, toSnakeCase } from './utils/helpers.ts'
-import { loadTypeMapping, discoverManifests, getGeneratorDetectors, getGeneratorContributions } from './utils/manifest-bridge.ts'
+import { loadTypeMapping, discoverManifests, getGeneratorDetectors, getGeneratorContributions } from './utils/manifest-loader.ts'
 import type { DetectionResult, DetectedField, FormEnhancement, ListEnhancement, GeneratorContribution } from '@fyit/crouton-core/shared/manifest'
 import { detectRequiredDependencies, displayMissingDependencies, ensureLayersExtended } from './utils/module-detector.ts'
 import { setupCroutonCssSource, displayManualCssSetupInstructions } from './utils/css-setup.ts'
@@ -1834,51 +1834,6 @@ async function runEnhancedConfigFormat(config: Record<string, any>, typeMapping:
   })
 }
 
-// Original simple config format (schemaPath + targets[]): every target collection
-// shares the one schema; then run the batch post-generation steps.
-async function runSimpleConfigFormat(config: Record<string, any>, typeMapping: any): Promise<void> {
-  const fields = await loadFields(config.schemaPath, typeMapping)
-
-  // Track all collections for batch db:generate
-  const allCollections: Array<{ name: string; layer: string; fields: Field[] }> = []
-
-  // Process each target
-  for (const target of config.targets) {
-    for (const collection of target.collections) {
-      console.log(`\nGenerating collection '${collection}' in layer '${target.layer}'...`)
-
-      // Check for global seed settings (this code path doesn't have per-collection config)
-      const globalSeed = config?.seed?.enabled === true || config?.flags?.seed === true
-
-      await writeScaffold({
-        layer: target.layer,
-        collection,
-        fields,
-        dialect: resolveDialect(config),
-        autoRelations: config.flags?.autoRelations || false,
-        dryRun: config.flags?.dryRun || false,
-        noDb: true, // Skip individual db:generate
-        force: config.flags?.force || false,
-        noTranslations: config.flags?.noTranslations || false,
-        config: config,
-        seed: globalSeed,
-        seedCount: config?.seed?.defaultCount || 25,
-        tests: config.flags?.tests === true
-      })
-
-      allCollections.push({ name: collection, layer: target.layer, fields })
-    }
-  }
-
-  await runPostGeneration({
-    allCollections,
-    config,
-    dryRun: config.flags?.dryRun || false,
-    noDb: config.flags?.noDb || false,
-    force: config.flags?.force || false,
-  })
-}
-
 /**
  * Run config-based generation.
  */
@@ -1903,18 +1858,10 @@ export async function runConfig(options: RunConfigOptions = {}): Promise<void> {
     // Auto-merge package manifest collections for the packages the app extends
     await autoMergeFeatureCollections(config, options)
 
-    // Handle both config formats
     if (config.collections && config.targets) {
-      // Enhanced config format with collections array
       await runEnhancedConfigFormat(config, typeMapping)
-    } else if (config.targets && config.schemaPath) {
-      // Original simple config format
-      await runSimpleConfigFormat(config, typeMapping)
     } else {
-      console.error('Error: Invalid config file')
-      console.error('Config must have either:')
-      console.error('  1. collections[] and targets[] (enhanced format)')
-      console.error('  2. schemaPath and targets[] (simple format)')
+      console.error('Error: Invalid config file — it needs collections[] and targets[] (the old schemaPath format was removed in #2290)')
       process.exit(1)
     }
   } catch (error: any) {

@@ -6,8 +6,6 @@
     "dragToReorder": "Drag to reorder",
     "removeItem": "Remove item",
     "metaSettings": "Meta settings",
-    "tryAgain": "Try Again",
-    "anErrorOccurred": "An error occurred",
     "sendingUpdate": "Sending update...",
     "maxDepthTitle": "Maximum depth reached",
     "maxDepthDescription": "Cannot open more than {count} nested forms",
@@ -49,7 +47,6 @@
     "export": "Export",
     "new": "New",
     "editing": "Editing",
-    "notFound": "Not found",
     "moreCount": "+{count} more",
     "sure": "Sure?"
   },
@@ -146,16 +143,9 @@
     "add": "Add",
     "createFirstItem": "Create your first item to see the tree structure."
   },
-  "dropzone": {
-    "idle": "Drag & drop files here",
-    "dropHere": "Drop files here"
-  },
   "image": {
     "cropImage": "Crop Image",
     "cropApply": "Crop & Apply",
-    "cropAvatar": "Crop Avatar",
-    "change": "Change",
-    "upload": "Upload",
     "cropPreview": "Crop preview",
     "preview": "Image preview"
   },
@@ -291,13 +281,6 @@
     "pressNToCreate": "or press N to create new",
     "loadFailed": "Failed to load item",
     "createNamed": "Create {collection}"
-  },
-  "content": {
-    "onThisPage": "On this page"
-  },
-  "draggableList": {
-    "searchPlaceholder": "Search items...",
-    "empty": "No items available"
   },
   "colorPicker": {
     "placeholder": "Pick a color",

@@ -51,7 +51,7 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: steps.site.outputs.skip == 'false'
         with:
           node-version: 22
@@ -68,7 +68,7 @@ jobs:
 
       - name: Upload static report
         if: steps.site.outputs.skip == 'false'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unlighthouse-report
           # Unlighthouse writes the static client to .unlighthouse/ by default.

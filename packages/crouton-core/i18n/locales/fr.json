@@ -6,8 +6,6 @@
     "dragToReorder": "Glisser pour réorganiser",
     "removeItem": "Supprimer l'élément",
     "metaSettings": "Paramètres méta",
-    "tryAgain": "Réessayer",
-    "anErrorOccurred": "Une erreur s'est produite",
     "sendingUpdate": "Envoi de la mise à jour...",
     "maxDepthTitle": "Profondeur maximale atteinte",
     "maxDepthDescription": "Impossible d'ouvrir plus de {count} formulaires imbriqués",
@@ -49,7 +47,6 @@
     "export": "Exporter",
     "new": "Nouveau",
     "editing": "Modification",
-    "notFound": "Introuvable",
     "moreCount": "+{count} de plus",
     "sure": "Sûr ?"
   },
@@ -146,16 +143,9 @@
     "add": "Ajouter",
     "createFirstItem": "Créez votre premier élément pour voir l'arborescence."
   },
-  "dropzone": {
-    "idle": "Glissez-déposez des fichiers ici",
-    "dropHere": "Déposez les fichiers ici"
-  },
   "image": {
     "cropImage": "Recadrer l'image",
     "cropApply": "Recadrer et appliquer",
-    "cropAvatar": "Recadrer l'avatar",
-    "change": "Modifier",
-    "upload": "Télécharger",
     "cropPreview": "Aperçu du recadrage",
     "preview": "Aperçu de l'image"
   },
@@ -291,13 +281,6 @@
     "pressNToCreate": "ou appuyez sur N pour en créer un nouveau",
     "loadFailed": "Impossible de charger l'élément",
     "createNamed": "Créer {collection}"
-  },
-  "content": {
-    "onThisPage": "Sur cette page"
-  },
-  "draggableList": {
-    "searchPlaceholder": "Rechercher des éléments...",
-    "empty": "Aucun élément disponible"
   },
   "colorPicker": {
     "placeholder": "Choisir une couleur",
