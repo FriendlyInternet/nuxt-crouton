@@ -93,7 +93,7 @@
     "@types/pluralize": "^0.0.33",
     "@types/sortablejs": "^1.15.8",
     "@vitest/coverage-v8": "catalog:",
-    "happy-dom": "^16.6.0",
+    "happy-dom": "catalog:",
     "tsx": "^4.19.2",
     "unbuild": "^3.6.1",
     "vitest": "catalog:"

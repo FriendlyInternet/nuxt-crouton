@@ -55,7 +55,7 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
-    "happy-dom": "^16.6.0",
+    "happy-dom": "catalog:",
     "vitest": "catalog:"
   }
 }
