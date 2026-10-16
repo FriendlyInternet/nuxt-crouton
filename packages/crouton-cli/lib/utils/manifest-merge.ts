@@ -20,8 +20,10 @@ import path from 'node:path'
 import fsp from 'node:fs/promises'
 import * as p from '@clack/prompts'
 import pluralizeLib from 'pluralize'
-import { discoverManifests } from './manifest-bridge.ts'
-import { findPackagesDir } from './manifest-loader.ts'
+// Direct import, not the jiti bridge: this file is .ts itself, and a second jiti
+// copy of manifest-loader (own cache, own module instance) made coverage count
+// the same branches twice and go negative, which the fallow audit refuses (#2286).
+import { discoverManifests, findPackagesDir } from './manifest-loader.ts'
 
 // ---------------------------------------------------------------------------
 // Types
