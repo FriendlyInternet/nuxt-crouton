@@ -334,6 +334,18 @@ type ParsedMd = ReturnType<typeof parseFrontmatter>
 type LocationSlot = { id: string; label: string; startTime: string; endTime: string }
 
 /** fr frontmatter -> a translation block (used verbatim for both en and fr) */
+/** Old-CMS exports store a GeoJSON Point string; the app stores "[lng, lat]". */
+function toLngLat(value: unknown): string | null {
+  if (!value) return null
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value
+    const coords = Array.isArray(parsed) ? parsed : parsed?.coordinates
+    return Array.isArray(coords) && coords.length === 2 ? JSON.stringify(coords.map(Number)) : null
+  } catch {
+    return null
+  }
+}
+
 function locationTranslationFr(frParsed: ParsedMd, loc: { slug: string }) {
   return {
     title: frParsed.data.title || loc.slug,
@@ -370,7 +382,7 @@ function locationRow(ctx: SeedContext, loc: { slug: string }, frParsed: ParsedMd
     street: frParsed.data.street || null,
     zip: frParsed.data.zip || null,
     city: frParsed.data.city || null,
-    location: frParsed.data.location || null,
+    location: toLngLat(frParsed.data.location),
     content: frParsed.content ? markdownToHtml(frParsed.content) : null,
     allowedMemberIds: null,
     slots,

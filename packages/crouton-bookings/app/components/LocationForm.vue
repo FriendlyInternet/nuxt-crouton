@@ -347,11 +347,12 @@ const parseCoordinates = (value: any): [number, number] | null => {
   }
   if (typeof value === 'string') {
     try {
-      const parsed = JSON.parse(value)
-      if (Array.isArray(parsed) && parsed.length === 2) {
-        return [Number(parsed[0]), Number(parsed[1])]
-      }
+      return parseCoordinates(JSON.parse(value))
     } catch { return null }
+  }
+  // GeoJSON Point ({ type: 'Point', coordinates: [lng, lat] })
+  if (typeof value === 'object' && Array.isArray(value.coordinates)) {
+    return parseCoordinates(value.coordinates)
   }
   return null
 }

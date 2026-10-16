@@ -71,6 +71,9 @@ const handleMapLoad = (map: MaplibreMap) => {
   mapInstance.value = map
   isLoaded.value = true
   error.value = null
+  // The center watcher ignores changes until the map is loaded, so a center
+  // that arrived while loading (e.g. an async geocode) would be lost — sync it.
+  if (props.center) map.jumpTo({ center: props.center })
   emit('load', map)
 }
 
