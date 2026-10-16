@@ -56,7 +56,8 @@
       "viewAsUser": "View as user",
       "exit": "Exit",
       "noBookingsForUser": "No bookings for {name}",
-      "noBookingsForTeam": "No bookings yet for this team"
+      "noBookingsForTeam": "No bookings yet for this team",
+      "thisUser": "this user"
     },
     "locations": {
       "title": "Locations",
@@ -211,7 +212,8 @@
       "tabLocation": "Location",
       "tabSettings": "Settings",
       "tabBookings": "Bookings",
-      "tabContent": "Content"
+      "tabContent": "Content",
+      "unknownMember": "Unknown"
     },
     "emailTemplates": {
       "title": "Email Templates",
@@ -309,7 +311,9 @@
       "emailSent": "Email sent",
       "emailSentDescription": "Confirmation email has been resent successfully",
       "emailFailed": "Failed to send email",
-      "errorOccurred": "An error occurred"
+      "errorOccurred": "An error occurred",
+      "emailNotEnabled": "Email module is not enabled",
+      "resendFailed": "Failed to resend email"
     },
     "block": {
       "booking": "Booking",
@@ -392,6 +396,70 @@
       "booking": {
         "name": "Booking page",
         "description": "Interactive booking page with calendar and availability"
+      }
+    },
+    "weekStrip": {
+      "previousWeek": "Previous week",
+      "nextWeek": "Next week",
+      "fullyBookedDay": "Fully booked: {day}",
+      "addBookingDay": "Add booking: {day}"
+    },
+    "emailVariables": {
+      "customerName": {
+        "label": "Customer Name",
+        "description": "The name of the person who made the booking"
+      },
+      "customerEmail": {
+        "label": "Customer Email",
+        "description": "The email address of the customer"
+      },
+      "bookingDate": {
+        "label": "Booking Date",
+        "description": "The date of the booking (formatted)"
+      },
+      "bookingSlot": {
+        "label": "Time Slot",
+        "description": "The time slot(s) of the booking"
+      },
+      "bookingReference": {
+        "label": "Booking Reference",
+        "description": "Unique booking reference number"
+      },
+      "locationName": {
+        "label": "Location Name",
+        "description": "The name of the booking location"
+      },
+      "locationTitle": {
+        "label": "Location Title",
+        "description": "The title of the booking location"
+      },
+      "locationStreet": {
+        "label": "Street Address",
+        "description": "The street address of the location"
+      },
+      "locationCity": {
+        "label": "City",
+        "description": "The city of the location"
+      },
+      "locationAddress": {
+        "label": "Full Address",
+        "description": "The complete address of the location"
+      },
+      "locationContent": {
+        "label": "Location Content",
+        "description": "The content/description of the location"
+      },
+      "teamName": {
+        "label": "Team Name",
+        "description": "The name of the team/business"
+      },
+      "teamEmail": {
+        "label": "Team Email",
+        "description": "Contact email of the team/business"
+      },
+      "teamPhone": {
+        "label": "Team Phone",
+        "description": "Contact phone of the team/business"
       }
     }
   }

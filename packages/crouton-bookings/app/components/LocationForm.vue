@@ -250,7 +250,7 @@ onMounted(async () => {
 
 const memberItems = computed(() =>
   teamMembers.value.map((m: any) => ({
-    label: m.user?.name || m.user?.email || 'Unknown',
+    label: m.user?.name || m.user?.email || t('bookings.locationForm.unknownMember'),
     email: m.user?.email || '',
     value: m.userId,
     avatar: { src: m.user?.image, alt: m.user?.name || m.user?.email || '' }

@@ -40,6 +40,7 @@ export function useBookingAvailability(
   location: Ref<LocationWithInventory | null | undefined>,
 ) {
   const { currentTeam } = useTeam()
+  const { t } = useT()
   const loading = ref(false)
   const availabilityData = ref<AvailabilityData>({})
 
@@ -64,7 +65,7 @@ export function useBookingAvailability(
   // or next to them when the location offers it (#2261)
   const allSlots = computed<SlotItem[]>(() => {
     if (isInventoryMode.value) return []
-    return withFullDay(locationSlots.value, location.value?.offerFullDay, ALL_DAY_SLOT)
+    return withFullDay(locationSlots.value, location.value?.offerFullDay, { ...ALL_DAY_SLOT, label: t('bookings.allDay') })
   })
 
 

@@ -56,7 +56,8 @@
       "viewAsUser": "Bekijken als gebruiker",
       "exit": "Sluiten",
       "noBookingsForUser": "Geen boekingen voor {name}",
-      "noBookingsForTeam": "Nog geen boekingen voor dit team"
+      "noBookingsForTeam": "Nog geen boekingen voor dit team",
+      "thisUser": "deze gebruiker"
     },
     "locations": {
       "title": "Locaties",
@@ -211,7 +212,8 @@
       "tabLocation": "Locatie",
       "tabSettings": "Instellingen",
       "tabBookings": "Boekingen",
-      "tabContent": "Inhoud"
+      "tabContent": "Inhoud",
+      "unknownMember": "Onbekend"
     },
     "emailTemplates": {
       "title": "E-mail Sjablonen",
@@ -309,7 +311,9 @@
       "emailSent": "E-mail verzonden",
       "emailSentDescription": "Bevestigingsmail is succesvol opnieuw verzonden",
       "emailFailed": "E-mail verzenden mislukt",
-      "errorOccurred": "Er is een fout opgetreden"
+      "errorOccurred": "Er is een fout opgetreden",
+      "emailNotEnabled": "De e-mailmodule is niet ingeschakeld",
+      "resendFailed": "E-mail opnieuw versturen mislukt"
     },
     "block": {
       "booking": "Boeking",
@@ -392,6 +396,70 @@
       "booking": {
         "name": "Reserveringspagina",
         "description": "Interactieve reserveringspagina met kalender en beschikbaarheid"
+      }
+    },
+    "weekStrip": {
+      "previousWeek": "Vorige week",
+      "nextWeek": "Volgende week",
+      "fullyBookedDay": "Volgeboekt: {day}",
+      "addBookingDay": "Boeking toevoegen: {day}"
+    },
+    "emailVariables": {
+      "customerName": {
+        "label": "Naam klant",
+        "description": "De naam van de persoon die boekte"
+      },
+      "customerEmail": {
+        "label": "E-mail klant",
+        "description": "Het e-mailadres van de klant"
+      },
+      "bookingDate": {
+        "label": "Boekingsdatum",
+        "description": "De datum van de boeking (opgemaakt)"
+      },
+      "bookingSlot": {
+        "label": "Tijdslot",
+        "description": "Het tijdslot (of de tijdsloten) van de boeking"
+      },
+      "bookingReference": {
+        "label": "Boekingsreferentie",
+        "description": "Uniek referentienummer van de boeking"
+      },
+      "locationName": {
+        "label": "Naam locatie",
+        "description": "De naam van de boekingslocatie"
+      },
+      "locationTitle": {
+        "label": "Titel locatie",
+        "description": "De titel van de boekingslocatie"
+      },
+      "locationStreet": {
+        "label": "Straat",
+        "description": "Het straatadres van de locatie"
+      },
+      "locationCity": {
+        "label": "Gemeente",
+        "description": "De gemeente van de locatie"
+      },
+      "locationAddress": {
+        "label": "Volledig adres",
+        "description": "Het volledige adres van de locatie"
+      },
+      "locationContent": {
+        "label": "Inhoud locatie",
+        "description": "De inhoud of beschrijving van de locatie"
+      },
+      "teamName": {
+        "label": "Teamnaam",
+        "description": "De naam van het team of bedrijf"
+      },
+      "teamEmail": {
+        "label": "E-mail team",
+        "description": "Contact-e-mail van het team of bedrijf"
+      },
+      "teamPhone": {
+        "label": "Telefoon team",
+        "description": "Contacttelefoon van het team of bedrijf"
       }
     }
   }
