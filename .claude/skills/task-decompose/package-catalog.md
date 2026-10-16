@@ -16,7 +16,6 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-ai` | `packages/crouton-ai` | AI integration layer for Nuxt Crouton |
 | `@fyit/crouton-analytics` | `packages/crouton-analytics` | Provider-agnostic usage analytics for nuxt-crouton — PostHog default, swappable backend, lean-loop events |
 | `@fyit/crouton-assets` | `packages/crouton-assets` | Asset management layer extending nuxt-crouton for centralized media library |
-| `@fyit/crouton-atelier` | `packages/crouton-atelier` | Visual app builder for Nuxt Crouton — compose apps from pre-defined blocks |
 | `@fyit/crouton-audio` | `packages/crouton-audio` | Audio player layer for Crouton with waveform visualization (wraps WaveSurfer.js) |
 | `@fyit/crouton-auth` | `packages/crouton-auth` | Authentication layer for Nuxt applications using Better Auth with teams, passkeys, and 2FA support |
 | `@fyit/crouton-bookings` | `packages/crouton-bookings` | Booking system layer for Nuxt Crouton - slot-based and inventory-based reservations |
@@ -24,7 +23,6 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-cli` | `packages/crouton-cli` | CLI for Nuxt Crouton - Generate complete CRUD collections with API, components, and database schema |
 | `@fyit/crouton-collab` | `packages/crouton-collab` | Real-time collaboration layer for Nuxt Crouton using Yjs CRDTs |
 | `@fyit/crouton-core` | `packages/crouton-core` | Base CRUD layer for FYIT scaffolded collections |
-| `@fyit/crouton-designer` | `packages/crouton-designer` | AI-guided schema designer for Nuxt Crouton applications |
 | `@fyit/crouton-devtools` | `packages/crouton-devtools` | DevTools integration for Nuxt Crouton - visual inspection and management of CRUD collections |
 | `@fyit/crouton-editor` | `packages/crouton-editor` | Rich text editor layer extending nuxt-crouton (wraps Nuxt UI Editor) |
 | `@fyit/crouton-email` | `packages/crouton-email` | Email infrastructure for Nuxt applications using Vue Email templates and Resend delivery |
