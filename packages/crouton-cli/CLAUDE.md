@@ -387,6 +387,7 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/add-module.ts` | Module installation implementation |
 | `lib/rollback-collection.ts` | Remove a collection — files, schema barrel, `app.config`, `extends`. Barrel via `getSchemaPath` (modern→legacy). `orphanTableName`/`dropTableWarning` (the code-only-rollback warning) + `generateDropMigration` (`--drop-table` emit / `--dry-run` temp-out preview) — #1445 WS4 |
 | `lib/utils/generate-migrations.ts` | Direct migration generation (`generateMigrations`, `prepareSchemaForMigration`, `DuplicateTableError`) — resolve graph → duplicate gate → app's `db:generate` (drizzle-kit, no Nuxt). Deferral/throw failure contract. Used by config/`add`/`init` (#1445 WS2) |
+| `lib/utils/owned-collections.ts` | `findCollectionOwner` / `findOwnedCollectionConflicts` / `assertNoOwnedCollections` / `OwnedCollectionError` — refuse a collection a manifest with `ownsCollections: true` ships itself (#2278). Called from `runConfig` + `writeScaffold` |
 | `lib/utils/validate-ref-targets.ts` | `validateRefTargets` / `RefTargetError` — refuse an unknown `refTarget` before any file is written; person-shaped targets get a message pointing at #1958 (#1957) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/dialects.ts` | PostgreSQL/SQLite configs |
@@ -738,6 +739,24 @@ crouton config
 `fieldsFile` paths in the config always resolve **relative to the config file**, not cwd.
 
 `crouton init` handles this automatically — it changes cwd to the new app directory before running generation.
+
+## Package-owned collections (#2278)
+
+A package whose manifest sets **`ownsCollections: true`** ships its collections end to end —
+Drizzle schema, queries, routes, list, composable, form — from its own layer (first: `@fyit/crouton-sales`,
+`packages/crouton-sales/collections/*`). For such a package the CLI:
+
+- **never merges** its manifest `collections` into the app config (`mergeManifestCollections` skips the
+  manifest, prompts included), and
+- **refuses to generate** them: `runConfig` (before anything is written) and `writeScaffold` call
+  `assertNoOwnedCollections`, which throws `OwnedCollectionError` —
+  `sales/products is owned by @fyit/crouton-sales — … Remove it from crouton.config.js`.
+
+Identity is **(layer, plural name)**, case-insensitive: `sales/orderitems` matches the manifest's
+`orderItem`, while `shop/products` in another app is a different table and stays allowed. An app gets
+the collections by extending the package; there is nothing to list in `crouton.config.js`. Packages
+without the flag (bookings, pages, assets — still being migrated under #2278) keep the old merge.
+Contract: `tests/unit/utils/owned-collections.test.ts`.
 
 ## Config File Format
 

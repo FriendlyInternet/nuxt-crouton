@@ -210,6 +210,15 @@ For repeater fields where each item needs translations (e.g., time slots, option
 }
 ```
 
+## Package-owned collections — don't generate them (#2278)
+
+Some packages ship their collections whole (schema, routes, list, form). Today: **`@fyit/crouton-sales`**
+(events, products, categories, orders, orderitems, locations, clients, eventsettings, printers,
+printqueues, kdsbumps). Extend the package and you have them — do **not** add them to
+`crouton.config.js`; `crouton config` refuses with `… is owned by @fyit/crouton-sales`. To change one,
+edit the package (`packages/crouton-sales/collections/<name>/`), not the app. Details:
+`packages/crouton-cli/CLAUDE.md` → *Package-owned collections*.
+
 ## Scaffold a NEW app or POC — `crouton init` (run this FIRST for a new app)
 
 **Creating a new app/POC from scratch? Run ONE command — do NOT reverse-engineer the CLI.**

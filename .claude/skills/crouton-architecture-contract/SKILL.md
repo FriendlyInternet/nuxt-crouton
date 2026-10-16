@@ -75,7 +75,7 @@ And `@fyit/crouton-core` itself extends `['@fyit/crouton-i18n', '@fyit/crouton-a
 
 ## 2. The two-halves rule (pointer)
 
-Canonical: `packages/crouton/CLAUDE.md` § "Packages vs Generated Layers (IMPORTANT)". In one line: a crouton feature = a **package** (UI, admin pages, nav, composables, i18n — via `extends`) + a **generated layer** (Drizzle schema, API endpoints, configs, types — via the CLI), and they need each other: package without layer → no tables/endpoints (404/500); layer without package → a generic "Collections" sidebar with no dedicated UI. When something "is installed but doesn't work", check which half is missing first.
+Canonical: `packages/crouton/CLAUDE.md` § "Packages vs Generated Layers (IMPORTANT)". In one line: a crouton feature = a **package** (UI, admin pages, nav, composables, i18n — via `extends`) + a **generated layer** (Drizzle schema, API endpoints, configs, types — via the CLI), and they need each other: package without layer → no tables/endpoints (404/500); layer without package → a generic "Collections" sidebar with no dedicated UI. When something "is installed but doesn't work", check which half is missing first. **Changing (#2278):** a package with `ownsCollections: true` in its manifest ships *both* halves itself (sales first — `packages/crouton-sales/collections/*`); the CLI refuses to generate those collections into an app. Bookings, pages and assets still follow the two-halves rule until their slices land.
 
 ## 3. The three registries (all `app.config`, defu-merged across layers)
 
