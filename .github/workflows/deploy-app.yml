@@ -257,6 +257,10 @@ jobs:
           # Gated on `review-pr`: an ordinary staging deploy is the trunk preview and must
           # stay overlay-free — and the bridge needs a PR to post to anyway.
           NUXT_PUBLIC_CROUTON_REVIEW: ${{ (inputs.environment == 'staging' && inputs['review-pr'] != '') && 'true' || '' }}
+          # SEARCH ENGINES (#2244) — only production may be indexed. Read by nuxt-site-config
+          # at build; non-indexable makes @nuxtjs/robots serve `Disallow: /` (staging + PR previews).
+          NUXT_SITE_ENV: ${{ inputs.environment == 'production' && 'production' || 'staging' }}
+          NUXT_SITE_INDEXABLE: ${{ inputs.environment == 'production' && 'true' || 'false' }}
         run: |
           set -o pipefail
           PR_NUM="${{ github.event.pull_request.number }}"
