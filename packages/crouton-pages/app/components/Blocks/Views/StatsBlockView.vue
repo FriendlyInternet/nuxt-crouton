@@ -52,7 +52,7 @@ function handleOpenPanel() {
         <div class="flex items-center justify-between mb-2">
           <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
             <UIcon name="i-lucide-bar-chart-3" class="size-3" />
-            Stats
+            {{ t('pages.blockLibrary.stats.name') }}
           </span>
           <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
@@ -95,10 +95,10 @@ function handleOpenPanel() {
               <span class="text-gray-500 dark:text-gray-400">{{ stat.label }}</span>
             </span>
             <span v-if="(attrs.stats || []).length > 4" class="text-xs text-gray-400">
-              +{{ attrs.stats.length - 4 }} more
+              {{ t('pages.blockViews.moreCount', { count: attrs.stats.length - 4 }) }}
             </span>
             <span v-if="!attrs.stats?.length" class="text-xs text-gray-400 italic">
-              No stats yet
+              {{ t('pages.blockViews.noStats') }}
             </span>
           </div>
         </div>

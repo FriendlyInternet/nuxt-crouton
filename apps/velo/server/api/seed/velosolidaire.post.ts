@@ -334,6 +334,18 @@ type ParsedMd = ReturnType<typeof parseFrontmatter>
 type LocationSlot = { id: string; label: string; startTime: string; endTime: string }
 
 /** fr frontmatter -> a translation block (used verbatim for both en and fr) */
+/** Old-CMS exports store a GeoJSON Point string; the app stores "[lng, lat]". */
+function toLngLat(value: unknown): string | null {
+  if (!value) return null
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value
+    const coords = Array.isArray(parsed) ? parsed : parsed?.coordinates
+    return Array.isArray(coords) && coords.length === 2 ? JSON.stringify(coords.map(Number)) : null
+  } catch {
+    return null
+  }
+}
+
 function locationTranslationFr(frParsed: ParsedMd, loc: { slug: string }) {
   return {
     title: frParsed.data.title || loc.slug,
@@ -370,7 +382,8 @@ function locationRow(ctx: SeedContext, loc: { slug: string }, frParsed: ParsedMd
     street: frParsed.data.street || null,
     zip: frParsed.data.zip || null,
     city: frParsed.data.city || null,
-    location: frParsed.data.location || null,
+    location: toLngLat(frParsed.data.location),
+    offerFullDay: true,
     content: frParsed.content ? markdownToHtml(frParsed.content) : null,
     allowedMemberIds: null,
     slots,
@@ -408,16 +421,15 @@ async function seedLocations(ctx: SeedContext): Promise<{ locationIdMap: Record<
     const idInSheet = frParsed.data.idInSheet || loc.slug
     locationIdMap[idInSheet] = locationId
 
-    // Create slot IDs
+    // Create slot IDs — the full day is the built-in exclusive option
+    // (`offerFullDay`, #2261), not a third named slot
     const morningId = nanoid()
     const afternoonId = nanoid()
-    const fulldayId = nanoid()
-    locationSlotIds[idInSheet] = { morning: morningId, afternoon: afternoonId, fullday: fulldayId }
+    locationSlotIds[idInSheet] = { morning: morningId, afternoon: afternoonId, fullday: 'all-day' }
 
     const slots = [
       { id: morningId, label: 'Matin', startTime: '09:30', endTime: '12:30' },
-      { id: afternoonId, label: 'Après-midi', startTime: '12:30', endTime: '16:30' },
-      { id: fulldayId, label: 'Toute la journée', startTime: '09:30', endTime: '16:30' }
+      { id: afternoonId, label: 'Après-midi', startTime: '12:30', endTime: '16:30' }
     ]
 
     await (db as any).insert(bookingsLocations).values(locationRow(ctx, loc, frParsed, nlParsed, locationId, slots, locIdx))
@@ -588,7 +600,7 @@ async function seedBookings(
     let slotValue: string[]
     if (moment === 0) slotValue = [slots.morning]
     else if (moment === 1) slotValue = [slots.afternoon]
-    else slotValue = [slots.morning, slots.afternoon] // full day = both slots
+    else slotValue = [slots.fullday] // full day = the built-in exclusive slot
 
     // Parse dates
     const bookingDate = parseDate(row.date!)

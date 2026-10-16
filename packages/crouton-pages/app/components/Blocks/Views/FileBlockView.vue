@@ -107,7 +107,7 @@ function handleOpenPanel() {
             </svg>
             <div class="min-w-0 flex-1">
               <p class="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
-                {{ attrs.label || 'Download file' }}
+                {{ attrs.label || t('pages.blockRender.downloadFile') }}
               </p>
               <p v-if="attrs.fileName" class="text-xs text-gray-400 truncate">
                 {{ attrs.fileName }}

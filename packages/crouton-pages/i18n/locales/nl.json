@@ -16,7 +16,8 @@
         "description": "De voettekst van de site, samengesteld uit blokken. Eén per site; verschijnt op elke pagina."
       },
       "collectionDerived": {
-        "description": "Publiceert items uit deze collectie als zelfstandige pagina's."
+        "description": "Publiceert items uit deze collectie als zelfstandige pagina's.",
+        "name": "{name}-pagina"
       }
     },
     "workspace": {
@@ -25,7 +26,8 @@
       "emptyDescription": "Kies een pagina uit de zijbalk om te bewerken, of maak een nieuwe aan.",
       "keyboardShortcuts": "Sneltoetsen",
       "newPage": "Nieuwe pagina",
-      "search": "Zoeken"
+      "search": "Zoeken",
+      "selectPageToEdit": "Kies een pagina om te bewerken"
     },
     "notFound": "Pagina niet gevonden",
     "notFoundDescription": "De pagina die je zoekt bestaat niet.",
@@ -96,7 +98,10 @@
     "nav": {
       "menu": "Menu",
       "theme": "Thema",
-      "signOut": "Uitloggen"
+      "signOut": "Uitloggen",
+      "openMenu": "Navigatiemenu openen",
+      "adminMenu": "Beheermenu",
+      "user": "Gebruiker"
     },
     "collection": {
       "itemUnavailable": "Item niet beschikbaar",
@@ -188,7 +193,16 @@
       "blocks": "blokken",
       "tapToEdit": "Tik om te bewerken",
       "seoGenerate": "Genereer met AI",
-      "seoGenerateFailed": "Kon geen beschrijving genereren"
+      "seoGenerateFailed": "Kon geen beschrijving genereren",
+      "titlePlaceholder": "Naamloze pagina",
+      "slugPlaceholder": "pagina-url-slug",
+      "seoTitlePlaceholder": "Standaard de paginatitel",
+      "seoDescriptionPlaceholder": "Korte samenvatting voor zoekmachines en delen",
+      "fullscreen": "Volledig scherm",
+      "editingFullscreen": "Bewerken in volledig scherm…",
+      "blockPlaceholder": "Typ / om een blok in te voegen...",
+      "item": "Item",
+      "anonymous": "Anoniem"
     },
     "sidebar": {
       "drafts": "Concepten",
@@ -196,7 +210,8 @@
       "createFirst": "Eerste pagina aanmaken",
       "changes": "{count} wijziging | {count} wijzigingen",
       "discard": "Verwerpen",
-      "publish": "Publiceren"
+      "publish": "Publiceren",
+      "reorder": "Pagina’s herschikken"
     },
     "seo": {
       "pageTitle": "Paginatitel",
@@ -229,7 +244,9 @@
         "fileDownload": "Bestandsdownload",
         "video": "Video",
         "logos": "Logo's",
-        "image": "Afbeelding"
+        "image": "Afbeelding",
+        "cta": "CTA",
+        "cards": "Kaarten"
       },
       "editBlock": "Blokeigenschappen bewerken",
       "deleteBlock": "Blok verwijderen",
@@ -963,6 +980,100 @@
             }
           }
         }
+      },
+      "pane": {
+        "name": "Paneelindeling",
+        "description": "Een aanpasbare, nestbare paneelindeling opgebouwd uit geregistreerde blokken"
+      },
+      "map": {
+        "name": "Kaart",
+        "description": "Voeg een interactieve kaart met een locatiepin in",
+        "fields": {
+          "address": {
+            "label": "Plaatsnaam",
+            "description": "Weergavenaam voor de locatie (enkel ter referentie)"
+          },
+          "lat": {
+            "label": "Breedtegraad",
+            "description": "Breedtegraad van het midden (bv. 37.7749)"
+          },
+          "lng": {
+            "label": "Lengtegraad",
+            "description": "Lengtegraad van het midden (bv. -122.4194)"
+          },
+          "zoom": {
+            "label": "Zoom",
+            "options": {
+              "8": "Land (8)",
+              "10": "Regio (10)",
+              "12": "Stad (12)",
+              "14": "Buurt (14)",
+              "16": "Straat (16)"
+            }
+          },
+          "style": {
+            "label": "Kaartstijl",
+            "options": {
+              "streets": "Straten",
+              "light": "Licht",
+              "dark": "Donker",
+              "satellite": "Satelliet",
+              "outdoors": "Buiten"
+            }
+          },
+          "height": {
+            "label": "Hoogte"
+          },
+          "markerLabel": {
+            "label": "Pop-up bij markering",
+            "description": "Tekst in de pop-up wanneer op de pin wordt geklikt"
+          }
+        }
+      },
+      "collectionMap": {
+        "name": "Collectiekaart",
+        "description": "Toon items uit een collectie als markeringen op een interactieve kaart",
+        "fields": {
+          "collection": {
+            "label": "Collectie",
+            "description": "Kies een collectie met locatiegegevens"
+          },
+          "title": {
+            "label": "Titel",
+            "description": "Optionele titel boven de kaart"
+          },
+          "coordinateField": {
+            "label": "Coördinatenveld",
+            "description": "Overschrijf het automatisch gevonden coördinatenveld"
+          },
+          "labelField": {
+            "label": "Labelveld",
+            "description": "Veld voor de pop-up bij de markering (gebruikt het titelveld als dit leeg is)"
+          },
+          "style": {
+            "label": "Kaartstijl",
+            "options": {
+              "streets": "Straten",
+              "light": "Licht",
+              "dark": "Donker",
+              "satellite": "Satelliet",
+              "outdoors": "Buiten"
+            }
+          },
+          "zoom": {
+            "label": "Standaardzoom",
+            "options": {
+              "8": "Land (8)",
+              "10": "Regio (10)",
+              "12": "Stad (12)",
+              "14": "Buurt (14)",
+              "16": "Straat (16)"
+            }
+          },
+          "height": {
+            "label": "Hoogte"
+          }
+        }
       }
     },
     "scopedGate": {
@@ -977,6 +1088,72 @@
       "locked": "Te veel pogingen — probeer het later opnieuw",
       "exhausted": "Deze toegangscode is niet meer beschikbaar",
       "guestName": "Gast"
+    },
+    "paneBlock": {
+      "invalid": "Deze paneelindeling kon niet worden weergegeven."
+    },
+    "blockViews": {
+      "moreCount": "+{count} meer",
+      "noButtons": "Geen knoppen — dubbelklik om toe te voegen",
+      "noCards": "Nog geen kaarten",
+      "noContact": "Geen contact ingesteld",
+      "loadingMember": "Lid laden...",
+      "noQuestions": "Nog geen vragen",
+      "noImages": "Nog geen afbeeldingen — dubbelklik om toe te voegen",
+      "noTitle": "Geen titel ingesteld",
+      "noUrl": "Geen URL",
+      "noStats": "Nog geen cijfers",
+      "unknownAddon": "Onbekend uitbreidingsblok: {name}",
+      "heroImage": "Hero-afbeelding",
+      "heroTitle": "Hero-titel",
+      "sectionTitle": "Sectietitel",
+      "leftColumn": "Linkerkolom",
+      "rightColumn": "Rechterkolom"
+    },
+    "blockRender": {
+      "noImageTitle": "Geen afbeelding ingesteld",
+      "noImageDescription": "Bewerk dit blok om een afbeelding toe te voegen.",
+      "noVideoTitle": "Geen video ingesteld",
+      "noVideoDescription": "Bewerk dit blok om een video toe te voegen.",
+      "noButtonsTitle": "Geen knoppen ingesteld",
+      "noButtonsDescription": "Bewerk dit blok om knoppen toe te voegen.",
+      "noUrlTitle": "Geen URL ingesteld",
+      "noUrlDescription": "Bewerk dit blok om een insluitbare URL in te voeren.",
+      "noFormUrlTitle": "Geen formulier-URL ingesteld",
+      "noFormUrlDescription": "Bewerk dit blok om de URL voor inschrijvingen in te voeren.",
+      "noFileTitle": "Geen bestand ingesteld",
+      "noFileDescription": "Bewerk dit blok om een bestand toe te voegen.",
+      "subscribed": "Bedankt voor je inschrijving!",
+      "emailPlaceholder": "Vul je e-mailadres in",
+      "subscribe": "Inschrijven",
+      "download": "Downloaden",
+      "button": "Knop",
+      "downloadFile": "Bestand downloaden",
+      "collectionNotFound": "Collectie \"{name}\" niet gevonden",
+      "loading": "Laden...",
+      "noContactInfo": "Geen contactgegevens",
+      "noImages": "Nog geen afbeeldingen toegevoegd"
+    },
+    "blockEditors": {
+      "statN": "Cijfer {n}",
+      "newStat": "Nieuw cijfer",
+      "addStat": "Cijfer toevoegen",
+      "value": "Waarde",
+      "valuePlaceholder": "bv. 10000",
+      "label": "Label",
+      "labelPlaceholder": "bv. Tevreden klanten",
+      "prefix": "Voorvoegsel",
+      "prefixPlaceholder": "bv. €",
+      "suffix": "Achtervoegsel",
+      "suffixPlaceholder": "bv. %, +, /7",
+      "imageN": "Afbeelding {n}",
+      "altPlaceholder": "Alt-tekst (optioneel)",
+      "addImage": "Afbeelding toevoegen",
+      "teamMemberPlaceholder": "Kies een teamlid...",
+      "imageUrlPlaceholder": "https://example.com/image.jpg of /images/...",
+      "videoUrlPlaceholder": "https://example.com/video.mp4 of /images/...",
+      "optionalLinkPlaceholder": "https://example.com (optionele link)",
+      "cropImage": "Afbeelding bijsnijden"
     }
   },
   "common": {

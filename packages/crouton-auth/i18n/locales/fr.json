@@ -1,7 +1,9 @@
 {
   "onboarding": {
     "createTeamTitle": "Créez Votre Première Équipe",
-    "createTeamDescription": "Commencez par créer un espace de travail pour vos projets."
+    "createTeamDescription": "Commencez par créer un espace de travail pour vos projets.",
+    "settingUpWorkspace": "Préparation de votre espace de travail",
+    "justAMoment": "Un instant…"
   },
   "auth": {
     "resetLinkSentDescription": "Nous avons envoyé un lien de réinitialisation à votre e-mail. Cliquez sur le lien pour réinitialiser votre mot de passe.",
@@ -16,7 +18,8 @@
       "currentPassword": "Entrez le mot de passe actuel",
       "newPassword": "Entrez le nouveau mot de passe",
       "name": "Jean Dupont",
-      "atLeastChars": "Au moins {min} caractères"
+      "atLeastChars": "Au moins {min} caractères",
+      "confirmNewPassword": "Confirmez votre nouveau mot de passe"
     },
     "twoFactor": {
       "authenticationCode": "Code d'authentification",
@@ -64,7 +67,29 @@
       "verificationFailed": "Échec de la vérification du lien magique",
       "tryAgain": "Réessayer",
       "expiredHint": "Le lien magique a peut-être expiré. Demandez-en un nouveau depuis la page de connexion."
-    }
+    },
+    "resetRequestFailed": "Impossible d'envoyer le lien de réinitialisation",
+    "credentialsRequired": "Saisissez votre e-mail et votre mot de passe",
+    "signInWithPasskey": "Se connecter avec une passkey",
+    "oauthLoginFailed": "La connexion via ce service a échoué",
+    "passkeyLoginFailed": "La connexion avec la passkey a échoué",
+    "loginFailed": "La connexion a échoué",
+    "magicLinkFailed": "Impossible d'envoyer le lien magique",
+    "registrationFailed": "L'inscription a échoué",
+    "accountCreated": "Compte créé",
+    "accountCreatedDescription": "Bienvenue ! Votre compte a été créé.",
+    "resetLinkIfAccountExists": "Si un compte existe avec cette adresse e-mail, vous recevrez un lien de réinitialisation.",
+    "goHome": "Retour à l'accueil",
+    "or": "ou",
+    "magicLinkSentTo": "Nous avons envoyé un lien magique à",
+    "resetLinkSentTo": "Nous avons envoyé un lien de réinitialisation du mot de passe à",
+    "passwordResetSuccessDescription": "Votre mot de passe a été réinitialisé.",
+    "passwordResetFailed": "La réinitialisation du mot de passe a échoué",
+    "signedOut": "Déconnecté",
+    "signedOutDescription": "Vous avez été déconnecté.",
+    "failedToSignOut": "La déconnexion a échoué",
+    "signInToAccess": "Connectez-vous pour accéder à ce contenu",
+    "emailSent": "E-mail envoyé"
   },
   "teams": {
     "slugValidation": "Le slug ne peut contenir que des lettres minuscules, des chiffres et des tirets",
@@ -93,7 +118,47 @@
     "permissionDeniedDescription": "Seuls les propriétaires et administrateurs peuvent modifier les paramètres.",
     "settingsSaved": "Paramètres enregistrés",
     "settingsSavedDescription": "Les paramètres de l'équipe ont été mis à jour.",
-    "failedToSaveSettings": "Échec de l'enregistrement des paramètres"
+    "failedToSaveSettings": "Échec de l'enregistrement des paramètres",
+    "invitationPage": {
+      "joinedTeam": "Vous avez rejoint {team}.",
+      "loading": "Chargement de l'invitation...",
+      "notFound": "Invitation introuvable",
+      "notFoundDescription": "Ce lien d'invitation n'est pas valide ou a été supprimé.",
+      "goToHomepage": "Aller à l'accueil",
+      "expired": "Invitation expirée",
+      "alreadyUsed": "Invitation déjà utilisée",
+      "expiredDescription": "Cette invitation a expiré.",
+      "alreadyUsedDescription": "Cette invitation a déjà été utilisée.",
+      "askForNew": "Demandez à l'administrateur de l'équipe de vous envoyer une nouvelle invitation.",
+      "youreInvited": "Vous êtes invité !",
+      "invitedYouToJoin": "vous invite à rejoindre",
+      "joining": "Connexion à {team}...",
+      "youreIn": "C'est fait !",
+      "welcomeRedirecting": "Bienvenue dans {team}. Redirection...",
+      "couldNotAccept": "Impossible d'accepter l'invitation",
+      "createAccount": "Créer un compte",
+      "haveAccount": "J'ai déjà un compte",
+      "acceptInvitation": "Accepter l'invitation"
+    },
+    "failedToAcceptInvitation": "Impossible d'accepter l'invitation",
+    "failedToDeclineInvitation": "Impossible de refuser l'invitation",
+    "failedToResendInvitation": "Impossible de renvoyer l'invitation",
+    "failedToCancelInvitation": "Impossible d'annuler l'invitation",
+    "failedToDeleteTeam": "Impossible de supprimer l'équipe",
+    "emailTemplates": "Modèles d'e-mail",
+    "unknownMember": "Inconnu",
+    "slugPlaceholder": "mon-equipe",
+    "inviteForm": {
+      "memberRoleDescription": "Peut consulter et utiliser les ressources de l'équipe",
+      "adminRoleDescription": "Peut gérer les membres et les paramètres",
+      "ownerRoleDescription": "Contrôle total sur l'équipe",
+      "noPermission": "Vous n'avez pas l'autorisation d'inviter des membres.",
+      "sent": "Invitation envoyée",
+      "sentDescription": "L'invitation a été envoyée à {email}.",
+      "failedToSend": "Impossible d'envoyer l'invitation",
+      "description": "Envoyez une invitation pour rejoindre votre équipe.",
+      "roleHint": "Le rôle détermine ce que le membre peut faire."
+    }
   },
   "account": {
     "profileDescription": "Mettez à jour vos informations personnelles.",
@@ -116,7 +181,9 @@
       "passkeyRemovedDescription": "La passkey a été supprimée.",
       "failedToLoadPasskeys": "Échec du chargement des passkeys",
       "failedToAddPasskey": "Échec de l'ajout de la passkey",
-      "failedToDeletePasskey": "Échec de la suppression de la passkey"
+      "failedToDeletePasskey": "Échec de la suppression de la passkey",
+      "unnamed": "Passkey",
+      "failedToUpdatePasskey": "Impossible de mettre à jour la clé d'accès"
     },
     "sessions": {
       "title": "Sessions actives",
@@ -131,8 +198,40 @@
       "failedToRevokeOthers": "Impossible de révoquer les autres sessions",
       "lastActive": "Dernière activité",
       "loading": "Chargement des sessions...",
-      "noSessions": "Aucune session active trouvée"
-    }
+      "noSessions": "Aucune session active trouvée",
+      "unknown": "Inconnu",
+      "browserOnOs": "{browser} sur {os}"
+    },
+    "twoFactor": {
+      "failedToLoadSetup": "Impossible de charger le code de configuration 2FA",
+      "verifyFailed": "La vérification a échoué",
+      "failedToLoadStatus": "Impossible de charger le statut 2FA",
+      "failedToEnable": "Impossible d'activer la 2FA",
+      "invalidCode": "Code invalide",
+      "enabled": "2FA activée",
+      "enabledDescription": "L'authentification à deux facteurs est maintenant active.",
+      "disabled": "2FA désactivée",
+      "disabledDescription": "L'authentification à deux facteurs a été désactivée.",
+      "failedToDisable": "Impossible de désactiver la 2FA",
+      "failedToGenerateCodes": "Impossible de générer les codes de secours",
+      "copied": "Copié",
+      "codesCopied": "Codes de secours copiés dans le presse-papiers"
+    },
+    "linked": {
+      "failedToLoad": "Impossible de charger les comptes",
+      "failedToLink": "Impossible d'associer le compte",
+      "failedToUnlink": "Impossible de dissocier le compte",
+      "unlinked": "Compte dissocié",
+      "unlinkedDescription": "Votre compte {provider} a été déconnecté."
+    },
+    "accountDeleted": "Compte supprimé",
+    "accountDeletedDescription": "Votre compte a été définitivement supprimé.",
+    "failedToDeleteAccount": "Impossible de supprimer le compte",
+    "darkMode": "Mode sombre",
+    "theme": "Thème",
+    "user": "Utilisateur",
+    "emailChangeFailed": "La modification de l'e-mail a échoué",
+    "yourName": "Votre nom"
   },
   "admin": {
     "passwordResetSent": "Réinitialisation envoyée",

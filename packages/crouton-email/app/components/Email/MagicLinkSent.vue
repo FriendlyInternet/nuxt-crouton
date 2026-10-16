@@ -17,6 +17,8 @@
 import { ref } from 'vue'
 import { useTimeoutFn } from '@vueuse/core'
 
+const { t } = useT()
+
 interface Props {
   /** Email address where magic link was sent */
   email: string
@@ -69,10 +71,10 @@ function handleChangeEmail() {
         />
       </div>
       <h2 class="text-xl font-semibold text-default">
-        Check your email
+        {{ t('email.checkYourEmail') }}
       </h2>
       <p class="text-sm text-muted mt-2">
-        We sent a magic link to
+        {{ t('email.magicLinkSentTo') }}
       </p>
     </div>
 
@@ -95,7 +97,7 @@ function handleChangeEmail() {
           icon="i-lucide-pencil"
           @click="handleChangeEmail"
         >
-          Edit
+          {{ t('common.edit') }}
         </UButton>
       </div>
     </div>
@@ -111,12 +113,12 @@ function handleChangeEmail() {
     <!-- Instructions -->
     <div class="space-y-3">
       <p class="text-sm text-muted text-center">
-        Click the link in the email to sign in. The link will expire in 10 minutes.
+        {{ t('email.magicLinkInstructions') }}
       </p>
 
       <!-- Resend section -->
       <div class="flex items-center justify-center gap-1 text-sm text-muted">
-        <span>Didn't receive the email?</span>
+        <span>{{ t('email.noEmailReceived') }}</span>
         <EmailResendButton
           :cooldown="resendCooldown"
           :loading="loading || isResending"
@@ -128,12 +130,12 @@ function handleChangeEmail() {
     <!-- Help tips -->
     <div class="bg-muted/30 rounded-lg p-4 space-y-2">
       <p class="text-xs font-medium text-default">
-        Tips:
+        {{ t('email.tips') }}
       </p>
       <ul class="text-xs text-muted space-y-1 list-disc list-inside">
-        <li>Check your spam or junk folder</li>
-        <li>Make sure the email address is correct</li>
-        <li>The link expires after 10 minutes</li>
+        <li>{{ t('email.tipSpam') }}</li>
+        <li>{{ t('email.tipCorrectAddress') }}</li>
+        <li>{{ t('email.tipLinkExpires') }}</li>
       </ul>
     </div>
 
@@ -145,7 +147,7 @@ function handleChangeEmail() {
       icon="i-lucide-arrow-left"
       @click="handleChangeEmail"
     >
-      Try a different email
+      {{ t('email.tryDifferentEmail') }}
     </UButton>
   </div>
 </template>

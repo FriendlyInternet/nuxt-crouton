@@ -66,6 +66,14 @@ CroutonBooking
    - UI shows "X left" / "Full" badges when capacity > 1
 2. **Inventory Mode**: Quantity-based like `{ quantity: 20 }` — no named slots
 
+**Full day (`offerFullDay`, #2261).** A location with no named slots offers only the built-in
+`all-day` slot (`ALL_DAY_SLOT`). A location with named slots can switch `offerFullDay` on to
+offer it *next to* them. The full day is exclusive: it can't share a date with any other slot —
+booked, in the cart, or ticked in the same booking. The rules are pure and shared by the form
+and the create endpoint: `app/utils/full-day.ts` (`withFullDay`, `isBlockedByFullDay`,
+`fullDayConflict`), tested in `test/full-day.test.ts`. `useBookingCart` exposes `isSlotTaken`
+(booked/full/closed) next to `isSlotDisabled` (also excluded by the current ticks).
+
 ## Configuration
 
 ```typescript

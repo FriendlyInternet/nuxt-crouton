@@ -15,6 +15,7 @@ import type { TotpSetupData, VerifyTotpOptions, TwoFactorStatus } from './useAut
 import { requireAuthClient } from '../../types/auth-client'
 
 export function useTwoFactor() {
+  const { t } = useT()
   const config = useAuthConfig()
   const { user: sessionUser, refresh } = useSession()
 
@@ -37,7 +38,7 @@ export function useTwoFactor() {
       const result = await requireAuthClient().twoFactor.enable({ password })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Enable 2FA failed')
+        throw new Error(result.error.message ?? t('account.twoFactor.failedToEnable'))
       }
 
       if (!result.data) {
@@ -49,7 +50,7 @@ export function useTwoFactor() {
         backupCodes: result.data.backupCodes ?? []
       }
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Enable 2FA failed'
+      error.value = e instanceof Error ? e.message : t('account.twoFactor.failedToEnable')
       throw e
     } finally {
       loading.value = false
@@ -67,10 +68,10 @@ export function useTwoFactor() {
       const result = await requireAuthClient().twoFactor.disable({ password })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Disable 2FA failed')
+        throw new Error(result.error.message ?? t('account.twoFactor.failedToDisable'))
       }
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Disable 2FA failed'
+      error.value = e instanceof Error ? e.message : t('account.twoFactor.failedToDisable')
       throw e
     } finally {
       loading.value = false
@@ -89,12 +90,12 @@ export function useTwoFactor() {
       const result = await requireAuthClient().twoFactor.getTotpUri({ password })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Get TOTP URI failed')
+        throw new Error(result.error.message ?? t('account.twoFactor.failedToLoadSetup'))
       }
 
       return result.data?.totpURI ?? ''
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Get TOTP URI failed'
+      error.value = e instanceof Error ? e.message : t('account.twoFactor.failedToLoadSetup')
       throw e
     } finally {
       loading.value = false
@@ -115,13 +116,13 @@ export function useTwoFactor() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Verify TOTP failed')
+        throw new Error(result.error.message ?? t('account.twoFactor.verifyFailed'))
       }
 
       await refresh()
       return true
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Verify TOTP failed'
+      error.value = e instanceof Error ? e.message : t('account.twoFactor.verifyFailed')
       throw e
     } finally {
       loading.value = false
@@ -139,12 +140,12 @@ export function useTwoFactor() {
       const result = await requireAuthClient().twoFactor.generateBackupCodes({ password })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Generate backup codes failed')
+        throw new Error(result.error.message ?? t('account.twoFactor.failedToGenerateCodes'))
       }
 
       return result.data?.backupCodes ?? []
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Generate backup codes failed'
+      error.value = e instanceof Error ? e.message : t('account.twoFactor.failedToGenerateCodes')
       throw e
     } finally {
       loading.value = false
@@ -162,13 +163,13 @@ export function useTwoFactor() {
       const result = await requireAuthClient().twoFactor.verifyBackupCode({ code })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Verify backup code failed')
+        throw new Error(result.error.message ?? t('account.twoFactor.verifyFailed'))
       }
 
       await refresh()
       return true
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Verify backup code failed'
+      error.value = e instanceof Error ? e.message : t('account.twoFactor.verifyFailed')
       throw e
     } finally {
       loading.value = false
@@ -198,7 +199,7 @@ export function useTwoFactor() {
         hasBackupCodes: twoFactorEnabled
       }
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Get 2FA status failed'
+      error.value = e instanceof Error ? e.message : t('account.twoFactor.failedToLoadStatus')
       return { enabled: false, hasTotp: false, hasBackupCodes: false }
     } finally {
       loading.value = false

@@ -29,6 +29,13 @@
       "visibility.options"
     ]
   },
+  "pocs/booking-demo/schemas/location.json": {
+    "package": "packages/crouton-bookings/schemas/location.json",
+    "reason": "Intentional — `offerFullDay` (#2261) is an optional per-location switch, off by default; the demo has no full-day use and no column for it. Package code reads it as `undefined` → off. Add it here (plus a migration) only if the demo needs full days.",
+    "fields": [
+      "-offerFullDay"
+    ]
+  },
   "pocs/crouton-builder-demo/schemas/pages.json": {
     "package": "packages/crouton-pages/schemas/pages.json",
     "reason": "Stale copy, inert — see apps/velo/schemas/pages.json.",

@@ -26,7 +26,7 @@
     />
 
     <!-- Crop Modal for avatars (1:1 circular) -->
-    <UModal v-model="showCropper">
+    <UModal v-model:open="showCropper">
       <template #content="{ close }">
         <div class="p-6">
           <h3 class="text-lg font-semibold mb-4">

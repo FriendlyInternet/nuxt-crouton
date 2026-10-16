@@ -139,6 +139,16 @@ export default defineNuxtConfig({
 
   css: [join(currentDir, 'app/assets/css/typography.css')],
 
+  // App chrome (admin, auth, account, onboarding) is never public content:
+  // keep it out of every app's sitemap and robots.txt (#2244). Staging is made
+  // non-indexable separately — deploy-app.yml sets NUXT_SITE_INDEXABLE=false.
+  sitemap: {
+    exclude: ['/admin/**', '/super-admin/**', '/auth/**', '/account', '/account/**', '/onboarding/**', '/dashboard/**']
+  },
+  robots: {
+    disallow: ['/admin', '/super-admin', '/auth', '/account', '/onboarding', '/dashboard']
+  },
+
   $meta: {
     description: 'Base CRUD layer for FYIT collections',
     name: 'crouton-core'

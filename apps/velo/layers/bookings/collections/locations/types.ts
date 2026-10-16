@@ -9,7 +9,7 @@
  * - Form data type: BookingsLocationFormData
  * - New item type: NewBookingsLocation
  * - Form props: BookingsLocationFormProps
- * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, openDays, slotSchedule, blockedDates, inventoryMode, quantity, maxBookingsPerMonth
+ * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, openDays, slotSchedule, blockedDates, offerFullDay, inventoryMode, quantity, maxBookingsPerMonth
  *
  * ## Common Modifications
  * - Add field: Add to interface and ensure schema matches
@@ -45,6 +45,7 @@ export interface BookingsLocation {
   openDays?: string[]
   slotSchedule?: Record<string, any>
   blockedDates?: any[]
+  offerFullDay?: boolean
   inventoryMode?: boolean
   quantity?: number
   maxBookingsPerMonth?: number

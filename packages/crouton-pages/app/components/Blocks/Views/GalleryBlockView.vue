@@ -54,7 +54,7 @@ const imageCount = computed(() => (attrs.value.images || []).length)
         <div class="flex items-center justify-between mb-2">
           <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
             <UIcon name="i-lucide-gallery-horizontal-end" class="size-3" />
-            Gallery
+            {{ t('pages.blockLibrary.gallery.name') }}
           </span>
           <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
@@ -102,7 +102,7 @@ const imageCount = computed(() => (attrs.value.images || []).length)
             </span>
           </div>
           <span v-else class="text-xs text-gray-400 italic">
-            No images yet — double-click to add
+            {{ t('pages.blockViews.noImages') }}
           </span>
         </div>
       </div>

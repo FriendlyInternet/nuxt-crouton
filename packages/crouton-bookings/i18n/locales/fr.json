@@ -56,7 +56,8 @@
       "viewAsUser": "Voir en tant qu'utilisateur",
       "exit": "Quitter",
       "noBookingsForUser": "Aucune réservation pour {name}",
-      "noBookingsForTeam": "Aucune réservation pour cette équipe"
+      "noBookingsForTeam": "Aucune réservation pour cette équipe",
+      "thisUser": "cet utilisateur"
     },
     "locations": {
       "title": "Lieux",
@@ -126,6 +127,13 @@
         "clickToSend": "Cliquer pour envoyer",
         "clickToResend": "Cliquer pour renvoyer",
         "clickToRetry": "Cliquer pour réessayer"
+      },
+      "sendEmailConfirm": {
+        "title": "Envoyer l'e-mail « {type} » ?",
+        "to": "Il sera envoyé à {email}.",
+        "toUnknown": "Il sera envoyé à la personne qui a fait cette réservation.",
+        "send": "Envoyer l'e-mail",
+        "cancel": "Annuler"
       }
     },
     "createCard": {
@@ -198,10 +206,14 @@
       "schedulingHint": "Définir quand ce lieu est disponible pour les réservations.",
       "slots": "Créneaux",
       "addTimeSlot": "Ajouter un créneau",
+      "offerFullDay": "Proposer l'option journée entière",
+      "offerFullDayHint": "Ajoute « Toute la journée » à côté de ces créneaux. La réserver bloque les autres créneaux ce jour-là, et tout créneau réservé la bloque.",
       "translations": "Traductions",
+      "tabLocation": "Lieu",
       "tabSettings": "Paramètres",
       "tabBookings": "Réservations",
-      "tabContent": "Contenu"
+      "tabContent": "Contenu",
+      "unknownMember": "Inconnu"
     },
     "emailTemplates": {
       "title": "Modèles d'e-mails",
@@ -299,11 +311,13 @@
       "emailSent": "E-mail envoyé",
       "emailSentDescription": "L'e-mail de confirmation a été renvoyé avec succès",
       "emailFailed": "Échec de l'envoi de l'e-mail",
-      "errorOccurred": "Une erreur s'est produite"
+      "errorOccurred": "Une erreur s'est produite",
+      "emailNotEnabled": "Le module e-mail n'est pas activé",
+      "resendFailed": "Impossible de renvoyer l'e-mail"
     },
     "block": {
       "booking": "Réservation",
-      "membersOnly": "Membres uniquement",
+      "hiddenWhenLoggedOut": "Masqué si non connecté",
       "teamView": "Vue d'équipe",
       "editBlock": "Modifier les propriétés du bloc",
       "deleteBlock": "Supprimer le bloc"
@@ -344,6 +358,108 @@
         "fri": "Ven",
         "sat": "Sam",
         "sun": "Dim"
+      }
+    },
+    "blocks": {
+      "booking": {
+        "name": "Réservation",
+        "description": "Intégrer un panneau de réservation",
+        "fields": {
+          "title": {
+            "label": "Titre",
+            "description": "Titre facultatif au-dessus du panneau de réservation"
+          },
+          "emptyMessage": {
+            "label": "Message vide",
+            "description": "Affiché quand il n'y a pas encore de réservation"
+          },
+          "loggedOut": {
+            "label": "Les visiteurs non connectés voient",
+            "description": "Réserver nécessite un compte. Afficher une invitation à se connecter, ou masquer le bloc.",
+            "options": {
+              "prompt": "Une invitation à se connecter",
+              "hide": "Rien"
+            }
+          },
+          "scope": {
+            "label": "Réservations affichées",
+            "description": "Quelles réservations le visiteur voit",
+            "options": {
+              "personal": "Ses propres réservations",
+              "team": "Toutes les réservations de l'équipe"
+            }
+          }
+        }
+      }
+    },
+    "pageTypes": {
+      "booking": {
+        "name": "Page de réservation",
+        "description": "Page de réservation interactive avec calendrier et disponibilités"
+      }
+    },
+    "weekStrip": {
+      "previousWeek": "Semaine précédente",
+      "nextWeek": "Semaine suivante",
+      "fullyBookedDay": "Complet : {day}",
+      "addBookingDay": "Ajouter une réservation : {day}"
+    },
+    "emailVariables": {
+      "customerName": {
+        "label": "Nom du client",
+        "description": "Le nom de la personne qui a réservé"
+      },
+      "customerEmail": {
+        "label": "E-mail du client",
+        "description": "L'adresse e-mail du client"
+      },
+      "bookingDate": {
+        "label": "Date de réservation",
+        "description": "La date de la réservation (formatée)"
+      },
+      "bookingSlot": {
+        "label": "Créneau",
+        "description": "Le ou les créneaux de la réservation"
+      },
+      "bookingReference": {
+        "label": "Référence de réservation",
+        "description": "Numéro de référence unique de la réservation"
+      },
+      "locationName": {
+        "label": "Nom du lieu",
+        "description": "Le nom du lieu de réservation"
+      },
+      "locationTitle": {
+        "label": "Titre du lieu",
+        "description": "Le titre du lieu de réservation"
+      },
+      "locationStreet": {
+        "label": "Adresse",
+        "description": "L'adresse postale du lieu"
+      },
+      "locationCity": {
+        "label": "Ville",
+        "description": "La ville du lieu"
+      },
+      "locationAddress": {
+        "label": "Adresse complète",
+        "description": "L'adresse complète du lieu"
+      },
+      "locationContent": {
+        "label": "Contenu du lieu",
+        "description": "Le contenu ou la description du lieu"
+      },
+      "teamName": {
+        "label": "Nom de l'équipe",
+        "description": "Le nom de l'équipe ou de l'entreprise"
+      },
+      "teamEmail": {
+        "label": "E-mail de l'équipe",
+        "description": "L'e-mail de contact de l'équipe ou de l'entreprise"
+      },
+      "teamPhone": {
+        "label": "Téléphone de l'équipe",
+        "description": "Le téléphone de contact de l'équipe ou de l'entreprise"
       }
     }
   }

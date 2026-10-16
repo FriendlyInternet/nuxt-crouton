@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import type { NavigationMenuItem, DropdownMenuItem } from '@nuxt/ui'
-import { useMediaQuery } from '@vueuse/core'
 
 /**
  * Pages Navigation Component
@@ -25,9 +24,6 @@ const { appsList, getAppAllRoutes } = useCroutonApps()
 const { adminCollections } = useCroutonCollectionsNav()
 const colorMode = useColorMode()
 const { t } = useT()
-
-// Responsive breakpoint
-const isDesktop = useMediaQuery('(min-width: 768px)')
 
 // Mobile drawer state
 const drawerOpen = ref(false)
@@ -57,6 +53,12 @@ const menuItems = computed<NavigationMenuItem[]>(() => {
       : undefined
   }))
 })
+
+// Team logo in the public header (#2259). Read from the shared site settings
+// that crouton-admin's team-theme plugin loads (SSR) — no hard dependency.
+const siteSettings = useState<Record<string, any> | null>('team-site-settings', () => null)
+const teamLogo = computed<string | null>(() => siteSettings.value?.teamLogo || null)
+const homePath = computed(() => (menuItems.value[0]?.to as string | undefined) ?? '/')
 
 // Per-page chrome flags (set by the public page route from page.config —
 // e.g. a volunteer-facing kassa page hides the member login). Language
@@ -232,10 +234,19 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
       </div>
     </template>
 
-    <!-- Desktop layout -->
-    <div v-else-if="isDesktop" class="relative flex items-center" :class="dockBottom ? 'gap-2' : (showPageNav ? 'justify-center' : 'justify-end')">
-      <!-- Center pill: Page navigation (hidden when ≤1 page) -->
-      <div v-if="showPageNav" :class="[pillClass, 'px-4']">
+    <!-- Desktop vs mobile is decided by CSS breakpoints (md = 768px), not JS:
+         the server can't know the viewport, so a JS switch rendered the mobile
+         wrapper on SSR and hydration kept its left alignment on desktop. -->
+    <div
+      v-else
+      class="relative flex items-center"
+      :class="dockBottom ? 'gap-2' : (showPageNav ? 'justify-start md:justify-center' : 'justify-end')"
+    >
+      <!-- Desktop: center pill with the page links (hidden when ≤1 page) -->
+      <div v-if="showPageNav" :class="[pillClass, 'px-4 hidden md:flex']">
+        <NuxtLink v-if="teamLogo" :to="homePath" class="shrink-0 flex items-center pe-2 me-1 border-e border-default">
+          <img :src="teamLogo" :alt="currentTeam?.name || ''" class="h-6 w-auto max-w-28 object-contain">
+        </NuxtLink>
         <UNavigationMenu
           :items="menuItems"
           variant="link"
@@ -248,141 +259,18 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
         />
       </div>
 
-      <!-- Right pill: User menu + language + dark mode (pinned right) -->
-      <div :class="[pillClass, 'px-2 py-1', showPageNav && !dockBottom && 'absolute right-0']">
-        <ClientOnly>
-          <template v-if="showAuthControls">
-            <!-- Authenticated: Avatar dropdown -->
-            <UDropdownMenu
-              v-if="user"
-              :items="userDropdownItems"
-              :content="{ align: 'end', side: 'bottom' }"
-              :ui="{ content: 'w-56' }"
-            >
-              <UButton
-                variant="ghost"
-                color="neutral"
-                size="sm"
-                class="rounded-full"
-              >
-                <template #leading>
-                  <UAvatar
-                    :src="user?.image ?? undefined"
-                    :alt="user?.name ?? 'User'"
-                    :text="userInitials"
-                    size="2xs"
-                  />
-                </template>
-              </UButton>
-            </UDropdownMenu>
-
-            <!-- Not authenticated: Login button (suppressed when a scoped
-                 visitor session is active — they're already signed in). -->
-            <UButton
-              v-else-if="!scopedSession"
-              :to="loginUrl"
-              icon="i-lucide-log-in"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :label="t('auth.signIn')"
-            />
-
-            <!-- Admin menu -->
-            <UDropdownMenu
-              v-if="user && isAdmin && currentTeam?.slug"
-              :items="adminDropdownItems"
-              :content="{ align: 'end', side: 'bottom' }"
-              :ui="{ content: 'w-48' }"
-            >
-              <UButton
-                icon="i-lucide-settings"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                aria-label="Admin menu"
-              />
-            </UDropdownMenu>
-
-            <!-- Divider only when the member section actually rendered something. -->
-            <USeparator v-if="user || !scopedSession" orientation="vertical" class="h-5 mx-1" />
-          </template>
-        </ClientOnly>
-
-        <!-- Scoped visitor session (e.g. a kassa volunteer). Their own session,
-             so it shows even when member auth controls are hidden; never
-             alongside a member avatar (`!user`). -->
-        <ClientOnly>
-          <template v-if="scopedSession && !user">
-            <span class="text-sm text-muted max-w-28 truncate">{{ scopedSession.displayName }}</span>
-            <UButton
-              icon="i-lucide-log-out"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :aria-label="t('pages.nav.signOut')"
-              @click="logoutScopedSession"
-            />
-            <USeparator orientation="vertical" class="h-5 mx-1" />
-          </template>
-        </ClientOnly>
-
-        <!-- Package-contributed pill actions (e.g. the edit-page pencil).
-             Client-only: actions are registered on mount. -->
-        <ClientOnly>
-          <UButton
-            v-for="action in navPillActions"
-            :key="action.id"
-            :icon="action.icon"
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            :aria-label="action.label"
-            @click="action.onSelect"
-          />
-        </ClientOnly>
-
-        <!-- Language Switcher -->
-        <CroutonI18nLanguageSwitcher class="w-auto" />
-
-        <!-- Theme quick-select — only when the themes package populates the
-             shared items (client-only, so no SSR hydration mismatch). -->
-        <ClientOnly>
-          <UDropdownMenu v-if="themeQuickItems.length" :items="themeQuickItems">
-            <UButton
-              icon="i-lucide-palette"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :aria-label="t('pages.nav.theme')"
-            />
-          </UDropdownMenu>
-        </ClientOnly>
-
-        <!-- Dark/Light Mode Toggle -->
-        <ClientOnly>
-          <UButton
-            :icon="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'"
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            @click="toggleColorMode"
-          />
-        </ClientOnly>
-      </div>
-    </div>
-
-    <!-- Mobile layout -->
-    <div v-else class="relative flex items-center" :class="showPageNav ? 'justify-start' : 'justify-end'">
-      <!-- Left pill: Hamburger + popover nav (hidden when ≤1 page) -->
-      <div v-if="showPageNav" :class="[pillClass, 'px-2 py-1']">
+      <!-- Mobile: left pill with hamburger + popover nav (hidden when ≤1 page) -->
+      <div v-if="showPageNav" :class="[pillClass, 'px-2 py-1 md:hidden']">
+        <NuxtLink v-if="teamLogo" :to="homePath" class="shrink-0 flex items-center ps-1 pe-1">
+          <img :src="teamLogo" :alt="currentTeam?.name || ''" class="h-6 w-auto max-w-24 object-contain">
+        </NuxtLink>
         <UPopover v-model:open="drawerOpen" :content="{ side: 'bottom', align: 'start', sideOffset: 8 }">
           <UButton
             :icon="drawerOpen ? 'i-lucide-x' : 'i-lucide-menu'"
             color="neutral"
             variant="ghost"
             size="sm"
-            aria-label="Open navigation menu"
+            :aria-label="t('pages.nav.openMenu')"
           />
 
           <template #content>
@@ -420,52 +308,36 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
         </UPopover>
       </div>
 
-      <!-- Right pill: auth controls (unless the page hides them) + language + dark mode -->
+      <!-- Right pill: auth controls (unless the page hides them) + language + dark mode (pinned right) -->
       <div :class="[pillClass, 'px-2 py-1', showPageNav && !dockBottom && 'absolute right-0']">
         <ClientOnly>
           <template v-if="showAuthControls">
             <!-- Authenticated: Avatar dropdown -->
-            <template v-if="user">
-              <UDropdownMenu
-                :items="userDropdownItems"
-                :content="{ align: 'end', side: 'bottom' }"
-                :ui="{ content: 'w-56' }"
+            <UDropdownMenu
+              v-if="user"
+              :items="userDropdownItems"
+              :content="{ align: 'end', side: 'bottom' }"
+              :ui="{ content: 'w-56' }"
+            >
+              <UButton
+                variant="ghost"
+                color="neutral"
+                size="sm"
+                class="rounded-full"
               >
-                <UButton
-                  variant="ghost"
-                  color="neutral"
-                  size="sm"
-                  class="rounded-full"
-                >
-                  <template #leading>
-                    <UAvatar
-                      :src="user?.image ?? undefined"
-                      :alt="user?.name ?? 'User'"
-                      :text="userInitials"
-                      size="2xs"
-                    />
-                  </template>
-                </UButton>
-              </UDropdownMenu>
+                <template #leading>
+                  <UAvatar
+                    :src="user?.image ?? undefined"
+                    :alt="user?.name ?? t('pages.nav.user')"
+                    :text="userInitials"
+                    size="2xs"
+                  />
+                </template>
+              </UButton>
+            </UDropdownMenu>
 
-              <!-- Admin menu -->
-              <UDropdownMenu
-                v-if="isAdmin && currentTeam?.slug"
-                :items="adminDropdownItems"
-                :content="{ align: 'end', side: 'bottom' }"
-                :ui="{ content: 'w-48' }"
-              >
-                <UButton
-                  icon="i-lucide-settings"
-                  color="neutral"
-                  variant="ghost"
-                  size="sm"
-                  aria-label="Admin menu"
-                />
-              </UDropdownMenu>
-            </template>
-
-            <!-- Not authenticated: Login button (suppressed for scoped visitors). -->
+            <!-- Not authenticated: Login button (suppressed when a scoped
+                 visitor session is active — they're already signed in). -->
             <UButton
               v-else-if="!scopedSession"
               :to="loginUrl"
@@ -473,17 +345,37 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
               color="neutral"
               variant="ghost"
               size="sm"
+              :label="t('auth.signIn')"
+              :ui="{ label: 'hidden md:inline' }"
             />
 
-            <USeparator v-if="user || !scopedSession" orientation="vertical" class="h-5" />
+            <!-- Admin menu -->
+            <UDropdownMenu
+              v-if="user && isAdmin && currentTeam?.slug"
+              :items="adminDropdownItems"
+              :content="{ align: 'end', side: 'bottom' }"
+              :ui="{ content: 'w-48' }"
+            >
+              <UButton
+                icon="i-lucide-settings"
+                color="neutral"
+                variant="ghost"
+                size="sm"
+                :aria-label="t('pages.nav.adminMenu')"
+              />
+            </UDropdownMenu>
+
+            <!-- Divider only when the member section actually rendered something. -->
+            <USeparator v-if="user || !scopedSession" orientation="vertical" class="h-5 md:mx-1" />
           </template>
         </ClientOnly>
 
-        <!-- Scoped visitor session — own session, shown even on chrome-less
-             pages; never alongside a member avatar (`!user`). -->
+        <!-- Scoped visitor session (e.g. a kassa volunteer). Their own session,
+             so it shows even when member auth controls are hidden; never
+             alongside a member avatar (`!user`). -->
         <ClientOnly>
           <template v-if="scopedSession && !user">
-            <span class="text-sm text-muted max-w-24 truncate">{{ scopedSession.displayName }}</span>
+            <span class="text-sm text-muted max-w-24 md:max-w-28 truncate">{{ scopedSession.displayName }}</span>
             <UButton
               icon="i-lucide-log-out"
               color="neutral"
@@ -492,11 +384,12 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
               :aria-label="t('pages.nav.signOut')"
               @click="logoutScopedSession"
             />
-            <USeparator orientation="vertical" class="h-5" />
+            <USeparator orientation="vertical" class="h-5 md:mx-1" />
           </template>
         </ClientOnly>
 
-        <!-- Package-contributed pill actions (e.g. the edit-page pencil). -->
+        <!-- Package-contributed pill actions (e.g. the edit-page pencil).
+             Client-only: actions are registered on mount. -->
         <ClientOnly>
           <UButton
             v-for="action in navPillActions"
@@ -510,9 +403,11 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
           />
         </ClientOnly>
 
-        <!-- Language + theme + dark mode — always reachable, even on chrome-less pages -->
+        <!-- Language Switcher -->
         <CroutonI18nLanguageSwitcher class="w-auto" />
 
+        <!-- Theme quick-select — only when the themes package populates the
+             shared items (client-only, so no SSR hydration mismatch). -->
         <ClientOnly>
           <UDropdownMenu v-if="themeQuickItems.length" :items="themeQuickItems">
             <UButton
@@ -525,6 +420,7 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
           </UDropdownMenu>
         </ClientOnly>
 
+        <!-- Dark/Light Mode Toggle -->
         <ClientOnly>
           <UButton
             :icon="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'"

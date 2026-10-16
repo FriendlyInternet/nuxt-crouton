@@ -155,7 +155,7 @@ useNuxtApp().hooks.hook('crouton:mutation', async (event: any) => {
             color="neutral"
             icon="i-lucide-x"
             size="xs"
-            aria-label="Clear selection"
+            :aria-label="t('assets.picker.clearSelection')"
             class="opacity-0 group-hover:opacity-100 transition-opacity"
             @click="clearSelection"
           />
@@ -263,7 +263,7 @@ useNuxtApp().hooks.hook('crouton:mutation', async (event: any) => {
 
           <!-- Footer -->
           <div class="flex items-center justify-between px-6 py-4 border-t border-gray-200 dark:border-gray-800">
-            <span class="text-sm text-gray-500">{{ totalCount }} asset{{ totalCount !== 1 ? 's' : '' }}</span>
+            <span class="text-sm text-gray-500">{{ t('assets.picker.assetCount', { count: totalCount }, totalCount) }}</span>
             <div class="flex gap-2">
               <UButton
                 color="neutral"

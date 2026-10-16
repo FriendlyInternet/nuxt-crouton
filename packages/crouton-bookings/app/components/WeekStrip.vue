@@ -17,6 +17,8 @@ interface Props {
   isDayFullyBooked?: ((date: Date) => boolean) | null
 }
 
+const { t } = useT()
+
 const props = withDefaults(defineProps<Props>(), {
   modelValue: null,
   weekStartsOn: 1, // Monday default
@@ -192,7 +194,7 @@ const sizeClasses = computed(() => {
         variant="ghost"
         color="neutral"
         size="sm"
-        aria-label="Previous week"
+        :aria-label="t('bookings.weekStrip.previousWeek')"
         @click="prevWeek"
       />
       <UButton
@@ -208,7 +210,7 @@ const sizeClasses = computed(() => {
         variant="ghost"
         color="neutral"
         size="sm"
-        aria-label="Next week"
+        :aria-label="t('bookings.weekStrip.nextWeek')"
         @click="nextWeek"
       />
     </div>
@@ -273,7 +275,7 @@ const sizeClasses = computed(() => {
           v-if="!isCreatingDate(day)"
           type="button"
           :disabled="isFullyBooked(day)"
-          :aria-label="(isFullyBooked(day) ? 'Fully booked: ' : 'Add booking: ') + day.weekdayShort + ' ' + day.day"
+          :aria-label="t(isFullyBooked(day) ? 'bookings.weekStrip.fullyBookedDay' : 'bookings.weekStrip.addBookingDay', { day: `${day.weekdayShort} ${day.day}` })"
           class="absolute bottom-0 left-0 right-0 translate-y-0 flex items-center justify-center h-6 rounded-b-lg opacity-0 transition-all duration-200 ease-out group-hover:translate-y-4 group-hover:opacity-100 z-10"
           :class="isFullyBooked(day)
             ? 'bg-neutral-700 cursor-default'

@@ -27,8 +27,9 @@ interface Props {
 const props = defineProps<Props>()
 
 // Get app name from auth config if not provided
+const { t } = useT()
 const authConfig = useAuthConfig()
-const appName = computed(() => props.appName ?? authConfig?.appName ?? 'Dashboard')
+const appName = computed(() => props.appName ?? authConfig?.appName ?? t('navigation.dashboard'))
 </script>
 
 <template>

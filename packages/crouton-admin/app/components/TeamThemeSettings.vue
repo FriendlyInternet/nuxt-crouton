@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useMounted } from '@vueuse/core'
 /**
  * Team Theme Settings Component
  *
@@ -8,11 +9,12 @@
  * When @fyit/crouton-themes is active, also shows the global theme switcher
  * (ko/minimal/kr11) so changes are reflected here in real-time.
  */
+import type {
+  THEME_PRESETS } from '../composables/useTeamTheme'
 import {
   PRIMARY_COLORS,
   NEUTRAL_COLORS,
   DEFAULT_THEME,
-  THEME_PRESETS,
   useAvailableThemePresets,
   type ThemePreset,
   type TeamThemeSettings
@@ -23,7 +25,12 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useT()
-const { isAdmin } = useTeam()
+const { isAdmin: isTeamAdmin } = useTeam()
+// The role is only known client-side: treat as admin only after mount so the
+// SSR markup (disabled) and the first client render agree — otherwise the
+// server's disabled/opacity classes survive hydration (#2271).
+const isMounted = useMounted()
+const isAdmin = computed(() => isMounted.value && isTeamAdmin.value)
 const notify = useNotify()
 const { theme, isLoading, updateTheme, applyTheme } = useTeamTheme()
 
@@ -93,12 +100,10 @@ async function handleSave() {
     notify.success(t('themeSettings.saved'), { icon: 'i-lucide-palette' })
 
     emit('saved', saved)
-  }
-  catch (e: unknown) {
+  } catch (e: unknown) {
     const message = e instanceof Error ? e.message : t('common.error')
     notify.error(t('common.error'), { description: message })
-  }
-  finally {
+  } finally {
     isSaving.value = false
   }
 }
@@ -143,7 +148,9 @@ const presetEntries = computed(() =>
     <!-- Allow users to switch themes -->
     <div class="flex items-center justify-between">
       <div>
-        <p class="text-sm font-medium text-default">{{ $t('themeSettings.allowUserThemes') }}</p>
+        <p class="text-sm font-medium text-default">
+          {{ $t('themeSettings.allowUserThemes') }}
+        </p>
         <p class="text-xs text-muted mt-0.5">
           {{ $t('themeSettings.allowUserThemesDescription') }}
         </p>
@@ -174,7 +181,9 @@ const presetEntries = computed(() =>
         <div class="flex-1 min-w-0 space-y-5">
           <!-- Preset Picker (vertical) -->
           <div class="space-y-2">
-            <label class="text-sm font-medium text-default">{{ $t('themeSettings.preset') }}</label>
+            <p class="text-sm font-medium text-default">
+              {{ $t('themeSettings.preset') }}
+            </p>
             <!-- Preset cards — UButton (not raw buttons) so themes reach the
                  theme picker itself (#1410); selection ring wins via class merge -->
             <div class="flex flex-col gap-2">
@@ -202,10 +211,10 @@ const presetEntries = computed(() =>
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="text-sm font-medium text-default">
-                    {{ preset.label }}
+                    {{ key === 'custom' ? t('themeSettings.presetCustom') : preset.label }}
                   </div>
                   <div class="text-xs text-muted truncate">
-                    {{ preset.description }}
+                    {{ key === 'custom' ? t('themeSettings.presetCustomDescription') : preset.description }}
                   </div>
                 </div>
                 <UIcon
@@ -244,56 +253,58 @@ const presetEntries = computed(() =>
 
         <!-- Right: Live Preview -->
         <div class="w-64 shrink-0 space-y-2 sticky top-4">
-          <label class="text-sm font-medium text-default">{{ $t('themeSettings.livePreview') }}</label>
+          <p class="text-sm font-medium text-default">
+            {{ $t('themeSettings.livePreview') }}
+          </p>
           <div class="p-4 border border-muted rounded-lg bg-muted/10 space-y-4">
             <div class="flex flex-wrap gap-2">
               <UButton
                 color="primary"
                 size="sm"
               >
-                Primary
+                {{ t('themeSettings.previewPrimary') }}
               </UButton>
               <UButton
                 color="primary"
                 variant="outline"
                 size="sm"
               >
-                Outline
+                {{ t('themeSettings.previewOutline') }}
               </UButton>
               <UButton
                 color="primary"
                 variant="soft"
                 size="sm"
               >
-                Soft
+                {{ t('themeSettings.previewSoft') }}
               </UButton>
               <UButton
                 color="primary"
                 variant="ghost"
                 size="sm"
               >
-                Ghost
+                {{ t('themeSettings.previewGhost') }}
               </UButton>
             </div>
             <div class="flex flex-wrap gap-2">
               <UBadge color="primary">
-                Badge
+                {{ t('themeSettings.previewBadge') }}
               </UBadge>
               <UBadge
                 color="primary"
                 variant="outline"
               >
-                Outline
+                {{ t('themeSettings.previewOutline') }}
               </UBadge>
               <UBadge
                 color="primary"
                 variant="soft"
               >
-                Soft
+                {{ t('themeSettings.previewSoft') }}
               </UBadge>
             </div>
             <UInput
-              placeholder="Sample input..."
+              :placeholder="t('themeSettings.previewInput')"
               icon="i-lucide-search"
             />
           </div>

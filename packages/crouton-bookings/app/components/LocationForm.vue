@@ -27,8 +27,8 @@
   >
     <CroutonFormLayout :tabs="tabs" :navigation-items="navigationItems" :tab-errors="tabErrorCounts" v-model="activeSection">
       <template #main="{ activeSection }">
-        <!-- Settings -->
-        <div v-show="activeSection === 'settings'" class="flex flex-col gap-6 p-1">
+        <!-- Location -->
+        <div v-show="activeSection === 'location'" class="flex flex-col gap-6 p-1">
           <fieldset class="flex flex-col gap-4">
             <legend class="text-sm font-semibold text-gray-900 dark:text-white mb-1">{{ t('bookings.locationForm.locationDetails') }}</legend>
             <p class="text-sm text-gray-500 -mt-1">{{ t('bookings.locationForm.colorHint') }}</p>
@@ -82,9 +82,10 @@
               </p>
             </UFormField>
           </fieldset>
+        </div>
 
-          <USeparator />
-
+        <!-- Settings -->
+        <div v-show="activeSection === 'settings'" class="flex flex-col gap-6 p-1">
           <!-- Access Control -->
           <fieldset class="flex flex-col gap-4">
             <legend class="text-sm font-semibold text-gray-900 dark:text-white mb-1">{{ t('bookings.locationForm.accessControl') }}</legend>
@@ -148,11 +149,21 @@
                 :sortable="true"
               />
             </UFormField>
+            <UFormField
+              v-if="!state.inventoryMode && state.slots?.length"
+              name="offerFullDay"
+            >
+              <USwitch
+                v-model="(state.offerFullDay as any)"
+                :label="t('bookings.locationForm.offerFullDay')"
+                :description="t('bookings.locationForm.offerFullDayHint')"
+              />
+            </UFormField>
             <UFormField :label="t('bookings.schedule.openDays')" name="openDays">
               <CroutonBookingsOpenDaysPicker v-model="state.openDays" />
             </UFormField>
             <UFormField v-if="!state.inventoryMode && state.slots?.length" :label="t('bookings.schedule.slotSchedule')" name="slotSchedule">
-              <CroutonBookingsScheduleGrid v-model="state.slotSchedule" :slots="state.slots" />
+              <CroutonBookingsScheduleGrid v-model="state.slotSchedule" :slots="state.slots" :open-days="state.openDays" />
             </UFormField>
             <UFormField :label="t('bookings.schedule.blockedDates')" name="blockedDates">
               <CroutonFormRepeater
@@ -239,33 +250,35 @@ onMounted(async () => {
 
 const memberItems = computed(() =>
   teamMembers.value.map((m: any) => ({
-    label: m.user?.name || m.user?.email || 'Unknown',
+    label: m.user?.name || m.user?.email || t('bookings.locationForm.unknownMember'),
     email: m.user?.email || '',
     value: m.userId,
     avatar: { src: m.user?.image, alt: m.user?.name || m.user?.email || '' }
   }))
 )
 
-// Form layout: 3 tabs
+// Form layout: 4 tabs
 const navigationItems = computed(() => [
+  { label: t('bookings.locationForm.tabLocation'), value: 'location', icon: 'i-lucide-map-pin' },
   { label: t('bookings.locationForm.tabSettings'), value: 'settings', icon: 'i-lucide-settings' },
   { label: t('bookings.locationForm.tabBookings'), value: 'bookings', icon: 'i-lucide-calendar' },
   { label: t('bookings.locationForm.tabContent'), value: 'content', icon: 'i-lucide-globe' }
 ])
 
 const tabs = ref(true)
-const activeSection = ref('settings')
+const activeSection = ref('location')
 
 // Map field names to tabs for validation error indicators
 const fieldToGroup: Record<string, string> = {
-  title: 'settings',
-  color: 'settings',
-  street: 'settings',
-  zip: 'settings',
-  city: 'settings',
-  content: 'settings',
-  location: 'settings',
+  title: 'location',
+  color: 'location',
+  street: 'location',
+  zip: 'location',
+  city: 'location',
+  content: 'location',
+  location: 'location',
   allowedMemberIds: 'settings',
+  offerFullDay: 'bookings',
   inventoryMode: 'bookings',
   quantity: 'bookings',
   maxBookingsPerMonth: 'bookings',
@@ -345,11 +358,12 @@ const parseCoordinates = (value: any): [number, number] | null => {
   }
   if (typeof value === 'string') {
     try {
-      const parsed = JSON.parse(value)
-      if (Array.isArray(parsed) && parsed.length === 2) {
-        return [Number(parsed[0]), Number(parsed[1])]
-      }
+      return parseCoordinates(JSON.parse(value))
     } catch { return null }
+  }
+  // GeoJSON Point ({ type: 'Point', coordinates: [lng, lat] })
+  if (typeof value === 'object' && Array.isArray(value.coordinates)) {
+    return parseCoordinates(value.coordinates)
   }
   return null
 }

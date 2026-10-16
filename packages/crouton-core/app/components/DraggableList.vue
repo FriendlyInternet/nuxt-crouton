@@ -41,10 +41,12 @@ const props = withDefaults(defineProps<Props>(), {
   descriptionField: 'description',
   iconField: 'icon',
   searchable: true,
-  searchPlaceholder: 'Search items...',
+  searchPlaceholder: undefined,
   loading: false,
-  emptyMessage: 'No items available'
+  emptyMessage: undefined
 })
+
+const { t } = useT()
 
 const emit = defineEmits<{
   /** Emitted when an item starts being dragged */
@@ -72,7 +74,7 @@ const filteredItems = computed(() => {
  * Get the label for an item
  */
 function getLabel(item: Record<string, unknown>): string {
-  return String(item[props.labelField] || 'Untitled')
+  return String(item[props.labelField] || t('common.untitled'))
 }
 
 /**
@@ -115,7 +117,7 @@ function handleItemClick(item: Record<string, unknown>) {
     >
       <UInput
         v-model="search"
-        :placeholder="searchPlaceholder"
+        :placeholder="searchPlaceholder ?? t('draggableList.searchPlaceholder')"
         icon="i-lucide-search"
         size="sm"
       />
@@ -130,7 +132,7 @@ function handleItemClick(item: Record<string, unknown>) {
         name="i-lucide-loader-2"
         class="animate-spin"
       />
-      <span>Loading...</span>
+      <span>{{ t('common.loading') }}</span>
     </div>
 
     <!-- Empty state -->
@@ -142,7 +144,7 @@ function handleItemClick(item: Record<string, unknown>) {
         name="i-lucide-inbox"
         class="w-8 h-8 opacity-50"
       />
-      <span>{{ emptyMessage }}</span>
+      <span>{{ emptyMessage ?? t('draggableList.empty') }}</span>
     </div>
 
     <!-- Items list -->

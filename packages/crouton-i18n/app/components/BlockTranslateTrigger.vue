@@ -19,10 +19,12 @@ defineProps<{
 defineEmits<{
   click: []
 }>()
+
+const { t } = useT()
 </script>
 
 <template>
-  <UTooltip :text="tooltip || 'Translate with AI'">
+  <UTooltip :text="tooltip || t('i18n.translateWithAi')">
     <UButton
       icon="i-lucide-sparkles"
       :size="(size || '2xs') as any"

@@ -10,7 +10,7 @@
  * - API endpoint: /api/teams/[id]/bookings-locations
  * - Form component: BookingsLocationsForm
  * - List component: BookingsLocationsList
- * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, openDays, slotSchedule, blockedDates, inventoryMode, quantity, maxBookingsPerMonth
+ * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, openDays, slotSchedule, blockedDates, offerFullDay, inventoryMode, quantity, maxBookingsPerMonth
  *
  * ## Common Modifications
  * - Add field: Add to schema object and defaultValues
@@ -40,6 +40,7 @@ export const bookingsLocationSchema = z.object({
   openDays: z.array(z.number()).nullish(),
   slotSchedule: z.record(z.string(), z.any()).nullish(),
   blockedDates: z.array(z.any()).nullish(),
+  offerFullDay: z.boolean().optional(),
   inventoryMode: z.boolean().optional(),
   quantity: z.number().optional(),
   maxBookingsPerMonth: z.number().optional(),
@@ -101,6 +102,7 @@ const _bookingsLocationsConfig = {
     openDays: [],
     slotSchedule: {},
     blockedDates: [],
+    offerFullDay: false,
     inventoryMode: false,
     quantity: 0,
     maxBookingsPerMonth: 0,
@@ -183,6 +185,12 @@ const _bookingsLocationsConfig = {
           "name": "blockedDates",
           "type": "repeater",
           "label": "Blocked Dates",
+          "area": "main"
+      },
+      {
+          "name": "offerFullDay",
+          "type": "boolean",
+          "label": "Offer a full-day option",
           "area": "main"
       },
       {

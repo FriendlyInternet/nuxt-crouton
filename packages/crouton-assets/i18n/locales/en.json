@@ -31,7 +31,9 @@
       "noResults": "No assets match your filter",
       "empty": "No assets yet",
       "select": "Select",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "clearSelection": "Clear selection",
+      "assetCount": "{count} asset | {count} assets"
     }
   }
 }

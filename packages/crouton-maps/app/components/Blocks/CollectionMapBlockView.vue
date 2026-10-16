@@ -31,15 +31,17 @@ const props = defineProps<{
 
 const attrs = computed(() => props.node.attrs)
 
-const styleLabels: Record<string, string> = {
-  streets: 'Streets',
-  light: 'Light',
-  dark: 'Dark',
-  satellite: 'Satellite',
-  outdoors: 'Outdoors'
-}
+const { t } = useT()
 
-const styleLabel = computed(() => styleLabels[attrs.value.style] || attrs.value.style || 'Streets')
+const styleLabels = computed<Record<string, string>>(() => ({
+  streets: t('maps.styles.streets'),
+  light: t('maps.styles.light'),
+  dark: t('maps.styles.dark'),
+  satellite: t('maps.styles.satellite'),
+  outdoors: t('maps.styles.outdoors')
+}))
+
+const styleLabel = computed(() => styleLabels.value[attrs.value.style] || attrs.value.style || t('maps.styles.streets'))
 
 const innerRef = ref<HTMLElement | null>(null)
 
@@ -82,14 +84,14 @@ function handleOpenPanel() {
               <path d="M8 2v16" />
               <path d="M16 6v16" />
             </svg>
-            Collection Map
+            {{ t('maps.collectionBlock.title') }}
           </span>
           <!-- Action buttons -->
           <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
             <button
               type="button"
               class="p-1 text-gray-400 hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
-              title="Edit block properties"
+              :title="t('maps.block.edit')"
               @click.stop="handleOpenPanel"
             >
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -99,7 +101,7 @@ function handleOpenPanel() {
             <button
               type="button"
               class="p-1 text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-gray-800 rounded"
-              title="Delete block"
+              :title="t('maps.block.delete')"
               @click.stop="deleteNode"
             >
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -116,7 +118,7 @@ function handleOpenPanel() {
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
-            <span class="text-sm font-medium">No collection selected</span>
+            <span class="text-sm font-medium">{{ t('maps.collectionBlock.noCollection') }}</span>
           </div>
 
           <!-- Collection info -->
@@ -141,7 +143,7 @@ function handleOpenPanel() {
                   <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
                   <circle cx="12" cy="10" r="3" />
                 </svg>
-                Map view
+                {{ t('maps.collectionBlock.mapView') }}
               </span>
               <span class="inline-flex items-center px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded text-xs">
                 {{ styleLabel }}

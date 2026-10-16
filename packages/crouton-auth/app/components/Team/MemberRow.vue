@@ -65,7 +65,7 @@ const memberIsOwner = computed(() => props.member.role === 'owner')
 
 // Get display name
 const displayName = computed(() => {
-  return props.member.user?.name || props.member.user?.email || 'Unknown'
+  return props.member.user?.name || props.member.user?.email || t('teams.unknownMember')
 })
 
 // Get initials for avatar fallback
@@ -185,7 +185,7 @@ const roleBadgeColor = computed(() => {
         color="error"
         size="sm"
         :loading="loading"
-        title="Remove member"
+        :title="t('teams.removeMember')"
         @click="handleRemove"
       />
     </div>
