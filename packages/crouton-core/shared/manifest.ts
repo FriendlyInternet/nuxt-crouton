@@ -40,6 +40,14 @@ export interface CroutonManifest {
   // Collections this package provides
   collections?: ManifestCollection[]
 
+  /**
+   * The package ships its collections end to end — Drizzle schema, queries,
+   * routes, list and form — from its own layer (#2278). The CLI then never
+   * merges them into an app's config and refuses to generate them. Without
+   * this flag, `collections` are merged into the app and generated there.
+   */
+  ownsCollections?: boolean
+
   // Configuration options
   configuration?: Record<string, ManifestConfigOption>
 

@@ -16,6 +16,7 @@ import { setupCroutonCssSource, displayManualCssSetupInstructions } from './util
 import { syncFrameworkPackages, addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-config.ts'
 import { addNamedSchemaExport, getSchemaPath } from './utils/update-schema-index.ts'
 import { validateRefTargets } from './utils/validate-ref-targets.ts'
+import { assertNoOwnedCollections } from './utils/owned-collections.ts'
 import { generateMigrations, DuplicateTableError } from './utils/generate-migrations.ts'
 import { addToAppConfig, resolveAppConfigPath } from './utils/update-app-config.ts'
 import { loadFields } from './utils/load-fields.ts'
@@ -1332,6 +1333,9 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   // collection map right here, so this is the cheapest possible place to catch it.
   validateRefTargets(fields, buildKnownRefTargets(config), collection)
 
+  // REFUSE a collection a package ships end to end (#2278) — a second copy would fork it.
+  assertNoOwnedCollections({ targets: [{ layer, collections: [collection] }] }, await discoverManifests())
+
   const cases = toCase(collection)
   const base = path.resolve('layers', layer, 'collections', cases.plural)
 
@@ -1911,6 +1915,9 @@ export async function runConfig(options: RunConfigOptions = {}): Promise<void> {
       console.error('\n⛔ Cannot proceed with generation due to validation errors\n')
       process.exit(1)
     }
+
+    // Refuse packaged collections before anything is written (#2278)
+    assertNoOwnedCollections(config, await discoverManifests())
 
     // Sync framework packages based on features config
     await syncFeaturePackages(config)
