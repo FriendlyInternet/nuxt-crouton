@@ -9,7 +9,8 @@
     "generate": "nuxt generate",
     "preview": "nuxt preview",
     "typecheck": "nuxt typecheck",
-    "postinstall": "nuxt prepare 2>/dev/null || true"
+    "postinstall": "nuxt prepare 2>/dev/null || true",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@fyit/crouton": "workspace:*",

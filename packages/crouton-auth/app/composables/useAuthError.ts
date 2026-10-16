@@ -47,6 +47,7 @@ export function useAuthError(options: UseAuthErrorOptions = {}) {
   const errorCode = computed(() => error.value?.code ?? null)
 
   const notify = useNotify()
+  const { t } = useT()
 
   /**
    * Clear the current error
@@ -71,7 +72,7 @@ export function useAuthError(options: UseAuthErrorOptions = {}) {
 
     // Show toast notification
     if (toastOptions?.show ?? showToast) {
-      notify.error('Error', {
+      notify.error(t('common.error'), {
         description: authError.toUserMessage(),
         icon: 'i-lucide-circle-alert',
       } as any)

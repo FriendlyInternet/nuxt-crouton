@@ -23,6 +23,8 @@
   </AuthGuard>
 -->
 <script setup lang="ts">
+const { t } = useT()
+
 interface Props {
   /** Redirect to this path if not authenticated */
   redirect?: string
@@ -141,7 +143,7 @@ const showContent = computed(() => {
           class="w-12 h-12 text-gray-400 mb-4"
         />
         <p class="text-gray-600 dark:text-gray-400">
-          Please sign in to access this content
+          {{ t('auth.signInToAccess') }}
         </p>
       </div>
     </slot>

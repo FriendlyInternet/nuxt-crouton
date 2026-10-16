@@ -11,7 +11,7 @@ definePageMeta({
 
 const { t } = useT()
 
-useSeoMeta({ title: 'Dashboard - Super Admin' })
+useSeoMeta({ title: () => t('superAdmin.pageTitle', { page: t('superAdmin.dashboard') }) })
 
 const { data: stats, status, error } = await useFetch('/api/admin/stats')
 </script>

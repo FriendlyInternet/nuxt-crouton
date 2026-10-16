@@ -52,7 +52,7 @@ function handleOpenPanel() {
         <div class="flex items-center justify-between mb-2">
           <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
             <UIcon name="i-lucide-mail" class="size-3" />
-            Mailing List
+            {{ t('pages.blockLibrary.mailing.name') }}
           </span>
           <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
@@ -88,13 +88,13 @@ function handleOpenPanel() {
               {{ attrs.title }}
             </span>
             <span v-else class="text-xs text-gray-400 italic">
-              No title set
+              {{ t('pages.blockViews.noTitle') }}
             </span>
             <span v-if="attrs.actionUrl" class="ml-auto text-[10px] text-gray-400 truncate max-w-[200px]">
               {{ attrs.provider }}
             </span>
             <span v-else class="ml-auto text-[10px] text-amber-500">
-              No URL
+              {{ t('pages.blockViews.noUrl') }}
             </span>
           </div>
         </div>

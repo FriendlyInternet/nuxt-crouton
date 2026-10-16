@@ -7,6 +7,7 @@ import type SortableType from 'sortablejs'
 import type { SortableEvent, MoveEvent } from 'sortablejs'
 
 const treeDrag = useTreeDrag()
+const { t } = useT()
 
 interface Props {
   items: TreeNode[]
@@ -203,10 +204,10 @@ onMounted(async () => {
           class="w-12 h-12 mx-auto mb-4 opacity-50"
         />
         <p class="text-lg font-medium mb-2">
-          No items yet
+          {{ t('collection.noItemsYet') }}
         </p>
         <p class="text-sm">
-          Create your first item to see the tree structure.
+          {{ t('tree.createFirstItem') }}
         </p>
       </div>
     </div>

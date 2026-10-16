@@ -7,7 +7,24 @@
     "removeItem": "Item verwijderen",
     "metaSettings": "Meta-instellingen",
     "tryAgain": "Opnieuw proberen",
-    "anErrorOccurred": "Er is een fout opgetreden"
+    "anErrorOccurred": "Er is een fout opgetreden",
+    "sendingUpdate": "Wijziging versturen...",
+    "maxDepthTitle": "Maximale diepte bereikt",
+    "maxDepthDescription": "Je kunt niet meer dan {count} geneste formulieren openen",
+    "somethingWentWrong": "Oei! Er ging iets mis.",
+    "titles": {
+      "create": "{collection} aanmaken",
+      "update": "{collection} bewerken",
+      "delete": "{collection} verwijderen",
+      "view": "{collection} bekijken"
+    },
+    "descriptions": {
+      "create": "Formulier om {collection} aan te maken",
+      "update": "Formulier om {collection} te bewerken",
+      "delete": "Formulier om {collection} te verwijderen",
+      "view": "{collection} bekijken",
+      "manage": "Formulier om {collection} te beheren"
+    }
   },
   "common": {
     "create": "Aanmaken",
@@ -31,7 +48,10 @@
     "untitled": "Naamloos",
     "export": "Exporteren",
     "new": "Nieuw",
-    "editing": "Bewerken"
+    "editing": "Bewerken",
+    "notFound": "Niet gevonden",
+    "moreCount": "+{count} meer",
+    "sure": "Zeker?"
   },
   "mutations": {
     "creationFailed": "Aanmaken mislukt",
@@ -86,7 +106,18 @@
     "componentNotFound": "Component niet gevonden voor collectie: {collection}",
     "selectItem": "Selecteer een item om te beginnen",
     "orPressN": "of druk op N om een nieuw item aan te maken",
-    "newItem": "Nieuw item"
+    "newItem": "Nieuw item",
+    "changeLayout": "Weergave wijzigen",
+    "notFound": "Collectie niet gevonden: {collection}",
+    "layouts": {
+      "table": "Tabel",
+      "list": "Lijst",
+      "grid": "Raster",
+      "cards": "Kaarten",
+      "tree": "Boom",
+      "kanban": "Kanban",
+      "workspace": "Werkruimte"
+    }
   },
   "detail": {
     "details": "Details",
@@ -103,14 +134,17 @@
     "groupBy": "Groeperen op:",
     "noItemsToDisplay": "Geen items om weer te geven",
     "addItemsOrChangeGrouping": "Voeg items toe of wijzig het groeperingsveld.",
-    "dropItemsHere": "Zet items hier neer"
+    "dropItemsHere": "Zet items hier neer",
+    "uncategorized": "Zonder categorie"
   },
   "tree": {
     "addChild": "Subpagina toevoegen",
     "addBelow": "Pagina hieronder toevoegen",
     "moveUp": "Omhoog verplaatsen",
     "moveDown": "Omlaag verplaatsen",
-    "moveToRoot": "Naar hoofdniveau verplaatsen"
+    "moveToRoot": "Naar hoofdniveau verplaatsen",
+    "add": "Toevoegen",
+    "createFirstItem": "Maak je eerste item aan om de boomstructuur te zien."
   },
   "dropzone": {
     "idle": "Sleep bestanden hierheen",
@@ -121,7 +155,9 @@
     "cropApply": "Bijsnijden en toepassen",
     "cropAvatar": "Avatar bijsnijden",
     "change": "Wijzigen",
-    "upload": "Uploaden"
+    "upload": "Uploaden",
+    "cropPreview": "Voorbeeld bijsnijden",
+    "preview": "Voorbeeld van de afbeelding"
   },
   "repeater": {
     "emptyState": "Nog geen items. Klik op \"{label}\" om te beginnen.",
@@ -163,7 +199,9 @@
     "valuePlaceholder": "Automatisch gegenereerd vanuit label",
     "valueHint": "Laat leeg om automatisch te genereren vanuit label",
     "createSuccess": "Optie aangemaakt",
-    "created": "\"{label}\" is toegevoegd"
+    "created": "\"{label}\" is toegevoegd",
+    "labelForLocale": "Label ({locale})",
+    "fallbackValue": "Standaard: {value}"
   },
   "dependent": {
     "loadingOptions": "Opties laden...",
@@ -186,7 +224,9 @@
     "showing": "Toont",
     "to": "tot",
     "of": "van",
-    "results": "resultaten"
+    "results": "resultaten",
+    "data": "Gegevens",
+    "searchPlaceholder": "Zoeken..."
   },
   "export": {
     "csv": "CSV",
@@ -194,7 +234,9 @@
     "noData": "Geen gegevens om te exporteren"
   },
   "iconPicker": {
-    "noIcons": "Geen iconen gevonden"
+    "noIcons": "Geen iconen gevonden",
+    "placeholder": "Kies een icoon",
+    "searchPlaceholder": "Zoek {set}-iconen..."
   },
   "help": {
     "customizeCard": "Kaartweergave aanpassen",
@@ -219,7 +261,10 @@
     "statusCode": "Statuscode",
     "active": "Actief",
     "permanent": "Permanent",
-    "temporary": "Tijdelijk"
+    "temporary": "Tijdelijk",
+    "columnFrom": "Van",
+    "columnTo": "Naar",
+    "columnStatus": "Status"
   },
   "setup": {
     "collections": "Collecties",
@@ -243,6 +288,22 @@
   },
   "workspace": {
     "selectItem": "Selecteer een item om te beginnen",
-    "pressNToCreate": "of druk op N om nieuw aan te maken"
+    "pressNToCreate": "of druk op N om nieuw aan te maken",
+    "loadFailed": "Item laden mislukt",
+    "createNamed": "{collection} aanmaken"
+  },
+  "content": {
+    "onThisPage": "Op deze pagina"
+  },
+  "draggableList": {
+    "searchPlaceholder": "Items zoeken...",
+    "empty": "Geen items beschikbaar"
+  },
+  "colorPicker": {
+    "placeholder": "Kies een kleur",
+    "custom": "Eigen kleur"
+  },
+  "calendar": {
+    "placeholder": "Kies een datum"
   }
 }

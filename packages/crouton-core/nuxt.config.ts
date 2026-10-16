@@ -53,7 +53,7 @@ export default defineNuxtConfig({
     // Must be before @nuxthub/core — sets hub.blob = true as a default so apps
     // that only declare hub: { db: 'sqlite' } still get blob storage enabled.
     join(currentDir, 'modules/ensure-hub-blob'),
-    '@nuxthub/core', '@nuxt/ui', '@vueuse/nuxt', '@nuxt/image', join(currentDir, 'modules/ipx-blob'), '@nuxtjs/seo', join(currentDir, 'modules/manifest-injection')
+    '@nuxthub/core', '@nuxt/ui', '@vueuse/nuxt', '@nuxt/image', join(currentDir, 'modules/ipx-blob'), '@nuxtjs/seo'
   ],
 
   // Runtime config for server-side secrets
@@ -138,6 +138,16 @@ export default defineNuxtConfig({
   },
 
   css: [join(currentDir, 'app/assets/css/typography.css')],
+
+  // App chrome (admin, auth, account, onboarding) is never public content:
+  // keep it out of every app's sitemap and robots.txt (#2244). Staging is made
+  // non-indexable separately — deploy-app.yml sets NUXT_SITE_INDEXABLE=false.
+  sitemap: {
+    exclude: ['/admin/**', '/super-admin/**', '/auth/**', '/account', '/account/**', '/onboarding/**', '/dashboard/**']
+  },
+  robots: {
+    disallow: ['/admin', '/super-admin', '/auth', '/account', '/onboarding', '/dashboard']
+  },
 
   $meta: {
     description: 'Base CRUD layer for FYIT collections',

@@ -1,4 +1,4 @@
-import { defineCroutonManifest, defineGeneratorContribution } from '@fyit/crouton-core/shared/manifest'
+import { defineCroutonManifest } from '@fyit/crouton-core/shared/manifest'
 import eventsSchema from './schemas/events.json'
 import productsSchema from './schemas/products.json'
 import categoriesSchema from './schemas/categories.json'
@@ -25,6 +25,10 @@ export default defineCroutonManifest({
     editable: false,
     reason: 'Table names are prefixed with "sales" (e.g., salesProducts, salesOrders). This cannot be changed.'
   },
+
+  // Every collection below ships from this package (collections/*), extended
+  // by its nuxt.config.ts. Apps never generate them; the CLI refuses to (#2278).
+  ownsCollections: true,
 
   dependencies: [
     '@fyit/crouton',
@@ -170,18 +174,3 @@ export default defineCroutonManifest({
   }
 })
 
-// The package ships bespoke forms for these collections. Declaring them here wires
-// the composable's componentName + skips the generic generated _Form.vue for ANY
-// consuming app — no per-app `formComponent` config needed, and it survives regen.
-// The CLI calls getFormComponent during generation (see generate-collection.ts).
-export const generatorContribution = defineGeneratorContribution({
-  getFormComponent({ collectionName }) {
-    const forms: Record<string, string> = {
-      product: 'SalesProductForm', products: 'SalesProductForm',
-      category: 'SalesCategoryForm', categories: 'SalesCategoryForm',
-      printer: 'SalesPrinterForm', printers: 'SalesPrinterForm',
-      location: 'SalesLocationForm', locations: 'SalesLocationForm'
-    }
-    return forms[collectionName] ?? null
-  }
-})

@@ -59,7 +59,7 @@ function handleOpenPanel() {
       <div class="p-3">
         <div class="flex items-center justify-between mb-2">
           <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-            Two Columns · {{ splitLabel }}
+            {{ t('pages.blockLibrary.twoColumn.name') }} · {{ splitLabel }}
           </span>
           <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
@@ -91,7 +91,7 @@ function handleOpenPanel() {
         <div class="grid gap-2" :class="attrs.split === '1/3' ? 'grid-cols-[1fr_2fr]' : attrs.split === '2/3' ? 'grid-cols-[2fr_1fr]' : 'grid-cols-2'">
           <div class="bg-gray-50 dark:bg-gray-800/50 rounded p-2 min-h-[48px]">
             <p class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
-              {{ attrs.leftTitle || 'Left column' }}
+              {{ attrs.leftTitle || t('pages.blockViews.leftColumn') }}
             </p>
             <p v-if="attrs.leftDescription" class="text-[11px] text-gray-400 truncate mt-0.5">
               {{ attrs.leftDescription }}
@@ -99,7 +99,7 @@ function handleOpenPanel() {
           </div>
           <div class="bg-gray-50 dark:bg-gray-800/50 rounded p-2 min-h-[48px]">
             <p class="text-xs font-medium text-gray-700 dark:text-gray-300 truncate">
-              {{ attrs.rightTitle || 'Right column' }}
+              {{ attrs.rightTitle || t('pages.blockViews.rightColumn') }}
             </p>
             <p v-if="attrs.rightDescription" class="text-[11px] text-gray-400 truncate mt-0.5">
               {{ attrs.rightDescription }}

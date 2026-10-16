@@ -41,7 +41,7 @@ vi.mock('@fyit/crouton-auth/server/utils/pairing-code', () => ({
 // The app-owned collection schema is reached through the consuming app's `~~`
 // alias, which only resolves inside a Nuxt build. Sentinel columns are all the
 // fake db needs — identity, not behaviour.
-vi.mock('~~/layers/sales/collections/events/server/database/schema', () => ({
+vi.mock('../collections/events/server/database/schema', () => ({
   salesEvents: { id: 'events.id', teamId: 'events.teamId', isCurrent: 'events.isCurrent' }
 }))
 

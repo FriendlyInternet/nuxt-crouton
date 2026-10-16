@@ -1,5 +1,19 @@
 import type { CroutonBlockDefinition } from '@fyit/crouton-core/app/types/block-definition'
 import { SALES_CHART_KIND_OPTIONS } from './utils/chart-blocks'
+// The sales collections ship with the package (#2278): register each one under
+// its byte-stable croutonCollections key, so no consuming app has to.
+import { salesEventsConfig } from '../collections/events/app/composables/useSalesEvents'
+import { salesProductsConfig } from '../collections/products/app/composables/useSalesProducts'
+import { salesCategoriesConfig } from '../collections/categories/app/composables/useSalesCategories'
+import { salesOrdersConfig } from '../collections/orders/app/composables/useSalesOrders'
+import { salesOrderitemsConfig } from '../collections/orderitems/app/composables/useSalesOrderitems'
+import { salesLocationsConfig } from '../collections/locations/app/composables/useSalesLocations'
+import { salesClientsConfig } from '../collections/clients/app/composables/useSalesClients'
+import { salesEventsettingsConfig } from '../collections/eventsettings/app/composables/useSalesEventsettings'
+import { salesPrintersConfig } from '../collections/printers/app/composables/useSalesPrinters'
+import { salesPrintqueuesConfig } from '../collections/printqueues/app/composables/useSalesPrintqueues'
+import { salesKdsbumpsConfig } from '../collections/kdsbumps/app/composables/useSalesKdsbumps'
+
 
 // Sales analytics block for crouton-pages: editor picks a chart kind and an
 // event scope (one event or all). Renders via CroutonChartsWidget when
@@ -483,6 +497,20 @@ export default defineAppConfig({
       pageTypes: []
     }
   },
+  croutonCollections: {
+    salesEvents: salesEventsConfig,
+    salesProducts: salesProductsConfig,
+    salesCategories: salesCategoriesConfig,
+    salesOrders: salesOrdersConfig,
+    salesOrderitems: salesOrderitemsConfig,
+    salesLocations: salesLocationsConfig,
+    salesClients: salesClientsConfig,
+    salesEventsettings: salesEventsettingsConfig,
+    salesPrinters: salesPrintersConfig,
+    salesPrintqueues: salesPrintqueuesConfig,
+    salesKdsbumps: salesKdsbumpsConfig
+  },
+
   croutonBlocks: {
     eventWorkspaceBlock,
     salesLiveDashboardBlock,

@@ -62,6 +62,7 @@ interface ManifestConfigOption {
 interface Manifest {
   id: string
   layer?: { name: string }
+  ownsCollections?: boolean
   collections?: ManifestCollection[]
   configuration?: Record<string, ManifestConfigOption>
 }
@@ -280,6 +281,8 @@ export async function mergeManifestCollections(config: CroutonConfig): Promise<M
 
   for (const manifest of manifests) {
     if (!manifest.collections || manifest.collections.length === 0) continue
+    // The package ships these itself; generating them would fork them (#2278).
+    if (manifest.ownsCollections) continue
 
     // Derive feature alias from manifest id (e.g., 'crouton-bookings' → 'bookings')
     const featureKey = manifest.id.replace(/^crouton-/, '')

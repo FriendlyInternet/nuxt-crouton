@@ -13,6 +13,7 @@ export function useExpandableSlideover(options: UseExpandableSlideoverOptions = 
     maxWidth = 'xl',
     closeOnExpand = false
   } = options
+  const { t } = useT()
 
   const [isOpen, toggleOpen] = useToggle(false)
   const [isExpanded, toggleExpanded] = useToggle(defaultExpanded)
@@ -109,8 +110,8 @@ export function useExpandableSlideover(options: UseExpandableSlideoverOptions = 
   // Tooltip text for expand button
   const expandTooltip = computed(() =>
     isExpanded.value
-      ? 'Collapse to sidebar'
-      : 'Expand to fullscreen'
+      ? t('form.collapse')
+      : t('form.expand')
   )
 
   return {

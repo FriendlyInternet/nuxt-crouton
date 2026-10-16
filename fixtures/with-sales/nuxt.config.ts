@@ -12,8 +12,7 @@ export default defineNuxtConfig({
     '@fyit/crouton-core',
     '@fyit/crouton-i18n',
     '@fyit/crouton-printing',
-    '@fyit/crouton-sales',
-    './layers/sales'
+    '@fyit/crouton-sales'
   ],
 
   hub: {

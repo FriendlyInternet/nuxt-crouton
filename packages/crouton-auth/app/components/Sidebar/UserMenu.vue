@@ -19,6 +19,7 @@ interface Props {
 
 defineProps<Props>()
 
+const { t } = useT()
 const { user, loading, userInitials, dropdownItems } = useUserMenuItems()
 </script>
 
@@ -40,7 +41,7 @@ const { user, loading, userInitials, dropdownItems } = useUserMenuItems()
       <template #leading>
         <UAvatar
           :src="user?.image ?? undefined"
-          :alt="user?.name ?? 'User'"
+          :alt="user?.name ?? t('account.user')"
           :text="userInitials"
           size="sm"
         />
@@ -52,7 +53,7 @@ const { user, loading, userInitials, dropdownItems } = useUserMenuItems()
       >
         <div class="flex flex-col items-start min-w-0 flex-1">
           <span class="text-sm font-medium truncate max-w-full">
-            {{ user?.name || 'User' }}
+            {{ user?.name || t('account.user') }}
           </span>
           <span class="text-xs text-muted truncate max-w-full">
             {{ user?.email }}

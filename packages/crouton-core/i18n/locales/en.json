@@ -7,7 +7,24 @@
     "removeItem": "Remove item",
     "metaSettings": "Meta settings",
     "tryAgain": "Try Again",
-    "anErrorOccurred": "An error occurred"
+    "anErrorOccurred": "An error occurred",
+    "sendingUpdate": "Sending update...",
+    "maxDepthTitle": "Maximum depth reached",
+    "maxDepthDescription": "Cannot open more than {count} nested forms",
+    "somethingWentWrong": "Uh oh! Something went wrong.",
+    "titles": {
+      "create": "Create {collection}",
+      "update": "Update {collection}",
+      "delete": "Delete {collection}",
+      "view": "View {collection}"
+    },
+    "descriptions": {
+      "create": "Form for creating {collection}",
+      "update": "Form for editing {collection}",
+      "delete": "Form for deleting {collection}",
+      "view": "Viewing {collection}",
+      "manage": "Form for managing {collection}"
+    }
   },
   "common": {
     "create": "Create",
@@ -31,7 +48,10 @@
     "untitled": "Untitled",
     "export": "Export",
     "new": "New",
-    "editing": "Editing"
+    "editing": "Editing",
+    "notFound": "Not found",
+    "moreCount": "+{count} more",
+    "sure": "Sure?"
   },
   "mutations": {
     "creationFailed": "Creation failed",
@@ -86,7 +106,18 @@
     "componentNotFound": "Component not found for collection: {collection}",
     "selectItem": "Select an item to get started",
     "orPressN": "or press N to create new",
-    "newItem": "New item"
+    "newItem": "New item",
+    "changeLayout": "Change layout",
+    "notFound": "Collection not found: {collection}",
+    "layouts": {
+      "table": "Table",
+      "list": "List",
+      "grid": "Grid",
+      "cards": "Cards",
+      "tree": "Tree",
+      "kanban": "Kanban",
+      "workspace": "Workspace"
+    }
   },
   "detail": {
     "details": "Details",
@@ -103,14 +134,17 @@
     "groupBy": "Group by:",
     "noItemsToDisplay": "No items to display",
     "addItemsOrChangeGrouping": "Add items or change the grouping field.",
-    "dropItemsHere": "Drop items here"
+    "dropItemsHere": "Drop items here",
+    "uncategorized": "Uncategorized"
   },
   "tree": {
     "addChild": "Add child page",
     "addBelow": "Add page below",
     "moveUp": "Move up",
     "moveDown": "Move down",
-    "moveToRoot": "Move to root"
+    "moveToRoot": "Move to root",
+    "add": "Add",
+    "createFirstItem": "Create your first item to see the tree structure."
   },
   "dropzone": {
     "idle": "Drag & drop files here",
@@ -121,7 +155,9 @@
     "cropApply": "Crop & Apply",
     "cropAvatar": "Crop Avatar",
     "change": "Change",
-    "upload": "Upload"
+    "upload": "Upload",
+    "cropPreview": "Crop preview",
+    "preview": "Image preview"
   },
   "repeater": {
     "emptyState": "No items yet. Click \"{label}\" to get started.",
@@ -163,7 +199,9 @@
     "valuePlaceholder": "Auto-generated from label",
     "valueHint": "Leave empty to auto-generate from label",
     "createSuccess": "Option created",
-    "created": "\"{label}\" has been added"
+    "created": "\"{label}\" has been added",
+    "labelForLocale": "Label ({locale})",
+    "fallbackValue": "Fallback: {value}"
   },
   "dependent": {
     "loadingOptions": "Loading options...",
@@ -186,7 +224,9 @@
     "showing": "Showing",
     "to": "to",
     "of": "of",
-    "results": "results"
+    "results": "results",
+    "data": "Data",
+    "searchPlaceholder": "Search..."
   },
   "export": {
     "csv": "CSV",
@@ -194,7 +234,9 @@
     "noData": "No data to export"
   },
   "iconPicker": {
-    "noIcons": "No icons found"
+    "noIcons": "No icons found",
+    "placeholder": "Select icon",
+    "searchPlaceholder": "Search {set} icons..."
   },
   "help": {
     "customizeCard": "Customize Card Display",
@@ -219,7 +261,10 @@
     "statusCode": "Status Code",
     "active": "Active",
     "permanent": "Permanent",
-    "temporary": "Temporary"
+    "temporary": "Temporary",
+    "columnFrom": "From",
+    "columnTo": "To",
+    "columnStatus": "Status"
   },
   "setup": {
     "collections": "Collections",
@@ -243,6 +288,22 @@
   },
   "workspace": {
     "selectItem": "Select an item to get started",
-    "pressNToCreate": "or press N to create new"
+    "pressNToCreate": "or press N to create new",
+    "loadFailed": "Failed to load item",
+    "createNamed": "Create {collection}"
+  },
+  "content": {
+    "onThisPage": "On this page"
+  },
+  "draggableList": {
+    "searchPlaceholder": "Search items...",
+    "empty": "No items available"
+  },
+  "colorPicker": {
+    "placeholder": "Pick a color",
+    "custom": "Custom color"
+  },
+  "calendar": {
+    "placeholder": "Select a date"
   }
 }

@@ -92,8 +92,8 @@ function handleOpenPanel() {
         <div class="flex items-center justify-between mb-2">
           <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
             <UIcon name="i-lucide-contact" class="size-3" />
-            Contact
-            <span v-if="isHorizontal" class="text-gray-300 ml-1">(Horizontal)</span>
+            {{ t('pages.blockLibrary.contact.name') }}
+            <span v-if="isHorizontal" class="text-gray-300 ml-1">({{ t('pages.blockLibrary.contact.fields.layout.options.horizontal') }})</span>
           </span>
           <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
@@ -139,7 +139,7 @@ function handleOpenPanel() {
                 {{ resolvedMember.email }}
               </p>
               <p v-if="!resolvedMember" class="text-xs text-gray-400 italic">
-                Loading member...
+                {{ t('pages.blockViews.loadingMember') }}
               </p>
             </div>
           </template>
@@ -164,7 +164,7 @@ function handleOpenPanel() {
 
           <!-- Empty State -->
           <span v-else class="text-xs text-gray-400 italic">
-            No contact set
+            {{ t('pages.blockViews.noContact') }}
           </span>
         </div>
       </div>

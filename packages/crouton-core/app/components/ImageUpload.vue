@@ -23,12 +23,14 @@
       <img
         v-else
         :src="model"
-        class="h-full w-full object-cover"
+        :alt="t('image.preview')"
+        class="h-full w-full"
+        :class="fit === 'contain' ? 'object-contain p-3' : 'object-cover'"
       >
     </button>
 
     <!-- Crop Modal -->
-    <UModal v-model="showCropper">
+    <UModal v-model:open="showCropper">
       <template #content="{ close }">
         <div class="p-6">
           <h3 class="text-lg font-semibold mb-4">
@@ -56,10 +58,13 @@ const { t } = useT()
 
 interface Props {
   crop?: boolean | { aspectRatio?: number | AspectRatioPreset, circular?: boolean }
+  /** Preview fit: 'cover' (default, photos) or 'contain' (logos — show the whole image) */
+  fit?: 'cover' | 'contain'
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  crop: false
+  crop: false,
+  fit: 'cover'
 })
 
 const model = defineModel<string | undefined>()

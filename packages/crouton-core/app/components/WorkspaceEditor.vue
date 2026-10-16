@@ -102,7 +102,7 @@ watch(
 
       activeItem.value = item
     } catch (error: any) {
-      loadError.value = error.message || 'Failed to load item'
+      loadError.value = error.message || t('workspace.loadFailed')
       console.error('WorkspaceEditor: Failed to load item:', error)
     } finally {
       isLoading.value = false
@@ -134,13 +134,13 @@ nuxtApp.hook('crouton:mutation', ({ operation, collection, itemId }) => {
           variant="subtle"
           size="xs"
         >
-          {{ action === 'create' ? t('common.new') || 'New' : t('common.editing') || 'Editing' }}
+          {{ action === 'create' ? t('common.new') : t('common.editing') }}
         </UBadge>
         <span v-if="itemTitle" class="text-sm font-medium truncate">
           {{ itemTitle }}
         </span>
         <span v-else-if="action === 'create'" class="text-sm text-muted">
-          {{ t('collection.newItem', { collection: collectionWithCapitalSingular(collection) }) || `New ${collectionWithCapitalSingular(collection)}` }}
+          {{ t('collection.newItem', { collection: collectionWithCapitalSingular(collection) }) }}
         </span>
       </div>
 

@@ -128,7 +128,7 @@ async function handleBookingChange() {
         :settings="firstSettings"
         :loading="loading"
         title=""
-        :empty-message="isPreview ? t('bookings.admin.noBookingsForUser', { name: impersonatedUser?.name || 'this user' }) : t('bookings.admin.noBookingsForTeam')"
+        :empty-message="isPreview ? t('bookings.admin.noBookingsForUser', { name: impersonatedUser?.name || t('bookings.admin.thisUser') }) : t('bookings.admin.noBookingsForTeam')"
         @created="handleBookingChange"
         @updated="handleBookingChange"
       />

@@ -1,9 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref, computed } from 'vue'
+import en from '../../../i18n/locales/en.json'
 
 // Stub Vue primitives globally for the composable
 vi.stubGlobal('ref', ref)
 vi.stubGlobal('computed', computed)
+
+// useT is auto-imported at runtime; resolve keys against the real English locale
+vi.stubGlobal('useT', () => ({
+  t: (key: string, params: Record<string, unknown> = {}) => {
+    const msg = key.split('.').reduce<any>((node, part) => node?.[part], en)
+    return typeof msg === 'string' ? msg.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? '')) : key
+  }
+}))
 
 // Import after mocking
 import { useExpandableSlideover } from '../useExpandableSlideover'

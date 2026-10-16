@@ -1,6 +1,6 @@
 import { useLocalStorage } from '@vueuse/core'
 import type { LocationData, SlotItem, BookingData, SettingsData, CartItem } from '../types/booking'
-import { ALL_DAY_SLOT } from '../types/booking'
+import { isBlockedByFullDay } from '../utils/full-day'
 import { toDateKey, isSameDay } from '@fyit/crouton-core/shared/utils/date'
 import { useBookingMonthlyLimit } from './useBookingMonthlyLimit'
 import { useBookingCartStorage } from './useBookingCartStorage'
@@ -17,6 +17,7 @@ import { useBookingAvailability } from './useBookingAvailability'
  */
 export function useBookingCart() {
   const { currentTeam } = useTeam()
+  const { t } = useT()
 
   // Team ID from auth context (consistent with useBookingsList)
   const teamId = computed(() => currentTeam.value?.id)
@@ -300,7 +301,9 @@ export function useBookingCart() {
   }
 
   // Check if a slot is disabled (slot mode only)
-  function isSlotDisabled(slotId: string): boolean {
+  // `selected` = slots ticked in the booking being made; pass [] to ask "is it
+  // taken?" regardless of the current ticks (see isSlotTaken)
+  function isSlotDisabled(slotId: string, selected: string[] = formState.slotIds): boolean {
     if (!formState.date || isInventoryMode.value) return true
 
     // Check schedule rules first
@@ -326,13 +329,16 @@ export function useBookingCart() {
       }
     }
 
-    // If any slot is booked or rule-blocked, "all-day" is disabled
+    // Full day ⇄ other slots exclude each other — counting what's booked, in
+    // the cart, rule-blocked, AND ticked in this booking (#2261)
     const ruleBlocked = getRuleBlockedSlotIds(formState.date)
-    if (slotId === 'all-day' && (bookedSlotIds.value.length > 0 || ruleBlocked.length > 0)) {
-      return true
-    }
+    return isBlockedByFullDay(slotId, [...bookedSlotIds.value, ...ruleBlocked], selected)
+  }
 
-    return false
+  // Unavailable no matter what is ticked (booked, full, closed) — vs. only
+  // excluded by the current selection (e.g. full day while Matin is ticked)
+  function isSlotTaken(slotId: string): boolean {
+    return isSlotDisabled(slotId, [])
   }
 
   // Compute available slots (slot mode only)
@@ -439,7 +445,7 @@ export function useBookingCart() {
 
   // Get slot label by ID
   function getSlotLabel(slotId: string): string {
-    if (slotId === 'all-day') return ALL_DAY_SLOT.label!
+    if (slotId === 'all-day') return t('bookings.allDay')
     const slot = rawSlots.value.find(s => s.id === slotId)
     return slot?.label || slot?.value || slotId
   }
@@ -564,6 +570,7 @@ export function useBookingCart() {
     availableSlots,
     rawSlots,
     isSlotDisabled,
+    isSlotTaken,
     getSlotRemaining,
     getSlotCapacity,
 

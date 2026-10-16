@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 import { bucketPrintStatuses } from '../../../shared/utils/print-status'
 import { CANCELLED_ORDER_STATUS } from '../../../shared/utils/order-status'
 

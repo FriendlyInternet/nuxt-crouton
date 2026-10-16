@@ -88,7 +88,7 @@ async function handleResend(invitationId: string) {
     await resendInvitation(invitationId)
     notify.success(t('teams.invitationResent'), { description: t('teams.invitationResentDescription') })
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to resend invitation'
+    const message = e instanceof Error ? e.message : t('teams.failedToResendInvitation')
     notify.error(t('common.error'), { description: message })
   } finally {
     loadingInvitationId.value = null
@@ -103,7 +103,7 @@ async function handleCancel(invitationId: string) {
     notify.success(t('teams.invitationCancelled'), { description: t('teams.invitationCancelledDescription') })
     invitations.value = invitations.value.filter(i => i.id !== invitationId)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to cancel invitation'
+    const message = e instanceof Error ? e.message : t('teams.failedToCancelInvitation')
     notify.error(t('common.error'), { description: message })
   } finally {
     loadingInvitationId.value = null
@@ -118,7 +118,7 @@ async function handleAccept(invitationId: string) {
     notify.success(t('teams.invitationAccepted'), { description: t('teams.invitationAcceptedDescription') })
     invitations.value = invitations.value.filter(i => i.id !== invitationId)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to accept invitation'
+    const message = e instanceof Error ? e.message : t('teams.failedToAcceptInvitation')
     notify.error(t('common.error'), { description: message })
   } finally {
     loadingInvitationId.value = null
@@ -133,7 +133,7 @@ async function handleReject(invitationId: string) {
     notify.info(t('teams.invitationDeclined'), { description: t('teams.invitationDeclinedDescription') })
     invitations.value = invitations.value.filter(i => i.id !== invitationId)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to decline invitation'
+    const message = e instanceof Error ? e.message : t('teams.failedToDeclineInvitation')
     notify.error(t('common.error'), { description: message })
   } finally {
     loadingInvitationId.value = null

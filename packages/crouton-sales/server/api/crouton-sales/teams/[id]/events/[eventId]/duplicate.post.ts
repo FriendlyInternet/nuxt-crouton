@@ -1,11 +1,11 @@
 import { eq } from 'drizzle-orm'
 import { nanoid } from 'nanoid'
 import { requireTeamEvent } from '../../../../../../utils/team-event'
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
-import { salesCategories } from '~~/layers/sales/collections/categories/server/database/schema'
-import { salesLocations } from '~~/layers/sales/collections/locations/server/database/schema'
-import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
-import { salesPrinters } from '~~/layers/sales/collections/printers/server/database/schema'
+import { salesEvents } from '../../../../../../../collections/events/server/database/schema'
+import { salesCategories } from '../../../../../../../collections/categories/server/database/schema'
+import { salesLocations } from '../../../../../../../collections/locations/server/database/schema'
+import { salesProducts } from '../../../../../../../collections/products/server/database/schema'
+import { salesPrinters } from '../../../../../../../collections/printers/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const { team, user, db, eventId, salesEvent: originalEvent } = await requireTeamEvent(event)

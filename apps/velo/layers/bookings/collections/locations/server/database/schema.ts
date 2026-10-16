@@ -42,6 +42,7 @@ export const bookingsLocations = sqliteTable('bookings_locations', {
   openDays: jsonColumn('openDays').$default(() => (null)),
   slotSchedule: jsonColumn('slotSchedule').$default(() => ({})),
   blockedDates: jsonColumn('blockedDates').$default(() => (null)),
+  offerFullDay: integer('offerFullDay', { mode: 'boolean' }).$default(() => false),
   inventoryMode: integer('inventoryMode', { mode: 'boolean' }).$default(() => false),
   quantity: integer('quantity'),
   maxBookingsPerMonth: integer('maxBookingsPerMonth'),

@@ -3,7 +3,7 @@
     <UInput
       :model-value="modelValue"
       icon="i-lucide-search"
-      :placeholder="placeholder"
+      :placeholder="placeholder ?? t('table.searchPlaceholder')"
       class="w-full sm:max-w-sm"
       @update:model-value="handleSearch"
     />
@@ -15,9 +15,11 @@ import { useDebounceFn } from '@vueuse/core'
 import type { TableSearchProps } from '../types/table'
 
 const props = withDefaults(defineProps<TableSearchProps>(), {
-  placeholder: 'Search...',
+  placeholder: undefined,
   debounceMs: 300
 })
+
+const { t } = useT()
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]

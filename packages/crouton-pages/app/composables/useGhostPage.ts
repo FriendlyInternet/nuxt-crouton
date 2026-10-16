@@ -5,6 +5,7 @@
  * The editor can update the ghost's title/slug as the user types.
  */
 export function useGhostPage() {
+  const { t } = useT()
   const ghost = useState<{
     id: string
     parentId: string | null
@@ -19,7 +20,7 @@ export function useGhostPage() {
     ghost.value = {
       id: '__ghost__',
       parentId,
-      title: 'New page...',
+      title: t('pages.newPagePlaceholder'),
       slug: '',
       status: 'draft',
       order: Infinity,

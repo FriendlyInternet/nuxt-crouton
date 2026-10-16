@@ -13,6 +13,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 const displayName = computed(() => {
   const { firstName, lastName } = props.attrs
@@ -50,7 +51,7 @@ const showAvatar = computed(() => props.attrs.showAvatar !== false)
             v-if="showAvatar"
             :src="attrs.avatar"
             :text="initials || '?'"
-            :alt="displayName || 'Contact'"
+            :alt="displayName || t('pages.blockLibrary.contact.name')"
             size="xl"
             class="shrink-0"
           />
@@ -121,7 +122,7 @@ const showAvatar = computed(() => props.attrs.showAvatar !== false)
             v-if="showAvatar"
             :src="attrs.avatar"
             :text="initials || '?'"
-            :alt="displayName || 'Contact'"
+            :alt="displayName || t('pages.blockLibrary.contact.name')"
             size="xl"
             class="mb-3"
           />
@@ -187,7 +188,7 @@ const showAvatar = computed(() => props.attrs.showAvatar !== false)
         class="text-center py-4 text-[var(--ui-text-dimmed)]"
       >
         <UIcon name="i-lucide-user" class="size-8 mb-2" />
-        <p class="text-sm">No contact information</p>
+        <p class="text-sm">{{ t('pages.blockRender.noContactInfo') }}</p>
       </div>
     </div>
   </div>

@@ -36,6 +36,7 @@ export interface AggregatedPageType extends CroutonPageType {
 export function usePageTypes() {
   const { appsList } = useCroutonApps()
   const collections = useCollections()
+  const { t } = useT()
 
   /**
    * All page types from all registered apps, flattened into a single array.
@@ -72,7 +73,7 @@ export function usePageTypes() {
       const fullId = `${layer}:${collectionName}-detail`
 
       // Skip if a manually registered page type already exists with this ID
-      if (types.some(t => t.fullId === fullId)) continue
+      if (types.some(existing => existing.fullId === fullId)) continue
 
       // A publishable collection may describe its derived page type via a
       // `pageType` config block (name/description/icon/category) — the same
@@ -89,7 +90,7 @@ export function usePageTypes() {
 
       types.push({
         id: `${collectionName}-detail`,
-        name: pageTypeMeta.name || `${singularName} Page`,
+        name: pageTypeMeta.name || t('pages.pageTypes.collectionDerived.name', { name: singularName }),
         description: pageTypeMeta.description || 'pages.pageTypes.collectionDerived.description',
         component: 'CroutonPagesCollectionPageRenderer',
         icon: pageTypeMeta.icon || config.adminNav?.icon || 'i-lucide-file-text',

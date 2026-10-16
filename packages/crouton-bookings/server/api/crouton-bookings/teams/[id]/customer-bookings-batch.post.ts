@@ -20,6 +20,7 @@ import { eq, and, gte, lte, sum } from 'drizzle-orm'
 import { useNitroApp } from 'nitropack/runtime'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { toMonthKey, monthBounds } from '@fyit/crouton-core/shared/utils/date'
+import { FULL_DAY_ID, fullDayConflict } from '../../../../../app/utils/full-day'
 import { bookingsBookings } from '~~/layers/bookings/collections/bookings/server/database/schema'
 import { bookingsLocations } from '~~/layers/bookings/collections/locations/server/database/schema'
 import { isBookingEmailEnabled, resolveTranslatedField, resolveSlotLabels } from '../../../../utils/booking-emails'
@@ -223,6 +224,46 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // --- Full-day exclusivity (#2261) ---
+  // The built-in full day can't share a location+date with any other slot —
+  // whether booked already or earlier in this same batch.
+  const slotItems = body.bookings.filter(item => item.slotIds?.length && !item.slotIds.includes('inventory'))
+  if (slotItems.some(item => item.slotIds!.includes(FULL_DAY_ID))) {
+    const takenByKey = new Map<string, string[]>()
+    for (const item of slotItems) {
+      const key = `${item.locationId}|${item.date}`
+      if (!takenByKey.has(key)) {
+        const rows = await db
+          .select({ slot: bookingsBookings.slot })
+          .from(bookingsBookings)
+          .where(
+            and(
+              eq(bookingsBookings.location as any, item.locationId),
+              eq(bookingsBookings.status as any, 'active'),
+              eq(bookingsBookings.date as any, new Date(item.date)),
+            ),
+          )
+        const existing: string[] = []
+        for (const row of rows) {
+          if (typeof row.slot === 'string') {
+            try { existing.push(...JSON.parse(row.slot)) } catch { existing.push(row.slot) }
+          } else if (Array.isArray(row.slot)) {
+            existing.push(...(row.slot as string[]))
+          }
+        }
+        takenByKey.set(key, existing)
+      }
+      const taken = takenByKey.get(key)!
+      if (fullDayConflict(item.slotIds!, taken)) {
+        throw createError({
+          status: 409,
+          statusText: 'The full day can\'t be combined with another slot on this date',
+        })
+      }
+      taken.push(...item.slotIds!)
+    }
+  }
+
   // Transform cart items to database records (one row per cart item, quantity stored on the row)
   const now = new Date()
   const bookingsToInsert = body.bookings.map((item) => ({
@@ -289,7 +330,7 @@ export default defineEventHandler(async (event) => {
         const locationContent = resolveTranslatedField(dbLocation?.content, tr, 'content', locale)
 
         // Resolve slot IDs to human-readable labels
-        const slotLabel = resolveSlotLabels(booking.slot, dbLocation?.slots as any)
+        const slotLabel = resolveSlotLabels(booking.slot, dbLocation?.slots as any, locale)
 
         const bookingContext: BookingEmailContext = {
           id: booking.id,

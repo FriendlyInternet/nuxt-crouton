@@ -31,7 +31,7 @@ const providerLabel = computed(() => {
   if (url.includes('figma.com')) return 'Figma'
   if (attrs.value.provider === 'youtube') return 'YouTube'
   if (attrs.value.provider === 'figma') return 'Figma'
-  return 'Embed'
+  return t('pages.blockLibrary.embed.name')
 })
 
 const truncatedUrl = computed(() => {

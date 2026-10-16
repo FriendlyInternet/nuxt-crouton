@@ -124,7 +124,7 @@ const getCurrentUser = () => {
       if (sessionUser?.value) {
         const u = sessionUser.value as unknown as Record<string, unknown>
         return {
-          name: String(u.name || u.email || 'Anonymous'),
+          name: String(u.name || u.email || t('pages.editor.anonymous')),
           color: undefined
         }
       }
@@ -132,7 +132,7 @@ const getCurrentUser = () => {
   } catch {
     // Auth package not installed
   }
-  return { name: 'Anonymous', color: undefined }
+  return { name: t('pages.editor.anonymous'), color: undefined }
 }
 
 // Set up collab for content if package is installed
@@ -1250,13 +1250,13 @@ defineExpose({ state })
           <!-- Collection item picker (publishable item pages) -->
           <div v-if="isCollectionPage" class="px-4 pt-4 pb-2 shrink-0 border-b border-default">
             <UFormField
-              :label="t('pages.editor.selectItem', { name: selectedPageType?.name ? t(selectedPageType.name) : 'Item' })"
+              :label="t('pages.editor.selectItem', { name: selectedPageType?.name ? t(selectedPageType.name, selectedPageType.name) : t('pages.editor.item') })"
               name="config.itemId"
             >
               <CroutonFormReferenceSelect
                 v-model="collectionItemId"
                 :collection="collectionPageName"
-                :label="selectedPageType?.name ? t(selectedPageType.name) : undefined"
+                :label="selectedPageType?.name ? t(selectedPageType.name, selectedPageType.name) : undefined"
                 :label-key="collectionLabelKey"
               />
             </UFormField>
@@ -1327,7 +1327,7 @@ defineExpose({ state })
             <div v-else class="p-4 bg-muted/30 rounded-lg text-center text-sm text-muted">
               <UIcon name="i-lucide-info" class="size-5 mb-2" />
               <p>{{ t('pages.editor.noConfig') }}</p>
-              <p>{{ t('pages.editor.displaysComponent', { name: selectedPageType?.name ? t(selectedPageType.name) : '' }) }}</p>
+              <p>{{ t('pages.editor.displaysComponent', { name: selectedPageType?.name ? t(selectedPageType.name, selectedPageType.name) : '' }) }}</p>
             </div>
           </div>
         </div>
