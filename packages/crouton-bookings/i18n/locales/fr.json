@@ -313,7 +313,7 @@
     },
     "block": {
       "booking": "Réservation",
-      "membersOnly": "Membres uniquement",
+      "hiddenWhenLoggedOut": "Masqué si non connecté",
       "teamView": "Vue d'équipe",
       "editBlock": "Modifier les propriétés du bloc",
       "deleteBlock": "Supprimer le bloc"

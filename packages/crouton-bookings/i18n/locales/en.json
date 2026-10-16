@@ -313,7 +313,7 @@
     },
     "block": {
       "booking": "Booking",
-      "membersOnly": "Members only",
+      "hiddenWhenLoggedOut": "Hidden when logged out",
       "teamView": "Team view",
       "editBlock": "Edit block properties",
       "deleteBlock": "Delete block"

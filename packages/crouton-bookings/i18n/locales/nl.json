@@ -313,7 +313,7 @@
     },
     "block": {
       "booking": "Boeking",
-      "membersOnly": "Alleen voor leden",
+      "hiddenWhenLoggedOut": "Verborgen voor niet-ingelogden",
       "teamView": "Teamweergave",
       "editBlock": "Blokeigenschappen bewerken",
       "deleteBlock": "Blok verwijderen"

@@ -98,7 +98,7 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
   defaultAttrs: {
     title: '',
     emptyMessage: '',
-    access: 'public',
+    loggedOut: 'prompt',
     scope: 'personal'
   },
   components: {
@@ -119,13 +119,15 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
       description: 'Message shown when no bookings exist'
     },
     {
-      name: 'access',
+      // Who sees the block at all is the generic Visibility panel; this only
+      // decides what a logged-out visitor gets — booking needs an account (#2263)
+      name: 'loggedOut',
       type: 'select',
-      label: 'Access',
-      description: 'Who can see this booking block',
+      label: 'Logged-out visitors see',
+      description: 'Booking needs an account. Show a login prompt, or hide the block.',
       options: [
-        { label: 'Everyone', value: 'public' },
-        { label: 'Members only', value: 'members' }
+        { label: 'A login prompt', value: 'prompt' },
+        { label: 'Nothing', value: 'hide' }
       ]
     },
     {
@@ -144,7 +146,7 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
     attributes: {
       title: { default: '' },
       emptyMessage: { default: '' },
-      access: { default: 'public' },
+      loggedOut: { default: 'prompt' },
       scope: { default: 'personal' }
     }
   }

@@ -15,7 +15,8 @@ import { useI18n } from 'vue-i18n'
 interface BookingBlockAttrs {
   title?: string
   emptyMessage?: string
-  access?: 'public' | 'members'
+  /** What a logged-out visitor sees (#2263). Older pages may still carry `access`. */
+  loggedOut?: 'prompt' | 'hide'
   scope?: 'personal' | 'team'
 }
 
@@ -74,14 +75,14 @@ function handleOpenPanel() {
             </span>
             <!-- Access badge -->
             <span
-              v-if="attrs.access === 'members'"
+              v-if="attrs.loggedOut === 'hide'"
               class="inline-flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
             >
               <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
                 <path d="M7 11V7a5 5 0 0 1 10 0v4" />
               </svg>
-              {{ t('bookings.block.membersOnly') }}
+              {{ t('bookings.block.hiddenWhenLoggedOut') }}
             </span>
             <!-- Scope badge -->
             <span
