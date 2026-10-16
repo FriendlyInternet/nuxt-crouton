@@ -15,7 +15,7 @@
  * map-to-HTTP, matching the delete endpoint.
  */
 import { requireTeamAdmin } from '@fyit/crouton-auth/server/utils/team'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
+import { salesOrders } from '../../../../../../../../../collections/orders/server/database/schema'
 import { actorLabel, cancelOrder } from '../../../../../../../../utils/cancel-order'
 
 export default defineEventHandler(async (event) => {

@@ -24,8 +24,8 @@ export default defineEventHandler(async (event) => {
   // Event must belong to this team; also hands back the db handle + eventId.
   const { db, eventId } = await requireTeamEvent(event)
 
-  const { salesOrders } = await import('~~/layers/sales/collections/orders/server/database/schema')
-  const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
+  const { salesOrders } = await import('../../../../../../../collections/orders/server/database/schema')
+  const { salesOrderitems } = await import('../../../../../../../collections/orderitems/server/database/schema')
 
   const ops: DeleteEventOrdersOps = {
     async listOrderIds(id) {

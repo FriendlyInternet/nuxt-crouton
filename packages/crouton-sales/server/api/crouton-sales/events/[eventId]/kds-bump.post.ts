@@ -19,8 +19,8 @@
  * venue LAN; a helper-scoped token is a follow-up).
  */
 import { and, eq } from 'drizzle-orm'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
-import { salesKdsbumps } from '~~/layers/sales/collections/kdsbumps/server/database/schema'
+import { salesOrders } from '../../../../../collections/orders/server/database/schema'
+import { salesKdsbumps } from '../../../../../collections/kdsbumps/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const eventId = getRouterParam(event, 'eventId')

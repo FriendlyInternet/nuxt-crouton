@@ -23,7 +23,7 @@
  */
 import type { SQL } from 'drizzle-orm'
 import { personnelConditionOn } from './personnel-condition'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
+import { salesOrders } from '../../collections/orders/server/database/schema'
 
 // NB: `parsePersonnelMode` / `PersonnelMode` are deliberately NOT re-exported
 // here. Nitro auto-imports every export under `server/utils/`, so a re-export

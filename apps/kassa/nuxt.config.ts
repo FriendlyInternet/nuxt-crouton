@@ -54,7 +54,6 @@ export default defineNuxtConfig({
     '@fyit/crouton-themes/riso',
     '@fyit/crouton-themes/eink',
     '@fyit/crouton-themes/blueprint',
-    './layers/sales',
     './layers/pages'
   ],
   appConfig: {

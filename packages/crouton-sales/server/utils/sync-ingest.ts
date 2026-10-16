@@ -17,8 +17,8 @@
  * Per-event isolation: one bad event never aborts the batch — partial batches
  * are explicitly allowed, and the caller acks precisely what was applied.
  *
- * App-layer schema is imported lazily (the `~~/layers` alias resolves only in
- * the consuming app — same pattern as generate-print-queues.ts / print-job-complete.ts).
+ * The collection tables (`collections/*`) are imported lazily, same pattern as
+ * generate-print-queues.ts.
  */
 import { eq, getTableColumns } from 'drizzle-orm'
 import type { OutboxEntityType } from './sync-outbox'
@@ -44,8 +44,8 @@ export interface IngestResult {
 const VALID_TYPES: OutboxEntityType[] = ['order', 'orderitem', 'printstatus']
 
 async function loadTables(): Promise<Record<OutboxEntityType, any>> {
-  const { salesOrders } = await import('~~/layers/sales/collections/orders/server/database/schema')
-  const { salesOrderitems } = await import('~~/layers/sales/collections/orderitems/server/database/schema')
+  const { salesOrders } = await import('../../collections/orders/server/database/schema')
+  const { salesOrderitems } = await import('../../collections/orderitems/server/database/schema')
   // printstatus mirrors the generic crouton-printing `print_jobs` table (the
   // cloud deploy also extends crouton-printing). The outbox printstatus payload
   // is a print_jobs row, so the mirror target must be print_jobs — not the old

@@ -11,7 +11,7 @@
  * and close button; this component is just the pane body. It mounts fresh
  * on every open (v-if), so loading happens in onMounted.
  */
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 
 const props = defineProps<{
   event: SalesEvent

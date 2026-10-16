@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { requireScopedAccessToResource } from '@fyit/crouton-auth/server/utils/scoped-access'
 import { organization } from '@fyit/crouton-auth/server/database/schema/auth'
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
+import { salesEvents } from '../../../../../../../collections/events/server/database/schema'
+import { salesOrders } from '../../../../../../../collections/orders/server/database/schema'
 import { generateAndInsertPrintQueues } from '../../../../../../utils/generate-print-queues'
 
 export default defineEventHandler(async (event) => {
