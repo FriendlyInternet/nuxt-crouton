@@ -67,7 +67,7 @@ jobs:
     # the command at the start of a line, outside code and quotes. Do not move the decision
     # back up here: GitHub expressions have no newline escape, so it cannot be anchored in
     # YAML — `'\n'` in a single-quoted scalar is a literal backslash-n and never matches.
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     steps:
       # Mint a Nuxt Harness App installation token so the `delegate` label is applied by
       # `nuxt-harness[bot]`. That makes the dispatched decompose run App-actored, which passes
