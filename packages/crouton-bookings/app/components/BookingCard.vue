@@ -76,7 +76,7 @@ const bookedSlots = computed<SlotItem[]>(() => {
 const slotLabel = computed(() => {
   const slotIds = bookedSlotIds.value
   if (slotIds.length === 0) return ''
-  const labels = slotIds.map(id => getSlotLabel(id, locationSlots.value))
+  const labels = slotIds.map(id => id === 'all-day' ? t('bookings.allDay') : getSlotLabel(id, locationSlots.value))
   return labels.join(', ')
 })
 

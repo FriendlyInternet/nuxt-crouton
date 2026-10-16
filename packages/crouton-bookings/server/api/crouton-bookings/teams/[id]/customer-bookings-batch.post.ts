@@ -330,7 +330,7 @@ export default defineEventHandler(async (event) => {
         const locationContent = resolveTranslatedField(dbLocation?.content, tr, 'content', locale)
 
         // Resolve slot IDs to human-readable labels
-        const slotLabel = resolveSlotLabels(booking.slot, dbLocation?.slots as any)
+        const slotLabel = resolveSlotLabels(booking.slot, dbLocation?.slots as any, locale)
 
         const bookingContext: BookingEmailContext = {
           id: booking.id,
