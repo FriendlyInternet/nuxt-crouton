@@ -161,7 +161,7 @@ const installCmd = defineCommand({
     if (!existsSync(installModulesPath)) {
       consola.error('Install script not found')
       console.log('Please install modules manually:')
-      console.log('  pnpm add @fyit/crouton')
+      console.log('  pnpm add @fyit/crouton-core')
       process.exit(1)
     }
     // install-modules.ts is self-executing on import

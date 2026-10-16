@@ -1392,7 +1392,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     for (const p of preserved) console.log(`     · ${path.relative(base, p)}`)
   }
 
-  // Note: team-auth utility is now provided by @fyit/crouton package
+  // Note: team-auth utility is provided by @fyit/crouton-auth (bundled via crouton-core)
   // No need to generate it per-layer
 
   // Update the layer root + root nuxt.config (and i18n locale files when needed)
@@ -1402,7 +1402,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   if (!noDb) {
     await createDatabaseTable({ name: collection, layer, fields, force })
 
-    // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton
+    // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton-core
     console.log(`↻ Ensuring translations_ui table...`)
     await exportI18nSchema(force)
   }
@@ -1484,7 +1484,7 @@ async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer
     }
   }
 
-  // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton
+  // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton-core
   // Note: exportI18nSchema() already calls registerTranslationsUiCollection() internally
   console.log(`\n↻ Ensuring translations_ui table...`)
   await exportI18nSchema(force)

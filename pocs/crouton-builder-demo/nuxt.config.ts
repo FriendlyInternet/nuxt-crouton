@@ -9,7 +9,7 @@ export default defineNuxtConfig({
   // @fyit/crouton-devtools registers the dev/review launcher — Console (eruda) + Annotate (pin
   // feedback → /api/_feedback → PR comment). Activated on staging by NUXT_PUBLIC_CROUTON_REVIEW=true
   // (set in cf:staging); zero production footprint. Supersedes the deprecated /eruda extends layer.
-  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
+  modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },

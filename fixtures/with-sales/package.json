@@ -13,7 +13,6 @@
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
-    "@fyit/crouton": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-printing": "workspace:*",

@@ -62,7 +62,7 @@ const config = {
   stagingUrl: `https://${name}.pmcp.dev`,
   // Space-separated pnpm filter names of dist-consumed framework packages built before
   // the app (pure source layers without a build script are skipped automatically).
-  layerPackages: '@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton',
+  layerPackages: '@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n',
 }
 
 const outPath = resolve(pocDir, 'deploy.config.json')

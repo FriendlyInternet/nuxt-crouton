@@ -433,14 +433,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Build crouton package
-        run: pnpm --filter '@fyit/crouton' build
+      # publint runs on crouton-core since the @fyit/crouton meta package was deleted
+      # (#2290). attw went with it: the meta module was the only package whose
+      # declaration files resolved cleanly, so the check validated nothing else.
+      - name: Build crouton-core
+        run: pnpm --filter '@fyit/crouton-core' build
 
       - name: Check package exports (publint)
         run: pnpm check:publint
-
-      - name: Check TypeScript types (attw)
-        run: pnpm check:attw
 
   # The pure `scripts/*.mjs` helpers (deploy-detect, packages-guard, harness-stages,
   # pipeline-context, pipeline-loop-guard, …) carry `node --test` contracts next to them. This

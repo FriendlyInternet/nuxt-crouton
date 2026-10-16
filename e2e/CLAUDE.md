@@ -58,7 +58,7 @@ The config's `webServer` boots `pnpm --filter e2e-fixture-$E2E_FIXTURE dev` on
 all use port 3000. Each fixture has its own local sqlite DB under `.data/`.
 
 > A fresh checkout/worktree must **build the fixture's workspace deps first** (the
-> dist-consumed `@fyit/*` packages), or the dev server can't load `@fyit/crouton`:
+> dist-consumed `@fyit/*` packages), or the dev server can't load `@fyit/crouton-core`:
 > `pnpm --filter "e2e-fixture-<name>^..." build` (this is what CI does).
 
 ### Type-safety gate (#197)

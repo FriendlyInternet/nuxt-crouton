@@ -63,14 +63,8 @@ async function isPackageInstalled(packageName: string): Promise<boolean> {
       return true
     }
 
-    // If @fyit/crouton (unified module) is installed, all @fyit/crouton-* packages are available
-    // because they're bundled as dependencies of the unified module
-    if (packageName.startsWith('@fyit/crouton-') && '@fyit/crouton' in deps) {
-      return true
-    }
-
     // Check for local file: paths that reference the package
-    // e.g., "file:/path/to/nuxt-crouton" for "@fyit/crouton"
+    // e.g., "file:/path/to/crouton-core" for "@fyit/crouton-core"
     const packageShortName = packageName.replace('@fyit/', '')
     for (const [name, version] of Object.entries(deps)) {
       // Check if the dependency value is a file: path containing the package name
@@ -100,15 +94,6 @@ async function isLayerExtended(layerName: string): Promise<boolean> {
   try {
     const nuxtConfigPath = path.resolve('nuxt.config.ts')
     const nuxtConfig = await fsp.readFile(nuxtConfigPath, 'utf-8')
-
-    // Check if using getCroutonLayers() helper - this includes all crouton packages dynamically
-    if (nuxtConfig.includes('getCroutonLayers')) {
-      // getCroutonLayers() returns all @fyit/crouton-* packages based on options
-      // If the layer is a crouton package, assume it's included
-      if (layerName.startsWith('@fyit/crouton')) {
-        return true
-      }
-    }
 
     // Check if layer is in extends array
     const extendsMatch = nuxtConfig.match(/extends:\s*\[([\s\S]*?)\]/)
@@ -182,18 +167,18 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
   }
 
   // Always check for base Crouton layer first
-  const baseLayerInstalled = await isPackageInstalled('@fyit/crouton')
-  const baseLayerExtended = await isLayerExtended('@fyit/crouton')
+  const baseLayerInstalled = await isPackageInstalled('@fyit/crouton-core')
+  const baseLayerExtended = await isLayerExtended('@fyit/crouton-core')
 
   // Check base layer status first
   if (baseLayerInstalled && !baseLayerExtended) {
     // Package installed but not added to nuxt.config.ts extends[]
     required.missing.push({
       type: 'layer',
-      name: '@fyit/crouton',
+      name: '@fyit/crouton-core',
       reason: 'Package is installed but NOT added to nuxt.config.ts extends[]',
       installCmd: '(already installed)',
-      configCmd: `Add to nuxt.config.ts:\n\n   extends: ['@fyit/crouton']`,
+      configCmd: `Add to nuxt.config.ts:\n\n   extends: ['@fyit/crouton-core']`,
       critical: true,
       note: 'Auth, admin, and i18n are automatically included when using the core package.',
     })
@@ -209,10 +194,10 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
         // Neither core nor auth available - recommend installing core (which includes auth)
         required.missing.push({
           type: 'package',
-          name: '@fyit/crouton',
+          name: '@fyit/crouton-core',
           reason: 'Required for Crouton collections (includes auth, admin, and i18n)',
-          installCmd: 'pnpm add @fyit/crouton',
-          configCmd: `Add to nuxt.config.ts:\n\n   extends: ['@fyit/crouton']`,
+          installCmd: 'pnpm add @fyit/crouton-core',
+          configCmd: `Add to nuxt.config.ts:\n\n   extends: ['@fyit/crouton-core']`,
           critical: true,
         })
       } else if (authPackageInstalled && !authLayerExtended) {
@@ -224,7 +209,7 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
           installCmd: '(already installed)',
           configCmd: `Add to nuxt.config.ts:\n\n   extends: ['@fyit/crouton-auth']`,
           critical: true,
-          note: 'Consider using @fyit/crouton instead (includes auth + admin + i18n).',
+          note: 'Consider using @fyit/crouton-core instead (includes auth + admin + i18n).',
         })
       }
       // If auth is extended standalone, that's fine too
@@ -233,7 +218,7 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
     }
   } else {
     // Core is installed AND extended - auth is bundled, no separate check needed
-    required.layers.push('@fyit/crouton')
+    required.layers.push('@fyit/crouton-core')
   }
 
   // Check if translations are needed
@@ -258,7 +243,7 @@ export async function detectRequiredDependencies(config: DetectorConfig): Promis
           name: '@fyit/crouton-i18n',
           reason: 'Required addon for translation fields',
           installCmd: 'pnpm add @fyit/crouton-i18n',
-          configCmd: `Add BOTH '@fyit/crouton' and '@fyit/crouton-i18n' to extends array`,
+          configCmd: `Add BOTH '@fyit/crouton-core' and '@fyit/crouton-i18n' to extends array`,
         })
       }
     }
@@ -350,18 +335,18 @@ export function displayMissingDependencies(dependencies: DependencyResult): bool
   }
 
   // Check if core package is being added (which includes auth/admin/i18n)
-  const hasCoreMissing = dependencies.missing.some(d => d.name === '@fyit/crouton')
+  const hasCoreMissing = dependencies.missing.some(d => d.name === '@fyit/crouton-core')
 
   console.log('\nThen add to nuxt.config.ts:')
   console.log(`   extends: [`)
 
   if (hasCoreMissing) {
     // Core includes auth, admin, and i18n - only show core
-    console.log(`     '@fyit/crouton',  // Includes auth, admin, i18n`)
+    console.log(`     '@fyit/crouton-core',  // Includes auth, admin, i18n`)
     // Show other addon layers (not auth/admin/i18n since they're bundled)
     dependencies.missing.forEach((dep) => {
       const bundledPackages = [
-        '@fyit/crouton',
+        '@fyit/crouton-core',
         '@fyit/crouton-auth',
         '@fyit/crouton-admin',
         '@fyit/crouton-i18n',

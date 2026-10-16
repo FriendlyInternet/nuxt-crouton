@@ -21,7 +21,6 @@
     "db:seed:staging": "crouton-seed --db crouton-builder-staging-db --remote"
   },
   "dependencies": {
-    "@fyit/crouton": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-flow": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
