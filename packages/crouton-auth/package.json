@@ -102,7 +102,7 @@
     "tsx": "^4.0.0",
     "typescript": "catalog:",
     "unbuild": "^2.0.0",
-    "vitest": "^2.1.9",
+    "vitest": "catalog:",
     "vue": "catalog:"
   },
   "peerDependencies": {

@@ -92,10 +92,10 @@
     "@types/papaparse": "^5.5.2",
     "@types/pluralize": "^0.0.33",
     "@types/sortablejs": "^1.15.8",
-    "@vitest/coverage-v8": "^2.1.9",
-    "happy-dom": "^16.6.0",
+    "@vitest/coverage-v8": "catalog:",
+    "happy-dom": "catalog:",
     "tsx": "^4.19.2",
     "unbuild": "^3.6.1",
-    "vitest": "^2.1.0"
+    "vitest": "catalog:"
   }
 }

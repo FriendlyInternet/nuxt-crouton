@@ -87,9 +87,11 @@ DEVICE_ID=t; DEVICE_CODE=0; STATUS_CHECK=1
 API_URL="http://127.0.0.1:${httpPort}"
 PARALLEL_DRAIN="${parallel}"
 . "${spooler}"
-RESPONSE='{"jobs":[{"id":"j1","printData":"VEVTVA==","printerIp":"192.168.1.70"},{"id":"j2","printData":"VEVTVA==","printerIp":"192.168.1.72"},{"id":"j3","printData":"VEVTVA==","printerIp":"192.168.1.73"}]}'
+# ids differ from parallel-drain.harness.sh on purpose: the spooler writes
+# /tmp/print_<id>.bin, so shared ids race when both test files run at once (#2291)
+RESPONSE='{"jobs":[{"id":"fr1","printData":"VEVTVA==","printerIp":"192.168.1.70"},{"id":"fr2","printData":"VEVTVA==","printerIp":"192.168.1.72"},{"id":"fr3","printData":"VEVTVA==","printerIp":"192.168.1.73"}]}'
 JOBLIST="${work}/jl"
-printf 'j1\\nj2\\nj3\\n' > "$JOBLIST"
+printf 'fr1\\nfr2\\nfr3\\n' > "$JOBLIST"
 group_jobs_by_printer
 fan_out_drain
 `)

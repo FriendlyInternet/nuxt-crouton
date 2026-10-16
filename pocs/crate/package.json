@@ -34,7 +34,7 @@
     "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-layout": "workspace:*",
     "drizzle-kit": "^0.31.0",
-    "vitest": "^2.1.0",
+    "vitest": "catalog:",
     "wrangler": "^4.64.0"
   }
 }

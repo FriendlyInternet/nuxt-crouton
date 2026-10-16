@@ -72,6 +72,6 @@
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.0.0",
     "@types/pluralize": "^0.0.33",
-    "vitest": "^2.1.0"
+    "vitest": "catalog:"
   }
 }
