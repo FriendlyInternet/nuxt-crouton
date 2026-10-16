@@ -894,10 +894,18 @@ When modifying the generator, **always check if examples need updating**:
 4. Call generator in appropriate step
 
 ### Add a new field type
-1. Add type mapping in `lib/utils/helpers.ts` (getTypeMapping function)
-2. Update Zod schema in `lib/generators/composable.ts`
-3. Update form component in `lib/generators/form-component.ts`
-4. Add Drizzle type in `lib/utils/dialects.ts`
+1. Declare it in the owning package's `crouton.manifest.ts` under `fieldTypes` — `db`, `drizzle`,
+   `zod`, `tsType`, `defaultValue`, **and `component`** (the form control). That row is the
+   single source: `getTypeMapping()` (`lib/utils/manifest-loader.ts`) flattens it and `loadFields`
+   attaches `zod` / `default` / `tsType` / `component` to every field (#285, #2286).
+2. The generated `_Form.vue` renders `field.component` as-is (`renderDefaultTypeField` in
+   `lib/generators/form-component.ts`). Only add a `case` there when the control needs
+   bindings beyond `v-model` (today: `CroutonCalendar` → `v-model:date`, `CroutonFormRepeater`
+   → `component-name`, `CroutonImageUpload` → `:crop`). JSON and array serialisation stay keyed on
+   *type* because they describe the value, not the widget.
+3. Add the SQLite/PG column in `lib/generators/database-schema.ts` if the `drizzle` kind is new.
+4. Still hardcoded, tracked in #2286: repeater-item inputs (`lib/generators/field-components.ts`),
+   list cells, and the system columns.
 
 ### Image and File Field Types
 - `image` → renders `<CroutonAssetsPicker v-model="..." :crop="true" />` in forms, stores `VARCHAR(255)` (asset ID)

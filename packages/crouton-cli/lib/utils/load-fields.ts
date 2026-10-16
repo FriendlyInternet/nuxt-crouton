@@ -13,6 +13,8 @@ export interface Field {
   zod: string
   default: string
   tsType: string
+  /** Form control declared by the manifest for this field's (canonical) type; undefined for unknown types (#2286) */
+  component?: string
 }
 
 export async function loadFields(p: string, typeMapping: Record<string, any>): Promise<Field[]> {
@@ -65,7 +67,8 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
       refScope: meta?.refScope,
       zod: typeMapping[resolvedType]?.zod || 'z.string()',
       default: typeMapping[resolvedType]?.default || '\'\'',
-      tsType: typeMapping[resolvedType]?.tsType || 'string'
+      tsType: typeMapping[resolvedType]?.tsType || 'string',
+      component: typeMapping[resolvedType]?.component
     }
   })
 }

@@ -7,7 +7,8 @@ import {
   formWithDateData,
   minimalConfig,
   translationsConfig,
-  allTypesFields
+  allTypesFields,
+  withComponent
 } from '../../fixtures/sample-data.mjs'
 
 // Mock date to prevent snapshot failures due to @generated timestamp
@@ -170,10 +171,10 @@ describe('generateFormComponent', () => {
     it('renders repeater fields with CroutonFormRepeater', () => {
       const dataWithRepeater = {
         ...formComponentData,
-        fields: [
+        fields: withComponent([
           { name: 'name', type: 'string', meta: { required: true } },
           { name: 'items', type: 'repeater', meta: {} }
-        ]
+        ])
       }
       const result = generateFormComponent(dataWithRepeater, minimalConfig)
       expect(result).toContain('<CroutonFormRepeater')
@@ -183,10 +184,10 @@ describe('generateFormComponent', () => {
     it('renders json fields with textarea', () => {
       const dataWithJson = {
         ...formComponentData,
-        fields: [
+        fields: withComponent([
           { name: 'name', type: 'string', meta: { required: true } },
           { name: 'metadata', type: 'json', meta: {} }
-        ]
+        ])
       }
       const result = generateFormComponent(dataWithJson, minimalConfig)
       expect(result).toContain('<UTextarea')
@@ -196,14 +197,55 @@ describe('generateFormComponent', () => {
     it('renders array fields without refTarget', () => {
       const dataWithArray = {
         ...formComponentData,
-        fields: [
+        fields: withComponent([
           { name: 'name', type: 'string', meta: { required: true } },
           { name: 'tags', type: 'array', meta: {} }
-        ]
+        ])
       }
       const result = generateFormComponent(dataWithArray, minimalConfig)
       expect(result).toContain('state.tags.join')
       expect(result).toContain('Enter one value per line')
+    })
+  })
+
+  describe('manifest-declared form component (#2286)', () => {
+    // A field carries `component` from the manifest (attached by loadFields).
+    // The generator must render THAT, not a private type→component switch.
+    it('renders the field\'s manifest component instead of a type-keyed default', () => {
+      const data = {
+        ...formComponentData,
+        fields: [{ name: 'color', type: 'string', component: 'UColorPicker', meta: {} }]
+      }
+      const result = generateFormComponent(data, minimalConfig)
+      expect(result).toContain('<UColorPicker v-model="state.color"')
+      expect(result).not.toContain('<UInput v-model="state.color"')
+    })
+
+    it('falls back to UInput when a field carries no component (manifest-less path)', () => {
+      const data = {
+        ...formComponentData,
+        fields: [{ name: 'name', type: 'string', meta: {} }]
+      }
+      const result = generateFormComponent(data, minimalConfig)
+      expect(result).toContain('<UInput v-model="state.name"')
+    })
+
+    it('keeps the type-specific bindings when the manifest names a known control', () => {
+      // CroutonCalendar binds v-model:date, the repeater needs component-name,
+      // image needs :crop — the component decides the markup, the type only
+      // decides data-shape specials (json/array serialisation).
+      const data = {
+        ...formComponentData,
+        fields: [
+          { name: 'when', type: 'date', component: 'CroutonCalendar', meta: {} },
+          { name: 'cover', type: 'image', component: 'CroutonImageUpload', meta: {} },
+          { name: 'meta', type: 'json', component: 'UTextarea', meta: {} }
+        ]
+      }
+      const result = generateFormComponent(data, minimalConfig)
+      expect(result).toContain('<CroutonCalendar v-model:date="state.when"')
+      expect(result).toContain(':crop="true"')
+      expect(result).toContain('JSON.stringify(state.meta')
     })
   })
 })
