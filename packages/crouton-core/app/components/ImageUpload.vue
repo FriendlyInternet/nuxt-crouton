@@ -28,7 +28,7 @@
     </button>
 
     <!-- Crop Modal -->
-    <UModal v-model="showCropper">
+    <UModal v-model:open="showCropper">
       <template #content="{ close }">
         <div class="p-6">
           <h3 class="text-lg font-semibold mb-4">
