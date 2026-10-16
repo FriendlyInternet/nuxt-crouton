@@ -270,7 +270,7 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
             color="neutral"
             variant="ghost"
             size="sm"
-            aria-label="Open navigation menu"
+            :aria-label="t('pages.nav.openMenu')"
           />
 
           <template #content>
@@ -328,7 +328,7 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
                 <template #leading>
                   <UAvatar
                     :src="user?.image ?? undefined"
-                    :alt="user?.name ?? 'User'"
+                    :alt="user?.name ?? t('pages.nav.user')"
                     :text="userInitials"
                     size="2xs"
                   />
@@ -361,7 +361,7 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
                 color="neutral"
                 variant="ghost"
                 size="sm"
-                aria-label="Admin menu"
+                :aria-label="t('pages.nav.adminMenu')"
               />
             </UDropdownMenu>
 

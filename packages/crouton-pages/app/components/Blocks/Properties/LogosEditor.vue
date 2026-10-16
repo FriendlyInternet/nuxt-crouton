@@ -411,7 +411,7 @@ function getImageMode(index: number): string {
         <!-- Link input (shared by both icon and image modes) -->
         <UInput
           :model-value="item.link || ''"
-          placeholder="https://example.com (optional link)"
+          :placeholder="t('pages.blockEditors.optionalLinkPlaceholder')"
           size="sm"
           class="w-full"
           @update:model-value="updateItem(index, 'link', $event)"
