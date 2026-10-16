@@ -13,7 +13,8 @@ import { loadTypeMapping, discoverManifests, getGeneratorDetectors, getGenerator
 import type { DetectionResult, DetectedField, FormEnhancement, ListEnhancement, GeneratorContribution } from '@fyit/crouton-core/shared/manifest'
 import { detectRequiredDependencies, displayMissingDependencies, ensureLayersExtended } from './utils/module-detector.ts'
 import { setupCroutonCssSource, displayManualCssSetupInstructions } from './utils/css-setup.ts'
-import { syncFrameworkPackages, addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-config.ts'
+import { addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-config.ts'
+import { resolveExtendedPackages } from './utils/extended-packages.ts'
 import { addNamedSchemaExport, getSchemaPath } from './utils/update-schema-index.ts'
 import { validateRefTargets } from './utils/validate-ref-targets.ts'
 import { assertNoOwnedCollections } from './utils/owned-collections.ts'
@@ -866,11 +867,11 @@ async function applyManifestEnhancements(params: {
   const detectors = await getGeneratorDetectors(manifests)
   data.detected = computeDetection(fields, collectionConfig, detectors, layerCamelCase)
 
-  // Run contribution functions and attach enhancement results to data
-  // Include: core packages, explicitly enabled features, AND packages whose detector matched fields
+  // Run contribution functions and attach enhancement results to data.
+  // Include: the packages the app extends (#2286 — the only on-switch; core brings
+  // auth/admin/i18n with it) AND packages whose detector matched fields.
   const allContributions = await getGeneratorContributions(manifests)
-  const enabledFeatures = new Set(Object.keys(config?.features || {}))
-  const corePackages = new Set(['crouton-core', 'crouton-auth', 'crouton-admin', 'crouton-i18n', 'crouton-bookings', 'crouton-pages'])
+  const extendedPackages = new Set(resolveExtendedPackages(process.cwd()))
 
   // Auto-include packages that detected matching fields in this collection's schema
   const detected = data.detected as DetectionResult
@@ -881,12 +882,10 @@ async function applyManifestEnhancements(params: {
   if (detected.collabEnabled) detectedPackages.add('crouton-collab')
 
   const contributions = allContributions.filter(({ packageId }) =>
-    corePackages.has(packageId)
-    || enabledFeatures.has(packageId.replace(/^crouton-/, ''))
-    || detectedPackages.has(packageId)
+    extendedPackages.has(packageId) || detectedPackages.has(packageId)
   )
   // Auto-detect formComponent from package contributions (when not explicitly configured).
-  // Scope to `contributions` (core + enabled features + detector-matched), NOT
+  // Scope to `contributions` (extended + detector-matched), NOT
   // `allContributions` — otherwise a package the app doesn't use (e.g. crouton-sales
   // reserving "location"/"product"/"category"/"printer") forces its bespoke form on
   // an unrelated collection and skips Form.vue generation (#558).
@@ -1558,7 +1557,7 @@ async function composeDefaultLayoutStep(allCollections: Array<{ name: string; la
     const { writeDefaultLayout } = await import('./compose-layout.ts')
     const layoutResult = await writeDefaultLayout({
       allCollections,
-      features: config.features,
+      packages: resolveExtendedPackages(process.cwd()),
       cwd: process.cwd(),
     })
     if (layoutResult.written) {
@@ -1646,24 +1645,6 @@ async function loadAndPrepareConfig(options: RunConfigOptions): Promise<Record<s
   return config
 }
 
-// Sync framework packages in the root nuxt.config extends for enabled features.
-async function syncFeaturePackages(config: Record<string, any>): Promise<void> {
-  if (!config.features) return
-
-  console.log('\n' + '═'.repeat(60))
-  console.log('  FRAMEWORK PACKAGES')
-  console.log('═'.repeat(60) + '\n')
-  console.log('↻ Syncing framework packages...')
-  const nuxtConfigPath = path.resolve('nuxt.config.ts')
-  const result = await syncFrameworkPackages(nuxtConfigPath, config.features)
-  if (result.synced) {
-    console.log(`✓ Synced ${result.packages.length} framework packages to extends`)
-    result.packages.forEach(pkg => console.log(`  • ${pkg}`))
-  } else {
-    console.log(`⚠ Could not sync framework packages: ${result.reason}`)
-  }
-}
-
 // Persist prompted feature configs: runtimeConfig into nuxt.config.ts and the
 // feature's config object back into crouton.config.js.
 async function persistPromptedConfigs(
@@ -1710,13 +1691,13 @@ async function persistPromptedConfigs(
   }
 }
 
-// Auto-merge package manifest collections for enabled features
+// Auto-merge package manifest collections for the packages the app extends
 // (may prompt interactively for manifest configuration options).
 async function autoMergeFeatureCollections(config: Record<string, any>, options: RunConfigOptions): Promise<void> {
-  if (!config.features || options.noAutoMerge) return
+  if (options.noAutoMerge) return
 
   const { mergeManifestCollections } = await import('./utils/manifest-merge.ts')
-  const mergeResult = await mergeManifestCollections(config)
+  const mergeResult = await mergeManifestCollections(config, resolveExtendedPackages(process.cwd()))
   const promptedConfigs: import('./utils/manifest-merge.ts').PromptedConfig[] = mergeResult.promptedConfigs
 
   if (mergeResult.merged > 0) {
@@ -1919,10 +1900,7 @@ export async function runConfig(options: RunConfigOptions = {}): Promise<void> {
     // Refuse packaged collections before anything is written (#2278)
     assertNoOwnedCollections(config, await discoverManifests())
 
-    // Sync framework packages based on features config
-    await syncFeaturePackages(config)
-
-    // Auto-merge package manifest collections for enabled features
+    // Auto-merge package manifest collections for the packages the app extends
     await autoMergeFeatureCollections(config, options)
 
     // Handle both config formats

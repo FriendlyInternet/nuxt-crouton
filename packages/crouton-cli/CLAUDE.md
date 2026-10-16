@@ -392,7 +392,8 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/dialects.ts` | PostgreSQL/SQLite configs |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
-| `lib/utils/update-nuxt-config.ts` | Update nuxt.config.ts extends |
+| `lib/utils/update-nuxt-config.ts` | Add/remove a package in nuxt.config.ts extends, add runtimeConfig |
+| `lib/utils/extended-packages.ts` | `resolveExtendedPackages(appDir)` — the crouton package ids an app extends, transitively; the ONE package on-switch the generator reads (#2286) |
 | `lib/utils/update-schema-index.ts` | Update schema exports (`add`/`removeSchemaExport`) + `getSchemaPath` (resolve the barrel modern→legacy). NB the magicast finders handle `$ast` being the `Program` node itself, not only a `File` (#1445 WS4) |
 | `lib/utils/schema-sources.ts` | `resolveSchemaSources(appDir, {dialect})` — reproduces NuxtHub's per-layer `server/db/schema*` glob over the recursive `extends` graph (app root + auto-scanned `layers/*` + `@fyit/*`/subpath extends, realpath-deduped, magicast static parse), WITHOUT a Nuxt process. Feeds drizzle-kit directly; parity-verified vs NuxtHub (epic #1445 WS1a). Duplicate-table gate over its output is WS1b |
 | `lib/utils/duplicate-tables.ts` | `findDuplicateTables(resolvedPaths)` — identity-aware gate over the resolver's output: jiti-imports each file through ONE instance, and fails only when a table name maps to ≥2 DISTINCT drizzle objects (benign same-object re-exports pass; catches distinct dups arriving via `export * from` that a regex misses). drizzle-kit otherwise silently last-wins. Epic #1445 WS1b |
@@ -761,20 +762,18 @@ Contract: `tests/unit/utils/owned-collections.test.ts`.
 
 ## Config File Format
 
-The `crouton.config.js` is a **unified configuration** that serves both:
-- **CLI**: Collection generation (collections, targets, dialect)
-- **Module**: Feature flags (features section, read by `getCroutonLayers()`)
+The `crouton.config.js` describes what to generate (collections, targets, dialect, seed,
+flags). **Which crouton packages the app uses is NOT decided here** — it is the `extends`
+list in `nuxt.config.ts` (#2286, owner decision 2026-10-16). `features.<alias>` only holds a
+package's prompted configuration (see *Package switch* below).
 
 ```javascript
 // crouton.config.js
 export default {
-  // Feature flags - which crouton packages to enable
-  // Used by getCroutonLayers() in nuxt.config.ts
+  // Optional: a package's configuration, written by `crouton config` when the
+  // package's manifest asks questions (e.g. bookings). Not a switch.
   features: {
-    // Core (enabled by default): auth, admin, i18n
-    editor: true,     // TipTap rich text
-    pages: true,      // CMS pages
-    // bookings: true // Enable booking system
+    bookings: { config: { email: { enabled: true } } }
   },
 
   // Collection generation (used by CLI)
@@ -801,28 +800,30 @@ export default {
 }
 ```
 
-### Features Reference
+### Package switch: `extends`, read from manifests (#2286)
 
-**IMPORTANT:** `@fyit/crouton-core` automatically bundles auth, admin, and i18n.
-DO NOT add these to your `nuxt.config.ts` extends array separately - doing so
-causes duplicate layer loading and SSR errors (e.g., `$setup.t is not a function`).
+A package is **on when the app extends it**. `lib/utils/extended-packages.ts`
+(`resolveExtendedPackages(appDir)`) walks `nuxt.config.ts` `extends` statically and
+transitively — `@fyit/crouton-core` brings auth, admin and i18n with it; a path extends counts
+by its `package.json` name; `@fyit/crouton-themes/ko` counts as `crouton-themes` — and returns
+the manifest ids. Every generator decision that used to key on `crouton.config.js features`
+reads that list instead:
 
-| Feature | Default | Description |
-|---------|---------|-------------|
-| `auth` | bundled | Authentication (Better Auth) - **included in core** |
-| `admin` | bundled | Admin dashboard - **included in core** |
-| `i18n` | bundled | Multi-language support - **included in core** |
-| `editor` | `false` | TipTap rich text editor |
-| `pages` | `false` | CMS pages system |
-| `bookings` | `false` | Booking system |
-| `sales` | `false` | Point of Sale |
-| `email` | `false` | Email with Resend |
-| `assets` | `false` | Media library |
-| `events` | `false` | Audit trail |
-| `ai` | `false` | AI/LLM integration (see below) |
-| `collab` | `false` | Real-time collaboration |
+| Decision | Where |
+|---|---|
+| Which packages' generator contributions run (plus detector matches, see below) | `applyManifestEnhancements` |
+| Which packages' manifest `collections` are merged into the config (never a package with `ownsCollections`, #2278) | `lib/utils/manifest-merge.ts` |
+| Whether the default layout is calendar-primary (bookings extended) | `lib/compose-layout.ts` |
+| Which packages `crouton doctor` expects in `dependencies` | `lib/doctor.ts` |
+| Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package unless core bundles it) | `lib/scaffold-app.ts` |
 
-**Auto-detection:** Generator contributions from addon packages (editor, assets, maps, collab) run automatically when the schema's fields match the package's detector patterns — even without an explicit feature flag. For example, a field with `"component": "CroutonEditorSimple"` triggers `crouton-editor` contributions regardless of whether `editor: true` is set. Feature flags are still needed for framework package syncing (adding to `nuxt.config.ts` extends).
+The generator **never writes `extends`** from a features block any more (the hardcoded
+`framework-packages.ts` table and `syncFrameworkPackages` are gone). Add a package with
+`crouton add <name>` or by editing `extends`. `@fyit/crouton-core` bundles auth, admin and i18n —
+don't list those separately (duplicate layer loading, `$setup.t is not a function`).
+Contract: `tests/unit/utils/extended-packages.test.ts`, `tests/unit/utils/manifest-merge.test.ts`.
+
+**Auto-detection:** Generator contributions from addon packages (editor, assets, maps, collab) also run when the schema's fields match the package's detector patterns — even if the app doesn't extend the package yet. For example, a field with `"component": "CroutonEditorSimple"` triggers `crouton-editor` contributions.
 
 ### AI Feature Configuration
 

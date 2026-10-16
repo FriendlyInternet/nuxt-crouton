@@ -1,15 +1,17 @@
 /**
  * Auto-merge package manifest collections into CLI generation config.
  *
- * When `config.features` enables a package (e.g., `bookings: true`), this
+ * For every package the app EXTENDS (#2286 — `extends` is the only package
+ * on-switch; `extendedPackages` comes from resolveExtendedPackages), this
  * utility reads the package's crouton.manifest.ts and adds its collections
  * to `config.collections` and `config.targets` so the generator creates
  * the missing CRUD routes.
  *
- * If a manifest declares `configuration` options and the feature is a simple
- * boolean (`true`), the user is interactively prompted for each option.
- * The answers are folded into the feature config so that `isConditionMet()`
- * resolves conditional collections automatically.
+ * If a manifest declares `configuration` options and `config.features.<alias>`
+ * holds no config object yet, the user is interactively prompted for each
+ * option. The answers are stored under `config.features.<alias>` — the one
+ * thing `features` still carries — so that `isConditionMet()` resolves
+ * conditional collections automatically.
  *
  * User-defined collections always win — we never overwrite them.
  */
@@ -252,10 +254,10 @@ function buildRuntimeAndEnvHints(
  * When a manifest has `configuration` options and the feature is a simple
  * boolean, prompts the user interactively and upgrades the feature config.
  */
-export async function mergeManifestCollections(config: CroutonConfig): Promise<MergeResult> {
+export async function mergeManifestCollections(config: CroutonConfig, extendedPackages: string[]): Promise<MergeResult> {
   const result: MergeResult = { merged: 0, collections: [], skipped: [], promptedConfigs: [] }
 
-  if (!config.features) return result
+  if (extendedPackages.length === 0) return result
 
   const packagesDir = await findPackagesDir(process.cwd())
   if (!packagesDir) return result
@@ -283,13 +285,15 @@ export async function mergeManifestCollections(config: CroutonConfig): Promise<M
     if (!manifest.collections || manifest.collections.length === 0) continue
     // The package ships these itself; generating them would fork them (#2278).
     if (manifest.ownsCollections) continue
+    // Only packages the app extends (#2286).
+    if (!extendedPackages.includes(manifest.id)) continue
 
     // Derive feature alias from manifest id (e.g., 'crouton-bookings' → 'bookings')
     const featureKey = manifest.id.replace(/^crouton-/, '')
-    let featureConfig = config.features[featureKey]
-    if (!featureConfig) continue // feature not enabled
+    if (!config.features) config.features = {}
+    let featureConfig: boolean | Record<string, unknown> = config.features[featureKey] || true
 
-    // Interactive prompting: if feature is boolean `true` and manifest has configuration
+    // Interactive prompting: no config object yet and the manifest has configuration
     if (featureConfig === true && manifest.configuration && Object.keys(manifest.configuration).length > 0) {
       if (isInteractive) {
         const configObj = await promptForConfiguration(featureKey, manifest.id, manifest.configuration)
