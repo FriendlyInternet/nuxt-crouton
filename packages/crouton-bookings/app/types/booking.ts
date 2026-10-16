@@ -17,6 +17,10 @@ export interface EmailTriggerStatus {
   sentAt?: string | null
   /** For scheduled emails like reminders - when they will be sent */
   scheduledFor?: string | null
+  /** Why the latest attempt failed (provider message), when it did */
+  error?: string | null
+  /** When the latest send attempt happened */
+  attemptedAt?: string | null
 }
 
 /**

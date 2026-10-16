@@ -32,6 +32,8 @@ interface ActivityItem {
   icon: string
   type: 'booking' | 'email'
   failed?: boolean
+  /** Why it failed (provider message), shown under the row */
+  detail?: string | null
 }
 
 // Build combined timeline from booking data and email details
@@ -54,28 +56,31 @@ const activityItems = computed<ActivityItem[]>(() => {
   // 2. Email events from emailDetails
   if (booking.emailDetails) {
     for (const detail of booking.emailDetails) {
-      if (detail.status === 'sent' && detail.sentAt) {
-        const emailType = detail.triggerType === 'booking_created' ? t('bookings.activity.confirmation')
-          : detail.triggerType === 'reminder_before' ? t('bookings.activity.reminder')
+      const emailType = detail.triggerType === 'booking_created' ? t('bookings.activity.confirmation')
+        : detail.triggerType === 'reminder_before' ? t('bookings.activity.reminder')
           : detail.triggerType === 'follow_up_after' ? t('bookings.activity.followUp')
-          : detail.triggerType === 'booking_cancelled' ? t('bookings.activity.cancellation')
-          : ''
+            : detail.triggerType === 'booking_cancelled' ? t('bookings.activity.cancellation')
+              : t('bookings.activity.emailLabel')
+      const emailName = emailType.charAt(0).toUpperCase() + emailType.slice(1)
+      if (detail.status === 'sent' && detail.sentAt) {
         items.push({
           date: new Date(detail.sentAt),
-          username: emailType.charAt(0).toUpperCase() + emailType.slice(1),
+          username: emailName,
           action: t('bookings.activity.emailSent'),
           icon: getEmailIcon(detail.triggerType, detail.status),
           type: 'email',
         })
       }
       else if (detail.status === 'failed') {
+        const attempted = detail.attemptedAt || detail.sentAt
         items.push({
-          date: detail.sentAt ? new Date(detail.sentAt) : new Date(),
-          username: t('bookings.activity.emailLabel'),
+          date: attempted ? new Date(attempted) : new Date(),
+          username: emailName,
           action: t('bookings.activity.failedToSend'),
           icon: getEmailIcon(detail.triggerType, detail.status),
           type: 'email',
           failed: true,
+          detail: detail.error,
         })
       }
     }
@@ -151,6 +156,12 @@ const activeValue = computed(() => {
       <template #title="{ item }">
         <span class="font-medium" :class="item.failed ? 'text-error' : ''">{{ item.username }}</span>
         <span class="font-normal" :class="item.failed ? 'text-error' : 'text-muted'">&nbsp;{{ item.action }}</span>
+      </template>
+
+      <template #description="{ item }">
+        <p v-if="item.detail" class="text-xs text-muted break-words">
+          {{ item.detail }}
+        </p>
       </template>
 
       <template #date="{ item }">
