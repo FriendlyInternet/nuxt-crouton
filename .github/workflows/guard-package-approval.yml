@@ -16,7 +16,7 @@ jobs:
     name: No committed approval file
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Fail if .claude/.package-edit-approved is committed
         run: |

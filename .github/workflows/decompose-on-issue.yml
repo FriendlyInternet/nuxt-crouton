@@ -38,7 +38,7 @@ jobs:
       issues: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
 
@@ -58,13 +58,13 @@ jobs:
       # a bare add succeeds, warns nothing, and the card never moves. Remove first, exactly as
       # comment-dispatch/resume-on-comment/canary/fix-ci-on-failure already do (the #1750 lesson).
       # Still safe re: re-trigger — both events name `status:in-progress`, not `delegate`.
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
       - name: Mark the issue in-progress
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -118,7 +118,7 @@ jobs:
       # the claude OIDC), so it never trips the bot-actor guard.
       - name: Artifact-gate — fail if the agent produced nothing
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           # #661: let the gate read WHY the agent produced nothing (billing / underspecified /
           # genuine no-op) so the failure comment is actionable instead of a generic message.
@@ -284,7 +284,7 @@ jobs:
       # cancellation (the artifact-gate `if: always()` above already runs in that case).
       - name: Flag a timeout / cancellation
         if: cancelled()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const issue_number = context.payload.issue.number

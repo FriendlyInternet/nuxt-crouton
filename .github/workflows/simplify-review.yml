@@ -44,7 +44,7 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # Full history so the agent can diff the PR against its base branch.
           fetch-depth: 0
@@ -131,7 +131,7 @@ jobs:
             --out finding-candidate.json || true
       - name: Upload finding candidate
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: loop-station-finding-${{ github.run_id }}
           path: finding-candidate.json
