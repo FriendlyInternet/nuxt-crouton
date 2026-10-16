@@ -23,7 +23,8 @@
       <img
         v-else
         :src="model"
-        class="h-full w-full object-cover"
+        class="h-full w-full"
+        :class="fit === 'contain' ? 'object-contain p-3' : 'object-cover'"
       >
     </button>
 
@@ -56,10 +57,13 @@ const { t } = useT()
 
 interface Props {
   crop?: boolean | { aspectRatio?: number | AspectRatioPreset, circular?: boolean }
+  /** Preview fit: 'cover' (default, photos) or 'contain' (logos — show the whole image) */
+  fit?: 'cover' | 'contain'
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  crop: false
+  crop: false,
+  fit: 'cover'
 })
 
 const model = defineModel<string | undefined>()
