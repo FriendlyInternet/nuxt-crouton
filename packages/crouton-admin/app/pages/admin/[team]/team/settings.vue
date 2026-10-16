@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useMounted } from '@vueuse/core'
 /**
  * Team Settings Page
  *
@@ -10,6 +11,9 @@
 const { teamSlug } = useTeamContext()
 const { t } = useT()
 const { currentTeam, isOwner, deleteTeam, isAdmin } = useTeam()
+// Role is only known client-side: render the access-denied branch after
+// mount so SSR and hydration agree (#2271). Middleware/API stay the guard.
+const isMounted = useMounted()
 const notify = useNotify()
 
 // Show delete confirmation modal
@@ -39,7 +43,7 @@ function handleSaved() {
   <div class="p-6">
     <!-- Not a team admin -->
     <div
-      v-if="!isAdmin"
+      v-if="isMounted && !isAdmin"
       class="text-center py-8"
     >
       <UIcon
