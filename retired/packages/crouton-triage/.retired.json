@@ -1,6 +1,0 @@
-{
-  "archivedAt": "2026-10-14T18:30:00Z",
-  "sourceEpic": null,
-  "sourceDir": "packages/crouton-triage",
-  "reason": "Only consumer (apps/triage) retired the same day (owner, 2026-10-14)."
-}

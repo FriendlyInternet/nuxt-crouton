@@ -20,7 +20,8 @@ writes them to `data/changelog-releases.json`. Runs daily via the
 ### What was going to replace it (historical — thinkgraph is retired, #1043)
 
 The plan was to do the same job inside the `thinkgraph` app. That app was archived
-to `retired/pocs/` on 2026-07-01, so none of the below is running. Kept only as a
+to `retired/pocs/` on 2026-07-01 and deleted in #2291 (recover from git history at
+`49691dba2`), so none of the below is running. Kept only as a
 design sketch in case the job ever moves off a committed JSON file:
 
 - **Storage**: D1 instead of a JSON file in this repo. Two collections:

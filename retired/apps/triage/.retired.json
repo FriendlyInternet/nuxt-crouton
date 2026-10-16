@@ -1,6 +1,0 @@
-{
-  "archivedAt": "2026-10-14T18:00:00Z",
-  "sourceEpic": null,
-  "sourceDir": "apps/triage",
-  "reason": "No longer used (owner, 2026-10-14). Cloudflare staging + production torn down; production D1 exported to ~/Backups/crouton-triage/triage-db-2026-10-14.sql on the owner's Mac."
-}
