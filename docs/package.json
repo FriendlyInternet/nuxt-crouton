@@ -18,7 +18,7 @@
     "@nuxt/content": "^3.7.1",
     "@nuxt/image": "^2.1.0",
     "@nuxt/ui": "catalog:",
-    "@nuxtjs/mcp-toolkit": "^0.5.2",
+    "@nuxtjs/mcp-toolkit": "^0.24.2",
     "better-sqlite3": "^12.4.1",
     "nuxt": "catalog:",
     "nuxt-llms": "0.1.3"
