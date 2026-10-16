@@ -106,7 +106,7 @@ Test files per package — `*.test.ts`/`*.spec.ts` excluding node_modules/dist/.
 | crouton-collab | 6 | | crouton-printing | 5 |
 | crouton-i18n | 4 | | crouton-triage | 3 |
 
-**Zero unit tests at the snapshot:** `crouton` (meta), `crouton-admin`, `crouton-ai`, `crouton-atelier`, `crouton-audio`, `crouton-bookings`, `crouton-charts`, `crouton-designer`, `crouton-devtools`, `crouton-editor`, `crouton-email`, `crouton-events`, `crouton-maps`, `crouton-mcp-toolkit`, `crouton-pages`, `crouton-themes`, `crouton-three`.
+**Zero unit tests at the snapshot:** `crouton` (meta), `crouton-admin`, `crouton-ai`, `crouton-audio`, `crouton-bookings`, `crouton-charts`, `crouton-devtools`, `crouton-editor`, `crouton-email`, `crouton-events`, `crouton-maps`, `crouton-mcp-toolkit`, `crouton-pages`, `crouton-themes`, `crouton-three`.
 
 Mitigations and their limits:
 

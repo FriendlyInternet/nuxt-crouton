@@ -1117,7 +1117,6 @@ The generator auto-detects field types and generates appropriate data:
 | MCP Server | `packages/crouton-mcp/` | CLI commands, field types change |
 | Auth Package | `packages/crouton-auth/CLAUDE.md` | If `@crouton/auth/server` exports change |
 | External Docs | `docs/content/` | Any user-facing change |
-| FormPreview.vue | `packages/crouton-designer/.../FormPreview.vue` | Form component mapping changes |
 
 ### Step 1: Classify Your Change
 
