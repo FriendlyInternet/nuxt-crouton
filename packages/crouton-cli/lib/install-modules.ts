@@ -44,7 +44,6 @@ const MODULES: Record<string, ModuleInfo> = {
     features: [
       '✨ CroutonFormActionButton component',
       '✨ CroutonFormReferenceSelect component',
-      '✨ FormExpandableSlideOver component',
       '✨ Table components with search and pagination',
       '✨ Crouton composables (useCrouton, useCollections)'
     ]

@@ -29,8 +29,6 @@
     "build": "unbuild",
     "dev": "unbuild --stub",
     "prepack": "pnpm build",
-    "sync-stub": "tsx scripts/sync-stub.ts",
-    "sync-stub:fix": "tsx scripts/sync-stub.ts --fix",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -38,11 +36,9 @@
     "app",
     "server",
     "shared",
-    "registry",
     "types",
     "dist",
     "nuxt.config.ts",
-    "crouton-team-auth.d.ts",
     "crouton-hooks.d.ts"
   ],
   "keywords": [

@@ -89,7 +89,7 @@ export async function useCollectionQuery(
     throw new Error(`Collection "${collection}" not registered`)
   }
 
-  const apiPath = getProxiedEndpoint(config, config.apiPath || collection)
+  const apiPath = config.apiPath || collection
 
   // Pagination state (inert unless options.pagination is set)
   const paginationEnabled = !!options.pagination
@@ -196,8 +196,7 @@ export async function useCollectionQuery(
       return []
     }
 
-    // Apply proxy transform if configured
-    return applyProxyTransform(rawItems, config)
+    return rawItems
   })
 
   // Total matching rows: prefer the server's `{ total }`, fall back to array length
