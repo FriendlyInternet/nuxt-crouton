@@ -18,6 +18,7 @@ Tag a rekordbox library into genre **piles** on the phone. Epic #2204. Brief: th
 
 ## Gotchas
 - Uploads stream straight into R2 through a `FixedLengthStream`: R2 refuses a stream of unknown length, and a Worker can't buffer 100 MB. Playback serves Range requests itself, because `blob.serve` sends the whole file and the deck starts at 30%. Local `nuxt dev` falls back to hub:blob's fs driver with no ranges. Test the real path with a `cloudflare_module` build plus `wrangler dev`.
+- Local dev's fs KV ignores `ttl`, so KV caches store their own expiry (`server/utils/dropbox.ts`); otherwise a stale Dropbox token breaks every play locally (401).
 - Constants from `server/utils` aren't auto-imported at runtime (typecheck passes, the Worker throws `X is not defined`), so import them explicitly.
 - D1 caps a query at 100 bound params, **including** `onConflictDoUpdate` set values (`rowsPerInsert(..., fixedParams)`). Local SQLite can't reproduce it.
 - Dropbox file names are lowercased and truncated: match on the normalised basename or a ≥12-char prefix, and prefer files without `(2)`.
