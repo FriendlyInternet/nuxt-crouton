@@ -46,6 +46,8 @@ function togglePile(pile: CratePile) {
   toggle(current.value, pile)
 }
 
+// Card swiped down: the pile list takes the screen and a tap opens a pile instead of filing.
+const deckCollapsed = ref(false)
 const deck = ref<{ playSrc: (url: string) => void, pause: () => void }>()
 
 // ── Listen to a pile (#2221) ──────────────────────────────────────────────
@@ -203,9 +205,9 @@ async function onFiles(event: Event) {
             :pile="pile"
             :count="counts.get(pile.id) ?? 0"
             :ticked="!!current && isIn(current, pile)"
-            :disabled="!current"
-            :glow="hints.glow(pile)"
-            @toggle="togglePile(pile)"
+            :disabled="!current && !deckCollapsed"
+            :glow="deckCollapsed ? null : hints.glow(pile)"
+            @toggle="deckCollapsed ? openLevel(pile) : togglePile(pile)"
             @open="openLevel(pile)"
           />
           <UButton
@@ -222,6 +224,7 @@ async function onFiles(event: Event) {
 
     <CrateDeck
       ref="deck"
+      v-model:collapsed="deckCollapsed"
       :track="current"
       :prev-track="prevTrack"
       :next-track="nextTrack"

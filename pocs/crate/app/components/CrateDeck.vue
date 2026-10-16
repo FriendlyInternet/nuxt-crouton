@@ -70,6 +70,19 @@ function onSlide(index: number) {
 }
 watch(() => props.track?.id, () => carousel.value?.emblaApi?.scrollTo(1, true), { flush: 'post' })
 
+// Swipe up = ✓ Done; swipe down = tuck the card away to look at the piles (the music keeps
+// playing). Embla only takes sideways drags, so the two never fight.
+const collapsed = defineModel<boolean>('collapsed', { default: false })
+const card = useTemplateRef<HTMLElement>('card')
+useSwipe(card, {
+  onSwipeEnd(_e, direction) {
+    if (direction === 'up') emit('done')
+    else if (direction === 'down') collapsed.value = true
+  },
+})
+const bar = useTemplateRef<HTMLElement>('bar')
+useSwipe(bar, { onSwipeEnd: (_e, direction) => { if (direction === 'up') collapsed.value = false } })
+
 function seek(seconds: number) {
   if (audio.value) audio.value.currentTime = seconds
 }
@@ -83,14 +96,40 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
 </script>
 
 <template>
-  <!-- Bottom pane, kassa-cart style: a borderless UCard, tight padding — every saved pixel
-       goes to the pile list above. -->
-  <UCard :ui="{ root: 'rounded-none ring-0 border-t border-default bg-elevated', body: 'space-y-2.5 px-3 py-3 sm:px-3 sm:py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]' }">
-    <template v-if="track">
-      <UCarousel ref="carousel" :items="slides" @select="onSlide" :start-index="1" :ui="{ container: '-ms-6', item: 'ps-6' }">
-        <template #default="{ item, index }">
+  <!-- Bottom pane: each track is its own card, with the neighbours peeking in at the edges so
+       it reads as "swipe me". -->
+  <div class="shrink-0 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+    <!-- The whole card swipes: left = next track, right = previous. Drags that start on the
+         seek bar or a sideways-scrolling chip row stay theirs (data-no-swipe). -->
+    <!-- Tucked away: one slim bar; tap or swipe up to bring the card back. -->
+    <div v-if="track && collapsed" ref="bar" class="px-3">
+      <UButton
+        block
+        color="neutral"
+        variant="soft"
+        trailing-icon="i-lucide-chevron-up"
+        :icon="playing ? 'i-lucide-audio-lines' : 'i-lucide-music'"
+        :label="`${track.name} · ${track.artist || 'Unknown artist'}`"
+        :ui="{ label: 'truncate' }"
+        aria-label="Show the track card"
+        @click="collapsed = false"
+      />
+    </div>
+    <UCarousel
+      v-else-if="track"
+      ref="carousel"
+      :items="slides"
+      :start-index="1"
+      :contain-scroll="false"
+      class="select-none"
+      :watch-drag="(_api, evt) => !(evt.target as HTMLElement | null)?.closest('[data-no-swipe]')"
+      :ui="{ container: '-ms-3 items-stretch', item: 'ps-3 basis-[calc(100%-2.5rem)] max-w-2xl' }"
+      @select="onSlide"
+    >
+      <template #default="{ item, index }">
+        <div v-if="item && index === 1" ref="card" class="h-full">
+        <UCard class="h-full rounded-2xl shadow-lg" :ui="{ root: 'bg-elevated', body: 'space-y-2.5 p-3 sm:p-3' }">
           <CrateNowPlaying
-            v-if="item && index === 1"
             :track="item"
             :meta="metaFor(item, true)"
             :playing="playing"
@@ -103,27 +142,28 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
             @done="emit('done')"
             @edit="emit('edit')"
           />
-          <!-- A neighbour, shown while it slides in: same card, controls inert. -->
+
+          <USlider v-if="src" data-no-swipe :model-value="position" :max="duration || 1" :step="1" size="sm" aria-label="Seek" @update:model-value="(v) => v !== undefined && seek(v)" />
+
+          <slot name="hints" />
+
+          <CrateInRow v-if="inPiles.length || otherTags.length" :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" @remove="(p) => emit('remove', p)" />
+        </UCard>
+        </div>
+        <!-- A neighbour, shown while it slides in: its title card, controls inert. -->
+        <UCard v-else-if="item" class="h-full rounded-2xl opacity-50" :ui="{ root: 'bg-elevated', body: 'p-3 sm:p-3' }" inert>
           <CrateNowPlaying
-            v-else-if="item"
             :track="item"
             :meta="metaFor(item, false)"
             :playing="false"
             :has-audio="item.hasAudio"
             :can-next="false"
             :checked="isChecked(item)"
-            inert
           />
-        </template>
-      </UCarousel>
-
-      <USlider v-if="src" :model-value="position" :max="duration || 1" :step="1" size="sm" aria-label="Seek" @update:model-value="(v) => v !== undefined && seek(v)" />
-
-      <slot name="hints" />
-
-      <CrateInRow v-if="inPiles.length || otherTags.length" :in-piles="inPiles" :other-tags="otherTags" :path-label="pathLabel" @remove="(p) => emit('remove', p)" />
-    </template>
-    <p v-else class="py-4 text-center text-sm text-muted">Nothing left here — pick a track from the list.</p>
+        </UCard>
+      </template>
+    </UCarousel>
+    <p v-else class="px-3 py-4 text-center text-sm text-muted">Nothing left here — pick a track from the list.</p>
 
     <audio
       ref="audio"
@@ -135,5 +175,5 @@ defineExpose({ playSrc, pause: () => audio.value?.pause() })
       @pause="playing = false"
       @ended="playing = false"
     />
-  </UCard>
+  </div>
 </template>
