@@ -34,7 +34,7 @@ concurrency:
 
 jobs:
   measure:
-    runs-on: ${{ vars.BUILD_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
       # Push with the Harness App, not GITHUB_TOKEN — see loop-station-inventory.yml (#1133).

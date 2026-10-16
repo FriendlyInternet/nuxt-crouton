@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   advisor:
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     # id-token MUST be at the job level for claude-code-action's OIDC (see claude.yml).
     permissions:

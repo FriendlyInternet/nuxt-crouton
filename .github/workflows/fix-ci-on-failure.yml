@@ -49,7 +49,7 @@ jobs:
       github.event.workflow_run.conclusion == 'failure' &&
       (startsWith(github.event.workflow_run.head_branch, 'claude/issue-') ||
        startsWith(github.event.workflow_run.head_branch, 'work-'))
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level — GitHub job-level `permissions` fully
     # OVERRIDES a workflow-level block, so id-token: write has to be here or

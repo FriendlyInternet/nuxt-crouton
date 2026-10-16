@@ -26,7 +26,7 @@ jobs:
       vars.AGENT_HARNESS != 'pi' &&
       ((github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
        (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate')))
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
     # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to

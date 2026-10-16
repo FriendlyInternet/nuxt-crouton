@@ -100,12 +100,12 @@ on:
 jobs:
   deploy:
     name: Deploy ${{ inputs.app }} (${{ inputs.environment }})
-    # Runs on vars.BUILD_RUNNER (unset = ubuntu-latest). Deploys use no AI, so they don't
+    # Runs on vars.HOSTED_RUNNER (unset = ubuntu-latest). Deploys use no AI, so they don't
     # need the subscription box behind AGENT_RUNNER — split off when the mac-mini went
     # away (#2275; history #654/#658). The fork guard implements the runbook §5 policy:
     # deploy-pocs.yml calls this on `pull_request` of pocs/**, so a fork PR must never
-    # reach a self-hosted box if BUILD_RUNNER is ever pointed at one.
-    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.BUILD_RUNNER || 'ubuntu-latest' }}
+    # reach a self-hosted box if HOSTED_RUNNER is ever pointed at one.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     # GitHub deployment environment — kept as production/staging so any
     # environment-scoped secrets/protection from the existing setup still apply
     # (the Workers target is staging/prod independently, via inputs.environment).

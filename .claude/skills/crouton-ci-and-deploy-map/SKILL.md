@@ -156,7 +156,7 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 
 ### Actions vars
 
-`AGENT_RUNNER` (AI/agent jobs → the self-hosted subscription box; default ubuntu-latest) · `BUILD_RUNNER` (non-AI jobs: deploys, bundle-budget, unlighthouse…; default ubuntu-latest, #2275) · `AGENT_HARNESS` (`pi` opt-in) · `CLEANUP_BRANCHES_APPLY` · `LABEL_READY_EPICS_APPLY` (write-gates for otherwise dry-run jobs) · `DIGEST_REPORT_EMAIL` / `DIGEST_EMAIL_FROM` / `RESEND_FROM` / `RED_TEAM_REPORT_EMAIL` (email rails) · `PROJECT_NAME` · `UNLIGHTHOUSE_SITE`.
+`AGENT_RUNNER` (only the pi.dev workers: work-issue-pidev, decompose-on-issue-pidev, a11y-daily-pidev; default ubuntu-latest) · `HOSTED_RUNNER` (everything else that was on the mac-mini — deploys and the claude-code-action reviews, which run on the subscription via `CLAUDE_CODE_OAUTH_TOKEN` on any machine; default ubuntu-latest, #2275) · `AGENT_HARNESS` (`pi` opt-in) · `CLEANUP_BRANCHES_APPLY` · `LABEL_READY_EPICS_APPLY` (write-gates for otherwise dry-run jobs) · `DIGEST_REPORT_EMAIL` / `DIGEST_EMAIL_FROM` / `RESEND_FROM` / `RED_TEAM_REPORT_EMAIL` (email rails) · `PROJECT_NAME` · `UNLIGHTHOUSE_SITE`.
 
 ### Three auth rules every agent workflow obeys
 

@@ -30,7 +30,7 @@ concurrency:
 
 jobs:
   unlighthouse:
-    runs-on: ${{ vars.BUILD_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     permissions:
       contents: read

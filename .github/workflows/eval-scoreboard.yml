@@ -25,7 +25,7 @@ concurrency:
 
 jobs:
   scoreboard:
-    runs-on: ${{ vars.BUILD_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
         with:

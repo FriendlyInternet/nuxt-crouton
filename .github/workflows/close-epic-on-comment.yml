@@ -30,7 +30,7 @@ jobs:
       contains(github.event.issue.labels.*.name, 'epic') &&
       contains(github.event.issue.labels.*.name, 'status:ready-to-close') &&
       contains(github.event.comment.body, '/close-epic')
-    runs-on: ${{ vars.BUILD_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
     permissions:
       issues: write

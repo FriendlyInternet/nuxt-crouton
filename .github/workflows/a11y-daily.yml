@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   a11y-daily:
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
     # Job-level permissions (see a11y.yml for why id-token MUST be here). `issues: write`
     # because — unlike the security sweep — this workflow DOES post to GitHub (standing
