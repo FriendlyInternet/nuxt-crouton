@@ -2,7 +2,16 @@
 import { VMap } from '@geoql/v-maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import '@geoql/v-maplibre/style.css'
+import { getWorkerUrl, setWorkerUrl } from 'maplibre-gl'
 import type { LngLatLike, Map as MaplibreMap } from 'maplibre-gl'
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
+
+// @geoql/v-maplibre ships its own prebuilt worker (v3.0.1 → maplibre 6.10.0) and
+// installs it unless a worker URL is already set. A worker from a different
+// maplibre version than the main thread fails every vector tile ("Cannot read
+// properties of undefined (reading 'width')"), so point maplibre at the worker
+// from the SAME maplibre-gl we load. (#2291)
+if (import.meta.client && !getWorkerUrl()) setWorkerUrl(maplibreWorkerUrl)
 
 interface Props {
   /** Map container ID (default: auto-generated) — must be unique per map */

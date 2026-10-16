@@ -185,8 +185,14 @@ Run Nominatim and set `NOMINATIM_URL` — the server proxy uses it transparently
 ## Dependencies
 
 - **Extends**: `@fyit/crouton`
-- **Core**: `@geoql/v-maplibre ^2.0.1`, `maplibre-gl ^5.24.0`
+- **Core**: `@geoql/v-maplibre ^3.0.1`, `maplibre-gl ^6.14.0` (v6 is ESM-only:
+  import named exports, there is no `default` export)
 - **Peer deps**: `nuxt ^4.0.0`, `@nuxt/ui ^4.3.0`
+- **Worker pin (#2291):** `@geoql/v-maplibre` bundles its own maplibre worker
+  (3.0.1 → maplibre 6.10.0). `Map.vue` sets maplibre's own worker
+  (`maplibre-gl/dist/maplibre-gl-worker.mjs?url`) first, so the worker always
+  matches the installed `maplibre-gl`. A mismatched worker fails every tile with
+  "reading 'width'" and the map shows "Failed to load map".
 - `@geoql/v-maplibre`'s deck.gl / GeoTIFF / LiDAR / wind peers are **optional** —
   not installed unless you import those subpaths (we only use `VMap`).
 
