@@ -27,8 +27,8 @@
   >
     <CroutonFormLayout :tabs="tabs" :navigation-items="navigationItems" :tab-errors="tabErrorCounts" v-model="activeSection">
       <template #main="{ activeSection }">
-        <!-- Settings -->
-        <div v-show="activeSection === 'settings'" class="flex flex-col gap-6 p-1">
+        <!-- Location -->
+        <div v-show="activeSection === 'location'" class="flex flex-col gap-6 p-1">
           <fieldset class="flex flex-col gap-4">
             <legend class="text-sm font-semibold text-gray-900 dark:text-white mb-1">{{ t('bookings.locationForm.locationDetails') }}</legend>
             <p class="text-sm text-gray-500 -mt-1">{{ t('bookings.locationForm.colorHint') }}</p>
@@ -82,9 +82,10 @@
               </p>
             </UFormField>
           </fieldset>
+        </div>
 
-          <USeparator />
-
+        <!-- Settings -->
+        <div v-show="activeSection === 'settings'" class="flex flex-col gap-6 p-1">
           <!-- Access Control -->
           <fieldset class="flex flex-col gap-4">
             <legend class="text-sm font-semibold text-gray-900 dark:text-white mb-1">{{ t('bookings.locationForm.accessControl') }}</legend>
@@ -246,25 +247,26 @@ const memberItems = computed(() =>
   }))
 )
 
-// Form layout: 3 tabs
+// Form layout: 4 tabs
 const navigationItems = computed(() => [
+  { label: t('bookings.locationForm.tabLocation'), value: 'location', icon: 'i-lucide-map-pin' },
   { label: t('bookings.locationForm.tabSettings'), value: 'settings', icon: 'i-lucide-settings' },
   { label: t('bookings.locationForm.tabBookings'), value: 'bookings', icon: 'i-lucide-calendar' },
   { label: t('bookings.locationForm.tabContent'), value: 'content', icon: 'i-lucide-globe' }
 ])
 
 const tabs = ref(true)
-const activeSection = ref('settings')
+const activeSection = ref('location')
 
 // Map field names to tabs for validation error indicators
 const fieldToGroup: Record<string, string> = {
-  title: 'settings',
-  color: 'settings',
-  street: 'settings',
-  zip: 'settings',
-  city: 'settings',
-  content: 'settings',
-  location: 'settings',
+  title: 'location',
+  color: 'location',
+  street: 'location',
+  zip: 'location',
+  city: 'location',
+  content: 'location',
+  location: 'location',
   allowedMemberIds: 'settings',
   inventoryMode: 'bookings',
   quantity: 'bookings',

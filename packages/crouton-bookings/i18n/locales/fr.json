@@ -199,6 +199,7 @@
       "slots": "Créneaux",
       "addTimeSlot": "Ajouter un créneau",
       "translations": "Traductions",
+      "tabLocation": "Lieu",
       "tabSettings": "Paramètres",
       "tabBookings": "Réservations",
       "tabContent": "Contenu"

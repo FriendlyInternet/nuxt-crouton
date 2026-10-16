@@ -199,6 +199,7 @@
       "slots": "Slots",
       "addTimeSlot": "Add Time Slot",
       "translations": "Translations",
+      "tabLocation": "Location",
       "tabSettings": "Settings",
       "tabBookings": "Bookings",
       "tabContent": "Content"
