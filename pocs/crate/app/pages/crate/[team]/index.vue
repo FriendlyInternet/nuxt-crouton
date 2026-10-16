@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { CratePile, CrateTrack } from '~/composables/useCrate'
+import type { CratePile, CrateTrack, TopTray } from '~/composables/useCrate'
+import { isChecked } from '~/composables/useCrate'
 import type { HintWord } from '~/composables/useCrateHints'
 
 definePageMeta({ layout: false, middleware: ['auth'] })
@@ -14,7 +15,9 @@ const levelId = ref<string | null>(null)
 const level = computed(() => crate.piles.value.find(p => p.id === levelId.value) ?? null)
 const shownPiles = computed(() => children(levelId.value))
 const trail = computed(() => level.value ? [...ancestors(level.value), level.value] : [])
-const trayTracks = computed(() => tray(level.value))
+// Top level shows the inbox, or every track not yet checked in crate (#2237) — remembered per device.
+const topTray = useLocalStorage<TopTray>('crate:top-tray', 'inbox')
+const trayTracks = computed(() => tray(level.value, topTray.value))
 const main = ref<HTMLElement>()
 function goUp() {
   const parentId = level.value?.parentId
@@ -43,6 +46,8 @@ function togglePile(pile: CratePile) {
   toggle(current.value, pile)
 }
 
+// Card swiped down: the pile list takes the screen and a tap opens a pile instead of filing.
+const deckCollapsed = ref(false)
 const deck = ref<{ playSrc: (url: string) => void, pause: () => void }>()
 
 // ── Listen to a pile (#2221) ──────────────────────────────────────────────
@@ -60,20 +65,46 @@ function listen() {
   listener.value?.start()
 }
 
-function show(track: CrateTrack | undefined, autoplay: boolean) {
+// Previous = the tracks you actually came through (a filed one has left the tray, but you
+// can still swipe back to it); with no history yet, the one above it in the tray.
+const history = ref<string[]>([])
+const prevTrack = computed(() => {
+  const id = history.value.at(-1)
+  if (id) return tracks.value.find(t => t.id === id) ?? null
+  const at = trayTracks.value.findIndex(t => t.id === current.value?.id)
+  return at > 0 ? trayTracks.value[at - 1]! : null
+})
+const nextTrack = computed(() => {
+  const list = trayTracks.value
+  const at = list.findIndex(t => t.id === current.value?.id)
+  // Still in the tray → the one after it; filed away → whatever now sits where it was.
+  const target = list[at >= 0 ? at + 1 : trayIndex.value]
+  return target && target.id !== current.value?.id ? target : null
+})
+
+function show(track: CrateTrack | undefined, autoplay: boolean, remember = true) {
   if (!track) return
+  if (remember && current.value && current.value.id !== track.id) history.value = [...history.value.slice(-49), current.value.id]
   currentId.value = track.id
   const at = trayTracks.value.findIndex(t => t.id === track.id)
   if (at >= 0) trayIndex.value = at
   if (autoplay && track.hasAudio) deck.value?.playSrc(audioUrl(track))
 }
+/** ✓ Done: mark the shown track as checked in crate, then move on like Next. */
+async function done() {
+  pin()
+  if (current.value) await crate.markChecked(current.value)
+  next()
+}
 function next() {
   pin()
-  const list = trayTracks.value
-  const at = list.findIndex(t => t.id === currentId.value)
-  // Still in the tray → the one after it; filed away → whatever now sits where it was.
-  const target = at >= 0 ? at + 1 : trayIndex.value
-  show(list[Math.min(list.length - 1, target)], true)
+  show(nextTrack.value ?? undefined, true)
+}
+function previous() {
+  pin()
+  const target = prevTrack.value
+  if (history.value.at(-1) === target?.id) history.value = history.value.slice(0, -1)
+  show(target ?? undefined, true, false)
 }
 
 // ── Genre hints + new piles (#2212) ───────────────────────────────────────
@@ -108,7 +139,34 @@ function pick(track: CrateTrack) {
   listOpen.value = false
   show(track, true)
 }
-const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 'Inbox')
+const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : { inbox: 'Inbox', unchecked: 'To check', uploads: 'Uploads' }[topTray.value])
+
+// ── Your uploads (#2237): rename or delete the track on the deck ──
+const editOpen = ref(false)
+async function saveUpload(artist: string, name: string) {
+  if (current.value && await crate.renameUpload(current.value, artist, name)) editOpen.value = false
+}
+async function removeUpload() {
+  const track = current.value
+  if (!track) return
+  pin()
+  if (!await crate.deleteUpload(track)) return
+  editOpen.value = false
+  currentId.value = null // the deck falls back to the first track in the tray
+}
+
+// ── Add new tracks (#2237): upload → inbox; the deck jumps to the first new one ──
+const { upload, progress: uploadProgress } = useCrateUpload(crate)
+const fileInput = ref<HTMLInputElement>()
+async function onFiles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const added = await upload([...(input.files ?? [])])
+  input.value = ''
+  if (added.length) {
+    openLevel(null)
+    show(tracks.value.find(t => t.id === added[0]!.id), false)
+  }
+}
 </script>
 
 <template>
@@ -117,18 +175,28 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
       :trail="trail"
       :tray-label="trayLabel"
       :tray-count="trayTracks.length"
+      :uploading="uploadProgress"
       @open="openLevel"
       @up="goUp"
       @undo="crate.undo()"
       @list="listOpen = true"
       @listen="listen"
+      @upload="fileInput?.click()"
+    />
+    <input ref="fileInput" type="file" accept="audio/*,.mp3,.m4a,.aac,.aif,.aiff,.wav,.flac,.ogg" multiple class="hidden" @change="onFiles">
+    <UProgress
+      v-if="uploadProgress"
+      :model-value="uploadProgress.total ? uploadProgress.done : null"
+      :max="uploadProgress.total || 1"
+      size="xs"
+      :aria-label="`Uploading ${uploadProgress.name}`"
     />
 
     <main ref="main" class="flex-1 overflow-y-auto p-2">
       <div v-if="status === 'error'" class="py-10 text-center text-error">
         Couldn’t load your library. <UButton variant="link" label="Retry" @click="crate.refresh()" />
       </div>
-      <div v-else-if="!crate.piles.value.length" class="py-10 text-center text-muted">Loading your library…</div>
+      <div v-else-if="status !== 'success' && !crate.piles.value.length" class="py-10 text-center text-muted">Loading your library…</div>
       <UCard v-else variant="soft" :ui="{ body: 'p-0 sm:p-0' }">
         <div class="divide-y divide-default/60 md:grid md:grid-cols-2 md:divide-y-0 lg:grid-cols-3">
           <CratePileRow
@@ -137,9 +205,9 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
             :pile="pile"
             :count="counts.get(pile.id) ?? 0"
             :ticked="!!current && isIn(current, pile)"
-            :disabled="!current"
-            :glow="hints.glow(pile)"
-            @toggle="togglePile(pile)"
+            :disabled="!current && !deckCollapsed"
+            :glow="deckCollapsed ? null : hints.glow(pile)"
+            @toggle="deckCollapsed ? openLevel(pile) : togglePile(pile)"
             @open="openLevel(pile)"
           />
           <UButton
@@ -156,13 +224,20 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
 
     <CrateDeck
       ref="deck"
+      v-model:collapsed="deckCollapsed"
       :track="current"
+      :prev-track="prevTrack"
+      :next-track="nextTrack"
       :src="current?.hasAudio ? audioUrl(current) : null"
       :in-piles="inPiles"
       :other-tags="deckOther"
       :path-label="pathLabel"
       :can-next="inPiles.length > 0"
+      :checked="!!current && isChecked(current)"
       @next="next"
+      @previous="previous"
+      @done="done"
+      @edit="editOpen = true"
       @remove="removeFromDeck"
     >
       <template #hints>
@@ -183,12 +258,16 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
 
     <CratePileListen ref="listener" :audio-url="audioUrl" :path-label="pathLabel" @started="deck?.pause()" />
 
+    <CrateUploadEdit v-model:open="editOpen" :track="current" @save="saveUpload" @delete="removeUpload" />
+
     <CrateNewPile ref="newPile" v-model:open="newPileOpen" :piles="crate.piles.value" :path-label="pathLabel" :track="current" @create="onCreate" />
 
     <CrateTrackList
       v-model:open="listOpen"
       :title="trayLabel"
       :tray="trayTracks"
+      v-model:top-tray="topTray"
+      :at-top="!level"
       :search-pool="level ? null : tracks"
       :current-id="currentId"
       @pick="pick"

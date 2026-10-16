@@ -23,6 +23,10 @@
   "kv_namespaces": [
     { "binding": "KV" }
   ],
+  // Uploaded tracks (#2237) — waiting in crate until they're exported to the Mac.
+  "r2_buckets": [
+    { "binding": "BLOB", "bucket_name": "crate-blob" }
+  ],
 
   // Staging environment — its OWN isolated D1 + KV, also id-less so they
   // auto-provision on the first `pnpm cf:staging`. The env block is stripped
@@ -44,6 +48,9 @@
           "binding": "KV",
           "id": "76d7981aca854f5d96659e2441ce8e38"
         }
+      ],
+      "r2_buckets": [
+        { "binding": "BLOB", "bucket_name": "crate-staging-blob" }
       ]
     }
   }
