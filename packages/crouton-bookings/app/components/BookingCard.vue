@@ -129,6 +129,8 @@ interface TimelineItem {
   status: 'sent' | 'pending' | 'failed' | 'not_sent'
   date: string | null
   tooltip: string
+  /** Why the latest send failed (provider message) */
+  error: string | null
 }
 
 // Get opacity class based on email status
@@ -237,11 +239,29 @@ const timelineItems = computed<TimelineItem[]>(() => {
       status: detail.status as TimelineItem['status'],
       date: formatTimelineDate(dateStr),
       tooltip: isSent ? t(config.sentTooltipKey) : t(config.defaultTooltipKey),
+      error: detail.error ?? null,
     })
   }
 
   return items
 })
+
+// Sending an email is outward-facing — ask first ("Send the confirmation email?")
+const pendingEmail = ref<TimelineItem | null>(null)
+const isSendConfirmOpen = computed({
+  get: () => !!pendingEmail.value,
+  set: (open: boolean) => { if (!open) pendingEmail.value = null }
+})
+
+function requestSend(item: TimelineItem) {
+  pendingEmail.value = item
+}
+
+function confirmSend() {
+  if (!pendingEmail.value) return
+  emit('resend-email', pendingEmail.value.type)
+  pendingEmail.value = null
+}
 </script>
 
 <template>
@@ -417,13 +437,13 @@ const timelineItems = computed<TimelineItem[]>(() => {
           <UButton
             color="neutral"
             variant="ghost"
-            class="flex-col items-center gap-1 p-1 transition-all hover:scale-105"
+            class="flex-col items-center gap-1 p-1 transition-all hover:scale-105 cursor-pointer"
             :class="[
               getTimelineOpacity(item.status),
               sendingEmailType === item.type ? 'animate-pulse' : ''
             ]"
             :disabled="!!sendingEmailType"
-            @click="emit('resend-email', item.type)"
+            @click="requestSend(item)"
           >
             <UIcon :name="item.icon" class="size-5" />
             <span class="text-xs font-medium whitespace-nowrap">{{ item.label }}</span>
@@ -436,6 +456,9 @@ const timelineItems = computed<TimelineItem[]>(() => {
                 <UIcon :name="getStatusInfo(item).icon" class="size-3.5 shrink-0" />
                 <span class="text-xs font-medium">{{ getStatusInfo(item).label }}</span>
               </div>
+              <p v-if="item.status === 'failed' && item.error" class="text-[11px] text-muted max-w-64 break-words">
+                {{ item.error }}
+              </p>
               <span class="text-[11px] text-muted block">{{ getStatusInfo(item).action }}</span>
             </div>
           </template>
@@ -456,13 +479,13 @@ const timelineItems = computed<TimelineItem[]>(() => {
           :key="item.type"
           color="neutral"
           variant="ghost"
-          class="flex-col items-center gap-1 p-1 transition-all active:scale-95"
+          class="flex-col items-center gap-1 p-1 transition-all active:scale-95 cursor-pointer"
           :class="[
             getTimelineOpacity(item.status),
             sendingEmailType === item.type ? 'animate-pulse' : ''
           ]"
           :disabled="!!sendingEmailType"
-          @click="emit('resend-email', item.type)"
+          @click="requestSend(item)"
         >
           <UIcon :name="item.icon" class="size-5" />
           <span class="text-xs font-medium whitespace-nowrap">{{ item.label }}</span>
@@ -483,5 +506,31 @@ const timelineItems = computed<TimelineItem[]>(() => {
         <CroutonBookingsActivityTimeline :booking="booking" />
       </div>
     </div>
+
+    <!-- "Send email?" confirmation -->
+    <UModal v-model:open="isSendConfirmOpen">
+      <template #content="{ close }">
+        <div class="p-6 space-y-4">
+          <div class="flex items-start gap-3">
+            <UIcon :name="pendingEmail?.icon || 'i-lucide-mail'" class="size-5 shrink-0 mt-0.5 text-primary" />
+            <div class="space-y-1">
+              <h3 class="text-base font-semibold">
+                {{ t('bookings.card.sendEmailConfirm.title', { type: (pendingEmail?.label || '').toLowerCase() }) }}
+              </h3>
+              <p class="text-sm text-muted">
+                {{ bookerUser?.email ? t('bookings.card.sendEmailConfirm.to', { email: bookerUser.email }) : t('bookings.card.sendEmailConfirm.toUnknown') }}
+              </p>
+              <p v-if="pendingEmail?.status === 'failed' && pendingEmail.error" class="text-xs text-error break-words">
+                {{ pendingEmail.error }}
+              </p>
+            </div>
+          </div>
+          <div class="flex justify-end gap-2">
+            <UButton color="neutral" variant="ghost" :label="t('bookings.card.sendEmailConfirm.cancel')" @click="close" />
+            <UButton icon="i-lucide-send" :label="t('bookings.card.sendEmailConfirm.send')" @click="confirmSend" />
+          </div>
+        </div>
+      </template>
+    </UModal>
   </UCard>
 </template>

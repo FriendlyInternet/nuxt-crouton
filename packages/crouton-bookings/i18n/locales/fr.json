@@ -126,6 +126,13 @@
         "clickToSend": "Cliquer pour envoyer",
         "clickToResend": "Cliquer pour renvoyer",
         "clickToRetry": "Cliquer pour réessayer"
+      },
+      "sendEmailConfirm": {
+        "title": "Envoyer l'e-mail « {type} » ?",
+        "to": "Il sera envoyé à {email}.",
+        "toUnknown": "Il sera envoyé à la personne qui a fait cette réservation.",
+        "send": "Envoyer l'e-mail",
+        "cancel": "Annuler"
       }
     },
     "createCard": {

@@ -126,6 +126,13 @@
         "clickToSend": "Click to send",
         "clickToResend": "Click to resend",
         "clickToRetry": "Click to retry"
+      },
+      "sendEmailConfirm": {
+        "title": "Send the {type} email?",
+        "to": "It goes to {email}.",
+        "toUnknown": "It goes to the person who made this booking.",
+        "send": "Send email",
+        "cancel": "Cancel"
       }
     },
     "createCard": {
