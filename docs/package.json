@@ -19,6 +19,7 @@
     "@nuxt/image": "^2.1.0",
     "@nuxt/ui": "catalog:",
     "@nuxtjs/mcp-toolkit": "^0.24.2",
+    "agents": "^0.28.1",
     "better-sqlite3": "^12.4.1",
     "nuxt": "catalog:",
     "nuxt-llms": "0.1.3"
