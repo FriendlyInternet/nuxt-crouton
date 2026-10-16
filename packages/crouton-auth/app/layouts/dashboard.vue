@@ -26,9 +26,9 @@ interface Props {
 
 const props = defineProps<Props>()
 
-// Get app name from runtime config if not provided
-const config = useRuntimeConfig()
-const appName = computed(() => props.appName ?? config.public.crouton?.auth?.appName ?? 'Dashboard')
+// Get app name from auth config if not provided
+const authConfig = useAuthConfig()
+const appName = computed(() => props.appName ?? authConfig?.appName ?? 'Dashboard')
 </script>
 
 <template>
