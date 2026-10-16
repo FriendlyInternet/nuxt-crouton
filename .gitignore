@@ -150,7 +150,6 @@ trace.jsonl
 loop-station-trace*.jsonl
 writeups/loop-station/traces/
 
-retired/pocs/blog/.data
 pocs/crouton-builder/.data
 pocs/booking-demo/.data
 .fallow/
