@@ -59,20 +59,20 @@ jobs:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as decompose-on-issue-pidev.yml / automerge-epic-subpr.yml. A
       # GITHUB_TOKEN push would NOT re-trigger downstream workflows (#572).
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -190,7 +190,7 @@ jobs:
       # variant is dispatch-only (a human is already watching the run).
       - name: Artifact-gate — fail if the agent produced nothing
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           PI_EXEC_LOG: pi-telemetry-out/session.jsonl
           PI_CONCLUSION: ${{ steps.pi.outputs.success }}
@@ -340,7 +340,7 @@ jobs:
 
       - name: Upload pi telemetry artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pi-telemetry-hosted-${{ github.run_id }}
           path: pi-telemetry-out/

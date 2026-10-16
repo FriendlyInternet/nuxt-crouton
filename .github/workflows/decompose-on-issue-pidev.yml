@@ -120,14 +120,14 @@ jobs:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
       # downstream workflows (#572); an App-installation token does.
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
@@ -158,7 +158,7 @@ jobs:
       # Contract: scripts/pipeline-loop-guard.test.mjs.
       - name: Gather claim facts
         id: claim-facts
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
@@ -190,7 +190,7 @@ jobs:
       # this step is I/O only. Contract: scripts/resume-decomposed.test.mjs.
       - name: Gather sub-issues
         id: subs
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
@@ -223,7 +223,7 @@ jobs:
 
       - name: Dispatch the open children
         if: ${{ steps.resume.outputs.resume == '1' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           DISPATCH: ${{ steps.resume.outputs.dispatch }}
           REASON: ${{ steps.resume.outputs.reason }}
@@ -253,13 +253,13 @@ jobs:
       # Everything below is the CLASSIFY path — skipped entirely once the tree was
       # resumed (#2048), so a decomposed epic costs a few API calls instead of an
       # install, a package warm and an eleven-minute pi run that cannot succeed.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: ${{ steps.resume.outputs.resume != '1' }}
         with:
           # per-job dest — the default ~/setup-pnpm collides between the two
           # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
           dest: ${{ runner.temp }}/setup-pnpm
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         if: ${{ steps.resume.outputs.resume != '1' }}
         with:
           node-version: 22
@@ -482,7 +482,7 @@ jobs:
       # silence after comment-dispatch's "🟢 On it" is its own mystery — just a calm one.
       - name: Not picked up — the issue is already claimed
         if: ${{ always() && steps.claim.outcome == 'failure' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           CLAIM_REASON: ${{ steps.claim.outputs.claim_reason }}
@@ -502,7 +502,7 @@ jobs:
         # deliverable, and its comment lands BEFORE t0 so the since-t0 scan
         # would never see it and would false-fail a successful run.
         if: ${{ always() && steps.claim.outcome != 'failure' && steps.resume.outputs.resume != '1' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}
           CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
@@ -780,7 +780,7 @@ jobs:
 
       - name: Upload pi telemetry artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pi-telemetry-${{ github.run_id }}
           path: pi-telemetry-out/

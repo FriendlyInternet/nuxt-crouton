@@ -37,13 +37,13 @@ jobs:
       # Mint an org-scoped Nuxt Harness App installation token. `owner` (no
       # `repositories`) carries the org-level grant (Projects: R/W) needed to
       # write the org board. (#546)
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@v9
         env:
           PROJECT_NAME: ${{ inputs.project_name || vars.PROJECT_NAME || 'Crouton' }}
         with:
