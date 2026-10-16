@@ -355,6 +355,44 @@
         "sat": "Sam",
         "sun": "Dim"
       }
+    },
+    "blocks": {
+      "booking": {
+        "name": "Réservation",
+        "description": "Intégrer un panneau de réservation",
+        "fields": {
+          "title": {
+            "label": "Titre",
+            "description": "Titre facultatif au-dessus du panneau de réservation"
+          },
+          "emptyMessage": {
+            "label": "Message vide",
+            "description": "Affiché quand il n'y a pas encore de réservation"
+          },
+          "loggedOut": {
+            "label": "Les visiteurs non connectés voient",
+            "description": "Réserver nécessite un compte. Afficher une invitation à se connecter, ou masquer le bloc.",
+            "options": {
+              "prompt": "Une invitation à se connecter",
+              "hide": "Rien"
+            }
+          },
+          "scope": {
+            "label": "Réservations affichées",
+            "description": "Quelles réservations le visiteur voit",
+            "options": {
+              "personal": "Ses propres réservations",
+              "team": "Toutes les réservations de l'équipe"
+            }
+          }
+        }
+      }
+    },
+    "pageTypes": {
+      "booking": {
+        "name": "Page de réservation",
+        "description": "Page de réservation interactive avec calendrier et disponibilités"
+      }
     }
   }
 }

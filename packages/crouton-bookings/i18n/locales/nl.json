@@ -355,6 +355,44 @@
         "sat": "Za",
         "sun": "Zo"
       }
+    },
+    "blocks": {
+      "booking": {
+        "name": "Reserveren",
+        "description": "Een reserveringspaneel insluiten",
+        "fields": {
+          "title": {
+            "label": "Titel",
+            "description": "Optionele titel boven het reserveringspaneel"
+          },
+          "emptyMessage": {
+            "label": "Leeg bericht",
+            "description": "Getoond als er nog geen reserveringen zijn"
+          },
+          "loggedOut": {
+            "label": "Niet-ingelogde bezoekers zien",
+            "description": "Reserveren vraagt een account. Toon een inlogvraag, of verberg het blok.",
+            "options": {
+              "prompt": "Een inlogvraag",
+              "hide": "Niets"
+            }
+          },
+          "scope": {
+            "label": "Welke reserveringen",
+            "description": "Welke reserveringen de bezoeker ziet",
+            "options": {
+              "personal": "Hun eigen reserveringen",
+              "team": "Alle reserveringen van het team"
+            }
+          }
+        }
+      }
+    },
+    "pageTypes": {
+      "booking": {
+        "name": "Reserveringspagina",
+        "description": "Interactieve reserveringspagina met kalender en beschikbaarheid"
+      }
     }
   }
 }

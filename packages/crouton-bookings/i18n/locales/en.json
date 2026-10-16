@@ -355,6 +355,44 @@
         "sat": "Sat",
         "sun": "Sun"
       }
+    },
+    "blocks": {
+      "booking": {
+        "name": "Booking",
+        "description": "Embed a booking panel",
+        "fields": {
+          "title": {
+            "label": "Title",
+            "description": "Optional heading above the booking panel"
+          },
+          "emptyMessage": {
+            "label": "Empty message",
+            "description": "Shown when there are no bookings yet"
+          },
+          "loggedOut": {
+            "label": "Logged-out visitors see",
+            "description": "Booking needs an account. Show a login prompt, or hide the block.",
+            "options": {
+              "prompt": "A login prompt",
+              "hide": "Nothing"
+            }
+          },
+          "scope": {
+            "label": "Booking scope",
+            "description": "Which bookings the visitor sees",
+            "options": {
+              "personal": "Their own bookings",
+              "team": "All team bookings"
+            }
+          }
+        }
+      }
+    },
+    "pageTypes": {
+      "booking": {
+        "name": "Booking page",
+        "description": "Interactive booking page with calendar and availability"
+      }
     }
   }
 }

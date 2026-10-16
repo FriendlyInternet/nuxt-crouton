@@ -90,8 +90,8 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
 
 const bookingBlockDefinition: CroutonBlockDefinition = {
   type: 'bookingBlock',
-  name: 'Booking',
-  description: 'Embed a booking panel',
+  name: 'bookings.blocks.booking.name',
+  description: 'bookings.blocks.booking.description',
   icon: 'i-lucide-calendar-check',
   category: 'customer',
   clientOnly: true,
@@ -109,35 +109,35 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
     {
       name: 'title',
       type: 'text',
-      label: 'Title',
-      description: 'Optional heading displayed above the booking UI'
+      label: 'bookings.blocks.booking.fields.title.label',
+      description: 'bookings.blocks.booking.fields.title.description'
     },
     {
       name: 'emptyMessage',
       type: 'text',
-      label: 'Empty message',
-      description: 'Message shown when no bookings exist'
+      label: 'bookings.blocks.booking.fields.emptyMessage.label',
+      description: 'bookings.blocks.booking.fields.emptyMessage.description'
     },
     {
       // Who sees the block at all is the generic Visibility panel; this only
       // decides what a logged-out visitor gets — booking needs an account (#2263)
       name: 'loggedOut',
       type: 'select',
-      label: 'Logged-out visitors see',
-      description: 'Booking needs an account. Show a login prompt, or hide the block.',
+      label: 'bookings.blocks.booking.fields.loggedOut.label',
+      description: 'bookings.blocks.booking.fields.loggedOut.description',
       options: [
-        { label: 'A login prompt', value: 'prompt' },
-        { label: 'Nothing', value: 'hide' }
+        { label: 'bookings.blocks.booking.fields.loggedOut.options.prompt', value: 'prompt' },
+        { label: 'bookings.blocks.booking.fields.loggedOut.options.hide', value: 'hide' }
       ]
     },
     {
       name: 'scope',
       type: 'select',
-      label: 'Booking scope',
-      description: 'What bookings are shown to the user',
+      label: 'bookings.blocks.booking.fields.scope.label',
+      description: 'bookings.blocks.booking.fields.scope.description',
       options: [
-        { label: 'Personal bookings', value: 'personal' },
-        { label: 'All team bookings', value: 'team' }
+        { label: 'bookings.blocks.booking.fields.scope.options.personal', value: 'personal' },
+        { label: 'bookings.blocks.booking.fields.scope.options.team', value: 'team' }
       ]
     }
   ],
@@ -213,8 +213,8 @@ export default defineAppConfig({
       pageTypes: [
         {
           id: 'booking',
-          name: 'Booking Page',
-          description: 'Interactive booking page with calendar and availability',
+          name: 'bookings.pageTypes.booking.name',
+          description: 'bookings.pageTypes.booking.description',
           icon: 'i-lucide-calendar',
           component: 'CroutonBookingsPanel',
           category: 'customer',
