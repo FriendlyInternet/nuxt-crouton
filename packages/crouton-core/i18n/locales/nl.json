@@ -156,7 +156,8 @@
     "cropAvatar": "Avatar bijsnijden",
     "change": "Wijzigen",
     "upload": "Uploaden",
-    "cropPreview": "Voorbeeld bijsnijden"
+    "cropPreview": "Voorbeeld bijsnijden",
+    "preview": "Voorbeeld van de afbeelding"
   },
   "repeater": {
     "emptyState": "Nog geen items. Klik op \"{label}\" om te beginnen.",

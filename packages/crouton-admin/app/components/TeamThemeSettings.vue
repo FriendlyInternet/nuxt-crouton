@@ -9,11 +9,12 @@ import { useMounted } from '@vueuse/core'
  * When @fyit/crouton-themes is active, also shows the global theme switcher
  * (ko/minimal/kr11) so changes are reflected here in real-time.
  */
+import type {
+  THEME_PRESETS } from '../composables/useTeamTheme'
 import {
   PRIMARY_COLORS,
   NEUTRAL_COLORS,
   DEFAULT_THEME,
-  THEME_PRESETS,
   useAvailableThemePresets,
   type ThemePreset,
   type TeamThemeSettings
@@ -99,12 +100,10 @@ async function handleSave() {
     notify.success(t('themeSettings.saved'), { icon: 'i-lucide-palette' })
 
     emit('saved', saved)
-  }
-  catch (e: unknown) {
+  } catch (e: unknown) {
     const message = e instanceof Error ? e.message : t('common.error')
     notify.error(t('common.error'), { description: message })
-  }
-  finally {
+  } finally {
     isSaving.value = false
   }
 }
@@ -149,7 +148,9 @@ const presetEntries = computed(() =>
     <!-- Allow users to switch themes -->
     <div class="flex items-center justify-between">
       <div>
-        <p class="text-sm font-medium text-default">{{ $t('themeSettings.allowUserThemes') }}</p>
+        <p class="text-sm font-medium text-default">
+          {{ $t('themeSettings.allowUserThemes') }}
+        </p>
         <p class="text-xs text-muted mt-0.5">
           {{ $t('themeSettings.allowUserThemesDescription') }}
         </p>
@@ -180,7 +181,9 @@ const presetEntries = computed(() =>
         <div class="flex-1 min-w-0 space-y-5">
           <!-- Preset Picker (vertical) -->
           <div class="space-y-2">
-            <label class="text-sm font-medium text-default">{{ $t('themeSettings.preset') }}</label>
+            <p class="text-sm font-medium text-default">
+              {{ $t('themeSettings.preset') }}
+            </p>
             <!-- Preset cards — UButton (not raw buttons) so themes reach the
                  theme picker itself (#1410); selection ring wins via class merge -->
             <div class="flex flex-col gap-2">
@@ -250,7 +253,9 @@ const presetEntries = computed(() =>
 
         <!-- Right: Live Preview -->
         <div class="w-64 shrink-0 space-y-2 sticky top-4">
-          <label class="text-sm font-medium text-default">{{ $t('themeSettings.livePreview') }}</label>
+          <p class="text-sm font-medium text-default">
+            {{ $t('themeSettings.livePreview') }}
+          </p>
           <div class="p-4 border border-muted rounded-lg bg-muted/10 space-y-4">
             <div class="flex flex-wrap gap-2">
               <UButton

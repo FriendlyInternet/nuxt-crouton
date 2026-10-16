@@ -156,7 +156,8 @@
     "cropAvatar": "Crop Avatar",
     "change": "Change",
     "upload": "Upload",
-    "cropPreview": "Crop preview"
+    "cropPreview": "Crop preview",
+    "preview": "Image preview"
   },
   "repeater": {
     "emptyState": "No items yet. Click \"{label}\" to get started.",

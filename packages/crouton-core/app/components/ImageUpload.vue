@@ -23,6 +23,7 @@
       <img
         v-else
         :src="model"
+        :alt="t('image.preview')"
         class="h-full w-full"
         :class="fit === 'contain' ? 'object-contain p-3' : 'object-cover'"
       >

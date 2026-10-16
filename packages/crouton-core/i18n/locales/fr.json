@@ -156,7 +156,8 @@
     "cropAvatar": "Recadrer l'avatar",
     "change": "Modifier",
     "upload": "Télécharger",
-    "cropPreview": "Aperçu du recadrage"
+    "cropPreview": "Aperçu du recadrage",
+    "preview": "Aperçu de l'image"
   },
   "repeater": {
     "emptyState": "Aucun élément pour le moment. Cliquez sur \"{label}\" pour commencer.",
