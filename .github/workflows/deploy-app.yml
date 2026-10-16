@@ -646,8 +646,10 @@ jobs:
       # review surface (deploy.config.json `reviewSurfaces`, else reviewLogin.landing), validates
       # the shot isn't blank/error, and commits the PNG(s) to writeups/ui-proposals/ — where the
       # #2172 sign-off gate looks. The push (App token) re-runs CI so that gate re-evaluates and
-      # finds the evidence; a ui-proposals-only change matches NO app watchPaths, so it does NOT
-      # re-deploy (no loop). Never fails the deploy — no capture ⇒ the gate withholds (honest).
+      # finds the evidence. That push DOES re-deploy any PR that already matches watchPaths (the
+      # path filters diff the whole PR, base..head), so a run triggered BY a capture commit skips
+      # capturing — one extra deploy round, then it stops (#2294). Never fails the deploy — no
+      # capture ⇒ the gate withholds (honest).
       - name: Mint token for review-capture push
         id: capture-token
         if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && steps.seed.outputs.email != '' }}
@@ -668,11 +670,17 @@ jobs:
           WORKSPACE: ${{ inputs.workspace }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
           GH_TOKEN_PUSH: ${{ steps.capture-token.outputs.token }}
         run: |
           set -o pipefail
           [ -n "$DEPLOY_URL" ] || { echo "no deploy url — skipping capture"; exit 0; }
+          # Loop guard (#2294): don't re-capture on the deploy our own capture commit triggered.
+          HEAD_MSG=$(GH_TOKEN="$GH_TOKEN_PUSH" gh api "repos/${REPO}/commits/${HEAD_SHA}" --jq '.commit.message' 2>/dev/null || true)
+          case "$HEAD_MSG" in
+            "chore(review): capture "*) echo "triggered by a capture commit — skipping (no capture loop, #2294)"; exit 0;;
+          esac
           npx playwright install chromium >/dev/null 2>&1 || true
           # Capture to a temp dir so the commit is done in a CLEAN clone, never the dirty deploy
           # workspace (build output / sync:ids-modified wrangler.jsonc would otherwise ride along).
