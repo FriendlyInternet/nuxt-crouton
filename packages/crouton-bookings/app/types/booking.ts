@@ -75,6 +75,8 @@ export interface LocationData {
   openDays?: number[] | string | null
   slotSchedule?: SlotSchedule | string | null
   blockedDates?: BlockedDateItem[] | string | null
+  /** Offer the built-in full day next to named slots (#2261) */
+  offerFullDay?: boolean | null
   // Inventory mode fields
   inventoryMode?: boolean
   quantity?: number
