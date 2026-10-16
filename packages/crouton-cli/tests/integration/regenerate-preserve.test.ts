@@ -73,7 +73,7 @@ let dir: string
 // migration/nuxt-prepare step, which would otherwise time out in a bare temp dir.
 async function generate(extraArgs: string[] = []) {
   return runCLI(
-    ['generate', 'shop', 'widgets', '--fields-file=widget-schema.json', '--noDb', '--no-tests', ...extraArgs],
+    ['generate', 'shop', 'widgets', '--fields-file=widget-schema.json', '--noDb', ...extraArgs],
     dir
   )
 }

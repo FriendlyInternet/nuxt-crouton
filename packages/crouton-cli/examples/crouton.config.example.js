@@ -77,9 +77,9 @@ export default {
     {
       name: 'products', // Collection name (plural, kebab-case recommended)
       fieldsFile: './schemas/products.json', // Path to JSON schema file
-      // tests: false // Skip the per-collection tests for this collection — the
-      //              // schema-smoke (#785) + the API route handler test (#791);
-      //              // both emitted by default, equivalent to the global --no-tests flag
+      // tests: true // Also emit the per-collection tests for this collection — the
+      //             // schema-smoke (#785) + the API route handler test (#791);
+      //             // off by default (#2286), equivalent to the global --tests flag
     },
 
     // Collection with hierarchy support (tree structure)

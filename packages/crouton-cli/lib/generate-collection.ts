@@ -121,7 +121,7 @@ interface WriteScaffoldOptions {
   hierarchy?: boolean
   seed?: boolean
   seedCount?: number
-  noTests?: boolean
+  tests?: boolean
 }
 
 interface RunConfigOptions {
@@ -130,7 +130,7 @@ interface RunConfigOptions {
   dryRun?: boolean
   only?: string
   noAutoMerge?: boolean
-  noTests?: boolean
+  tests?: boolean
 }
 
 interface RunGenerateOptions {
@@ -146,7 +146,7 @@ interface RunGenerateOptions {
   hierarchy?: boolean
   seed?: boolean
   seedCount?: number
-  noTests?: boolean
+  tests?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -920,10 +920,10 @@ function printDryRunPlan(params: {
   fields: Field[]
   seed: boolean
   seedCount: number
-  noTests: boolean
+  tests: boolean
   noDb: boolean
 }): void {
-  const { base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, noTests, noDb } = params
+  const { base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, tests, noDb } = params
   const apiPath = `${layer}-${cases.plural}`
   console.log('DRY RUN - Would generate:')
   if (hierarchy.enabled) {
@@ -966,7 +966,7 @@ function printDryRunPlan(params: {
     console.log(`• ${base}/server/database/seed.ts (${seedCount} records)`)
   }
   console.log(`• ${base}/types.ts`)
-  if (!noTests) {
+  if (tests) {
     console.log(`• ${base}/${layerPascalCase}${cases.pascalCasePlural}.test.ts (schema smoke)`)
     console.log(`• ${base}/${layerPascalCase}${cases.pascalCasePlural}.api.test.ts (route handlers)`)
   }
@@ -1223,7 +1223,7 @@ function buildSeedFiles(params: {
 }
 
 // Build the per-collection tests — the schema-smoke test (#785) and the API
-// route handler test (#791). Caller gates on --no-tests.
+// route handler test (#791). Caller gates on --tests (off by default, #2286).
 function buildCollectionTestFiles(params: {
   base: string
   data: Record<string, any>
@@ -1234,8 +1234,8 @@ function buildCollectionTestFiles(params: {
   const { base, data, config, cases, layerPascalCase } = params
   const files: GeneratedFile[] = []
 
-  // Emit a schema-smoke test next to the collection (#785) — on by default,
-  // suppressed by --no-tests. Runtime-free (zod only): asserts the generated
+  // Emit a schema-smoke test next to the collection (#785) — opt-in via --tests since
+  // #2286 (generated CRUD is covered by the e2e fixture smoke). Runtime-free (zod only): asserts the generated
   // Zod schema accepts a valid record and rejects an invalid one. The e2e
   // fixture smoke owns boot + CRUD; this is the unit-level complement.
   files.push({
@@ -1248,7 +1248,7 @@ function buildCollectionTestFiles(params: {
   // Drives the generated handlers with mocked team-auth + queries and a fake
   // H3 event to cover team-scoping (unauth → rejected; queries called with the
   // resolved team id) and error paths (invalid body → rejected, missing id →
-  // 400, not-found → 404). Same --no-tests gate.
+  // 400, not-found → 404). Same --tests gate.
   files.push({
     path: path.join(base, `${layerPascalCase}${cases.pascalCasePlural}.api.test.ts`),
     content: generateApiTest(data, config),
@@ -1324,7 +1324,7 @@ async function registerCollectionInAppConfig(params: {
   }
 }
 
-async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, noTests = false }: WriteScaffoldOptions): Promise<void> {
+async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, tests = false }: WriteScaffoldOptions): Promise<void> {
   // REFUSE an unresolvable relation BEFORE anything is written or installed (#1957). The queries
   // generator would otherwise fall through its `// or unknown — fall back to existing behavior`
   // branch and emit an import to a collection that does not exist, turning a local, obvious
@@ -1353,7 +1353,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   collectionConfig = await applyManifestEnhancements({ data, fields, config, collectionConfig, dialect, collection })
 
   if (dryRun) {
-    printDryRunPlan({ base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, noTests, noDb })
+    printDryRunPlan({ base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, tests, noDb })
     return
   }
 
@@ -1366,7 +1366,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     ...buildCoreScaffoldFiles({ base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable }),
     ...await buildRepeaterComponentFiles(base, fields, data),
     ...buildSeedFiles({ base, data, config, seed, seedCount }),
-    ...(noTests ? [] : buildCollectionTestFiles({ base, data, config, cases, layerPascalCase }))
+    ...(tests ? buildCollectionTestFiles({ base, data, config, cases, layerPascalCase }) : [])
   ]
 
   // Write all files. Per-collection scaffold files are user-editable, so regeneration
@@ -1630,7 +1630,7 @@ async function loadAndPrepareConfig(options: RunConfigOptions): Promise<Record<s
   if (!config.flags) config.flags = {}
   if (options.force) config.flags.force = true
   if (options.dryRun) config.flags.dryRun = true
-  if (options.noTests) config.flags.noTests = true
+  if (options.tests) config.flags.tests = true
 
   // Single-collection filter
   const onlyCollection = options.only || null
@@ -1796,7 +1796,7 @@ async function generateConfigEntry(params: {
     collectionConfig: collectionConfig, // Pass individual collection config for hierarchy detection
     seed: !!collectionSeed,
     seedCount: collectionSeed?.count || config?.seed?.defaultCount || 25,
-    noTests: config.flags?.noTests || collectionConfig?.tests === false || false
+    tests: config.flags?.tests === true || collectionConfig?.tests === true
   })
 
   return { name: collectionName, layer, fields }
@@ -1878,7 +1878,7 @@ async function runSimpleConfigFormat(config: Record<string, any>, typeMapping: a
         config: config,
         seed: globalSeed,
         seedCount: config?.seed?.defaultCount || 25,
-        noTests: config.flags?.noTests || false
+        tests: config.flags?.tests === true
       })
 
       allCollections.push({ name: collection, layer: target.layer, fields })
@@ -1997,7 +1997,7 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
       hierarchy: options.hierarchy || false,
       seed: options.seed || false,
       seedCount: options.seedCount || 25,
-      noTests: options.noTests || false
+      tests: options.tests || false
     }
 
     // Validate CLI arguments
