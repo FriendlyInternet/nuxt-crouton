@@ -5,8 +5,8 @@
     v-for="(state, index) in modalStates"
     :key="state.id"
     v-model:open="state.isOpen"
-    :title="`${state.action ? state.action.charAt(0).toUpperCase() + state.action.slice(1) : ''} ${getCollectionName(state.collection)}`"
-    :description="`Form for ${state.action || 'managing'} ${getCollectionName(state.collection)}`"
+    :title="getFormTitle(state)"
+    :description="getFormDescription(state)"
     size="lg"
     @update:open="(val: boolean) => handleClose(state.id, val)"
     @after:leave="() => handleAfterLeave(state.id)"
@@ -34,8 +34,8 @@
     v-for="(state, index) in dialogStates"
     :key="state.id"
     v-model:open="state.isOpen"
-    :title="`${state.action ? state.action.charAt(0).toUpperCase() + state.action.slice(1) : ''} ${getCollectionName(state.collection)}`"
-    :description="`${state.action ? state.action.charAt(0).toUpperCase() + state.action.slice(1) : ''} ${getCollectionName(state.collection)}`"
+    :title="getFormTitle(state)"
+    :description="getFormTitle(state)"
     @update:open="(val: boolean) => handleClose(state.id, val)"
     @after:leave="() => handleAfterLeave(state.id)"
   >
@@ -43,8 +43,7 @@
       <div class="p-6">
         <div class="flex items-center justify-between mb-4">
           <h2>
-            <span class="capitalize">{{ state.action }}</span>
-            {{ getCollectionName(state.collection) }}
+            {{ getFormTitle(state) }}
           </h2>
           <UButton
             icon="i-lucide-x"
@@ -78,8 +77,8 @@
     v-for="(state, index) in slideoverStates"
     :key="state.id"
     v-model:open="state.isOpen"
-    :title="`${state.action ? state.action.charAt(0).toUpperCase() + state.action.slice(1) : ''} ${getCollectionName(state.collection)}`"
-    :description="`Form for ${state.action || 'managing'} ${getCollectionName(state.collection)}`"
+    :title="getFormTitle(state)"
+    :description="getFormDescription(state)"
     side="right"
     :close="false"
     :ui="getSlideoverUi(state, index)"
@@ -177,6 +176,16 @@ const slideoverStates = computed(() =>
 const getCollectionName = (collection: string | null): string => {
   return collection ? collectionWithCapitalSingular(collection) : ''
 }
+
+// Translated title, e.g. "Create Booking"
+const getFormTitle = (state: CroutonState): string => {
+  const collection = getCollectionName(state.collection)
+  return state.action ? t(`form.titles.${state.action}`, { collection }) : collection
+}
+
+// Translated (screen-reader) description of the open form
+const getFormDescription = (state: CroutonState): string =>
+  t(`form.descriptions.${state.action || 'manage'}`, { collection: getCollectionName(state.collection) })
 
 // Helper for getting previous slideover safely
 const getPreviousSlideover = (index: number) => {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const { t } = useT()
 const props = defineProps<{
   valueId: string
   parentId: string
@@ -47,7 +48,7 @@ const displayValue = computed(() => {
       v-else-if="error"
       class="text-red-500 text-sm"
     >
-      Error loading
+      {{ t('errors.errorLoading') }}
     </span>
 
     <!-- No value found -->
@@ -55,7 +56,7 @@ const displayValue = computed(() => {
       v-else-if="!resolvedValue"
       class="text-gray-400 text-sm italic"
     >
-      Not found
+      {{ t('common.notFound') }}
     </span>
 
     <!-- Display resolved value -->

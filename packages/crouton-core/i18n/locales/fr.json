@@ -7,7 +7,24 @@
     "removeItem": "Supprimer l'élément",
     "metaSettings": "Paramètres méta",
     "tryAgain": "Réessayer",
-    "anErrorOccurred": "Une erreur s'est produite"
+    "anErrorOccurred": "Une erreur s'est produite",
+    "sendingUpdate": "Envoi de la mise à jour...",
+    "maxDepthTitle": "Profondeur maximale atteinte",
+    "maxDepthDescription": "Impossible d'ouvrir plus de {count} formulaires imbriqués",
+    "somethingWentWrong": "Oups ! Une erreur s'est produite.",
+    "titles": {
+      "create": "Créer {collection}",
+      "update": "Modifier {collection}",
+      "delete": "Supprimer {collection}",
+      "view": "Voir {collection}"
+    },
+    "descriptions": {
+      "create": "Formulaire de création : {collection}",
+      "update": "Formulaire de modification : {collection}",
+      "delete": "Formulaire de suppression : {collection}",
+      "view": "Consultation : {collection}",
+      "manage": "Formulaire de gestion : {collection}"
+    }
   },
   "common": {
     "create": "Créer",
@@ -31,7 +48,10 @@
     "untitled": "Sans titre",
     "export": "Exporter",
     "new": "Nouveau",
-    "editing": "Modification"
+    "editing": "Modification",
+    "notFound": "Introuvable",
+    "moreCount": "+{count} de plus",
+    "sure": "Sûr ?"
   },
   "mutations": {
     "creationFailed": "Échec de la création",
@@ -86,7 +106,18 @@
     "componentNotFound": "Composant introuvable pour la collection : {collection}",
     "selectItem": "Sélectionnez un élément pour commencer",
     "orPressN": "ou appuyez sur N pour créer un nouvel élément",
-    "newItem": "Nouvel élément"
+    "newItem": "Nouvel élément",
+    "changeLayout": "Changer l'affichage",
+    "notFound": "Collection introuvable : {collection}",
+    "layouts": {
+      "table": "Tableau",
+      "list": "Liste",
+      "grid": "Grille",
+      "cards": "Cartes",
+      "tree": "Arborescence",
+      "kanban": "Kanban",
+      "workspace": "Espace de travail"
+    }
   },
   "detail": {
     "details": "Détails",
@@ -103,14 +134,17 @@
     "groupBy": "Grouper par :",
     "noItemsToDisplay": "Aucun élément à afficher",
     "addItemsOrChangeGrouping": "Ajoutez des éléments ou modifiez le champ de regroupement.",
-    "dropItemsHere": "Déposez les éléments ici"
+    "dropItemsHere": "Déposez les éléments ici",
+    "uncategorized": "Sans catégorie"
   },
   "tree": {
     "addChild": "Ajouter une sous-page",
     "addBelow": "Ajouter une page en dessous",
     "moveUp": "Déplacer vers le haut",
     "moveDown": "Déplacer vers le bas",
-    "moveToRoot": "Déplacer à la racine"
+    "moveToRoot": "Déplacer à la racine",
+    "add": "Ajouter",
+    "createFirstItem": "Créez votre premier élément pour voir l'arborescence."
   },
   "dropzone": {
     "idle": "Glissez-déposez des fichiers ici",
@@ -121,7 +155,8 @@
     "cropApply": "Recadrer et appliquer",
     "cropAvatar": "Recadrer l'avatar",
     "change": "Modifier",
-    "upload": "Télécharger"
+    "upload": "Télécharger",
+    "cropPreview": "Aperçu du recadrage"
   },
   "repeater": {
     "emptyState": "Aucun élément pour le moment. Cliquez sur \"{label}\" pour commencer.",
@@ -163,7 +198,9 @@
     "valuePlaceholder": "Généré automatiquement à partir du libellé",
     "valueHint": "Laisser vide pour générer automatiquement à partir du libellé",
     "createSuccess": "Option créée",
-    "created": "\"{label}\" a été ajouté"
+    "created": "\"{label}\" a été ajouté",
+    "labelForLocale": "Libellé ({locale})",
+    "fallbackValue": "Par défaut : {value}"
   },
   "dependent": {
     "loadingOptions": "Chargement des options...",
@@ -186,7 +223,9 @@
     "showing": "Affichage de",
     "to": "à",
     "of": "sur",
-    "results": "résultats"
+    "results": "résultats",
+    "data": "Données",
+    "searchPlaceholder": "Rechercher..."
   },
   "export": {
     "csv": "CSV",
@@ -194,7 +233,9 @@
     "noData": "Aucune donnée à exporter"
   },
   "iconPicker": {
-    "noIcons": "Aucune icône trouvée"
+    "noIcons": "Aucune icône trouvée",
+    "placeholder": "Choisir une icône",
+    "searchPlaceholder": "Rechercher des icônes {set}..."
   },
   "help": {
     "customizeCard": "Personnaliser l'affichage de la carte",
@@ -219,7 +260,10 @@
     "statusCode": "Code de statut",
     "active": "Actif",
     "permanent": "Permanent",
-    "temporary": "Temporaire"
+    "temporary": "Temporaire",
+    "columnFrom": "De",
+    "columnTo": "Vers",
+    "columnStatus": "Statut"
   },
   "setup": {
     "collections": "Collections",
@@ -243,6 +287,22 @@
   },
   "workspace": {
     "selectItem": "Sélectionnez un élément pour commencer",
-    "pressNToCreate": "ou appuyez sur N pour en créer un nouveau"
+    "pressNToCreate": "ou appuyez sur N pour en créer un nouveau",
+    "loadFailed": "Impossible de charger l'élément",
+    "createNamed": "Créer {collection}"
+  },
+  "content": {
+    "onThisPage": "Sur cette page"
+  },
+  "draggableList": {
+    "searchPlaceholder": "Rechercher des éléments...",
+    "empty": "Aucun élément disponible"
+  },
+  "colorPicker": {
+    "placeholder": "Choisir une couleur",
+    "custom": "Couleur personnalisée"
+  },
+  "calendar": {
+    "placeholder": "Choisir une date"
   }
 }

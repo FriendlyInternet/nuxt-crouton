@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { TocLink } from '../types/content'
 
+const { t } = useT()
+
 interface Props {
   content?: string
   title?: string
@@ -97,7 +99,7 @@ const maxWidthClasses: Record<string, string> = {
                 class="space-y-1"
               >
                 <p class="text-sm font-semibold mb-3">
-                  On this page
+                  {{ t('content.onThisPage') }}
                 </p>
                 <ul class="space-y-2 text-sm">
                   <li
