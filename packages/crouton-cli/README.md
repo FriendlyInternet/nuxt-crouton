@@ -100,7 +100,9 @@ Create a `crouton.config.js` file:
 
 ```javascript
 export default {
-  schemaPath: './product-schema.json',
+  collections: [
+    { name: 'products', fieldsFile: './schemas/products.json' }
+  ],
   dialect: 'sqlite',
   targets: [
     {
@@ -155,13 +157,16 @@ The configuration file allows you to define all generation settings in one place
 ```javascript
 // crouton.config.js
 export default {
-  // Path to your JSON schema file
-  schemaPath: './product-schema.json',
+  // Collections and their JSON schema files (paths resolve relative to this file)
+  collections: [
+    { name: 'products', fieldsFile: './schemas/products.json' },
+    { name: 'categories', fieldsFile: './schemas/categories.json', hierarchy: true }
+  ],
 
   // Database dialect
   dialect: 'sqlite',
 
-  // Target layers and collections
+  // Target layers and the collections (by name) they receive
   targets: [
     {
       layer: 'shop',
