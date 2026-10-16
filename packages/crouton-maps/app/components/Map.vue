@@ -40,6 +40,7 @@ const emit = defineEmits<{
 
 // Get map config (style/center/zoom defaults)
 const config = useMapConfig()
+const { t } = useT()
 
 // Dark mode detection — auto-switch map style
 const colorMode = useColorMode()
@@ -79,15 +80,15 @@ const handleMapLoad = (map: MaplibreMap) => {
 
 // Handle map error
 const handleMapError = (err: Error | { message?: string } | unknown) => {
-  const errorMessage = (err as { message?: string })?.message || 'Failed to load map'
+  const errorMessage = (err as { message?: string })?.message || t('maps.loadFailed')
   error.value = errorMessage
   isLoaded.value = false
   emit('error', errorMessage)
 }
 
 // Default easing function for flyTo
-const defaultEasing = (t: number): number => {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+const defaultEasing = (x: number): number => {
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
 }
 
 // Watch for style changes (e.g. dark mode toggle) and update the map

@@ -51,12 +51,12 @@
     "settings": "Instellingen",
     "accessRestricted": "Toegang beperkt",
     "error": "Fout",
-    "fallbackToEN": "Falling back to English",
-    "noTranslation": "No translation",
-    "copy": "Copy",
-    "content": "Content",
-    "characters": "characters",
-    "words": "words"
+    "fallbackToEN": "Terugvallen op Engels",
+    "noTranslation": "Geen vertaling",
+    "copy": "Kopiëren",
+    "content": "Inhoud",
+    "characters": "tekens",
+    "words": "woorden"
   },
   "table": {
     "id": "ID",
@@ -133,13 +133,13 @@
     "maxLength": "Mag maximaal {max} tekens bevatten",
     "tryAgain": "Probeer het opnieuw",
     "contactSupport": "Neem contact op met support als het probleem aanhoudt",
-    "noTextToCopy": "No text to copy",
-    "failedToCopyText": "Failed to copy text"
+    "noTextToCopy": "Geen tekst om te kopiëren",
+    "failedToCopyText": "Tekst kopiëren mislukt"
   },
   "messages": {
-    "usingEnglishFallback": "Using English fallback",
-    "noTranslationAvailable": "No translation available",
-    "copiedToClipboard": "Copied to clipboard"
+    "usingEnglishFallback": "Engelse versie wordt gebruikt",
+    "noTranslationAvailable": "Geen vertaling beschikbaar",
+    "copiedToClipboard": "Gekopieerd naar klembord"
   },
   "errorPage": {
     "error": "Fout",
@@ -420,20 +420,51 @@
   },
   "admin": {
     "translations": {
-      "title": "UI Translations",
-      "searchPlaceholder": "Search translations...",
-      "allCategories": "All categories",
-      "loadFailed": "Failed to load translations",
-      "noTranslationsFound": "No translations found",
-      "keyPath": "Key Path",
-      "systemValues": "System Values",
-      "teamOverrideValues": "Team Override Values",
-      "editOverride": "Edit/Create Override",
-      "removeOverrideTitle": "Remove Translation Override?",
-      "removeOverrideDescription": "This will permanently delete your team's custom translation and revert to using the system translation.",
-      "removeOverride": "Remove Override",
-      "replaceConfirmTitle": "Replace existing translation?",
-      "replace": "Replace"
+      "title": "UI-vertalingen",
+      "searchPlaceholder": "Vertalingen zoeken...",
+      "allCategories": "Alle categorieën",
+      "loadFailed": "Vertalingen laden mislukt",
+      "noTranslationsFound": "Geen vertalingen gevonden",
+      "keyPath": "Sleutelpad",
+      "systemValues": "Systeemwaarden",
+      "teamOverrideValues": "Teamwaarden",
+      "editOverride": "Aanpassing bewerken of maken",
+      "removeOverrideTitle": "Aanpassing verwijderen?",
+      "removeOverrideDescription": "Dit verwijdert de aangepaste vertaling van je team definitief. De systeemvertaling wordt dan weer gebruikt.",
+      "removeOverride": "Aanpassing verwijderen",
+      "replaceConfirmTitle": "Bestaande vertaling vervangen?",
+      "replace": "Vervangen",
+      "subtitle": "Systeemvertalingen met aanpassingen van je team",
+      "addTranslation": "Vertaling toevoegen",
+      "newTranslation": "Nieuwe vertaling",
+      "overridden": "Aangepast",
+      "system": "Systeem",
+      "paginationSummary": "{from}–{to} van {total} vertalingen",
+      "searchKeysPlaceholder": "Vertaalsleutels zoeken...",
+      "currentValue": "Huidige waarde",
+      "values": "Waarden",
+      "createOverride": "Aanpassing maken",
+      "updateOverride": "Aanpassing bijwerken",
+      "columnKey": "Sleutel",
+      "columnCategory": "Categorie",
+      "columnValueEn": "Waarde (EN)",
+      "columnOverride": "Aanpassing",
+      "columnStatus": "Status",
+      "valueRequired": "Vul minstens één vertaling in",
+      "keyPathRequired": "Sleutelpad is verplicht",
+      "overrideCreated": "Aanpassing gemaakt",
+      "overrideUpdated": "Aanpassing bijgewerkt",
+      "overrideRemoved": "Aanpassing verwijderd",
+      "translationCreated": "Vertaling gemaakt",
+      "saveOverrideFailed": "Aanpassing opslaan mislukt",
+      "createFailed": "Vertaling maken mislukt",
+      "deleteOverrideFailed": "Aanpassing verwijderen mislukt",
+      "keyPathPlaceholder": "bv. table.search",
+      "category": "Categorie",
+      "categoryPlaceholder": "bv. table",
+      "translations": "Vertalingen",
+      "description": "Beschrijving",
+      "descriptionPlaceholder": "Optionele beschrijving"
     }
   },
   "navigation": {
@@ -456,5 +487,103 @@
     "content": "Inhoud",
     "media": "Media",
     "data": "Collecties"
+  },
+  "i18n": {
+    "translateWithAi": "Vertalen met AI",
+    "input": {
+      "blockEditorPlaceholder": "Typ / om een blok in te voegen...",
+      "versionAvailable": "{locale}-versie beschikbaar",
+      "fallback": "Standaard: {value}",
+      "translationLabel": "Vertaling ({locale})",
+      "replaceWarning": "Dit veld heeft al inhoud. Vertalen vervangt die door een nieuwe vertaling van AI.",
+      "gridModeUnavailable": "Rasterweergave werkt niet voor opgemaakte tekst. Bewerk één taal tegelijk."
+    },
+    "display": {
+      "modalTitle": "Vertaling - {locale}"
+    },
+    "ai": {
+      "translate": "Vertalen",
+      "translateFrom": "Vertalen vanuit {locale}",
+      "notConfigured": "AI-vertaling niet ingesteld",
+      "notConfiguredDescription": "Stel NUXT_ANTHROPIC_API_KEY of NUXT_OPENAI_API_KEY in je .env-bestand in",
+      "failed": "Vertalen mislukt",
+      "complete": "Vertaling klaar",
+      "saved": "Vertaling opgeslagen",
+      "translatedBlocks": "{count} tekstblokken vertaald.",
+      "translatedBlocksReload": "{count} tekstblokken vertaald. Sla op en herlaad om ze in de editor te zien."
+    }
+  },
+  "email": {
+    "checkYourEmail": "Check je mailbox",
+    "magicLinkSentTo": "We hebben een inloglink gestuurd naar",
+    "magicLinkInstructions": "Klik op de link in de e-mail om in te loggen. De link vervalt na 10 minuten.",
+    "noEmailReceived": "Geen e-mail gekregen?",
+    "tips": "Tips:",
+    "tipSpam": "Kijk in je spam- of ongewenste map",
+    "tipCorrectAddress": "Controleer of het e-mailadres klopt",
+    "tipLinkExpires": "De link vervalt na 10 minuten",
+    "tryDifferentEmail": "Probeer een ander e-mailadres",
+    "codeSentTo": "We hebben een verificatiecode gestuurd naar",
+    "verificationCode": "Verificatiecode",
+    "verifyEmail": "E-mail bevestigen",
+    "noCodeReceived": "Geen code gekregen?",
+    "checkSpamHint": "Zie je de e-mail niet? Kijk dan in je spammap.",
+    "sending": "Versturen...",
+    "resend": "Opnieuw versturen",
+    "resendIn": "Opnieuw versturen over {time}",
+    "emailRequired": "E-mailadres is verplicht",
+    "invalidEmail": "Vul een geldig e-mailadres in"
+  },
+  "maps": {
+    "loadFailed": "Kaart laden mislukt",
+    "styles": {
+      "streets": "Straten",
+      "light": "Licht",
+      "dark": "Donker",
+      "satellite": "Satelliet",
+      "outdoors": "Buiten"
+    },
+    "block": {
+      "map": "Kaart",
+      "edit": "Blokinstellingen bewerken",
+      "delete": "Blok verwijderen",
+      "noLocation": "Geen locatie ingesteld",
+      "noLocationDescription": "Bewerk dit blok om de breedte- en lengtegraad in te vullen.",
+      "noLocationHint": "Geen locatie ingesteld — vul breedte- en lengtegraad in bij de instellingen",
+      "zoom": "zoom {zoom}"
+    },
+    "collectionBlock": {
+      "title": "Collectiekaart",
+      "mapView": "Kaartweergave",
+      "noCollection": "Geen collectie gekozen",
+      "noCollectionDescription": "Bewerk dit blok om een collectie te kiezen.",
+      "notFound": "Collectie \"{collection}\" niet gevonden",
+      "noCoordinates": "Geen coördinaten gevonden",
+      "noCoordinatesDescription": "Deze collectie lijkt geen locatievelden te hebben. Vul de naam van het coördinatenveld in bij de blokinstellingen.",
+      "noMarkers": "Geen kaartmarkeringen",
+      "noMarkersDescription": "Geen enkel item in deze collectie heeft geldige coördinaten."
+    },
+    "preview": {
+      "noLocation": "Geen locatie",
+      "title": "Locatiekaart",
+      "coordinates": "Coördinaten:",
+      "latitude": "Breedtegraad: {value}",
+      "longitude": "Lengtegraad: {value}"
+    },
+    "location": {
+      "useMyLocation": "Gebruik mijn locatie",
+      "couldNotGet": "Je locatie ophalen lukte niet",
+      "unavailable": "Locatie niet beschikbaar",
+      "notSupported": "Locatie is niet beschikbaar op dit toestel",
+      "permissionDenied": "Toegang tot locatie geweigerd",
+      "timedOut": "Locatie opvragen duurde te lang",
+      "failed": "Je locatie bepalen lukte niet",
+      "noAddress": "Geen adres gevonden voor je locatie"
+    },
+    "geocode": {
+      "noResults": "Geen resultaten gevonden",
+      "failed": "Adres opzoeken mislukt",
+      "reverseFailed": "Adres opzoeken mislukt"
+    }
   }
 }

@@ -51,12 +51,12 @@
     "settings": "Paramètres",
     "accessRestricted": "Accès restreint",
     "error": "Erreur",
-    "fallbackToEN": "Falling back to English",
-    "noTranslation": "No translation",
-    "copy": "Copy",
-    "content": "Content",
-    "characters": "characters",
-    "words": "words"
+    "fallbackToEN": "Retour à l'anglais",
+    "noTranslation": "Aucune traduction",
+    "copy": "Copier",
+    "content": "Contenu",
+    "characters": "caractères",
+    "words": "mots"
   },
   "table": {
     "id": "ID",
@@ -133,13 +133,13 @@
     "maxLength": "Doit contenir au plus {max} caractères",
     "tryAgain": "Veuillez réessayer",
     "contactSupport": "Veuillez contacter le support si le problème persiste",
-    "noTextToCopy": "No text to copy",
-    "failedToCopyText": "Failed to copy text"
+    "noTextToCopy": "Aucun texte à copier",
+    "failedToCopyText": "Échec de la copie du texte"
   },
   "messages": {
-    "usingEnglishFallback": "Using English fallback",
-    "noTranslationAvailable": "No translation available",
-    "copiedToClipboard": "Copied to clipboard"
+    "usingEnglishFallback": "Version anglaise utilisée",
+    "noTranslationAvailable": "Aucune traduction disponible",
+    "copiedToClipboard": "Copié dans le presse-papiers"
   },
   "errorPage": {
     "error": "Erreur",
@@ -348,6 +348,7 @@
     "teamNamePlaceholder": "Mon équipe",
     "teamSettings": "Paramètres de l'équipe",
     "teamSettingsDescription": "Gérez le profil et les paramètres de votre équipe.",
+    "general": "Général",
     "createTeam": "Créer une équipe",
     "leaveTeam": "Quitter l'équipe",
     "deleteTeam": "Supprimer l'équipe",
@@ -419,20 +420,51 @@
   },
   "admin": {
     "translations": {
-      "title": "UI Translations",
-      "searchPlaceholder": "Search translations...",
-      "allCategories": "All categories",
-      "loadFailed": "Failed to load translations",
-      "noTranslationsFound": "No translations found",
-      "keyPath": "Key Path",
-      "systemValues": "System Values",
-      "teamOverrideValues": "Team Override Values",
-      "editOverride": "Edit/Create Override",
-      "removeOverrideTitle": "Remove Translation Override?",
-      "removeOverrideDescription": "This will permanently delete your team's custom translation and revert to using the system translation.",
-      "removeOverride": "Remove Override",
-      "replaceConfirmTitle": "Replace existing translation?",
-      "replace": "Replace"
+      "title": "Traductions de l'interface",
+      "searchPlaceholder": "Rechercher des traductions...",
+      "allCategories": "Toutes les catégories",
+      "loadFailed": "Échec du chargement des traductions",
+      "noTranslationsFound": "Aucune traduction trouvée",
+      "keyPath": "Chemin de la clé",
+      "systemValues": "Valeurs système",
+      "teamOverrideValues": "Valeurs de l'équipe",
+      "editOverride": "Modifier ou créer une personnalisation",
+      "removeOverrideTitle": "Supprimer la personnalisation ?",
+      "removeOverrideDescription": "Cela supprimera définitivement la traduction personnalisée de votre équipe et rétablira la traduction système.",
+      "removeOverride": "Supprimer la personnalisation",
+      "replaceConfirmTitle": "Remplacer la traduction existante ?",
+      "replace": "Remplacer",
+      "subtitle": "Traductions système avec les personnalisations de l'équipe",
+      "addTranslation": "Ajouter une traduction",
+      "newTranslation": "Nouvelle traduction",
+      "overridden": "Personnalisé",
+      "system": "Système",
+      "paginationSummary": "{from}–{to} sur {total} traductions",
+      "searchKeysPlaceholder": "Rechercher des clés de traduction...",
+      "currentValue": "Valeur actuelle",
+      "values": "Valeurs",
+      "createOverride": "Créer la personnalisation",
+      "updateOverride": "Mettre à jour la personnalisation",
+      "columnKey": "Clé",
+      "columnCategory": "Catégorie",
+      "columnValueEn": "Valeur (EN)",
+      "columnOverride": "Personnalisation",
+      "columnStatus": "Statut",
+      "valueRequired": "Au moins une traduction est requise",
+      "keyPathRequired": "Le chemin de la clé est requis",
+      "overrideCreated": "Personnalisation créée",
+      "overrideUpdated": "Personnalisation mise à jour",
+      "overrideRemoved": "Personnalisation supprimée",
+      "translationCreated": "Traduction créée",
+      "saveOverrideFailed": "Échec de l'enregistrement de la personnalisation",
+      "createFailed": "Échec de la création de la traduction",
+      "deleteOverrideFailed": "Échec de la suppression de la personnalisation",
+      "keyPathPlaceholder": "p. ex. table.search",
+      "category": "Catégorie",
+      "categoryPlaceholder": "p. ex. table",
+      "translations": "Traductions",
+      "description": "Description",
+      "descriptionPlaceholder": "Description facultative"
     }
   },
   "navigation": {
@@ -455,5 +487,103 @@
     "content": "Contenu",
     "media": "Médias",
     "data": "Collections"
+  },
+  "i18n": {
+    "translateWithAi": "Traduire avec l'IA",
+    "input": {
+      "blockEditorPlaceholder": "Tapez / pour insérer un bloc...",
+      "versionAvailable": "Version {locale} disponible",
+      "fallback": "Par défaut : {value}",
+      "translationLabel": "Traduction ({locale})",
+      "replaceWarning": "Ce champ contient déjà du texte. La traduction le remplacera par une nouvelle traduction générée par l'IA.",
+      "gridModeUnavailable": "Le mode grille n'est pas disponible pour le texte enrichi. Modifiez une langue à la fois."
+    },
+    "display": {
+      "modalTitle": "Traduction - {locale}"
+    },
+    "ai": {
+      "translate": "Traduire",
+      "translateFrom": "Traduire depuis {locale}",
+      "notConfigured": "Traduction IA non configurée",
+      "notConfiguredDescription": "Définissez NUXT_ANTHROPIC_API_KEY ou NUXT_OPENAI_API_KEY dans votre fichier .env",
+      "failed": "Échec de la traduction",
+      "complete": "Traduction terminée",
+      "saved": "Traduction enregistrée",
+      "translatedBlocks": "{count} blocs de texte traduits.",
+      "translatedBlocksReload": "{count} blocs de texte traduits. Enregistrez et rechargez pour les voir dans l'éditeur."
+    }
+  },
+  "email": {
+    "checkYourEmail": "Consultez vos e-mails",
+    "magicLinkSentTo": "Nous avons envoyé un lien de connexion à",
+    "magicLinkInstructions": "Cliquez sur le lien dans l'e-mail pour vous connecter. Le lien expire dans 10 minutes.",
+    "noEmailReceived": "Vous n'avez pas reçu l'e-mail ?",
+    "tips": "Conseils :",
+    "tipSpam": "Vérifiez votre dossier spam ou courrier indésirable",
+    "tipCorrectAddress": "Vérifiez que l'adresse e-mail est correcte",
+    "tipLinkExpires": "Le lien expire après 10 minutes",
+    "tryDifferentEmail": "Essayer une autre adresse e-mail",
+    "codeSentTo": "Nous avons envoyé un code de vérification à",
+    "verificationCode": "Code de vérification",
+    "verifyEmail": "Vérifier l'e-mail",
+    "noCodeReceived": "Vous n'avez pas reçu le code ?",
+    "checkSpamHint": "Si vous ne voyez pas l'e-mail, vérifiez votre dossier spam.",
+    "sending": "Envoi...",
+    "resend": "Renvoyer",
+    "resendIn": "Renvoyer dans {time}",
+    "emailRequired": "L'adresse e-mail est requise",
+    "invalidEmail": "Veuillez saisir une adresse e-mail valide"
+  },
+  "maps": {
+    "loadFailed": "Échec du chargement de la carte",
+    "styles": {
+      "streets": "Rues",
+      "light": "Clair",
+      "dark": "Sombre",
+      "satellite": "Satellite",
+      "outdoors": "Plein air"
+    },
+    "block": {
+      "map": "Carte",
+      "edit": "Modifier les propriétés du bloc",
+      "delete": "Supprimer le bloc",
+      "noLocation": "Aucun emplacement défini",
+      "noLocationDescription": "Modifiez ce bloc pour saisir la latitude et la longitude.",
+      "noLocationHint": "Aucun emplacement défini — saisissez la latitude et la longitude dans les propriétés",
+      "zoom": "zoom {zoom}"
+    },
+    "collectionBlock": {
+      "title": "Carte de collection",
+      "mapView": "Vue carte",
+      "noCollection": "Aucune collection sélectionnée",
+      "noCollectionDescription": "Modifiez ce bloc pour sélectionner une collection.",
+      "notFound": "Collection « {collection} » introuvable",
+      "noCoordinates": "Aucune coordonnée trouvée",
+      "noCoordinatesDescription": "Cette collection ne semble pas avoir de champs de localisation. Indiquez le nom du champ de coordonnées dans les propriétés du bloc.",
+      "noMarkers": "Aucun marqueur",
+      "noMarkersDescription": "Aucun élément de cette collection n'a de coordonnées valides."
+    },
+    "preview": {
+      "noLocation": "Aucun emplacement",
+      "title": "Carte de l'emplacement",
+      "coordinates": "Coordonnées :",
+      "latitude": "Latitude : {value}",
+      "longitude": "Longitude : {value}"
+    },
+    "location": {
+      "useMyLocation": "Utiliser ma position",
+      "couldNotGet": "Impossible d'obtenir votre position",
+      "unavailable": "Position indisponible",
+      "notSupported": "La localisation n'est pas disponible sur cet appareil",
+      "permissionDenied": "Accès à la position refusé",
+      "timedOut": "La demande de position a expiré",
+      "failed": "Impossible de déterminer votre position",
+      "noAddress": "Aucune adresse trouvée pour votre position"
+    },
+    "geocode": {
+      "noResults": "Aucun résultat trouvé",
+      "failed": "Échec de la recherche d'adresse",
+      "reverseFailed": "Échec de la recherche d'adresse"
+    }
   }
 }

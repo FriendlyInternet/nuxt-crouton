@@ -433,7 +433,38 @@
       "removeOverrideDescription": "This will permanently delete your team's custom translation and revert to using the system translation.",
       "removeOverride": "Remove Override",
       "replaceConfirmTitle": "Replace existing translation?",
-      "replace": "Replace"
+      "replace": "Replace",
+      "subtitle": "System translations with team overrides",
+      "addTranslation": "Add Translation",
+      "newTranslation": "New Translation",
+      "overridden": "Overridden",
+      "system": "System",
+      "paginationSummary": "{from}–{to} of {total} translations",
+      "searchKeysPlaceholder": "Search translation keys...",
+      "currentValue": "Current value",
+      "values": "Values",
+      "createOverride": "Create Override",
+      "updateOverride": "Update Override",
+      "columnKey": "Key",
+      "columnCategory": "Category",
+      "columnValueEn": "Value (EN)",
+      "columnOverride": "Override",
+      "columnStatus": "Status",
+      "valueRequired": "At least one translation value is required",
+      "keyPathRequired": "Key path is required",
+      "overrideCreated": "Override created",
+      "overrideUpdated": "Override updated",
+      "overrideRemoved": "Override removed",
+      "translationCreated": "Translation created",
+      "saveOverrideFailed": "Failed to save override",
+      "createFailed": "Failed to create translation",
+      "deleteOverrideFailed": "Failed to delete override",
+      "keyPathPlaceholder": "e.g. table.search",
+      "category": "Category",
+      "categoryPlaceholder": "e.g. table",
+      "translations": "Translations",
+      "description": "Description",
+      "descriptionPlaceholder": "Optional description"
     }
   },
   "navigation": {
@@ -456,5 +487,103 @@
     "content": "Content",
     "media": "Media",
     "data": "Collections"
+  },
+  "i18n": {
+    "translateWithAi": "Translate with AI",
+    "input": {
+      "blockEditorPlaceholder": "Type / to insert a block...",
+      "versionAvailable": "{locale} version available",
+      "fallback": "Fallback: {value}",
+      "translationLabel": "Translation ({locale})",
+      "replaceWarning": "The target field already has content. Translating will replace it with a new AI-generated translation.",
+      "gridModeUnavailable": "Grid mode is not available for rich text editing. Please edit one language at a time."
+    },
+    "display": {
+      "modalTitle": "Translation - {locale}"
+    },
+    "ai": {
+      "translate": "Translate",
+      "translateFrom": "Translate from {locale}",
+      "notConfigured": "AI translation not configured",
+      "notConfiguredDescription": "Set NUXT_ANTHROPIC_API_KEY or NUXT_OPENAI_API_KEY in your .env file",
+      "failed": "Translation failed",
+      "complete": "Translation complete",
+      "saved": "Translation saved",
+      "translatedBlocks": "Translated {count} text blocks.",
+      "translatedBlocksReload": "Translated {count} text blocks. Save and reload to see them in the editor."
+    }
+  },
+  "email": {
+    "checkYourEmail": "Check your email",
+    "magicLinkSentTo": "We sent a magic link to",
+    "magicLinkInstructions": "Click the link in the email to sign in. The link will expire in 10 minutes.",
+    "noEmailReceived": "Didn't receive the email?",
+    "tips": "Tips:",
+    "tipSpam": "Check your spam or junk folder",
+    "tipCorrectAddress": "Make sure the email address is correct",
+    "tipLinkExpires": "The link expires after 10 minutes",
+    "tryDifferentEmail": "Try a different email",
+    "codeSentTo": "We sent a verification code to",
+    "verificationCode": "Verification code",
+    "verifyEmail": "Verify email",
+    "noCodeReceived": "Didn't receive the code?",
+    "checkSpamHint": "Check your spam folder if you don't see the email.",
+    "sending": "Sending...",
+    "resend": "Resend",
+    "resendIn": "Resend in {time}",
+    "emailRequired": "Email is required",
+    "invalidEmail": "Please enter a valid email"
+  },
+  "maps": {
+    "loadFailed": "Failed to load map",
+    "styles": {
+      "streets": "Streets",
+      "light": "Light",
+      "dark": "Dark",
+      "satellite": "Satellite",
+      "outdoors": "Outdoors"
+    },
+    "block": {
+      "map": "Map",
+      "edit": "Edit block properties",
+      "delete": "Delete block",
+      "noLocation": "No location set",
+      "noLocationDescription": "Edit this block to enter latitude and longitude coordinates.",
+      "noLocationHint": "No location set — enter lat/lng in properties",
+      "zoom": "zoom {zoom}"
+    },
+    "collectionBlock": {
+      "title": "Collection Map",
+      "mapView": "Map view",
+      "noCollection": "No collection selected",
+      "noCollectionDescription": "Edit this block to select a collection.",
+      "notFound": "Collection \"{collection}\" not found",
+      "noCoordinates": "No coordinate data found",
+      "noCoordinatesDescription": "This collection doesn't appear to have location fields. Set the coordinate field name in block properties.",
+      "noMarkers": "No map markers",
+      "noMarkersDescription": "No items in this collection have valid coordinate data."
+    },
+    "preview": {
+      "noLocation": "No location",
+      "title": "Location Map",
+      "coordinates": "Coordinates:",
+      "latitude": "Latitude: {value}",
+      "longitude": "Longitude: {value}"
+    },
+    "location": {
+      "useMyLocation": "Use my location",
+      "couldNotGet": "Could not get your location",
+      "unavailable": "Location unavailable",
+      "notSupported": "Location is not available on this device",
+      "permissionDenied": "Location permission denied",
+      "timedOut": "Location request timed out",
+      "failed": "Could not determine your location",
+      "noAddress": "Could not find an address for your location"
+    },
+    "geocode": {
+      "noResults": "No results found",
+      "failed": "Address lookup failed",
+      "reverseFailed": "Address lookup failed"
+    }
   }
 }
