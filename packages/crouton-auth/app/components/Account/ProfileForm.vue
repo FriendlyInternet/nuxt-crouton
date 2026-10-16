@@ -231,7 +231,7 @@ function resetForm() {
       </UFormField>
 
       <UFormField
-        :label="t('forms.email') || 'Email'"
+        :label="t('auth.email')"
         name="email"
         class="w-full"
       >
