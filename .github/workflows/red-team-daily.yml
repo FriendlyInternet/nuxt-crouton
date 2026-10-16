@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   red-team-daily:
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
     # Job-level permissions (see red-team.yml for why id-token MUST be here). No issues/PR
     # write — this workflow does NOT post to GitHub; disclosure is by private email only.
