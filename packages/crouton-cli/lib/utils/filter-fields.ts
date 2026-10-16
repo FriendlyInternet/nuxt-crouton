@@ -1,3 +1,4 @@
+import { autoRefFields } from './system-fields.ts'
 /**
  * The reference fields a generated list endpoint can be scoped by (`?assigneeId=…`).
  *
@@ -26,7 +27,7 @@ export function collectFilterFields(
   // Mirrors the auto refs `detectReferenceFields` appends: owner is unconditional, the audit
   // pair rides `useMetadata`. Order matches so the emitted opts read the same in both files.
   const useMetadata = config?.flags?.useMetadata ?? true
-  const auto = useMetadata ? ['owner', 'createdBy', 'updatedBy'] : ['owner']
+  const auto = autoRefFields(useMetadata)
 
   return [...declared, ...auto]
 }
