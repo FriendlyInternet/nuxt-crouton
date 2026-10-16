@@ -530,7 +530,7 @@ Idempotent (stable ids). Run via an app's `crouton-seed` / `db:seed:*` scripts.
 ## Dependencies
 
 - **Extends**: None (standalone module/layer)
-- **Used by**: `@fyit/crouton` and all crouton packages (canonical team auth)
+- **Used by**: `@fyit/crouton-core` (extends this layer, so every app gets it) and all crouton packages (canonical team auth)
 - **Core deps**: better-auth, @better-auth/passkey
 - **Recommended**: nuxthub-ratelimit (optional peer dependency for rate limiting)
 

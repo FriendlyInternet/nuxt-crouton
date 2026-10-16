@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-layout": "workspace:*",
     "drizzle-orm": "catalog:",

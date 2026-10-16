@@ -1,14 +1,14 @@
-# CLAUDE.md - @fyit/crouton
+# CLAUDE.md - @fyit/crouton-core
 
 ## Package Purpose
 
 Core CRUD layer for Nuxt applications. Provides composables, components, and server utilities for building data-driven admin panels with team-scoped access, nested forms, and smart caching.
 
-**Single-install experience:** Installing `@fyit/crouton` automatically includes i18n, auth, and admin packages - no need to install them separately.
+**One layer to extend:** `@fyit/crouton-core` bundles i18n, auth, and admin (it extends `@fyit/crouton-i18n`, `@fyit/crouton-auth`, `@fyit/crouton-admin`) and registers `@nuxthub/core`, `@nuxt/ui`, `@vueuse/nuxt`, `@nuxt/image`, `@nuxtjs/seo` itself. An app switches crouton on by **extending** it — `extends: ['@fyit/crouton-core', '@fyit/crouton-pages', './layers/shop']` — and adds each addon package the same way. There is no crouton entry in `modules` (the optional `@fyit/crouton-devtools` is the only one); `crouton.config.js` `features` is generation input, not a package switch (#2286).
 
 ## Auto-Included Packages
 
-When you extend `@fyit/crouton`, you automatically get:
+When you extend `@fyit/crouton-core`, you automatically get:
 
 | Package | Provides | Routes |
 |---------|----------|--------|
@@ -25,7 +25,7 @@ When you extend `@fyit/crouton`, you automatically get:
 // nuxt.config.ts - BEFORE (manual)
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-auth',
     '@fyit/crouton-admin',
     '@fyit/crouton-i18n',
@@ -36,8 +36,8 @@ export default defineNuxtConfig({
 // nuxt.config.ts - AFTER (auto-included)
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',           // Includes auth, admin, i18n
-    '@fyit/crouton-bookings',       // Optional apps
+    '@fyit/crouton-core',      // Includes auth, admin, i18n
+    '@fyit/crouton-bookings',  // Optional apps
   ]
 })
 
@@ -423,7 +423,7 @@ ensureBlob(file, { maxSize: '10MB', types: ['image/png'] })
 ```typescript
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: ['@fyit/crouton'],
+  extends: ['@fyit/crouton-core'],
 
   hub: {
     db: 'postgresql',  // Use PostgreSQL instead

@@ -1,7 +1,7 @@
 ---
 name: crouton-diagnostics-index
 layer: stack
-description: Symptom → root-cause lookup table for nuxt-crouton's recurring failure modes — exact error strings mapped to their known cause, fix, and evidence issue. Use when you hit an error you don't recognize in this repo, before debugging from first principles. Trigger phrases and symptoms: "Cannot resolve entry module .nuxt/hub/db/schema.entry.ts", "Could not load '@fyit/crouton'", "No migrations present", "No schema files found", "$setup.t is not a function", "does not provide an export named 'Map'", "no such table: translations_ui", "collection pages 500 in production", "the build was green but the app is broken", "is this a known issue?".
+description: Symptom → root-cause lookup table for nuxt-crouton's recurring failure modes — exact error strings mapped to their known cause, fix, and evidence issue. Use when you hit an error you don't recognize in this repo, before debugging from first principles. Trigger phrases and symptoms: "Cannot resolve entry module .nuxt/hub/db/schema.entry.ts", "Could not load '@fyit/crouton-*'", "No migrations present", "No schema files found", "$setup.t is not a function", "does not provide an export named 'Map'", "no such table: translations_ui", "collection pages 500 in production", "the build was green but the app is broken", "is this a known issue?".
 ---
 
 # crouton-diagnostics-index
@@ -31,7 +31,7 @@ Rule of engagement: a table hit here does NOT waive the `bug-archaeology` gate f
 | Symptom (exact text where known) | Root cause | Fix / action | Evidence |
 |---|---|---|---|
 | `Cannot resolve entry module .nuxt/hub/db/schema.entry.ts` | app config used `hub: { database: true }` | use `hub: { db: 'sqlite' }` — canonical: root `CLAUDE.md` §Critical Gotchas | root `CLAUDE.md`; depth: `crouton-build-and-env` |
-| `Could not load '@fyit/crouton'` (or any `@fyit/*`) during install / `nuxt prepare` / boot | dist-consumed package not built; a bare `postinstall: nuxt prepare` aborts the whole install | `pnpm build:packages` + guarded postinstall — canonical: root `CLAUDE.md` §postinstall guard | root `CLAUDE.md`; depth: `crouton-build-and-env` §2 |
+| `Could not load '@fyit/crouton-*'` (any dist-consumed `@fyit/*`) during install / `nuxt prepare` / boot | dist-consumed package not built; a bare `postinstall: nuxt prepare` aborts the whole install | `pnpm build:packages` + guarded postinstall — canonical: root `CLAUDE.md` §postinstall guard | root `CLAUDE.md`; depth: `crouton-build-and-env` §2 |
 | `Could not load @fyit/crouton-devtools` in a DEPLOY workflow only | shared layer-build cache keyed without build-set identity (fixed) | should not recur; if it does, suspect the deploy workflow's cache key | #740 → #745; why: `crouton-failure-archaeology` §B |
 | Thousands of typecheck errors at once | `nuxt typecheck` run outside an app dir | `pnpm typecheck` from root — canonical: root `CLAUDE.md` §MANDATORY TypeScript Checking | root `CLAUDE.md` |
 | `Cannot find module '@vue/compiler-sfc'` (or similar phantom type error) after a dep bump | stale/unhoisted `node_modules`, not code | `rm -rf node_modules && pnpm install` — canonical: `dependency-sweep` skill | the #424 class |

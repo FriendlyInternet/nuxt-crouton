@@ -53,7 +53,8 @@ doesn't exist yet, the seed fails with a recipe (run `pnpm dev` once to create +
 | `--dry-run` | false | Print SQL instead of running wrangler |
 
 **How it works:** BFS-discovers every `@fyit/crouton-*` package reachable from the
-app (direct deps + transitively bundled ones like `crouton-auth` via `crouton-core`),
+app (`discoverCroutonPackageNames`: the layers in its `nuxt.config` `extends` + its direct
+deps + what those pull in transitively, like `crouton-auth` via `crouton-core`),
 loads each package's `./seed` export via **jiti** (no build step), topo-sorts the
 providers by `dependsOn` (`auth → sales → pages`), then calls
 `collectSeedSql()` from `@fyit/crouton-core/shared/seed` to turn their declarative
@@ -64,9 +65,10 @@ via `wrangler d1 execute --command`. Stable, namespace-derived ids
 
 **Resilient per-chunk execution (#1370):** the seed runs as INDEPENDENT chunks — one
 `--command` per provider, plus the collection fixtures and the default layout — not one
-atomic batch. Why: `@fyit/crouton` (the kitchen-sink meta package) bundles *every* crouton
-package as a dep, so the BFS discovers a provider even for a package the app **doesn't
-extend** (e.g. `crouton-bookings` in a minimal app that never migrated `bookings_settings`).
+atomic batch. Why: discovery is transitive over package deps, so the BFS can reach a
+provider for a package the app **doesn't extend** (a dep of a dep — or, on an older
+published meta package, everything — e.g. `crouton-bookings` in a minimal app that never
+migrated `bookings_settings`).
 As one batch, that single missing table aborted the WHOLE seed → an empty preview. Now a
 failing chunk **warns + is skipped** (`runSeedChunks`, unit-tested) and the auth team + the
 app's own rows + layout still seed. `crouton-seed` throws only if **every** chunk fails.
@@ -76,10 +78,11 @@ The contract (`SeedProvider`, `SeedContext`, `createPageWithBlocks`) lives in
 Wire it into an app with `db:seed:local` / `db:seed:remote` scripts (see
 `apps/fanfare/package.json`).
 
-**Scoped to the tables the app actually has (#1165):** provider discovery is by
-*dependency*, but a table only exists if the app *extended* that package's layer +
-migrated it. A "bundle" dep (`@fyit/crouton` pulling in bookings/pages/sales) makes
-those two sets diverge, so a **minimal** app would emit `INSERT INTO bookings_locations …`
+**Scoped to the tables the app actually has (#1165):** provider discovery follows
+`extends` + *dependencies* (transitively), but a table only exists if the app *extended*
+that package's layer + migrated it. A transitive dep the app never extends (or, on an
+older published meta package, its bookings/pages/sales deps) makes those two sets
+diverge, so a **minimal** app would emit `INSERT INTO bookings_locations …`
 for a table it never created → the whole seed errors. Before executing, the runner
 queries `sqlite_master` for the real tables and **drops `INSERT`s for tables that
 don't exist** (logging `Skipped N row(s) for … not in <db>`). The probe is
@@ -1038,7 +1041,7 @@ envelope. `pageSize` is clamped to `[1, 100]`, default 10:
 ```
 
 Client side, `useCollectionQuery(collection, { pagination: { pageSize } })` (in
-`@fyit/crouton`) folds `page`/`pageSize` into the query and exposes
+`@fyit/crouton-core`) folds `page`/`pageSize` into the query and exposes
 `page`/`total`/`pageCount`/`paginationData` for `<CroutonCollection>`. `count(*)` reuses the
 same `where` (no joins), so totals respect FK filters.
 
@@ -1047,9 +1050,9 @@ same `where` (no joins), so totals respect FK filters.
 All generated collections are team-scoped. The generator:
 - Imports team auth from `@fyit/crouton-auth/server/utils/team`
 - Uses `resolveTeamAndCheckMembership()` for membership validation
-- Requires the core `@fyit/crouton` package (which bundles auth, admin, and i18n)
+- Requires the core `@fyit/crouton-core` package (which bundles auth, admin, and i18n)
 
-**Note:** The core package (`@fyit/crouton`) automatically includes:
+**Note:** The core package (`@fyit/crouton-core`) automatically includes:
 - `@fyit/crouton-auth` - Team-based authentication
 - `@fyit/crouton-admin` - Admin dashboard
 - `@fyit/crouton-i18n` - Internationalization
@@ -1061,7 +1064,7 @@ You only need to add the core package to your `nuxt.config.ts` extends array.
 ## Dependencies
 
 - **Extends**: None (standalone CLI)
-- **Works with**: `@fyit/crouton`
+- **Works with**: `@fyit/crouton-core`
 - **CLI deps**: citty (CLI framework), @clack/prompts (interactive prompts), consola (logging), c12 (config loading), magicast (AST config modification)
 
 ## Testing

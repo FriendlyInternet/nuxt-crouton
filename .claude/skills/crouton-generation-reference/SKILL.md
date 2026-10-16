@@ -25,7 +25,7 @@ The drift-corrected lookup tables for the generation domain: what a schema file 
 - **Collection** — one CRUD entity (e.g. `products`): a generated, self-contained nested Nuxt layer with form, list, composable, team-scoped API, Drizzle schema. Always team-scoped (every row has `teamId`).
 - **Layer** — here: the domain folder `layers/<layer>/` grouping collections (e.g. `shop`). (Distinct from Nuxt-layer-as-package; see `crouton-architecture-contract`.)
 - **fieldsFile** — the JSON file defining a collection's fields (§1). The input to everything.
-- **`crouton.config.js`** — unified config at the app root: collections + targets + dialect for the CLI, `features` flags for the `@fyit/crouton` module. Full key reference: `packages/crouton-cli/CLAUDE.md` "Config File Format".
+- **`crouton.config.js`** — unified config at the app root: collections + targets + dialect for the CLI; `features` is generation input only — a package is switched on by `extends` in `nuxt.config.ts`, not by `features` (#2286). Full key reference: `packages/crouton-cli/CLAUDE.md` "Config File Format".
 - **Manifest (`crouton.manifest.ts`)** — per-package declaration of field types, reserved names, detection patterns. The **source of truth for field types** (§2).
 - **The CLI** — `packages/crouton-cli`, bins `crouton` (= `crouton-generate`) and `crouton-seed` (verified `package.json` bin map). In an app with `@fyit/crouton-cli` as devDep: `pnpm exec crouton <cmd>`.
 

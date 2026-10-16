@@ -379,23 +379,23 @@ The seed generator auto-detects field names and generates appropriate data (emai
 
 - Node.js 18+
 - Nuxt 3 or 4
-- @fyit/crouton installed
+- @fyit/crouton-core installed
 - Drizzle ORM configured
 
 ## Integration with Nuxt Crouton
 
-This generator is designed to work seamlessly with [@fyit/crouton](https://www.npmjs.com/package/@fyit/crouton).
+This generator is designed to work seamlessly with [@fyit/crouton-core](https://www.npmjs.com/package/@fyit/crouton-core).
 
 First, install and configure Nuxt Crouton:
 
 ```bash
-pnpm add @fyit/crouton
+pnpm add @fyit/crouton-core
 ```
 
 ```typescript
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: ['@fyit/crouton']
+  extends: ['@fyit/crouton-core']
 })
 ```
 
@@ -476,5 +476,5 @@ MIT © FYIT
 ## Links
 
 - [GitHub Repository](https://github.com/FriendlyInternet/nuxt-crouton)
-- [Nuxt Crouton Package](https://www.npmjs.com/package/@fyit/crouton)
+- [Nuxt Crouton Core Package](https://www.npmjs.com/package/@fyit/crouton-core)
 - [Report Issues](https://github.com/FriendlyInternet/nuxt-crouton/issues)

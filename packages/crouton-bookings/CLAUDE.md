@@ -2,7 +2,7 @@
 
 ## Package Purpose
 
-Booking system layer for Nuxt applications that provides both slot-based bookings (courts, rooms, appointments) and inventory-based reservations (equipment, rentals). Works as a Nuxt layer that integrates with `@fyit/crouton` and `@fyit/crouton-auth`.
+Booking system layer for Nuxt applications that provides both slot-based bookings (courts, rooms, appointments) and inventory-based reservations (equipment, rentals). Works as a Nuxt layer that integrates with `@fyit/crouton-core` (which bundles `@fyit/crouton-auth`).
 
 ## Key Files
 
@@ -80,8 +80,7 @@ and the create endpoint: `app/utils/full-day.ts` (`withFullDay`, `isBlockedByFul
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
-    '@fyit/crouton-auth',
+    '@fyit/crouton-core',  // bundles crouton-auth
     '@fyit/crouton-bookings',
     './layers/bookings' // Generated collections
   ],
@@ -188,7 +187,7 @@ const { variables, getPreviewValues, demoData } = useBookingEmailVariables()
 
 ## Dependencies
 
-- **Required**: `@fyit/crouton`, `@fyit/crouton-auth`
+- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`)
 - **Optional**: `@fyit/crouton-email` (for email features)
 - **Peer**: `@nuxtjs/i18n` (auto-included)
 
