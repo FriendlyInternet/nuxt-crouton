@@ -321,7 +321,7 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
     <!-- Body: locations sidebar + content -->
     <div class="flex min-h-0">
         <!-- Location sidebar -->
-        <div class="w-36 shrink-0 border-r border-default flex flex-col gap-0.5 px-1 py-4">
+        <div class="w-52 shrink-0 border-r border-default flex flex-col gap-0.5 px-1 py-4">
           <UButton
             v-for="location in locations"
             :key="location.id"
@@ -338,7 +338,7 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
               class="w-2 h-2 rounded-full shrink-0"
               :style="{ backgroundColor: isLocationEnabled(location.id) ? (location.color || '#3b82f6') : '#9ca3af' }"
             />
-            <span class="truncate">{{ getLocationTitle(location) }}</span>
+            <span class="text-left break-words">{{ getLocationTitle(location) }}</span>
           </UButton>
         </div>
 
