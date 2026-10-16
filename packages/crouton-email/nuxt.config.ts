@@ -76,6 +76,14 @@ export default defineNuxtConfig({
     imports: {
       dirs: ['server/utils']
     },
+    // Bundle this package's own files (brand/email-brand.mjs is imported by the
+    // server/emails templates but lives outside app/ and server/, so Nitro treated
+    // it as an external and emitted a relative path that is wrong by two levels in
+    // the prerender bundle: "Cannot find module .../packages/crouton-email/brand/
+    // email-brand.mjs"). The deleted @fyit/crouton meta module masked this (#2290).
+    externals: {
+      inline: [fileURLToPath(new URL('./', import.meta.url))]
+    },
     // Required for vue-email: enables Vue SFC compilation in server context
     // See: https://vuemail.net/getting-started/nuxt-nitro
     rollupConfig: {

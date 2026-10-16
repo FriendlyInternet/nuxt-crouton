@@ -346,3 +346,15 @@ Server util: useEmailService, sendVerificationEmail, sendMagicLink
 Template: Verification.vue, MagicLink.vue, TeamInvite.vue
 Type: SendEmailOptions, VerificationEmailOptions
 ```
+
+## Nitro bundling of `brand/email-brand.mjs` (#2290)
+
+`server/emails/BaseLayout.vue` imports `../../brand/email-brand.mjs`. That file lives outside
+`app/` and `server/`, so Nitro treats it as an **external** and writes a relative path into the
+prerender bundle that is wrong by two directory levels (`Cannot find module
+…/packages/crouton-email/brand/email-brand.mjs imported from …/.nuxt/prerender/index.mjs`,
+velo's staging build). `nuxt.config.ts` therefore sets `nitro.externals.inline` to this
+package's own directory so the brand file is bundled. The deleted `@fyit/crouton` meta module
+used to mask this (loading it changed Nitro's module-directory set); don't move the brand
+file under `server/` only to drop the rule — the digest renderers import it from `brand/`
+too (`./brand` export).
