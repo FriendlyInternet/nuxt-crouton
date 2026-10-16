@@ -54,8 +54,8 @@
     "nuxt": "^4.0.0"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^2.1.9",
+    "@vitest/coverage-v8": "catalog:",
     "happy-dom": "^16.6.0",
-    "vitest": "^2.1.0"
+    "vitest": "catalog:"
   }
 }

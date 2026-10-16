@@ -130,5 +130,6 @@ standing deliberate/wait items each sweep — open `deps` issues
 
 - Several packages pin **drizzle** directly instead of via `catalog:`, so old
   copies linger after a bump. Catalog-ising those is a separate cleanup.
-- `vitest` / `@vitest/coverage-v8` / `happy-dom` / `@nuxt/kit|schema` are
-  deliberately **not** cataloged yet (version spreads need a real migration — #141).
+- `vitest` / `@vitest/coverage-v8` / `@vitest/ui` are cataloged since #2291
+  (unified on 4.x). `happy-dom` / `@nuxt/kit|schema` are still **not** cataloged
+  (version spreads need a real migration — #141).

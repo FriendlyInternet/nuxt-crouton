@@ -34,7 +34,7 @@
     "@vitejs/plugin-vue": "^5.0.0",
     "@vue/test-utils": "^2.4.0",
     "happy-dom": "^15.0.0",
-    "vitest": "^2.0.0"
+    "vitest": "catalog:"
   },
   "keywords": [
     "nuxt",

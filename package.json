@@ -57,8 +57,8 @@
     "@nuxt/eslint-config": "^1.2.0",
     "@nuxt/test-utils": "^3.23.0",
     "@playwright/test": "^1.64.0",
-    "@vitest/coverage-v8": "^4.0.16",
-    "@vitest/ui": "^4.0.16",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "@vue/compiler-sfc": "^3.5.0",
     "@vue/test-utils": "^2.4.6",
     "changelogithub": "^14.0.0",
@@ -70,7 +70,7 @@
     "publint": "^0.3.16",
     "sharp": "^0.34.5",
     "typescript": "catalog:",
-    "vitest": "^4.0.16"
+    "vitest": "catalog:"
   },
   "pnpm": {
     "overrides": {
@@ -94,7 +94,8 @@
       "@fyit/crouton-sales>vue-i18n": "^11.4.14",
       "lodash-es": "^4.18.1",
       "protocol-buffers-schema": "^3.6.1",
-      "@simplewebauthn/server": "^13.3.2"
+      "@simplewebauthn/server": "^13.3.2",
+      "flatted": "^3.4.2"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3"

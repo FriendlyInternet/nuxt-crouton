@@ -14,9 +14,9 @@ packages:
 
 # Single source of truth for shared dependency versions (#142).
 # Reference from any package.json with "<dep>": "catalog:".
-# NOTE: vitest / @vitest/coverage-v8 / happy-dom and @nuxt/kit|schema are
-# intentionally NOT cataloged yet (version spreads require a real migration,
-# not a dedup) — see #141.
+# NOTE: happy-dom and @nuxt/kit|schema are intentionally NOT cataloged yet
+# (version spreads require a real migration, not a dedup) — see #141.
+# vitest was unified on 4.x and cataloged in #2291.
 catalog:
   nuxt: ^4.6.1
   vue: ^3.5.44
@@ -27,3 +27,6 @@ catalog:
   drizzle-orm: ^0.45.4
   drizzle-kit: ^0.31.11
   '@nuxt/ui': ^4.11.3
+  vitest: ^4.1.11
+  '@vitest/coverage-v8': ^4.1.11
+  '@vitest/ui': ^4.1.11

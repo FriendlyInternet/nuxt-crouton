@@ -79,6 +79,6 @@
     "better-sqlite3": "^12.4.1",
     "drizzle-orm": "catalog:",
     "unbuild": "^3.6.1",
-    "vitest": "^4.0.0"
+    "vitest": "catalog:"
   }
 }

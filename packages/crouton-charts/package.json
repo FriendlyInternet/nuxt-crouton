@@ -27,9 +27,9 @@
     "@nuxt/ui": "^3.0.0"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^2.1.8",
+    "@vitest/coverage-v8": "catalog:",
     "happy-dom": "^15.11.7",
-    "vitest": "^2.1.8"
+    "vitest": "catalog:"
   },
   "keywords": [
     "nuxt",
