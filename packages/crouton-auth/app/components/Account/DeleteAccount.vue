@@ -63,18 +63,18 @@ async function handleDelete() {
     })
 
     if (result.error) {
-      throw new Error(result.error.message ?? 'Failed to delete account')
+      throw new Error(result.error.message ?? t('account.failedToDeleteAccount'))
     }
 
-    notify.success('Account deleted', { description: 'Your account has been permanently deleted.' })
+    notify.success(t('account.accountDeleted'), { description: t('account.accountDeletedDescription') })
 
     // Sign out and redirect
     await logout()
     emit('deleted')
     await navigateTo('/')
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to delete account'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('account.failedToDeleteAccount')
+    notify.error(t('common.error'), { description: message })
   } finally {
     deleteLoading.value = false
   }

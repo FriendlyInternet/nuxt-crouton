@@ -68,10 +68,10 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
   async function handleLogout() {
     try {
       await logout()
-      notify.success(t('auth.signOut') || 'Signed out', { description: t('success.saved') || 'You have been signed out successfully.' })
+      notify.success(t('auth.signedOut'), { description: t('auth.signedOutDescription') })
       await router.push('/auth/login')
     } catch (error: unknown) {
-      notify.error(t('errors.generic') || 'Error', { description: error instanceof Error ? error.message : 'Failed to sign out' })
+      notify.error(t('common.error'), { description: error instanceof Error ? error.message : t('auth.failedToSignOut') })
     }
   }
 
@@ -80,13 +80,13 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
       // Language submenu — only when the app has more than one locale
       ...(locales.value.length > 1
         ? [{
-            label: t('forms.language') || 'Language',
+            label: t('forms.language'),
             icon: 'i-lucide-globe',
             children: languageItems.value
           }]
         : []),
       {
-        label: 'Dark Mode',
+        label: t('account.darkMode'),
         icon: isDark.value ? 'i-lucide-moon' : 'i-lucide-sun',
         type: 'checkbox',
         checked: isDark.value,
@@ -104,10 +104,10 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
     return [
       [
         {
-          label: user.value?.name || 'User',
+          label: user.value?.name || t('account.user'),
           avatar: {
             src: user.value?.image ?? undefined,
-            alt: user.value?.name ?? 'User',
+            alt: user.value?.name ?? t('account.user'),
             text: userInitials.value
           },
           type: 'label'
@@ -115,7 +115,7 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
       ],
       [
         {
-          label: t('navigation.accountSettings') || 'Account Settings',
+          label: t('navigation.accountSettings'),
           icon: 'i-lucide-user',
           ...(accountModal
             ? {
@@ -130,7 +130,7 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
       preferenceGroup,
       [
         {
-          label: t('auth.signOut') || 'Sign Out',
+          label: t('auth.signOut'),
           icon: 'i-lucide-log-out',
           color: 'error',
           onSelect: handleLogout
