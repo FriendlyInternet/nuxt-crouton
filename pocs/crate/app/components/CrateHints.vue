@@ -32,11 +32,10 @@ const emit = defineEmits<{ word: [word: HintWord], file: [pile: CratePile], hold
         @release="emit('listen')"
       />
     </CrateScrollRow>
-    <CrateScrollRow v-if="sources.length" class="text-xs">
-      <template v-for="s in sources" :key="s.label">
-        <ULink :to="s.url ?? undefined" target="_blank" class="shrink-0 ps-1 text-muted underline-offset-2 hover:underline">{{ s.label }}</ULink>
-        <CrateHintWord v-for="w in s.words" :key="w.word" :word="w" :ticked="!!w.pileId && isInPile(w.pileId)" class="shrink-0" @pick="emit('word', w)" />
-      </template>
+    <!-- One row per source (Discogs, Bandcamp…), stacked, each scrolling sideways on its own. -->
+    <CrateScrollRow v-for="s in sources" :key="s.label" class="text-xs">
+      <ULink :to="s.url ?? undefined" target="_blank" class="shrink-0 ps-1 text-muted underline-offset-2 hover:underline">{{ s.label }}</ULink>
+      <CrateHintWord v-for="w in s.words" :key="w.word" :word="w" :ticked="!!w.pileId && isInPile(w.pileId)" class="shrink-0" @pick="emit('word', w)" />
     </CrateScrollRow>
   </div>
 </template>
