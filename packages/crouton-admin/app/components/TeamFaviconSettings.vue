@@ -25,16 +25,17 @@ async function handleFileSelected(file: File | null) {
   try {
     const formData = new FormData()
     formData.append('file', file)
-    const result = await $fetch<{ url: string }>('/api/upload-image', {
+    // The endpoint returns the blob `pathname` (stored as-is; useTeamFavicon serves it at /images/<pathname>)
+    const result = await $fetch<{ pathname: string }>('/api/upload-image', {
       method: 'POST',
       body: formData
     })
 
-    if (result?.url) {
+    if (result?.pathname) {
       // Save favicon path to site settings
       const updated = await $fetch<{ favicon?: string }>(`/api/teams/${teamId.value}/settings/site`, {
         method: 'PATCH',
-        body: { favicon: result.url }
+        body: { favicon: result.pathname }
       })
       siteSettings.value = { ...siteSettings.value, ...updated }
       notify.success(t('teams.favicon.uploaded') || 'Favicon uploaded')
