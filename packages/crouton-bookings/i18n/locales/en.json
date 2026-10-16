@@ -205,6 +205,8 @@
       "schedulingHint": "Define when this location is available for bookings.",
       "slots": "Slots",
       "addTimeSlot": "Add Time Slot",
+      "offerFullDay": "Offer a full-day option",
+      "offerFullDayHint": "Adds \"All day\" next to these slots. Booking it blocks the other slots that day, and any booked slot blocks it.",
       "translations": "Translations",
       "tabLocation": "Location",
       "tabSettings": "Settings",

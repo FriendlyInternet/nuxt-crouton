@@ -149,6 +149,16 @@
                 :sortable="true"
               />
             </UFormField>
+            <UFormField
+              v-if="!state.inventoryMode && state.slots?.length"
+              name="offerFullDay"
+            >
+              <USwitch
+                v-model="(state.offerFullDay as any)"
+                :label="t('bookings.locationForm.offerFullDay')"
+                :description="t('bookings.locationForm.offerFullDayHint')"
+              />
+            </UFormField>
             <UFormField :label="t('bookings.schedule.openDays')" name="openDays">
               <CroutonBookingsOpenDaysPicker v-model="state.openDays" />
             </UFormField>
@@ -268,6 +278,7 @@ const fieldToGroup: Record<string, string> = {
   content: 'location',
   location: 'location',
   allowedMemberIds: 'settings',
+  offerFullDay: 'bookings',
   inventoryMode: 'bookings',
   quantity: 'bookings',
   maxBookingsPerMonth: 'bookings',

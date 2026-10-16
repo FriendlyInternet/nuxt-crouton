@@ -205,6 +205,8 @@
       "schedulingHint": "Définir quand ce lieu est disponible pour les réservations.",
       "slots": "Créneaux",
       "addTimeSlot": "Ajouter un créneau",
+      "offerFullDay": "Proposer l'option journée entière",
+      "offerFullDayHint": "Ajoute « Toute la journée » à côté de ces créneaux. La réserver bloque les autres créneaux ce jour-là, et tout créneau réservé la bloque.",
       "translations": "Traductions",
       "tabLocation": "Lieu",
       "tabSettings": "Paramètres",

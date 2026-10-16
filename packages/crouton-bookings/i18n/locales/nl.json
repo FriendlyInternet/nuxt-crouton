@@ -205,6 +205,8 @@
       "schedulingHint": "Bepaal wanneer deze locatie beschikbaar is voor boekingen.",
       "slots": "Slots",
       "addTimeSlot": "Tijdslot toevoegen",
+      "offerFullDay": "Een hele-dag-optie aanbieden",
+      "offerFullDayHint": "Voegt \"Hele dag\" toe naast deze tijdsloten. Wie de hele dag boekt, blokkeert de andere sloten die dag, en elk geboekt slot blokkeert de hele dag.",
       "translations": "Vertalingen",
       "tabLocation": "Locatie",
       "tabSettings": "Instellingen",
