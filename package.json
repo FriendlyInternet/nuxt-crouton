@@ -95,7 +95,8 @@
       "lodash-es": "^4.18.1",
       "protocol-buffers-schema": "^3.6.1",
       "@simplewebauthn/server": "^13.3.2",
-      "flatted": "^3.4.2"
+      "flatted": "^3.4.2",
+      "proxy-addr": "^2.0.8"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3"
