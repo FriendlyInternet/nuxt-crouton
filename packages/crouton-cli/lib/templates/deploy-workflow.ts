@@ -157,13 +157,13 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: \${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: \${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '20'
           cache: 'pnpm'
@@ -173,7 +173,7 @@ jobs:
 ${layerPackages.length > 0 ? `
       - name: Cache layer builds
         id: layer-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
 ${cachePaths}
@@ -185,7 +185,7 @@ ${cachePaths}
 ${buildCommands}
 ` : ''}
       - name: Cache Nuxt build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ${appDir}/node_modules/.cache
