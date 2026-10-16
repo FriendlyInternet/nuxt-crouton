@@ -1,6 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { join, dirname } from 'node:path'
-import { createRequire } from 'node:module'
+import { join } from 'node:path'
 import { existsSync } from 'node:fs'
 import type { NitroConfig } from 'nitropack'
 import type { LocaleObject } from '@nuxtjs/i18n'
@@ -18,26 +17,6 @@ const _dependencies = (globalThis as unknown as Record<string, Set<string>>).__c
 if (process.env.NODE_ENV !== 'production' && !_dependencies.has('crouton-core')) {
   _dependencies.add('crouton-core')
   console.log('🍞 crouton:core ✓ Layer loaded')
-}
-
-// Resolve @crouton/auth package path (handles both installed and workspace:* scenarios)
-let croutonAuthPath: string | undefined
-try {
-  const require = createRequire(import.meta.url)
-  // Resolve the main export, then derive the team-auth path
-  const mainPath = require.resolve('@fyit/crouton-auth')
-  // mainPath is nuxt.config.ts in package root, so only need one dirname
-  const pkgRoot = dirname(mainPath)
-  const teamAuthPath = join(pkgRoot, 'server/utils/team-auth.ts')
-
-  // Verify the file exists
-  if (existsSync(teamAuthPath)) {
-    croutonAuthPath = teamAuthPath
-  } else {
-    console.warn('🍞 crouton:core @crouton/auth found but team-auth.ts missing at:', teamAuthPath)
-  }
-} catch {
-  // @crouton/auth not installed - will use fallback or error at runtime
 }
 
 export default defineNuxtConfig({
@@ -185,15 +164,10 @@ export default defineNuxtConfig({
     '#crouton/types': join(currentDir, 'app/types/collections.ts')
   },
 
-  // Make registry available and auto-import server utils
+  // Auto-import server utils
   nitro: {
     imports: {
       dirs: [join(currentDir, 'server/utils')]
-    },
-    alias: {
-      '#crouton/registry': './registry',
-      // Team auth uses @crouton/auth (Better Auth) when available
-      ...(croutonAuthPath && { '#crouton/team-auth': croutonAuthPath })
     }
   }
 })

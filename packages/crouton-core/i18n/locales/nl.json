@@ -6,8 +6,6 @@
     "dragToReorder": "Slepen om te herordenen",
     "removeItem": "Item verwijderen",
     "metaSettings": "Meta-instellingen",
-    "tryAgain": "Opnieuw proberen",
-    "anErrorOccurred": "Er is een fout opgetreden",
     "sendingUpdate": "Wijziging versturen...",
     "maxDepthTitle": "Maximale diepte bereikt",
     "maxDepthDescription": "Je kunt niet meer dan {count} geneste formulieren openen",
@@ -49,7 +47,6 @@
     "export": "Exporteren",
     "new": "Nieuw",
     "editing": "Bewerken",
-    "notFound": "Niet gevonden",
     "moreCount": "+{count} meer",
     "sure": "Zeker?"
   },
@@ -146,16 +143,9 @@
     "add": "Toevoegen",
     "createFirstItem": "Maak je eerste item aan om de boomstructuur te zien."
   },
-  "dropzone": {
-    "idle": "Sleep bestanden hierheen",
-    "dropHere": "Laat bestanden hier vallen"
-  },
   "image": {
     "cropImage": "Afbeelding bijsnijden",
     "cropApply": "Bijsnijden en toepassen",
-    "cropAvatar": "Avatar bijsnijden",
-    "change": "Wijzigen",
-    "upload": "Uploaden",
     "cropPreview": "Voorbeeld bijsnijden",
     "preview": "Voorbeeld van de afbeelding"
   },
@@ -291,13 +281,6 @@
     "pressNToCreate": "of druk op N om nieuw aan te maken",
     "loadFailed": "Item laden mislukt",
     "createNamed": "{collection} aanmaken"
-  },
-  "content": {
-    "onThisPage": "Op deze pagina"
-  },
-  "draggableList": {
-    "searchPlaceholder": "Items zoeken...",
-    "empty": "Geen items beschikbaar"
   },
   "colorPicker": {
     "placeholder": "Kies een kleur",

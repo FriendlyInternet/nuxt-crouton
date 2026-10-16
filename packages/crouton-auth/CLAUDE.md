@@ -301,7 +301,7 @@ Generated collections automatically import from `@crouton/auth/server`. Ensure:
    export * from '@crouton/auth/server/database/schema/auth'
    ```
 
-**Note**: The collection generator uses `@crouton/auth/server` directly (not the `#crouton/team-auth` alias).
+**Note**: Import from `@crouton/auth/server` directly. The old `#crouton/team-auth` Nitro alias was removed in #2290 (nothing imported it).
 
 ## Rate Limiting (Recommended)
 
