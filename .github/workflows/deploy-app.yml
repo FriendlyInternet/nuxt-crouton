@@ -100,13 +100,12 @@ on:
 jobs:
   deploy:
     name: Deploy ${{ inputs.app }} (${{ inputs.environment }})
-    # Routed to the self-hosted box behind the AGENT_RUNNER toggle (#654/#658 — wrangler
-    # deploy is cross-platform Node; verified from macOS by the #654 proof run). The fork
-    # guard implements the runbook §5 policy: deploy-pocs.yml calls this on `pull_request`
-    # of pocs/**, so a fork PR must never reach the box — it routes back to GitHub-hosted
-    # structurally (fork PRs also get no secrets, but the guard keeps their code off our
-    # hardware in the first place). Delete the AGENT_RUNNER repo var to fall back.
-    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    # Runs on vars.BUILD_RUNNER (unset = ubuntu-latest). Deploys use no AI, so they don't
+    # need the subscription box behind AGENT_RUNNER — split off when the mac-mini went
+    # away (#2275; history #654/#658). The fork guard implements the runbook §5 policy:
+    # deploy-pocs.yml calls this on `pull_request` of pocs/**, so a fork PR must never
+    # reach a self-hosted box if BUILD_RUNNER is ever pointed at one.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.BUILD_RUNNER || 'ubuntu-latest' }}
     # GitHub deployment environment — kept as production/staging so any
     # environment-scoped secrets/protection from the existing setup still apply
     # (the Workers target is staging/prod independently, via inputs.environment).

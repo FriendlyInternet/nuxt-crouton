@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   sync:
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.BUILD_RUNNER || 'ubuntu-latest' }}
     defaults:
       run:
         # `docs`, NOT `apps/docs` — #164 relocated the docs site to the top level on
