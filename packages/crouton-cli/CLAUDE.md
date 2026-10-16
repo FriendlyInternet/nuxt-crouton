@@ -904,8 +904,10 @@ When modifying the generator, **always check if examples need updating**:
    → `component-name`, `CroutonImageUpload` → `:crop`). JSON and array serialisation stay keyed on
    *type* because they describe the value, not the widget.
 3. Add the SQLite/PG column in `lib/generators/database-schema.ts` if the `drizzle` kind is new.
-4. Still hardcoded, tracked in #2286: repeater-item inputs (`lib/generators/field-components.ts`),
-   list cells, and the system columns.
+4. Repeater item inputs (`lib/generators/field-components.ts`) follow the same rule: `loadFields`
+   attaches `component` to every `meta.properties[*]`, the item `Input.vue` renders it. Booleans
+   are `UCheckbox` everywhere (owner decision 2026-10-16; the old private map rendered `USwitch`
+   inside repeaters). Still hardcoded, tracked in #2286: list cells and the system columns.
 
 ### Image and File Field Types
 - `image` → renders `<CroutonAssetsPicker v-model="..." :crop="true" />` in forms, stores `VARCHAR(255)` (asset ID)

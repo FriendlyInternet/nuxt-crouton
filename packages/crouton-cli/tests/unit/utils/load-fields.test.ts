@@ -10,6 +10,7 @@ const typeMapping = {
   string: { db: '', drizzle: '', zod: 'z.string()', default: "''", tsType: 'string', canonical: 'string', component: 'UInput' },
   number: { db: '', drizzle: '', zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number', component: 'UInputNumber' },
   date: { db: '', drizzle: '', zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date', component: 'CroutonCalendar' },
+  repeater: { db: '', drizzle: '', zod: 'z.array(z.any())', default: '[]', tsType: 'any[]', canonical: 'repeater', component: 'CroutonFormRepeater' },
   // aliases — same def as their canonical, with canonical pointing back
   integer: { db: '', drizzle: '', zod: 'z.number()', default: '0', tsType: 'number', canonical: 'number', component: 'UInputNumber' },
   datetime: { db: '', drizzle: '', zod: 'z.date()', default: 'null', tsType: 'Date | null', canonical: 'date', component: 'CroutonCalendar' },
@@ -69,5 +70,15 @@ describe('loadFields attaches the manifest-declared form component (#2286)', () 
     const byName = await loadFromSchema({ weird: { type: 'nope' } })
     expect(byName.weird.type).toBe('string')
     expect(byName.weird.component).toBe('UInput')
+  })
+
+  it('attaches `component` to each repeater property as well (aliases resolved)', async () => {
+    const byName = await loadFromSchema({
+      slots: { type: 'repeater', meta: { properties: { label: { type: 'string' }, at: { type: 'datetime' }, n: { type: 'integer' } } } }
+    })
+    const props = byName.slots.meta.properties
+    expect(props.label.component).toBe('UInput')
+    expect(props.at.component).toBe('CroutonCalendar')
+    expect(props.n.component).toBe('UInputNumber')
   })
 })
