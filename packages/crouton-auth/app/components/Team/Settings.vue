@@ -186,7 +186,7 @@ function resetForm() {
             {{ t('teams.teamNamePlaceholder') }}
           </p>
         </div>
-        <UFormField name="name" class="flex items-start">
+        <UFormField name="name" class="w-full">
           <UInput
             v-model="state.name"
             :placeholder="t('teams.teamNamePlaceholder')"
@@ -207,7 +207,7 @@ function resetForm() {
             {{ t('teams.urlSlugHint') }}
           </p>
         </div>
-        <UFormField name="slug" class="flex items-start">
+        <UFormField name="slug" class="w-full">
           <UInput
             v-model="state.slug"
             :placeholder="$t('teams.yourSlug')"
@@ -228,7 +228,7 @@ function resetForm() {
             {{ t('teams.logoUrlHint') }}
           </p>
         </div>
-        <UFormField name="logo" class="flex items-start">
+        <UFormField name="logo" class="w-full">
           <UInput
             v-model="state.logo"
             placeholder="https://example.com/logo.png"

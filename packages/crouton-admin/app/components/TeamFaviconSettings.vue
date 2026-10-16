@@ -105,6 +105,9 @@ async function removeFavicon() {
           :disabled="!isAdmin || isUploading"
           @file-selected="handleFileSelected"
         />
+        <p class="text-xs text-muted max-w-48">
+          {{ t('teams.favicon.uploadHint') }}
+        </p>
         <UButton
           v-if="hasCustomFavicon"
           variant="ghost"

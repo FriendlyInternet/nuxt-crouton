@@ -110,6 +110,7 @@ onMounted(loadSettings)
             placeholder="info@example.com"
             :disabled="!isAdmin"
             icon="i-lucide-mail"
+            class="w-full"
           />
         </UFormField>
 
@@ -120,6 +121,7 @@ onMounted(loadSettings)
             placeholder="https://..."
             :disabled="!isAdmin"
             icon="i-lucide-newspaper"
+            class="w-full"
           />
         </UFormField>
 
@@ -130,6 +132,7 @@ onMounted(loadSettings)
             placeholder="https://..."
             :disabled="!isAdmin"
             icon="i-lucide-calendar"
+            class="w-full"
           />
         </UFormField>
 
@@ -140,6 +143,7 @@ onMounted(loadSettings)
             placeholder="https://..."
             :disabled="!isAdmin"
             icon="i-lucide-user-plus"
+            class="w-full"
           />
         </UFormField>
       </div>
@@ -153,7 +157,7 @@ onMounted(loadSettings)
               v-model="form.socialLinks.facebook"
               placeholder="https://facebook.com/..."
               :disabled="!isAdmin"
-              size="sm"
+              class="w-full"
             />
           </UFormField>
           <UFormField label="Instagram">
@@ -161,7 +165,7 @@ onMounted(loadSettings)
               v-model="form.socialLinks.instagram"
               placeholder="https://instagram.com/..."
               :disabled="!isAdmin"
-              size="sm"
+              class="w-full"
             />
           </UFormField>
           <UFormField label="YouTube">
@@ -169,7 +173,7 @@ onMounted(loadSettings)
               v-model="form.socialLinks.youtube"
               placeholder="https://youtube.com/..."
               :disabled="!isAdmin"
-              size="sm"
+              class="w-full"
             />
           </UFormField>
           <UFormField label="LinkedIn">
@@ -177,7 +181,7 @@ onMounted(loadSettings)
               v-model="form.socialLinks.linkedin"
               placeholder="https://linkedin.com/..."
               :disabled="!isAdmin"
-              size="sm"
+              class="w-full"
             />
           </UFormField>
           <UFormField label="Twitter / X">
@@ -185,7 +189,7 @@ onMounted(loadSettings)
               v-model="form.socialLinks.twitter"
               placeholder="https://x.com/..."
               :disabled="!isAdmin"
-              size="sm"
+              class="w-full"
             />
           </UFormField>
           <UFormField label="TikTok">
@@ -193,7 +197,7 @@ onMounted(loadSettings)
               v-model="form.socialLinks.tiktok"
               placeholder="https://tiktok.com/..."
               :disabled="!isAdmin"
-              size="sm"
+              class="w-full"
             />
           </UFormField>
         </div>
