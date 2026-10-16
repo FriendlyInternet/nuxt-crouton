@@ -12,7 +12,7 @@
  * Async setup (event lookup) — hosts wrap it in <Suspense>.
  */
 import type { Ref } from 'vue'
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 
 const props = defineProps<{
   eventSlug: string

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 
 const props = defineProps<{ event: SalesEvent }>()
 

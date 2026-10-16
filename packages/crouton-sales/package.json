@@ -6,6 +6,7 @@
   "main": "./nuxt.config.ts",
   "files": [
     "app",
+    "collections",
     "server",
     "schemas",
     "seed",
@@ -22,6 +23,7 @@
       "types": "./seed/index.ts"
     },
     "./schemas/*": "./schemas/*",
+    "./collections/*/types": "./collections/*/types.ts",
     "./server/utils/generate-print-queues": {
       "import": "./server/utils/generate-print-queues.ts",
       "types": "./server/utils/generate-print-queues.ts"

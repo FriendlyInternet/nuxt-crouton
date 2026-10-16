@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useSortable } from '@vueuse/integrations/useSortable'
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
-import type { SalesProduct } from '~~/layers/sales/collections/products/types'
+import type { SalesEvent } from '../../../collections/events/types'
+import type { SalesProduct } from '../../../collections/products/types'
 
 const props = defineProps<{ event: SalesEvent }>()
 

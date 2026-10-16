@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { Ref, ComputedRef } from 'vue'
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 import { attributePrinterStates, type LedJob, type LedState } from '../../utils/printer-led'
 
 const props = defineProps<{

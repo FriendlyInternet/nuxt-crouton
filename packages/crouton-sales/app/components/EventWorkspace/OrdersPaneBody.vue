@@ -11,7 +11,7 @@
  * `filtersOpen` / `activeFilterCount` are passed straight through, because each
  * host owns its own header and hosts the filter toggle there.
  */
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 
 defineProps<{ event: SalesEvent }>()
 
