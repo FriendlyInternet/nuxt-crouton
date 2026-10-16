@@ -30,6 +30,7 @@ const emit = defineEmits<{ open: [pile: CratePile | null], up: [], undo: [], lis
       @click="emit('upload')"
     />
     <UButton icon="i-lucide-undo-2" size="sm" variant="ghost" color="neutral" aria-label="Undo last change" class="shrink-0" @click="emit('undo')" />
+    <UColorModeButton size="sm" class="shrink-0" />
     <UButton :label="String(trayCount)" icon="i-lucide-inbox" size="sm" variant="soft" color="neutral" class="shrink-0 tabular-nums" :aria-label="`${trayLabel}: ${trayCount} tracks`" @click="emit('list')" />
   </header>
 </template>
