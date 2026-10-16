@@ -1,6 +1,7 @@
 import type { DateValue } from '@internationalized/date'
 import type { BlockedDateItem, SlotSchedule, SlotItem, AvailabilityData } from '../types/booking'
 import { ALL_DAY_SLOT } from '../types/booking'
+import { withFullDay, isBlockedByFullDay } from '../utils/full-day'
 import { parseLocationSlots } from './useBookingSlots'
 import { toDateKey as sharedToDateKey } from '@fyit/crouton-core/shared/utils/date'
 
@@ -16,6 +17,8 @@ export interface InventoryAvailability {
 export interface LocationWithInventory {
   id: string
   inventoryMode?: boolean
+  /** Offer the built-in full day next to named slots (#2261) */
+  offerFullDay?: boolean | null
   quantity?: number
   maxBookingsPerMonth?: number | null
   slots?: SlotItem[] | string | null
@@ -57,12 +60,13 @@ export function useBookingAvailability(
   // Total quantity for inventory mode
   const inventoryQuantity = computed(() => location.value?.quantity ?? 0)
 
-  // All slots for slot mode — "All Day" only when no named slots exist
+  // All slots for slot mode — the full day when there are no named slots,
+  // or next to them when the location offers it (#2261)
   const allSlots = computed<SlotItem[]>(() => {
     if (isInventoryMode.value) return []
-    if (locationSlots.value.length > 0) return locationSlots.value
-    return [ALL_DAY_SLOT]
+    return withFullDay(locationSlots.value, location.value?.offerFullDay, ALL_DAY_SLOT)
   })
+
 
   // Fetch availability for a date range (client-only — auth context not available during SSR)
   async function fetchAvailability(startDate: Date, endDate: Date, excludeBookingId?: string) {
@@ -174,14 +178,14 @@ export function useBookingAvailability(
       return true
     }
 
-    // All individual slots are full when booked count >= capacity for each
-    const individualSlots = locationSlots.value
-    if (individualSlots.length === 0) return false
+    // Fully booked when every offered slot is full or blocked by the full-day rule
+    const offered = allSlots.value
+    if (offered.length === 0) return false
 
-    return individualSlots.every((slot) => {
+    return offered.every((slot) => {
       const capacity = slot.capacity ?? 1
       const bookedCount = bookedSlots.filter(id => id === slot.id).length
-      return bookedCount >= capacity
+      return bookedCount >= capacity || isBlockedByFullDay(slot.id, bookedSlots, [])
     })
   }
 
@@ -195,13 +199,9 @@ export function useBookingAvailability(
     const bookedSlots = getBookedSlotsForDate(date)
     const ruleBlockedSlots = getRuleBlockedSlotIds(date)
 
-    // If "all-day" is booked, no slots available
-    if (bookedSlots.includes('all-day')) {
-      return []
-    }
-
-    // If ANY slot is booked or rule-blocked, "all-day" is not available
-    const hasAnyBooking = bookedSlots.length > 0 || ruleBlockedSlots.length > 0
+    // A rule-blocked slot counts as taken for the full-day rule (a full day
+    // can't be booked when part of the day is closed)
+    const taken = [...bookedSlots, ...ruleBlockedSlots]
 
     return allSlots.value.filter((slot) => {
       // Remove rule-blocked slots
@@ -212,10 +212,8 @@ export function useBookingAvailability(
       const bookedCount = bookedSlots.filter(id => id === slot.id).length
       if (bookedCount >= capacity) return false
 
-      // Remove "all-day" if any slot is booked or rule-blocked
-      if (slot.id === 'all-day' && hasAnyBooking) return false
-
-      return true
+      // Full day ⇄ other slots exclude each other
+      return !isBlockedByFullDay(slot.id, taken, [])
     })
   }
 

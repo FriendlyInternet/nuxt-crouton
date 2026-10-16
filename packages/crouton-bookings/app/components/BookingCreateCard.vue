@@ -33,6 +33,7 @@ const {
   selectedLocation,
   allSlots,
   isSlotDisabled,
+  isSlotTaken,
   getSlotRemaining,
   getSlotCapacity,
   canAddToCart,
@@ -383,7 +384,7 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
                 :key="slot.id"
                 size="sm"
                 :variant="localSlotIds.includes(slot.id) ? 'solid' : 'soft'"
-                :color="localSlotIds.includes(slot.id) ? 'primary' : (isSlotDisabled(slot.id) ? 'error' : 'neutral')"
+                :color="localSlotIds.includes(slot.id) ? 'primary' : (isSlotTaken(slot.id) ? 'error' : 'neutral')"
                 :disabled="isSlotDisabled(slot.id)"
                 @click="localSlotIds.includes(slot.id) ? localSlotIds = localSlotIds.filter(id => id !== slot.id) : localSlotIds = [...localSlotIds, slot.id]"
               >
@@ -392,14 +393,14 @@ const isAlreadyCancelled = computed(() => props.booking?.status === 'cancelled')
                   name="i-lucide-check"
                   class="size-3"
                 />
-                <span :class="{ 'line-through': isSlotDisabled(slot.id) }">
-                  {{ slot.label || slot.id }}
+                <span :class="{ 'line-through': isSlotTaken(slot.id) }">
+                  {{ slot.id === 'all-day' ? t('bookings.allDay') : (slot.label || slot.id) }}
                 </span>
                 <span v-if="getSlotCapacity(slot.id) > 1 && !isSlotDisabled(slot.id)" class="text-xs opacity-60 ml-0.5">
                   ({{ getSlotRemaining(slot.id) }} {{ t('bookings.createCard.left') }})
                 </span>
                 <UIcon
-                  v-if="isSlotDisabled(slot.id)"
+                  v-if="isSlotTaken(slot.id)"
                   name="i-lucide-ban"
                   class="size-3 ml-0.5"
                 />
