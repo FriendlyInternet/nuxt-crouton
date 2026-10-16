@@ -479,7 +479,7 @@ function getProxiedEndpoint(config: any, apiPath: string): string
 
 ```typescript
 // app.config.ts
-import { defineExternalCollection } from '@fyit/crouton'
+import { defineExternalCollection } from '#imports'
 import { z } from 'zod'
 
 const membersSchema = z.object({
@@ -512,7 +512,7 @@ export default defineAppConfig({
 
 ```vue
 <script setup lang="ts">
-const { applyProxyTransform } = await import('@fyit/crouton')
+// applyProxyTransform is auto-imported from @fyit/crouton-core
 
 // External API response
 const externalData = [
@@ -547,7 +547,7 @@ const transformed = applyProxyTransform(externalData, config)
 
 ```vue
 <script setup lang="ts">
-const { applyProxyTransform } = await import('@fyit/crouton')
+// applyProxyTransform is auto-imported from @fyit/crouton-core
 
 // Single item from external API
 const externalItem = {
@@ -576,7 +576,7 @@ const transformed = applyProxyTransform(externalItem, config)
 
 ```vue
 <script setup lang="ts">
-const { getProxiedEndpoint } = await import('@fyit/crouton')
+// getProxiedEndpoint is auto-imported from @fyit/crouton-core
 
 // Without proxy
 const config1 = {
@@ -604,7 +604,7 @@ const endpoint2 = getProxiedEndpoint(config2, 'users')
 <script setup lang="ts">
 // This is how useCollectionQuery uses the proxy internally
 const { getConfig } = useCollections()
-const { applyProxyTransform, getProxiedEndpoint } = await import('@fyit/crouton')
+// applyProxyTransform and getProxiedEndpoint are auto-imported from @fyit/crouton-core
 
 const collection = 'users'
 const config = getConfig(collection)
@@ -676,7 +676,7 @@ The proxy automatically handles transform errors:
 
 ```vue
 <script setup lang="ts">
-const { applyProxyTransform } = await import('@fyit/crouton')
+// applyProxyTransform is auto-imported from @fyit/crouton-core
 
 // Malformed data
 const badData = [
@@ -834,7 +834,7 @@ Simple external users collection:
 ```typescript
 // utils/collections.ts
 import { z } from 'zod'
-import { defineExternalCollection } from '@fyit/crouton'
+import { defineExternalCollection } from '#imports'
 
 const userSchema = z.object({
   id: z.string(),
@@ -956,7 +956,7 @@ Register several external sources:
 ```typescript
 // app.config.ts
 import { z } from 'zod'
-import { defineExternalCollection } from '@fyit/crouton'
+import { defineExternalCollection } from '#imports'
 
 // Define schemas (see Basic Usage for full examples)
 const userSchema = z.object({ /* ... */ })
