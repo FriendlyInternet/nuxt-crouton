@@ -54,6 +54,12 @@ const menuItems = computed<NavigationMenuItem[]>(() => {
   }))
 })
 
+// Team logo in the public header (#2259). Read from the shared site settings
+// that crouton-admin's team-theme plugin loads (SSR) — no hard dependency.
+const siteSettings = useState<Record<string, any> | null>('team-site-settings', () => null)
+const teamLogo = computed<string | null>(() => siteSettings.value?.teamLogo || null)
+const homePath = computed(() => (menuItems.value[0]?.to as string | undefined) ?? '/')
+
 // Per-page chrome flags (set by the public page route from page.config —
 // e.g. a volunteer-facing kassa page hides the member login). Language
 // switcher and color-mode toggle are deliberately not hideable.
@@ -238,6 +244,9 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
     >
       <!-- Desktop: center pill with the page links (hidden when ≤1 page) -->
       <div v-if="showPageNav" :class="[pillClass, 'px-4 hidden md:flex']">
+        <NuxtLink v-if="teamLogo" :to="homePath" class="shrink-0 flex items-center pe-2 me-1 border-e border-default">
+          <img :src="teamLogo" :alt="currentTeam?.name || ''" class="h-6 w-auto max-w-28 object-contain">
+        </NuxtLink>
         <UNavigationMenu
           :items="menuItems"
           variant="link"
@@ -252,6 +261,9 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
 
       <!-- Mobile: left pill with hamburger + popover nav (hidden when ≤1 page) -->
       <div v-if="showPageNav" :class="[pillClass, 'px-2 py-1 md:hidden']">
+        <NuxtLink v-if="teamLogo" :to="homePath" class="shrink-0 flex items-center ps-1 pe-1">
+          <img :src="teamLogo" :alt="currentTeam?.name || ''" class="h-6 w-auto max-w-24 object-contain">
+        </NuxtLink>
         <UPopover v-model:open="drawerOpen" :content="{ side: 'bottom', align: 'start', sideOffset: 8 }">
           <UButton
             :icon="drawerOpen ? 'i-lucide-x' : 'i-lucide-menu'"
