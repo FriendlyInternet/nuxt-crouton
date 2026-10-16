@@ -208,10 +208,10 @@ const presetEntries = computed(() =>
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="text-sm font-medium text-default">
-                    {{ preset.label }}
+                    {{ key === 'custom' ? t('themeSettings.presetCustom') : preset.label }}
                   </div>
                   <div class="text-xs text-muted truncate">
-                    {{ preset.description }}
+                    {{ key === 'custom' ? t('themeSettings.presetCustomDescription') : preset.description }}
                   </div>
                 </div>
                 <UIcon
@@ -257,49 +257,49 @@ const presetEntries = computed(() =>
                 color="primary"
                 size="sm"
               >
-                Primary
+                {{ t('themeSettings.previewPrimary') }}
               </UButton>
               <UButton
                 color="primary"
                 variant="outline"
                 size="sm"
               >
-                Outline
+                {{ t('themeSettings.previewOutline') }}
               </UButton>
               <UButton
                 color="primary"
                 variant="soft"
                 size="sm"
               >
-                Soft
+                {{ t('themeSettings.previewSoft') }}
               </UButton>
               <UButton
                 color="primary"
                 variant="ghost"
                 size="sm"
               >
-                Ghost
+                {{ t('themeSettings.previewGhost') }}
               </UButton>
             </div>
             <div class="flex flex-wrap gap-2">
               <UBadge color="primary">
-                Badge
+                {{ t('themeSettings.previewBadge') }}
               </UBadge>
               <UBadge
                 color="primary"
                 variant="outline"
               >
-                Outline
+                {{ t('themeSettings.previewOutline') }}
               </UBadge>
               <UBadge
                 color="primary"
                 variant="soft"
               >
-                Soft
+                {{ t('themeSettings.previewSoft') }}
               </UBadge>
             </div>
             <UInput
-              placeholder="Sample input..."
+              :placeholder="t('themeSettings.previewInput')"
               icon="i-lucide-search"
             />
           </div>

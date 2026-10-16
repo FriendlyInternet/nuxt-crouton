@@ -75,7 +75,7 @@ async function save() {
     siteSettings.value = { ...siteSettings.value, ...updated }
     notify.success(t('common.saved') || 'Saved')
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to save'
+    const message = e instanceof Error ? e.message : t('teams.siteInfo.saveFailed')
     notify.error(t('common.error') || 'Error', { description: message })
   } finally {
     isSaving.value = false
