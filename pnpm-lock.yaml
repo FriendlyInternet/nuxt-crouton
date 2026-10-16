@@ -1784,6 +1784,9 @@ importers:
       '@fyit/crouton-i18n':
         specifier: workspace:*
         version: link:../../packages/crouton-i18n
+      '@fyit/crouton-themes':
+        specifier: workspace:*
+        version: link:../../packages/crouton-themes
       '@libsql/client':
         specifier: ^0.17.0
         version: 0.17.4
