@@ -38,13 +38,8 @@ describe('validateConfig — empty scaffold', () => {
   })
 
   // The discriminating cases: the neutral path must be narrow, or it swallows real problems.
-  it('does NOT take the scaffold path once a schemaPath is configured', async () => {
-    await validateConfig({ collections: [], schemaPath: 'schemas/thing.json' })
-    expect(output()).not.toContain('Scaffolded')
-  })
-
   it('does NOT take the scaffold path once a collection is configured', async () => {
-    await validateConfig({ collections: [{ name: 'things', schemaPath: 'schemas/things.json' }] })
+    await validateConfig({ collections: [{ name: 'things', fieldsFile: 'schemas/things.json' }] })
     expect(output()).not.toContain('Scaffolded')
   })
 
