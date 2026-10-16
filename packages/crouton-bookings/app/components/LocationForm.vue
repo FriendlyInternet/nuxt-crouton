@@ -152,7 +152,7 @@
               <CroutonBookingsOpenDaysPicker v-model="state.openDays" />
             </UFormField>
             <UFormField v-if="!state.inventoryMode && state.slots?.length" :label="t('bookings.schedule.slotSchedule')" name="slotSchedule">
-              <CroutonBookingsScheduleGrid v-model="state.slotSchedule" :slots="state.slots" />
+              <CroutonBookingsScheduleGrid v-model="state.slotSchedule" :slots="state.slots" :open-days="state.openDays" />
             </UFormField>
             <UFormField :label="t('bookings.schedule.blockedDates')" name="blockedDates">
               <CroutonFormRepeater
