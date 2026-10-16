@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path'
 import { access, readFile } from 'node:fs/promises'
 import consola from 'consola'
 import { loadModules } from './module-registry.ts'
+import { resolveExtendedPackages, packageAlias } from './utils/extended-packages.ts'
 
 interface DoctorCheck {
   name: string
@@ -32,7 +33,7 @@ export async function doctor(appDir: string): Promise<DoctorResult> {
   // Load package.json
   const pkg = await loadJson(join(appDir, 'package.json'))
 
-  // 1. Missing dependencies vs crouton.config features
+  // 1. Missing dependencies vs the packages nuxt.config.ts extends (#2286)
   checks.push(...await checkFeatureDeps(config, pkg))
 
   // 2. Stale wrangler.toml placeholder IDs
@@ -103,11 +104,10 @@ async function checkFeatureDeps(config: Record<string, any> | null, pkg: Record<
 
   const MODULES = await loadModules()
   const allDeps = { ...pkg.dependencies, ...pkg.devDependencies }
-  const features = config.features || {}
 
-  for (const [feature, enabled] of Object.entries(features)) {
-    if (!enabled) continue
-    const mod = MODULES[feature]
+  // The packages the app extends are the ones that must be installed (#2286).
+  for (const id of resolveExtendedPackages(process.cwd())) {
+    const mod = MODULES[packageAlias(id)]
     if (!mod) continue
     if (mod.bundled) continue // bundled in @fyit/crouton-core
 
@@ -117,7 +117,7 @@ async function checkFeatureDeps(config: Record<string, any> | null, pkg: Record<
       results.push({
         name: 'deps',
         status: 'fail',
-        message: `Feature "${feature}" enabled but ${mod.package} not in dependencies`
+        message: `nuxt.config.ts extends ${mod.package} but it is not in dependencies`
       })
     }
   }

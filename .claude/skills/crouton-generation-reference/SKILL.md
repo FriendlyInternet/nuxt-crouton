@@ -137,7 +137,7 @@ server/database/schema.ts           # Drizzle (+ translations JSON column when t
 server/database/queries.ts          # getAll* with FK-filter + opt-in pagination overloads
 server/database/seed.ts             # only with seed flag (drizzle-seed + Faker)
 seed.json                           # always, except hierarchy collections (#298) — editable sample rows
-{Layer}{Plurals}.test.ts            # Zod schema-smoke (#785) — skipped by --no-tests / tests:false
+{Layer}{Plurals}.test.ts            # Zod schema-smoke (#785) — only with --tests / tests:true (off by default, #2286)
 {Layer}{Plurals}.api.test.ts        # mocked route-handler test (#791), carries // @ts-nocheck — same gate
 types.ts   nuxt.config.ts   README.md
 ```

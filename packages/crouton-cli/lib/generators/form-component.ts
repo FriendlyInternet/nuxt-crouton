@@ -244,89 +244,79 @@ function renderReferenceField(field: Record<string, any>, ctx: FieldMarkupContex
         </UFormField>`
 }
 
-// Fallback rendering keyed on the field's (canonical) type
+// Fallback rendering: the manifest decides the control, the control decides its
+// bindings. `field.component` is attached by loadFields from the manifest's
+// `fieldTypes[type].component` (#2286), so adding or changing a type's control is a
+// manifest edit, not a generator edit. Only two DATA-SHAPE specials stay keyed on
+// type (json / array serialisation) because they describe the value, not the widget.
+// Fields that reach us without a component (manifest-less callers) render UInput.
 function renderDefaultTypeField(field: Record<string, any>, ctx: FieldMarkupContext): string {
   const { labelAttr } = ctx
+  const wrap = (inner: string) => `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
+${inner}
+        </UFormField>`
 
-  // Image field type — base fallback uses CroutonImageUpload (crouton-assets contribution overrides with CroutonAssetsPicker)
-  if (field.type === 'image') {
-    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonImageUpload
-            v-model="state.${field.name}"
-            :crop="true"
-          />
-        </UFormField>`
-  }
-
-  // File field type — base fallback uses CroutonImageUpload
-  if (field.type === 'file') {
-    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonImageUpload
-            v-model="state.${field.name}"
-          />
-        </UFormField>`
-  }
-
-  // Default component selection based on field type
-  if (field.type === 'text') {
-    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UTextarea v-model="state.${field.name}" class="w-full" size="xl" />
-        </UFormField>`
-  } else if (field.type === 'boolean') {
-    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UCheckbox v-model="state.${field.name}" />
-        </UFormField>`
-  } else if (field.type === 'number' || field.type === 'decimal') {
-    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UInputNumber v-model="state.${field.name}" class="w-full" />
-        </UFormField>`
-  } else if (field.type === 'date') {
-    const pickerProp = field.meta?.picker ? ' picker' : ''
-    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonCalendar v-model:date="state.${field.name}"${pickerProp} />
-        </UFormField>`
-  } else if (field.type === 'repeater') {
-    // Use the field's Input component from the field components folder
-    const fieldCases = toCase(field.name)
-    const componentName = `${ctx.layerPascalCase}${ctx.pascalCasePlural}${fieldCases.pascalCase}Input`
-    const addLabel = field.meta?.addLabel || 'Add Item'
-    const sortable = field.meta?.sortable !== false // Default to true
-
-    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <CroutonFormRepeater
-            v-model="state.${field.name}"
-            component-name="${componentName}"
-            add-label="${addLabel}"
-            ${sortable ? ':sortable="true"' : ':sortable="false"'}
-          />
-        </UFormField>`
-  } else if (field.type === 'json') {
-    // JSON field - use textarea with JSON serialization
-    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UTextarea
+  // ── Data-shape specials (serialisation lives in the form, whatever the widget) ──
+  if (field.type === 'json') {
+    return wrap(`          <UTextarea
             :model-value="typeof state.${field.name} === 'string' ? state.${field.name} : JSON.stringify(state.${field.name}, null, 2)"
             @update:model-value="(val) => { try { state.${field.name} = val ? JSON.parse(val) : {} } catch (e) { console.error('Invalid JSON:', e) } }"
             class="w-full font-mono text-sm"
             :rows="8"
             placeholder="Enter JSON object"
-          />
-        </UFormField>`
-  } else if (field.type === 'array' && !field.refTarget) {
-    // Array field without refTarget - use textarea with array handling
-    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UTextarea
+          />`)
+  }
+  if (field.type === 'array' && !field.refTarget) {
+    return wrap(`          <UTextarea
             :model-value="Array.isArray(state.${field.name}) ? state.${field.name}.join('\\n') : ''"
             @update:model-value="(val) => state.${field.name} = val ? val.split('\\n').filter(Boolean) : []"
             class="w-full"
             :rows="6"
             placeholder="Enter one value per line"
           />
-          <p class="text-sm text-gray-500 mt-1">Enter one value per line</p>
-        </UFormField>`
-  } else {
-    return `        <UFormField ${labelAttr(field)} name="${field.name}" class="not-last:pb-4">
-          <UInput v-model="state.${field.name}" class="w-full" size="xl" />
-        </UFormField>`
+          <p class="text-sm text-gray-500 mt-1">Enter one value per line</p>`)
+  }
+
+  // ── Controls with bespoke bindings ──
+  const component = field.component || 'UInput'
+  const bespoke = BESPOKE_CONTROL_MARKUP[component]
+  if (bespoke) return wrap(bespoke(field, ctx))
+
+  // ── Plain v-model controls: the manifest named it, we just bind it ──
+  const attrs = PLAIN_CONTROL_ATTRS[component] ?? ' class="w-full"'
+  return wrap(`          <${component} v-model="state.${field.name}"${attrs} />`)
+}
+
+// Attribute presets for the stock controls; anything else gets full width.
+const PLAIN_CONTROL_ATTRS: Record<string, string> = {
+  UInput: ' class="w-full" size="xl"',
+  UTextarea: ' class="w-full" size="xl"',
+  UInputNumber: ' class="w-full"',
+  UCheckbox: '',
+  USwitch: ''
+}
+
+// Controls whose bindings go beyond v-model. Add a row here ONLY when a new control
+// needs extra props; a new field type that renders an existing control needs nothing.
+const BESPOKE_CONTROL_MARKUP: Record<string, (field: Record<string, any>, ctx: FieldMarkupContext) => string> = {
+  // crouton-assets' contribution overrides this with CroutonAssetsPicker; the base
+  // fallback crops images and not files.
+  CroutonImageUpload: field => `          <CroutonImageUpload
+            v-model="state.${field.name}"${field.type === 'image' ? `\n            :crop="true"` : ''}
+          />`,
+  CroutonCalendar: field => `          <CroutonCalendar v-model:date="state.${field.name}"${field.meta?.picker ? ' picker' : ''} />`,
+  CroutonFormRepeater: (field, ctx) => {
+    // Use the field's Input component from the field components folder
+    const fieldCases = toCase(field.name)
+    const componentName = `${ctx.layerPascalCase}${ctx.pascalCasePlural}${fieldCases.pascalCase}Input`
+    const addLabel = field.meta?.addLabel || 'Add Item'
+    const sortable = field.meta?.sortable !== false // Default to true
+    return `          <CroutonFormRepeater
+            v-model="state.${field.name}"
+            component-name="${componentName}"
+            add-label="${addLabel}"
+            ${sortable ? ':sortable="true"' : ':sortable="false"'}
+          />`
   }
 }
 

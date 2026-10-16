@@ -294,8 +294,8 @@ export function getModuleRegistryMap(
  */
 export function getTypeMapping(
   manifests: CroutonManifest[],
-): Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string }> {
-  const mapping: Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string }> = {}
+): Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string; component?: string }> {
+  const mapping: Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string; component?: string }> = {}
 
   for (const manifest of manifests) {
     if (!manifest.fieldTypes) continue
@@ -311,6 +311,10 @@ export function getTypeMapping(
         default: def.defaultValue,
         tsType: def.tsType,
         canonical: name,
+        // The form control the manifest declares for this type. Carried onto
+        // every field by loadFields so generators render it instead of keeping
+        // a private type→component switch (#2286).
+        component: def.component,
       }
       mapping[name] = entry
       if (def.aliases) {

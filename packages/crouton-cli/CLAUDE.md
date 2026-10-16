@@ -354,7 +354,7 @@ crouton db-pull --config ./custom-wrangler.jsonc
 | `--count <number>` | Number of seed records (default: 25) |
 | `--force` | Overwrite existing files |
 | `--no-translations` | Skip i18n fields |
-| `--no-tests` | Skip the per-collection tests — schema-smoke (#785) + API route handler test (#791); both emitted by default |
+| `--tests` | Also emit the per-collection tests — schema-smoke (#785) + API route handler test (#791). Off by default since #2286: generated CRUD is covered by the e2e fixture smoke |
 | `--dry-run` | Preview without writing |
 
 ### Regeneration is non-destructive (#1260)
@@ -380,8 +380,8 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/generate-collection.ts` | Main orchestrator (~74KB) |
 | `lib/init-app.ts` | Init pipeline (scaffold → generate → doctor) |
 | `lib/generators/*.ts` | Template generators (16 files) |
-| `lib/generators/collection-test.ts` | Emits `<Layer><Collections>.test.ts` — a runtime-free Zod schema smoke (valid parses / invalid rejected). Sample derived from each field's `zod`. On by default; `--no-tests` skips (#785). Also exports the shared sample derivation (`buildCollectionSample`) reused by the API test |
-| `lib/generators/api-test.ts` | Emits `<Layer><Collections>.api.test.ts` — drives the generated route handlers (get/post/[id].patch/[id].delete + move/reorder) with a mocked team-auth util + queries module and a fake H3 event; covers team-scoping + 400/403/404 error paths. Same `--no-tests` gate (#791) |
+| `lib/generators/collection-test.ts` | Emits `<Layer><Collections>.test.ts` — a runtime-free Zod schema smoke (valid parses / invalid rejected). Sample derived from each field's `zod`. Opt-in with `--tests` (#785, off by default since #2286). Also exports the shared sample derivation (`buildCollectionSample`) reused by the API test |
+| `lib/generators/api-test.ts` | Emits `<Layer><Collections>.api.test.ts` — drives the generated route handlers (get/post/[id].patch/[id].delete + move/reorder) with a mocked team-auth util + queries module and a fake H3 event; covers team-scoping + 400/403/404 error paths. Same `--tests` gate (#791) |
 | `lib/db-pull.ts` | Remote D1 → local dev pull |
 | `lib/module-registry.ts` | Module definitions for `crouton add` |
 | `lib/add-module.ts` | Module installation implementation |
@@ -392,7 +392,8 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/dialects.ts` | PostgreSQL/SQLite configs |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
-| `lib/utils/update-nuxt-config.ts` | Update nuxt.config.ts extends |
+| `lib/utils/update-nuxt-config.ts` | Add/remove a package in nuxt.config.ts extends, add runtimeConfig |
+| `lib/utils/extended-packages.ts` | `resolveExtendedPackages(appDir)` — the crouton package ids an app extends, transitively; the ONE package on-switch the generator reads (#2286) |
 | `lib/utils/update-schema-index.ts` | Update schema exports (`add`/`removeSchemaExport`) + `getSchemaPath` (resolve the barrel modern→legacy). NB the magicast finders handle `$ast` being the `Program` node itself, not only a `File` (#1445 WS4) |
 | `lib/utils/schema-sources.ts` | `resolveSchemaSources(appDir, {dialect})` — reproduces NuxtHub's per-layer `server/db/schema*` glob over the recursive `extends` graph (app root + auto-scanned `layers/*` + `@fyit/*`/subpath extends, realpath-deduped, magicast static parse), WITHOUT a Nuxt process. Feeds drizzle-kit directly; parity-verified vs NuxtHub (epic #1445 WS1a). Duplicate-table gate over its output is WS1b |
 | `lib/utils/duplicate-tables.ts` | `findDuplicateTables(resolvedPaths)` — identity-aware gate over the resolver's output: jiti-imports each file through ONE instance, and fails only when a table name maps to ≥2 DISTINCT drizzle objects (benign same-object re-exports pass; catches distinct dups arriving via `export * from` that a regex misses). drizzle-kit otherwise silently last-wins. Epic #1445 WS1b |
@@ -643,8 +644,8 @@ layers/[layer]/collections/[collection]/
 │       ├── queries.ts
 │       └── seed.ts          # Only with --seed flag
 ├── seed.json                # Editable auto-derived sample rows (#298)
-├── [Layer][Collections].test.ts      # Zod schema-smoke test (#785) — skip with --no-tests
-├── [Layer][Collections].api.test.ts  # API route handler test (#791) — skip with --no-tests
+├── [Layer][Collections].test.ts      # Zod schema-smoke test (#785) — only with --tests
+├── [Layer][Collections].api.test.ts  # API route handler test (#791) — only with --tests
 ├── types.ts
 └── nuxt.config.ts
 
@@ -655,9 +656,10 @@ crouton.layout.json                       # Deterministic default layout tree (#
 
 ## Generated Tests (#785)
 
-Every generated collection ships a **schema-smoke test** next to it
-(`<Layer><Collections>.test.ts`) — on by default, suppressed with `--no-tests`
-(or `tests: false` on a collection). It imports the collection's generated Zod
+With `--tests` (or `tests: true` on a collection) a generated collection ships a
+**schema-smoke test** next to it (`<Layer><Collections>.test.ts`). Off by default
+since #2286: the generated files are the app's after generation, and the e2e fixture
+smoke already covers generated CRUD. It imports the collection's generated Zod
 schema from the composable and asserts the deterministic surface: a valid record
 parses, an invalid one is rejected. It is **runtime-free** (zod only, no Nuxt/DB,
 no mocks), so it stays green for any schema — the unit-level complement to the
@@ -691,8 +693,8 @@ and **error paths** (invalid body → rejected before any write, missing id para
   `useServerTiming`) are provided as globals via `vi.hoisted` (so the route's
   `export default defineEventHandler(...)` evaluates at import); each handler runs
   against a plain fake H3 event. No Nuxt server, no DB, no network.
-- **Same `--no-tests` gate** as the schema-smoke — it rides the one `tests` flag
-  (on by default). The assertions are engineered to be schema-shape-independent
+- **Same `--tests` gate** as the schema-smoke — it rides the one `tests` flag
+  (off by default). The assertions are engineered to be schema-shape-independent
   (mock/control-flow driven); the one body-shape-dependent case (invalid-body →
   rejected) is emitted only when an invalid sample is derivable, degrading
   gracefully. The happy-path body reuses the schema-smoke's single-sourced sample
@@ -760,20 +762,18 @@ Contract: `tests/unit/utils/owned-collections.test.ts`.
 
 ## Config File Format
 
-The `crouton.config.js` is a **unified configuration** that serves both:
-- **CLI**: Collection generation (collections, targets, dialect)
-- **Module**: Feature flags (features section, read by `getCroutonLayers()`)
+The `crouton.config.js` describes what to generate (collections, targets, dialect, seed,
+flags). **Which crouton packages the app uses is NOT decided here** — it is the `extends`
+list in `nuxt.config.ts` (#2286, owner decision 2026-10-16). `features.<alias>` only holds a
+package's prompted configuration (see *Package switch* below).
 
 ```javascript
 // crouton.config.js
 export default {
-  // Feature flags - which crouton packages to enable
-  // Used by getCroutonLayers() in nuxt.config.ts
+  // Optional: a package's configuration, written by `crouton config` when the
+  // package's manifest asks questions (e.g. bookings). Not a switch.
   features: {
-    // Core (enabled by default): auth, admin, i18n
-    editor: true,     // TipTap rich text
-    pages: true,      // CMS pages
-    // bookings: true // Enable booking system
+    bookings: { config: { email: { enabled: true } } }
   },
 
   // Collection generation (used by CLI)
@@ -800,28 +800,30 @@ export default {
 }
 ```
 
-### Features Reference
+### Package switch: `extends`, read from manifests (#2286)
 
-**IMPORTANT:** `@fyit/crouton-core` automatically bundles auth, admin, and i18n.
-DO NOT add these to your `nuxt.config.ts` extends array separately - doing so
-causes duplicate layer loading and SSR errors (e.g., `$setup.t is not a function`).
+A package is **on when the app extends it**. `lib/utils/extended-packages.ts`
+(`resolveExtendedPackages(appDir)`) walks `nuxt.config.ts` `extends` statically and
+transitively — `@fyit/crouton-core` brings auth, admin and i18n with it; a path extends counts
+by its `package.json` name; `@fyit/crouton-themes/ko` counts as `crouton-themes` — and returns
+the manifest ids. Every generator decision that used to key on `crouton.config.js features`
+reads that list instead:
 
-| Feature | Default | Description |
-|---------|---------|-------------|
-| `auth` | bundled | Authentication (Better Auth) - **included in core** |
-| `admin` | bundled | Admin dashboard - **included in core** |
-| `i18n` | bundled | Multi-language support - **included in core** |
-| `editor` | `false` | TipTap rich text editor |
-| `pages` | `false` | CMS pages system |
-| `bookings` | `false` | Booking system |
-| `sales` | `false` | Point of Sale |
-| `email` | `false` | Email with Resend |
-| `assets` | `false` | Media library |
-| `events` | `false` | Audit trail |
-| `ai` | `false` | AI/LLM integration (see below) |
-| `collab` | `false` | Real-time collaboration |
+| Decision | Where |
+|---|---|
+| Which packages' generator contributions run (plus detector matches, see below) | `applyManifestEnhancements` |
+| Which packages' manifest `collections` are merged into the config (never a package with `ownsCollections`, #2278) | `lib/utils/manifest-merge.ts` |
+| Whether the default layout is calendar-primary (bookings extended) | `lib/compose-layout.ts` |
+| Which packages `crouton doctor` expects in `dependencies` | `lib/doctor.ts` |
+| Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package unless core bundles it) | `lib/scaffold-app.ts` |
 
-**Auto-detection:** Generator contributions from addon packages (editor, assets, maps, collab) run automatically when the schema's fields match the package's detector patterns — even without an explicit feature flag. For example, a field with `"component": "CroutonEditorSimple"` triggers `crouton-editor` contributions regardless of whether `editor: true` is set. Feature flags are still needed for framework package syncing (adding to `nuxt.config.ts` extends).
+The generator **never writes `extends`** from a features block any more (the hardcoded
+`framework-packages.ts` table and `syncFrameworkPackages` are gone). Add a package with
+`crouton add <name>` or by editing `extends`. `@fyit/crouton-core` bundles auth, admin and i18n —
+don't list those separately (duplicate layer loading, `$setup.t is not a function`).
+Contract: `tests/unit/utils/extended-packages.test.ts`, `tests/unit/utils/manifest-merge.test.ts`.
+
+**Auto-detection:** Generator contributions from addon packages (editor, assets, maps, collab) also run when the schema's fields match the package's detector patterns — even if the app doesn't extend the package yet. For example, a field with `"component": "CroutonEditorSimple"` triggers `crouton-editor` contributions.
 
 ### AI Feature Configuration
 
@@ -856,7 +858,7 @@ features: {
 | `formComponent` | string | Use a custom form component instead of generating Form.vue |
 | `kind` | string | Collection kind: `'data'` (default), `'content'`, or `'media'`. Affects admin sidebar grouping |
 | `publishable` | boolean | Auto-register as page type in crouton-pages (requires crouton-pages) |
-| `tests` | boolean | Emit the per-collection tests — schema-smoke (#785) + API route handler test (#791) — for this collection (default `true`; set `false` to skip, like `--no-tests`) |
+| `tests` | boolean | Emit the per-collection tests — schema-smoke (#785) + API route handler test (#791) — for this collection (default `false`; set `true` to opt in, like `--tests`) |
 
 ### formComponent Option
 
@@ -913,10 +915,26 @@ When modifying the generator, **always check if examples need updating**:
 4. Call generator in appropriate step
 
 ### Add a new field type
-1. Add type mapping in `lib/utils/helpers.ts` (getTypeMapping function)
-2. Update Zod schema in `lib/generators/composable.ts`
-3. Update form component in `lib/generators/form-component.ts`
-4. Add Drizzle type in `lib/utils/dialects.ts`
+1. Declare it in the owning package's `crouton.manifest.ts` under `fieldTypes` — `db`, `drizzle`,
+   `zod`, `tsType`, `defaultValue`, **and `component`** (the form control). That row is the
+   single source: `getTypeMapping()` (`lib/utils/manifest-loader.ts`) flattens it and `loadFields`
+   attaches `zod` / `default` / `tsType` / `component` to every field (#285, #2286).
+2. The generated `_Form.vue` renders `field.component` as-is (`renderDefaultTypeField` in
+   `lib/generators/form-component.ts`). Only add a `case` there when the control needs
+   bindings beyond `v-model` (today: `CroutonCalendar` → `v-model:date`, `CroutonFormRepeater`
+   → `component-name`, `CroutonImageUpload` → `:crop`). JSON and array serialisation stay keyed on
+   *type* because they describe the value, not the widget.
+3. Add the SQLite/PG column in `lib/generators/database-schema.ts` if the `drizzle` kind is new.
+4. Repeater item inputs (`lib/generators/field-components.ts`) follow the same rule: `loadFields`
+   attaches `component` to every `meta.properties[*]`, the item `Input.vue` renders it. Booleans
+   are `UCheckbox` everywhere (owner decision 2026-10-16; the old private map rendered `USwitch`
+   inside repeaters). Still hardcoded, tracked in #2286: list cells.
+5. The system columns every table gets (`id, teamId, owner, createdAt, updatedAt, createdBy,
+   updatedBy` + hierarchy names) are enumerated ONCE in `lib/utils/system-fields.ts` and consumed
+   by the PATCH-body exclusion, the Drizzle reserved list, the `New*` omit list, the FK auto-refs,
+   the seed fixture and the schema-smoke test. `tests/unit/utils/system-fields.test.ts` pins that
+   list to `crouton-core/crouton.manifest.ts` `autoGeneratedFields`, so a manifest change that
+   isn't mirrored fails the suite (#2286).
 
 ### Image and File Field Types
 - `image` → renders `<CroutonAssetsPicker v-model="..." :crop="true" />` in forms, stores `VARCHAR(255)` (asset ID)

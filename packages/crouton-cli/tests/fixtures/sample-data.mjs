@@ -10,19 +10,32 @@
 // ============ Field Definitions ============
 
 /**
+ * Mirror of what loadFields attaches from the core manifest (#2286): every field
+ * carries the form control its (canonical) type declares. Generators render
+ * `field.component`; keeping the fixtures in the real shape is what lets the
+ * form snapshots prove the manifest-driven path is byte-identical.
+ */
+const MANIFEST_COMPONENT = {
+  string: 'UInput', text: 'UTextarea', number: 'UInputNumber', decimal: 'UInputNumber',
+  boolean: 'UCheckbox', date: 'CroutonCalendar', json: 'UTextarea', repeater: 'CroutonFormRepeater',
+  array: 'UTextarea', reference: 'CroutonFormReferenceSelect', image: 'CroutonImageUpload', file: 'CroutonImageUpload'
+}
+export const withComponent = (fields) => fields.map(f => ({ ...f, component: f.component ?? MANIFEST_COMPONENT[f.type] }))
+
+/**
  * Basic field definitions for a simple collection
  */
-export const basicFields = [
+export const basicFields = withComponent([
   { name: 'name', type: 'string', meta: { required: true, maxLength: 255 } },
   { name: 'description', type: 'text', meta: {} },
   { name: 'price', type: 'decimal', meta: { precision: 10, scale: 2 } },
   { name: 'active', type: 'boolean', meta: {} }
-]
+])
 
 /**
  * Complex field definitions with all field types
  */
-export const allTypesFields = [
+export const allTypesFields = withComponent([
   { name: 'title', type: 'string', meta: { required: true } },
   { name: 'content', type: 'text', meta: {} },
   { name: 'count', type: 'number', meta: {} },
@@ -32,20 +45,20 @@ export const allTypesFields = [
   { name: 'metadata', type: 'json', meta: {} },
   { name: 'items', type: 'repeater', meta: {} },
   { name: 'tags', type: 'array', meta: {} }
-]
+])
 
 /**
  * Fields with references
  */
-export const fieldsWithRefs = [
+export const fieldsWithRefs = withComponent([
   { name: 'name', type: 'string', meta: { required: true } },
   { name: 'categoryId', type: 'string', refTarget: 'categories', meta: {} }
-]
+])
 
 /**
  * Fields for seed generator testing
  */
-export const seedTestFields = [
+export const seedTestFields = withComponent([
   { name: 'email', type: 'string' },
   { name: 'fullName', type: 'string' },
   { name: 'firstName', type: 'string' },
@@ -63,7 +76,7 @@ export const seedTestFields = [
   { name: 'isActive', type: 'boolean' },
   { name: 'createdAt', type: 'date' },
   { name: 'settings', type: 'json' }
-]
+])
 
 // ============ Generator Data Objects ============
 
@@ -150,10 +163,10 @@ export const sortableData = {
  */
 export const dependentFieldsData = {
   ...basicComposableData,
-  fields: [
+  fields: withComponent([
     { name: 'name', type: 'string', meta: { required: true } },
     { name: 'items', type: 'repeater', meta: { repeaterComponent: 'ItemEditor' } }
-  ]
+  ])
 }
 
 /**
@@ -167,13 +180,13 @@ export const displayConfigData = {
     badge: 'active',
     description: 'description'
   },
-  fields: [
+  fields: withComponent([
     { name: 'name', type: 'string', meta: { required: true, label: 'Name', area: 'main' } },
     { name: 'description', type: 'text', meta: { label: 'Description', area: 'main' } },
     { name: 'photo', type: 'image', meta: { label: 'Photo', area: 'main' } },
     { name: 'price', type: 'decimal', meta: { label: 'Price', area: 'sidebar' } },
     { name: 'active', type: 'boolean', meta: { label: 'Active', area: 'sidebar', displayAs: 'badge' } }
-  ]
+  ])
 }
 
 // ============ Config Objects ============
@@ -259,11 +272,11 @@ export const formWithRefsData = {
 /**
  * Fields with date type for form component tests
  */
-export const fieldsWithDate = [
+export const fieldsWithDate = withComponent([
   { name: 'name', type: 'string', meta: { required: true } },
   { name: 'publishedAt', type: 'date', meta: {} },
   { name: 'expiresAt', type: 'date', meta: {} }
-]
+])
 
 /**
  * Data object for form component tests with date fields
