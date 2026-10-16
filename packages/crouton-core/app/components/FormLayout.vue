@@ -30,6 +30,12 @@ const activeSection = computed({
 })
 
 // Enhance navigation items with error indicators
+// Many tabs don't fit a phone: show icons only below `sm` (labels stay for
+// screen readers). Only when every tab has an icon, so none renders empty.
+const tabsIconOnlyOnMobile = computed(() =>
+  props.navigationItems.length > 3 && props.navigationItems.every(item => item.icon)
+)
+
 const enhancedNavigationItems = computed(() => {
   return props.navigationItems.map((item) => {
     const errorCount = props.tabErrors[item.value] || 0
@@ -87,6 +93,7 @@ const sidebarAccordionItems = computed(() => [{
             v-model="activeSection"
             :items="enhancedNavigationItems as any"
             :content="false"
+            :ui="tabsIconOnlyOnMobile ? { label: 'sr-only sm:not-sr-only' } : undefined"
             class="w-full"
           />
           <!-- Main Content Slot -->
