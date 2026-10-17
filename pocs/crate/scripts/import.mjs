@@ -11,18 +11,14 @@
 // DROPBOX_APP_KEY, DROPBOX_REFRESH_TOKEN, DROPBOX_AUDIO_ROOT.
 import { readFileSync, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { join } from 'node:path'
 import { parseArgs } from 'node:util'
-
-const here = dirname(fileURLToPath(import.meta.url))
-const envFile = join(here, '..', '.env')
-if (existsSync(envFile)) process.loadEnvFile(envFile)
+import { DEFAULT_URL, DEFAULT_XML, attributes, readCollection, signIn, splitComments } from './lib.mjs'
 
 const { values: args } = parseArgs({
   options: {
-    'url': { type: 'string', default: process.env.CRATE_URL || 'http://localhost:3017' },
-    'xml': { type: 'string', default: '/Users/paulmcparty/DJ/exportForTagger.xml' },
+    'url': { type: 'string', default: DEFAULT_URL },
+    'xml': { type: 'string', default: DEFAULT_XML },
     'data': { type: 'string', default: join(homedir(), 'Library/Application Support/CrateTagger') },
     'team': { type: 'string' },
     'dry-run': { type: 'boolean', default: false }
@@ -31,26 +27,12 @@ const { values: args } = parseArgs({
 
 const BATCH = 400
 
-// ── rekordbox XML ──────────────────────────────────────────────────────────
-const ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: '\'' }
-const decode = s => s.replace(/&(#x?[0-9a-f]+|\w+);/gi, (m, e) =>
-  e[0] === '#' ? String.fromCodePoint(Number.parseInt(e.slice(e[1] === 'x' ? 2 : 1), e[1] === 'x' ? 16 : 10)) : (ENTITIES[e] ?? m))
-
-/** Collection TRACK elements → attribute maps. The file is 71 MB; one regex pass over the COLLECTION block. */
+/** Collection TRACK elements → attribute maps. */
 function readTracks(path) {
-  const xml = readFileSync(path, 'utf8')
-  const start = xml.indexOf('<COLLECTION')
-  const end = xml.indexOf('</COLLECTION>', start)
-  const tracks = []
-  for (const m of xml.slice(start, end).matchAll(/<TRACK\s([^>]*?)\/?>/g)) {
-    const attrs = {}
-    for (const a of m[1].matchAll(/(\w+)="([^"]*)"/g)) attrs[a[1]] = decode(a[2])
-    if (attrs.TrackID) tracks.push(attrs)
-  }
-  return tracks
+  const { collection } = readCollection(path)
+  return [...collection.matchAll(/<TRACK\s([^>]*?)\/?>/g)].map(m => attributes(m[1])).filter(a => a.TrackID)
 }
 
-const splitComments = c => (c ?? '').split(',').map(t => t.trim()).filter(Boolean)
 const num = v => (v === undefined || v === '' ? null : Number(v))
 const int = v => (v === undefined || v === '' || Number(v) === 0 ? null : Math.round(Number(v)))
 
@@ -97,28 +79,6 @@ function audioMatcher(files) {
   }
 }
 
-// ── App API ────────────────────────────────────────────────────────────────
-async function signIn() {
-  const { CRATE_EMAIL: email, CRATE_PASSWORD: password } = process.env
-  if (!email || !password) throw new Error('Set CRATE_EMAIL and CRATE_PASSWORD (an app login) in pocs/crate/.env')
-  const res = await fetch(`${args.url}/api/auth/sign-in/email`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Origin': args.url },
-    body: JSON.stringify({ email, password })
-  })
-  if (!res.ok) throw new Error(`Sign-in failed (${res.status}): ${await res.text()}`)
-  const cookie = res.headers.getSetCookie().map(c => c.split(';')[0]).join('; ')
-  const api = async (path, init = {}) => {
-    const r = await fetch(`${args.url}${path}`, { ...init, headers: { 'Content-Type': 'application/json', 'Origin': args.url, cookie, ...init.headers } })
-    if (!r.ok) throw new Error(`${init.method ?? 'GET'} ${path} → ${r.status}: ${(await r.text()).slice(0, 500)}`)
-    return r.json()
-  }
-  const teams = await api('/api/auth/organization/list')
-  const team = args.team ? teams.find(t => t.slug === args.team || t.id === args.team) : teams[0]
-  if (!team) throw new Error(`No team found for ${email}${args.team ? ` matching "${args.team}"` : ''} — create one in the app first`)
-  return { api, team }
-}
-
 const readJson = (file, fallback) => {
   const p = join(args.data, file)
   return existsSync(p) ? JSON.parse(readFileSync(p, 'utf8')) : fallback
@@ -161,7 +121,7 @@ if (args['dry-run']) {
   process.exit(0)
 }
 
-const { api, team } = await signIn()
+const { api, team } = await signIn(args.url, args.team)
 const endpoint = `/api/teams/${team.id}/crate/import`
 const totals = {}
 const add = r => Object.entries(r).forEach(([k, v]) => { totals[k] = (totals[k] ?? 0) + v })
