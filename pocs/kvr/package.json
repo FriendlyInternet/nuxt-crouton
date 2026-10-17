@@ -18,7 +18,6 @@
     "logs": "npx wrangler pages deployment tail --project-name kvr"
   },
   "dependencies": {
-    "@fyit/crouton": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-email": "workspace:*",

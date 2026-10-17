@@ -2,9 +2,6 @@
 # Mirrors packages/* (pkg:) · apps/* (app:) · workers/* (worker:) plus type:/meta labels.
 
 # ── Packages (packages/*) ──
-- name: "pkg:crouton"
-  color: "1d76db"
-  description: "Package: @fyit/crouton"
 - name: "pkg:crouton-admin"
   color: "1d76db"
   description: "Package: @fyit/crouton-admin"

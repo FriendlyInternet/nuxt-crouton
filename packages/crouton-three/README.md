@@ -15,7 +15,7 @@ This package ships as a Nuxt layer. Add it to your app's `extends`:
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-three'
   ]
 })

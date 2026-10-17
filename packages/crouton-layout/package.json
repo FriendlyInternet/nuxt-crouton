@@ -1,7 +1,7 @@
 {
   "name": "@fyit/crouton-layout",
   "version": "0.1.0",
-  "description": "Deterministic layout engine for Nuxt Crouton — the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Default-on via @fyit/crouton.",
+  "description": "Deterministic layout engine for Nuxt Crouton \u2014 the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Opt in by extending it next to @fyit/crouton-core.",
   "type": "module",
   "main": "./nuxt.config.ts",
   "exports": {

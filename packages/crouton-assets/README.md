@@ -33,7 +33,7 @@ Add to your `nuxt.config.ts`:
 ```typescript
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-assets'  // Add assets layer
   ],
   hub: {
@@ -205,7 +205,7 @@ The assets collection includes:
 ## Requirements
 
 - Nuxt 4+
-- @fyit/crouton
+- @fyit/crouton-core
 - @nuxthub/core with blob storage enabled
 - @vueuse/core
 

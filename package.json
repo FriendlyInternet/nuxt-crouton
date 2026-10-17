@@ -46,12 +46,10 @@
     "release": "changeset version && pnpm publish:packages",
     "clean": "rm -rf node_modules packages/*/node_modules apps/*/node_modules",
     "changelog": "changelogithub",
-    "check:publint": "publint ./packages/crouton",
-    "check:attw": "attw --pack ./packages/crouton --ignore-rules cjs-resolves-to-esm",
+    "check:publint": "publint ./packages/crouton-core",
     "test:e2e": "playwright test --config e2e/playwright.config.ts"
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "^0.18.2",
     "@axe-core/playwright": "^4.10.2",
     "@changesets/cli": "^2.30.0",
     "@nuxt/eslint-config": "^1.2.0",
