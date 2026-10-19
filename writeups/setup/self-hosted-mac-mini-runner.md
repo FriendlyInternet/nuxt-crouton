@@ -610,3 +610,5 @@ are observed in 🌐 **GITHUB (browser)** on the Actions tab.
 - The reports-only pi.dev workflow that targets this runner: `.github/workflows/a11y-daily-pidev.yml`
 - No-sleep detail + caffeinate agent: `scripts/mac-mini-runner/no-sleep.md`
 - Epics: #610 (run the whole flow on the mini), #669 (pi.dev as the in-job agent)
+
+<!-- #2334 gate check: docs-only change, E2E Gate must report green without running fixtures. Throwaway PR, closed unmerged. -->
