@@ -756,6 +756,10 @@ Drizzle schema, queries, routes, list, composable, form — from its own layer (
   `assertNoOwnedCollections`, which throws `OwnedCollectionError` —
   `sales/products is owned by @fyit/crouton-sales — … Remove it from crouton.config.js`.
 
+The package's manifest `configuration` questions (bookings: email) are **still asked** for an owning
+package the app extends — only the collection merge is skipped, not the setup (#2307). Answers land
+under `features.<alias>` in `crouton.config.js` and as runtimeConfig in `nuxt.config.ts` as before.
+
 Identity is **(layer, plural name)**, case-insensitive: `sales/orderitems` matches the manifest's
 `orderItem`, while `shop/products` in another app is a different table and stays allowed. An app gets
 the collections by extending the package; there is nothing to list in `crouton.config.js`. Packages
