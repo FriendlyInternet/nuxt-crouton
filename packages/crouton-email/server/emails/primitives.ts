@@ -137,12 +137,16 @@ export const EHr = defineComponent({
 
 export const EImg = defineComponent({
   name: 'EImg',
-  props: { src: { type: String, required: true } },
+  // `alt` is declared so the accessibility intent is explicit in the component, not left to
+  // attribute fall-through (which did carry it, but invisibly). No default: an image that
+  // passes no alt renders no attribute, exactly as before.
+  props: { src: { type: String, required: true }, alt: { type: String } },
   setup(props) {
     return () => h('img', {
       'data-id': '__vue-email-img',
       'style': 'display: block; outline: none; border: none; text-decoration: none',
       'src': props.src,
+      'alt': props.alt,
     })
   },
 })
