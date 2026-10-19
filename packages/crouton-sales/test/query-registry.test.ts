@@ -9,7 +9,8 @@ import { readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { salesQueryRegistry } from '../server/query-registry'
 
-const PUBLIC = ['products', 'categories', 'events', 'locations']
+// Not `events`: an event row carries `helperPin`, the volunteer login secret.
+const PUBLIC = ['products', 'categories', 'locations']
 const key = (dir: string) => 'sales' + dir.charAt(0).toUpperCase() + dir.slice(1)
 
 describe('salesQueryRegistry', () => {

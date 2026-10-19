@@ -32,6 +32,11 @@ describe('stripInternalFields', () => {
     expect(JSON.stringify(out)).not.toContain('@example.com')
   })
 
+  it('drops secret-shaped columns as a backstop (helperPin, apiKey, accessToken, passwordHash)', () => {
+    const out = stripInternalFields({ id: 'e1', name: 'Kermis', helperPin: '1234', apiKey: 'k', accessToken: 't', passwordHash: 'h', pinned: true })
+    expect(out).toEqual({ id: 'e1', name: 'Kermis', pinned: true })
+  })
+
   it('leaves dates, nulls and scalars alone and does not mutate the input', () => {
     const createdAt = new Date('2026-01-01')
     const input = { id: 'p1', createdAt, note: null, ownerUser: user }

@@ -10,6 +10,8 @@
  * collections that make sense on a public page — see each package's server/query-registry.ts.)
  */
 const INTERNAL_KEYS = new Set(['createdBy', 'updatedBy', 'owner', 'userId'])
+/** Backstop for a secret-shaped column that slipped onto a public collection (`helperPin`, `apiKey` …). */
+const SECRET_KEY = /(pin|secret|token|password|hash|apikey)$/i
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   if (v === null || typeof v !== 'object') return false
@@ -22,7 +24,7 @@ function strip(value: unknown): unknown {
   if (!isPlainObject(value)) return value
   const out: Record<string, unknown> = {}
   for (const [key, v] of Object.entries(value)) {
-    if (INTERNAL_KEYS.has(key) || key.endsWith('User')) continue
+    if (INTERNAL_KEYS.has(key) || key.endsWith('User') || SECRET_KEY.test(key)) continue
     out[key] = strip(v)
   }
   return out
