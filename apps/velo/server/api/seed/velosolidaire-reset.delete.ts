@@ -11,7 +11,7 @@ import { bookingsSettings } from '@fyit/crouton-bookings/collections/settings/se
 import { bookingsEmailtemplates } from '@fyit/crouton-bookings/collections/emailtemplates/server/database/schema'
 import { bookingsBookings } from '@fyit/crouton-bookings/collections/bookings/server/database/schema'
 import { bookingsEmaillogs } from '@fyit/crouton-bookings/collections/emaillogs/server/database/schema'
-import { pagesPages } from '~~/layers/pages/collections/pages/server/database/schema'
+import { pagesPages } from '@fyit/crouton-pages/collections/pages/server/database/schema'
 
 export default defineEventHandler(async () => {
   if (!import.meta.dev) {

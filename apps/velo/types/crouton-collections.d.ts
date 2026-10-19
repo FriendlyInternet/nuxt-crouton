@@ -19,7 +19,6 @@
  * - veloMembers: VeloMember
  * - veloRoomtypes: VeloRoomtype
  * - croutonAssets: CroutonAsset
- * - pagesPages: PagesPage
  */
 
 import type { VeloBookingrequest, VeloBookingrequestFormData, NewVeloBookingrequest } from './layers/velo/collections/bookingrequests/types'
@@ -28,7 +27,6 @@ import type { VeloEquipment, VeloEquipmentFormData, NewVeloEquipment } from './l
 import type { VeloMember, VeloMemberFormData, NewVeloMember } from './layers/velo/collections/members/types'
 import type { VeloRoomtype, VeloRoomtypeFormData, NewVeloRoomtype } from './layers/velo/collections/roomtypes/types'
 import type { CroutonAsset, CroutonAssetFormData, NewCroutonAsset } from './layers/crouton/collections/assets/types'
-import type { PagesPage, PagesPageFormData, NewPagesPage } from './layers/pages/collections/pages/types'
 
 declare module '#crouton/types' {
   interface CollectionTypeMap {
@@ -61,11 +59,6 @@ declare module '#crouton/types' {
       Item: CroutonAsset
       FormData: CroutonAssetFormData
       NewItem: NewCroutonAsset
-    }
-    pagesPages: {
-      Item: PagesPage
-      FormData: PagesPageFormData
-      NewItem: NewPagesPage
     }
   }
 }

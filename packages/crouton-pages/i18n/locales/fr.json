@@ -1154,6 +1154,11 @@
       "videoUrlPlaceholder": "https://example.com/video.mp4 ou /images/...",
       "optionalLinkPlaceholder": "https://example.com (lien facultatif)",
       "cropImage": "Recadrer l’image"
+    },
+    "collections": {
+      "pages": {
+        "title": "Pages"
+      }
     }
   },
   "common": {

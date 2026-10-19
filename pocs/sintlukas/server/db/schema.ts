@@ -10,5 +10,4 @@ export { contentLocations } from '../../layers/content/collections/locations/ser
 export { contentNews } from '../../layers/content/collections/news/server/database/schema'
 export { contentDownloads } from '../../layers/content/collections/downloads/server/database/schema'
 export { croutonAssets } from '../../layers/crouton/collections/assets/server/database/schema'
-export { pagesPages } from '../../layers/pages/collections/pages/server/database/schema'
 export * from './translations-ui'

@@ -13,19 +13,11 @@
  * knows the return type is BlogPost[] without requiring explicit generics.
  *
  * ## Registered Collections
- * - pagesPages: PagesPage
+ * (none — pagesPages ships from @fyit/crouton-pages, #2278)
  */
 
-import type { PagesPage, PagesPageFormData, NewPagesPage } from './layers/pages/collections/pages/types'
-
 declare module '#crouton/types' {
-  interface CollectionTypeMap {
-    pagesPages: {
-      Item: PagesPage
-      FormData: PagesPageFormData
-      NewItem: NewPagesPage
-    }
-  }
+  interface CollectionTypeMap {}
 }
 
 export {}
