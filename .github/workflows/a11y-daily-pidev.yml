@@ -46,7 +46,7 @@ on:
         default: "claude-haiku-4-5"
         type: string
       provider:
-        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the `claude` CLI + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-claude-cli, #2275; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
+        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the `claude` CLI + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
         required: false
         default: "pi-claude-cli"
         type: choice
@@ -90,10 +90,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # GitHub-hosted runners (#2275) have no `claude` login. pi's `pi-claude-cli` provider
-      # drives the Claude SUBSCRIPTION by spawning `claude -p`, so install the CLI and prove
-      # the token answers before the pi run.
-      - name: Set up Claude CLI (subscription)
-        uses: ./.github/actions/setup-claude-cli
+      # drives the Claude SUBSCRIPTION by spawning `claude -p`. setup-pi installs pinned pi + CLI and
+      # proves the token answers + the provider registers before the pi run.
+      - name: Set up pi + Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
         with:
           oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
@@ -110,11 +110,10 @@ jobs:
           PI_MODEL: ${{ inputs.model || 'claude-haiku-4-5' }}
           PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
           # Headless subscription auth (#2119/#2275): the long-lived OAuth token (claude
-          # setup-token, 1y) the CLI reads from env; installed + preflighted by setup-claude-cli.
+          # setup-token, 1y) the CLI reads from env; installed + preflighted by setup-pi.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -uo pipefail
-          command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
           DATE=$(date -u +%Y%m%d)
           LOG="a11y-pidev-exec-${{ github.run_id }}.log"
           # Build the prompt in a FILE, not PROMPT=$(cat <<EOF…) — a $()-wrapped heredoc
@@ -138,8 +137,9 @@ jobs:
           echo "report=writeups/reports/a11y-repo-pidev-${DATE}.md" >> "$GITHUB_OUTPUT"
           echo "exec=$LOG" >> "$GITHUB_OUTPUT"
           START=$(date +%s)
-          # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
-          pi --print --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
+          # Pin provider + load skills via --skill (#888). --approve trusts .pi/settings.json on a fresh
+          # runner (the other two pi flows already pass it); without it the project package list is ignored.
+          pi --print --approve --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           END=$(date +%s)
           echo "wall=$((END-START))" >> "$GITHUB_OUTPUT"

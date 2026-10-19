@@ -1,0 +1,71 @@
+name: Set up pi.dev + the Claude CLI (subscription) on a fresh runner
+description: >-
+  Everything the pi agent pipeline used to inherit from the mac-mini's hand-set-up box
+  (#2275), reproduced on an ephemeral GitHub-hosted runner: a PINNED pi, a PINNED Claude
+  Code CLI, and two preflights that prove — in seconds, before the long pi run — that the
+  subscription token answers and that pi registers the `pi-claude-cli` provider. pi installs
+  the extensions `.pi/settings.json` lists by itself, but ONLY when the project is trusted
+  (`--approve`); the first hosted run invoked pi without it and died with
+  `Unknown provider "pi-claude-cli"`. The provider preflight runs trusted, so it also
+  warms that install.
+
+inputs:
+  oauth-token:
+    description: "CLAUDE_CODE_OAUTH_TOKEN — the long-lived token from `claude setup-token` (#2119). Composite actions can't read secrets; pass it in."
+    required: true
+  pi-version:
+    description: "@earendil-works/pi-coding-agent version. PINNED: the box ran a manifest-pinned pi; an unpinned CI pi changes the pipeline's behaviour with no diff in this repo. 1.3.0 verified to register pi-claude-cli 0.3.1 (17 Claude models)."
+    required: false
+    default: "1.3.0"
+  claude-version:
+    description: "@anthropic-ai/claude-code version, pinned for the same reason."
+    required: false
+    default: "2.1.303"
+
+runs:
+  using: composite
+  steps:
+    - name: Install pi ${{ inputs.pi-version }} and Claude Code CLI ${{ inputs.claude-version }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        npm i -g "@earendil-works/pi-coding-agent@${{ inputs.pi-version }}" "@anthropic-ai/claude-code@${{ inputs.claude-version }}"
+        pi --version
+        claude --version
+
+    - name: Preflight — the subscription token answers
+      shell: bash
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.oauth-token }}
+      run: |
+        set -uo pipefail
+        if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+          echo "::error::CLAUDE_CODE_OAUTH_TOKEN is empty — the pi pipeline runs on the Claude subscription and has nothing to authenticate with. Run \`claude setup-token\` locally and store it as the repo secret CLAUDE_CODE_OAUTH_TOKEN."
+          exit 1
+        fi
+        # One tiny headless call. `timeout` so a hung CLI can't eat the job's budget.
+        OUT="$(timeout 120 claude -p 'Reply with exactly the two letters OK and nothing else.' --output-format text 2>&1)" || {
+          echo "$OUT" | tail -n 20
+          echo "::error::The Claude CLI could not complete a one-line prompt with CLAUDE_CODE_OAUTH_TOKEN. Usual cause: the token expired or was revoked — mint a new one with \`claude setup-token\` and update the repo secret. (Output above.)"
+          exit 1
+        }
+        case "$OUT" in
+          *OK*) echo "preflight: subscription token works" ;;
+          *) echo "$OUT" | tail -n 20; echo "::error::Claude answered, but not as expected — check the output above before trusting a pi run on it."; exit 1 ;;
+        esac
+
+    # `--approve` trusts .pi/settings.json, which makes pi install the listed extensions into
+    # <repo>/.pi/npm (pi writes its own .gitignore there) and register pi-claude-cli. Every pi
+    # invocation in the workflows passes --approve too; this step is the assertion that the
+    # pi ↔ pi-claude-cli version pair still works, with pi's own `--list-models` as the witness.
+    - name: Preflight — pi registers the pi-claude-cli provider
+      shell: bash
+      run: |
+        set -euo pipefail
+        MODELS="$(pi --approve --list-models 2>&1 || true)"
+        if ! grep -q '^pi-claude-cli ' <<< "$MODELS"; then
+          echo "$MODELS" | tail -n 30
+          echo "::error::pi does not list a pi-claude-cli provider — the extensions in .pi/settings.json did not load (pi/pi-claude-cli version pair incompatible, or the install failed). Nothing on the subscription can run."
+          exit 1
+        fi
+        echo "preflight: pi-claude-cli provider registered ($(grep -c '^pi-claude-cli ' <<< "$MODELS") models)"
