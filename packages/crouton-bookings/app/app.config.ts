@@ -1,3 +1,10 @@
+import { bookingsBookingsConfig } from '../collections/bookings/app/composables/useBookingsBookings'
+import { bookingsLocationsConfig } from '../collections/locations/app/composables/useBookingsLocations'
+import { bookingsSettingsConfig } from '../collections/settings/app/composables/useBookingsSettings'
+import { bookingsEmailtemplatesConfig } from '../collections/emailtemplates/app/composables/useBookingsEmailtemplates'
+import { bookingsEmaillogsConfig } from '../collections/emaillogs/app/composables/useBookingsEmaillogs'
+// The five collections above ship with this package (#2278); registering them here
+// means a consuming app lists nothing for bookings in its own app.config.
 import type { CroutonBlockDefinition } from '@fyit/crouton-core/app/types/block-definition'
 import type { CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/layout-block'
 
@@ -153,11 +160,13 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
 }
 
 export default defineAppConfig({
-  // Package-provided form for bookings locations (overrides CLI-generated _Form.vue)
   croutonCollections: {
-    bookingsLocations: {
-      packageForm: 'CroutonBookingsLocationForm'
-    }
+    bookingsBookings: bookingsBookingsConfig,
+    // Package-provided form for locations (overrides the generated _Form.vue)
+    bookingsLocations: { ...bookingsLocationsConfig, packageForm: 'CroutonBookingsLocationForm' },
+    bookingsSettings: bookingsSettingsConfig,
+    bookingsEmailtemplates: bookingsEmailtemplatesConfig,
+    bookingsEmaillogs: bookingsEmaillogsConfig
   },
   // App auto-discovery registration for crouton-bookings
   croutonApps: {

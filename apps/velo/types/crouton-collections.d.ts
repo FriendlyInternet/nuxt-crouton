@@ -13,11 +13,6 @@
  * knows the return type is BlogPost[] without requiring explicit generics.
  *
  * ## Registered Collections
- * - bookingsBookings: BookingsBooking
- * - bookingsEmaillogs: BookingsEmaillog
- * - bookingsEmailtemplates: BookingsEmailtemplate
- * - bookingsLocations: BookingsLocation
- * - bookingsSettings: BookingsSetting
  * - veloBookingrequests: VeloBookingrequest
  * - veloDepartments: VeloDepartment
  * - veloEquipments: VeloEquipment
@@ -27,11 +22,6 @@
  * - pagesPages: PagesPage
  */
 
-import type { BookingsBooking, BookingsBookingFormData, NewBookingsBooking } from './layers/bookings/collections/bookings/types'
-import type { BookingsEmaillog, BookingsEmaillogFormData, NewBookingsEmaillog } from './layers/bookings/collections/emaillogs/types'
-import type { BookingsEmailtemplate, BookingsEmailtemplateFormData, NewBookingsEmailtemplate } from './layers/bookings/collections/emailtemplates/types'
-import type { BookingsLocation, BookingsLocationFormData, NewBookingsLocation } from './layers/bookings/collections/locations/types'
-import type { BookingsSetting, BookingsSettingFormData, NewBookingsSetting } from './layers/bookings/collections/settings/types'
 import type { VeloBookingrequest, VeloBookingrequestFormData, NewVeloBookingrequest } from './layers/velo/collections/bookingrequests/types'
 import type { VeloDepartment, VeloDepartmentFormData, NewVeloDepartment } from './layers/velo/collections/departments/types'
 import type { VeloEquipment, VeloEquipmentFormData, NewVeloEquipment } from './layers/velo/collections/equipments/types'
@@ -42,31 +32,6 @@ import type { PagesPage, PagesPageFormData, NewPagesPage } from './layers/pages/
 
 declare module '#crouton/types' {
   interface CollectionTypeMap {
-    bookingsBookings: {
-      Item: BookingsBooking
-      FormData: BookingsBookingFormData
-      NewItem: NewBookingsBooking
-    }
-    bookingsEmaillogs: {
-      Item: BookingsEmaillog
-      FormData: BookingsEmaillogFormData
-      NewItem: NewBookingsEmaillog
-    }
-    bookingsEmailtemplates: {
-      Item: BookingsEmailtemplate
-      FormData: BookingsEmailtemplateFormData
-      NewItem: NewBookingsEmailtemplate
-    }
-    bookingsLocations: {
-      Item: BookingsLocation
-      FormData: BookingsLocationFormData
-      NewItem: NewBookingsLocation
-    }
-    bookingsSettings: {
-      Item: BookingsSetting
-      FormData: BookingsSettingFormData
-      NewItem: NewBookingsSetting
-    }
     veloBookingrequests: {
       Item: VeloBookingrequest
       FormData: VeloBookingrequestFormData

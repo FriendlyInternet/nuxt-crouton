@@ -10,8 +10,8 @@
  */
 import { eq, and, gte, lte } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { bookingsBookings } from '~~/layers/bookings/collections/bookings/server/database/schema'
-import { bookingsLocations } from '~~/layers/bookings/collections/locations/server/database/schema'
+import { bookingsBookings } from '../../../../../collections/bookings/server/database/schema'
+import { bookingsLocations } from '../../../../../collections/locations/server/database/schema'
 import { monthBounds, currentMonthBounds } from '@fyit/crouton-core/shared/utils/date'
 
 export default defineEventHandler(async (event) => {
