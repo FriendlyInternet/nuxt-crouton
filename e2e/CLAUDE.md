@@ -17,6 +17,7 @@ e2e/                         # the harness (Playwright) — NOT a workspace pack
   i18n.smoke.spec.ts         # generic, manifest-driven locale-switch check (optional)
   maps.smoke.spec.ts         # generic, manifest-driven maps mount + live geocode check (optional)
   a11y.smoke.spec.ts         # generic, manifest-driven axe-core accessibility scan (per surface)
+  assets.smoke.spec.ts       # with-assets only: upload a file via Media → it shows in the grid without a reload (#2315)
   printing.smoke.spec.ts     # with-sales only: four-tier order→print→done + transport-routing (#1324) + router self-pairing (#1366) smoke vs an in-test fake :9100 printer (optional)
   .auth/                     # generated storageState + team slug (gitignored)
 
@@ -24,7 +25,7 @@ fixtures/                    # the apps under test — real crouton apps, one pe
   minimal/                   # core + auth + i18n, one 'items' collection
   with-pages/                # + @fyit/crouton-pages   (surface: pages workspace)
   with-bookings/             # + @fyit/crouton-bookings (surface: bookings admin)
-  with-assets/               # + @fyit/crouton-assets  (surface: CroutonAssetsPicker mounts, not the stub)
+  with-assets/               # + @fyit/crouton-assets  (surface: CroutonAssetsPicker mounts, not the stub; upload → list refresh)
   with-collab/               # + @fyit/crouton-collab  (spike surface: realtime collab UI mounts single-client)
   with-maps/                 # + @fyit/crouton-maps    (maps: map mounts in form + live Nominatim geocode)
   with-sales/                # + @fyit/crouton-printing + @fyit/crouton-sales (four-tier print + pairing smoke vs an in-test fake :9100 printer)
