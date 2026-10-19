@@ -129,7 +129,7 @@ const presetEntries = computed(() =>
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="@container space-y-6">
     <div>
       <h3 class="text-lg font-semibold">
         {{ $t('themeSettings.title') }}
@@ -169,8 +169,8 @@ const presetEntries = computed(() =>
     </div>
 
     <template v-else>
-      <!-- Two-column layout: controls left, preview right -->
-      <div class="flex gap-8 items-start">
+      <!-- Controls + preview: side by side when the pane is wide, stacked when narrow -->
+      <div class="flex flex-col @2xl:flex-row gap-6 @2xl:gap-8 @2xl:items-start">
         <!-- Left: Selection Controls -->
         <div class="flex-1 min-w-0 space-y-5">
           <!-- Preset Picker (vertical) -->
@@ -246,7 +246,7 @@ const presetEntries = computed(() =>
         </div>
 
         <!-- Right: Live Preview -->
-        <div class="w-64 shrink-0 space-y-2 sticky top-4">
+        <div class="space-y-2 @2xl:w-64 @2xl:shrink-0 @2xl:sticky @2xl:top-4">
           <p class="text-sm font-medium text-default">
             {{ $t('themeSettings.livePreview') }}
           </p>
@@ -308,7 +308,7 @@ const presetEntries = computed(() =>
       <USeparator />
 
       <!-- Actions -->
-      <div class="flex justify-between items-center">
+      <div class="flex flex-wrap justify-between items-center gap-3">
         <UButton
           variant="ghost"
           color="neutral"
