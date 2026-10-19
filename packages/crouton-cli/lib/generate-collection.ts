@@ -1648,7 +1648,7 @@ async function loadAndPrepareConfig(options: RunConfigOptions): Promise<Record<s
 // Persist prompted feature configs: runtimeConfig into nuxt.config.ts and the
 // feature's config object back into crouton.config.js.
 async function persistPromptedConfigs(
-  promptedConfigs: import('./utils/manifest-merge.ts').PromptedConfig[],
+  promptedConfigs: import('./utils/manifest-configuration.ts').PromptedConfig[],
   config: Record<string, any>
 ): Promise<void> {
   const nuxtConfigPath = path.resolve('nuxt.config.ts')
@@ -1691,26 +1691,13 @@ async function persistPromptedConfigs(
   }
 }
 
-// Auto-merge package manifest collections for the packages the app extends
-// (may prompt interactively for manifest configuration options).
-async function autoMergeFeatureCollections(config: Record<string, any>, options: RunConfigOptions): Promise<void> {
+// Ask the setup questions of the packages the app extends (prompts
+// interactively, defaults in CI) and persist the answers.
+async function applyPackageConfiguration(config: Record<string, any>, options: RunConfigOptions): Promise<void> {
   if (options.noAutoMerge) return
 
-  const { mergeManifestCollections } = await import('./utils/manifest-merge.ts')
-  const mergeResult = await mergeManifestCollections(config, resolveExtendedPackages(process.cwd()))
-  const promptedConfigs: import('./utils/manifest-merge.ts').PromptedConfig[] = mergeResult.promptedConfigs
-
-  if (mergeResult.merged > 0) {
-    console.log('\n' + '═'.repeat(60))
-    console.log('  PACKAGE COLLECTIONS (auto-merged)')
-    console.log('═'.repeat(60))
-    mergeResult.collections.forEach(c =>
-      console.log(`  + ${c.layer}/${c.name} (from @fyit/crouton-${c.feature})`)
-    )
-    if (mergeResult.skipped.length > 0) {
-      console.log(`\n  Already in config: ${mergeResult.skipped.join(', ')}`)
-    }
-  }
+  const { applyManifestConfiguration } = await import('./utils/manifest-configuration.ts')
+  const promptedConfigs = await applyManifestConfiguration(config, resolveExtendedPackages(process.cwd()))
 
   // Persist prompted configs: update nuxt.config.ts runtimeConfig + crouton.config.js
   if (promptedConfigs.length > 0 && !options.dryRun) {
@@ -1855,8 +1842,8 @@ export async function runConfig(options: RunConfigOptions = {}): Promise<void> {
     // Refuse packaged collections before anything is written (#2278)
     assertNoOwnedCollections(config, await discoverManifests())
 
-    // Auto-merge package manifest collections for the packages the app extends
-    await autoMergeFeatureCollections(config, options)
+    // Ask the setup questions of the packages the app extends
+    await applyPackageConfiguration(config, options)
 
     if (config.collections && config.targets) {
       await runEnhancedConfigFormat(config, typeMapping)
