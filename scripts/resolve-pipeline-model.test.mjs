@@ -6,7 +6,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { resolveModel, VALID_TIERS } from './resolve-pipeline-model.mjs'
 
-const CFG = { provider: 'pi-claude-cli', default: 'claude-sonnet-5', hard: 'claude-opus-4-8' }
+const CFG = { provider: 'claude-bridge', default: 'claude-sonnet-5', hard: 'claude-opus-4-8' }
 
 test('default tier resolves to the configured default model', () => {
   assert.equal(resolveModel(CFG, 'default'), 'claude-sonnet-5')

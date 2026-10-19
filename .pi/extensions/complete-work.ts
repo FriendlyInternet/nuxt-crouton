@@ -18,7 +18,7 @@
 // also what makes the lean `.pi/settings.json` CI profile apply.
 const DONE = "PI_TASK_COMPLETE_NOTHING_LEFT";
 const MAX = Number(process.env.PI_COMPLETE_MAX_NUDGES || 4);
-// A tool-less turn that is actually a PROVIDER/BACKEND error (the pi-claude-cli subprocess timing
+// A tool-less turn that is actually a PROVIDER/BACKEND error (the claude-bridge / Claude Code child timing
 // out under load, a rate/usage limit, etc.) must NOT be nudged — re-driving just fires another
 // doomed backend call and amplifies load. Let those fall through to the workflow's finish backstop.
 const BACKEND_ERR = /subprocess timed out|no output for \d+ seconds|rate.?limit|overloaded|usage limit reached|\b429\b/i;

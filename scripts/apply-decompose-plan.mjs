@@ -204,7 +204,7 @@ export function planToActions(plan, ctx) {
   })
   // Pass 2: record dependencies, then dispatch ONLY the children with none. A blocked child gets
   // no trigger label at all — the wave scheduler releases it when its last blocker closes. That
-  // is the whole point: an unbuildable leaf should never consume a run on the serial mac-mini.
+  // is the whole point: an unbuildable leaf should never consume a pi run (and its subscription quota).
   plan.children.forEach((c, i) => {
     const deps = c.blockedBy || []
     if (deps.length) {
@@ -338,7 +338,7 @@ const ACTION_HANDLERS = {
     const art = renderSignoffArtifacts(a.signoff, state)
     const rawBase = a.epic_branch ? `https://raw.githubusercontent.com/${repo}/${a.epic_branch}` : null
     const lines = []
-    lines.push('> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _design sign-off gate (#1821)_')
+    lines.push('> 🤖 **pi.dev harness** · agent pipeline (CI) · _design sign-off gate (#1821)_')
     lines.push('')
     lines.push('## 🎨 Design sign-off needed before building')
     lines.push('')

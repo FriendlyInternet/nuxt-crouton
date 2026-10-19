@@ -211,7 +211,7 @@
   description: "Claude Code agent/skill tooling (.claude/) serving the whole monorepo"
 - name: "delegate"
   color: "0e8a16"
-  description: "Hand this issue to the agent pipeline. Routes by the AGENT_HARNESS repo variable — currently 'pi', so it runs on the mac-mini"
+  description: "Hand this issue to the agent pipeline. Routes by the AGENT_HARNESS repo variable — currently 'pi' (the pi.dev worker on a GitHub-hosted runner, Claude subscription)"
   from_name: "auto-decompose"
 - name: "delegate-pi"
   color: "5319e7"
