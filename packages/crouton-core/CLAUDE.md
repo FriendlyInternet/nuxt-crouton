@@ -270,6 +270,10 @@ useNuxtApp().hook('crouton:mutation', ({ operation, collection, itemId, data }) 
 })
 ```
 
+`update` events carry `beforeData` (the item as it was) **only when `@fyit/crouton-events` is
+installed** (`useCroutonApps().hasApp('events')`): fetching it costs a GET before every PATCH,
+and crouton-events is the one listener that reads it (#2289).
+
 ## Keyboard Shortcuts
 
 Power-user keyboard shortcuts via `useCroutonShortcuts()`:
