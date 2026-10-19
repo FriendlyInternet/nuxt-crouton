@@ -75,18 +75,18 @@ jobs:
       # claude-code-action's bot-actor guard via `allowed_bots` (decompose-on-issue.yml) — no
       # human PAT needed. An App installation token (unlike the built-in GITHUB_TOKEN) DOES
       # trigger the downstream `labeled` workflow. (#535 / #519 WS5)
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
       # Needed so the script can `require` the unit-tested command parser
       # (scripts/comment-command.mjs) — same pattern as schedule-waves.yml.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
 
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |

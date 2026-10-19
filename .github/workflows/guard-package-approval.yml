@@ -17,8 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Fail if .claude/.package-edit-approved is committed
         run: |
           if git ls-files --error-unmatch .claude/.package-edit-approved >/dev/null 2>&1; then

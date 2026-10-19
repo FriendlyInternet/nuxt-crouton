@@ -23,7 +23,7 @@ jobs:
     steps:
       # Push with the Harness App, not GITHUB_TOKEN — this job commits to `main`, which
       # the ruleset rejects for a GITHUB_TOKEN push (#1133). See loop-station-inventory.yml.
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
@@ -31,20 +31,20 @@ jobs:
           owner: FriendlyInternet
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0 # full history so the commit-back rebases cleanly
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           # per-job dest — the default ~/setup-pnpm collides between the two
           # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
           dest: ${{ runner.temp }}/setup-pnpm
 
       - name: Setup Node
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'pnpm'
