@@ -649,8 +649,11 @@
       }
     },
     "packages/crouton-auth/app/composables/useSession.ts": {
-      "crap_moderate": {
-        "count": 6
+      "crap_critical": {
+        "count": 2
+      },
+      "crap_high": {
+        "count": 1
       }
     },
     "packages/crouton-auth/app/composables/useTeam.ts": {
