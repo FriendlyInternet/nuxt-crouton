@@ -377,11 +377,6 @@
         "notSecurityNotice": "Een verborgen blok staat nog steeds in de paginabron — dit bepaalt wat er getoond wordt, niet wat er toegankelijk is. Stel de zichtbaarheid van de pagina zelf in voor inhoud die privé moet blijven."
       }
     },
-    "fieldGroups": {
-      "info": "Info",
-      "extra": "Extra",
-      "content": "Inhoud"
-    },
     "blockLibrary": {
       "hero": {
         "name": "Hero",
