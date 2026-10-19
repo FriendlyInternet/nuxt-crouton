@@ -6,7 +6,7 @@
 // `crouton.config.js features` used to be a second answer — four tables in the
 // generator keyed on it and disagreed. Owner decision 2026-10-16: extends is the
 // only package on-switch; `features.<alias>` only carries a package's prompted
-// configuration (manifest-merge.ts).
+// configuration (manifest-configuration.ts).
 
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { basename, join } from 'node:path'

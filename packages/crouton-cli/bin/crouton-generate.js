@@ -56,7 +56,7 @@ const generate = defineCommand({
     seed: { type: 'boolean', description: 'Generate seed data file using drizzle-seed' },
     count: { type: 'string', description: 'Number of seed records (default: 25)', default: '25' },
     tests: { type: 'boolean', description: 'Also emit per-collection tests (schema smoke + API handlers); off by default', default: false },
-    noAutoMerge: { type: 'boolean', description: 'Skip auto-merging package collections from manifests' },
+    noAutoMerge: { type: 'boolean', description: 'Skip the setup questions of extended packages' },
   },
   async run({ args }) {
     // If --config is provided, delegate to config mode
@@ -130,7 +130,7 @@ const configCmd = defineCommand({
     dryRun: { type: 'boolean', description: 'Preview without writing' },
     force: { type: 'boolean', description: 'Force generation' },
     tests: { type: 'boolean', description: 'Also emit per-collection tests (schema smoke + API handlers); off by default', default: false },
-    noAutoMerge: { type: 'boolean', description: 'Skip auto-merging package collections' },
+    noAutoMerge: { type: 'boolean', description: 'Skip the setup questions of extended packages' },
   },
   async run({ args }) {
     let configPath = args.configPath

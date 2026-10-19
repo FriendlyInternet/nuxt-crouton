@@ -750,21 +750,20 @@ A package whose manifest sets **`ownsCollections: true`** ships its collections 
 Drizzle schema, queries, routes, list, composable, form — from its own layer (first: `@fyit/crouton-sales`,
 `packages/crouton-sales/collections/*`). For such a package the CLI:
 
-- **never merges** its manifest `collections` into the app config (`mergeManifestCollections` skips the
-  manifest, prompts included), and
 - **refuses to generate** them: `runConfig` (before anything is written) and `writeScaffold` call
   `assertNoOwnedCollections`, which throws `OwnedCollectionError` —
   `sales/products is owned by @fyit/crouton-sales — … Remove it from crouton.config.js`.
 
-The package's manifest `configuration` questions (bookings: email) are **still asked** for an owning
-package the app extends — only the collection merge is skipped, not the setup (#2307). Answers land
+The package's manifest `configuration` questions (bookings: email) are **still asked** for a package
+the app extends (`applyManifestConfiguration`, `lib/utils/manifest-configuration.ts`, #2307). The CLI
+no longer merges manifest `collections` into the app config at all: every package that listed them owns
+them, so that path was removed (#2316). Answers land
 under `features.<alias>` in `crouton.config.js` and as runtimeConfig in `nuxt.config.ts` as before.
 
 Identity is **(layer, plural name)**, case-insensitive: `sales/orderitems` matches the manifest's
 `orderItem`, while `shop/products` in another app is a different table and stays allowed. An app gets
 the collections by extending the package; there is nothing to list in `crouton.config.js`. Sales,
-bookings, pages and assets all own theirs (#2278). No shipping package exercises the merge path any
-more, so `manifest-merge.test.ts` covers it with a test-local manifest.
+bookings, pages and assets all own theirs (#2278).
 
 **Known gap (#2311):** a field can't `refTarget` a package-owned collection yet (`validateRefTargets`
 only knows the app's own collections, and `database-queries.ts` has no import branch for a package
@@ -823,7 +822,7 @@ reads that list instead:
 | Decision | Where |
 |---|---|
 | Which packages' generator contributions run (plus detector matches, see below) | `applyManifestEnhancements` |
-| Which packages' manifest `collections` are merged into the config (never a package with `ownsCollections`, #2278) | `lib/utils/manifest-merge.ts` |
+| Which packages' setup questions (manifest `configuration`) are asked | `lib/utils/manifest-configuration.ts` |
 | Whether the default layout is calendar-primary (bookings extended) | `lib/compose-layout.ts` |
 | Which packages `crouton doctor` expects in `dependencies` | `lib/doctor.ts` |
 | Which packages `crouton init --features` writes into `extends` (core + each feature's manifest package unless core bundles it) | `lib/scaffold-app.ts` |
@@ -832,7 +831,7 @@ The generator **never writes `extends`** from a features block any more (the har
 `framework-packages.ts` table and `syncFrameworkPackages` are gone). Add a package with
 `crouton add <name>` or by editing `extends`. `@fyit/crouton-core` bundles auth, admin and i18n —
 don't list those separately (duplicate layer loading, `$setup.t is not a function`).
-Contract: `tests/unit/utils/extended-packages.test.ts`, `tests/unit/utils/manifest-merge.test.ts`.
+Contract: `tests/unit/utils/extended-packages.test.ts`, `tests/unit/utils/manifest-configuration.test.ts`.
 
 **Auto-detection:** Generator contributions from addon packages (editor, assets, maps, collab) also run when the schema's fields match the package's detector patterns — even if the app doesn't extend the package yet. For example, a field with `"component": "CroutonEditorSimple"` triggers `crouton-editor` contributions.
 

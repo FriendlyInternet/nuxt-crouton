@@ -1559,7 +1559,7 @@
         "count": 3
       }
     },
-    "packages/crouton-cli/lib/utils/manifest-merge.ts": {
+    "packages/crouton-cli/lib/utils/manifest-configuration.ts": {
       "complexity_critical": {
         "count": 2
       },
@@ -5293,7 +5293,7 @@
     "packages/crouton-sales/app/components/EventWorkspace/OrdersTab.vue:complexity",
     "apps/triage/layers/categorize/app/pages/admin/[team]/categorize.vue:complexity",
     "docs/app/pages/[...slug].vue:untested risk",
-    "packages/crouton-cli/lib/utils/manifest-merge.ts:complexity",
+    "packages/crouton-cli/lib/utils/manifest-configuration.ts:complexity",
     "packages/crouton-assets/app/components/FormUpdate.vue:complexity",
     "packages/crouton-bookings/app/components/List.vue:complexity",
     "packages/crouton-cli/lib/utils/layer-config.ts:complexity",
