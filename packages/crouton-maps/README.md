@@ -28,7 +28,7 @@ pnpm add @fyit/crouton-maps
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-maps'
   ]
   // No runtimeConfig and no tokens needed.

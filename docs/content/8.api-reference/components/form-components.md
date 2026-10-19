@@ -1052,7 +1052,7 @@ const handleUploaded = async (close: () => void, assetId: string) => {
 
 ## Calendar
 
-Interactive date picker component for selecting single dates or date ranges. Wraps Nuxt UI's `<UCalendar>` with timezone-aware date handling. Part of the base `@fyit/crouton` package.
+Interactive date picker component for selecting single dates or date ranges. Wraps Nuxt UI's `<UCalendar>` with timezone-aware date handling. Part of the base `@fyit/crouton-core` package.
 
 ::callout{icon="i-lucide-info" color="blue"}
 **Timezone Handling**: Calendar uses `@internationalized/date` library to handle timezone conversions transparently. You can pass JavaScript `Date` objects or timestamps (numbers), and the component handles the rest.
@@ -1524,7 +1524,7 @@ const date = ref<Date | null>(new Date())
 
 ## CalendarYear
 
-Year calendar view component that displays all 12 months in a responsive grid. Ideal for year-at-a-glance scheduling, availability views, or selecting dates across the entire year. Part of the base `@fyit/crouton` package.
+Year calendar view component that displays all 12 months in a responsive grid. Ideal for year-at-a-glance scheduling, availability views, or selecting dates across the entire year. Part of the base `@fyit/crouton-core` package.
 
 ::callout{icon="i-lucide-info" color="blue"}
 **Year View**: Unlike the standard `Calendar` component which shows 1-2 months, `CalendarYear` displays all 12 months simultaneously in a responsive grid layout.
@@ -1634,7 +1634,7 @@ Each month is displayed in its own card with the month name header.
 
 ## CroutonDate
 
-Read-only date display component that shows both absolute and relative timestamps. Commonly used in tables, cards, and detail views. Part of the base `@fyit/crouton` package.
+Read-only date display component that shows both absolute and relative timestamps. Commonly used in tables, cards, and detail views. Part of the base `@fyit/crouton-core` package.
 
 ::callout{icon="i-lucide-triangle-alert" color="amber"}
 **Display Only**: This is NOT an input component. For date selection, use `<Calendar>`. This component is for displaying dates in a user-friendly format.
@@ -1904,7 +1904,7 @@ const date = new Date()
 
 ## CroutonImageUpload
 
-Simple file picker with preview for direct image uploads. Part of the base `@fyit/crouton` package.
+Simple file picker with preview for direct image uploads. Part of the base `@fyit/crouton-core` package.
 
 ### Props
 
@@ -1991,7 +1991,7 @@ const handleUpload = async (file: File | null) => {
 
 ## CroutonAvatarUpload
 
-Specialized variant of CroutonImageUpload for avatar/profile images. Part of the base `@fyit/crouton` package.
+Specialized variant of CroutonImageUpload for avatar/profile images. Part of the base `@fyit/crouton-core` package.
 
 ### Props
 

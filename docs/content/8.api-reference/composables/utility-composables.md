@@ -714,7 +714,7 @@ useCroutonShortcuts({
 ## useEntityTranslations
 
 ::callout{type="warning" icon="i-lucide-triangle-alert"}
-**Package Required**: This composable is part of the `@fyit/crouton-i18n` package. It is **not available** in the core `@fyit/crouton` package. Install the i18n package to use this composable.
+**Package**: This composable is part of the `@fyit/crouton-i18n` package. `@fyit/crouton-core` extends that package for you, so it is available in every app that extends the core layer.
 ::
 
 Display translated field values with automatic locale fallback.
@@ -817,7 +817,7 @@ When the user switches languages, `useCollectionQuery` automatically refetches d
 ## useAssetUpload
 
 ::callout{type="warning" icon="i-lucide-triangle-alert"}
-**Package Required**: This composable is part of the `@fyit/crouton-assets` package. It is **not available** in the core `@fyit/crouton` package. Install the assets package to use this composable.
+**Package Required**: This composable is part of the `@fyit/crouton-assets` package. It is **not available** in `@fyit/crouton-core` alone. Install and extend the assets package to use this composable.
 ::
 
 Programmatic asset upload with metadata tracking.
@@ -1665,7 +1665,7 @@ debugErrors()
 ## useT
 
 ::callout{type="info" icon="i-lucide-info"}
-**Stub vs Full Implementation**: The core `@fyit/crouton` package provides a **stub implementation** of `useT()` with English fallbacks for common UI strings. For full i18n support (database-backed translations, multiple locales, translation management UI), install `@fyit/crouton-i18n`.
+**Stub vs Full Implementation**: `@fyit/crouton-core` ships a **stub implementation** of `useT()` with English fallbacks for common UI strings. The full implementation (database-backed translations, multiple locales, translation management UI) comes from `@fyit/crouton-i18n`, which core extends for you.
 ::
 
 Translation helper composable with fallback support for UI strings and content.

@@ -67,7 +67,7 @@ This package only runs in development mode and has zero impact on your productio
 
 - Nuxt 4+
 - @nuxt/devtools
-- @fyit/crouton
+- @fyit/crouton-core
 
 ## Roadmap
 

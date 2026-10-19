@@ -689,8 +689,7 @@ syncing now, or is this a stale snapshot?
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
-    '@fyit/crouton-auth',  // Required for helper auth
+    '@fyit/crouton-core',  // bundles crouton-auth (helper auth)
     '@fyit/crouton-sales',
     './layers/sales'  // Generated layer
   ],
@@ -901,7 +900,7 @@ deleted row is still re-created, an existing one is left alone.
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton` (required)
+- **Extends**: `@fyit/crouton-core` (required)
 - **Peer deps**: `@fyit/crouton-auth`, `@nuxtjs/i18n ^9.0.0`, `zod ^3.0.0`
 - **Receipt printing**: zero runtime deps. `receipt-formatter.ts` is a self-contained
   ESC/POS byte builder (CP858 encoding via `ESC t 19`). It does **not** use

@@ -12,7 +12,7 @@ export default defineNuxtConfig({
   // (#2073). In a production build the module gates itself off entirely — it
   // returns before installing anything unless dev / the devtools flag / the review
   // flag is set — so this costs a normal deploy nothing.
-  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
+  modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },

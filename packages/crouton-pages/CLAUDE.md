@@ -792,7 +792,7 @@ Part of the composable seeding system (epic #82, contract in
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton`, `@fyit/crouton-editor`
+- **Extends**: `@fyit/crouton-core`, `@fyit/crouton-editor`
 - **Uses**: Collection tree/sortable for admin page list
 - **Uses**: Domain table from `@fyit/crouton-auth`
 

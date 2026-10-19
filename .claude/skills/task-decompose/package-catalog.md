@@ -11,7 +11,6 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | Package | Dir | What it provides (when to reach for it) |
 |---------|-----|------------------------------------------|
 | `@fyit/canary-target` | `packages/canary-target` | Disposable target for the worker-pipeline canary rig (#1878). Never published, never imported. |
-| `@fyit/crouton` | `packages/crouton` | Unified Nuxt CRUD framework with opt-in features |
 | `@fyit/crouton-admin` | `packages/crouton-admin` | Admin dashboard and user management for Nuxt applications using crouton-auth |
 | `@fyit/crouton-ai` | `packages/crouton-ai` | AI integration layer for Nuxt Crouton |
 | `@fyit/crouton-analytics` | `packages/crouton-analytics` | Provider-agnostic usage analytics for nuxt-crouton — PostHog default, swappable backend, lean-loop events |
@@ -30,7 +29,7 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-feedback` | `packages/crouton-feedback` | Drop-in in-page feedback toolkit for any Nuxt UI app — a glasses launcher with a mobile console (eruda) and a pin-a-comment Annotate tool that sends to a pluggable destination (webhook / Slack / Discord / GitHub) |
 | `@fyit/crouton-flow` | `packages/crouton-flow` | Vue Flow integration for nuxt-crouton - graph/DAG visualization for collections |
 | `@fyit/crouton-i18n` | `packages/crouton-i18n` | i18n layer extending nuxt-crouton for multi-language support |
-| `@fyit/crouton-layout` | `packages/crouton-layout` | Deterministic layout engine for Nuxt Crouton — the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Default-on via @fyit/crouton. |
+| `@fyit/crouton-layout` | `packages/crouton-layout` | Deterministic layout engine for Nuxt Crouton — the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Opt in by extending it next to @fyit/crouton-core. |
 | `@fyit/crouton-maps` | `packages/crouton-maps` | Map integration layer for Nuxt Crouton with MapLibre GL (@geoql/v-maplibre), OpenFreeMap tiles, and Nominatim geocoding — no API keys required |
 | `@fyit/crouton-mcp` | `packages/crouton-mcp` | MCP server for AI-powered Crouton collection generation |
 | `@fyit/crouton-mcp-toolkit` | `packages/crouton-mcp-toolkit` | MCP Toolkit integration for Crouton - expose collections to AI assistants via Model Context Protocol |

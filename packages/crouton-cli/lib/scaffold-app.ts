@@ -65,7 +65,6 @@ function resolveFeatures(featureNames: string[], modules: Record<string, any>): 
  */
 function buildDependencies(features: string[], modules: Record<string, any>): Record<string, string> {
   const deps: Record<string, string> = {
-    '@fyit/crouton': 'workspace:*',
     '@fyit/crouton-core': 'workspace:*',
     '@fyit/crouton-i18n': 'workspace:*',
     '@libsql/client': '^0.17.0',
@@ -209,7 +208,7 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 
   return `${cfImports}// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
+  modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },

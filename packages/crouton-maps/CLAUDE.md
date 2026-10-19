@@ -38,7 +38,7 @@ base tiles come from [OpenFreeMap](https://openfreemap.org) and geocoding from
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-maps'
   ]
   // No runtimeConfig and no tokens needed.
@@ -184,7 +184,7 @@ Run Nominatim and set `NOMINATIM_URL` — the server proxy uses it transparently
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton`
+- **Extends**: `@fyit/crouton-core`
 - **Core**: `@geoql/v-maplibre ^3.0.1`, `maplibre-gl ^6.14.0` (v6 is ESM-only:
   import named exports, there is no `default` export)
 - **Peer deps**: `nuxt ^4.0.0`, `@nuxt/ui ^4.3.0`

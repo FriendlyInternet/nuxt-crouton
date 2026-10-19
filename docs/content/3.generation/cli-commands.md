@@ -175,19 +175,19 @@ crouton-generate install
 ```
 
 This installs:
-- `@fyit/crouton`
+- `@fyit/crouton-core` (bundles auth, admin and i18n)
 - Required peer dependencies
 - Updates nuxt.config.ts with extends
 
 **Manual installation**:
 ```bash
-pnpm add @fyit/crouton
+pnpm add @fyit/crouton-core
 ```
 
 Then update nuxt.config.ts:
 ```typescript
 export default defineNuxtConfig({
-  extends: ['@fyit/crouton']
+  extends: ['@fyit/crouton-core']
 })
 ```
 

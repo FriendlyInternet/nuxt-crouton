@@ -111,8 +111,7 @@ async function checkFeatureDeps(config: Record<string, any> | null, pkg: Record<
     if (!mod) continue
     if (mod.bundled) continue // bundled in @fyit/crouton-core
 
-    // Check if the package or @fyit/crouton (which bundles everything) is in deps
-    const hasPkg = mod.package in allDeps || '@fyit/crouton' in allDeps
+    const hasPkg = mod.package in allDeps
     if (!hasPkg) {
       results.push({
         name: 'deps',
@@ -124,7 +123,7 @@ async function checkFeatureDeps(config: Record<string, any> | null, pkg: Record<
 
   // Check flags that imply dependencies
   if (config.flags?.useMaps) {
-    const hasMaps = '@fyit/crouton-maps' in allDeps || '@fyit/crouton' in allDeps
+    const hasMaps = '@fyit/crouton-maps' in allDeps
     if (!hasMaps) {
       results.push({ name: 'deps', status: 'fail', message: 'Flag useMaps enabled but @fyit/crouton-maps not in dependencies' })
     }

@@ -29,7 +29,7 @@ This package requires `@nuxt/ui` v3.4+ to be installed and configured in your pr
 export default defineNuxtConfig({
   modules: ['@nuxt/ui'],
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-editor'
   ]
 })
@@ -140,9 +140,8 @@ const slashItems: EditorSuggestionMenuItem[][] = [
 2. **Update nuxt.config.ts**:
    ```typescript
    export default defineNuxtConfig({
-     modules: ['@fyit/crouton'],
      extends: [
-       '@fyit/crouton',
+       '@fyit/crouton-core',
        '@fyit/crouton-editor'
      ]
    })

@@ -43,7 +43,7 @@ Your Project (generated)
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-assets'
   ],
   hub: {
@@ -132,7 +132,7 @@ Query with `contentType` filter (e.g., `image/*`).
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton` (required)
+- **Extends**: `@fyit/crouton-core` (required)
 - **Requires**: `@nuxthub/core` with `hub.blob: true`
 - **Peer deps**: `@vueuse/core ^11.0.0`
 
