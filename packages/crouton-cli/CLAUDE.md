@@ -762,8 +762,10 @@ under `features.<alias>` in `crouton.config.js` and as runtimeConfig in `nuxt.co
 
 Identity is **(layer, plural name)**, case-insensitive: `sales/orderitems` matches the manifest's
 `orderItem`, while `shop/products` in another app is a different table and stays allowed. An app gets
-the collections by extending the package; there is nothing to list in `crouton.config.js`. Packages
-without the flag (pages, assets — still being migrated under #2278; sales and bookings are done) keep the old merge.
+the collections by extending the package; there is nothing to list in `crouton.config.js`. Sales,
+bookings and pages are done; assets (still being migrated under #2278) has no manifest `collections` at all.
+No shipping package exercises the merge path any more, so `manifest-merge.test.ts` covers it with a
+test-local manifest.
 Contract: `tests/unit/utils/owned-collections.test.ts`.
 
 ## Config File Format
@@ -788,7 +790,7 @@ export default {
     { name: 'authors', fieldsFile: './schemas/authors.json', seed: true },          // seed with defaults
     { name: 'posts', fieldsFile: './schemas/posts.json', kind: 'content', seed: { count: 50 } },  // content kind
     { name: 'bookings', fieldsFile: './schemas/bookings.json', collab: true },      // enable collab presence
-    { name: 'pages', fieldsFile: './schemas/pages.json', kind: 'content', formComponent: 'CroutonPagesForm' },
+    { name: 'articles', fieldsFile: './schemas/articles.json', kind: 'content', formComponent: 'BlogArticleEditor' },
     { name: 'gallery', fieldsFile: './schemas/gallery.json', kind: 'media' }        // media kind
   ],
   dialect: 'sqlite',
@@ -868,15 +870,15 @@ features: {
 
 ### formComponent Option
 
-When a Crouton package (like `@fyit/crouton-pages`) provides its own form component, you can skip generating a redundant Form.vue by specifying `formComponent`:
+When you (or a package) provide a form component for a collection the app generates, skip the
+redundant Form.vue by specifying `formComponent`:
 
 ```javascript
 collections: [
   {
-    name: 'pages',
-    fieldsFile: './schemas/pages.json',
-    formComponent: 'CroutonPagesForm',  // Use package-provided form
-    hierarchy: true
+    name: 'articles',
+    fieldsFile: './schemas/articles.json',
+    formComponent: 'BlogArticleEditor',  // Use your own form
   }
 ]
 ```
@@ -884,17 +886,16 @@ collections: [
 **What this does:**
 1. Skips generating `Form.vue` in the collection directory
 2. Sets `componentName` in the composable to the specified component name
-3. The package's form component is used instead for create/edit operations
+3. That component is used instead for create/edit operations
 
-**When to use:**
-- When using `@fyit/crouton-pages` with `features.pages: true` → use `formComponent: 'CroutonPagesForm'`
-- When using `@fyit/crouton-bookings` with custom forms → use `formComponent: 'CroutonBookingsForm'`
-- When you have a custom form component that handles the collection's data entry
+**When to use:** you have a custom form component that handles the collection's data entry.
+Not for package-owned collections (sales, bookings, pages, #2278): the package ships them,
+form included, and the CLI refuses to generate them.
 
 **Dry-run output:**
 ```
-• Form.vue skipped (using CroutonPagesForm)
-• layers/pages/collections/pages/app/components/List.vue
+• Form.vue skipped (using BlogArticleEditor)
+• layers/blog/collections/articles/app/components/List.vue
 ...
 ```
 
