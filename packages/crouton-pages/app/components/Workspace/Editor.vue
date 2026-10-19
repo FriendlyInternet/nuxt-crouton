@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { buildPageSubmitData } from '../../utils/page-submit-data'
 /**
  * Workspace Editor - Inline Page Editor
  *
@@ -732,93 +733,29 @@ function onLayoutChange() {
 async function handleSubmit() {
   isSaving.value = true
   try {
-    let translations = { ...state.value.translations } as Record<string, { title?: string; slug?: string; content?: string }>
+    // Live collab fragments (locale → TipTap JSON) win over the form's content while the
+    // block editor is open; the payload builder takes them as plain data.
+    const collabContent = collabLocalizedContent && showBlockEditor.value
+      ? Object.fromEntries(
+          collabLocalizedContent.getActiveFragments()
+            .map(({ locale: loc }: { locale: string }) => [loc, collabLocalizedContent.getContentJson(loc)]),
+        )
+      : null
 
-    // Extract collab content
-    if (collabLocalizedContent && showBlockEditor.value) {
-      const activeFragments = collabLocalizedContent.getActiveFragments()
-      for (const { locale: loc } of activeFragments) {
-        const contentJson = collabLocalizedContent.getContentJson(loc)
-        if (!translations[loc]) {
-          translations[loc] = {}
-        }
-        translations[loc] = {
-          ...translations[loc],
-          content: JSON.stringify(contentJson)
-        }
-      }
-    }
-
-    // Validate title
-    const hasTitle = Object.values(translations).some(
-      (t) => t?.title && t.title.trim().length > 0
+    // What goes to the API — flattening, auto-slugs, the #1403 allowlist — is a pure,
+    // tested function (#2322, test/page-submit-data.test.ts).
+    const result = buildPageSubmitData(
+      { state: state.value, showBlockEditor: showBlockEditor.value, isRegularPage: isRegularPage.value, collabContent },
+      { slugify },
     )
-    if (!hasTitle) {
+    if (!result.ok) {
       const notify = useNotify()
       notify.error(t('pages.errors.titleRequired'), { description: t('pages.errors.titleRequiredDescription') })
       return
     }
-
-    // Auto-generate slugs
-    for (const [loc, data] of Object.entries(translations)) {
-      if (data?.title && (!data?.slug || data.slug.trim() === '')) {
-        translations[loc] = {
-          ...data,
-          slug: slugify(data.title)
-        }
-      }
-      // Block editor emits TipTap JSON objects — stringify for the text column
-      if (data?.content && typeof data.content === 'object') {
-        translations[loc] = { ...translations[loc], content: JSON.stringify(data.content) }
-      }
-    }
-
-    // Flatten primary locale's translations to root-level fields for the API
-    // The database has flat title/slug/content columns — no translations column
-    const primaryLocale = Object.keys(translations)[0] || 'en'
-    const primary = translations[primaryLocale] || {}
-
-    // Regular pages carry no type-specific config, but page-level flags
-    // (chrome hiding, manual requiredScope) live in config too and must
-    // survive the save — strip everything else instead of nulling wholesale.
-    const PAGE_LEVEL_CONFIG_KEYS = ['hideNav', 'hideAuthControls', 'requiredScope'] as const
-    const regularPageConfig = () => {
-      const config = state.value.config as Record<string, unknown> | null | undefined
-      if (!config) return null
-      const kept = Object.fromEntries(
-        PAGE_LEVEL_CONFIG_KEYS.filter(key => config[key] !== undefined && config[key] !== false)
-          .map(key => [key, config[key]])
-      )
-      return Object.keys(kept).length ? kept : null
-    }
-
-    const rawContent = showBlockEditor.value ? (primary.content || state.value.content) : state.value.content
-    // Explicit allowlist of the fields this form owns — never spread the whole
-    // record: identity/ownership/hierarchy/audit fields (id, teamId, owner,
-    // path, depth, createdBy, *User joins…) must not ride along in the body,
-    // and untouched fields shouldn't be re-asserted beyond what the form
-    // actually presents (#1403).
-    const submitData = {
-      title: primary.title || state.value.title,
-      slug: primary.slug || state.value.slug,
-      pageType: state.value.pageType,
-      status: state.value.status,
-      visibility: state.value.visibility,
-      publishedAt: state.value.publishedAt,
-      showInNavigation: state.value.showInNavigation,
-      layout: state.value.layout,
-      parentId: state.value.parentId,
-      seoTitle: (primary as any).seoTitle || '',
-      seoDescription: (primary as any).seoDescription || '',
-      ogImage: state.value.ogImage,
-      robots: state.value.robots,
-      content: rawContent && typeof rawContent === 'object' ? JSON.stringify(rawContent) : rawContent,
-      translations,
-      config: isRegularPage.value ? regularPageConfig() : state.value.config
-    } as any
+    const submitData = result.data
 
     let savedPage: any
-
     if (action.value === 'create') {
       savedPage = await create(submitData)
     } else if (state.value.id) {
