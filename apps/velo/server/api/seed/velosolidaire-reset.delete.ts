@@ -6,11 +6,11 @@
  */
 import { eq } from 'drizzle-orm'
 import { organization, member } from '~~/server/db/schema'
-import { bookingsLocations } from '~~/layers/bookings/collections/locations/server/database/schema'
-import { bookingsSettings } from '~~/layers/bookings/collections/settings/server/database/schema'
-import { bookingsEmailtemplates } from '~~/layers/bookings/collections/emailtemplates/server/database/schema'
-import { bookingsBookings } from '~~/layers/bookings/collections/bookings/server/database/schema'
-import { bookingsEmaillogs } from '~~/layers/bookings/collections/emaillogs/server/database/schema'
+import { bookingsLocations } from '@fyit/crouton-bookings/collections/locations/server/database/schema'
+import { bookingsSettings } from '@fyit/crouton-bookings/collections/settings/server/database/schema'
+import { bookingsEmailtemplates } from '@fyit/crouton-bookings/collections/emailtemplates/server/database/schema'
+import { bookingsBookings } from '@fyit/crouton-bookings/collections/bookings/server/database/schema'
+import { bookingsEmaillogs } from '@fyit/crouton-bookings/collections/emaillogs/server/database/schema'
 import { pagesPages } from '~~/layers/pages/collections/pages/server/database/schema'
 
 export default defineEventHandler(async () => {

@@ -20,9 +20,6 @@
  * ```
  *
  * ## Registered Collections
- * - bookingsBookings (bookings/bookings)
- * - bookingsLocations (bookings/locations)
- * - bookingsSettings (bookings/settings)
  * - mainItems (main/items)
  */
 
@@ -30,24 +27,6 @@ export const queryRegistry: Record<string, {
   getAll: () => Promise<(teamId: string) => Promise<any[]>>
   getByIds: () => Promise<(teamId: string, ids: string[]) => Promise<any[]>>
 }> = {
-  bookingsBookings: {
-    getAll: () => import('~~/layers/bookings/collections/bookings/server/database/queries')
-      .then(m => m.getAllBookingsBookings),
-    getByIds: () => import('~~/layers/bookings/collections/bookings/server/database/queries')
-      .then(m => m.getBookingsBookingsByIds),
-  },
-  bookingsLocations: {
-    getAll: () => import('~~/layers/bookings/collections/locations/server/database/queries')
-      .then(m => m.getAllBookingsLocations),
-    getByIds: () => import('~~/layers/bookings/collections/locations/server/database/queries')
-      .then(m => m.getBookingsLocationsByIds),
-  },
-  bookingsSettings: {
-    getAll: () => import('~~/layers/bookings/collections/settings/server/database/queries')
-      .then(m => m.getAllBookingsSettings),
-    getByIds: () => import('~~/layers/bookings/collections/settings/server/database/queries')
-      .then(m => m.getBookingsSettingsByIds),
-  },
   mainItems: {
     getAll: () => import('~~/layers/main/collections/items/server/database/queries')
       .then(m => m.getAllMainItems),

@@ -21,8 +21,8 @@ import { useNitroApp } from 'nitropack/runtime'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { toMonthKey, monthBounds } from '@fyit/crouton-core/shared/utils/date'
 import { FULL_DAY_ID, fullDayConflict } from '../../../../../app/utils/full-day'
-import { bookingsBookings } from '~~/layers/bookings/collections/bookings/server/database/schema'
-import { bookingsLocations } from '~~/layers/bookings/collections/locations/server/database/schema'
+import { bookingsBookings } from '../../../../../collections/bookings/server/database/schema'
+import { bookingsLocations } from '../../../../../collections/locations/server/database/schema'
 import { isBookingEmailEnabled, resolveTranslatedField, resolveSlotLabels } from '../../../../utils/booking-emails'
 import {
   triggerBookingCreatedEmail,

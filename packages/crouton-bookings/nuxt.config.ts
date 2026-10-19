@@ -11,11 +11,19 @@ if (process.env.NODE_ENV !== 'production' && !_dependencies.has('crouton-booking
 }
 
 export default defineNuxtConfig({
-  // Extend the editor layer for email template editing
-  extends: ['@fyit/crouton-editor'],
+  // The editor layer (email template editing) plus the five bookings collections
+  // this package owns end to end (#2278): schema, queries, routes, list, composable.
+  extends: [
+    '@fyit/crouton-editor',
+    join(currentDir, 'collections/bookings'),
+    join(currentDir, 'collections/locations'),
+    join(currentDir, 'collections/settings'),
+    join(currentDir, 'collections/emailtemplates'),
+    join(currentDir, 'collections/emaillogs')
+  ],
 
   // Note: This is an addon layer - users must explicitly extend:
-  // extends: ['@fyit/crouton-core', '@fyit/crouton-i18n', '@fyit/crouton-bookings', './layers/bookings']
+  // extends: ['@fyit/crouton-core', '@fyit/crouton-bookings']  (no generated ./layers/bookings since #2278)
 
   // i18n module is provided by nuxt-crouton-i18n layer
   // No need to declare it here - just provide locale files

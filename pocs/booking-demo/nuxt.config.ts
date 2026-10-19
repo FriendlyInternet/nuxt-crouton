@@ -15,7 +15,6 @@ export default defineNuxtConfig({
     '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-bookings',
-    './layers/bookings'
   ],
   hub: {
     db: 'sqlite',
