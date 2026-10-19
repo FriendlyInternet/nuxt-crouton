@@ -39,6 +39,9 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      # CI files themselves (#2335): a workflow-only PR must still be shellchecked — it is
+      # exactly the PR where shell mistakes happen, and it used to skip the lint entirely.
+      workflows: ${{ steps.filter.outputs.workflows }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -61,6 +64,11 @@ jobs:
           else
             echo "code=false  (no code paths touched — heavy jobs will skip)" >&2
             echo "code=false" >> "$GITHUB_OUTPUT"
+          fi
+          if echo "$files" | grep -qE '^\.github/(workflows|actions)/'; then
+            echo "workflows=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "workflows=false" >> "$GITHUB_OUTPUT"
           fi
 
   # Was `lint-and-typecheck` — renamed under #1097: the job never ran eslint and
@@ -485,7 +493,9 @@ jobs:
   shellcheck-workflows:
     name: Shellcheck workflow shell
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # Runs on code changes AND on CI-file changes (#2335) — a PR that edits only a workflow
+    # or a composite action is the one that most needs this and used to skip it.
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -516,9 +526,21 @@ jobs:
           node -e '
             const yaml = require("js-yaml"), fs = require("fs"), path = require("path");
             let n = 0;
-            for (const f of fs.readdirSync(".github/workflows").filter(f => /\.ya?ml$/.test(f))) {
-              let doc; try { doc = yaml.load(fs.readFileSync(path.join(".github/workflows", f), "utf8")) } catch { continue }
-              for (const [jobId, job] of Object.entries(doc?.jobs || {})) {
+            // Workflows AND composite actions (.github/actions/*/action.yml, #2335): the steps
+            // under an action `runs:` carry `run:` blocks exactly like job steps, so lint them too.
+            // (No apostrophes in these comments: this whole program sits inside a single-quoted
+            // shell string, and one apostrophe ends it — the local extractor caught exactly that.)
+            const sources = fs.readdirSync(".github/workflows").filter(f => /\.ya?ml$/.test(f))
+              .map(f => ({ label: f, file: path.join(".github/workflows", f), jobsOf: d => d?.jobs || {} }));
+            if (fs.existsSync(".github/actions")) {
+              for (const dir of fs.readdirSync(".github/actions")) {
+                const file = path.join(".github/actions", dir, "action.yml");
+                if (fs.existsSync(file)) sources.push({ label: `action-${dir}`, file, jobsOf: d => ({ runs: { steps: d?.runs?.steps || [] } }) });
+              }
+            }
+            for (const { label: f, file, jobsOf } of sources) {
+              let doc; try { doc = yaml.load(fs.readFileSync(file, "utf8")) } catch { continue }
+              for (const [jobId, job] of Object.entries(jobsOf(doc))) {
                 for (const [i, step] of (job.steps || []).entries()) {
                   if (typeof step.run !== "string") continue;
                   // Actions expressions are not shell, so they have to be substituted with
