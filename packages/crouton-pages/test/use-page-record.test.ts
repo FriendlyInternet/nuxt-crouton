@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi } from 'vitest'
 import { ref } from 'vue'
-import { usePageRecord, PAGE_DEFAULTS } from '../app/composables/usePageRecord'
+import { usePageRecord, PAGE_DEFAULTS, firstRow } from '../app/composables/usePageRecord'
 import { slugify } from '../../crouton-core/shared/utils/slugify'
 
 function makeDeps(over: Partial<Parameters<typeof usePageRecord>[1]> = {}) {
@@ -143,6 +143,21 @@ describe('usePageRecord — save()', () => {
     const r = await record.save({ showBlockEditor: false, isRegularPage: true, collabContent: null })
     expect(r).toEqual({ ok: false, reason: 'request-failed' })
     expect(record.isSaving.value).toBe(false)
+  })
+})
+
+describe('firstRow — unwrapping the pages endpoint', () => {
+  const row = { id: 'p1' }
+  it('takes the first row from an envelope, a bare array, or a single object', () => {
+    expect(firstRow({ items: [row, { id: 'p2' }] })).toBe(row)
+    expect(firstRow([row])).toBe(row)
+    expect(firstRow(row)).toBe(row)
+  })
+  it('is null for an empty envelope, an empty array, or nothing', () => {
+    expect(firstRow({ items: [] })).toBeNull()
+    expect(firstRow([])).toBeNull()
+    expect(firstRow(null)).toBeNull()
+    expect(firstRow(undefined)).toBeNull()
   })
 })
 
