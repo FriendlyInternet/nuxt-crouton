@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { buildPageSubmitData } from '../../utils/page-submit-data'
+import { usePageRecord, usePageRecordDeps } from '../../composables/usePageRecord'
 /**
  * Workspace Editor - Inline Page Editor
  *
@@ -43,7 +43,6 @@ const emit = defineEmits<{
 const { t } = useT()
 const { useTimeAgo, watchDebounced } = await import('@vueuse/core')
 const { pageTypes, getPageType } = usePageTypes()
-const { create, update, deleteItems } = useCollectionMutation('pagesPages')
 const { locale, locales } = useI18n()
 
 // Locale options for the AI generator
@@ -56,14 +55,7 @@ const availableLocales = computed(() =>
 const collections = useCollections()
 const { teamSlug: teamSlugRef } = useTeamContext()
 
-// Get API path from collection config
-const collectionConfig = collections.getConfig('pagesPages')
-const apiPath = collectionConfig?.apiPath || 'pages-pages'
 
-// Component state
-const isLoading = ref(false)
-const isSaving = ref(false)
-const loadError = ref<string | null>(null)
 
 // AI page generator
 const showAiGenerator = ref(false)
@@ -112,9 +104,14 @@ async function applyAiContent(results: Array<{
   contentReady.value = true
 }
 
-// Form action mode
-const action = computed<'create' | 'update'>(() =>
-  props.pageId ? 'update' : 'create'
+// The page record — mode, state, load, save, delete — is usePageRecord (#2323). The
+// component keeps the screen: when to load, what to do with the result, what to tell the user.
+const {
+  state, action, isLoading, isSaving, loadError,
+  reset: resetRecord, load: loadRecord, save: saveRecord, remove: removeRecord,
+} = usePageRecord(
+  { pageId: () => props.pageId, defaultParentId: () => props.defaultParentId, fallbackLocale: () => locale.value },
+  usePageRecordDeps(() => getCurrentUser().name),
 )
 
 // Get current user for collab
@@ -180,23 +177,6 @@ const collabForI18n = computed(() => {
 // Fetch all pages for parent selector
 const { items: allPages, pending: pagesPending } = await useCollectionQuery('pagesPages')
 
-// Default values for new pages
-const defaultValue = {
-  pageType: 'pages:regular',
-  config: {},
-  status: 'draft',
-  visibility: 'public',
-  showInNavigation: true,
-  layout: 'default',
-  parentId: null,
-  order: 0,
-  translations: {},
-  ogImage: '',
-  robots: 'index'
-}
-
-// Form state
-const state = ref<Record<string, any> & { id?: string | null }>({ ...defaultValue })
 
 // Sync title/slug to ghost page in sidebar during creation
 const { updateGhost } = useGhostPage()
@@ -261,87 +241,40 @@ watch(
   () => props.pageId,
   async (newId) => {
     if (!newId) {
-      // Create mode - reset to defaults, pre-fill parentId if provided
-      state.value = { ...defaultValue, parentId: props.defaultParentId ?? null }
+      resetRecord()
       contentReady.value = true
-      loadError.value = null
       return
     }
+    const pageData = await loadRecord(newId)
+    if (!pageData) return // loadError is set; the error state renders
+    contentReady.value = false
+    // Initialize collab content if available
+    if (collabLocalizedContent && pageData.translations) {
+      const translations = pageData.translations as Record<string, { content?: string }>
 
-    // Update mode - fetch page data
-    isLoading.value = true
-    loadError.value = null
-
-    try {
-      const route = useRoute()
-      const { getTeamId } = useTeamContext()
-      const teamId = getTeamId()
-
-      if (!teamId) {
-        throw new Error('Team context required')
-      }
-
-      const response = await $fetch<any>(`/api/teams/${teamId}/${apiPath}`, {
-        method: 'GET',
-        query: { ids: newId },
-        credentials: 'include'
-      })
-
-      const pageData = response?.items?.[0] || response?.[0] || response
-      if (!pageData) {
-        throw new Error('Page not found')
-      }
-
-      state.value = { ...defaultValue, ...pageData }
-
-      // Reconstruct translations from root-level fields when API returns flat data
-      if (!pageData.translations || Object.keys(pageData.translations).length === 0) {
-        state.value.translations = {
-          [locale.value || 'en']: {
-            title: pageData.title || '',
-            slug: pageData.slug || '',
-            seoTitle: pageData.seoTitle || '',
-            seoDescription: pageData.seoDescription || '',
-            content: pageData.content || ''
-          }
-        }
-      }
-
-      contentReady.value = false
-
-      // Initialize collab content if available
-      if (collabLocalizedContent && pageData.translations) {
-        const translations = pageData.translations as Record<string, { content?: string }>
-
-        watch(
-          () => collabLocalizedContent?.synced?.value,
-          (synced) => {
-            if (synced) {
-              for (const [loc, data] of Object.entries(translations)) {
-                if (data?.content) {
-                  try {
-                    const contentJson = typeof data.content === 'string'
-                      ? JSON.parse(data.content)
-                      : data.content
-                    collabLocalizedContent.setContentJson(loc, contentJson)
-                  } catch {
-                    // Failed to parse content
-                  }
+      watch(
+        () => collabLocalizedContent?.synced?.value,
+        (synced) => {
+          if (synced) {
+            for (const [loc, data] of Object.entries(translations)) {
+              if (data?.content) {
+                try {
+                  const contentJson = typeof data.content === 'string'
+                    ? JSON.parse(data.content)
+                    : data.content
+                  collabLocalizedContent.setContentJson(loc, contentJson)
+                } catch {
+                  // Failed to parse content
                 }
               }
-              contentReady.value = true
             }
-          },
-          { immediate: true }
-        )
-      } else {
-        contentReady.value = true
-      }
-    } catch (error: any) {
-      loadError.value = error.message || t('pages.errors.loadFailed')
-      console.error('Failed to load page:', error)
-    } finally {
-      isLoading.value = false
+            contentReady.value = true
+          }
+        },
+        { immediate: true }
+      )
+    } else {
+      contentReady.value = true
     }
   },
   { immediate: true }
@@ -731,60 +664,31 @@ function onLayoutChange() {
 
 // Form submission
 async function handleSubmit() {
-  isSaving.value = true
-  try {
-    // Live collab fragments (locale → TipTap JSON) win over the form's content while the
-    // block editor is open; the payload builder takes them as plain data.
-    const collabContent = collabLocalizedContent && showBlockEditor.value
-      ? Object.fromEntries(
-          collabLocalizedContent.getActiveFragments()
-            .map(({ locale: loc }: { locale: string }) => [loc, collabLocalizedContent.getContentJson(loc)]),
-        )
-      : null
+  // Live collab fragments (locale → TipTap JSON) win over the form's content while the
+  // block editor is open; the record takes them as plain data.
+  const collabContent = collabLocalizedContent && showBlockEditor.value
+    ? Object.fromEntries(
+        collabLocalizedContent.getActiveFragments()
+          .map(({ locale: loc }: { locale: string }) => [loc, collabLocalizedContent.getContentJson(loc)]),
+      )
+    : null
 
-    // What goes to the API — flattening, auto-slugs, the #1403 allowlist — is a pure,
-    // tested function (#2322, test/page-submit-data.test.ts).
-    const result = buildPageSubmitData(
-      { state: state.value, showBlockEditor: showBlockEditor.value, isRegularPage: isRegularPage.value, collabContent },
-      { slugify },
-    )
-    if (!result.ok) {
+  const result = await saveRecord({ showBlockEditor: showBlockEditor.value, isRegularPage: isRegularPage.value, collabContent })
+  if (!result.ok) {
+    if (result.reason === 'title-required') {
       const notify = useNotify()
       notify.error(t('pages.errors.titleRequired'), { description: t('pages.errors.titleRequiredDescription') })
-      return
     }
-    const submitData = result.data
-
-    let savedPage: any
-    if (action.value === 'create') {
-      savedPage = await create(submitData)
-    } else if (state.value.id) {
-      savedPage = await update(state.value.id, submitData)
-    }
-
-    // Refresh metadata locally after update
-    if (action.value === 'update') {
-      const currentUser = getCurrentUser()
-      const s = state.value as any
-      s.updatedAt = Date.now()
-      s.updatedByUser = { name: currentUser.name }
-    }
-
-    emit('save', savedPage || submitData)
-  } catch (error) {
-    console.error('Form submission failed:', error)
-  } finally {
-    isSaving.value = false
+    return
   }
+  emit('save', result.page)
 }
 
 // Delete handler — confirmation is the two-step "Delete? → confirm" in the
 // toolbar's ⋯ overflow menu
 function handleDelete() {
-  if (!state.value.id) return
-  const id = state.value.id
-  deleteItems([id]).then(() => {
-    emit('delete', id)
+  removeRecord().then((id) => {
+    if (id) emit('delete', id)
   })
 }
 
