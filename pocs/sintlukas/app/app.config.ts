@@ -10,7 +10,6 @@ import {contentNewsConfig} from '../layers/content/collections/news/app/composab
 
 import {contentDownloadsConfig} from '../layers/content/collections/downloads/app/composables/useContentDownloads';
 
-import {croutonAssetsConfig} from '../layers/crouton/collections/assets/app/composables/useCroutonAssets';
 
 
 import {translationsUiConfig} from '@fyit/crouton-i18n/app/composables/useTranslationsUi';
@@ -61,7 +60,6 @@ export default defineAppConfig({
       }
     },
     contentDownloads: contentDownloadsConfig,
-    croutonAssets: croutonAssetsConfig,
     translationsUi: translationsUiConfig
   }
 })

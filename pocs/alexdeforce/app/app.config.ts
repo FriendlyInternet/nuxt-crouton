@@ -7,7 +7,6 @@ import {translationsUiConfig} from '@fyit/crouton-i18n/app/composables/useTransl
 
 import {contentTagsConfig} from '../layers/content/collections/tags/app/composables/useContentTags';
 
-import {croutonAssetsConfig} from '../layers/crouton/collections/assets/app/composables/useCroutonAssets';
 
 import {contentCategoriesConfig} from '../layers/content/collections/categories/app/composables/useContentCategories';
 
@@ -17,7 +16,6 @@ export default defineAppConfig({
     contentAgendas: contentAgendasConfig,
     translationsUi: translationsUiConfig,
     contentTags: contentTagsConfig,
-    croutonAssets: croutonAssetsConfig,
     contentCategories: contentCategoriesConfig
   }
 })

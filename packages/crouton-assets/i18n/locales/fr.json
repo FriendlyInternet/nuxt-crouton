@@ -35,5 +35,12 @@
       "clearSelection": "Effacer la sélection",
       "assetCount": "{count} asset | {count} assets"
     }
+  },
+  "crouton": {
+    "collections": {
+      "assets": {
+        "title": "Médias"
+      }
+    }
   }
 }

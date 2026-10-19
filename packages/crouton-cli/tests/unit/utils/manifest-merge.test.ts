@@ -7,8 +7,8 @@ import { mergeManifestCollections } from '../../../lib/utils/manifest-merge.ts'
 // Package collections are merged for the packages the app EXTENDS, not for
 // keys in `crouton.config.js features` (#2286). Real manifests from packages/*,
 // plus one test-local manifest: since #2278 every shipping package that lists
-// collections owns them (sales, bookings, pages), so no real manifest still
-// exercises the merge path. `crouton-merge-fixture` stands in for one that does.
+// collections owns them (sales, bookings, pages, assets), so no real manifest
+// still exercises the merge path. `crouton-merge-fixture` stands in for one that does.
 // Non-interactive (CI) so configuration prompts take their defaults.
 
 const fixture = vi.hoisted(() => ({ schemaPath: '' }))
@@ -64,7 +64,7 @@ describe('mergeManifestCollections (keyed on extended packages)', () => {
   })
 
   it('skips a package that owns its collections (#2278)', async () => {
-    for (const owner of ['crouton-sales', 'crouton-bookings', 'crouton-pages']) {
+    for (const owner of ['crouton-sales', 'crouton-bookings', 'crouton-pages', 'crouton-assets']) {
       const config = freshConfig()
       const result = await mergeManifestCollections(config, [owner])
       expect(result.merged).toBe(0)
