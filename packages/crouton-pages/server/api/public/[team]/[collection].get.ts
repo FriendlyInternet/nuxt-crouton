@@ -13,6 +13,7 @@
  * - order: 'asc' or 'desc' (default: desc)
  */
 import { eq, and, or } from 'drizzle-orm'
+import { resolveQueryRegistry } from '@fyit/crouton-core/shared/utils/query-registry'
 
 // Optionally auto-imported by Nitro from the consuming app's generated
 // server/utils/crouton-query-registry.ts. Apps that haven't generated a
@@ -98,10 +99,8 @@ export default defineCachedEventHandler(async (event) => {
     // ── 3. Get items from the query registry ──
     // queryRegistry is auto-imported by Nitro from the app's server/utils/
     // Use globalThis fallback for apps that haven't generated a registry yet
-    const registry = (globalThis as any).__crouton_query_registry ?? (typeof queryRegistry !== 'undefined' ? queryRegistry : null)
-    if (!registry) {
-      throw createError({ status: 404, statusText: 'Not found' })
-    }
+    // Package-owned collections (#2309) + the app's generated registry, app winning on a clash
+    const registry = resolveQueryRegistry(typeof queryRegistry !== 'undefined' ? queryRegistry : null)
 
     const collectionQueries = registry[collectionParam]
     if (!collectionQueries?.getAll) {
