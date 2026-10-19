@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useMounted } from '@vueuse/core'
 /**
  * Team Theme Settings Component
  *
@@ -25,12 +24,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useT()
-const { isAdmin: isTeamAdmin } = useTeam()
-// The role is only known client-side: treat as admin only after mount so the
-// SSR markup (disabled) and the first client render agree — otherwise the
-// server's disabled/opacity classes survive hydration (#2271).
-const isMounted = useMounted()
-const isAdmin = computed(() => isMounted.value && isTeamAdmin.value)
+const { isAdmin } = useTeam()
 const notify = useNotify()
 const { theme, isLoading, updateTheme, applyTheme } = useTeamTheme()
 

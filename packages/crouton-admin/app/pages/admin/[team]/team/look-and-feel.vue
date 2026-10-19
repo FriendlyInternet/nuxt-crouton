@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { useMounted } from '@vueuse/core'
 /**
  * Look and Feel Page
  *
@@ -12,16 +11,13 @@ import { useMounted } from '@vueuse/core'
 const { teamSlug } = useTeamContext()
 const { t } = useT()
 const { isAdmin } = useTeam()
-// Role is only known client-side: render the access-denied branch after
-// mount so SSR and hydration agree (#2271). Middleware/API stay the guard.
-const isMounted = useMounted()
 </script>
 
 <template>
   <div class="p-6">
     <!-- Not a team admin -->
     <div
-      v-if="isMounted && !isAdmin"
+      v-if="!isAdmin"
       class="text-center py-8"
     >
       <UIcon
