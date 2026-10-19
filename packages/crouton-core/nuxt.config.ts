@@ -1,7 +1,5 @@
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
-import { existsSync } from 'node:fs'
-import type { NitroConfig } from 'nitropack'
 import type { LocaleObject } from '@nuxtjs/i18n'
 import { getCroutonLocales } from '@fyit/crouton-i18n/config-utils'
 
@@ -88,31 +86,6 @@ export default defineNuxtConfig({
         // Vue (prevent multiple instances in SSR)
         'vue'
       ]
-    }
-  },
-
-  // Inject crouton.config.js at build time for runtime access
-  hooks: {
-    'nitro:config': async (nitroConfig: NitroConfig) => {
-      const configPaths = [
-        join(process.cwd(), 'crouton.config.js'),
-        join(process.cwd(), 'crouton.config.js')
-      ]
-
-      for (const configPath of configPaths) {
-        if (existsSync(configPath)) {
-          try {
-            const config = await import(configPath)
-            nitroConfig.runtimeConfig = nitroConfig.runtimeConfig || {}
-            nitroConfig.runtimeConfig.public = nitroConfig.runtimeConfig.public || {}
-            nitroConfig.runtimeConfig.public.croutonConfig = config.default
-            console.log('🍞 crouton:core Loaded config from:', configPath)
-          } catch (err) {
-            console.warn('🍞 crouton:core Failed to load config:', err)
-          }
-          break
-        }
-      }
     }
   },
 

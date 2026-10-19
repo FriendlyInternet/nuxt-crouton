@@ -256,26 +256,6 @@
     "columnTo": "Vers",
     "columnStatus": "Statut"
   },
-  "setup": {
-    "collections": "Collections",
-    "manageCollections": "Gérez vos collections crouton",
-    "refreshStats": "Actualiser les statistiques",
-    "failedToLoadStats": "Impossible de charger les statistiques des collections",
-    "noCollections": "Aucune collection trouvée",
-    "runGenerator": "Exécutez le générateur crouton pour créer votre première collection.",
-    "featureTree": "Arbre",
-    "featureSortable": "Triable",
-    "items": "éléments",
-    "fields": "champs",
-    "viewCollection": "Voir la collection",
-    "generatorConfig": "Configuration du générateur",
-    "notConfigured": "Non configuré",
-    "hideConfig": "Masquer la configuration",
-    "showConfig": "Afficher la configuration",
-    "noConfigFile": "Aucun fichier {file} trouvé à la racine de votre projet.",
-    "configDescription": "Ce fichier est utilisé par le générateur crouton pour définir les collections et leurs schémas.",
-    "retry": "Réessayer"
-  },
   "workspace": {
     "selectItem": "Sélectionnez un élément pour commencer",
     "pressNToCreate": "ou appuyez sur N pour en créer un nouveau",

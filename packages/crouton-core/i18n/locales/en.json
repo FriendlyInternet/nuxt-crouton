@@ -256,26 +256,6 @@
     "columnTo": "To",
     "columnStatus": "Status"
   },
-  "setup": {
-    "collections": "Collections",
-    "manageCollections": "Manage your crouton collections",
-    "refreshStats": "Refresh Stats",
-    "failedToLoadStats": "Failed to load collection stats",
-    "noCollections": "No collections found",
-    "runGenerator": "Run the crouton generator to create your first collection.",
-    "featureTree": "Tree",
-    "featureSortable": "Sortable",
-    "items": "items",
-    "fields": "fields",
-    "viewCollection": "View Collection",
-    "generatorConfig": "Generator Configuration",
-    "notConfigured": "Not configured",
-    "hideConfig": "Hide configuration",
-    "showConfig": "Show configuration",
-    "noConfigFile": "No {file} found in your project root.",
-    "configDescription": "This file is used by the crouton generator to define collections and their schemas.",
-    "retry": "Retry"
-  },
   "workspace": {
     "selectItem": "Select an item to get started",
     "pressNToCreate": "or press N to create new",
