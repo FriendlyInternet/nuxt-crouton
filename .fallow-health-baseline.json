@@ -447,6 +447,9 @@
       "complexity_critical": {
         "count": 1
       },
+      "complexity_moderate": {
+        "count": 1
+      },
       "crap_critical": {
         "count": 1
       },
@@ -821,7 +824,7 @@
     },
     "packages/crouton-auth/server/lib/auth.ts": {
       "crap_moderate": {
-        "count": 2
+        "count": 5
       }
     },
     "packages/crouton-auth/server/middleware/team-context.ts": {
@@ -5212,6 +5215,11 @@
     "scripts/validate-field-types-sync.mjs": {
       "complexity_high": {
         "count": 2
+      }
+    },
+    "packages/crouton-auth/app/composables/useTwoFactor.ts": {
+      "crap_high": {
+        "count": 1
       }
     }
   },

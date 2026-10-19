@@ -46,7 +46,7 @@ Sibling of #479 (same philosophy for ticket/epic bodies).
 >
 > **Fix:** top up the account + re-dispatch.
 >
-> <sub>🤖 pi.dev harness (CI · mac-mini) · artifact-gate #461 fails a no-op run so it isn't
+> <sub>🤖 pi.dev harness (CI) · artifact-gate #461 fails a no-op run so it isn't
 > mistaken for done · [run log](…)</sub>
 
 ## Don'ts
