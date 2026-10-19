@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { EText, EButton, ESection } from 'vue-email'
+import { EText, EButton, ESection } from './primitives'
 import BaseLayout from './BaseLayout.vue'
 import type { BaseEmailTemplateProps, ContentOverrideProps } from './template-props'
 
