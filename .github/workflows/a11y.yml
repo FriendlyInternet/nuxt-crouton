@@ -30,7 +30,7 @@ jobs:
     # Fork PRs never land on the self-hosted box, even with AGENT_RUNNER set — this job
     # checks out the PR's code and runs an agent (bash) over it, so a fork head means
     # untrusted code on our hardware. Security policy: runbook §5 (#656).
-    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
     # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to
@@ -41,7 +41,7 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history so the agent can diff the PR against its base branch.
           fetch-depth: 0
@@ -49,12 +49,12 @@ jobs:
       # a11y's engine is eslint-plugin-vuejs-accessibility (already wired into the root
       # eslint.config.mjs, warn-first) — so unlike red-team's pure static read, the subagent
       # needs node_modules to actually run `npx eslint`. Install before invoking it.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           # per-job dest — the default ~/setup-pnpm collides between the two
           # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
           dest: ${{ runner.temp }}/setup-pnpm
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -62,7 +62,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         id: agent
         # The VERDICT FILE is the gate — NOT this step's exit code. The agent can exit non-zero
         # on `max_turns` (it flails writing the verdict / the SDK errors) even when it found
@@ -131,7 +131,7 @@ jobs:
             --out finding-candidate.json || true
       - name: Upload finding candidate
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: loop-station-finding-${{ github.run_id }}
           path: finding-candidate.json

@@ -1,4 +1,5 @@
 // Generator for Drizzle schema
+import { SYSTEM_FIELD_GROUPS, metadataFields as systemMetadataFields, hierarchyFields as systemHierarchyFields } from '../utils/system-fields.ts'
 import { toSnakeCase } from '../utils/helpers.ts'
 
 export function generateSchema(data: Record<string, any>, dialect: string, config: Record<string, any> | null = null): string {
@@ -33,19 +34,11 @@ export function generateSchema(data: Record<string, any>, dialect: string, confi
     translationsComment = `\n// Note: This collection has translatable fields: ${translatableFields.join(', ')}\n// Translations are stored in a JSON field without indexes for performance baseline`
   }
 
-  // Define reserved field names that are auto-generated
-  const METADATA_FIELDS = ['createdAt', 'updatedAt', 'createdBy', 'updatedBy']
-  const TEAM_FIELDS = ['teamId', 'owner']
+  // Reserved (auto-generated) column names — one list, system-fields.ts
+  const TEAM_FIELDS = SYSTEM_FIELD_GROUPS.team
 
   // Hierarchy fields (use custom names from config or defaults)
-  const HIERARCHY_FIELDS = hierarchy?.enabled
-    ? [
-        hierarchy.parentField || 'parentId',
-        hierarchy.pathField || 'path',
-        hierarchy.depthField || 'depth',
-        hierarchy.orderField || 'order'
-      ]
-    : []
+  const HIERARCHY_FIELDS = systemHierarchyFields(hierarchy)
 
   // Sortable field (only when not using hierarchy, since hierarchy already includes order).
   // data.sortable may be a boolean (`true`) or the object `{ enabled }` depending on caller —
@@ -60,8 +53,8 @@ export function generateSchema(data: Record<string, any>, dialect: string, confi
 
   // Build list of reserved fields to filter out based on config
   const reservedFields = [
-    'id',
-    ...(useMetadata ? METADATA_FIELDS : []),
+    ...SYSTEM_FIELD_GROUPS.id,
+    ...systemMetadataFields(useMetadata),
     ...TEAM_FIELDS, // Always included - required for @crouton/auth
     ...HIERARCHY_FIELDS,
     ...SORTABLE_FIELDS

@@ -34,7 +34,7 @@ This is an **addon layer** — apps extend it explicitly alongside crouton-core.
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-three'
   ]
 })

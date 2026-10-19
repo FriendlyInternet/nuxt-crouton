@@ -35,12 +35,10 @@ See [Form Components](/api-reference/components/form-components) for complete Cr
 | `CroutonFormDependentButtonGroup` | Conditional button groups | [Form](/api-reference/components/form-components#croutonformdependentbuttongroup) |
 | `CroutonFormDependentFieldLoader` | Load fields based on dependencies | [Form](/api-reference/components/form-components#croutonformdependentfieldloader) |
 | `CroutonFormDependentSelectOption` | Conditional select options | [Form](/api-reference/components/form-components#croutonformdependentselectoption) |
-| `CroutonFormExpandableSlideOver` | Expandable slideover forms | [Form](/api-reference/components/form-components#croutonformexpandableslideover) |
 | `CroutonFormDynamicLoader` | Dynamic form loader | [Form](/api-reference/components/form-components#croutonformdynamicloader) |
 | `CroutonFormLayout` | Form layout component | [Form](/api-reference/components/form-components#croutonformlayout) |
 | `CroutonFormReferenceSelect` | Reference select field | [Form](/api-reference/components/form-components#croutonformreferenceselect) |
 | `CroutonFormRepeater` | Form repeater component | [Form](/api-reference/components/form-components#croutonformrepeater) |
-| `CroutonUsersAvatarUpload` | User avatar upload | [Form](/api-reference/components/form-components#croutonusersavatarupload) |
 
 ### Table Components
 Data table components with sorting, filtering, and pagination.
@@ -66,7 +64,6 @@ Container and card components for organizing content.
 | `CardMini` | Mini card component | [Layout](/api-reference/components/layout-components#cardmini) |
 | `CroutonDependentFieldCardMini` | Conditional mini cards | [Layout](/api-reference/components/layout-components#croutondependentfieldcardmini) |
 | `CroutonItemButtonsMini` | Mini card action buttons | [Layout](/api-reference/components/layout-components#croutonitembu ttonsmini) |
-| `CroutonItemDependentField` | Conditional item fields | [Layout](/api-reference/components/layout-components#croutonitemdependentfield) |
 | `CroutonUsersCardMini` | User mini card | [Layout](/api-reference/components/layout-components#croutonuserscardmini) |
 
 ### Modal Components
@@ -81,9 +78,6 @@ Components for displaying rich text content, articles, and prose pages.
 
 | Component | Purpose | Category |
 |-----------|---------|----------|
-| `CroutonContentPreview` | Truncated content preview for tables | [Content](/api-reference/components/content-components#croutoncontentpreview) |
-| `CroutonContentPage` | Generic content page with prose styling | [Content](/api-reference/components/content-components#croutoncontentpage) |
-| `CroutonContentArticle` | Blog post / article layout | [Content](/api-reference/components/content-components#croutoncontentarticle) |
 
 ### Utility Components
 Helper components for loading states, errors, and special behaviors.
@@ -135,15 +129,6 @@ icon: i-lucide-app-window
 to: /api-reference/components/modal-components
 ---
 Modal, slideover, and dialog overlay interfaces
-::
-
-::card
----
-title: Content Components
-icon: i-lucide-file-text
-to: /api-reference/components/content-components
----
-Rich text content, articles, and prose page layouts
 ::
 
 ::card

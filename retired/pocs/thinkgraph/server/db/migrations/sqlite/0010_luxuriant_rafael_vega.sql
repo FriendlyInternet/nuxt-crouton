@@ -1,1 +1,0 @@
-ALTER TABLE `thinkgraph_workitems` ADD `retrospective` text;

@@ -21,7 +21,6 @@
     "db:seed:staging": "crouton-seed --db crouton-builder-staging-db --remote"
   },
   "dependencies": {
-    "@fyit/crouton": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-flow": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
@@ -36,7 +35,7 @@
     "@fyit/crouton-cli": "workspace:*",
     "@fyit/crouton-devtools": "workspace:*",
     "drizzle-kit": "^0.31.0",
-    "vitest": "^2.1.0",
+    "vitest": "catalog:",
     "wrangler": "^4.64.0"
   }
 }

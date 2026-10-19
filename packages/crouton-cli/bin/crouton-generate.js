@@ -55,8 +55,8 @@ const generate = defineCommand({
     hierarchy: { type: 'boolean', description: 'Enable hierarchy support (parentId, path, depth, order)' },
     seed: { type: 'boolean', description: 'Generate seed data file using drizzle-seed' },
     count: { type: 'string', description: 'Number of seed records (default: 25)', default: '25' },
-    tests: { type: 'boolean', description: 'Generate a per-collection schema-smoke test (use --no-tests to skip)', default: true },
-    noAutoMerge: { type: 'boolean', description: 'Skip auto-merging package collections from manifests' },
+    tests: { type: 'boolean', description: 'Also emit per-collection tests (schema smoke + API handlers); off by default', default: false },
+    noAutoMerge: { type: 'boolean', description: 'Skip the setup questions of extended packages' },
   },
   async run({ args }) {
     // If --config is provided, delegate to config mode
@@ -66,7 +66,7 @@ const generate = defineCommand({
         configPath: args.config,
         force: args.force,
         dryRun: args.dryRun,
-        noTests: args.tests === false,
+        tests: args.tests,
         noAutoMerge: args.noAutoMerge,
       })
       return
@@ -81,7 +81,7 @@ const generate = defineCommand({
           configPath,
           force: args.force,
           dryRun: args.dryRun,
-          noTests: args.tests === false,
+          tests: args.tests,
           noAutoMerge: args.noAutoMerge,
         })
         return
@@ -115,7 +115,7 @@ const generate = defineCommand({
       hierarchy: args.hierarchy,
       seed: args.seed,
       seedCount: parseInt(args.count || '25', 10),
-      noTests: args.tests === false,
+      tests: args.tests,
     })
   }
 })
@@ -129,8 +129,8 @@ const configCmd = defineCommand({
     only: { type: 'string', description: 'Generate only a specific collection' },
     dryRun: { type: 'boolean', description: 'Preview without writing' },
     force: { type: 'boolean', description: 'Force generation' },
-    tests: { type: 'boolean', description: 'Generate per-collection schema-smoke tests (use --no-tests to skip)', default: true },
-    noAutoMerge: { type: 'boolean', description: 'Skip auto-merging package collections' },
+    tests: { type: 'boolean', description: 'Also emit per-collection tests (schema smoke + API handlers); off by default', default: false },
+    noAutoMerge: { type: 'boolean', description: 'Skip the setup questions of extended packages' },
   },
   async run({ args }) {
     let configPath = args.configPath
@@ -145,7 +145,7 @@ const configCmd = defineCommand({
       force: args.force,
       dryRun: args.dryRun,
       only: args.only,
-      noTests: args.tests === false,
+      tests: args.tests,
       noAutoMerge: args.noAutoMerge,
     })
   }
@@ -161,7 +161,7 @@ const installCmd = defineCommand({
     if (!existsSync(installModulesPath)) {
       consola.error('Install script not found')
       console.log('Please install modules manually:')
-      console.log('  pnpm add @fyit/crouton')
+      console.log('  pnpm add @fyit/crouton-core')
       process.exit(1)
     }
     // install-modules.ts is self-executing on import
@@ -230,25 +230,8 @@ const addCmd = defineCommand({
       return
     }
 
-    // Import module registry to check if items are modules
-    const registryPath = join(__dirname, '..', 'lib', 'module-registry.ts')
-    const { getModule } = await tsImport(registryPath)
+    const modules = items
 
-    // Separate modules from features
-    const modules = []
-    const features = []
-
-    for (const item of items) {
-      if (await getModule(item)) {
-        modules.push(item)
-      } else if (item === 'events') {
-        features.push(item)
-      } else {
-        modules.push(item)
-      }
-    }
-
-    // Add modules if any
     if (modules.length > 0) {
       const addModulePath = join(__dirname, '..', 'lib', 'add-module.ts')
       const { addModules } = await tsImport(addModulePath)
@@ -265,18 +248,6 @@ const addCmd = defineCommand({
       }
     }
 
-    // Add features if any
-    for (const feature of features) {
-      if (feature === 'events') {
-        const addEventsPath = join(__dirname, '..', 'lib', 'add-events.ts')
-        if (!existsSync(addEventsPath)) {
-          consola.error('add-events script not found. Please ensure the package is properly installed.')
-          process.exit(1)
-        }
-        const { addEvents } = await tsImport(addEventsPath)
-        await addEvents({ dryRun: args.dryRun, force: args.force })
-      }
-    }
   }
 })
 
@@ -477,22 +448,6 @@ const dbPullCmd = defineCommand({
   }
 })
 
-// ─── deploy-setup ─────────────────────────────────────────────────
-
-// Retired (#1137): this command set up the Cloudflare PAGES deploy the crouton
-// standard migrated away from (Workers + auto-provisioning, #108/#114). A fresh
-// `crouton init` already ships the Workers setup; a second scaffold path is drift.
-const deploySetupCmd = defineCommand({
-  meta: { name: 'deploy-setup', description: '(deprecated) Cloudflare Pages setup — retired; use `crouton init` (Workers) instead' },
-  async run() {
-    console.error('crouton deploy-setup is retired: it set up the deprecated Cloudflare Pages deploy.')
-    console.error('The Workers deploy needs no setup command — a fresh `crouton init` app ships the')
-    console.error('id-less wrangler.jsonc + cf:deploy/cf:staging scripts, and the first deploy')
-    console.error('auto-provisions D1/KV. See the deployment guide: https://nuxt-crouton.dev/guides/deployment')
-    process.exit(1)
-  }
-})
-
 // ─── deploy-check ─────────────────────────────────────────────────
 
 const deployCheckCmd = defineCommand({
@@ -527,7 +482,6 @@ const main = defineCommand({
     'rollback-bulk': rollbackBulkCmd,
     'rollback-interactive': rollbackInteractiveCmd,
     doctor: doctorCmd,
-    'deploy-setup': deploySetupCmd,
     'deploy-check': deployCheckCmd,
     'scaffold-app': scaffoldAppCmd,
     'seed-translations': seedTranslationsCmd,

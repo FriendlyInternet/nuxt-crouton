@@ -319,7 +319,7 @@ const columns = computed<TableColumn<MemberRow>[]>(() => {
       cell: ({ row }) => {
         const member = row.original
         const memberUser = 'user' in member ? member.user : undefined
-        const displayName = memberUser?.name || memberUser?.email || 'Unknown'
+        const displayName = memberUser?.name || memberUser?.email || t('teams.unknownMember')
         const initials = (memberUser?.name || memberUser?.email || '?').slice(0, 2).toUpperCase()
 
         const children = [
@@ -403,7 +403,7 @@ const columns = computed<TableColumn<MemberRow>[]>(() => {
             :variant="layout === 'grid' ? 'subtle' : 'ghost'"
             :color="layout === 'grid' ? 'primary' : 'neutral'"
             size="xs"
-            :aria-label="t('teams.gridLayout', 'Grid layout')"
+            :aria-label="t('teams.gridLayout')"
             :aria-pressed="layout === 'grid'"
             @click="layout = 'grid'"
           />
@@ -412,7 +412,7 @@ const columns = computed<TableColumn<MemberRow>[]>(() => {
             :variant="layout === 'table' ? 'subtle' : 'ghost'"
             :color="layout === 'table' ? 'primary' : 'neutral'"
             size="xs"
-            :aria-label="t('teams.tableLayout', 'Table layout')"
+            :aria-label="t('teams.tableLayout')"
             :aria-pressed="layout === 'table'"
             @click="layout = 'table'"
           />
@@ -513,7 +513,7 @@ const columns = computed<TableColumn<MemberRow>[]>(() => {
             class="mb-3"
           />
           <div class="font-medium truncate max-w-full">
-            {{ (member as any).user?.name || (member as any).user?.email || 'Unknown' }}
+            {{ (member as any).user?.name || (member as any).user?.email || t('teams.unknownMember') }}
             <span v-if="member.userId === user?.id" class="text-xs text-muted">({{ t('teams.you') }})</span>
           </div>
           <div class="text-sm text-muted truncate max-w-full">

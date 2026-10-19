@@ -26,7 +26,7 @@ jobs:
       vars.AGENT_HARNESS != 'pi' &&
       ((github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
        (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate')))
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
     # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to
@@ -38,7 +38,7 @@ jobs:
       issues: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
 
@@ -58,13 +58,13 @@ jobs:
       # a bare add succeeds, warns nothing, and the card never moves. Remove first, exactly as
       # comment-dispatch/resume-on-comment/canary/fix-ci-on-failure already do (the #1750 lesson).
       # Still safe re: re-trigger — both events name `status:in-progress`, not `delegate`.
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
       - name: Mark the issue in-progress
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -93,7 +93,7 @@ jobs:
       # on the owner's instruction that Anthropic now permits subscription auth for
       # unattended automation (#1669; supporting source pending on that issue — if it
       # does not cover automation, revert). Runs on the mac-mini runner.
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         id: claude
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -118,7 +118,7 @@ jobs:
       # the claude OIDC), so it never trips the bot-actor guard.
       - name: Artifact-gate — fail if the agent produced nothing
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           # #661: let the gate read WHY the agent produced nothing (billing / underspecified /
           # genuine no-op) so the failure comment is actionable instead of a generic message.
@@ -284,7 +284,7 @@ jobs:
       # cancellation (the artifact-gate `if: always()` above already runs in that case).
       - name: Flag a timeout / cancellation
         if: cancelled()
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = context.payload.issue.number

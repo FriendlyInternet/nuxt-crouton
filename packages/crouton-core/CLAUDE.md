@@ -1,14 +1,14 @@
-# CLAUDE.md - @fyit/crouton
+# CLAUDE.md - @fyit/crouton-core
 
 ## Package Purpose
 
 Core CRUD layer for Nuxt applications. Provides composables, components, and server utilities for building data-driven admin panels with team-scoped access, nested forms, and smart caching.
 
-**Single-install experience:** Installing `@fyit/crouton` automatically includes i18n, auth, and admin packages - no need to install them separately.
+**One layer to extend:** `@fyit/crouton-core` bundles i18n, auth, and admin (it extends `@fyit/crouton-i18n`, `@fyit/crouton-auth`, `@fyit/crouton-admin`) and registers `@nuxthub/core`, `@nuxt/ui`, `@vueuse/nuxt`, `@nuxt/image`, `@nuxtjs/seo` itself. An app switches crouton on by **extending** it — `extends: ['@fyit/crouton-core', '@fyit/crouton-pages', './layers/shop']` — and adds each addon package the same way. There is no crouton entry in `modules` (the optional `@fyit/crouton-devtools` is the only one); `crouton.config.js` `features` is generation input, not a package switch (#2286).
 
 ## Auto-Included Packages
 
-When you extend `@fyit/crouton`, you automatically get:
+When you extend `@fyit/crouton-core`, you automatically get:
 
 | Package | Provides | Routes |
 |---------|----------|--------|
@@ -25,7 +25,7 @@ When you extend `@fyit/crouton`, you automatically get:
 // nuxt.config.ts - BEFORE (manual)
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-auth',
     '@fyit/crouton-admin',
     '@fyit/crouton-i18n',
@@ -36,8 +36,8 @@ export default defineNuxtConfig({
 // nuxt.config.ts - AFTER (auto-included)
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',           // Includes auth, admin, i18n
-    '@fyit/crouton-bookings',       // Optional apps
+    '@fyit/crouton-core',      // Includes auth, admin, i18n
+    '@fyit/crouton-bookings',  // Optional apps
   ]
 })
 
@@ -46,6 +46,7 @@ export default defineNuxtConfig({
 | File | Purpose |
 |------|---------|
 | `shared/seed/` | Composable seeding contract + runner core (`SeedProvider`, `SeedContext`, `buildUpsert`, `seedId`, `collectSeedSql`) — exported at `@fyit/crouton-core/shared/seed` |
+| `shared/utils/query-registry.ts` | The process-wide server query registry (#2309): `registerCollectionQueries` (a package's Nitro plugin merges its collections in), `resolveQueryRegistry` (package entries + the app's generated `queryRegistry`, app wins), `collectionQueries` (one entry from a lazy queries import + the `getAll<Name>`/`get<Name>ByIds` stem). Exported at `@fyit/crouton-core/shared/utils/query-registry`; consumed by crouton-pages' public collection endpoints |
 | `server/utils/encryption.ts` | AES-256-GCM encryption for storing third-party secrets at rest |
 | `server/utils/tiptap-renderer.ts` | Server-side TipTap JSON to HTML conversion (auto-imported by Nitro) |
 | `app/composables/useCrouton.ts` | Modal/slideover state management (nested up to 5 levels) |
@@ -73,8 +74,6 @@ export default defineNuxtConfig({
 | `app/composables/useImageCrop.ts` | Cropperjs v2 composable for image cropping |
 | `app/components/ImageCropper.vue` | Reusable image crop modal with rotate/zoom/aspect ratio |
 | `app/components/ImageUpload.vue` | File picker with optional crop support |
-| `app/components/UsersAvatarUpload.vue` | Avatar upload with 1:1 circular crop |
-| `app/components/DropZone.vue` | Drag-and-drop file upload zone (VueUse) |
 | `app/components/QrCode.vue` | `CroutonQrCode` — renders any string (usually a URL) as an inline SVG QR code via `uqr` (zero-dep, SSR-safe). Props: `data`, `size?` (px). |
 | `app/components/DeleteButton.vue` | `CroutonDeleteButton` — two-step pill delete (click arms "sure?", click again emits `confirm`; mouseleave disarms). Props: `loading?`, `expanded?` (always show the label; collapsed mode is an icon pill that expands on hover — pointer-only, so forms/touch surfaces pass `expanded`). Parent performs the delete. A `UButton` (soft, neutral→error) so themes reach it (#1410); free height + `min-h-7`: stretches to match neighbors in a `flex items-stretch` row (sales form footers pair it with `CroutonFormActionButton class="flex-1"`). |
 | `server/api/upload-image.post.ts` | Authenticated file upload to blob storage |
@@ -272,6 +271,10 @@ useNuxtApp().hook('crouton:mutation', ({ operation, collection, itemId, data }) 
 })
 ```
 
+`update` events carry `beforeData` (the item as it was) **only when `@fyit/crouton-events` is
+installed** (`useCroutonApps().hasApp('events')`): fetching it costs a GET before every PATCH,
+and crouton-events is the one listener that reads it (#2289).
+
 ## Keyboard Shortcuts
 
 Power-user keyboard shortcuts via `useCroutonShortcuts()`:
@@ -423,7 +426,7 @@ ensureBlob(file, { maxSize: '10MB', types: ['image/png'] })
 ```typescript
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: ['@fyit/crouton'],
+  extends: ['@fyit/crouton-core'],
 
   hub: {
     db: 'postgresql',  // Use PostgreSQL instead

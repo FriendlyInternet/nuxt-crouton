@@ -13,7 +13,7 @@ export async function requireEventPrinter(db: any, event: H3Event, eventId: stri
     throw createError({ status: 400, statusText: 'Printer ID is required' })
   }
 
-  const { salesPrinters } = await import('~~/layers/sales/collections/printers/server/database/schema')
+  const { salesPrinters } = await import('../../collections/printers/server/database/schema')
   const [printer] = await db
     .select()
     .from(salesPrinters)

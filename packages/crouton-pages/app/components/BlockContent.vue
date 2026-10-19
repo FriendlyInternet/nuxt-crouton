@@ -41,6 +41,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
+const { t } = useT()
 
 // Parse content if string
 const blocks = computed<PageBlock[]>(() => {
@@ -399,7 +400,7 @@ const headingClasses: Record<number, string> = {
             v-else
             class="p-4 bg-warning/10 text-warning rounded-lg"
           >
-            Unknown block type: {{ block.type }}
+            {{ t('pages.editor.unknownBlockType') }}: {{ block.type }}
           </div>
         </div>
       </template>

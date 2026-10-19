@@ -77,12 +77,10 @@ apps/crouton-test/.data
 apps/studio-test/.data
 apps/triage/.data
 apps/bike-sheds/.data
-apps/crouton-designer/.data
 apps/bookings-app/.data
 apps/bookings-app-2/.data
 apps/crouton-playground/.data
 apps/velo/.data
-apps/atelier/.data_archive/**/*.db
 _archive/**/.data/
 
 # Seed data
@@ -152,7 +150,6 @@ trace.jsonl
 loop-station-trace*.jsonl
 writeups/loop-station/traces/
 
-retired/pocs/blog/.data
 pocs/crouton-builder/.data
 pocs/booking-demo/.data
 .fallow/
@@ -160,3 +157,5 @@ pocs/booking-demo/.data
 fixtures/with-sales/.data
 pocs/snippets/.data
 pocs/crate/.data
+# Generator history, written per app by `crouton config`; read by crouton-devtools (#2290)
+.crouton-generation-history.json

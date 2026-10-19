@@ -14,6 +14,7 @@
 import { requireAuthClient } from '../../types/auth-client'
 
 export function usePasswordReset() {
+  const { t } = useT()
 
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -28,10 +29,10 @@ export function usePasswordReset() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Request failed')
+        throw new Error(result.error.message ?? t('auth.resetRequestFailed'))
       }
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Request failed'
+      error.value = e instanceof Error ? e.message : t('auth.resetRequestFailed')
       throw e
     } finally {
       loading.value = false
@@ -48,10 +49,10 @@ export function usePasswordReset() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Reset failed')
+        throw new Error(result.error.message ?? t('auth.passwordResetFailed'))
       }
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Reset failed'
+      error.value = e instanceof Error ? e.message : t('auth.passwordResetFailed')
       throw e
     } finally {
       loading.value = false

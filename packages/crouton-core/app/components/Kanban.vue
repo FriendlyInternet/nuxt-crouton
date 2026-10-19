@@ -88,7 +88,8 @@ const {
   groupField: activeGroupField,
   orderField: props.orderField,
   columns: props.columns,
-  showUncategorized: true
+  showUncategorized: true,
+  uncategorizedLabel: t('kanban.uncategorized')
 })
 
 // Re-initialize kanban when group field changes

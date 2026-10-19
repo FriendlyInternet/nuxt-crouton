@@ -1,7 +1,7 @@
 ---
 name: crouton-build-and-env
 layer: stack
-description: Recreate the nuxt-crouton dev environment from scratch and survive its install/build traps — the pnpm toolchain, the cold-start sequence (why packages must build before apps prepare), the version catalog and workaround pins, the per-app typecheck rule, required env vars, and the known environment traps. Use when setting up a fresh clone/worktree, when "pnpm install" or "nuxt prepare" fails, when an app won't boot after install, when typecheck output looks insane, or when a tool "isn't available". Trigger phrases: "set up the repo from scratch", "why does typecheck show thousands of errors", "playwright install fails", "what pnpm/node version". (Exact error strings — "Could not load '@fyit/crouton'", "Cannot find module '@vue/compiler-sfc'" — route via crouton-diagnostics-index first; it points back here for depth.)
+description: Recreate the nuxt-crouton dev environment from scratch and survive its install/build traps — the pnpm toolchain, the cold-start sequence (why packages must build before apps prepare), the version catalog and workaround pins, the per-app typecheck rule, required env vars, and the known environment traps. Use when setting up a fresh clone/worktree, when "pnpm install" or "nuxt prepare" fails, when an app won't boot after install, when typecheck output looks insane, or when a tool "isn't available". Trigger phrases: "set up the repo from scratch", "why does typecheck show thousands of errors", "playwright install fails", "what pnpm/node version". (Exact error strings — "Could not load '@fyit/crouton-*'", "Cannot find module '@vue/compiler-sfc'" — route via crouton-diagnostics-index first; it points back here for depth.)
 ---
 
 # crouton-build-and-env
@@ -43,11 +43,11 @@ This is exactly what the SessionStart hook (`.claude/hooks/session-start.sh`) do
 
 **Why `build:packages` is mandatory — the dist-consumption model.** Most `packages/*` are consumed as *source* Nuxt layers (no build), but a subset carry build scripts and some of their exports only resolve into `dist/`:
 
-- `@fyit/crouton` (`packages/crouton`) is **fully dist-consumed**: `"main": "./dist/module.mjs"`, exports only `./dist/module.{mjs,d.ts}`. No dist → the module is unresolvable.
+- `@fyit/crouton-devtools` (`packages/crouton-devtools`) is **fully dist-consumed**: `"main": "./dist/module.mjs"`. No dist → the module is unresolvable.
 - `@fyit/crouton-core` is **mixed**: `"main": "./nuxt.config.ts"` (source layer), but its `./app/composables/*` and `./server/database/schema/*` subpath exports resolve into `./dist/` — apps error on a missing `crouton-core/dist`.
 - The build-script set drifts (mostly unbuild; a couple use `nuxt build` or `tsc`) — enumerate it with the build-script loop in the re-verify block.
 
-**The guarded-postinstall trap** is owned by root CLAUDE.md ("New App `postinstall` Must Be Guarded") — read it there. Delta facts verified here: every app/poc/fixture uses `"postinstall": "nuxt prepare 2>/dev/null || true"` (copy from `apps/velo/package.json`); the failure it prevents is exactly the fresh-install ordering above (unbuilt dist → bare `nuxt prepare` → `Could not load '@fyit/crouton'` → whole install aborts).
+**The guarded-postinstall trap** is owned by root CLAUDE.md ("New App `postinstall` Must Be Guarded") — read it there. Delta facts verified here: every app/poc/fixture uses `"postinstall": "nuxt prepare 2>/dev/null || true"` (copy from `apps/velo/package.json`); the failure it prevents is exactly the fresh-install ordering above (unbuilt dist → bare `nuxt prepare` → `Could not load '@fyit/crouton-*'` → whole install aborts).
 
 **CI's alternative to the guard** (`.github/workflows/ci.yml`): `pnpm install --frozen-lockfile --ignore-scripts`, then build only the app's transitive workspace deps with `pnpm --filter "fanfare^..." build` (the `^...` suffix selects dependencies, excluding the app itself), then an explicit `npx nuxt prepare` inside the app. Use this pattern when you need a minimal, deterministic bootstrap of one app.
 
@@ -97,7 +97,7 @@ Fixtures commit a dummy `.env` on purpose (`BETTER_AUTH_SECRET=dev-fixture-secre
 
 | Symptom | Reality | Fix |
 |---|---|---|
-| `Could not load '@fyit/crouton'` during install/prepare | dist packages not built yet (§2) | `pnpm build:packages`, then retry |
+| `Could not load '@fyit/crouton-*'` during install/prepare | dist packages not built yet (§2) | `pnpm build:packages`, then retry |
 | `npx playwright install` fails → "no browser" | only the *download host* is egress-blocked; chromium IS pre-installed under `/opt/pw-browsers/` | use `node scripts/app-shots.mjs` (auto-globs the build) or `PLAYWRIGHT_CHROMIUM_PATH`/`PW_EXECUTABLE_PATH`; never hardcode a build number. Doctrine + the #629 incident: sibling `crouton-harness-observability` §5 |
 | `Cannot find module '@vue/compiler-sfc'` from typecheck after a dep bump | stale/unhoisted node_modules, NOT a real error (the #424 "rule out non-code causes" class) | `rm -rf node_modules && pnpm install` — mechanics owned by the `dependency-sweep` skill |
 | Thousands of typecheck errors | you ran `nuxt typecheck` outside an app dir (§4) | `pnpm typecheck` from root |

@@ -294,8 +294,8 @@ export function getModuleRegistryMap(
  */
 export function getTypeMapping(
   manifests: CroutonManifest[],
-): Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string }> {
-  const mapping: Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string }> = {}
+): Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string; component?: string }> {
+  const mapping: Record<string, { db: string; drizzle: string; zod: string; default: string; tsType: string; canonical: string; component?: string }> = {}
 
   for (const manifest of manifests) {
     if (!manifest.fieldTypes) continue
@@ -311,6 +311,10 @@ export function getTypeMapping(
         default: def.defaultValue,
         tsType: def.tsType,
         canonical: name,
+        // The form control the manifest declares for this type. Carried onto
+        // every field by loadFields so generators render it instead of keeping
+        // a private type→component switch (#2286).
+        component: def.component,
       }
       mapping[name] = entry
       if (def.aliases) {
@@ -445,4 +449,20 @@ export async function findPackagesDir(startDir: string): Promise<string | null> 
   }
 
   return null
+}
+
+// ── Convenience helpers (discover + compute in one call) ──────────
+// Moved here from the deleted manifest-bridge.ts (#2290): every caller is .ts,
+// so the jiti hop (and its second manifest cache) bought nothing.
+
+export async function loadTypeMapping(rootDir?: string) {
+  return getTypeMapping(await discoverManifests(rootDir))
+}
+
+export async function loadModuleRegistryMap(rootDir?: string) {
+  return getModuleRegistryMap(await discoverManifests(rootDir))
+}
+
+export async function loadModuleRegistry(rootDir?: string) {
+  return getModuleRegistry(await discoverManifests(rootDir))
 }

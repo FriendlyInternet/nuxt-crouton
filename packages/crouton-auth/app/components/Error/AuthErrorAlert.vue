@@ -15,6 +15,8 @@
 <script setup lang="ts">
 import { getErrorMessage, getErrorCode, AUTH_ERROR_CODES } from '../../utils/errors'
 
+const { t } = useT()
+
 interface Props {
   error: unknown
   title?: string
@@ -101,7 +103,7 @@ watch(() => props.error, () => {
             :color="colorMap[variant]"
             @click="handleRetry"
           >
-            Try Again
+            {{ t('auth.magicLink.tryAgain') }}
           </UButton>
         </div>
       </div>

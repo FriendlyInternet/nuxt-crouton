@@ -170,7 +170,7 @@ async function handleAssetSelected(asset: Record<string, any>) {
       <div class="relative rounded-lg border border-default">
         <img
           :src="modelValue"
-          alt="Preview"
+          :alt="t('pages.editor.preview')"
           class="w-full max-h-48 object-cover rounded-lg"
         >
         <div class="absolute top-2 right-2 flex gap-1">
@@ -286,7 +286,7 @@ async function handleAssetSelected(asset: Record<string, any>) {
     <div v-if="mode === 'url'" class="space-y-2">
       <UInput
         v-model="urlInput"
-        placeholder="https://example.com/image.jpg or /images/..."
+        :placeholder="t('pages.blockEditors.imageUrlPlaceholder')"
         size="sm"
         class="w-full"
       >
@@ -360,7 +360,7 @@ async function handleAssetSelected(asset: Record<string, any>) {
       <template #content="{ close }">
         <div class="p-6">
           <h3 class="text-lg font-semibold mb-4">
-            {{ t('image.cropImage') }}
+            {{ t('pages.blockEditors.cropImage') }}
           </h3>
           <CroutonImageCropper
             v-if="cropFile"

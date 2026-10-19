@@ -24,8 +24,9 @@ jobs:
       startsWith(github.event.pull_request.head.ref, 'epic/') &&
       github.event.pull_request.base.ref == 'main'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const branch = context.payload.pull_request.head.ref

@@ -301,7 +301,7 @@ Generated collections automatically import from `@crouton/auth/server`. Ensure:
    export * from '@crouton/auth/server/database/schema/auth'
    ```
 
-**Note**: The collection generator uses `@crouton/auth/server` directly (not the `#crouton/team-auth` alias).
+**Note**: Import from `@crouton/auth/server` directly. The old `#crouton/team-auth` Nitro alias was removed in #2290 (nothing imported it).
 
 ## Rate Limiting (Recommended)
 
@@ -530,7 +530,7 @@ Idempotent (stable ids). Run via an app's `crouton-seed` / `db:seed:*` scripts.
 ## Dependencies
 
 - **Extends**: None (standalone module/layer)
-- **Used by**: `@fyit/crouton` and all crouton packages (canonical team auth)
+- **Used by**: `@fyit/crouton-core` (extends this layer, so every app gets it) and all crouton packages (canonical team auth)
 - **Core deps**: better-auth, @better-auth/passkey
 - **Recommended**: nuxthub-ratelimit (optional peer dependency for rate limiting)
 

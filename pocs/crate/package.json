@@ -20,7 +20,6 @@
     "db:migrate:staging": "npx wrangler d1 migrations apply crate-staging-db --env staging --remote"
   },
   "dependencies": {
-    "@fyit/crouton": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
     "@libsql/client": "^0.17.0",
@@ -34,7 +33,7 @@
     "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-layout": "workspace:*",
     "drizzle-kit": "^0.31.0",
-    "vitest": "^2.1.0",
+    "vitest": "catalog:",
     "wrangler": "^4.64.0"
   }
 }

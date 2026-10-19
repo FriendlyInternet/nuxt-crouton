@@ -9,10 +9,10 @@
 import { desc, eq } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import { chartOrderScope } from '../../../../../utils/chart-scope'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
-import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
-import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
-import { salesLocations } from '~~/layers/sales/collections/locations/server/database/schema'
+import { salesOrders } from '../../../../../../collections/orders/server/database/schema'
+import { salesOrderitems } from '../../../../../../collections/orderitems/server/database/schema'
+import { salesProducts } from '../../../../../../collections/products/server/database/schema'
+import { salesLocations } from '../../../../../../collections/locations/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)

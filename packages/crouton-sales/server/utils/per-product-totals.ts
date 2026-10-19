@@ -30,9 +30,8 @@
  * path that cannot duplicate, and costs one extra round trip on a query whose
  * parameter count is fixed by the scope rather than by the data (#1766).
  *
- * Tables are injected, not imported: they live in the consuming app's generated
- * layer (`~~/layers/sales/...`), which a package unit test cannot resolve — the
- * same reason `handover.ts` takes its table as a parameter.
+ * Tables are injected, not imported, so a unit test can pass a throwaway
+ * in-memory schema.
  */
 import { and, desc, eq, sql } from 'drizzle-orm'
 import { locationBlocksDeliverySql } from './location-handover'

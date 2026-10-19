@@ -73,9 +73,7 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  placeholder: 'Type / to insert a block...',
   editable: true,
-  previewTitle: 'Page Preview',
   defaultTab: 'editor',
   previewScale: 0.6
 })
@@ -285,7 +283,7 @@ defineExpose({
           <CroutonEditorBlocks
             ref="editorBlocksRef"
             v-model="content"
-            :placeholder="placeholder"
+            :placeholder="placeholder ?? t('pages.editor.blockPlaceholder')"
             :editable="editable"
             :extensions="pageBlockExtensions"
             :suggestion-items="blockSuggestionItems"
@@ -309,7 +307,7 @@ defineExpose({
             <div class="flex items-center justify-between px-4 py-2 border-b border-default bg-muted/30 flex-shrink-0">
               <div class="flex items-center gap-2">
                 <UIcon name="i-lucide-eye" class="size-4 text-muted" />
-                <span class="text-sm font-medium">{{ previewTitle }}</span>
+                <span class="text-sm font-medium">{{ previewTitle ?? t('pages.editor.pagePreview') }}</span>
               </div>
               <!-- Zoom toggle -->
               <UButton

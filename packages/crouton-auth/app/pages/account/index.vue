@@ -33,7 +33,7 @@ const initialTab = computed(() => {
           name="i-lucide-arrow-left"
           class="size-4"
         />
-        {{ t('common.back') || 'Back' }}
+        {{ t('common.back') }}
       </NuxtLink>
 
       <!-- Settings -->

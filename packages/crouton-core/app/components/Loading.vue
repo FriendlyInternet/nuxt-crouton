@@ -12,11 +12,12 @@
     </template>
 
     <template v-if="loading === 'create_send' || loading === 'update_send'">
-      SENDING UPDATE
+      {{ t('form.sendingUpdate') }}
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
 const { loading } = useCrouton()
+const { t } = useT()
 </script>

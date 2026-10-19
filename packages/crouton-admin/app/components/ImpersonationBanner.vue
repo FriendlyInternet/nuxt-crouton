@@ -20,7 +20,7 @@ async function handleStop() {
   try {
     await stopImpersonation()
   } catch (e) {
-    notify.error(t('admin.impersonation.stopFailed'), { description: e instanceof Error ? e.message : 'Unknown error' })
+    notify.error(t('admin.impersonation.stopFailed'), { description: e instanceof Error ? e.message : t('errors.unknown') })
   }
 }
 </script>

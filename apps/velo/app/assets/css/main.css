@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+@plugin "@tailwindcss/typography";
 
 /* Scan Nuxt Crouton layers for Tailwind classes */
 @source "../../../../node_modules/@fyit/crouton*/app/**/*.{vue,js,ts}";

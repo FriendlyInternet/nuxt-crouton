@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
   a11y-daily:
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
     # Job-level permissions (see a11y.yml for why id-token MUST be here). `issues: write`
     # because — unlike the security sweep — this workflow DOES post to GitHub (standing
@@ -32,17 +32,17 @@ jobs:
       issues: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
 
       # The deep pass runs eslint-a11y (needs deps) and may boot a fixture for axe.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           # per-job dest — the default ~/setup-pnpm collides between the two
           # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
           dest: ${{ runner.temp }}/setup-pnpm
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -50,7 +50,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true

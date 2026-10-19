@@ -46,31 +46,29 @@
     "release": "changeset version && pnpm publish:packages",
     "clean": "rm -rf node_modules packages/*/node_modules apps/*/node_modules",
     "changelog": "changelogithub",
-    "check:publint": "publint ./packages/crouton",
-    "check:attw": "attw --pack ./packages/crouton --ignore-rules cjs-resolves-to-esm",
+    "check:publint": "publint ./packages/crouton-core",
     "test:e2e": "playwright test --config e2e/playwright.config.ts"
   },
   "devDependencies": {
-    "@arethetypeswrong/cli": "^0.18.2",
     "@axe-core/playwright": "^4.10.2",
     "@changesets/cli": "^2.30.0",
     "@nuxt/eslint-config": "^1.2.0",
     "@nuxt/test-utils": "^3.23.0",
     "@playwright/test": "^1.64.0",
-    "@vitest/coverage-v8": "^4.0.16",
-    "@vitest/ui": "^4.0.16",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
     "@vue/compiler-sfc": "^3.5.0",
     "@vue/test-utils": "^2.4.6",
     "changelogithub": "^14.0.0",
     "eslint": "^9.17.0",
     "eslint-plugin-vuejs-accessibility": "2.5.0",
     "fallow": "^2.104.0",
-    "happy-dom": "^20.3.3",
+    "happy-dom": "catalog:",
     "nuxt": "catalog:",
     "publint": "^0.3.16",
     "sharp": "^0.34.5",
     "typescript": "catalog:",
-    "vitest": "^4.0.16"
+    "vitest": "catalog:"
   },
   "pnpm": {
     "overrides": {
@@ -86,12 +84,14 @@
       "@tiptap/core": "3.32.0",
       "@tiptap/pm": "3.32.0",
       "@tiptap/vue-3": "3.32.0",
-      "better-auth": "~1.6.33",
-      "@better-auth/i18n": "~1.6.33",
-      "@better-auth/passkey": "~1.6.33",
       "drizzle-orm": "^0.45.4",
       "@nuxtjs/i18n": "^10.6.0",
-      "@fyit/crouton-sales>vue-i18n": "^11.4.14"
+      "@fyit/crouton-sales>vue-i18n": "^11.4.14",
+      "lodash-es": "^4.18.1",
+      "protocol-buffers-schema": "^3.6.1",
+      "@simplewebauthn/server": "^13.3.2",
+      "flatted": "^3.4.2",
+      "proxy-addr": "^2.0.8"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3"

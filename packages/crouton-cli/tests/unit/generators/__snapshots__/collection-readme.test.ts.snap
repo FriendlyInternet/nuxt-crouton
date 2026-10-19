@@ -1,0 +1,50 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`generateCollectionReadme > matches the snapshot 1`] = `
+"# ShopProducts
+
+> Generated once by @fyit/crouton-cli on 2025-01-01. From here on it's yours:
+> edit any file in this folder. \`crouton config\` skips files that already exist;
+> only \`--force\` overwrites them.
+
+| | |
+|---|---|
+| Collection | \`shopProducts\` |
+| API | \`/api/teams/[teamId]/shop-products\` |
+| Components | \`<ShopProductsForm />\`, \`<ShopProductsList />\` |
+| Composable | \`useShopProducts()\` |
+
+## Fields
+
+| Field | Type | Required |
+|-------|------|----------|
+| id | string (primary key) | Auto |
+| name | string | Yes |
+| description | text | No |
+| price | decimal | No |
+| active | boolean | No |
+| createdAt | timestamp | Auto |
+| updatedAt | timestamp | Auto |
+| createdBy | string | Auto |
+| updatedBy | string | Auto |
+
+## Files
+
+\`\`\`
+collections/products/
+├── app/components/Form.vue            # the form
+├── app/components/List.vue            # the table
+├── app/composables/useShopProducts.ts   # Zod schema, columns, config
+├── server/api/teams/[id]/shop-products/
+│   ├── index.get.ts / index.post.ts
+│   └── [productId].patch.ts / [productId].delete.ts
+├── server/database/schema.ts          # Drizzle table
+├── server/database/queries.ts         # DB access
+├── types.ts
+└── nuxt.config.ts
+\`\`\`
+
+To add a field: edit the schema, the composable and the form, or regenerate with \`--force\`
+and re-apply your edits. How the pieces fit is documented in @fyit/crouton-core.
+"
+`;

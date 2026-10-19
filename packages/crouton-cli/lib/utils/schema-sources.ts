@@ -32,7 +32,7 @@ export interface SchemaGraph {
 const NUXT_CONFIG_NAMES = ['nuxt.config.ts', 'nuxt.config.js', 'nuxt.config.mjs']
 
 /** Walk up from `startDir` to the nearest dir holding a nuxt.config.* (the layer root). */
-function findLayerRoot(startDir: string): string | null {
+export function findLayerRoot(startDir: string): string | null {
   let dir = startDir
   for (let i = 0; i < 20; i++) {
     if (NUXT_CONFIG_NAMES.some(name => existsSync(join(dir, name)))) return dir
@@ -43,7 +43,7 @@ function findLayerRoot(startDir: string): string | null {
   return null
 }
 
-function layerConfigPath(dir: string): string | null {
+export function layerConfigPath(dir: string): string | null {
   for (const name of NUXT_CONFIG_NAMES) {
     const p = join(dir, name)
     if (existsSync(p)) return p
@@ -52,7 +52,7 @@ function layerConfigPath(dir: string): string | null {
 }
 
 /** Statically extract the `extends` string entries from a nuxt.config.* — no execution. */
-function readExtends(configPath: string): string[] {
+export function readExtends(configPath: string): string[] {
   let code: string
   try {
     code = readFileSync(configPath, 'utf8')
@@ -78,7 +78,7 @@ function readExtends(configPath: string): string[] {
 }
 
 /** Resolve an extends spec to a layer dir, FROM the extending layer's own dir. */
-function resolveLayerDir(spec: string, fromDir: string): string | null {
+export function resolveLayerDir(spec: string, fromDir: string): string | null {
   // Relative / absolute path extends resolve against the extending layer.
   if (spec.startsWith('.') || isAbsolute(spec)) {
     const candidate = resolve(fromDir, spec)

@@ -23,15 +23,15 @@
     "db:seed:staging": "crouton-seed --db velo-staging-db --remote --with-staff"
   },
   "dependencies": {
-    "@fyit/crouton": "workspace:*",
     "@fyit/crouton-assets": "workspace:*",
     "@fyit/crouton-bookings": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-maps": "workspace:*",
     "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-email": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",
-    "better-auth": "^1.5.5",
+    "better-auth": "^1.7.7",
     "drizzle-orm": "catalog:",
     "nanoid": "^5.0.0",
     "nuxt": "catalog:",

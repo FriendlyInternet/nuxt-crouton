@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { ref, computed, reactive } from 'vue'
+import en from '../../../i18n/locales/en.json'
 
 // State holders for useState mock
 const stateStore: Record<string, any> = {}
@@ -39,6 +40,14 @@ let mockUseTeam: (() => { currentTeam: any }) | null = null
 vi.stubGlobal('ref', ref)
 vi.stubGlobal('computed', computed)
 vi.stubGlobal('reactive', reactive)
+
+// useT is auto-imported at runtime; resolve keys against the real English locale
+vi.stubGlobal('useT', () => ({
+  t: (key: string, params: Record<string, unknown> = {}) => {
+    const msg = key.split('.').reduce<any>((node, part) => node?.[part], en)
+    return typeof msg === 'string' ? msg.replace(/\{(\w+)\}/g, (_, k) => String(params[k] ?? '')) : key
+  }
+}))
 
 vi.stubGlobal('useRoute', () => mockRoute)
 

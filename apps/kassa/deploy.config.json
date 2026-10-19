@@ -1,7 +1,7 @@
 {
   "stagingUrl": "https://kassa.pmcp.dev",
   "productionUrl": "https://kassa.friendlyinter.net",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-email @fyit/crouton",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-email",
   "reviewLogin": {
     "landing": "/admin/test1/sales/events/vlaamsekermis"
   },

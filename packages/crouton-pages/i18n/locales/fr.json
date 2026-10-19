@@ -16,7 +16,8 @@
         "description": "Le pied de page du site, composé de blocs. Un seul par site ; affiché sur chaque page."
       },
       "collectionDerived": {
-        "description": "Publie les éléments de cette collection en tant que pages autonomes."
+        "description": "Publie les éléments de cette collection en tant que pages autonomes.",
+        "name": "Page {name}"
       }
     },
     "workspace": {
@@ -25,7 +26,8 @@
       "emptyDescription": "Choisissez une page dans la barre latérale pour la modifier, ou créez-en une nouvelle.",
       "keyboardShortcuts": "Raccourcis clavier",
       "newPage": "Nouvelle page",
-      "search": "Rechercher"
+      "search": "Rechercher",
+      "selectPageToEdit": "Sélectionnez une page à modifier"
     },
     "notFound": "Page non trouvée",
     "notFoundDescription": "La page que vous recherchez n'existe pas.",
@@ -96,7 +98,10 @@
     "nav": {
       "menu": "Menu",
       "theme": "Thème",
-      "signOut": "Déconnexion"
+      "signOut": "Déconnexion",
+      "openMenu": "Ouvrir le menu de navigation",
+      "adminMenu": "Menu d’administration",
+      "user": "Utilisateur"
     },
     "collection": {
       "itemUnavailable": "Élément indisponible",
@@ -188,7 +193,16 @@
       "blocks": "blocs",
       "tapToEdit": "Toucher pour modifier",
       "seoGenerate": "Générer avec IA",
-      "seoGenerateFailed": "Impossible de générer une description"
+      "seoGenerateFailed": "Impossible de générer une description",
+      "titlePlaceholder": "Page sans titre",
+      "slugPlaceholder": "slug-url-de-la-page",
+      "seoTitlePlaceholder": "Par défaut, le titre de la page",
+      "seoDescriptionPlaceholder": "Résumé en une ligne pour la recherche et le partage",
+      "fullscreen": "Plein écran",
+      "editingFullscreen": "Modification en plein écran…",
+      "blockPlaceholder": "Tapez / pour insérer un bloc...",
+      "item": "Élément",
+      "anonymous": "Anonyme"
     },
     "sidebar": {
       "drafts": "Brouillons",
@@ -196,7 +210,8 @@
       "createFirst": "Créer la première page",
       "changes": "{count} modification | {count} modifications",
       "discard": "Annuler",
-      "publish": "Publier"
+      "publish": "Publier",
+      "reorder": "Réorganiser les pages"
     },
     "seo": {
       "pageTitle": "Titre de la page",
@@ -229,7 +244,9 @@
         "fileDownload": "Téléchargement de fichier",
         "video": "Vidéo",
         "logos": "Logos",
-        "image": "Image"
+        "image": "Image",
+        "cta": "CTA",
+        "cards": "Cartes"
       },
       "editBlock": "Modifier les propriétés du bloc",
       "deleteBlock": "Supprimer le bloc",
@@ -963,6 +980,100 @@
             }
           }
         }
+      },
+      "pane": {
+        "name": "Mise en page en panneaux",
+        "description": "Une mise en page en panneaux redimensionnables et imbricables, composée de blocs enregistrés"
+      },
+      "map": {
+        "name": "Carte",
+        "description": "Intégrez une carte interactive avec un repère",
+        "fields": {
+          "address": {
+            "label": "Nom du lieu",
+            "description": "Libellé affiché pour le lieu (à titre indicatif)"
+          },
+          "lat": {
+            "label": "Latitude",
+            "description": "Latitude du centre (ex. 37.7749)"
+          },
+          "lng": {
+            "label": "Longitude",
+            "description": "Longitude du centre (ex. -122.4194)"
+          },
+          "zoom": {
+            "label": "Zoom",
+            "options": {
+              "8": "Pays (8)",
+              "10": "Région (10)",
+              "12": "Ville (12)",
+              "14": "Quartier (14)",
+              "16": "Rue (16)"
+            }
+          },
+          "style": {
+            "label": "Style de carte",
+            "options": {
+              "streets": "Rues",
+              "light": "Clair",
+              "dark": "Sombre",
+              "satellite": "Satellite",
+              "outdoors": "Plein air"
+            }
+          },
+          "height": {
+            "label": "Hauteur"
+          },
+          "markerLabel": {
+            "label": "Info-bulle du repère",
+            "description": "Texte affiché dans l’info-bulle au clic sur le repère"
+          }
+        }
+      },
+      "collectionMap": {
+        "name": "Carte de collection",
+        "description": "Affichez les éléments d’une collection sous forme de repères sur une carte interactive",
+        "fields": {
+          "collection": {
+            "label": "Collection",
+            "description": "Sélectionnez une collection avec des données de localisation"
+          },
+          "title": {
+            "label": "Titre",
+            "description": "Titre facultatif au-dessus de la carte"
+          },
+          "coordinateField": {
+            "label": "Champ de coordonnées",
+            "description": "Remplacez le champ de coordonnées détecté automatiquement"
+          },
+          "labelField": {
+            "label": "Champ de libellé",
+            "description": "Champ utilisé pour l’info-bulle du repère (champ titre si vide)"
+          },
+          "style": {
+            "label": "Style de carte",
+            "options": {
+              "streets": "Rues",
+              "light": "Clair",
+              "dark": "Sombre",
+              "satellite": "Satellite",
+              "outdoors": "Plein air"
+            }
+          },
+          "zoom": {
+            "label": "Zoom par défaut",
+            "options": {
+              "8": "Pays (8)",
+              "10": "Région (10)",
+              "12": "Ville (12)",
+              "14": "Quartier (14)",
+              "16": "Rue (16)"
+            }
+          },
+          "height": {
+            "label": "Hauteur"
+          }
+        }
       }
     },
     "scopedGate": {
@@ -977,6 +1088,77 @@
       "locked": "Trop de tentatives — réessayez plus tard",
       "exhausted": "Ce code d'accès n'est plus disponible",
       "guestName": "Invité"
+    },
+    "paneBlock": {
+      "invalid": "Cette mise en page en panneaux n’a pas pu être affichée."
+    },
+    "blockViews": {
+      "moreCount": "+{count} de plus",
+      "noButtons": "Aucun bouton — double-cliquez pour en ajouter",
+      "noCards": "Aucune carte pour l’instant",
+      "noContact": "Aucun contact défini",
+      "loadingMember": "Chargement du membre...",
+      "noQuestions": "Aucune question pour l’instant",
+      "noImages": "Aucune image pour l’instant — double-cliquez pour en ajouter",
+      "noTitle": "Aucun titre défini",
+      "noUrl": "Aucune URL",
+      "noStats": "Aucune statistique pour l’instant",
+      "unknownAddon": "Bloc d’extension inconnu : {name}",
+      "heroImage": "Image du hero",
+      "heroTitle": "Titre du hero",
+      "sectionTitle": "Titre de section",
+      "leftColumn": "Colonne de gauche",
+      "rightColumn": "Colonne de droite"
+    },
+    "blockRender": {
+      "noImageTitle": "Aucune image configurée",
+      "noImageDescription": "Modifiez ce bloc pour ajouter une image.",
+      "noVideoTitle": "Aucune vidéo configurée",
+      "noVideoDescription": "Modifiez ce bloc pour ajouter une vidéo.",
+      "noButtonsTitle": "Aucun bouton configuré",
+      "noButtonsDescription": "Modifiez ce bloc pour ajouter des boutons.",
+      "noUrlTitle": "Aucune URL configurée",
+      "noUrlDescription": "Modifiez ce bloc pour saisir une URL intégrable.",
+      "noFormUrlTitle": "Aucune URL de formulaire configurée",
+      "noFormUrlDescription": "Modifiez ce bloc pour saisir l’URL d’inscription.",
+      "noFileTitle": "Aucun fichier configuré",
+      "noFileDescription": "Modifiez ce bloc pour ajouter un fichier.",
+      "subscribed": "Merci pour votre inscription !",
+      "emailPlaceholder": "Saisissez votre adresse e-mail",
+      "subscribe": "S’inscrire",
+      "download": "Télécharger",
+      "button": "Bouton",
+      "downloadFile": "Télécharger le fichier",
+      "collectionNotFound": "Collection « {name} » introuvable",
+      "loading": "Chargement...",
+      "noContactInfo": "Aucune coordonnée",
+      "noImages": "Aucune image ajoutée pour l’instant"
+    },
+    "blockEditors": {
+      "statN": "Statistique {n}",
+      "newStat": "Nouvelle statistique",
+      "addStat": "Ajouter une statistique",
+      "value": "Valeur",
+      "valuePlaceholder": "ex. 10000",
+      "label": "Libellé",
+      "labelPlaceholder": "ex. Clients satisfaits",
+      "prefix": "Préfixe",
+      "prefixPlaceholder": "ex. €",
+      "suffix": "Suffixe",
+      "suffixPlaceholder": "ex. %, +, /7",
+      "imageN": "Image {n}",
+      "altPlaceholder": "Texte alternatif (facultatif)",
+      "addImage": "Ajouter une image",
+      "teamMemberPlaceholder": "Sélectionnez un membre de l’équipe...",
+      "imageUrlPlaceholder": "https://example.com/image.jpg ou /images/...",
+      "videoUrlPlaceholder": "https://example.com/video.mp4 ou /images/...",
+      "optionalLinkPlaceholder": "https://example.com (lien facultatif)",
+      "cropImage": "Recadrer l’image"
+    },
+    "collections": {
+      "pages": {
+        "title": "Pages"
+      }
     }
   },
   "common": {

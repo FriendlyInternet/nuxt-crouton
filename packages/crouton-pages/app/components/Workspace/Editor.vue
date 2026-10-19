@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { buildPageSubmitData } from '../../utils/page-submit-data'
 /**
  * Workspace Editor - Inline Page Editor
  *
@@ -124,7 +125,7 @@ const getCurrentUser = () => {
       if (sessionUser?.value) {
         const u = sessionUser.value as unknown as Record<string, unknown>
         return {
-          name: String(u.name || u.email || 'Anonymous'),
+          name: String(u.name || u.email || t('pages.editor.anonymous')),
           color: undefined
         }
       }
@@ -132,7 +133,7 @@ const getCurrentUser = () => {
   } catch {
     // Auth package not installed
   }
-  return { name: 'Anonymous', color: undefined }
+  return { name: t('pages.editor.anonymous'), color: undefined }
 }
 
 // Set up collab for content if package is installed
@@ -732,93 +733,29 @@ function onLayoutChange() {
 async function handleSubmit() {
   isSaving.value = true
   try {
-    let translations = { ...state.value.translations } as Record<string, { title?: string; slug?: string; content?: string }>
+    // Live collab fragments (locale → TipTap JSON) win over the form's content while the
+    // block editor is open; the payload builder takes them as plain data.
+    const collabContent = collabLocalizedContent && showBlockEditor.value
+      ? Object.fromEntries(
+          collabLocalizedContent.getActiveFragments()
+            .map(({ locale: loc }: { locale: string }) => [loc, collabLocalizedContent.getContentJson(loc)]),
+        )
+      : null
 
-    // Extract collab content
-    if (collabLocalizedContent && showBlockEditor.value) {
-      const activeFragments = collabLocalizedContent.getActiveFragments()
-      for (const { locale: loc } of activeFragments) {
-        const contentJson = collabLocalizedContent.getContentJson(loc)
-        if (!translations[loc]) {
-          translations[loc] = {}
-        }
-        translations[loc] = {
-          ...translations[loc],
-          content: JSON.stringify(contentJson)
-        }
-      }
-    }
-
-    // Validate title
-    const hasTitle = Object.values(translations).some(
-      (t) => t?.title && t.title.trim().length > 0
+    // What goes to the API — flattening, auto-slugs, the #1403 allowlist — is a pure,
+    // tested function (#2322, test/page-submit-data.test.ts).
+    const result = buildPageSubmitData(
+      { state: state.value, showBlockEditor: showBlockEditor.value, isRegularPage: isRegularPage.value, collabContent },
+      { slugify },
     )
-    if (!hasTitle) {
+    if (!result.ok) {
       const notify = useNotify()
       notify.error(t('pages.errors.titleRequired'), { description: t('pages.errors.titleRequiredDescription') })
       return
     }
-
-    // Auto-generate slugs
-    for (const [loc, data] of Object.entries(translations)) {
-      if (data?.title && (!data?.slug || data.slug.trim() === '')) {
-        translations[loc] = {
-          ...data,
-          slug: slugify(data.title)
-        }
-      }
-      // Block editor emits TipTap JSON objects — stringify for the text column
-      if (data?.content && typeof data.content === 'object') {
-        translations[loc] = { ...translations[loc], content: JSON.stringify(data.content) }
-      }
-    }
-
-    // Flatten primary locale's translations to root-level fields for the API
-    // The database has flat title/slug/content columns — no translations column
-    const primaryLocale = Object.keys(translations)[0] || 'en'
-    const primary = translations[primaryLocale] || {}
-
-    // Regular pages carry no type-specific config, but page-level flags
-    // (chrome hiding, manual requiredScope) live in config too and must
-    // survive the save — strip everything else instead of nulling wholesale.
-    const PAGE_LEVEL_CONFIG_KEYS = ['hideNav', 'hideAuthControls', 'requiredScope'] as const
-    const regularPageConfig = () => {
-      const config = state.value.config as Record<string, unknown> | null | undefined
-      if (!config) return null
-      const kept = Object.fromEntries(
-        PAGE_LEVEL_CONFIG_KEYS.filter(key => config[key] !== undefined && config[key] !== false)
-          .map(key => [key, config[key]])
-      )
-      return Object.keys(kept).length ? kept : null
-    }
-
-    const rawContent = showBlockEditor.value ? (primary.content || state.value.content) : state.value.content
-    // Explicit allowlist of the fields this form owns — never spread the whole
-    // record: identity/ownership/hierarchy/audit fields (id, teamId, owner,
-    // path, depth, createdBy, *User joins…) must not ride along in the body,
-    // and untouched fields shouldn't be re-asserted beyond what the form
-    // actually presents (#1403).
-    const submitData = {
-      title: primary.title || state.value.title,
-      slug: primary.slug || state.value.slug,
-      pageType: state.value.pageType,
-      status: state.value.status,
-      visibility: state.value.visibility,
-      publishedAt: state.value.publishedAt,
-      showInNavigation: state.value.showInNavigation,
-      layout: state.value.layout,
-      parentId: state.value.parentId,
-      seoTitle: (primary as any).seoTitle || '',
-      seoDescription: (primary as any).seoDescription || '',
-      ogImage: state.value.ogImage,
-      robots: state.value.robots,
-      content: rawContent && typeof rawContent === 'object' ? JSON.stringify(rawContent) : rawContent,
-      translations,
-      config: isRegularPage.value ? regularPageConfig() : state.value.config
-    } as any
+    const submitData = result.data
 
     let savedPage: any
-
     if (action.value === 'create') {
       savedPage = await create(submitData)
     } else if (state.value.id) {
@@ -904,12 +841,11 @@ const currentTitle = computed(() => {
   const tr = state.value.translations as Record<string, { title?: string }> | undefined
   return tr?.[editingLocale.value]?.title || ''
 })
-const toolbarTitle = computed(() =>
-  currentTitle.value || (() => {
-    const tr = state.value.translations as Record<string, { title?: string }> | undefined
-    return (tr ? Object.values(tr).find(d => d?.title)?.title : '') || ''
-  })()
-)
+function findFirstAvailableTitle(): string {
+  const tr = state.value.translations as Record<string, { title?: string }> | undefined
+  return (tr ? Object.values(tr).find(d => d?.title)?.title : '') || ''
+}
+const toolbarTitle = computed(() => currentTitle.value || findFirstAvailableTitle())
 
 // SEO fields are translatable too — they follow the shared editing locale.
 const seoLocale = computed(() => editingLocale.value)
@@ -1181,41 +1117,24 @@ defineExpose({ state })
            input never loses state when switching tabs. -->
       <div class="flex-1 min-h-0 overflow-auto">
         <!-- ───────── Settings (title + slug + page setup) ───────── -->
-        <div v-show="activeTab === 'settings'" class="mx-auto w-full max-w-3xl px-4 py-4 space-y-6">
-          <!-- Page identity — title + slug. Tabs layout + the shared editing
-               locale (switcher hidden — the language bar drives it). -->
-          <CroutonI18nInput
-            v-model="state.translations"
-            :fields="metaFields"
-            layout="tabs"
-            :active-locale="editingLocale"
-            hide-locale-switcher
-            :show-ai-translate="hasAI"
-            field-type="page"
+        <!-- Bare wrapper: the extracted tab owns its own layout (`mx-auto max-w-3xl
+             px-4 py-4`), so repeating those classes here applied the padding TWICE and
+             shifted every control 16px down and right. Matches the SeoTab wrapper. -->
+        <div v-show="activeTab === 'settings'">
+          <CroutonPagesEditorSettingsTab
+            v-model:translations="state.translations"
+            :editing-locale="editingLocale"
+            :meta-fields="metaFields"
+            :has-ai="hasAI"
             :field-options="fieldOptions"
             :field-placeholders="docFieldPlaceholders"
-          >
-            <template v-if="hasMetadata" #header>
-              <div class="flex items-center gap-3 text-xs text-muted">
-                <span v-if="createdByName" class="flex items-center gap-1">
-                  <UIcon name="i-lucide-user-plus" class="size-3" />
-                  {{ createdByName }} {{ createdTimeAgo }}
-                </span>
-                <span v-if="updatedByName && updatedByName !== createdByName" class="flex items-center gap-1">
-                  <UIcon name="i-lucide-pencil" class="size-3" />
-                  {{ updatedByName }} {{ updatedTimeAgo }}
-                </span>
-                <span v-else-if="(state as any).updatedAt && (state as any).updatedAt !== (state as any).createdAt" class="flex items-center gap-1">
-                  <UIcon name="i-lucide-pencil" class="size-3" />
-                  {{ t('pages.editor.updated', { time: updatedTimeAgo }) }}
-                </span>
-              </div>
-            </template>
-          </CroutonI18nInput>
-
-          <USeparator />
-
-          <CroutonPagesEditorSettingsPanel
+            :has-metadata="hasMetadata"
+            :created-by-name="createdByName"
+            :created-time-ago="createdTimeAgo"
+            :updated-by-name="updatedByName"
+            :updated-time-ago="updatedTimeAgo"
+            :updated-at="(state as any).updatedAt"
+            :created-at="(state as any).createdAt"
             :action="action"
             :visibility="state.visibility"
             :show-in-navigation="state.showInNavigation"
@@ -1250,13 +1169,13 @@ defineExpose({ state })
           <!-- Collection item picker (publishable item pages) -->
           <div v-if="isCollectionPage" class="px-4 pt-4 pb-2 shrink-0 border-b border-default">
             <UFormField
-              :label="t('pages.editor.selectItem', { name: selectedPageType?.name ? t(selectedPageType.name) : 'Item' })"
+              :label="t('pages.editor.selectItem', { name: selectedPageType?.name ? t(selectedPageType.name, selectedPageType.name) : t('pages.editor.item') })"
               name="config.itemId"
             >
               <CroutonFormReferenceSelect
                 v-model="collectionItemId"
                 :collection="collectionPageName"
-                :label="selectedPageType?.name ? t(selectedPageType.name) : undefined"
+                :label="selectedPageType?.name ? t(selectedPageType.name, selectedPageType.name) : undefined"
                 :label-key="collectionLabelKey"
               />
             </UFormField>
@@ -1327,55 +1246,21 @@ defineExpose({ state })
             <div v-else class="p-4 bg-muted/30 rounded-lg text-center text-sm text-muted">
               <UIcon name="i-lucide-info" class="size-5 mb-2" />
               <p>{{ t('pages.editor.noConfig') }}</p>
-              <p>{{ t('pages.editor.displaysComponent', { name: selectedPageType?.name ? t(selectedPageType.name) : '' }) }}</p>
+              <p>{{ t('pages.editor.displaysComponent', { name: selectedPageType?.name ? t(selectedPageType.name, selectedPageType.name) : '' }) }}</p>
             </div>
           </div>
         </div>
 
         <!-- ───────── SEO & social ───────── -->
-        <div v-show="activeTab === 'seo'" class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-4">
-          <!-- SEO title — placeholder is the real page title, so an empty SEO
-               title transparently falls back to it. -->
-          <UFormField :label="t('pages.fields.seoTitle', 'SEO title')" name="seoTitle">
-            <UInput
-              v-model="seoTitle"
-              size="sm"
-              class="w-full"
-              :placeholder="currentTitle || t('pages.editor.seoTitlePlaceholder', 'Defaults to the page title')"
-            />
-          </UFormField>
-          <UFormField :label="t('pages.fields.seoDescription', 'SEO description')" name="seoDescription">
-            <UTextarea v-model="seoDescription" :rows="3" size="sm" class="w-full" :placeholder="t('pages.editor.seoDescriptionPlaceholder', 'One-line summary for search & shares')" />
-            <!-- AI drafts the description from the title + page content (crouton-ai only) -->
-            <div v-if="hasAI" class="mt-2 flex justify-end">
-              <UButton
-                color="primary"
-                variant="soft"
-                size="xs"
-                icon="i-lucide-sparkles"
-                :loading="seoGenerating"
-                :label="t('pages.editor.seoGenerate', 'Generate with AI')"
-                @click="generateSeoDescription"
-              />
-            </div>
-          </UFormField>
-          <UFormField :label="t('pages.fields.ogImage')" name="ogImage">
-            <Suspense v-if="hasAssetsPicker">
-              <CroutonAssetsPicker v-model="selectedOgImageAssetId" @select="handleAssetSelect" />
-              <template #fallback>
-                <div class="h-20 rounded-lg border-2 border-dashed border-default animate-pulse" />
-              </template>
-            </Suspense>
-            <CroutonImageUpload v-else v-model="state.ogImage" size="sm" accept="image/*" />
-          </UFormField>
-          <UFormField :label="t('pages.fields.robots')" name="robots">
-            <USelect v-model="state.robots" :items="robotsOptions" value-key="value" size="sm" class="w-full" />
-          </UFormField>
-          <CroutonPagesEditorSeoPreview
+        <div v-show="activeTab === 'seo'">
+          <CroutonPagesEditorSeoTab
+            v-model:translations="state.translations"
+            v-model:og-image="state.ogImage"
+            v-model:robots="state.robots"
+            :editing-locale="editingLocale"
+            :current-title="currentTitle"
+            :has-ai="hasAI"
             :team-slug="teamSlugRef"
-            :translations="state.translations"
-            :og-image="state.ogImage"
-            :preview-locale="seoLocale"
           />
         </div>
       </div>

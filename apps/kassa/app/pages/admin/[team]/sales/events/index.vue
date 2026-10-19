@@ -9,7 +9,7 @@
  *
  * @route /admin/[team]/sales/events
  */
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '@fyit/crouton-sales/collections/events/types'
 
 definePageMeta({ middleware: ['auth'] })
 

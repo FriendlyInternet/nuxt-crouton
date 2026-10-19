@@ -52,6 +52,14 @@ export const demoBookingData = {
  * replaced with actual booking data when sending emails.
  */
 export function useBookingEmailVariables() {
+  const { t } = useT()
+
+  /** Translated label + description for the variable picker */
+  const describe = (key: string) => ({
+    label: t(`bookings.emailVariables.${key}.label`),
+    description: t(`bookings.emailVariables.${key}.description`)
+  })
+
   /**
    * All available booking email variables
    */
@@ -59,16 +67,14 @@ export function useBookingEmailVariables() {
     // Customer variables
     {
       name: 'customer_name',
-      label: 'Customer Name',
-      description: 'The name of the person who made the booking',
+      ...describe('customerName'),
       category: 'customer',
       icon: 'i-lucide-user',
       sample: demoBookingData.customer.name
     },
     {
       name: 'customer_email',
-      label: 'Customer Email',
-      description: 'The email address of the customer',
+      ...describe('customerEmail'),
       category: 'customer',
       icon: 'i-lucide-mail',
       sample: demoBookingData.customer.email
@@ -77,24 +83,21 @@ export function useBookingEmailVariables() {
     // Booking variables
     {
       name: 'booking_date',
-      label: 'Booking Date',
-      description: 'The date of the booking (formatted)',
+      ...describe('bookingDate'),
       category: 'booking',
       icon: 'i-lucide-calendar',
       sample: demoBookingData.booking.date
     },
     {
       name: 'booking_slot',
-      label: 'Time Slot',
-      description: 'The time slot(s) of the booking',
+      ...describe('bookingSlot'),
       category: 'booking',
       icon: 'i-lucide-clock',
       sample: demoBookingData.booking.slot
     },
     {
       name: 'booking_reference',
-      label: 'Booking Reference',
-      description: 'Unique booking reference number',
+      ...describe('bookingReference'),
       category: 'booking',
       icon: 'i-lucide-hash',
       sample: demoBookingData.booking.reference
@@ -103,48 +106,42 @@ export function useBookingEmailVariables() {
     // Location variables
     {
       name: 'location_name',
-      label: 'Location Name',
-      description: 'The name of the booking location',
+      ...describe('locationName'),
       category: 'location',
       icon: 'i-lucide-map-pin',
       sample: demoBookingData.location.name
     },
     {
       name: 'location_title',
-      label: 'Location Title',
-      description: 'The title of the booking location',
+      ...describe('locationTitle'),
       category: 'location',
       icon: 'i-lucide-building',
       sample: demoBookingData.location.title
     },
     {
       name: 'location_street',
-      label: 'Street Address',
-      description: 'The street address of the location',
+      ...describe('locationStreet'),
       category: 'location',
       icon: 'i-lucide-home',
       sample: demoBookingData.location.street
     },
     {
       name: 'location_city',
-      label: 'City',
-      description: 'The city of the location',
+      ...describe('locationCity'),
       category: 'location',
       icon: 'i-lucide-building-2',
       sample: demoBookingData.location.city
     },
     {
       name: 'location_address',
-      label: 'Full Address',
-      description: 'The complete address of the location',
+      ...describe('locationAddress'),
       category: 'location',
       icon: 'i-lucide-map',
       sample: demoBookingData.location.address
     },
     {
       name: 'location_content',
-      label: 'Location Content',
-      description: 'The content/description of the location',
+      ...describe('locationContent'),
       category: 'location',
       icon: 'i-lucide-file-text',
       sample: demoBookingData.location.content
@@ -153,24 +150,21 @@ export function useBookingEmailVariables() {
     // Team variables
     {
       name: 'team_name',
-      label: 'Team Name',
-      description: 'The name of the team/business',
+      ...describe('teamName'),
       category: 'team',
       icon: 'i-lucide-users',
       sample: demoBookingData.team.name
     },
     {
       name: 'team_email',
-      label: 'Team Email',
-      description: 'Contact email of the team/business',
+      ...describe('teamEmail'),
       category: 'team',
       icon: 'i-lucide-mail',
       sample: demoBookingData.team.email
     },
     {
       name: 'team_phone',
-      label: 'Team Phone',
-      description: 'Contact phone of the team/business',
+      ...describe('teamPhone'),
       category: 'team',
       icon: 'i-lucide-phone',
       sample: demoBookingData.team.phone

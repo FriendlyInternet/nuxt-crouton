@@ -55,7 +55,7 @@ const tabs = computed(() => [
       to: `/admin/${teamSlug.value}/team/redirects`
     },
     {
-      label: 'Email Templates',
+      label: t('emailTemplates.title'),
       icon: 'i-lucide-mail-open',
       to: `/admin/${teamSlug.value}/team/email-templates`
     },
@@ -83,6 +83,7 @@ const tabs = computed(() => [
         highlight
         highlight-color="primary"
         class="border-b border-default px-4"
+        :ui="{ root: 'overflow-x-auto [&>div]:min-w-max' }"
       />
     </template>
 

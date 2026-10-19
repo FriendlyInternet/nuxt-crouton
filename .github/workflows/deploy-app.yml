@@ -100,13 +100,13 @@ on:
 jobs:
   deploy:
     name: Deploy ${{ inputs.app }} (${{ inputs.environment }})
-    # Routed to the self-hosted box behind the AGENT_RUNNER toggle (#654/#658 — wrangler
-    # deploy is cross-platform Node; verified from macOS by the #654 proof run). The fork
-    # guard implements the runbook §5 policy: deploy-pocs.yml calls this on `pull_request`
-    # of pocs/**, so a fork PR must never reach the box — it routes back to GitHub-hosted
-    # structurally (fork PRs also get no secrets, but the guard keeps their code off our
-    # hardware in the first place). Delete the AGENT_RUNNER repo var to fall back.
-    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    # Runs on vars.HOSTED_RUNNER (unset = ubuntu-latest). Deploys use no AI, so they don't
+    # need the subscription box behind AGENT_RUNNER — split off when the mac-mini went
+    # away (#2275; history #654/#658). The fork guard implements the runbook §5 policy:
+    # deploy-pocs.yml calls this on `pull_request` of pocs/**, so a fork PR must never
+    # reach a self-hosted box if HOSTED_RUNNER is ever pointed at one.
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
     # GitHub deployment environment — kept as production/staging so any
     # environment-scoped secrets/protection from the existing setup still apply
     # (the Workers target is staging/prod independently, via inputs.environment).
@@ -124,8 +124,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       NODE_OPTIONS: '--max-old-space-size=8192'
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Hosted runners ship jq; a self-hosted mac starts bare (runbook §2a installs
       # node/pnpm/gh/wrangler but jq wasn't on the list). Self-heals via Homebrew —
       # already on the runner PATH through its `.path` file. No-op when jq exists.
@@ -138,12 +137,12 @@ jobs:
       # #1254/#1255). The deploy-<app>-<env> concurrency group above guarantees one
       # writer per dest; the dest set is bounded (apps × envs), so no disk creep. (#1258)
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           dest: ~/setup-pnpm-${{ inputs.app }}-${{ inputs.environment }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs['node-version'] }}
           cache: 'pnpm'
@@ -222,7 +221,7 @@ jobs:
         uses: ./.github/actions/warm-packages
 
       - name: Cache Nuxt build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ${{ inputs.workspace }}/${{ inputs.app }}/node_modules/.cache
@@ -257,6 +256,10 @@ jobs:
           # Gated on `review-pr`: an ordinary staging deploy is the trunk preview and must
           # stay overlay-free — and the bridge needs a PR to post to anyway.
           NUXT_PUBLIC_CROUTON_REVIEW: ${{ (inputs.environment == 'staging' && inputs['review-pr'] != '') && 'true' || '' }}
+          # SEARCH ENGINES (#2244) — only production may be indexed. Read by nuxt-site-config
+          # at build; non-indexable makes @nuxtjs/robots serve `Disallow: /` (staging + PR previews).
+          NUXT_SITE_ENV: ${{ inputs.environment == 'production' && 'production' || 'staging' }}
+          NUXT_SITE_INDEXABLE: ${{ inputs.environment == 'production' && 'true' || 'false' }}
         run: |
           set -o pipefail
           PR_NUM="${{ github.event.pull_request.number }}"
@@ -404,7 +407,7 @@ jobs:
         id: review-app-token
         if: ${{ inputs.environment == 'staging' && inputs.review-pr != '' }}
         continue-on-error: true
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
@@ -643,13 +646,15 @@ jobs:
       # review surface (deploy.config.json `reviewSurfaces`, else reviewLogin.landing), validates
       # the shot isn't blank/error, and commits the PNG(s) to writeups/ui-proposals/ — where the
       # #2172 sign-off gate looks. The push (App token) re-runs CI so that gate re-evaluates and
-      # finds the evidence; a ui-proposals-only change matches NO app watchPaths, so it does NOT
-      # re-deploy (no loop). Never fails the deploy — no capture ⇒ the gate withholds (honest).
+      # finds the evidence. That push DOES re-deploy any PR that already matches watchPaths (the
+      # path filters diff the whole PR, base..head), so a run triggered BY a capture commit skips
+      # capturing — one extra deploy round, then it stops (#2294). Never fails the deploy — no
+      # capture ⇒ the gate withholds (honest).
       - name: Mint token for review-capture push
         id: capture-token
         if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && steps.seed.outputs.email != '' }}
         continue-on-error: true
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
@@ -665,11 +670,17 @@ jobs:
           WORKSPACE: ${{ inputs.workspace }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
           GH_TOKEN_PUSH: ${{ steps.capture-token.outputs.token }}
         run: |
           set -o pipefail
           [ -n "$DEPLOY_URL" ] || { echo "no deploy url — skipping capture"; exit 0; }
+          # Loop guard (#2294): don't re-capture on the deploy our own capture commit triggered.
+          HEAD_MSG=$(GH_TOKEN="$GH_TOKEN_PUSH" gh api "repos/${REPO}/commits/${HEAD_SHA}" --jq '.commit.message' 2>/dev/null || true)
+          case "$HEAD_MSG" in
+            "chore(review): capture "*) echo "triggered by a capture commit — skipping (no capture loop, #2294)"; exit 0;;
+          esac
           npx playwright install chromium >/dev/null 2>&1 || true
           # Capture to a temp dir so the commit is done in a CLEAN clone, never the dirty deploy
           # workspace (build output / sync:ids-modified wrangler.jsonc would otherwise ride along).
@@ -730,7 +741,7 @@ jobs:
       - name: Upload smoke screenshot
         if: ${{ always() && steps.smoke.outputs.result != '' }}
         continue-on-error: true
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: smoke-${{ inputs.app }}
           path: screenshots/${{ inputs.app }}-smoke.png
@@ -773,7 +784,7 @@ jobs:
       # On PRs, post/update a sticky comment with the isolated staging URL.
       - name: Comment staging URL on PR
         if: ${{ inputs.environment != 'production' && github.event_name == 'pull_request' && steps.deploy.outputs.url != '' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const url = '${{ steps.deploy.outputs.url }}'

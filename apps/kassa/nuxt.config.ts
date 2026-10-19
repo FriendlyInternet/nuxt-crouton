@@ -16,7 +16,7 @@ export default defineNuxtConfig({
   // overlay under the `NUXT_PUBLIC_CROUTON_REVIEW` gate; without it a review
   // preview has nothing to pin a comment on (#2073). Gates itself off in a
   // normal production build.
-  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
+  modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -54,8 +54,6 @@ export default defineNuxtConfig({
     '@fyit/crouton-themes/riso',
     '@fyit/crouton-themes/eink',
     '@fyit/crouton-themes/blueprint',
-    './layers/sales',
-    './layers/pages'
   ],
   appConfig: {
     croutonApps: {

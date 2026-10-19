@@ -14,7 +14,7 @@
           :color="displayedLayout === layoutOption.value ? 'primary' : 'neutral'"
           :variant="displayedLayout === layoutOption.value ? 'solid' : 'ghost'"
           size="sm"
-          :aria-label="camelToTitleCase(layoutOption.value)"
+          :aria-label="t(`collection.layouts.${layoutOption.value}`)"
           :aria-pressed="displayedLayout === layoutOption.value"
           @click="selectLayout(layoutOption.value)"
         />
@@ -37,7 +37,7 @@
             variant="outline"
             size="sm"
             trailing-icon="i-lucide-chevron-down"
-            aria-label="Change layout"
+            :aria-label="t('collection.changeLayout')"
           />
         </UDropdownMenu>
 
@@ -126,7 +126,7 @@
       >
         <div class="text-center">
           <UIcon name="i-lucide-mouse-pointer-click" class="size-12 mb-3 opacity-30" />
-          <p class="text-sm">{{ t('collection.selectItem') || 'Select an item to edit' }}</p>
+          <p class="text-sm">{{ t('collection.selectItem') }}</p>
           <p class="text-xs text-muted mt-1">
             {{ t('collection.orPressN') || 'or press N to create new' }}
           </p>
@@ -284,7 +284,7 @@ const currentLayoutIcon = computed(() =>
 // Mobile switcher: same options as the desktop group, as a dropdown menu
 const switcherMenuItems = computed(() =>
   layoutOptions.value.map(o => ({
-    label: camelToTitleCase(o.value),
+    label: t(`collection.layouts.${o.value}`),
     icon: o.icon,
     onSelect: () => selectLayout(o.value)
   }))

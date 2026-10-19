@@ -6,7 +6,7 @@
  * - Has members in list = restricted to those members only
  */
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { getAllBookingsLocations } from '~~/layers/bookings/collections/locations/server/database/queries'
+import { getAllBookingsLocations } from '../../../../../collections/locations/server/database/queries'
 
 export default defineEventHandler(async (event) => {
   const { team, membership } = await resolveTeamAndCheckMembership(event)

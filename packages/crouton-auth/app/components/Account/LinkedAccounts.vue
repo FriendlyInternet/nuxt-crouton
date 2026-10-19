@@ -66,7 +66,7 @@ async function loadAccounts() {
   try {
     const result = await authClient.listAccounts()
     if (result.error) {
-      throw new Error(result.error.message ?? 'Failed to load accounts')
+      throw new Error(result.error.message ?? t('account.linked.failedToLoad'))
     }
     accounts.value = (result.data ?? []).map((a: {
       id: string
@@ -91,8 +91,8 @@ async function loadAccounts() {
       updatedAt: new Date(a.updatedAt)
     }))
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to load accounts'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('account.linked.failedToLoad')
+    notify.error(t('common.error'), { description: message })
   } finally {
     listLoading.value = false
   }
@@ -112,8 +112,8 @@ async function handleLink(provider: string) {
     await loginWithOAuth(provider)
     // This will redirect, so no need to handle success
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to link account'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('account.linked.failedToLink')
+    notify.error(t('common.error'), { description: message })
     linkLoading.value = null
   }
 }
@@ -122,21 +122,26 @@ async function handleLink(provider: string) {
 async function handleUnlink(provider: string) {
   unlinkLoading.value = provider
   try {
+    // better-auth 1.7 unlinks by the account row id, not the provider (#2223)
+    const account = getLinkedAccount(provider)
+    if (!account) {
+      throw new Error(t('account.linked.failedToUnlink'))
+    }
     const result = await authClient.unlinkAccount({
-      providerId: provider
+      accountId: account.id
     })
 
     if (result.error) {
-      throw new Error(result.error.message ?? 'Failed to unlink account')
+      throw new Error(result.error.message ?? t('account.linked.failedToUnlink'))
     }
 
-    notify.success('Account unlinked', { description: `Your ${getProviderInfo(provider).name} account has been disconnected.` })
+    notify.success(t('account.linked.unlinked'), { description: t('account.linked.unlinkedDescription', { provider: getProviderInfo(provider).name }) })
 
     // Remove from local list
     accounts.value = accounts.value.filter(a => a.provider !== provider)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to unlink account'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('account.linked.failedToUnlink')
+    notify.error(t('common.error'), { description: message })
   } finally {
     unlinkLoading.value = null
   }

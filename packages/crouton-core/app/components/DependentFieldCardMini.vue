@@ -1,4 +1,5 @@
 <script setup lang="ts">
+const { t } = useT()
 /**
  * DependentFieldCardMini - Display dependent field values with proper resolution
  *
@@ -102,7 +103,7 @@ const hasItems = computed(() => resolvedItems.value.length > 0)
       v-else-if="error"
       class="text-red-500 text-xs"
     >
-      Error loading
+      {{ t('errors.errorLoading') }}
     </span>
 
     <!-- Empty state -->
@@ -131,7 +132,7 @@ const hasItems = computed(() => resolvedItems.value.length > 0)
         color="neutral"
         variant="subtle"
       >
-        +{{ resolvedItems.length - 3 }} more
+        {{ t('common.moreCount', { count: resolvedItems.length - 3 }) }}
       </UBadge>
     </div>
   </div>

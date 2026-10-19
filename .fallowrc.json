@@ -19,6 +19,10 @@
     // graph reads them as unused. Same generated-code category as the two entries above
     // (28 such findings across 8 apps before this entry) — #1455.
     "**/layers/**/collections/**/types.ts",
+    // The same generated collection code, shipped by the package that owns it (#2278)
+    "packages/*/collections/**/app/components/**/*.vue",
+    "packages/*/collections/**/app/composables/**/*.ts",
+    "packages/*/collections/**/types.ts",
     // Loaded by crouton-core's nuxt.config at build time (join(process.cwd(), ...))
     "**/crouton.config.js",
     // Referenced from nuxt.config `css:` arrays, not imports
@@ -177,7 +181,10 @@
       "**/scripts/sync-wrangler-ids.mjs",
       "**/scripts/inject-wrangler-env.mjs",
       "**/layers/**/app/components/**/*.vue",
-      "**/layers/**/collections/**/server/**"
+      "**/layers/**/collections/**/server/**",
+      // …and the same generated code shipped by the package that owns it (#2278)
+      "packages/*/collections/**/app/components/**/*.vue",
+      "packages/*/collections/**/server/**"
     ]
   },
   "duplicates": {
@@ -192,6 +199,7 @@
       // Generated collection code (CRUD API routes, List/_Form, queries) — every collection is the
       // same crouton template, so cross-collection duplication is by design, not copy-paste (#1252)
       "**/layers/**/collections/**",
+      "packages/*/collections/**", // generated collections a package owns (#2278)
       // Generated per-app scaffold files — byte-identical across every crouton app/POC (#1252)
       "**/server/db/translations-ui.ts",
       "**/server/utils/_cf-stubs/**"

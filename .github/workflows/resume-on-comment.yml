@@ -19,7 +19,7 @@ jobs:
       !github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
       contains(github.event.issue.labels.*.name, 'status:blocked')
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: write
@@ -27,7 +27,7 @@ jobs:
       issues: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
 
@@ -43,7 +43,7 @@ jobs:
       # deterministic-merge fallback must survive this early exit.
       - name: Re-check the issue is still open
         id: state
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = context.payload.issue.number
@@ -71,7 +71,7 @@ jobs:
       - name: React 👀 — resume picked up
         if: steps.state.outputs.open == 'true'
         id: eyes
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             try {
@@ -96,7 +96,7 @@ jobs:
       # approval/answers in the thread). The label MUST be applied with the App token, or the
       # `labeled` event won't cascade to the decompose workflow (GITHUB_TOKEN events are suppressed,
       # #572). When we take this path we set `redispatch=true` and the claude agent step below skips.
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token-early
         if: steps.state.outputs.open == 'true'
         with:
@@ -106,7 +106,7 @@ jobs:
       - name: Re-dispatch a pi design-hold to the pi decomposer
         id: piredispatch
         if: steps.state.outputs.open == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token-early.outputs.token }}
           script: |
@@ -157,7 +157,7 @@ jobs:
         # Skip when we re-dispatched a pi design-hold above (#1828) — the pi decomposer builds it,
         # not this generic claude resume (which would just re-block and double-decompose).
         if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -182,7 +182,7 @@ jobs:
       # event would NOT reach schedule-waves and the chain stalls (the #572 first-attempt
       # regression). An App installation token is a non-GITHUB_TOKEN actor, so its merge
       # fires schedule-waves → close issue → release next workstream. (#535/#519 WS5.)
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         if: always()
         with:
@@ -203,7 +203,7 @@ jobs:
       - name: Merge the gate PR on approval
         id: mergegate
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -324,7 +324,7 @@ jobs:
       - name: Artifact-gate — fail if the resume produced nothing
         id: gate
         if: always() && steps.state.outputs.open == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           # Why the merge step passed over each candidate PR, if it did (#1663). Passed via
           # env, not `${{ }}` inside the script — the value is multi-line and interpolating
@@ -412,7 +412,7 @@ jobs:
       # is already explained by the artifact-gate above, so we don't duplicate it (#1216).
       - name: React outcome — 🚀 done / 😕 failed
         if: always() && steps.state.outputs.open == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const comment_id = context.payload.comment.id
@@ -448,7 +448,7 @@ jobs:
       # top of the job's `user.type != 'Bot'` guard).
       - name: Comment ✅ — visible success
         if: success() && steps.state.outputs.open == 'true' && steps.gate.outputs.newComment != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = context.payload.issue.number
@@ -466,7 +466,7 @@ jobs:
       # A cancelled resume (the 30-min timeout) must announce itself, not vanish silently (#1220).
       - name: Flag a timeout / cancellation
         if: cancelled()
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = context.payload.issue.number
@@ -508,10 +508,10 @@ jobs:
     steps:
       # Needed so the script can import the unit-tested matcher (scripts/approval.mjs) —
       # same pattern as approve-draft-pr.yml (#2051/#2094).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = context.payload.issue.number

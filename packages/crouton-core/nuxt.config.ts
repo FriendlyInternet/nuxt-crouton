@@ -1,8 +1,5 @@
 import { fileURLToPath } from 'node:url'
-import { join, dirname } from 'node:path'
-import { createRequire } from 'node:module'
-import { existsSync } from 'node:fs'
-import type { NitroConfig } from 'nitropack'
+import { join } from 'node:path'
 import type { LocaleObject } from '@nuxtjs/i18n'
 import { getCroutonLocales } from '@fyit/crouton-i18n/config-utils'
 
@@ -20,26 +17,6 @@ if (process.env.NODE_ENV !== 'production' && !_dependencies.has('crouton-core'))
   console.log('🍞 crouton:core ✓ Layer loaded')
 }
 
-// Resolve @crouton/auth package path (handles both installed and workspace:* scenarios)
-let croutonAuthPath: string | undefined
-try {
-  const require = createRequire(import.meta.url)
-  // Resolve the main export, then derive the team-auth path
-  const mainPath = require.resolve('@fyit/crouton-auth')
-  // mainPath is nuxt.config.ts in package root, so only need one dirname
-  const pkgRoot = dirname(mainPath)
-  const teamAuthPath = join(pkgRoot, 'server/utils/team-auth.ts')
-
-  // Verify the file exists
-  if (existsSync(teamAuthPath)) {
-    croutonAuthPath = teamAuthPath
-  } else {
-    console.warn('🍞 crouton:core @crouton/auth found but team-auth.ts missing at:', teamAuthPath)
-  }
-} catch {
-  // @crouton/auth not installed - will use fallback or error at runtime
-}
-
 export default defineNuxtConfig({
   // Auto-include i18n, auth, and admin layers
   // Order matters: i18n provides translation system that auth/admin consume
@@ -53,7 +30,7 @@ export default defineNuxtConfig({
     // Must be before @nuxthub/core — sets hub.blob = true as a default so apps
     // that only declare hub: { db: 'sqlite' } still get blob storage enabled.
     join(currentDir, 'modules/ensure-hub-blob'),
-    '@nuxthub/core', '@nuxt/ui', '@vueuse/nuxt', '@nuxt/image', join(currentDir, 'modules/ipx-blob'), '@nuxtjs/seo', join(currentDir, 'modules/manifest-injection')
+    '@nuxthub/core', '@nuxt/ui', '@vueuse/nuxt', '@nuxt/image', join(currentDir, 'modules/ipx-blob'), '@nuxtjs/seo'
   ],
 
   // Runtime config for server-side secrets
@@ -112,32 +89,17 @@ export default defineNuxtConfig({
     }
   },
 
-  // Inject crouton.config.js at build time for runtime access
-  hooks: {
-    'nitro:config': async (nitroConfig: NitroConfig) => {
-      const configPaths = [
-        join(process.cwd(), 'crouton.config.js'),
-        join(process.cwd(), 'crouton.config.js')
-      ]
-
-      for (const configPath of configPaths) {
-        if (existsSync(configPath)) {
-          try {
-            const config = await import(configPath)
-            nitroConfig.runtimeConfig = nitroConfig.runtimeConfig || {}
-            nitroConfig.runtimeConfig.public = nitroConfig.runtimeConfig.public || {}
-            nitroConfig.runtimeConfig.public.croutonConfig = config.default
-            console.log('🍞 crouton:core Loaded config from:', configPath)
-          } catch (err) {
-            console.warn('🍞 crouton:core Failed to load config:', err)
-          }
-          break
-        }
-      }
-    }
-  },
-
   css: [join(currentDir, 'app/assets/css/typography.css')],
+
+  // App chrome (admin, auth, account, onboarding) is never public content:
+  // keep it out of every app's sitemap and robots.txt (#2244). Staging is made
+  // non-indexable separately — deploy-app.yml sets NUXT_SITE_INDEXABLE=false.
+  sitemap: {
+    exclude: ['/admin/**', '/super-admin/**', '/auth/**', '/account', '/account/**', '/onboarding/**', '/dashboard/**']
+  },
+  robots: {
+    disallow: ['/admin', '/super-admin', '/auth', '/account', '/onboarding', '/dashboard']
+  },
 
   $meta: {
     description: 'Base CRUD layer for FYIT collections',
@@ -175,15 +137,10 @@ export default defineNuxtConfig({
     '#crouton/types': join(currentDir, 'app/types/collections.ts')
   },
 
-  // Make registry available and auto-import server utils
+  // Auto-import server utils
   nitro: {
     imports: {
       dirs: [join(currentDir, 'server/utils')]
-    },
-    alias: {
-      '#crouton/registry': './registry',
-      // Team auth uses @crouton/auth (Better Auth) when available
-      ...(croutonAuthPath && { '#crouton/team-auth': croutonAuthPath })
     }
   }
 })

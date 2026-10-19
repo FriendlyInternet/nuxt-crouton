@@ -131,12 +131,12 @@ const defaultNavItems = computed<NavigationMenuItem[][]>(() => {
         to: `${baseUrl}/members`
       },
       {
-        label: t('teams.invitationsShort') || t('teams.invitations') || 'Invitations',
+        label: t('teams.invitations'),
         icon: 'i-lucide-mail',
         to: `${baseUrl}/invitations`
       },
       {
-        label: 'Email Templates',
+        label: t('teams.emailTemplates'),
         icon: 'i-lucide-mail-open',
         to: `${baseUrl}/team/email-templates`
       }
@@ -251,7 +251,7 @@ const navItems = computed(() => props.navigationItems ?? defaultNavItems.value)
         v-if="hasThemePicker && !collapsed && canSwitchTheme"
         class="px-3 pt-2 pb-1 flex items-center gap-2"
       >
-        <span class="text-xs text-muted">Theme</span>
+        <span class="text-xs text-muted">{{ t('account.theme') }}</span>
         <component :is="themeCompactPicker" size="xs" />
       </div>
 

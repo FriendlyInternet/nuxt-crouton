@@ -12,7 +12,6 @@
     "postinstall": "nuxt prepare 2>/dev/null || true"
   },
   "dependencies": {
-    "@fyit/crouton": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-sales": "workspace:*",
     "drizzle-orm": "^0.45.1",

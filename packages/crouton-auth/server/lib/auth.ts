@@ -632,7 +632,14 @@ function buildPlugins(
     // Admin plugin - user management (ban, impersonate, revoke sessions, etc.)
     admin({
       defaultRole: 'user',
-      adminRoles: ['admin']
+      adminRoles: ['admin'],
+      // Our columns predate the plugin's names (crouton-admin reads them directly).
+      // better-auth 1.7 validates the schema on every request and 500s on a
+      // missing field, so map its fields onto ours instead of migrating (#2223).
+      schema: {
+        user: { fields: { banReason: 'bannedReason', banExpires: 'bannedUntil' } },
+        session: { fields: { impersonatedBy: 'impersonatingFrom' } }
+      }
     }),
 
     // Password breach checking via Have I Been Pwned API
