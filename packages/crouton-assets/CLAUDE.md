@@ -59,9 +59,13 @@ migrations. The manifest sets `ownsCollections: true` with layer `crouton` / col
 so `crouton config` refuses `crouton/assets`. Changing a column = edit
 `collections/assets/server/database/schema.ts` here, then `db:generate` in each app.
 
-**Known gap (#2311):** an app field with `"refTarget": "assets"` is refused by the CLI, because
-the generator only references collections the app generates. Use an `image`/`file` field (renders
-`CroutonAssetsPicker`, stores the asset id) until #2311 lands.
+An app collection may reference the library: `"imageId": { "type": "string", "refTarget": "assets" }`
+generates a query that joins `croutonAssets` (imported from this package's
+`./collections/assets/server/database/schema` export) and a form picker / list cell bound to the
+`croutonAssets` collection key (#2311). `image`/`file` fields still work for a plain asset id.
+
+`server/plugins/query-registry.ts` registers `croutonAssets` in the process-wide query registry so
+crouton-pages' public collection endpoints can serve it without the app generating anything (#2309).
 
 ## Usage
 

@@ -24,6 +24,8 @@
     },
     "./schemas/*": "./schemas/*",
     "./collections/*/types": "./collections/*/types.ts",
+    "./collections/*/server/database/schema": "./collections/*/server/database/schema.ts",
+    "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts",
     "./server/utils/generate-print-queues": {
       "import": "./server/utils/generate-print-queues.ts",
       "types": "./server/utils/generate-print-queues.ts"

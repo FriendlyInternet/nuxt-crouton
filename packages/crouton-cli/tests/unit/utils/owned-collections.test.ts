@@ -114,3 +114,79 @@ describe('real crouton-assets manifest', () => {
     expect(findCollectionOwner('media', 'assets', [assetsManifest as any])).toBeNull()
   })
 })
+
+/**
+ * #2311 — a field may reference a collection a package owns.
+ *
+ * `refTarget: "assets"` must resolve to the owning package's layer (for the table name the
+ * join uses: `croutonAssets`) and to the package's schema export (for the import the generated
+ * queries file emits). Only packages the app actually EXTENDS count: an import to a package
+ * the app does not have would fail at build, which is the opaque failure #1957 removed.
+ */
+import { ownedRefTargets, ownedRefTargetNames } from '../../../lib/utils/owned-collections'
+import bookingsManifest from '../../../../crouton-bookings/crouton.manifest'
+import pagesManifest from '../../../../crouton-pages/crouton.manifest'
+import { existsSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+describe('ownedRefTargets', () => {
+  it('maps an owned collection, by its plural directory name, to its layer and schema export', () => {
+    const targets = ownedRefTargets(manifests, ['crouton-core', 'crouton-sales'])
+    expect(targets.get('products')).toEqual({
+      layer: 'sales',
+      packageName: '@fyit/crouton-sales',
+      importPath: '@fyit/crouton-sales/collections/products/server/database/schema',
+    })
+    // The manifest says `orderItem`; the directory (and so the refTarget) is `orderitems`.
+    expect(targets.get('orderitems')?.importPath).toBe('@fyit/crouton-sales/collections/orderitems/server/database/schema')
+  })
+
+  it('ignores an owning package the app does not extend', () => {
+    expect(ownedRefTargets(manifests, ['crouton-core']).size).toBe(0)
+  })
+
+  it('ignores a manifest that does not own its collections', () => {
+    // `bookings` here is the not-yet-migrated shape: the app generates those itself.
+    expect(ownedRefTargets(manifests, ['crouton-bookings']).has('bookings')).toBe(false)
+  })
+
+  it('ownedRefTargetNames accepts both the singular and the plural spelling', () => {
+    const names = ownedRefTargetNames(ownedRefTargets(manifests, ['crouton-sales']))
+    expect(names.has('product')).toBe(true)
+    expect(names.has('products')).toBe(true)
+    expect(names.has('orderitem')).toBe(true)
+    expect(names.has('orderitems')).toBe(true)
+  })
+
+  it('drops a directory name two extended packages both ship — a bare refTarget is ambiguous', () => {
+    const both = ownedRefTargets([salesManifest, bookingsManifest] as any[], ['crouton-sales', 'crouton-bookings'])
+    expect(both.has('locations')).toBe(false)
+    expect(both.get('products')?.layer).toBe('sales')
+    expect(both.get('bookings')?.layer).toBe('bookings')
+    // Extend only one of them and its locations are addressable again.
+    expect(ownedRefTargets([salesManifest, bookingsManifest] as any[], ['crouton-bookings']).get('locations')?.layer).toBe('bookings')
+  })
+
+  it('resolves the assets collection to the crouton layer (its table is croutonAssets)', () => {
+    const targets = ownedRefTargets([assetsManifest as any], ['crouton-assets'])
+    expect(targets.get('assets')).toEqual({
+      layer: 'crouton',
+      packageName: '@fyit/crouton-assets',
+      importPath: '@fyit/crouton-assets/collections/assets/server/database/schema',
+    })
+  })
+
+  // Run the rule over the corpus: every import path it would emit for a shipping package
+  // must point at a schema file that exists, or the generated app fails to build.
+  it('every shipping package-owned collection has the schema file its import path names', () => {
+    const shipping = [salesManifest, bookingsManifest, pagesManifest, assetsManifest] as any[]
+    const targets = ownedRefTargets(shipping, shipping.map(m => m.id))
+    // 11 sales + 5 bookings + 1 pages + 1 assets = 18, minus BOTH `locations` entries
+    // (sales and bookings each ship one, so the bare name is ambiguous)
+    expect(targets.size).toBe(16)
+    for (const [, t] of targets) {
+      const rel = t.importPath.replace(/^@fyit\//, '') + '.ts'
+      expect(existsSync(resolve(__dirname, '../../../..', rel)), rel).toBe(true)
+    }
+  })
+})

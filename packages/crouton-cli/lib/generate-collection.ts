@@ -17,7 +17,8 @@ import { addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-co
 import { resolveExtendedPackages } from './utils/extended-packages.ts'
 import { addNamedSchemaExport, getSchemaPath } from './utils/update-schema-index.ts'
 import { validateRefTargets } from './utils/validate-ref-targets.ts'
-import { assertNoOwnedCollections } from './utils/owned-collections.ts'
+import { assertNoOwnedCollections, ownedRefTargets, ownedRefTargetNames, type OwnedRefTarget } from './utils/owned-collections.ts'
+import { resolveRefCollectionKey } from './utils/ref-collection.ts'
 import { generateMigrations, DuplicateTableError } from './utils/generate-migrations.ts'
 import { addToAppConfig, resolveAppConfigPath } from './utils/update-app-config.ts'
 import { loadFields } from './utils/load-fields.ts'
@@ -164,6 +165,7 @@ function computeDetection(
   collectionConfig: Record<string, any> | null,
   detectors: Map<string, any>,
   layerCamelCase: string,
+  collectionLayerMap?: Map<string, string>,
 ): DetectionResult {
   const allNonIdFields = fields.filter(f => f.name !== 'id')
 
@@ -203,11 +205,12 @@ function computeDetection(
       })
     : []) as unknown as DetectedField[]
 
-  // Pre-compute resolvedCollection for refTarget asset fields (used by contribution)
+  // Pre-compute resolvedCollection for refTarget asset fields (used by contribution).
+  // Through the TARGET's layer: `refTarget: "assets"` is `croutonAssets`, whatever layer
+  // the referencing collection lives in (#2311).
   for (const f of assetFields) {
     if (f.refTarget && !f.resolvedCollection) {
-      const refCases = toCase(f.refTarget as string)
-      f.resolvedCollection = `${layerCamelCase}${refCases.pascalCasePlural}`
+      f.resolvedCollection = resolveRefCollectionKey(f.refTarget as string, layerCamelCase, collectionLayerMap)
     }
   }
 
@@ -865,7 +868,7 @@ async function applyManifestEnhancements(params: {
   // Discover manifests (cached after first call) and compute detection results
   const manifests = await discoverManifests()
   const detectors = await getGeneratorDetectors(manifests)
-  data.detected = computeDetection(fields, collectionConfig, detectors, layerCamelCase)
+  data.detected = computeDetection(fields, collectionConfig, detectors, layerCamelCase, data.collectionLayerMap)
 
   // Run contribution functions and attach enhancement results to data.
   // Include: the packages the app extends (#2286 — the only on-switch; core brings
@@ -1021,7 +1024,9 @@ async function createCollectionDirs(base: string, apiPath: string, hierarchy: Hi
 
 // Map every configured collection name to its layer (used by the queries
 // generator to resolve cross-collection references).
-function buildCollectionLayerMap(config: Record<string, any> | null): Map<string, string> {
+// Package-owned collections (#2311) are added by plural directory name; the app's own
+// entries win on a clash (an app `shop/assets` next to the assets package stays the app's).
+function buildCollectionLayerMap(config: Record<string, any> | null, owned?: Map<string, OwnedRefTarget>): Map<string, string> {
   const map = new Map<string, string>()
   if (config?.targets) {
     for (const t of config.targets) {
@@ -1029,6 +1034,9 @@ function buildCollectionLayerMap(config: Record<string, any> | null): Map<string
         map.set(c.toLowerCase(), t.layer)
       }
     }
+  }
+  for (const [dir, target] of owned ?? []) {
+    if (!map.has(dir)) map.set(dir, target.layer)
   }
   return map
 }
@@ -1038,12 +1046,14 @@ function buildCollectionLayerMap(config: Record<string, any> | null): Map<string
 // `buildCollectionLayerMap`) is keyed by the collection name as written. apps/velo configures
 // `location` and its schema correctly says `refTarget: "locations"`; checking only the config
 // key would reject that valid, shipping schema. Verified by scanning every schema in the repo.
-function buildKnownRefTargets(config: Record<string, any> | null): Set<string> {
+// Plus every collection an extended package owns (#2311), in both spellings.
+function buildKnownRefTargets(config: Record<string, any> | null, owned?: Map<string, OwnedRefTarget>): Set<string> {
   const names = new Set<string>()
   for (const key of buildCollectionLayerMap(config).keys()) {
     names.add(key)
     names.add(toCase(key).plural.toLowerCase())
   }
+  for (const name of ownedRefTargetNames(owned ?? new Map())) names.add(name)
   return names
 }
 
@@ -1062,8 +1072,10 @@ function buildCoreScaffoldFiles(params: {
   layerPascalCase: string
   hierarchy: HierarchyConfig
   sortable: SortableConfig
+  /** refTarget (plural dir) → the owning package's schema export (#2311) */
+  owned?: Map<string, OwnedRefTarget>
 }): GeneratedFile[] {
-  const { base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable } = params
+  const { base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable, owned } = params
 
   // All endpoints now use @crouton/auth for team-based authentication
   const files: GeneratedFile[] = [
@@ -1098,7 +1110,7 @@ function buildCoreScaffoldFiles(params: {
     },
     {
       path: path.join(base, 'server', 'database', 'queries.ts'),
-      content: generateQueries(data, config, layer, buildCollectionLayerMap(config))
+      content: generateQueries(data, config, layer, data.collectionLayerMap ?? buildCollectionLayerMap(config, owned), owned)
     },
     {
       path: path.join(base, 'server', 'database', 'schema.ts'),
@@ -1330,7 +1342,10 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   // branch and emit an import to a collection that does not exist, turning a local, obvious
   // mistake into an opaque build failure minutes later (the #1825 chores case). We hold the full
   // collection map right here, so this is the cheapest possible place to catch it.
-  validateRefTargets(fields, buildKnownRefTargets(config), collection)
+  // A collection an EXTENDED package owns (`refTarget: "assets"`) is a valid target too (#2311):
+  // the queries file imports its table from the package, the UI uses its registered key.
+  const owned = ownedRefTargets(await discoverManifests(), resolveExtendedPackages(process.cwd()))
+  validateRefTargets(fields, buildKnownRefTargets(config, owned), collection)
 
   // REFUSE a collection a package ships end to end (#2278) — a second copy would fork it.
   assertNoOwnedCollections({ targets: [{ layer, collections: [collection] }] }, await discoverManifests())
@@ -1351,6 +1366,8 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   // Typed as Record<string, any> so contribution results can be attached dynamically
   const data: Record<string, any> = buildGeneratorData({ layer, collection, fields, hierarchy, sortable, collab, config, collectionConfig })
   const { layerPascalCase, layerCamelCase } = data
+  // refTarget → owning layer, for every generator that turns a reference into a collection key
+  data.collectionLayerMap = buildCollectionLayerMap(config, owned)
 
   // Manifest-driven detection + contributions (may auto-detect the form component)
   collectionConfig = await applyManifestEnhancements({ data, fields, config, collectionConfig, dialect, collection })
@@ -1366,7 +1383,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
 
   // Generate all files using modules
   const files: GeneratedFile[] = [
-    ...buildCoreScaffoldFiles({ base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable }),
+    ...buildCoreScaffoldFiles({ base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable, owned }),
     ...await buildRepeaterComponentFiles(base, fields, data),
     ...buildSeedFiles({ base, data, config, seed, seedCount }),
     ...(tests ? buildCollectionTestFiles({ base, data, config, cases, layerPascalCase }) : [])
