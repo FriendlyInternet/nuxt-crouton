@@ -3,18 +3,19 @@ description: >-
   Everything the pi agent pipeline used to inherit from the mac-mini's hand-set-up box
   (#2275), reproduced on an ephemeral GitHub-hosted runner: a PINNED pi, a PINNED Claude
   Code CLI, and two preflights that prove — in seconds, before the long pi run — that the
-  subscription token answers and that pi registers the `pi-claude-cli` provider. pi installs
+  subscription token answers and that pi registers the `claude-bridge` provider. pi installs
   the extensions `.pi/settings.json` lists by itself, but ONLY when the project is trusted
   (`--approve`); the first hosted run invoked pi without it and died with
-  `Unknown provider "pi-claude-cli"`. The provider preflight runs trusted, so it also
-  warms that install.
+  `Unknown provider`. The provider preflight runs trusted, so it also warms that install.
+  (The second hosted run registered the OLD extension, pi-claude-cli, and then every turn
+  ended silently — it is dead against pi 1.x; #2275 switched to pi-claude-bridge.)
 
 inputs:
   oauth-token:
     description: "CLAUDE_CODE_OAUTH_TOKEN — the long-lived token from `claude setup-token` (#2119). Composite actions can't read secrets; pass it in."
     required: true
   pi-version:
-    description: "@earendil-works/pi-coding-agent version. PINNED: the box ran a manifest-pinned pi; an unpinned CI pi changes the pipeline's behaviour with no diff in this repo. 1.3.0 verified to register pi-claude-cli 0.3.1 (17 Claude models)."
+    description: "@earendil-works/pi-coding-agent version. PINNED: the box ran a manifest-pinned pi; an unpinned CI pi changes the pipeline's behaviour with no diff in this repo. 1.3.0 verified with pi-claude-bridge 0.9.3 (needs pi ≥ 0.86.1): headless `--print` answers."
     required: false
     default: "1.3.0"
   claude-version:
@@ -55,17 +56,17 @@ runs:
         esac
 
     # `--approve` trusts .pi/settings.json, which makes pi install the listed extensions into
-    # <repo>/.pi/npm (pi writes its own .gitignore there) and register pi-claude-cli. Every pi
+    # <repo>/.pi/npm (pi writes its own .gitignore there) and register claude-bridge. Every pi
     # invocation in the workflows passes --approve too; this step is the assertion that the
-    # pi ↔ pi-claude-cli version pair still works, with pi's own `--list-models` as the witness.
-    - name: Preflight — pi registers the pi-claude-cli provider
+    # pi ↔ pi-claude-bridge version pair still works, with pi's own `--list-models` as the witness.
+    - name: Preflight — pi registers the claude-bridge provider
       shell: bash
       run: |
         set -euo pipefail
         MODELS="$(pi --approve --list-models 2>&1 || true)"
-        if ! grep -q '^pi-claude-cli ' <<< "$MODELS"; then
+        if ! grep -q '^claude-bridge ' <<< "$MODELS"; then
           echo "$MODELS" | tail -n 30
-          echo "::error::pi does not list a pi-claude-cli provider — the extensions in .pi/settings.json did not load (pi/pi-claude-cli version pair incompatible, or the install failed). Nothing on the subscription can run."
+          echo "::error::pi does not list a claude-bridge provider — the extensions in .pi/settings.json did not load (pi/pi-claude-bridge version pair incompatible, or the install failed). Nothing on the subscription can run."
           exit 1
         fi
-        echo "preflight: pi-claude-cli provider registered ($(grep -c '^pi-claude-cli ' <<< "$MODELS") models)"
+        echo "preflight: claude-bridge provider registered ($(grep -c '^claude-bridge ' <<< "$MODELS") models)"

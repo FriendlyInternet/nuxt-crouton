@@ -6,10 +6,10 @@ name: Work issue (pi.dev · single-use worker)
 #   • Trigger — the `work-this` label on a LEAF issue (not `delegate*`), applied by a human or,
 #     later, by the decomposer via the Harness App token (nuxt-harness[bot] → passes the guard).
 #   • Task — the prompt IMPLEMENTS that one leaf and opens a PR; NO /task-decompose, NO in-process
-#     subagent tree. Each run is one-shot — which is what pi-claude-cli can actually drive.
+#     subagent tree. Each run is one-shot — which is what the Claude Code bridge can actually drive.
 # ⚠️ CLEANUP PENDING (#1686): many inherited comments/vars below still say "decompose"/"decompose-pi"
 #   and describe the tree flow — they are stale here. Functional edits (trigger, if, prompt) are done;
-#   the comment sweep + on-box test (label a leaf → PR on pi-claude-cli) are the remaining WS1 items.
+#   the comment sweep + on-box test (label a leaf → PR on claude-bridge) are the remaining WS1 items.
 # ── original decompose-flow header follows (context for the shared machinery) ──
 
 # WS4 (#1004) of #669 — the code-writing pipeline on pi.dev. A twin of
@@ -78,16 +78,16 @@ on:
         required: true
         type: string
       model:
-        description: "Model for pi. Default claude-sonnet-5 on the Claude SUBSCRIPTION (provider=pi-claude-cli)."
+        description: "Model for pi. Default claude-sonnet-5 on the Claude SUBSCRIPTION (provider=claude-bridge)."
         required: false
         default: "claude-sonnet-5"
         type: string
       provider:
-        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the `claude` CLI + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
+        description: "pi provider. Default claude-bridge = Claude SUBSCRIPTION via Claude Code + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275; replaced the silent pi-claude-cli). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
         required: false
-        default: "pi-claude-cli"
+        default: "claude-bridge"
         type: choice
-        options: ["pi-claude-cli", "zai", "anthropic"]
+        options: ["claude-bridge", "zai", "anthropic"]
   # Single-use trigger (#1685/#1686): a human OR the decomposer (via the Harness App token, so
   # it's nuxt-harness[bot]-actored and passes the bot-actor guard + cascades) applies `work-this`
   # to a LEAF issue → this one-shot worker implements it and opens a PR. We fire on EVERY labeled
@@ -244,8 +244,8 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # GitHub-hosted runners (#2275) have no `claude` login. pi's `pi-claude-cli` provider
-      # drives the Claude SUBSCRIPTION by spawning `claude -p`. setup-pi installs pinned pi + CLI and
+      # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
+      # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
       # proves the token answers + the provider registers BEFORE the 45-minute pi run — not after it (the #1849 "produced
       # nothing" shape, discovered half an hour too late).
       - name: Set up pi + Claude CLI (subscription)
@@ -303,12 +303,12 @@ jobs:
           # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). delegate-hard
           # still escalates, but by MODEL (default → hard) on the same provider — no metered lane.
           # Headless subscription auth on a GitHub-hosted runner (#2275): CLAUDE_CODE_OAUTH_TOKEN
-          # (claude setup-token, 1y) authenticates the `claude` CLI that pi-claude-cli spawns;
+          # (claude setup-token, 1y) authenticates the Claude Code child that claude-bridge spawns;
           # the CLI itself is installed + preflighted by setup-pi above (#2119).
           # #2161: the two models come from the resolve step (.claude/pipeline-models.json), not
           # a hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
           PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
-          PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
+          PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           # WS2 (#1695): the integration branch parsed off the issue's pipeline block (empty → main).
@@ -436,7 +436,7 @@ jobs:
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
           PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
-          PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
+          PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
         run: |
           set -uo pipefail
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"

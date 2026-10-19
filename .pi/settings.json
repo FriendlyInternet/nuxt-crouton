@@ -1,6 +1,6 @@
 {
-  "$comment": "Headless CI profile (#1019/#1004) — only pipeline-critical + telemetry extensions. pi merges this project file OVER ~/.pi/agent/settings.json, and `packages` (an array) REPLACES the global list, so CI loads exactly these 8 — notably WITHOUT pi-ask-user / pi-interactive-shell, so a headless run can't stall-and-ask (the #839 failure). pi-ralph-wiggum gives the persistence loop. defaultProvider is 'pi-claude-cli' — headless runs drive the Claude SUBSCRIPTION by spawning the `claude` CLI (#1669, everything-on-the-subscription). On GitHub-hosted runners the CLI is installed and its CLAUDE_CODE_OAUTH_TOKEN preflighted by .github/actions/setup-pi before pi starts (#2275); without that step `claude` is absent and this provider fails.",
-  "defaultProvider": "pi-claude-cli",
+  "$comment": "Headless CI profile (#1019/#1004) — only pipeline-critical + telemetry extensions. pi merges this project file OVER ~/.pi/agent/settings.json, and `packages` (an array) REPLACES the global list, so CI loads exactly these 8, PINNED (pi docs: a versioned npm spec is pinned; unpinned entries silently float to whatever npm serves on the day a runner is provisioned — #2275 bumped them deliberately, bump them deliberately again) — notably WITHOUT pi-ask-user / pi-interactive-shell, so a headless run can't stall-and-ask (the #839 failure). pi-ralph-wiggum gives the persistence loop. defaultProvider is 'claude-bridge' (npm:pi-claude-bridge, maintained; drives Claude Code via the Agent SDK) — headless runs use the Claude SUBSCRIPTION (#1669, everything-on-the-subscription). It REPLACED npm:pi-claude-cli in #2275: that extension (unchanged since 2026-03) registers fine against pi 1.x but every turn ends silently with no output — the #1764/#1849 'produced nothing' shape, reproduced locally. On GitHub-hosted runners the `claude` CLI is installed and its CLAUDE_CODE_OAUTH_TOKEN preflighted by .github/actions/setup-pi before pi starts; without that step `claude` is absent and this provider fails. Exported ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN / ANTHROPIC_BASE_URL would redirect the child — never set them on the pi step.",
+  "defaultProvider": "claude-bridge",
   "defaultThinkingLevel": "medium",
   "quietStartup": true,
   "enableInstallTelemetry": false,
@@ -12,13 +12,13 @@
     "signals": { "traces": true, "metrics": false, "logs": false }
   },
   "packages": [
-    "npm:pi-subagents",
-    "npm:pi-mcp-adapter",
-    "npm:pi-claude-cli",
-    "npm:pi-otel",
-    "npm:@jademind/pi-telemetry",
-    "npm:@tmustier/pi-usage-extension",
-    "npm:pi-prompt-template-model",
-    "npm:@tmustier/pi-ralph-wiggum"
+    "npm:pi-subagents@0.79.1",
+    "npm:pi-mcp-adapter@5.3.2",
+    "npm:pi-claude-bridge@0.9.3",
+    "npm:pi-otel@0.3.0",
+    "npm:@jademind/pi-telemetry@0.1.4",
+    "npm:@tmustier/pi-usage-extension@0.9.5",
+    "npm:pi-prompt-template-model@0.12.3",
+    "npm:@tmustier/pi-ralph-wiggum@0.2.4"
   ]
 }

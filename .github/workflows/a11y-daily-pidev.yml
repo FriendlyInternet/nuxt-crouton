@@ -41,16 +41,16 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi. Default claude-haiku-4-5 on the Claude SUBSCRIPTION (provider=pi-claude-cli). glm-5.2 available via provider=zai if you want the GLM plan."
+        description: "Model for pi. Default claude-haiku-4-5 on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
         required: false
         default: "claude-haiku-4-5"
         type: string
       provider:
-        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the `claude` CLI + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
+        description: "pi provider. Default claude-bridge = Claude SUBSCRIPTION via Claude Code + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275; replaced the silent pi-claude-cli; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
         required: false
-        default: "pi-claude-cli"
+        default: "claude-bridge"
         type: choice
-        options: ["pi-claude-cli", "zai", "anthropic"]
+        options: ["claude-bridge", "zai", "anthropic"]
 
 concurrency:
   group: a11y-daily-pidev
@@ -89,8 +89,8 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # GitHub-hosted runners (#2275) have no `claude` login. pi's `pi-claude-cli` provider
-      # drives the Claude SUBSCRIPTION by spawning `claude -p`. setup-pi installs pinned pi + CLI and
+      # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
+      # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
       # proves the token answers + the provider registers before the pi run.
       - name: Set up pi + Claude CLI (subscription)
         uses: ./.github/actions/setup-pi
@@ -99,7 +99,7 @@ jobs:
 
       # ── The agent: pi.dev, REPORTS-ONLY ────────────────────────────────────────────
       # env carries NO GH_TOKEN/GITHUB_TOKEN (reports-only) and NO metered key. Provider
-      # lanes: `pi-claude-cli` (DEFAULT, #1669) = Claude SUBSCRIPTION via the `claude` CLI —
+      # lanes: `claude-bridge` (DEFAULT, #1669/#2275) = Claude SUBSCRIPTION via Claude Code —
       # this REVERSES the old "OAuth must not back CI" rule on the owner's instruction that
       # Anthropic now permits it. `zai` = GLM Coding Plan (flat-rate); `anthropic` = metered
       # PI_PROVIDER_KEY. Skills (#888): the `.pi/skills` symlink bridge does NOT load — pi's
@@ -108,7 +108,7 @@ jobs:
       - id: pi
         env:
           PI_MODEL: ${{ inputs.model || 'claude-haiku-4-5' }}
-          PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
+          PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           # Headless subscription auth (#2119/#2275): the long-lived OAuth token (claude
           # setup-token, 1y) the CLI reads from env; installed + preflighted by setup-pi.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
