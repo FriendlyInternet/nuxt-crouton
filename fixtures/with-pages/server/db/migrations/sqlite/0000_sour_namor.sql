@@ -1,3 +1,15 @@
+CREATE TABLE `main_items` (
+	`id` text PRIMARY KEY NOT NULL,
+	`teamId` text NOT NULL,
+	`owner` text NOT NULL,
+	`name` text NOT NULL,
+	`done` integer,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	`createdBy` text NOT NULL,
+	`updatedBy` text NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE `account` (
 	`id` text PRIMARY KEY NOT NULL,
 	`userId` text NOT NULL,
@@ -34,21 +46,6 @@ CREATE INDEX `auth_email_log_type_idx` ON `auth_email_log` (`emailType`);--> sta
 CREATE INDEX `auth_email_log_status_idx` ON `auth_email_log` (`status`);--> statement-breakpoint
 CREATE INDEX `auth_email_log_recipient_idx` ON `auth_email_log` (`recipientEmail`);--> statement-breakpoint
 CREATE INDEX `auth_email_log_created_idx` ON `auth_email_log` (`createdAt`);--> statement-breakpoint
-CREATE TABLE `crouton_redirects` (
-	`id` text PRIMARY KEY NOT NULL,
-	`teamId` text NOT NULL,
-	`owner` text NOT NULL,
-	`fromPath` text NOT NULL,
-	`toPath` text NOT NULL,
-	`statusCode` text NOT NULL,
-	`isActive` integer NOT NULL,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
-	`createdBy` text NOT NULL,
-	`updatedBy` text NOT NULL
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `crouton_redirects_team_from_path_idx` ON `crouton_redirects` (`teamId`,`fromPath`);--> statement-breakpoint
 CREATE TABLE `domain` (
 	`id` text PRIMARY KEY NOT NULL,
 	`organizationId` text NOT NULL,
@@ -83,18 +80,6 @@ CREATE TABLE `invitation` (
 CREATE INDEX `invitation_email_idx` ON `invitation` (`email`);--> statement-breakpoint
 CREATE INDEX `invitation_org_idx` ON `invitation` (`organizationId`);--> statement-breakpoint
 CREATE INDEX `invitation_status_idx` ON `invitation` (`status`);--> statement-breakpoint
-CREATE TABLE `main_items` (
-	`id` text PRIMARY KEY NOT NULL,
-	`teamId` text NOT NULL,
-	`owner` text NOT NULL,
-	`name` text NOT NULL,
-	`done` integer,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
-	`createdBy` text NOT NULL,
-	`updatedBy` text NOT NULL
-);
---> statement-breakpoint
 CREATE TABLE `member` (
 	`id` text PRIMARY KEY NOT NULL,
 	`userId` text NOT NULL,
@@ -125,36 +110,6 @@ CREATE INDEX `organization_slug_idx` ON `organization` (`slug`);--> statement-br
 CREATE INDEX `organization_owner_idx` ON `organization` (`ownerId`);--> statement-breakpoint
 CREATE INDEX `organization_default_idx` ON `organization` (`isDefault`);--> statement-breakpoint
 CREATE INDEX `organization_personal_idx` ON `organization` (`personal`);--> statement-breakpoint
-CREATE TABLE `pages_pages` (
-	`id` text PRIMARY KEY NOT NULL,
-	`teamId` text NOT NULL,
-	`owner` text NOT NULL,
-	`parentId` text,
-	`path` text NOT NULL,
-	`depth` integer NOT NULL,
-	`order` integer NOT NULL,
-	`title` text NOT NULL,
-	`slug` text NOT NULL,
-	`pageType` text NOT NULL,
-	`content` text,
-	`config` text,
-	`status` text NOT NULL,
-	`visibility` text NOT NULL,
-	`publishedAt` integer,
-	`showInNavigation` integer,
-	`layout` text,
-	`seoTitle` text,
-	`seoDescription` text,
-	`ogImage` text,
-	`robots` text,
-	`translations` text,
-	`createdAt` integer NOT NULL,
-	`updatedAt` integer NOT NULL,
-	`createdBy` text NOT NULL,
-	`updatedBy` text NOT NULL
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `pages_pages_team_slug_idx` ON `pages_pages` (`teamId`,`slug`);--> statement-breakpoint
 CREATE TABLE `passkey` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text,
@@ -274,21 +229,6 @@ CREATE TABLE `team_settings` (
 --> statement-breakpoint
 CREATE UNIQUE INDEX `team_settings_team_id_unique` ON `team_settings` (`team_id`);--> statement-breakpoint
 CREATE INDEX `team_settings_team_idx` ON `team_settings` (`team_id`);--> statement-breakpoint
-CREATE TABLE `translations_ui` (
-	`id` text PRIMARY KEY NOT NULL,
-	`user_id` text NOT NULL,
-	`team_id` text,
-	`namespace` text DEFAULT 'ui' NOT NULL,
-	`key_path` text NOT NULL,
-	`category` text NOT NULL,
-	`values` text NOT NULL,
-	`description` text,
-	`is_overrideable` integer DEFAULT true NOT NULL,
-	`created_at` integer NOT NULL,
-	`updated_at` integer NOT NULL
-);
---> statement-breakpoint
-CREATE UNIQUE INDEX `translations_ui_team_id_namespace_key_path_unique` ON `translations_ui` (`team_id`,`namespace`,`key_path`);--> statement-breakpoint
 CREATE TABLE `twoFactor` (
 	`id` text PRIMARY KEY NOT NULL,
 	`userId` text NOT NULL,
@@ -341,4 +281,75 @@ CREATE TABLE `verification` (
 	`updatedAt` integer NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `verification_identifier_idx` ON `verification` (`identifier`);
+CREATE INDEX `verification_identifier_idx` ON `verification` (`identifier`);--> statement-breakpoint
+CREATE TABLE `translations_ui` (
+	`id` text PRIMARY KEY NOT NULL,
+	`user_id` text NOT NULL,
+	`team_id` text,
+	`namespace` text DEFAULT 'ui' NOT NULL,
+	`key_path` text NOT NULL,
+	`category` text NOT NULL,
+	`values` text NOT NULL,
+	`description` text,
+	`is_overrideable` integer DEFAULT true NOT NULL,
+	`created_at` integer NOT NULL,
+	`updated_at` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `translations_ui_team_id_namespace_key_path_unique` ON `translations_ui` (`team_id`,`namespace`,`key_path`);--> statement-breakpoint
+CREATE TABLE `crouton_redirects` (
+	`id` text PRIMARY KEY NOT NULL,
+	`teamId` text NOT NULL,
+	`owner` text NOT NULL,
+	`fromPath` text NOT NULL,
+	`toPath` text NOT NULL,
+	`statusCode` text NOT NULL,
+	`isActive` integer NOT NULL,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	`createdBy` text NOT NULL,
+	`updatedBy` text NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `crouton_redirects_team_from_path_idx` ON `crouton_redirects` (`teamId`,`fromPath`);--> statement-breakpoint
+CREATE TABLE `layout_configs` (
+	`id` text PRIMARY KEY NOT NULL,
+	`teamId` text NOT NULL,
+	`name` text NOT NULL,
+	`renderer` text NOT NULL,
+	`tree` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL
+);
+--> statement-breakpoint
+CREATE INDEX `layout_configs_team_idx` ON `layout_configs` (`teamId`);--> statement-breakpoint
+CREATE TABLE `pages_pages` (
+	`id` text PRIMARY KEY NOT NULL,
+	`teamId` text NOT NULL,
+	`owner` text NOT NULL,
+	`parentId` text,
+	`path` text NOT NULL,
+	`depth` integer NOT NULL,
+	`order` integer NOT NULL,
+	`title` text NOT NULL,
+	`slug` text NOT NULL,
+	`pageType` text NOT NULL,
+	`content` text,
+	`config` text,
+	`status` text NOT NULL,
+	`visibility` text NOT NULL,
+	`publishedAt` integer,
+	`showInNavigation` integer,
+	`layout` text,
+	`seoTitle` text,
+	`seoDescription` text,
+	`ogImage` text,
+	`robots` text,
+	`translations` text,
+	`createdAt` integer NOT NULL,
+	`updatedAt` integer NOT NULL,
+	`createdBy` text NOT NULL,
+	`updatedBy` text NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `pages_pages_team_slug_idx` ON `pages_pages` (`teamId`,`slug`);
