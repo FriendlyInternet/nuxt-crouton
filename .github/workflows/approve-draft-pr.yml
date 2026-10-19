@@ -48,6 +48,7 @@ jobs:
     # check is `isApproval()` below, which strips code and quotes first. Do not move the
     # decision up here: GitHub expressions cannot express it.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       # An App token so the ready-for-review event CASCADES into the downstream CI/
       # auto-merge workflows — a GITHUB_TOKEN action does not re-trigger them (#572).

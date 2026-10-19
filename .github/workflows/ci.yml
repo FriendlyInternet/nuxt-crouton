@@ -37,6 +37,7 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       code: ${{ steps.filter.outputs.code }}
       # CI files themselves (#2335): a workflow-only PR must still be shellchecked — it is
@@ -79,6 +80,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -113,6 +115,7 @@ jobs:
     # layers must exist before `nuxt prepare` can resolve them.
     name: Type Check Apps
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -164,6 +167,7 @@ jobs:
     # gone: kassa typechecks green and is gated by typecheck-apps, #1097.)
     name: Build kassa (${{ matrix.preset }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -207,6 +211,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -229,6 +234,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -251,6 +257,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -287,6 +294,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -310,6 +318,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -336,6 +345,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -395,6 +405,7 @@ jobs:
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
@@ -426,6 +437,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
@@ -460,6 +472,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -497,6 +510,7 @@ jobs:
     # or a composite action is the one that most needs this and used to skip it.
     if: needs.changes.outputs.code == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -614,6 +628,7 @@ jobs:
     # build, since `nuxt prepare` needs the workspace packages built first.)
     name: Fallow Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Waits on the test job for its coverage artifact (#1256): real per-function
     # coverage makes the restored maxCrap 30 measure untested-complex code.
     # `changes` added for #1698 — the per-job path gate.
@@ -659,6 +674,7 @@ jobs:
             compile-check, sync-validation, mcp-server-tests, test, changeset-check, package-check,
             scripts-tests, fallow-audit, shellcheck-workflows]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Every needed job succeeded or was legitimately skipped
         run: |

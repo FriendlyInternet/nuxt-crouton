@@ -46,6 +46,7 @@ permissions:
 jobs:
   set-status:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # Mint an org-scoped Nuxt Harness App installation token. `owner` (no
       # `repositories`) yields a token carrying the org-level grants — here

@@ -41,6 +41,7 @@ jobs:
   deploy:
     name: Deploy docs to Cloudflare Workers
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # `docs-production`, NOT the shared `production` env (#1133). docs is a public
     # content site that ships continuously on merge, and its own header (above) says
     # it is explicitly NOT the #318 prod gate. Putting the required reviewer on

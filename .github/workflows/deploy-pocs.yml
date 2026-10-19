@@ -62,6 +62,7 @@ jobs:
   # Figure out which opted-in POCs to deploy → a matrix the deploy job fans out over.
   detect:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
       any: ${{ steps.set.outputs.any }}
@@ -160,6 +161,7 @@ jobs:
     needs: detect
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.mode == 'version' && needs.detect.outputs.any == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     environment: staging
     permissions:
       contents: read

@@ -37,6 +37,7 @@ jobs:
     # Gate PRs (base = epic/*) legitimately close their blocked issue — exempt.
     if: ${{ !startsWith(github.event.pull_request.base.ref, 'epic/') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/github-script@v9
         with:

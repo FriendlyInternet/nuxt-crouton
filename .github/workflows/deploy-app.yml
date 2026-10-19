@@ -106,6 +106,7 @@ jobs:
     # deploy-pocs.yml calls this on `pull_request` of pocs/**, so a fork PR must never
     # reach a self-hosted box if HOSTED_RUNNER is ever pointed at one.
     runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
     # GitHub deployment environment — kept as production/staging so any
     # environment-scoped secrets/protection from the existing setup still apply
     # (the Workers target is staging/prod independently, via inputs.environment).

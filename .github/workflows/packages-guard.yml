@@ -27,6 +27,7 @@ jobs:
   declared:
     name: Packages edit declared
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 

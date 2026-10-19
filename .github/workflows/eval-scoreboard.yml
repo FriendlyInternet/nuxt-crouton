@@ -26,6 +26,7 @@ concurrency:
 jobs:
   scoreboard:
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:

@@ -27,6 +27,7 @@ concurrency:
 jobs:
   inventory:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # Push with the Harness App, not GITHUB_TOKEN (#1133). The `main` ruleset requires
       # a PR, and GitHub Actions cannot be a ruleset bypass actor (422: "must be part of

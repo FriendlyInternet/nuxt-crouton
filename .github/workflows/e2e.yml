@@ -44,6 +44,7 @@ jobs:
   # Decide which fixtures to run. PR → only what's affected; everything else → all.
   detect:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
       any: ${{ steps.set.outputs.any }}
@@ -121,6 +122,7 @@ jobs:
     if: needs.detect.outputs.any == 'true'
     name: E2E (${{ matrix.fixture }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Every fixture runs inside the official, version-matched Playwright image
     # (Chromium + system libs baked in) — proven on with-assets in #393. This
     # drops the flaky `playwright install --with-deps` apt step that

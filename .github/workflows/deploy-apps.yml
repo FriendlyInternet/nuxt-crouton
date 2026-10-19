@@ -84,6 +84,7 @@ jobs:
   # job fans out over. push/pull_request → STAGING only (env hard-coded below, #318).
   detect:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
       any: ${{ steps.set.outputs.any }}
@@ -151,6 +152,7 @@ jobs:
     needs: [detect, deploy]
     if: always() && github.event_name == 'pull_request' && needs.deploy.result == 'cancelled'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       pull-requests: write
     steps:

@@ -61,6 +61,7 @@ on:
 jobs:
   teardown:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     # Never let two teardowns of the same app race.
