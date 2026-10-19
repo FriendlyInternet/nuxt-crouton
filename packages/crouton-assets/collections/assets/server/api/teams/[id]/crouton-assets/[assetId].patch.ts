@@ -1,40 +1,21 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
-import { updateCroutonAsset, getCroutonAssetsByIds } from '../../../../database/queries'
+import { updateCroutonAsset } from '../../../../database/queries'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 import type { CroutonAsset } from '../../../../../types'
 
 export default defineEventHandler(async (event) => {
-  const timing = useServerTiming(event)
-
   const { assetId } = getRouterParams(event)
   if (!assetId) {
     throw createError({ status: 400, statusText: 'Missing asset ID' })
   }
-
-  const authTimer = timing.start('auth')
   const { team, user, membership } = await resolveTeamAndCheckMembership(event)
-  authTimer.end()
 
   const body = await readBody<Partial<CroutonAsset>>(event)
 
-  // Handle translation updates properly
-  if (body.translations && body.locale) {
-    const [existing] = await getCroutonAssetsByIds(team.id, [assetId]) as any[]
-    if (existing) {
-      body.translations = {
-        ...existing.translations,
-        [body.locale]: {
-          ...existing.translations?.[body.locale],
-          ...body.translations[body.locale]
-        }
-      }
-    }
-  }
-
-  const dbTimer = timing.start('db')
-  const result = await updateCroutonAsset(assetId, team.id, user.id, {
-    userId: body.userId,
+  // id, teamId, userId and updatedBy are server-owned: taking them from the
+  // body let a member move an asset into another team (#2278).
+  return await updateCroutonAsset(assetId, team.id, user.id, {
     filename: body.filename,
     pathname: body.pathname,
     contentType: body.contentType,
@@ -44,9 +25,5 @@ export default defineEventHandler(async (event) => {
     height: body.height,
     alt: body.alt,
     uploadedAt: body.uploadedAt ? new Date(body.uploadedAt) : body.uploadedAt,
-    updatedBy: body.updatedBy,
-    translations: body.translations
   }, { role: membership.role })
-  dbTimer.end()
-  return result
 })

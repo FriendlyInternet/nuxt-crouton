@@ -24,7 +24,6 @@
  * - contentLocations (content/locations)
  * - contentNews (content/news)
  * - contentPersons (content/persons)
- * - croutonAssets (crouton/assets)
  */
 
 export const queryRegistry: Record<string, {
@@ -66,11 +65,5 @@ export const queryRegistry: Record<string, {
       .then(m => m.getAllContentPersons),
     getByIds: () => import('~~/layers/content/collections/persons/server/database/queries')
       .then(m => m.getContentPersonsByIds),
-  },
-  croutonAssets: {
-    getAll: () => import('~~/layers/crouton/collections/assets/server/database/queries')
-      .then(m => m.getAllCroutonAssets),
-    getByIds: () => import('~~/layers/crouton/collections/assets/server/database/queries')
-      .then(m => m.getCroutonAssetsByIds),
   },
 }

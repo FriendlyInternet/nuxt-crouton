@@ -9,5 +9,4 @@ export { contentPersons } from '../../layers/content/collections/persons/server/
 export { contentLocations } from '../../layers/content/collections/locations/server/database/schema'
 export { contentNews } from '../../layers/content/collections/news/server/database/schema'
 export { contentDownloads } from '../../layers/content/collections/downloads/server/database/schema'
-export { croutonAssets } from '../../layers/crouton/collections/assets/server/database/schema'
 export * from './translations-ui'

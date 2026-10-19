@@ -35,5 +35,12 @@
       "clearSelection": "Clear selection",
       "assetCount": "{count} asset | {count} assets"
     }
+  },
+  "crouton": {
+    "collections": {
+      "assets": {
+        "title": "Assets"
+      }
+    }
   }
 }
