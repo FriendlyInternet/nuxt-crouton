@@ -284,10 +284,9 @@ export async function mergeManifestCollections(config: CroutonConfig, extendedPa
   const isInteractive = process.stdout.isTTY && !process.env.CI
 
   for (const manifest of manifests) {
-    if (!manifest.collections || manifest.collections.length === 0) continue
-    // The package ships these itself; generating them would fork them (#2278).
-    if (manifest.ownsCollections) continue
-    // Only packages the app extends (#2286).
+    // Only packages the app extends (#2286). A package's setup questions below
+    // are asked for every extended package that declares `configuration`,
+    // whether or not it has collections to merge (#2307).
     if (!extendedPackages.includes(manifest.id)) continue
 
     // Derive feature alias from manifest id (e.g., 'crouton-bookings' → 'bookings')
@@ -332,6 +331,11 @@ export async function mergeManifestCollections(config: CroutonConfig, extendedPa
         })
       }
     }
+
+    // Nothing to merge for a package without collections, or one that ships
+    // them itself — generating those would fork them (#2278).
+    if (!manifest.collections || manifest.collections.length === 0) continue
+    if (manifest.ownsCollections) continue
 
     // Resolve package directory
     const pkgDir = path.join(packagesDir, manifest.id)

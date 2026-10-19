@@ -52,11 +52,16 @@ describe('mergeManifestCollections (keyed on extended packages)', () => {
     expect(config.collections.filter(c => c.name === 'pages')).toHaveLength(1)
   })
 
-  it('stores a package\'s prompted configuration under features.<alias> (the config carrier)', async () => {
+  it('still asks an OWNING package\'s setup questions and stores the answers under features.<alias> (#2307)', async () => {
+    // crouton-bookings owns its collections (#2278) AND declares `configuration`
+    // (email). Owning must skip the merge, not the questions: non-interactive
+    // here, so the manifest defaults are taken.
     const config = freshConfig()
-    const result = await mergeManifestCollections(config, ['crouton-pages'])
-    for (const pc of result.promptedConfigs) {
-      expect(config.features?.[pc.featureKey]).toEqual(pc.configObject)
-    }
+    const result = await mergeManifestCollections(config, ['crouton-bookings'])
+    expect(result.merged).toBe(0)
+    const pc = result.promptedConfigs.find(p => p.featureKey === 'bookings')
+    expect(pc).toBeDefined()
+    expect(config.features?.bookings).toEqual(pc!.configObject)
+    expect(pc!.runtimeConfig?.public).toHaveProperty('croutonBookings')
   })
 })
