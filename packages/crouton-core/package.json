@@ -11,6 +11,7 @@
     "./shared/utils/date": "./shared/utils/date.ts",
     "./shared/utils/fs": "./shared/utils/fs.ts",
     "./shared/utils/d1": "./shared/utils/d1.ts",
+    "./shared/utils/query-registry": "./shared/utils/query-registry.ts",
     "./app/types/app": "./app/types/app.ts",
     "./app/types/block-definition": "./app/types/block-definition.ts",
     "./app/types/layout": "./app/types/layout.ts",

@@ -249,3 +249,30 @@ describe('generateFormComponent', () => {
     })
   })
 })
+
+// #2311 — a reference field's picker must point at the TARGET's collection key, not one
+// built from the current layer (`mainAssets` does not exist; `croutonAssets` does).
+describe('generateFormComponent — reference to another layer', () => {
+  const refData = {
+    ...formComponentData,
+    layer: 'main',
+    layerPascalCase: 'Main',
+    layerCamelCase: 'main',
+    collectionLayerMap: new Map([['assets', 'crouton']]),
+    fields: withComponent([
+      { name: 'name', type: 'string', meta: { required: true } },
+      { name: 'imageId', type: 'string', refTarget: 'assets', meta: {} },
+    ]),
+  }
+
+  it('resolves the collection key through the target layer', () => {
+    const result = generateFormComponent(refData, minimalConfig)
+    expect(result).toContain('collection="croutonAssets"')
+    expect(result).not.toContain('collection="mainAssets"')
+  })
+
+  it('still prefixes the current layer when the target is unknown', () => {
+    const result = generateFormComponent({ ...refData, collectionLayerMap: new Map() }, minimalConfig)
+    expect(result).toContain('collection="mainAssets"')
+  })
+})

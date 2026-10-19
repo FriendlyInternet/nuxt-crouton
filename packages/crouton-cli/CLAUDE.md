@@ -390,7 +390,8 @@ rewritten every run regardless. Guarded by the write loop in `writeScaffold`
 | `lib/add-module.ts` | Module installation implementation |
 | `lib/rollback-collection.ts` | Remove a collection — files, schema barrel, `app.config`, `extends`. Barrel via `getSchemaPath` (modern→legacy). `orphanTableName`/`dropTableWarning` (the code-only-rollback warning) + `generateDropMigration` (`--drop-table` emit / `--dry-run` temp-out preview) — #1445 WS4 |
 | `lib/utils/generate-migrations.ts` | Direct migration generation (`generateMigrations`, `prepareSchemaForMigration`, `DuplicateTableError`) — resolve graph → duplicate gate → app's `db:generate` (drizzle-kit, no Nuxt). Deferral/throw failure contract. Used by config/`add`/`init` (#1445 WS2) |
-| `lib/utils/owned-collections.ts` | `findCollectionOwner` / `findOwnedCollectionConflicts` / `assertNoOwnedCollections` / `OwnedCollectionError` — refuse a collection a manifest with `ownsCollections: true` ships itself (#2278). Called from `runConfig` + `writeScaffold` |
+| `lib/utils/owned-collections.ts` | `findCollectionOwner` / `findOwnedCollectionConflicts` / `assertNoOwnedCollections` / `OwnedCollectionError` — refuse a collection a manifest with `ownsCollections: true` ships itself (#2278). Called from `runConfig` + `writeScaffold`. Also `ownedRefTargets` / `ownedRefTargetNames` — the package-owned collections an app may `refTarget` (plural dir → layer + package schema export), limited to packages the app EXTENDS; a dir two extended packages both ship (`locations`: sales + bookings) is ambiguous and registers for neither (#2311) |
+| `lib/utils/ref-collection.ts` | `resolveRefCollectionKey(refTarget, currentLayer, collectionLayerMap)` — the registered collection KEY a reference points the UI at (`croutonAssets`, `bookingsLocations`), via the TARGET's layer. Used by the form picker, the list cell and the asset detector, which used to prefix the current layer (`mainAssets`) (#2311) |
 | `lib/utils/validate-ref-targets.ts` | `validateRefTargets` / `RefTargetError` — refuse an unknown `refTarget` before any file is written; person-shaped targets get a message pointing at #1958 (#1957) |
 | `lib/utils/helpers.ts` | Case conversion, type mapping |
 | `lib/utils/detect-package-manager.ts` | Detect pnpm/yarn/npm |
@@ -765,10 +766,32 @@ Identity is **(layer, plural name)**, case-insensitive: `sales/orderitems` match
 the collections by extending the package; there is nothing to list in `crouton.config.js`. Sales,
 bookings, pages and assets all own theirs (#2278).
 
-**Known gap (#2311):** a field can't `refTarget` a package-owned collection yet (`validateRefTargets`
-only knows the app's own collections, and `database-queries.ts` has no import branch for a package
-export), so `"refTarget": "assets"` is refused.
-Contract: `tests/unit/utils/owned-collections.test.ts`.
+**Referencing a package-owned collection (#2311).** A field may `refTarget` a collection an EXTENDED
+package owns (`"imageId": { "type": "string", "refTarget": "assets" }`). `writeScaffold` builds
+`ownedRefTargets(manifests, resolveExtendedPackages())` and threads it through:
+- `validateRefTargets` accepts the owned names (singular + plural) alongside the app's own;
+- `database-queries.ts` gets a fourth import shape — `import * as assetsSchema from
+  '@fyit/crouton-assets/collections/assets/server/database/schema'` — and joins `assetsSchema.croutonAssets`
+  (every owning package exports `./collections/*/server/database/{schema,queries}`);
+- `data.collectionLayerMap` (app collections + owned targets → layer) feeds `resolveRefCollectionKey`,
+  so the form picker, the list cell and the asset contribution point at `croutonAssets`, not `mainAssets`.
+
+A directory name two extended packages both ship (`locations`: sales AND bookings) is ambiguous as a
+bare `refTarget`, so it registers for neither and the usual refusal fires; a layer-qualified
+`refTarget` is not supported. Proof: `fixtures/with-assets` has a `galleries` collection with
+`imageId → assets`, generated and typechecked. Contract: `tests/unit/utils/owned-collections.test.ts`,
+`tests/unit/utils/ref-collection.test.ts`, `tests/unit/generators/database-queries.test.ts`.
+
+**Public query registry for package-owned collections (#2309).** The app-generated
+`server/utils/crouton-query-registry.ts` only lists the app's own collections. Each owning package
+registers its entries at runtime instead (`server/query-registry.ts` + a Nitro plugin, built with
+`collectionQueries` from `@fyit/crouton-core/shared/utils/query-registry`), and crouton-pages'
+public collection endpoints read the union via `resolveQueryRegistry` — the app's entry wins on a
+clash. Nothing to generate. **A package registers only what belongs on a public page** (sales:
+products, categories, events, locations; bookings: locations; pages: pages; assets: assets) — the
+queries are the admin ones and an admin can bind any registered key on a public page, so orders,
+clients, email logs, settings, printers stay admin-only (red-team finding on PR #2317). Each
+package's `test/query-registry.test.ts` pins that list.
 
 ## Config File Format
 

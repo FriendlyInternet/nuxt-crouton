@@ -732,9 +732,9 @@ The server plugin sets `event.context.routingMode = 'locale'` which makes `useDo
 Collection-binder pages with `visibility: 'public'` and `status: 'published'` automatically expose their bound collection via unauthenticated endpoints. These endpoints:
 - Resolve team by slug or ID
 - Validate a published public binder exists for the requested collection
-- Use the app's generated query registry (`server/utils/crouton-query-registry.ts`) for data access
+- Resolve the collection's queries through `resolveQueryRegistry` (`@fyit/crouton-core/shared/utils/query-registry`): the app's generated `server/utils/crouton-query-registry.ts` PLUS the entries each owning package registers at runtime (sales, bookings, pages, assets — `server/plugins/query-registry.ts`), app winning on a clash (#2309). `pagesPages` itself is registered the same way
 - Filter items to `status: 'published'` only
-- Strip internal fields (`createdBy`, `updatedBy`)
+- Strip internal fields via `server/utils/strip-internal-fields.ts`: audit ids (`createdBy`, `updatedBy`, `owner`, `userId`) and every joined user object (`ownerUser`, `createdByUser`, …), recursively through hydrated FK rows and arrays — the registry functions are the admin queries, which join staff emails. Only the public-safe collections of each package are registered at all (see each package's `server/query-registry.ts`)
 - Cache responses with SWR (5 min)
 
 The `CollectionBinderRenderer` auto-switches to public endpoints when not in `/admin/` and the page visibility is `'public'`.

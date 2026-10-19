@@ -9,24 +9,14 @@
  * GET /api/public/[team]/[collection]/[itemId]
  */
 import { eq, and, or } from 'drizzle-orm'
+import { resolveQueryRegistry } from '@fyit/crouton-core/shared/utils/query-registry'
+import { stripInternalFields } from '../../../../utils/strip-internal-fields'
 
 // Optionally auto-imported by Nitro from the consuming app's generated
 // server/utils/crouton-query-registry.ts. Apps that haven't generated a
 // registry yet won't have it, so usage is guarded with `typeof`. Declared
 // (module-scoped) so the guard type-checks without assuming the import exists.
 declare const queryRegistry: Record<string, unknown> | undefined
-
-/**
- * Strip internal/sensitive fields from a collection item.
- */
-function stripInternalFields(item: Record<string, unknown>): Record<string, unknown> {
-  const stripped = { ...item }
-  delete stripped.createdBy
-  delete stripped.updatedBy
-  delete stripped.createdByUser
-  delete stripped.updatedByUser
-  return stripped
-}
 
 export default defineCachedEventHandler(async (event) => {
   const teamParam = getRouterParam(event, 'team')
@@ -90,10 +80,8 @@ export default defineCachedEventHandler(async (event) => {
 
     // ── 3. Get item from the query registry ──
     // queryRegistry is auto-imported by Nitro from the app's server/utils/
-    const registry = (globalThis as any).__crouton_query_registry ?? (typeof queryRegistry !== 'undefined' ? queryRegistry : null)
-    if (!registry) {
-      throw createError({ status: 404, statusText: 'Not found' })
-    }
+    // Package-owned collections (#2309) + the app's generated registry, app winning on a clash
+    const registry = resolveQueryRegistry(typeof queryRegistry !== 'undefined' ? queryRegistry : null)
 
     const collectionQueries = registry[collectionParam]
     if (!collectionQueries?.getByIds) {

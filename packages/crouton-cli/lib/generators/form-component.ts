@@ -1,5 +1,6 @@
 // Generator for _Form.vue component
 import { toCase } from '../utils/helpers.ts'
+import { resolveRefCollectionKey } from '../utils/ref-collection.ts'
 
 /**
  * Generate AI context header for _Form.vue components
@@ -108,6 +109,8 @@ function createLabelAttr(fieldsI18nPrefix: string) {
 // don't close over generateFormComponent locals).
 interface FieldMarkupContext {
   layerCamelCase: string
+  /** refTarget → owning layer (app collections + package-owned, #2311) */
+  collectionLayerMap?: Map<string, string>
   layerPascalCase: string
   pascalCasePlural: string
   formEnhancements: Record<string, any>
@@ -200,9 +203,9 @@ function renderReferenceField(field: Record<string, any>, ctx: FieldMarkupContex
     // These are managed by connector packages (e.g., @fyit/crouton-supersaas)
     resolvedCollection = field.refTarget
   } else {
-    // Local layer reference: add layer prefix
-    const refCases = toCase(field.refTarget)
-    resolvedCollection = `${ctx.layerCamelCase}${refCases.pascalCasePlural}`
+    // The TARGET's layer, not the current one: a cross-layer or package-owned ref
+    // (`refTarget: "assets"` → `croutonAssets`) registers under its own layer (#2311).
+    resolvedCollection = resolveRefCollectionKey(field.refTarget, ctx.layerCamelCase, ctx.collectionLayerMap)
   }
 
   // Check if this is a read-only reference field
@@ -850,6 +853,7 @@ export function generateFormComponent(data: Record<string, any>, config: Record<
   // Context handed to the module-scope field/group renderers
   const ctx: FieldMarkupContext = {
     layerCamelCase,
+    collectionLayerMap: data.collectionLayerMap,
     layerPascalCase,
     pascalCasePlural,
     formEnhancements,

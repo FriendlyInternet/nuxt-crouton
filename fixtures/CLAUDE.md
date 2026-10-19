@@ -10,7 +10,7 @@ authenticates, and does CRUD** after a `packages/` change or dependency bump.
 | `minimal` | core + auth + i18n, one `items` collection (generic CRUD + locale-switch) |
 | `with-pages` | + `@fyit/crouton-pages` → `@fyit/crouton-editor` (pages workspace surface) |
 | `with-bookings` | + `@fyit/crouton-bookings` (bookings admin surface) |
-| `with-assets` | + `@fyit/crouton-assets` (asserts the optional `CroutonAssetsPicker` mounts, not the core stub) |
+| `with-assets` | + `@fyit/crouton-assets` (asserts the optional `CroutonAssetsPicker` mounts, not the core stub); its `galleries` collection has `imageId → refTarget: "assets"`, the generated proof that an app may reference a package-owned collection (#2311) |
 | `with-collab` | + `@fyit/crouton-collab` (spike: asserts the realtime collab UI mounts single-client) |
 | `with-maps` | + `@fyit/crouton-maps` (a `venues` collection with address+coordinate fields → asserts the MapLibre map mounts in the generated form + the `/api/maps/geocode` proxy geocodes against live Nominatim) |
 | `with-sales` | + `@fyit/crouton-printing` + `@fyit/crouton-sales` (the full POS + printing domain → three-tier `printing.smoke` boots, places an order, drives a print job pending → done against an in-test fake :9100 ESC/POS printer, asserts the order auto-completes, and flips the per-event transport row (#1324) to prove drainer/spooler routing) |

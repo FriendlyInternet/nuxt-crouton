@@ -46,6 +46,7 @@ export default defineNuxtConfig({
 | File | Purpose |
 |------|---------|
 | `shared/seed/` | Composable seeding contract + runner core (`SeedProvider`, `SeedContext`, `buildUpsert`, `seedId`, `collectSeedSql`) — exported at `@fyit/crouton-core/shared/seed` |
+| `shared/utils/query-registry.ts` | The process-wide server query registry (#2309): `registerCollectionQueries` (a package's Nitro plugin merges its collections in), `resolveQueryRegistry` (package entries + the app's generated `queryRegistry`, app wins), `collectionQueries` (one entry from a lazy queries import + the `getAll<Name>`/`get<Name>ByIds` stem). Exported at `@fyit/crouton-core/shared/utils/query-registry`; consumed by crouton-pages' public collection endpoints |
 | `server/utils/encryption.ts` | AES-256-GCM encryption for storing third-party secrets at rest |
 | `server/utils/tiptap-renderer.ts` | Server-side TipTap JSON to HTML conversion (auto-imported by Nitro) |
 | `app/composables/useCrouton.ts` | Modal/slideover state management (nested up to 5 levels) |
