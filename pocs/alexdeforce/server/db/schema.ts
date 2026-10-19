@@ -5,7 +5,6 @@
 export * from '@fyit/crouton-auth/server/database/schema/auth'
 export { contentArticles } from '../../layers/content/collections/articles/server/database/schema'
 export { contentAgendas } from '../../layers/content/collections/agendas/server/database/schema'
-export { pagesPages } from '../../layers/pages/collections/pages/server/database/schema'
 export * from './translations-ui'
 export { contentTags } from '../../layers/content/collections/tags/server/database/schema'
 export { croutonAssets } from '../../layers/crouton/collections/assets/server/database/schema'

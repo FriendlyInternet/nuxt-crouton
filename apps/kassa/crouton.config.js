@@ -13,16 +13,9 @@ export default {
     layout: false
   },
 
-  collections: [
-    { name: 'pages', fieldsFile: './schemas/pages.json', formComponent: 'CroutonPagesForm', hierarchy: { enabled: true, parentField: 'parentId', orderField: 'order', pathField: 'path', depthField: 'depth' } }
-  ],
+  collections: [],
 
-  targets: [
-    {
-      layer: 'pages',
-      collections: ['pages']
-    }
-  ],
+  targets: [],
 
   dialect: 'sqlite'
 }

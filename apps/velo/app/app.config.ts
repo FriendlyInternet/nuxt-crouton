@@ -3,7 +3,6 @@ import { translationsUiConfig } from '@fyit/crouton-i18n/app/composables/useTran
 
 
 
-import {pagesPagesConfig} from '../layers/pages/collections/pages/app/composables/usePagesPages';
 
 
 import {croutonAssetsConfig} from '../layers/crouton/collections/assets/app/composables/useCroutonAssets';
@@ -13,7 +12,6 @@ import {croutonAssetsConfig} from '../layers/crouton/collections/assets/app/comp
 export default defineAppConfig({
   croutonCollections: {
     translationsUi: translationsUiConfig,
-    pagesPages: pagesPagesConfig,
     croutonAssets: croutonAssetsConfig,
   }
 })

@@ -22,8 +22,6 @@ export default defineNuxtConfig({
     '@fyit/crouton-i18n',
     '@fyit/crouton-pages',
     '@fyit/crouton-ai', // optional AI add-on — enables ✨ Magic v2 (gated via hasApp('ai'), #909)
-    // Generated collection layers must come last
-    './layers/pages'
   ],
 
   hub: {

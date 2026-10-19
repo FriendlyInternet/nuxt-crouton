@@ -20,7 +20,6 @@
  * - contentNews: ContentNew
  * - contentPersons: ContentPerson
  * - croutonAssets: CroutonAsset
- * - pagesPages: PagesPage
  */
 
 import type { ContentAtelier, ContentAtelierFormData, NewContentAtelier } from './layers/content/collections/ateliers/types'
@@ -30,7 +29,6 @@ import type { ContentLocation, ContentLocationFormData, NewContentLocation } fro
 import type { ContentNew, ContentNewFormData, NewContentNew } from './layers/content/collections/news/types'
 import type { ContentPerson, ContentPersonFormData, NewContentPerson } from './layers/content/collections/persons/types'
 import type { CroutonAsset, CroutonAssetFormData, NewCroutonAsset } from './layers/crouton/collections/assets/types'
-import type { PagesPage, PagesPageFormData, NewPagesPage } from './layers/pages/collections/pages/types'
 
 declare module '#crouton/types' {
   interface CollectionTypeMap {
@@ -68,11 +66,6 @@ declare module '#crouton/types' {
       Item: CroutonAsset
       FormData: CroutonAssetFormData
       NewItem: NewCroutonAsset
-    }
-    pagesPages: {
-      Item: PagesPage
-      FormData: PagesPageFormData
-      NewItem: NewPagesPage
     }
   }
 }

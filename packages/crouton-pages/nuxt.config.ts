@@ -26,10 +26,12 @@ if (process.env.NODE_ENV !== 'production' && !_dependencies.has('crouton-pages')
  * - Custom domain support with automatic team resolution
  */
 export default defineNuxtConfig({
-  // Extend core crouton and editor
+  // Extend core crouton and editor, plus the `pages` collection this package
+  // owns end to end (#2278): schema, queries, routes, list, composable.
   extends: [
     '@fyit/crouton-core',
-    '@fyit/crouton-editor'
+    '@fyit/crouton-editor',
+    join(currentDir, 'collections/pages')
   ],
 
   // Components auto-import with CroutonPages prefix

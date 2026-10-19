@@ -60,7 +60,7 @@ export default defineCachedEventHandler(async (event) => {
     }
 
     // ── 2. Find a published, public collection-binder page for this collection ──
-    const pagesSchema = await import('~~/layers/pages/collections/pages/server/database/schema')
+    const pagesSchema = await import('../../../../../collections/pages/server/database/schema')
 
     const binderPages = await database
       .select()

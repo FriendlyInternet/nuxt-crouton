@@ -20,17 +20,10 @@
  * ```
  *
  * ## Registered Collections
- * - pagesPages (pages/pages)
+ * (none — pagesPages ships from @fyit/crouton-pages, #2278)
  */
 
 export const queryRegistry: Record<string, {
   getAll: () => Promise<(teamId: string) => Promise<any[]>>
   getByIds: () => Promise<(teamId: string, ids: string[]) => Promise<any[]>>
-}> = {
-  pagesPages: {
-    getAll: () => import('~~/layers/pages/collections/pages/server/database/queries')
-      .then(m => m.getAllPagesPages),
-    getByIds: () => import('~~/layers/pages/collections/pages/server/database/queries')
-      .then(m => m.getPagesPagesByIds),
-  },
-}
+}> = {}

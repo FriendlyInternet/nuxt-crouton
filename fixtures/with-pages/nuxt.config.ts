@@ -9,7 +9,6 @@ export default defineNuxtConfig({
     '@fyit/crouton-i18n',
     '@fyit/crouton-pages',
     './layers/main',
-    './layers/pages',
   ],
   hub: {
     db: 'sqlite',
