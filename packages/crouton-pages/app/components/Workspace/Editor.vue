@@ -904,12 +904,11 @@ const currentTitle = computed(() => {
   const tr = state.value.translations as Record<string, { title?: string }> | undefined
   return tr?.[editingLocale.value]?.title || ''
 })
-const toolbarTitle = computed(() =>
-  currentTitle.value || (() => {
-    const tr = state.value.translations as Record<string, { title?: string }> | undefined
-    return (tr ? Object.values(tr).find(d => d?.title)?.title : '') || ''
-  })()
-)
+function findFirstAvailableTitle(): string {
+  const tr = state.value.translations as Record<string, { title?: string }> | undefined
+  return (tr ? Object.values(tr).find(d => d?.title)?.title : '') || ''
+}
+const toolbarTitle = computed(() => currentTitle.value || findFirstAvailableTitle())
 
 // SEO fields are translatable too — they follow the shared editing locale.
 const seoLocale = computed(() => editingLocale.value)
