@@ -147,7 +147,7 @@ export function usePageRecord(options: PageRecordOptions, deps: PageRecordDeps) 
 }
 
 /** The list/ids endpoint answers `{ items }`, a bare array, or one row — take the first row. */
-function firstRow(response: any): Record<string, any> | null {
+export function firstRow(response: any): Record<string, any> | null {
   const rows = response?.items ?? response
   return (Array.isArray(rows) ? rows[0] : rows) ?? null
 }
