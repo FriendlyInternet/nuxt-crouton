@@ -12,8 +12,10 @@ Email infrastructure layer for Nuxt applications using Vue Email templates and R
 | `brand/email-brand.mjs` | **Brand identity SSOT** (name, primary accent, URL, logo, sans stack) — plain ESM so the dependency-free digest `render.mjs` scripts can import it too. `.d.mts` sibling for types |
 | `server/utils/email.ts` | Resend service wrapper (`useEmailService()`) |
 | `server/utils/senders.ts` | Convenience send functions |
-| `server/utils/template-renderer.ts` | Vue Email template rendering |
-| `server/emails/*.vue` | Vue Email templates |
+| `server/utils/template-renderer.ts` | Renders a template to `{ html, text }` with `vue/server-renderer` + `html-to-text` (in-house since #2224; `vue-email` had an unpatchable advisory) |
+| `server/emails/primitives.ts` | The ten email building blocks the templates use (`EHtml`, `EHead`, `EPreview`, `EBody`, `EContainer`, `ESection`, `EText`, `EHr`, `EImg`, `EButton`) — same markup vue-email emitted, so output is unchanged; a template's `:style` falls through and MERGES with the base style, don't declare `style` as a prop |
+| `server/emails/*.vue` | The transactional templates, built from `./primitives` |
+| `tests/render-templates.test.ts` | Snapshot contract: every template, defaults + overrides, html + text — captured with vue-email before the swap, must stay byte-identical |
 | `app/components/Email/*.vue` | Client flow components |
 | `types/index.ts` | TypeScript type definitions |
 
@@ -334,7 +336,7 @@ RESEND_API_KEY=re_test_xxx
 
 ## Dependencies
 
-- **Core deps**: vue-email, resend
+- **Core deps**: resend, html-to-text (plain-text part); templates render with Vue's own `vue/server-renderer` — no email library since #2224
 - **Works with**: `@crouton/auth` (optional, enhances auth emails)
 - **Peer deps**: nuxt, @nuxt/ui (optional)
 

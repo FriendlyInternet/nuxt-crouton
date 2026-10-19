@@ -84,8 +84,8 @@ export default defineNuxtConfig({
     externals: {
       inline: [fileURLToPath(new URL('./', import.meta.url))]
     },
-    // Required for vue-email: enables Vue SFC compilation in server context
-    // See: https://vuemail.net/getting-started/nuxt-nitro
+    // Compiles the server/emails/*.vue templates inside the Nitro bundle (they render
+    // through vue/server-renderer — see server/utils/template-renderer.ts, #2224).
     rollupConfig: {
       plugins: [vue() as any]
     }

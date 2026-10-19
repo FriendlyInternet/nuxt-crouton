@@ -1,6 +1,6 @@
 # @crouton/email
 
-Email infrastructure layer for Nuxt applications using [Vue Email](https://vuemail.net/) templates and [Resend](https://resend.com/) delivery.
+Email infrastructure layer for Nuxt applications: Vue single-file templates rendered server-side (no third-party email renderer) and [Resend](https://resend.com/) delivery.
 
 ## Features
 
@@ -13,7 +13,7 @@ Email infrastructure layer for Nuxt applications using [Vue Email](https://vuema
 ## Installation
 
 ```bash
-pnpm add @crouton/email vue-email resend
+pnpm add @crouton/email resend
 ```
 
 ## Quick Start
@@ -419,8 +419,8 @@ Create your own templates using the base layout:
 ```vue
 <!-- server/emails/CustomEmail.vue -->
 <script setup lang="ts">
-import { EBody, EContainer, EText, EButton, ESection } from 'vue-email'
-import BaseLayout from './BaseLayout.vue'
+import { EText, EButton, ESection } from '#crouton-email/server/emails/primitives'
+import BaseLayout from '#crouton-email/server/emails/BaseLayout.vue'
 
 interface Props {
   customProp: string
