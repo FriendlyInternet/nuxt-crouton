@@ -95,7 +95,9 @@ test('the config-keys-only rule refuses shipping schemas — the corpus says so,
 })
 
 test('findFiles reaches the real schema corpus', () => {
-  const files = findFiles('apps/*/schemas/*.json')
+  // pocs, not apps: since the pages package took its collection (#2278) no launched app has a
+  // schema file left, so `apps/*` would match nothing and prove nothing.
+  const files = findFiles('pocs/*/schemas/*.json')
   assert.ok(files.length > 0, 'the schema corpus is not empty — a zero match here means the walker is broken')
   assert.ok(findFiles('packages/*/schemas/*.json').includes(VELO_BOOKING))
 })
