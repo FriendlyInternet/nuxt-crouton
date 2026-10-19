@@ -1,0 +1,52 @@
+name: Set up the Claude Code CLI (subscription backend for pi)
+description: >-
+  Installs a pinned Claude Code CLI on a GitHub-hosted runner and proves the subscription
+  token works BEFORE the expensive pi run starts. The pi pipeline's `pi-claude-cli` provider
+  shells out to `claude -p`, so the CLI must be on PATH and authenticated; on the retired
+  mac-mini both came from the box's own login (#2275). The preflight exists because a
+  missing/expired token otherwise surfaces 30+ minutes later as pi "producing nothing"
+  (#1849 shape) — fail here, in seconds, with the fix named.
+
+inputs:
+  oauth-token:
+    description: "CLAUDE_CODE_OAUTH_TOKEN — the long-lived token from `claude setup-token` (#2119). Composite actions can't read secrets; pass it in."
+    required: true
+  version:
+    description: "@anthropic-ai/claude-code version to install. PINNED on purpose: an unpinned CLI makes the pipeline's behaviour change under it with no diff in this repo."
+    required: false
+    default: "2.1.303"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Claude Code CLI ${{ inputs.version }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        if command -v claude >/dev/null 2>&1 && claude --version 2>/dev/null | grep -q "^${{ inputs.version }} "; then
+          echo "claude ${{ inputs.version }} already on PATH"
+        else
+          npm i -g "@anthropic-ai/claude-code@${{ inputs.version }}"
+        fi
+        claude --version
+
+    - name: Preflight — the subscription token answers
+      shell: bash
+      env:
+        CLAUDE_CODE_OAUTH_TOKEN: ${{ inputs.oauth-token }}
+      run: |
+        set -uo pipefail
+        if [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]; then
+          echo "::error::CLAUDE_CODE_OAUTH_TOKEN is empty — the pi pipeline runs on the Claude subscription and has nothing to authenticate with. Run \`claude setup-token\` locally and store it as the repo secret CLAUDE_CODE_OAUTH_TOKEN."
+          exit 1
+        fi
+        # One tiny headless call. `timeout` so a hung CLI can't eat the job's budget.
+        OUT="$(timeout 120 claude -p 'Reply with exactly the two letters OK and nothing else.' --output-format text 2>&1)" || {
+          echo "$OUT" | tail -n 20
+          echo "::error::The Claude CLI could not complete a one-line prompt with CLAUDE_CODE_OAUTH_TOKEN. Usual cause: the token expired or was revoked — mint a new one with \`claude setup-token\` and update the repo secret. (Output above.)"
+          exit 1
+        }
+        case "$OUT" in
+          *OK*) echo "preflight: subscription token works" ;;
+          *) echo "$OUT" | tail -n 20; echo "::error::Claude answered, but not as expected — check the output above before trusting a pi run on it."; exit 1 ;;
+        esac

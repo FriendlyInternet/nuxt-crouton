@@ -46,7 +46,7 @@ on:
         default: "claude-haiku-4-5"
         type: string
       provider:
-        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the mini's `claude` login (#1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
+        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the `claude` CLI + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-claude-cli, #2275; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
         required: false
         default: "pi-claude-cli"
         type: choice
@@ -89,22 +89,28 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # GitHub-hosted runners (#2275) have no `claude` login. pi's `pi-claude-cli` provider
+      # drives the Claude SUBSCRIPTION by spawning `claude -p`, so install the CLI and prove
+      # the token answers before the pi run.
+      - name: Set up Claude CLI (subscription)
+        uses: ./.github/actions/setup-claude-cli
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
       # ── The agent: pi.dev, REPORTS-ONLY ────────────────────────────────────────────
       # env carries NO GH_TOKEN/GITHUB_TOKEN (reports-only) and NO metered key. Provider
-      # lanes: `pi-claude-cli` (DEFAULT, #1669) = Claude SUBSCRIPTION via the mini's
-      # `claude` login — this REVERSES the old "OAuth must not back CI" rule on the owner's
-      # instruction Anthropic now permits it. `zai` = GLM Coding Plan (flat-rate); `anthropic`
-      # = metered PI_PROVIDER_KEY. Only `pi-claude-cli`/`zai` work on the mac-mini runner.
-      # Invocation + skills confirmed on the mac-mini (#888): the `.pi/skills` symlink
-      # bridge does NOT load — pi's discovery ignores it — so skills are passed via the
-      # explicit `--skill .claude/skills` flag (our SKILL.md format is drop-in portable).
+      # lanes: `pi-claude-cli` (DEFAULT, #1669) = Claude SUBSCRIPTION via the `claude` CLI —
+      # this REVERSES the old "OAuth must not back CI" rule on the owner's instruction that
+      # Anthropic now permits it. `zai` = GLM Coding Plan (flat-rate); `anthropic` = metered
+      # PI_PROVIDER_KEY. Skills (#888): the `.pi/skills` symlink bridge does NOT load — pi's
+      # discovery ignores it — so skills are passed via the explicit `--skill .claude/skills`
+      # flag (our SKILL.md format is drop-in portable).
       - id: pi
         env:
           PI_MODEL: ${{ inputs.model || 'claude-haiku-4-5' }}
           PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
-          # Headless subscription auth: the mini's runner runs `claude` in a session that can't
-          # reach the macOS Keychain, so pass a long-lived OAuth token (claude setup-token, 1y)
-          # the CLI reads from env instead of the keychain login (#2119).
+          # Headless subscription auth (#2119/#2275): the long-lived OAuth token (claude
+          # setup-token, 1y) the CLI reads from env; installed + preflighted by setup-claude-cli.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -uo pipefail

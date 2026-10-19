@@ -77,7 +77,7 @@ on:
         default: "claude-sonnet-5"
         type: string
       provider:
-        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the mini's `claude` login (#1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
+        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the `claude` CLI + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-claude-cli, #2275; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
         required: false
         default: "pi-claude-cli"
         type: choice
@@ -247,7 +247,7 @@ jobs:
               `🌳 **Already decomposed — resumed the tree instead of re-planning it.**\n\n`
               + (done.length ? `Dispatched: ${done.join(' · ')}\n\n` : `Nothing dispatchable right now — every open child is waiting on a sibling.\n\n`)
               + `_${process.env.REASON}_\n\n`
-              + `<sub>🤖 pi.dev harness (CI · mac-mini) · resume-decomposed #2048 · <a href="${runUrl}">run log</a></sub>` })
+              + `<sub>🤖 pi.dev harness (CI) · resume-decomposed #2048 · <a href="${runUrl}">run log</a></sub>` })
             core.info(`Resumed #${issue_number}: ${done.join(', ') || '(all blocked)'}`)
 
       # Everything below is the CLASSIFY path — skipped entirely once the tree was
@@ -267,6 +267,16 @@ jobs:
       - name: Install
         if: ${{ steps.resume.outputs.resume != '1' }}
         run: pnpm install --frozen-lockfile
+
+      # GitHub-hosted runners (#2275) have no `claude` login. pi's `pi-claude-cli` provider
+      # drives the Claude SUBSCRIPTION by spawning `claude -p`, so install the CLI and prove
+      # the token answers BEFORE the pi run — a dead token must fail here in seconds, not
+      # surface 30 minutes later as an empty plan.
+      - name: Set up Claude CLI (subscription)
+        if: ${{ steps.resume.outputs.resume != '1' }}
+        uses: ./.github/actions/setup-claude-cli
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
       # Warm @fyit/* dist so the agent's `crouton init`/generate/migrate doesn't cold-build
       # ~30 packages one-at-a-time mid-run (the #1213/#1247 tax — ~15-20 min). Content-addressed
@@ -294,18 +304,17 @@ jobs:
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
-      # the worker PR) act as the Harness App and cascade. ANTHROPIC_API_KEY = the
-      # funded metered key (NOT a subscription — subscription OAuth must not back CI).
+      # the worker PR) act as the Harness App and cascade.
       - id: pi
         if: ${{ steps.resume.outputs.resume != '1' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Everything on the Claude SUBSCRIPTION (#1669). delegate-hard still escalates,
-          # but now by MODEL (default → hard) on the same subscription provider — no metered
-          # lane. Headless subscription auth: the mini's runner runs `claude` in a session that
-          # can't reach the macOS Keychain, so CLAUDE_CODE_OAUTH_TOKEN (claude setup-token, 1y)
-          # authenticates the CLI from env instead of the keychain login (#2119).
+          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). delegate-hard
+          # still escalates, but by MODEL (default → hard) on the same provider — no metered
+          # lane. Headless subscription auth on a GitHub-hosted runner (#2275):
+          # CLAUDE_CODE_OAUTH_TOKEN (claude setup-token, 1y) authenticates the `claude` CLI that
+          # pi-claude-cli spawns; the CLI is installed + preflighted by setup-claude-cli (#2119).
           # #2161: both models come from the resolve step (.claude/pipeline-models.json), not a
           # hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
           PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
