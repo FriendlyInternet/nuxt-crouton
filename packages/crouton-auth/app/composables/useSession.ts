@@ -219,7 +219,21 @@ async function fetchActiveOrgImpl(ctx: SessionContext): Promise<void> {
 
   // Don't fetch org data if user is not authenticated (prevents 401 console errors)
   if (!userState.value) return
-  if (!authClient?.organization?.getFullOrganization) return
+
+  // SSR: authClient is not available (client-only plugin), so fetch over HTTP with
+  // the request cookie — same as fetchSessionOnServer. Without this the members
+  // array (and so the role) is unknown on the server render and admin-only
+  // controls hydrate with disabled styling (#2274). No default-org repair here:
+  // that's a write, and it stays on the client.
+  if (!authClient) {
+    const data = await ($fetch as (url: string, opts?: Record<string, unknown>) => Promise<unknown>)(
+      '/api/auth/organization/get-full-organization',
+      { headers: headers ?? {} }
+    ).catch(() => null)
+    activeOrgState.value = data ?? null
+    return
+  }
+  if (!authClient.organization?.getFullOrganization) return
 
   try {
     const { data, error } = await authClient.organization.getFullOrganization({
@@ -536,7 +550,8 @@ export function useSession() {
   const authClient = useAuthClientSafe()
   const config = useRuntimeConfig()
   const debug = (config.public?.crouton?.auth as { debug?: boolean } | undefined)?.debug ?? false
-  const headers = import.meta.server ? useRequestHeaders() : undefined
+  // No authClient == SSR (client-only plugin); the server fetches forward the request cookie
+  const headers = import.meta.server || !authClient ? useRequestHeaders() : undefined
 
   const ctx: SessionContext = {
     authClient,
