@@ -66,6 +66,7 @@
     "@fyit/crouton-admin": "workspace:*",
     "@fyit/crouton-auth": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
+    "@iconify-json/lucide": "^1.2.68",
     "@nuxt/kit": "^4.0.0",
     "@nuxthub/core": "^0.10.0",
     "@nuxt/image": "^2.1.0",

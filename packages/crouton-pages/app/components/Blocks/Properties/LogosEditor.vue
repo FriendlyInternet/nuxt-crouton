@@ -106,7 +106,7 @@ function resolveType(item: LogoItem): LogoItemType {
 }
 
 function addIconItem() {
-  items.value.push(assignId({ type: 'icon', value: 'i-simple-icons-github' }))
+  items.value.push(assignId({ type: 'icon', value: 'i-lucide-github' }))
   emitChange()
 }
 
