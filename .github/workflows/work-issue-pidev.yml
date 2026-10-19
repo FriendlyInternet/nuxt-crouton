@@ -116,14 +116,14 @@ jobs:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
       # downstream workflows (#572); an App-installation token does.
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
@@ -152,7 +152,7 @@ jobs:
       # Contract: scripts/pipeline-loop-guard.test.mjs.
       - name: Gather claim facts
         id: claim-facts
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
@@ -182,7 +182,7 @@ jobs:
       # and block the actual work — evidence, not a gate.
       - name: Follow-along breadcrumb
         continue-on-error: true
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
@@ -220,7 +220,7 @@ jobs:
       # epic_branch as a step output so the pi prompt branches deterministically, not by grepping.
       - name: Fetch issue body
         id: body
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
@@ -232,12 +232,12 @@ jobs:
           echo "epic_branch=${EPIC_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}'"
 
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           # per-job dest — the default ~/setup-pnpm collides between the two
           # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
           dest: ${{ runner.temp }}/setup-pnpm
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -805,7 +805,7 @@ jobs:
       # that names the blocker, posted by the step below.
       - name: Not picked up — the issue is already claimed
         if: ${{ always() && steps.claim.outcome == 'failure' }}
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           CLAIM_REASON: ${{ steps.claim.outputs.claim_reason }}
@@ -822,7 +822,7 @@ jobs:
 
       - name: Artifact-gate — fail if the agent produced nothing
         if: ${{ always() && steps.claim.outcome != 'failure' }}
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}
           CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
@@ -1148,7 +1148,7 @@ jobs:
 
       - name: Upload pi telemetry artifact
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pi-telemetry-${{ github.run_id }}
           path: pi-telemetry-out/

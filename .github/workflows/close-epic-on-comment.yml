@@ -39,7 +39,7 @@ jobs:
       # triggers for GITHUB_TOKEN-initiated events, so a GITHUB_TOKEN close's
       # `issues: closed` event would NOT reach strip-status-on-close / project-status
       # (the #572 lesson). An App installation token cascades.
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
@@ -47,7 +47,7 @@ jobs:
           owner: FriendlyInternet
 
       - name: Close the epic
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |

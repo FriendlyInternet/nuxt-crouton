@@ -44,13 +44,13 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history so the agent can diff the PR against its base branch.
           fetch-depth: 0
 
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         id: agent
         # The VERDICT FILE is the gate — NOT this step's exit code. The agent can exit non-zero
         # on `max_turns` (it flails writing the verdict / the SDK errors) even when it found
@@ -110,7 +110,7 @@ jobs:
             --out finding-candidate.json || true
       - name: Upload finding candidate
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: loop-station-finding-${{ github.run_id }}
           path: finding-candidate.json

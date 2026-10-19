@@ -106,6 +106,7 @@ jobs:
     # deploy-pocs.yml calls this on `pull_request` of pocs/**, so a fork PR must never
     # reach a self-hosted box if HOSTED_RUNNER is ever pointed at one.
     runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
     # GitHub deployment environment — kept as production/staging so any
     # environment-scoped secrets/protection from the existing setup still apply
     # (the Workers target is staging/prod independently, via inputs.environment).
@@ -123,8 +124,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       NODE_OPTIONS: '--max-old-space-size=8192'
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # Hosted runners ship jq; a self-hosted mac starts bare (runbook §2a installs
       # node/pnpm/gh/wrangler but jq wasn't on the list). Self-heals via Homebrew —
       # already on the runner PATH through its `.path` file. No-op when jq exists.
@@ -137,12 +137,12 @@ jobs:
       # #1254/#1255). The deploy-<app>-<env> concurrency group above guarantees one
       # writer per dest; the dest set is bounded (apps × envs), so no disk creep. (#1258)
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           dest: ~/setup-pnpm-${{ inputs.app }}-${{ inputs.environment }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs['node-version'] }}
           cache: 'pnpm'
@@ -221,7 +221,7 @@ jobs:
         uses: ./.github/actions/warm-packages
 
       - name: Cache Nuxt build artifacts
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ${{ inputs.workspace }}/${{ inputs.app }}/node_modules/.cache
@@ -407,7 +407,7 @@ jobs:
         id: review-app-token
         if: ${{ inputs.environment == 'staging' && inputs.review-pr != '' }}
         continue-on-error: true
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
@@ -654,7 +654,7 @@ jobs:
         id: capture-token
         if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && steps.seed.outputs.email != '' }}
         continue-on-error: true
-        uses: actions/create-github-app-token@v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
@@ -741,7 +741,7 @@ jobs:
       - name: Upload smoke screenshot
         if: ${{ always() && steps.smoke.outputs.result != '' }}
         continue-on-error: true
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: smoke-${{ inputs.app }}
           path: screenshots/${{ inputs.app }}-smoke.png
@@ -784,7 +784,7 @@ jobs:
       # On PRs, post/update a sticky comment with the isolated staging URL.
       - name: Comment staging URL on PR
         if: ${{ inputs.environment != 'production' && github.event_name == 'pull_request' && steps.deploy.outputs.url != '' }}
-        uses: actions/github-script@v9
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const url = '${{ steps.deploy.outputs.url }}'
