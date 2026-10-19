@@ -64,10 +64,13 @@ test('formatReport names every refused file', () => {
 
 // ── #1957 replay: the corpus catches what eight green unit tests did not ──────────────────────
 // `refTarget` names the generated DIRECTORY (plural); the config is keyed by the collection name
-// as written. velo configures `location` and correctly says `refTarget: "locations"`. The gate's
-// first version compared against config keys only — green tests, and it would have refused this.
-const VELO_BOOKING = 'apps/velo/schemas/booking.json'
-const CONFIGURED = ['location', 'booking'] // as the config keys them — singular
+// as written. The bookings schema configures `location` and correctly says `refTarget: "locations"`.
+// The gate's first version compared against config keys only — green tests, and it would have
+// refused this. The corpus case moved from apps/velo/schemas (deleted when the bookings package
+// took ownership of its collections, #2278) to the package's shipped schema; the configured
+// names are now the manifest's collection names, still singular.
+const VELO_BOOKING = 'packages/crouton-bookings/schemas/booking.json'
+const CONFIGURED = ['location', 'booking'] // as the manifest names them — singular
 const plural = (name) => (name.endsWith('s') ? name : `${name}s`)
 
 function refTargetsOf({ json }) {
@@ -94,5 +97,5 @@ test('the config-keys-only rule refuses shipping schemas — the corpus says so,
 test('findFiles reaches the real schema corpus', () => {
   const files = findFiles('apps/*/schemas/*.json')
   assert.ok(files.length > 0, 'the schema corpus is not empty — a zero match here means the walker is broken')
-  assert.ok(files.includes(VELO_BOOKING))
+  assert.ok(findFiles('packages/*/schemas/*.json').includes(VELO_BOOKING))
 })

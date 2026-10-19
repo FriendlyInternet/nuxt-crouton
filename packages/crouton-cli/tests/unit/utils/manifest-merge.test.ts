@@ -3,6 +3,8 @@ import { mergeManifestCollections } from '../../../lib/utils/manifest-merge.ts'
 
 // Package collections are merged for the packages the app EXTENDS, not for
 // keys in `crouton.config.js features` (#2286). Real manifests from packages/*.
+// crouton-pages is the example: it still ships a `collections` list the app
+// generates (crouton-sales and crouton-bookings own theirs since #2278).
 // Non-interactive (CI) so configuration prompts take their defaults.
 
 let prevCI: string | undefined
@@ -23,34 +25,36 @@ describe('mergeManifestCollections (keyed on extended packages)', () => {
 
   it('merges a package\'s collections when the app extends it, with no features block at all', async () => {
     const config = freshConfig()
-    const result = await mergeManifestCollections(config, ['crouton-bookings'])
+    const result = await mergeManifestCollections(config, ['crouton-pages'])
     expect(result.merged).toBeGreaterThan(0)
-    expect(result.collections.every(c => c.feature === 'bookings')).toBe(true)
-    expect(config.targets.some(t => t.layer === 'bookings')).toBe(true)
+    expect(result.collections.every(c => c.feature === 'pages')).toBe(true)
+    expect(config.targets.some(t => t.layer === 'pages')).toBe(true)
   })
 
   it('does not merge a package the app does not extend, even if features names it', async () => {
-    const config = { ...freshConfig(), features: { bookings: true } }
+    const config = { ...freshConfig(), features: { pages: true } }
     const result = await mergeManifestCollections(config, ['crouton-core'])
     expect(result.merged).toBe(0)
   })
 
   it('skips a package that owns its collections (#2278)', async () => {
-    const config = freshConfig()
-    const result = await mergeManifestCollections(config, ['crouton-sales'])
-    expect(result.merged).toBe(0)
+    for (const owner of ['crouton-sales', 'crouton-bookings']) {
+      const config = freshConfig()
+      const result = await mergeManifestCollections(config, [owner])
+      expect(result.merged).toBe(0)
+    }
   })
 
   it('keeps a user-defined collection over the package\'s', async () => {
-    const config = { collections: [{ name: 'bookings', fieldsFile: './schemas/bookings.json' }], targets: [] as any[] }
-    const result = await mergeManifestCollections(config, ['crouton-bookings'])
-    expect(result.skipped).toContain('bookings')
-    expect(config.collections.filter(c => c.name === 'bookings')).toHaveLength(1)
+    const config = { collections: [{ name: 'pages', fieldsFile: './schemas/pages.json' }], targets: [] as any[] }
+    const result = await mergeManifestCollections(config, ['crouton-pages'])
+    expect(result.skipped).toContain('pages')
+    expect(config.collections.filter(c => c.name === 'pages')).toHaveLength(1)
   })
 
   it('stores a package\'s prompted configuration under features.<alias> (the config carrier)', async () => {
     const config = freshConfig()
-    const result = await mergeManifestCollections(config, ['crouton-bookings'])
+    const result = await mergeManifestCollections(config, ['crouton-pages'])
     for (const pc of result.promptedConfigs) {
       expect(config.features?.[pc.featureKey]).toEqual(pc.configObject)
     }
