@@ -763,9 +763,12 @@ under `features.<alias>` in `crouton.config.js` and as runtimeConfig in `nuxt.co
 Identity is **(layer, plural name)**, case-insensitive: `sales/orderitems` matches the manifest's
 `orderItem`, while `shop/products` in another app is a different table and stays allowed. An app gets
 the collections by extending the package; there is nothing to list in `crouton.config.js`. Sales,
-bookings and pages are done; assets (still being migrated under #2278) has no manifest `collections` at all.
-No shipping package exercises the merge path any more, so `manifest-merge.test.ts` covers it with a
-test-local manifest.
+bookings, pages and assets all own theirs (#2278). No shipping package exercises the merge path any
+more, so `manifest-merge.test.ts` covers it with a test-local manifest.
+
+**Known gap (#2311):** a field can't `refTarget` a package-owned collection yet (`validateRefTargets`
+only knows the app's own collections, and `database-queries.ts` has no import branch for a package
+export), so `"refTarget": "assets"` is refused.
 Contract: `tests/unit/utils/owned-collections.test.ts`.
 
 ## Config File Format
@@ -889,7 +892,7 @@ collections: [
 3. That component is used instead for create/edit operations
 
 **When to use:** you have a custom form component that handles the collection's data entry.
-Not for package-owned collections (sales, bookings, pages, #2278): the package ships them,
+Not for package-owned collections (sales, bookings, pages, assets, #2278): the package ships them,
 form included, and the CLI refuses to generate them.
 
 **Dry-run output:**
