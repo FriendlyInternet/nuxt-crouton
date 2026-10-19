@@ -638,21 +638,6 @@ function handleAssetSelect(asset: Record<string, any>) {
 }
 
 // Preview locale (for language selector in preview panel)
-const previewLocale = ref<string>(locale.value)
-
-// Reset preview locale to current editor locale when preview opens
-watch(showPreview, (open) => {
-  if (open) previewLocale.value = editingLocale.value
-})
-
-// Locales that actually have content (for the language selector)
-const availablePreviewLocales = computed(() => {
-  const translations = state.value.translations as Record<string, { title?: string; content?: string }> | undefined
-  if (!translations) return [locale.value]
-  return Object.entries(translations)
-    .filter(([, data]) => data?.title || data?.content)
-    .map(([loc]) => loc)
-})
 
 // Metadata: created/updated info
 const createdTimeAgo = useTimeAgo(() => (state.value as any).createdAt)
@@ -909,63 +894,12 @@ defineExpose({ state })
       </div>
     </UForm>
 
-    <!-- Preview Slideover -->
-    <USlideover v-model:open="showPreview" :ui="{ content: 'w-full sm:max-w-2xl lg:max-w-4xl' }">
-      <template #content="{ close }">
-        <div class="flex flex-col h-full">
-          <!-- Header -->
-          <div class="flex items-center justify-between px-4 py-3 border-b border-default">
-            <div class="flex items-center gap-2">
-              <UIcon name="i-lucide-eye" class="size-4 text-muted" />
-              <span class="text-sm font-medium">
-                {{ state.status === 'draft' ? t('pages.editor.draftPreview') : t('pages.editor.pagePreview') }}
-              </span>
-              <UBadge
-                v-if="state.status === 'draft'"
-                color="warning"
-                variant="subtle"
-                size="xs"
-              >
-                {{ t('pages.status.draft') }}
-              </UBadge>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <!-- Language selector (shown when multiple locales have content) -->
-              <div v-if="availablePreviewLocales.length > 1" class="flex items-center gap-1">
-                <UButton
-                  v-for="loc in availablePreviewLocales"
-                  :key="loc"
-                  size="xs"
-                  :color="previewLocale === loc ? 'primary' : 'neutral'"
-                  :variant="previewLocale === loc ? 'soft' : 'ghost'"
-                  class="uppercase font-mono"
-                  @click="previewLocale = loc"
-                >
-                  {{ loc }}
-                </UButton>
-              </div>
-
-              <UButton
-                variant="ghost"
-                color="neutral"
-                icon="i-lucide-x"
-                size="xs"
-                :aria-label="t('common.close')"
-                @click="close"
-              />
-            </div>
-          </div>
-
-          <!-- Rendered page content -->
-          <div class="flex-1 overflow-auto">
-            <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-              <CroutonPagesRenderer :page="previewPage" :locale="previewLocale" />
-            </div>
-          </div>
-        </div>
-      </template>
-    </USlideover>
+    <!-- Preview Slideover (#2325) -->
+    <CroutonPagesEditorPreviewSlideover
+      v-model:open="showPreview"
+      :page="previewPage"
+      :initial-locale="editingLocale"
+    />
 
   </div>
 </template>
