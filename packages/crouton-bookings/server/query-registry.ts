@@ -1,14 +1,13 @@
-// #2309 — the collections this package ships, under the key the generator would have
-// written for each (`bookings` + PascalCase directory). Registered process-wide by
-// server/plugins/query-registry.ts so the pages package's public collection endpoints
-// can serve them without the app generating anything. Kept in sync with collections/ by
-// test/query-registry.test.ts.
+// #2309 — the collections this package exposes to crouton-pages' PUBLIC collection endpoints
+// (`/api/public/[team]/<key>`, unauthenticated, cached), keyed as the generator would
+// (`bookings` + PascalCase directory). Registered process-wide by server/plugins/query-registry.ts.
+//
+// Deliberately NOT every collection: the queries are the admin ones and an admin can bind any
+// registered key on a public page, so only what belongs on a public page is listed. The rest
+// stay admin-only (they hold customer/staff data or internal configuration).
+// test/query-registry.test.ts pins both lists.
 import { collectionQueries, type QueryRegistry } from '@fyit/crouton-core/shared/utils/query-registry'
 
 export const bookingsQueryRegistry: QueryRegistry = {
-  bookingsBookings: collectionQueries(() => import('../collections/bookings/server/database/queries'), 'BookingsBookings'),
-  bookingsEmaillogs: collectionQueries(() => import('../collections/emaillogs/server/database/queries'), 'BookingsEmaillogs'),
-  bookingsEmailtemplates: collectionQueries(() => import('../collections/emailtemplates/server/database/queries'), 'BookingsEmailtemplates'),
   bookingsLocations: collectionQueries(() => import('../collections/locations/server/database/queries'), 'BookingsLocations'),
-  bookingsSettings: collectionQueries(() => import('../collections/settings/server/database/queries'), 'BookingsSettings'),
 }

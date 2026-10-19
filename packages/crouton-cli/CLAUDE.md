@@ -788,7 +788,11 @@ bare `refTarget`, so it registers for neither and the usual refusal fires; a lay
 registers its entries at runtime instead (`server/query-registry.ts` + a Nitro plugin, built with
 `collectionQueries` from `@fyit/crouton-core/shared/utils/query-registry`), and crouton-pages'
 public collection endpoints read the union via `resolveQueryRegistry` — the app's entry wins on a
-clash. Nothing to generate.
+clash. Nothing to generate. **A package registers only what belongs on a public page** (sales:
+products, categories, events, locations; bookings: locations; pages: pages; assets: assets) — the
+queries are the admin ones and an admin can bind any registered key on a public page, so orders,
+clients, email logs, settings, printers stay admin-only (red-team finding on PR #2317). Each
+package's `test/query-registry.test.ts` pins that list.
 
 ## Config File Format
 
