@@ -41,8 +41,8 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useT()
-const { useTimeAgo, watchDebounced } = await import('@vueuse/core')
-const { pageTypes, getPageType } = usePageTypes()
+const { watchDebounced } = await import('@vueuse/core')
+const { getPageType } = usePageTypes()
 const { locale, locales } = useI18n()
 const availableLocales = computed(() =>
   (locales.value as Array<{ code: string, name: string }>).map(l => ({ code: l.code, name: l.name })),
@@ -255,224 +255,10 @@ const isBinderPage = computed(() => selectedPageType.value?.fullId === 'pages:co
 // Page-type options for the Settings panel's stacked radio picker (create mode).
 // Description is an i18n key authored by the package that registers the type
 // (app.config pageTypes); collection-derived types may have none → name only.
-const pageTypeOptions = computed(() =>
-  pageTypes.value.map((type: any) => ({
-    value: type.fullId,
-    // Pass the raw value as fallback: package types use i18n keys (resolved),
-    // collection-derived types use plain strings — t(value, value) returns them
-    // verbatim instead of this app's missing-key "[value]" bracketing.
-    label: t(type.name, type.name),
-    description: type.description ? t(type.description, type.description) : undefined,
-    icon: type.icon
-  }))
-)
-
-// Status config
-const statusConfig: Record<string, { color: string; icon: string; label: string }> = {
-  draft: { color: 'warning', icon: 'i-lucide-pencil', label: t('pages.status.draft') },
-  published: { color: 'success', icon: 'i-lucide-check', label: t('pages.status.published') },
-  archived: { color: 'error', icon: 'i-lucide-archive', label: t('pages.status.archived') }
-}
-
-const statusDropdownItems = computed(() => [
-  Object.entries(statusConfig).map(([status, config]) => ({
-    label: config.label,
-    slot: status as 'draft' | 'published' | 'archived',
-    onSelect: () => { state.value.status = status }
-  }))
-])
-
-// Visibility config
-const visibilityConfig: Record<string, { icon: string; label: string }> = {
-  public: { icon: 'i-lucide-globe', label: t('pages.visibility.public') },
-  members: { icon: 'i-lucide-users', label: t('pages.visibility.members') },
-  admin: { icon: 'i-lucide-shield', label: t('pages.visibility.admin') },
-  scoped: { icon: 'i-lucide-key-round', label: t('pages.visibility.scoped') },
-  hidden: { icon: 'i-lucide-eye-off', label: t('pages.visibility.hidden') }
-}
-
-const visibilityDropdownItems = computed(() => [
-  Object.entries(visibilityConfig).map(([visibility, config]) => ({
-    label: config.label,
-    slot: visibility as 'public' | 'members' | 'admin' | 'scoped' | 'hidden',
-    onSelect: () => { state.value.visibility = visibility }
-  }))
-])
 
 // Access code for scoped visibility — manages the ('page', pageId) grant via
 // the access-code endpoint. The code is hashed server-side, so we only ever
 // know whether one exists.
-const { getTeamId: getTeamIdForAccessCode } = useTeamContext()
-const hasAccessCode = ref(false)
-const accessCodePending = ref(false)
-
-const accessCodeUrl = () =>
-  `/api/teams/${getTeamIdForAccessCode()}/pages/${state.value.id}/access-code`
-
-watch(
-  () => [state.value.visibility, state.value.id] as const,
-  async ([visibility, id]) => {
-    if (visibility !== 'scoped' || !id) {
-      hasAccessCode.value = false
-      return
-    }
-    try {
-      const { exists } = await $fetch<{ exists: boolean }>(accessCodeUrl())
-      hasAccessCode.value = exists
-    } catch {
-      hasAccessCode.value = false
-    }
-  },
-  { immediate: true }
-)
-
-async function saveAccessCode(code: string) {
-  if (!state.value.id) return
-  accessCodePending.value = true
-  try {
-    await $fetch(accessCodeUrl(), { method: 'PUT', body: { code } })
-    hasAccessCode.value = true
-  } catch (err) {
-    console.error('Failed to save access code:', err)
-  } finally {
-    accessCodePending.value = false
-  }
-}
-
-async function removeAccessCode() {
-  if (!state.value.id) return
-  accessCodePending.value = true
-  try {
-    await $fetch(accessCodeUrl(), { method: 'DELETE' })
-    hasAccessCode.value = false
-  } catch (err) {
-    console.error('Failed to remove access code:', err)
-  } finally {
-    accessCodePending.value = false
-  }
-}
-
-// Mirror of the server's read-time scope derivation, for the editor hint
-// only: when a scoped page's content contains a block whose definition
-// carries `providesScope` (e.g. the sales kassa block), the page is gated by
-// that block's own credential and the access-code field hides behind a hint.
-// Detection is the flag on the block definition — the editor never
-// re-implements the server's derivation logic.
-const registeredCroutonBlocks = (useAppConfig().croutonBlocks ?? {}) as Record<string, { type?: string, providesScope?: boolean }>
-const scopeProvidingBlockTypes = new Set(
-  Object.entries(registeredCroutonBlocks)
-    .filter(([, def]) => def?.providesScope)
-    .map(([key, def]) => def?.type || key)
-)
-
-// Per-page chrome flags (config.hideNav / config.hideAuthControls) — hide
-// the public page's nav pill and/or login/account controls (language +
-// color-mode toggle always stay). Stored sparsely: false is removed from
-// config instead of persisted.
-const configChromeFlag = (key: 'hideNav' | 'hideAuthControls') => computed({
-  get: () => !!(state.value.config as any)?.[key],
-  set: (value: boolean) => {
-    const config = { ...(state.value.config as Record<string, unknown> | undefined) }
-    if (value) config[key] = true
-    else delete config[key]
-    state.value.config = config
-  }
-})
-const chromeHideNav = configChromeFlag('hideNav')
-const chromeHideAuthControls = configChromeFlag('hideAuthControls')
-
-const scopeProvidedByBlock = computed(() => {
-  if (state.value.visibility !== 'scoped' || !scopeProvidingBlockTypes.size) return false
-
-  const docs: unknown[] = [state.value.content]
-  const translations = state.value.translations as Record<string, { content?: unknown }> | undefined
-  for (const data of Object.values(translations || {})) {
-    docs.push(data?.content)
-  }
-
-  return docs.some((raw) => {
-    if (!raw) return false
-    try {
-      const doc = typeof raw === 'string' ? JSON.parse(raw) : raw
-      const blocks = Array.isArray((doc as any)?.content) ? (doc as any).content : []
-      return blocks.some((b: any) => scopeProvidingBlockTypes.has(b?.type))
-    } catch {
-      return false
-    }
-  })
-})
-
-// Layout options
-const layoutOptions = [
-  { value: 'default', label: t('pages.layout.default') },
-  { value: 'full-height', label: t('pages.layout.fullHeight') },
-  { value: 'full-screen', label: t('pages.layout.fullScreen') }
-]
-
-// Robots options for SEO
-const robotsOptions = [
-  { value: 'index', label: t('pages.robots.index') },
-  { value: 'noindex', label: t('pages.robots.noindex') }
-]
-
-// Parent page options
-const parentOptions = computed(() => {
-  const options: { value: string | null; label: string; disabled?: boolean }[] = [
-    { value: null, label: t('pages.parent.root') }
-  ]
-
-  const pages = allPages.value
-  if (!pages || pages.length === 0) return options
-
-  const getDescendantIds = (pageId: string): Set<string> => {
-    const descendants = new Set<string>()
-    const findDescendants = (parentId: string) => {
-      for (const page of pages) {
-        if ((page as any).parentId === parentId) {
-          descendants.add(page.id)
-          findDescendants(page.id)
-        }
-      }
-    }
-    findDescendants(pageId)
-    return descendants
-  }
-
-  const currentId = state.value.id
-  const excludeIds = currentId ? getDescendantIds(currentId) : new Set<string>()
-  if (currentId) excludeIds.add(currentId)
-
-  const buildOptions = (parentId: string | null = null, depth: number = 0) => {
-    const children = pages.filter((p: any) => p.parentId === parentId)
-    for (const page of children) {
-      const isExcluded = excludeIds.has(page.id)
-      options.push({
-        value: page.id,
-        label: `${'— '.repeat(depth)}${page.title || page.slug || t('pages.untitled')}`,
-        disabled: isExcluded
-      })
-      buildOptions(page.id, depth + 1)
-    }
-  }
-
-  buildOptions(null, 0)
-  return options
-})
-
-// Track manual layout changes
-const layoutManuallyChanged = ref(false)
-
-// Auto-set layout based on pageType
-watch(() => state.value.pageType, (newPageType) => {
-  if (action.value === 'create' && !layoutManuallyChanged.value) {
-    const pageType = getPageType(newPageType) as any
-    state.value.layout = pageType?.preferredLayout || 'default'
-  }
-}, { immediate: true })
-
-function onLayoutChange() {
-  layoutManuallyChanged.value = true
-}
 
 // Form submission
 async function handleSubmit() {
@@ -506,15 +292,6 @@ function handleDelete() {
 
 // Translatable fields, split across tabs (#307): title + slug live in the
 // Settings tab (the page's identity), the block content fills the Content tab.
-const metaFields = ['title', 'slug']
-
-// Placeholders for the title/slug identity inputs (rendered in the Settings tab
-// via the tabs-layout i18n input, which already gives them clear bordered inputs
-// + labels).
-const docFieldPlaceholders = computed(() => ({
-  title: t('pages.editor.titlePlaceholder', 'Untitled page'),
-  slug: t('pages.editor.slugPlaceholder', 'page-url-slug'),
-}))
 
 // Editor body tabs — the page config surfaces (Content / SEO / Settings) as a
 // horizontal nav so nothing hides in a slideover or an overflow menu (#307).
@@ -563,88 +340,17 @@ function findFirstAvailableTitle(): string {
 const toolbarTitle = computed(() => currentTitle.value || findFirstAvailableTitle())
 
 // SEO fields are translatable too — they follow the shared editing locale.
-const seoLocale = computed(() => editingLocale.value)
-function localeField(field: 'seoTitle' | 'seoDescription') {
-  return computed<string>({
-    get: () => {
-      const tr = state.value.translations as Record<string, Record<string, any>> | undefined
-      return (tr?.[seoLocale.value]?.[field] as string) ?? ''
-    },
-    set: (val: string) => {
-      const tr = { ...(state.value.translations as Record<string, Record<string, any>> || {}) }
-      tr[seoLocale.value] = { ...(tr[seoLocale.value] || {}), [field]: val }
-      state.value.translations = tr
-    },
-  })
-}
-const seoTitle = localeField('seoTitle')
-const seoDescription = localeField('seoDescription')
 
-// AI-draft the SEO description from the page's title + content (crouton-ai only).
-// Writes into the currently-edited locale's seoDescription.
-const seoGenerating = ref(false)
-async function generateSeoDescription() {
-  seoGenerating.value = true
-  try {
-    const tr = state.value.translations as Record<string, { content?: unknown }> | undefined
-    const content = tr?.[editingLocale.value]?.content ?? state.value.content
-    const { description } = await $fetch<{ description: string }>('/api/ai/generate-seo', {
-      method: 'POST',
-      body: {
-        title: currentTitle.value,
-        content,
-        language: localeOptions.value.find(l => l.value === editingLocale.value)?.label || editingLocale.value,
-      },
-    })
-    if (description) seoDescription.value = description
-  } catch (error) {
-    console.error('SEO description generation failed:', error)
-    useNotify().error(t('pages.editor.seoGenerateFailed', 'Could not generate a description'))
-  } finally {
-    seoGenerating.value = false
-  }
-}
+// Preview locale (for language selector in preview panel)
 
-// Field components
-
-// Field options
-const fieldOptions = {
-  slug: { transform: 'slug' as const }
-}
-
-// Field groups for collapsible sections in the i18n input
-const fieldGroups = computed(() => ({
-  title: t('pages.fieldGroups.info'),
-  slug: t('pages.fieldGroups.info'),
-  seoTitle: t('pages.fieldGroups.extra'),
-  seoDescription: t('pages.fieldGroups.extra'),
-  content: t('pages.fieldGroups.content'),
-}))
+// Metadata: created/updated info
 
 // Preview drawer state
 const showPreview = ref(false)
 
 // Detect optional packages via croutonApps registration
 const { hasApp } = useCroutonApps()
-const hasAssetsPicker = hasApp('assets')
 const hasAI = hasApp('ai')
-
-// Asset ID for the picker (not persisted — just tracks current picker selection)
-const selectedOgImageAssetId = ref<string | undefined>()
-
-function handleAssetSelect(asset: Record<string, any>) {
-  state.value.ogImage = `/images/${asset.pathname}`
-  selectedOgImageAssetId.value = asset.id
-}
-
-// Preview locale (for language selector in preview panel)
-
-// Metadata: created/updated info
-const createdTimeAgo = useTimeAgo(() => (state.value as any).createdAt)
-const updatedTimeAgo = useTimeAgo(() => (state.value as any).updatedAt)
-const createdByName = computed(() => (state.value as any).createdByUser?.name || (state.value as any).createdByUser?.email)
-const updatedByName = computed(() => (state.value as any).updatedByUser?.name || (state.value as any).updatedByUser?.email)
-const hasMetadata = computed(() => action.value === 'update' && ((state.value as any).createdAt || (state.value as any).updatedAt))
 
 // Build a preview page object from current form state
 const previewPage = computed(() => {
@@ -743,12 +449,8 @@ defineExpose({ state })
       <!-- Consolidated bar: back · status · visibility · name · ⋯ · save -->
       <CroutonPagesEditorToolbar
         :action="action"
-        :status="state.status"
-        :visibility="state.visibility"
-        :status-config="statusConfig"
-        :visibility-config="visibilityConfig"
-        :status-dropdown-items="statusDropdownItems"
-        :visibility-dropdown-items="visibilityDropdownItems"
+        v-model:status="state.status"
+        v-model:visibility="state.visibility"
         :is-regular-page="isRegularPage"
         :has-ai="hasAI"
         :is-saving="isSaving"
@@ -816,45 +518,13 @@ defineExpose({ state })
              shifted every control 16px down and right. Matches the SeoTab wrapper. -->
         <div v-show="activeTab === 'settings'">
           <CroutonPagesEditorSettingsTab
-            v-model:translations="state.translations"
-            :editing-locale="editingLocale"
-            :meta-fields="metaFields"
-            :has-ai="hasAI"
-            :field-options="fieldOptions"
-            :field-placeholders="docFieldPlaceholders"
-            :has-metadata="hasMetadata"
-            :created-by-name="createdByName"
-            :created-time-ago="createdTimeAgo"
-            :updated-by-name="updatedByName"
-            :updated-time-ago="updatedTimeAgo"
-            :updated-at="(state as any).updatedAt"
-            :created-at="(state as any).createdAt"
+            v-model:page="state"
             :action="action"
-            :visibility="state.visibility"
-            :show-in-navigation="state.showInNavigation"
-            :layout="state.layout"
-            :parent-id="state.parentId"
-            :page-type="state.pageType"
+            :editing-locale="editingLocale"
+            :has-ai="hasAI"
             :selected-page-type="selectedPageType"
-            :page-type-options="pageTypeOptions"
-            :layout-options="layoutOptions"
-            :parent-options="parentOptions"
+            :pages="allPages"
             :pages-pending="pagesPending"
-            :page-id="state.id"
-            :has-access-code="hasAccessCode"
-            :access-code-pending="accessCodePending"
-            :scope-provided-by-block="scopeProvidedByBlock"
-            :hide-nav="chromeHideNav"
-            :hide-auth-controls="chromeHideAuthControls"
-            @update:page-type="state.pageType = $event"
-            @update:show-in-navigation="state.showInNavigation = $event"
-            @update:layout="state.layout = $event"
-            @update:parent-id="state.parentId = $event"
-            @update:hide-nav="chromeHideNav = $event"
-            @update:hide-auth-controls="chromeHideAuthControls = $event"
-            @layout-change="onLayoutChange"
-            @save-access-code="saveAccessCode"
-            @remove-access-code="removeAccessCode"
           />
         </div>
 

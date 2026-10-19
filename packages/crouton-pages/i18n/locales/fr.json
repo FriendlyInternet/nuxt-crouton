@@ -377,11 +377,6 @@
         "notSecurityNotice": "Un bloc masqué reste présent dans le source de la page — ceci contrôle ce qui est affiché, pas ce qui est accessible. Pour un contenu qui doit rester privé, définissez la visibilité de la page elle-même."
       }
     },
-    "fieldGroups": {
-      "info": "Info",
-      "extra": "Extra",
-      "content": "Contenu"
-    },
     "blockLibrary": {
       "hero": {
         "name": "Hero",

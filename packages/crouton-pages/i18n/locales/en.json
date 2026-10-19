@@ -377,11 +377,6 @@
         "notSecurityNotice": "A hidden block is still present in the page source — this controls what is shown, not what is accessible. For content that must stay private, set the visibility of the page itself."
       }
     },
-    "fieldGroups": {
-      "info": "Info",
-      "extra": "Extra",
-      "content": "Content"
-    },
     "blockLibrary": {
       "hero": {
         "name": "Hero",
