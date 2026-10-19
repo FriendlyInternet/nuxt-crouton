@@ -951,6 +951,7 @@ defineExpose({ state })
                 color="neutral"
                 icon="i-lucide-x"
                 size="xs"
+                :aria-label="t('common.close')"
                 @click="close"
               />
             </div>
