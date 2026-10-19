@@ -256,26 +256,6 @@
     "columnTo": "Naar",
     "columnStatus": "Status"
   },
-  "setup": {
-    "collections": "Collecties",
-    "manageCollections": "Beheer je crouton-collecties",
-    "refreshStats": "Statistieken vernieuwen",
-    "failedToLoadStats": "Kan collectiestatistieken niet laden",
-    "noCollections": "Geen collecties gevonden",
-    "runGenerator": "Voer de crouton-generator uit om je eerste collectie aan te maken.",
-    "featureTree": "Boom",
-    "featureSortable": "Sorteerbaar",
-    "items": "items",
-    "fields": "velden",
-    "viewCollection": "Collectie bekijken",
-    "generatorConfig": "Generatorconfiguratie",
-    "notConfigured": "Niet geconfigureerd",
-    "hideConfig": "Configuratie verbergen",
-    "showConfig": "Configuratie tonen",
-    "noConfigFile": "Geen {file} gevonden in uw projectroot.",
-    "configDescription": "Dit bestand wordt gebruikt door de crouton-generator om collecties en hun schema's te definiëren.",
-    "retry": "Opnieuw"
-  },
   "workspace": {
     "selectItem": "Selecteer een item om te beginnen",
     "pressNToCreate": "of druk op N om nieuw aan te maken",
