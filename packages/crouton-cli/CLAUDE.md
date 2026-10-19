@@ -759,7 +759,7 @@ Drizzle schema, queries, routes, list, composable, form — from its own layer (
 Identity is **(layer, plural name)**, case-insensitive: `sales/orderitems` matches the manifest's
 `orderItem`, while `shop/products` in another app is a different table and stays allowed. An app gets
 the collections by extending the package; there is nothing to list in `crouton.config.js`. Packages
-without the flag (bookings, pages, assets — still being migrated under #2278) keep the old merge.
+without the flag (pages, assets — still being migrated under #2278; sales and bookings are done) keep the old merge.
 Contract: `tests/unit/utils/owned-collections.test.ts`.
 
 ## Config File Format
