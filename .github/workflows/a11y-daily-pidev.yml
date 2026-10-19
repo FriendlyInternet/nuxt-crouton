@@ -41,16 +41,16 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi. Default claude-haiku-4-5 on the Claude SUBSCRIPTION (provider=pi-claude-cli). glm-5.2 available via provider=zai if you want the GLM plan."
+        description: "Model for pi. Default claude-haiku-4-5 on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
         required: false
         default: "claude-haiku-4-5"
         type: string
       provider:
-        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the mini's `claude` login (#1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
+        description: "pi provider. Default claude-bridge = Claude SUBSCRIPTION via Claude Code + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275; replaced the silent pi-claude-cli; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
         required: false
-        default: "pi-claude-cli"
+        default: "claude-bridge"
         type: choice
-        options: ["pi-claude-cli", "zai", "anthropic"]
+        options: ["claude-bridge", "zai", "anthropic"]
 
 concurrency:
   group: a11y-daily-pidev
@@ -71,44 +71,49 @@ jobs:
     steps:
       # persist-credentials:false → no GITHUB_TOKEN is written into .git/config, so the
       # pi step has no git push path even if it tried (scoped-credential property #1).
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           persist-credentials: false
 
       # The deep a11y pass runs eslint-a11y (needs deps) and may boot a fixture for axe.
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           # per-job dest — the default ~/setup-pnpm collides between the two
           # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
           dest: ${{ runner.temp }}/setup-pnpm
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
+      # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
+      # proves the token answers + the provider registers before the pi run.
+      - name: Set up pi + Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
       # ── The agent: pi.dev, REPORTS-ONLY ────────────────────────────────────────────
       # env carries NO GH_TOKEN/GITHUB_TOKEN (reports-only) and NO metered key. Provider
-      # lanes: `pi-claude-cli` (DEFAULT, #1669) = Claude SUBSCRIPTION via the mini's
-      # `claude` login — this REVERSES the old "OAuth must not back CI" rule on the owner's
-      # instruction Anthropic now permits it. `zai` = GLM Coding Plan (flat-rate); `anthropic`
-      # = metered PI_PROVIDER_KEY. Only `pi-claude-cli`/`zai` work on the mac-mini runner.
-      # Invocation + skills confirmed on the mac-mini (#888): the `.pi/skills` symlink
-      # bridge does NOT load — pi's discovery ignores it — so skills are passed via the
-      # explicit `--skill .claude/skills` flag (our SKILL.md format is drop-in portable).
+      # lanes: `claude-bridge` (DEFAULT, #1669/#2275) = Claude SUBSCRIPTION via Claude Code —
+      # this REVERSES the old "OAuth must not back CI" rule on the owner's instruction that
+      # Anthropic now permits it. `zai` = GLM Coding Plan (flat-rate); `anthropic` = metered
+      # PI_PROVIDER_KEY. Skills (#888): the `.pi/skills` symlink bridge does NOT load — pi's
+      # discovery ignores it — so skills are passed via the explicit `--skill .claude/skills`
+      # flag (our SKILL.md format is drop-in portable).
       - id: pi
         env:
           PI_MODEL: ${{ inputs.model || 'claude-haiku-4-5' }}
-          PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
-          # Headless subscription auth: the mini's runner runs `claude` in a session that can't
-          # reach the macOS Keychain, so pass a long-lived OAuth token (claude setup-token, 1y)
-          # the CLI reads from env instead of the keychain login (#2119).
+          PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
+          # Headless subscription auth (#2119/#2275): the long-lived OAuth token (claude
+          # setup-token, 1y) the CLI reads from env; installed + preflighted by setup-pi.
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           set -uo pipefail
-          command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
           DATE=$(date -u +%Y%m%d)
           LOG="a11y-pidev-exec-${{ github.run_id }}.log"
           # Build the prompt in a FILE, not PROMPT=$(cat <<EOF…) — a $()-wrapped heredoc
@@ -132,8 +137,9 @@ jobs:
           echo "report=writeups/reports/a11y-repo-pidev-${DATE}.md" >> "$GITHUB_OUTPUT"
           echo "exec=$LOG" >> "$GITHUB_OUTPUT"
           START=$(date +%s)
-          # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
-          pi --print --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
+          # Pin provider + load skills via --skill (#888). --approve trusts .pi/settings.json on a fresh
+          # runner (the other two pi flows already pass it); without it the project package list is ignored.
+          pi --print --approve --provider "$PI_PROVIDER" --model "$PI_MODEL" --skill .claude/skills "$(cat "$PROMPT_FILE")" 2>&1 | tee "$LOG"
           RC=${PIPESTATUS[0]}
           END=$(date +%s)
           echo "wall=$((END-START))" >> "$GITHUB_OUTPUT"

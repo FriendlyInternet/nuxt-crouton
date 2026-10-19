@@ -37,10 +37,14 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      # CI files themselves (#2335): a workflow-only PR must still be shellchecked — it is
+      # exactly the PR where shell mistakes happen, and it used to skip the lint entirely.
+      workflows: ${{ steps.filter.outputs.workflows }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - id: filter
@@ -62,6 +66,11 @@ jobs:
             echo "code=false  (no code paths touched — heavy jobs will skip)" >&2
             echo "code=false" >> "$GITHUB_OUTPUT"
           fi
+          if echo "$files" | grep -qE '^\.github/(workflows|actions)/'; then
+            echo "workflows=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "workflows=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # Was `lint-and-typecheck` — renamed under #1097: the job never ran eslint and
   # only typechecks the MCP server, so the old name overclaimed. App typecheck
@@ -71,14 +80,13 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -105,14 +113,13 @@ jobs:
     # layers must exist before `nuxt prepare` can resolve them.
     name: Type Check Apps
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -122,7 +129,7 @@ jobs:
 
       - name: Cache app workspace-dependency builds
         id: app-dep-cache
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: packages/*/dist
           key: app-dep-builds-${{ hashFiles('packages/**/*.ts', 'packages/**/*.vue', 'pnpm-lock.yaml') }}
@@ -156,18 +163,17 @@ jobs:
     # gone: kassa typechecks green and is gated by typecheck-apps, #1097.)
     name: Build kassa (${{ matrix.preset }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         preset: [cloudflare-pages, node-server]
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -199,11 +205,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
@@ -221,11 +227,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
@@ -243,16 +249,16 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -279,11 +285,11 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
@@ -302,14 +308,13 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -328,14 +333,13 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -376,7 +380,7 @@ jobs:
         run: pnpm test:coverage
 
       - name: Upload coverage for the fallow audit
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vitest-coverage
           path: coverage/coverage-final.json
@@ -387,8 +391,9 @@ jobs:
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -418,14 +423,13 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -452,9 +456,10 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
       - name: Run scripts/*.test.mjs
@@ -485,11 +490,14 @@ jobs:
   shellcheck-workflows:
     name: Shellcheck workflow shell
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    # Runs on code changes AND on CI-file changes (#2335) — a PR that edits only a workflow
+    # or a composite action is the one that most needs this and used to skip it.
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
       - name: Extract each `run:` block and lint it
@@ -516,9 +524,21 @@ jobs:
           node -e '
             const yaml = require("js-yaml"), fs = require("fs"), path = require("path");
             let n = 0;
-            for (const f of fs.readdirSync(".github/workflows").filter(f => /\.ya?ml$/.test(f))) {
-              let doc; try { doc = yaml.load(fs.readFileSync(path.join(".github/workflows", f), "utf8")) } catch { continue }
-              for (const [jobId, job] of Object.entries(doc?.jobs || {})) {
+            // Workflows AND composite actions (.github/actions/*/action.yml, #2335): the steps
+            // under an action `runs:` carry `run:` blocks exactly like job steps, so lint them too.
+            // (No apostrophes in these comments: this whole program sits inside a single-quoted
+            // shell string, and one apostrophe ends it — the local extractor caught exactly that.)
+            const sources = fs.readdirSync(".github/workflows").filter(f => /\.ya?ml$/.test(f))
+              .map(f => ({ label: f, file: path.join(".github/workflows", f), jobsOf: d => d?.jobs || {} }));
+            if (fs.existsSync(".github/actions")) {
+              for (const dir of fs.readdirSync(".github/actions")) {
+                const file = path.join(".github/actions", dir, "action.yml");
+                if (fs.existsSync(file)) sources.push({ label: `action-${dir}`, file, jobsOf: d => ({ runs: { steps: d?.runs?.steps || [] } }) });
+              }
+            }
+            for (const { label: f, file, jobsOf } of sources) {
+              let doc; try { doc = yaml.load(fs.readFileSync(file, "utf8")) } catch { continue }
+              for (const [jobId, job] of Object.entries(jobsOf(doc))) {
                 for (const [i, step] of (job.steps || []).entries()) {
                   if (typeof step.run !== "string") continue;
                   // Actions expressions are not shell, so they have to be substituted with
@@ -592,21 +612,21 @@ jobs:
     # build, since `nuxt prepare` needs the workspace packages built first.)
     name: Fallow Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Waits on the test job for its coverage artifact (#1256): real per-function
     # coverage makes the restored maxCrap 30 measure untested-complex code.
     # `changes` added for #1698 — the per-job path gate.
     needs: [changes, test]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history: audit diffs against the merge-base with main
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v7
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -615,7 +635,7 @@ jobs:
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Download vitest coverage
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: vitest-coverage
           path: coverage
@@ -637,6 +657,7 @@ jobs:
             compile-check, sync-validation, mcp-server-tests, test, changeset-check, package-check,
             scripts-tests, fallow-audit, shellcheck-workflows]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Every needed job succeeded or was legitimately skipped
         run: |

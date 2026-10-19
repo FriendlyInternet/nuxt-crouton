@@ -63,7 +63,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 
 ### Agent pipeline (see §5 for the chain)
 
-`claude.yml` (@claude mention) · `decompose-on-issue.yml` (`delegate` label) · `comment-dispatch.yml` (`/delegate` comment) · `resume-on-comment.yml` (reply on `status:blocked`) · `close-epic-on-comment.yml` (`/close-epic`) · `schedule-waves.yml` (baton pass) · `automerge-epic-subpr.yml` · `fix-ci-on-failure.yml` · `pipeline-pr-status.yml` · plus the pi.dev variants: `decompose-on-issue-pidev.yml` (**LIVE** — promoted past dispatch-only in #1017: fires when a human applies the `delegate-pi` label, plus manual dispatch; default model tuned in #1019; has run for real under `delegate-pi`) and `a11y-daily-pidev.yml` (still dispatch-only + `AGENT_HARNESS` gated); both need a funded `PI_PROVIDER_KEY` to complete. Also `mac-mini-smoke.yml` (self-hosted-runner proof, #610).
+`claude.yml` (@claude mention) · `decompose-on-issue.yml` (`delegate` label) · `comment-dispatch.yml` (`/delegate` comment) · `resume-on-comment.yml` (reply on `status:blocked`) · `close-epic-on-comment.yml` (`/close-epic`) · `schedule-waves.yml` (baton pass) · `automerge-epic-subpr.yml` · `fix-ci-on-failure.yml` · `pipeline-pr-status.yml` · plus the pi.dev variants: `decompose-on-issue-pidev.yml` (**LIVE** — promoted past dispatch-only in #1017: fires when a human applies the `delegate-pi` label, plus manual dispatch; default model tuned in #1019; has run for real under `delegate-pi`) and `a11y-daily-pidev.yml` (still dispatch-only + `AGENT_HARNESS` gated); both run on GitHub-hosted `ubuntu-latest` on the Claude SUBSCRIPTION via the `claude-bridge` pi provider (npm `pi-claude-bridge`, pinned in `.pi/settings.json` with the other extensions) — `.github/actions/setup-pi` installs a pinned pi + `claude` CLI, preflights `CLAUDE_CODE_OAUTH_TOKEN`, and asserts the provider is registered before pi starts; every pi call passes `--approve` or the project's extension list is ignored (#2275). The older `pi-claude-cli` extension is dead against pi 1.x (registers, then every turn ends silently). The mac-mini and its `mac-mini-smoke.yml` / `pi-box-apply.yml` are retired (#2275).
 
 ### Digests & scheduled reports (real cadence in §4)
 
@@ -77,7 +77,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 | `strip-status-on-close.yml` | issue closed | Strips `status:*` labels (#641) |
 | `cleanup-epic-branches.yml` | PR closed | Deletes `epic/*` head branch only when merged into main (#613) |
 | `cleanup-merged-branches.yml` | weekly cron + dispatch | Dry-run unless `vars.CLEANUP_BRANCHES_APPLY=true` |
-| `project-status.yml` / `backfill-project.yml` | PR/issue events / dispatch | Projects-v2 board automation |
+| `project-status.yml` | PR/issue events | Projects-v2 board automation (the one-off `backfill-project.yml` was retired in #2338 after its 2026-06 board migration) |
 | `db-clone.yml` | dispatch | D1 mirror between envs (`db-clone` skill) |
 | `db-counts.yml` | dispatch | Read-only row counts of any app DB — the safe "what's in there" check (#384) |
 | `teardown-app.yml` | dispatch | CF/branch/issue teardown (`remove-app` skill) — runs in CI because the interactive agent has no Cloudflare creds |
@@ -156,7 +156,7 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 
 ### Actions vars
 
-`AGENT_RUNNER` (only the pi.dev workers: work-issue-pidev, decompose-on-issue-pidev, a11y-daily-pidev; default ubuntu-latest) · `HOSTED_RUNNER` (everything else that was on the mac-mini — deploys and the claude-code-action reviews, which run on the subscription via `CLAUDE_CODE_OAUTH_TOKEN` on any machine; default ubuntu-latest, #2275) · `AGENT_HARNESS` (`pi` opt-in) · `CLEANUP_BRANCHES_APPLY` · `LABEL_READY_EPICS_APPLY` (write-gates for otherwise dry-run jobs) · `DIGEST_REPORT_EMAIL` / `DIGEST_EMAIL_FROM` / `RESEND_FROM` / `RED_TEAM_REPORT_EMAIL` (email rails) · `PROJECT_NAME` · `UNLIGHTHOUSE_SITE`.
+`AGENT_RUNNER` (only the pi.dev workers: work-issue-pidev, decompose-on-issue-pidev, a11y-daily-pidev; set to `ubuntu-latest` since #2275 — no self-hosted runner exists, so any other value queues forever) · `HOSTED_RUNNER` (everything else that was on the mac-mini — deploys and the claude-code-action reviews, which run on the subscription via `CLAUDE_CODE_OAUTH_TOKEN` on any machine; default ubuntu-latest, #2275) · `AGENT_HARNESS` (`pi` opt-in) · `CLEANUP_BRANCHES_APPLY` · `LABEL_READY_EPICS_APPLY` (write-gates for otherwise dry-run jobs) · `DIGEST_REPORT_EMAIL` / `DIGEST_EMAIL_FROM` / `RESEND_FROM` / `RED_TEAM_REPORT_EMAIL` (email rails) · `PROJECT_NAME` · `UNLIGHTHOUSE_SITE`.
 
 ### Three auth rules every agent workflow obeys
 

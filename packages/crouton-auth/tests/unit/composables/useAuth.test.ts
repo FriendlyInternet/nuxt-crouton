@@ -551,6 +551,7 @@ describe('useTwoFactor', () => {
     it('should return TOTP setup data', async () => {
       mockAuthClient.twoFactor.enable.mockResolvedValue({
         data: {
+          method: 'totp',
           totpURI: 'otpauth://totp/App:user@example.com?secret=ABC123',
           secret: 'ABC123',
           backupCodes: ['BACKUP1', 'BACKUP2']

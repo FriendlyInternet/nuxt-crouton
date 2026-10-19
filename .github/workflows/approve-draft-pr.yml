@@ -48,10 +48,11 @@ jobs:
     # check is `isApproval()` below, which strips code and quotes first. Do not move the
     # decision up here: GitHub expressions cannot express it.
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       # An App token so the ready-for-review event CASCADES into the downstream CI/
       # auto-merge workflows — a GITHUB_TOKEN action does not re-trigger them (#572).
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
@@ -59,11 +60,11 @@ jobs:
           owner: FriendlyInternet
 
       # Needed so the script can import the unit-tested matcher.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
 
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |

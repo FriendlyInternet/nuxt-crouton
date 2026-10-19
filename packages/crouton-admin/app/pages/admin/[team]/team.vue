@@ -83,6 +83,7 @@ const tabs = computed(() => [
         highlight
         highlight-color="primary"
         class="border-b border-default px-4"
+        :ui="{ root: 'overflow-x-auto [&>div]:min-w-max' }"
       />
     </template>
 

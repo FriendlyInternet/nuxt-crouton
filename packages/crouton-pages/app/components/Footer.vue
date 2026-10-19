@@ -47,10 +47,10 @@ const socialLinks = computed(() => {
   const links: Array<{ icon: string; to: string; label: string }> = []
   const social = siteInfo.value?.socialLinks
   if (social?.facebook) {
-    links.push({ icon: 'i-simple-icons-facebook', to: social.facebook, label: 'Facebook' })
+    links.push({ icon: 'i-lucide-facebook', to: social.facebook, label: 'Facebook' })
   }
   if (social?.instagram) {
-    links.push({ icon: 'i-simple-icons-instagram', to: social.instagram, label: 'Instagram' })
+    links.push({ icon: 'i-lucide-instagram', to: social.instagram, label: 'Instagram' })
   }
   return links
 })

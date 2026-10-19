@@ -1,7 +1,7 @@
 # Self-Hosted Mac mini GitHub Actions Runner — Runbook
 
 **Date:** 2026-06-25
-**Status:** Active setup runbook (epic #610 / #669 — WS1/WS2/WS4/WS5)
+**Status:** RETIRED 2026-10-19 (#2275) — the Mac mini is gone; every job, including the pi.dev agent pipeline on the Claude subscription, runs on GitHub-hosted `ubuntu-latest` (`.github/actions/setup-pi`). Kept as history only; nothing below is a live instruction.
 **Purpose:** Stand up the Mac mini at home as an **always-on GitHub Actions self-hosted
 runner**, so the agent + deploy workflows run on our own hardware (no metered
 GitHub-hosted minutes, full control) and survive reboots, sleep, and network blips.

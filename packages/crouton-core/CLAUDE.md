@@ -398,6 +398,7 @@ Routes from child apps are automatically included in the parent's sidebar group.
 
 - **Auto-includes**: `@nuxthub/core`, `@nuxt/ui`, `@fyit/crouton-i18n`, `@fyit/crouton-auth`, `@fyit/crouton-admin`
 - **Runtime deps**: `@libsql/client` (required for SQLite - pnpm doesn't hoist from layers)
+- **Icon sets**: `@iconify-json/lucide` — installed sets are bundled by Nuxt UI, so icons render on the server render and offline (no iconify API calls). Declared here so apps don't rely on another workspace's deps being hoisted (#2240)
 - **Required by**: App packages (e.g., `crouton-bookings`)
 - **Peer deps**: `nuxt ^4.0.0`
 
