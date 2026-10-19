@@ -122,8 +122,13 @@ async function handleLink(provider: string) {
 async function handleUnlink(provider: string) {
   unlinkLoading.value = provider
   try {
+    // better-auth 1.7 unlinks by the account row id, not the provider (#2223)
+    const account = getLinkedAccount(provider)
+    if (!account) {
+      throw new Error(t('account.linked.failedToUnlink'))
+    }
     const result = await authClient.unlinkAccount({
-      providerId: provider
+      accountId: account.id
     })
 
     if (result.error) {

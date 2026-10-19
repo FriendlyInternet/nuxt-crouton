@@ -41,8 +41,9 @@ export function useTwoFactor() {
         throw new Error(result.error.message ?? t('account.twoFactor.failedToEnable'))
       }
 
-      if (!result.data) {
-        throw new Error('No data returned from enable 2FA')
+      // better-auth 1.7 answers `{ method: 'otp' }` when TOTP is off; we need the TOTP setup (#2223)
+      if (result.data?.method !== 'totp') {
+        throw new Error('No TOTP setup returned from enable 2FA')
       }
 
       return {
