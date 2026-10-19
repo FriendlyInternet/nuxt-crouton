@@ -146,6 +146,12 @@ export function usePageRecord(options: PageRecordOptions, deps: PageRecordDeps) 
   return { state, action, isLoading, isSaving, loadError, reset, load, save, remove }
 }
 
+/** The list/ids endpoint answers `{ items }`, a bare array, or one row — take the first row. */
+function firstRow(response: any): Record<string, any> | null {
+  const rows = response?.items ?? response
+  return (Array.isArray(rows) ? rows[0] : rows) ?? null
+}
+
 /**
  * The real dependencies, from the app's auto-imports. Called from the editor component
  * (a Nuxt context); never from a unit test.
@@ -159,12 +165,7 @@ export function usePageRecordDeps(currentUserName: () => string): PageRecordDeps
     async fetchPage(id) {
       const teamId = getTeamId()
       if (!teamId) throw new Error('Team context required')
-      const response = await $fetch<any>(`/api/teams/${teamId}/${apiPath}`, {
-        method: 'GET',
-        query: { ids: id },
-        credentials: 'include',
-      })
-      return response?.items?.[0] || response?.[0] || response || null
+      return firstRow(await $fetch<any>(`/api/teams/${teamId}/${apiPath}`, { method: 'GET', query: { ids: id }, credentials: 'include' }))
     },
     create,
     update,
