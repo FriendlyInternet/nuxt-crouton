@@ -904,12 +904,11 @@ const currentTitle = computed(() => {
   const tr = state.value.translations as Record<string, { title?: string }> | undefined
   return tr?.[editingLocale.value]?.title || ''
 })
-const toolbarTitle = computed(() =>
-  currentTitle.value || (() => {
-    const tr = state.value.translations as Record<string, { title?: string }> | undefined
-    return (tr ? Object.values(tr).find(d => d?.title)?.title : '') || ''
-  })()
-)
+function findFirstAvailableTitle(): string {
+  const tr = state.value.translations as Record<string, { title?: string }> | undefined
+  return (tr ? Object.values(tr).find(d => d?.title)?.title : '') || ''
+}
+const toolbarTitle = computed(() => currentTitle.value || findFirstAvailableTitle())
 
 // SEO fields are translatable too — they follow the shared editing locale.
 const seoLocale = computed(() => editingLocale.value)
@@ -1181,41 +1180,24 @@ defineExpose({ state })
            input never loses state when switching tabs. -->
       <div class="flex-1 min-h-0 overflow-auto">
         <!-- ───────── Settings (title + slug + page setup) ───────── -->
-        <div v-show="activeTab === 'settings'" class="mx-auto w-full max-w-3xl px-4 py-4 space-y-6">
-          <!-- Page identity — title + slug. Tabs layout + the shared editing
-               locale (switcher hidden — the language bar drives it). -->
-          <CroutonI18nInput
-            v-model="state.translations"
-            :fields="metaFields"
-            layout="tabs"
-            :active-locale="editingLocale"
-            hide-locale-switcher
-            :show-ai-translate="hasAI"
-            field-type="page"
+        <!-- Bare wrapper: the extracted tab owns its own layout (`mx-auto max-w-3xl
+             px-4 py-4`), so repeating those classes here applied the padding TWICE and
+             shifted every control 16px down and right. Matches the SeoTab wrapper. -->
+        <div v-show="activeTab === 'settings'">
+          <CroutonPagesEditorSettingsTab
+            v-model:translations="state.translations"
+            :editing-locale="editingLocale"
+            :meta-fields="metaFields"
+            :has-ai="hasAI"
             :field-options="fieldOptions"
             :field-placeholders="docFieldPlaceholders"
-          >
-            <template v-if="hasMetadata" #header>
-              <div class="flex items-center gap-3 text-xs text-muted">
-                <span v-if="createdByName" class="flex items-center gap-1">
-                  <UIcon name="i-lucide-user-plus" class="size-3" />
-                  {{ createdByName }} {{ createdTimeAgo }}
-                </span>
-                <span v-if="updatedByName && updatedByName !== createdByName" class="flex items-center gap-1">
-                  <UIcon name="i-lucide-pencil" class="size-3" />
-                  {{ updatedByName }} {{ updatedTimeAgo }}
-                </span>
-                <span v-else-if="(state as any).updatedAt && (state as any).updatedAt !== (state as any).createdAt" class="flex items-center gap-1">
-                  <UIcon name="i-lucide-pencil" class="size-3" />
-                  {{ t('pages.editor.updated', { time: updatedTimeAgo }) }}
-                </span>
-              </div>
-            </template>
-          </CroutonI18nInput>
-
-          <USeparator />
-
-          <CroutonPagesEditorSettingsPanel
+            :has-metadata="hasMetadata"
+            :created-by-name="createdByName"
+            :created-time-ago="createdTimeAgo"
+            :updated-by-name="updatedByName"
+            :updated-time-ago="updatedTimeAgo"
+            :updated-at="(state as any).updatedAt"
+            :created-at="(state as any).createdAt"
             :action="action"
             :visibility="state.visibility"
             :show-in-navigation="state.showInNavigation"
@@ -1333,49 +1315,15 @@ defineExpose({ state })
         </div>
 
         <!-- ───────── SEO & social ───────── -->
-        <div v-show="activeTab === 'seo'" class="mx-auto flex w-full max-w-3xl flex-col gap-3 px-4 py-4">
-          <!-- SEO title — placeholder is the real page title, so an empty SEO
-               title transparently falls back to it. -->
-          <UFormField :label="t('pages.fields.seoTitle', 'SEO title')" name="seoTitle">
-            <UInput
-              v-model="seoTitle"
-              size="sm"
-              class="w-full"
-              :placeholder="currentTitle || t('pages.editor.seoTitlePlaceholder', 'Defaults to the page title')"
-            />
-          </UFormField>
-          <UFormField :label="t('pages.fields.seoDescription', 'SEO description')" name="seoDescription">
-            <UTextarea v-model="seoDescription" :rows="3" size="sm" class="w-full" :placeholder="t('pages.editor.seoDescriptionPlaceholder', 'One-line summary for search & shares')" />
-            <!-- AI drafts the description from the title + page content (crouton-ai only) -->
-            <div v-if="hasAI" class="mt-2 flex justify-end">
-              <UButton
-                color="primary"
-                variant="soft"
-                size="xs"
-                icon="i-lucide-sparkles"
-                :loading="seoGenerating"
-                :label="t('pages.editor.seoGenerate', 'Generate with AI')"
-                @click="generateSeoDescription"
-              />
-            </div>
-          </UFormField>
-          <UFormField :label="t('pages.fields.ogImage')" name="ogImage">
-            <Suspense v-if="hasAssetsPicker">
-              <CroutonAssetsPicker v-model="selectedOgImageAssetId" @select="handleAssetSelect" />
-              <template #fallback>
-                <div class="h-20 rounded-lg border-2 border-dashed border-default animate-pulse" />
-              </template>
-            </Suspense>
-            <CroutonImageUpload v-else v-model="state.ogImage" size="sm" accept="image/*" />
-          </UFormField>
-          <UFormField :label="t('pages.fields.robots')" name="robots">
-            <USelect v-model="state.robots" :items="robotsOptions" value-key="value" size="sm" class="w-full" />
-          </UFormField>
-          <CroutonPagesEditorSeoPreview
+        <div v-show="activeTab === 'seo'">
+          <CroutonPagesEditorSeoTab
+            v-model:translations="state.translations"
+            v-model:og-image="state.ogImage"
+            v-model:robots="state.robots"
+            :editing-locale="editingLocale"
+            :current-title="currentTitle"
+            :has-ai="hasAI"
             :team-slug="teamSlugRef"
-            :translations="state.translations"
-            :og-image="state.ogImage"
-            :preview-locale="seoLocale"
           />
         </div>
       </div>
