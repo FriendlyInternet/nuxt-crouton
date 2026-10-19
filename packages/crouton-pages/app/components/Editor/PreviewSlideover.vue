@@ -77,7 +77,7 @@ const isDraft = computed(() => props.page.status === 'draft')
               </UButton>
             </div>
 
-            <UButton variant="ghost" color="neutral" icon="i-lucide-x" size="xs" @click="close" />
+            <UButton variant="ghost" color="neutral" icon="i-lucide-x" size="xs" :aria-label="t('common.close')" @click="close" />
           </div>
         </div>
 
