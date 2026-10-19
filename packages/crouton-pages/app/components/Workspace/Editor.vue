@@ -44,65 +44,13 @@ const { t } = useT()
 const { useTimeAgo, watchDebounced } = await import('@vueuse/core')
 const { pageTypes, getPageType } = usePageTypes()
 const { locale, locales } = useI18n()
-
-// Locale options for the AI generator
 const availableLocales = computed(() =>
-  (locales.value as Array<{ code: string, name: string }>).map(l => ({
-    code: l.code,
-    name: l.name
-  }))
+  (locales.value as Array<{ code: string, name: string }>).map(l => ({ code: l.code, name: l.name })),
 )
-const collections = useCollections()
 const { teamSlug: teamSlugRef } = useTeamContext()
-
-
 
 // AI page generator
 const showAiGenerator = ref(false)
-// Incrementing key forces CroutonI18nInput to fully remount after AI generation
-const contentKey = ref(0)
-
-async function applyAiContent(results: Array<{
-  locale: string
-  content: string
-  seoTitle: string
-  seoDescription: string
-}>) {
-  for (const { locale: localeCode, content, seoTitle, seoDescription } of results) {
-    // Path 1: collab is connected — inject into Yjs directly so the editor syncs
-    if (collabForI18n.value?.setContentJson) {
-      try {
-        const parsed = JSON.parse(content)
-        collabForI18n.value.setContentJson(localeCode, parsed, true)
-      }
-      catch {
-        // Fall through to state-based path
-      }
-    }
-
-    // Path 2: always update state.translations so the value persists on save
-    const translations = state.value.translations as Record<string, Record<string, unknown>> | undefined
-    if (!translations) {
-      (state.value as any).translations = {
-        [localeCode]: { content, seoTitle, seoDescription }
-      }
-    }
-    else if (!translations[localeCode]) {
-      translations[localeCode] = { content, seoTitle, seoDescription }
-    }
-    else {
-      translations[localeCode].content = content
-      if (seoTitle) translations[localeCode].seoTitle = seoTitle
-      if (seoDescription) translations[localeCode].seoDescription = seoDescription
-    }
-  }
-
-  // Force a full remount of CroutonI18nInput so TipTap reinitialises from state
-  contentReady.value = false
-  await nextTick()
-  contentKey.value++
-  contentReady.value = true
-}
 
 // The page record — mode, state, load, save, delete — is usePageRecord (#2323). The
 // component keeps the screen: when to load, what to do with the result, what to tell the user.
@@ -299,142 +247,6 @@ const collectionPageName = computed(() => selectedPageType.value?.collection || 
 // Collection binder page type detection (pages:collection-binder)
 const isBinderPage = computed(() => selectedPageType.value?.fullId === 'pages:collection-binder')
 
-// Which collection the binder wraps (stored in config.collection)
-const binderCollection = computed({
-  get: () => (state.value.config as any)?.collection as string | undefined ?? undefined,
-  set: (val: string | undefined) => {
-    state.value.config = { ...state.value.config, collection: val }
-  }
-})
-
-// Binder sort config
-const binderSortField = computed({
-  get: () => (state.value.config as any)?.sortField as string || '',
-  set: (val: string) => {
-    state.value.config = { ...state.value.config, sortField: val || null }
-  }
-})
-
-const binderSortOrder = computed({
-  get: () => (state.value.config as any)?.sortOrder as string || 'asc',
-  set: (val: string) => {
-    state.value.config = { ...state.value.config, sortOrder: val }
-  }
-})
-
-// Binder groupBy config
-const binderGroupBy = computed({
-  get: () => (state.value.config as any)?.groupBy as string || '',
-  set: (val: string) => {
-    state.value.config = { ...state.value.config, groupBy: val || null }
-  }
-})
-
-
-// Available collections for the binder picker
-const collectionOptions = computed(() =>
-  Object.keys(collections.configs).map(name => {
-    const cfg = collections.getConfig(name)
-    return {
-      value: name,
-      label: cfg?.displayName || cfg?.name || name
-    }
-  })
-)
-
-
-// Selected collection item ID (stored in page config)
-const collectionItemId = computed({
-  get: () => (state.value.config as any)?.itemId || null,
-  set: (val: string | null) => {
-    state.value.config = { ...state.value.config, itemId: val }
-  }
-})
-
-// Determine label key for the collection item picker using display config
-const collectionLabelKey = computed(() => {
-  if (!collectionPageName.value) return 'title'
-  const config = collections.getConfig(collectionPageName.value)
-  return config?.display?.title || 'title'
-})
-
-// Auto-populate page title when a collection item is selected
-// Note: using watch + $fetch instead of useFetch to avoid Nuxt 4 behavior where
-// returning null from a useFetch URL function fetches "null" as a relative URL
-// (e.g. /admin/team/null), causing a spurious 404 on initial mount.
-const { getTeamId: getTeamIdForItem } = useTeamContext()
-const selectedCollectionItem = ref<Record<string, any> | null>(null)
-
-watch(
-  [isCollectionPage, collectionItemId, collectionPageName],
-  async ([isCollection, itemId, colName]) => {
-    if (!isCollection || !itemId) {
-      selectedCollectionItem.value = null
-      return
-    }
-    const teamId = getTeamIdForItem()
-    const config = collections.getConfig(colName)
-    if (!teamId || !config?.apiPath) {
-      selectedCollectionItem.value = null
-      return
-    }
-    try {
-      const response = await $fetch<any>(`/api/teams/${teamId}/${config.apiPath}`, {
-        query: { ids: itemId },
-        credentials: 'include'
-      })
-      const items = response?.items || response
-      selectedCollectionItem.value = Array.isArray(items) ? (items[0] || null) : items
-    } catch {
-      selectedCollectionItem.value = null
-    }
-  },
-  { immediate: false }
-)
-
-// When a collection item is selected, auto-populate page title, slug, and SEO fields
-watch(selectedCollectionItem, (item: Record<string, any> | null) => {
-  if (!item || !isCollectionPage.value) return
-
-  const config = collections.getConfig(collectionPageName.value)
-  const titleField = config?.display?.title || 'title'
-  const descriptionField = config?.display?.description
-  const imageField = config?.display?.image
-  // For translatable collections the root title may be empty — fall back to translations
-  const currentLocaleCode = locale.value || 'en'
-  const itemTranslations = item.translations as Record<string, Record<string, string>> | undefined
-  const itemTitle = item[titleField]
-    || itemTranslations?.[currentLocaleCode]?.[titleField]
-    || itemTranslations?.en?.[titleField]
-    || item.name
-    || item.title
-
-  if (itemTitle) {
-    const translations = { ...state.value.translations } as Record<string, { title?: string; slug?: string; seoTitle?: string; seoDescription?: string }>
-    const currentLocale = locale.value || 'en'
-
-    // Only auto-populate if title is empty
-    if (!translations[currentLocale]) {
-      translations[currentLocale] = {}
-    }
-    if (!translations[currentLocale].title) {
-      translations[currentLocale].title = itemTitle
-      translations[currentLocale].slug = slugify(itemTitle)
-      // Auto-fill SEO title from item title
-      translations[currentLocale].seoTitle = itemTitle
-      // Auto-fill SEO description from display.description field
-      if (descriptionField && item[descriptionField]) {
-        translations[currentLocale].seoDescription = String(item[descriptionField]).slice(0, 160)
-      }
-      state.value.translations = translations
-    }
-
-    // Auto-fill ogImage from display.image field
-    if (imageField && item[imageField] && !state.value.ogImage) {
-      state.value.ogImage = item[imageField]
-    }
-  }
-})
 
 // Page type options
 // name/description are i18n keys (see each app's app.config.ts pageTypes).
@@ -695,7 +507,6 @@ function handleDelete() {
 // Translatable fields, split across tabs (#307): title + slug live in the
 // Settings tab (the page's identity), the block content fills the Content tab.
 const metaFields = ['title', 'slug']
-const contentFields = computed(() => (showBlockEditor.value ? ['content'] : []))
 
 // Placeholders for the title/slug identity inputs (rendered in the Settings tab
 // via the tabs-layout i18n input, which already gives them clear bordered inputs
@@ -795,12 +606,6 @@ async function generateSeoDescription() {
 }
 
 // Field components
-const fieldComponents = computed((): Record<string, string> => {
-  if (showBlockEditor.value) {
-    return { content: 'CroutonPagesEditorBlockEditorWithPreview' }
-  }
-  return {}
-})
 
 // Field options
 const fieldOptions = {
@@ -1070,89 +875,23 @@ defineExpose({ state })
 
         <!-- ───────── Content (block editor fills the whole tab) ───────── -->
         <div v-show="activeTab === 'content'" class="flex h-full flex-col">
-          <!-- Collection item picker (publishable item pages) -->
-          <div v-if="isCollectionPage" class="px-4 pt-4 pb-2 shrink-0 border-b border-default">
-            <UFormField
-              :label="t('pages.editor.selectItem', { name: selectedPageType?.name ? t(selectedPageType.name, selectedPageType.name) : t('pages.editor.item') })"
-              name="config.itemId"
-            >
-              <CroutonFormReferenceSelect
-                v-model="collectionItemId"
-                :collection="collectionPageName"
-                :label="selectedPageType?.name ? t(selectedPageType.name, selectedPageType.name) : undefined"
-                :label-key="collectionLabelKey"
-              />
-            </UFormField>
-          </div>
-
-          <!-- Collection binder config -->
-          <div v-if="isBinderPage" class="px-4 pt-4 pb-3 shrink-0 border-b border-default space-y-3">
-            <UFormField :label="t('pages.editor.binder.bindCollection')" name="config.collection" :help="t('pages.editor.binder.bindCollectionHelp')">
-              <USelect
-                v-model="binderCollection"
-                :items="collectionOptions"
-                value-key="value"
-                :placeholder="t('pages.editor.binder.selectCollection')"
-                size="sm"
-                class="w-full"
-              />
-            </UFormField>
-            <div class="grid grid-cols-2 gap-2">
-              <UFormField :label="t('pages.editor.binder.sortField')" name="config.sortField" :help="t('pages.editor.binder.sortFieldHelp')">
-                <UInput v-model="binderSortField" placeholder="order" size="sm" class="w-full" />
-              </UFormField>
-              <UFormField :label="t('pages.editor.binder.sortOrder')" name="config.sortOrder">
-                <USelect
-                  v-model="binderSortOrder"
-                  :items="[{ value: 'asc', label: t('common.ascending') }, { value: 'desc', label: t('common.descending') }]"
-                  value-key="value"
-                  size="sm"
-                  class="w-full"
-                />
-              </UFormField>
-            </div>
-            <UFormField :label="t('pages.editor.binder.groupBy')" name="config.groupBy" :help="t('pages.editor.binder.groupByHelp')">
-              <UInput v-model="binderGroupBy" :placeholder="t('pages.editor.binder.groupByPlaceholder')" size="sm" class="w-full" />
-            </UFormField>
-          </div>
-
-          <!-- Block content — fills the tab inline (no summary card / slideout) -->
-          <div v-if="showBlockEditor" class="flex flex-1 min-h-0 flex-col px-3 py-3">
-            <CroutonI18nInput
-              v-if="contentReady"
-              :key="contentKey"
-              v-model="state.translations"
-              :fields="contentFields"
-              layout="tabs"
-              :active-locale="editingLocale"
-              hide-locale-switcher
-              :show-ai-translate="hasAI"
-              field-type="page"
-              :field-components="fieldComponents"
-              :collab="collabForI18n"
-              class="flex-1 min-h-0"
-            />
-            <div v-else class="h-full flex items-center justify-center">
-              <UIcon name="i-lucide-loader-2" class="size-6 animate-spin text-muted" />
-            </div>
-          </div>
-
-          <!-- Config fields for app pages (non-regular, non-collection, non-block-content page types) -->
-          <div v-else-if="!isCollectionPage" class="mx-auto w-full max-w-3xl px-4 py-4">
-            <template v-if="selectedPageType?.configSchema?.length">
-              <USeparator :label="t('pages.editor.pageSettings')" class="my-2" />
-              <div class="space-y-4">
-                <div v-for="field in selectedPageType.configSchema" :key="field.name" class="text-sm text-muted">
-                  {{ t('pages.editor.configField', { name: field.name }) }}
-                </div>
-              </div>
-            </template>
-            <div v-else class="p-4 bg-muted/30 rounded-lg text-center text-sm text-muted">
-              <UIcon name="i-lucide-info" class="size-5 mb-2" />
-              <p>{{ t('pages.editor.noConfig') }}</p>
-              <p>{{ t('pages.editor.displaysComponent', { name: selectedPageType?.name ? t(selectedPageType.name, selectedPageType.name) : '' }) }}</p>
-            </div>
-          </div>
+          <CroutonPagesEditorContentTab
+            v-model:translations="state.translations"
+            v-model:config="state.config"
+            v-model:og-image="state.ogImage"
+            v-model:content-ready="contentReady"
+            v-model:show-ai-generator="showAiGenerator"
+            :page-type="selectedPageType"
+            :show-block-editor="showBlockEditor"
+            :is-collection-page="isCollectionPage"
+            :is-binder-page="isBinderPage"
+            :collection-page-name="collectionPageName"
+            :editing-locale="editingLocale"
+            :collab="collabForI18n"
+            :has-ai="hasAI"
+            :current-locale="locale"
+            :available-locales="availableLocales"
+          />
         </div>
 
         <!-- ───────── SEO & social ───────── -->
@@ -1227,13 +966,5 @@ defineExpose({ state })
       </template>
     </USlideover>
 
-    <!-- AI Page Generator Modal (only when crouton-ai is installed) -->
-    <AIPageGenerator
-      v-if="hasAI"
-      v-model="showAiGenerator"
-      :available-locales="availableLocales"
-      :current-locale="locale"
-      @apply="applyAiContent"
-    />
   </div>
 </template>
