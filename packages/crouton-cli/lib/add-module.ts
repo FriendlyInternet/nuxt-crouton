@@ -239,10 +239,11 @@ export async function addModule(moduleName: string, options: AddModuleOptions = 
   } else if (moduleName === 'i18n') {
     console.log('  2. Configure locales in nuxt.config.ts')
   } else if (moduleName === 'bookings') {
-    console.log('  2. Generate booking collections with crouton config')
+    // The package ships its collections (#2278) — nothing to generate.
+    console.log('  2. Run pnpm db:generate to add the bookings tables to your migrations')
   } else if (moduleName === 'assets') {
     console.log('  2. Enable hub.blob in nuxt.config.ts')
-    console.log('  3. Generate assets collection with crouton config')
+    console.log('  3. Run pnpm db:generate to add the assets table to your migrations')
   }
 
   return { success: true, message: 'Module added successfully' }

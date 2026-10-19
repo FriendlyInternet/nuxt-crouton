@@ -17,6 +17,7 @@ import {
   OwnedCollectionError,
 } from '../../../lib/utils/owned-collections'
 import salesManifest from '../../../../crouton-sales/crouton.manifest'
+import assetsManifest from '../../../../crouton-assets/crouton.manifest'
 
 const sales = {
   id: 'crouton-sales',
@@ -102,5 +103,14 @@ describe('real crouton-sales manifest', () => {
     const conflicts = findOwnedCollectionConflicts(kassaBefore, [salesManifest as any])
     expect(conflicts.map(c => c.collection)).toEqual(kassaBefore.targets[0].collections)
     expect(conflicts.every(c => c.packageName === '@fyit/crouton-sales')).toBe(true)
+  })
+})
+
+// The real crouton-assets manifest against velo's pre-#2278 target: the media library
+// lived in a generated `crouton` layer as `assets`.
+describe('real crouton-assets manifest', () => {
+  it('owns crouton/assets, and leaves an app\'s own assets in another layer alone', () => {
+    expect(findCollectionOwner('crouton', 'assets', [assetsManifest as any])).toBe('@fyit/crouton-assets')
+    expect(findCollectionOwner('media', 'assets', [assetsManifest as any])).toBeNull()
   })
 })
