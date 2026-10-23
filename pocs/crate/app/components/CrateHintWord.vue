@@ -10,7 +10,7 @@ const look = computed(() => props.word.pileId
 </script>
 
 <template>
-  <UButton size="xs" :color="look.color" :variant="look.variant" :trailing-icon="look.icon" class="max-w-full" @click="emit('pick')">
-    <span class="truncate">{{ word.word }}</span>
+  <UButton size="xs" :color="look.color" :variant="look.variant" :trailing-icon="look.icon" @click="emit('pick')">
+    {{ word.word }}
   </UButton>
 </template>
