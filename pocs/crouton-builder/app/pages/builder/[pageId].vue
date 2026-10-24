@@ -42,6 +42,7 @@ const { payload: dragPayload, point: dragPoint, arm, onDrop: registerDrop, consu
 const root = shallowRef<LayoutNode | null>(null)
 const breakpoints = ref<LayoutBreakpoint[] | undefined>()
 const dirty = ref(false)
+const selected = ref<NodePath | null>(null)
 
 function starterRoot(): LayoutNode {
   return {
@@ -54,21 +55,105 @@ function starterRoot(): LayoutNode {
   }
 }
 
+// ── Variants (#942): a page holds named layout variants; one is live. ─────────
+interface BoardVariant { id: string, name: string, tree: LayoutTree }
+const variants = ref<BoardVariant[]>([])
+const liveId = ref<string>('a')
+const currentId = ref<string>('a')
+const current = computed(() => variants.value.find(v => v.id === currentId.value) ?? null)
+const liveVariant = computed(() => variants.value.find(v => v.id === liveId.value) ?? null)
+
+const nextName = () => String.fromCharCode(65 + (variants.value.length % 26))
+const newId = () => Math.random().toString(36).slice(2, 8)
+
 // Seed ONCE per page — never on a refetch, so a save can't re-seed the board.
+// A board stored as `{ layout }` (pre-#942) wraps as variant "A"; `{ live, variants }` loads as is.
 const loadedFor = ref<string | null>(null)
 watch([page, pageId] as const, ([p, id]) => {
   if (!p || loadedFor.value === id) return
-  const stored = (p.board as Record<string, unknown> | null)?.layout
-  const parsed = typeof stored === 'string' ? parseLayoutTree(stored) : null
-  root.value = parsed?.root ?? starterRoot()
-  breakpoints.value = parsed?.breakpoints
+  const board = (p.board as Record<string, unknown> | null) ?? {}
+  const storedVariants = Array.isArray(board.variants) ? board.variants as { id: string, name: string, layout: string }[] : null
+  if (storedVariants?.length) {
+    variants.value = storedVariants.map(v => ({ id: v.id, name: v.name, tree: parseLayoutTree(v.layout) ?? { renderer: 'panes', root: starterRoot() } }))
+    liveId.value = typeof board.live === 'string' && variants.value.some(v => v.id === board.live) ? board.live : variants.value[0]!.id
+  }
+  else {
+    const parsed = typeof board.layout === 'string' ? parseLayoutTree(board.layout) : null
+    variants.value = [{ id: 'a', name: 'A', tree: parsed ?? { renderer: 'panes', root: starterRoot() } }]
+    liveId.value = 'a'
+  }
+  showVariant(liveId.value)
   loadedFor.value = id
   dirty.value = false
 }, { immediate: true })
 
+// The board edits `root` in place; the current variant's tree is written back on
+// every commit, so switching variants never loses an unsaved edit.
+function showVariant(id: string) {
+  const v = variants.value.find(x => x.id === id)
+  if (!v) return
+  currentId.value = id
+  root.value = v.tree.root
+  breakpoints.value = v.tree.breakpoints
+  selected.value = null
+}
+function syncCurrent() {
+  const v = current.value
+  if (v) v.tree = { renderer: 'panes', root: root.value ?? starterRoot(), breakpoints: breakpoints.value }
+}
+
+function duplicateVariant() {
+  const v = current.value
+  if (!v) return
+  syncCurrent()
+  const copy: BoardVariant = { id: newId(), name: nextName(), tree: parseLayoutTree(serializeLayoutTree(v.tree)) ?? v.tree }
+  variants.value = [...variants.value, copy]
+  showVariant(copy.id)
+  dirty.value = true
+}
+function setLive() {
+  liveId.value = currentId.value
+  dirty.value = true
+}
+function deleteVariant() {
+  if (variants.value.length <= 1) return
+  const id = currentId.value
+  variants.value = variants.value.filter(v => v.id !== id)
+  if (liveId.value === id) liveId.value = variants.value[0]!.id
+  showVariant(liveId.value)
+  dirty.value = true
+}
+const renaming = ref(false)
+const renameDraft = ref('')
+function startRename() {
+  renameDraft.value = current.value?.name ?? ''
+  renaming.value = true
+}
+function finishRename() {
+  const v = current.value
+  const name = renameDraft.value.trim()
+  if (v && name && name !== v.name) { v.name = name; dirty.value = true }
+  renaming.value = false
+}
+
+const variantMenu = computed(() => [
+  variants.value.map(v => ({
+    label: v.name,
+    icon: v.id === liveId.value ? 'i-lucide-star' : (v.id === currentId.value ? 'i-lucide-check' : 'i-lucide-circle-dashed'),
+    onSelect: () => showVariant(v.id),
+  })),
+  [
+    { label: 'Duplicate', icon: 'i-lucide-copy', onSelect: duplicateVariant },
+    { label: 'Rename', icon: 'i-lucide-pencil', onSelect: startRename },
+    { label: 'Set as live', icon: 'i-lucide-star', disabled: currentId.value === liveId.value, onSelect: setLive },
+    { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error' as const, disabled: variants.value.length <= 1, onSelect: deleteVariant },
+  ],
+])
+
 function commit(next: LayoutNode | null) {
   root.value = next
   dirty.value = true
+  syncCurrent()
 }
 
 // ── Drops ──────────────────────────────────────────────────────────────────────
@@ -106,10 +191,10 @@ function onResize(at: NodePath, sizes: number[]) {
   if (!root.value) return
   root.value = applySizes(root.value, at, sizes)
   dirty.value = true
+  syncCurrent()
 }
 
 // ── Selection + the bottom sheet ──────────────────────────────────────────────
-const selected = ref<NodePath | null>(null)
 const sheetOpen = ref(false)
 const selectedNode = computed(() => (selected.value && root.value ? getNode(root.value, selected.value) : null))
 const selectedLeaf = computed(() => (selectedNode.value?.type === 'leaf' ? selectedNode.value : null))
@@ -143,12 +228,14 @@ function onChipClick(blockId: string) {
   if (consumeClick()) return
   tapAdd(blockId)
 }
-// Tap-to-add for one-handed use: lands to the right of the selected pane, or the root.
+// Tap-to-add for one-handed use: lands beside the selected pane (or the root) —
+// to the right on a wide screen, below on a phone, so columns don't get squeezed.
 function tapAdd(blockId: string) {
   const r = root.value
   if (!r) return commit(newLeaf(blockId))
   const at = selected.value ?? []
-  commit(applyPaneDrop(r, { path: at, edge: 'right' }, newLeaf(blockId)))
+  const edge: DropEdge = import.meta.client && window.innerWidth < 640 ? 'bottom' : 'right'
+  commit(applyPaneDrop(r, { path: at, edge }, newLeaf(blockId)))
 }
 
 // ── Save ───────────────────────────────────────────────────────────────────────
@@ -156,10 +243,17 @@ const { update } = useCollectionMutation('builderPages')
 const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
 async function saveBoard() {
   if (!root.value) return
-  const tree: LayoutTree = { renderer: 'panes', root: root.value, breakpoints: breakpoints.value }
+  syncCurrent()
   saveState.value = 'saving'
   try {
-    await update(pageId.value, { board: { layout: serializeLayoutTree(tree) } })
+    await update(pageId.value, {
+      board: {
+        live: liveId.value,
+        variants: variants.value.map(v => ({ id: v.id, name: v.name, layout: serializeLayoutTree(v.tree) })),
+        // Kept for anything still reading the single-layout shape: the LIVE variant.
+        layout: serializeLayoutTree(liveVariant.value?.tree ?? { renderer: 'panes', root: root.value }),
+      },
+    })
     dirty.value = false
     saveState.value = 'saved'
   }
@@ -174,7 +268,29 @@ async function saveBoard() {
     <!-- Header -->
     <header class="flex items-center gap-2 border-b border-default px-2 py-1.5">
       <UButton icon="i-lucide-arrow-left" color="neutral" variant="ghost" size="sm" to="/builder" aria-label="Back to site" />
-      <span class="min-w-0 flex-1 truncate text-sm font-medium" data-handoff="page-badge">{{ page?.title ?? 'Page' }}</span>
+      <span class="min-w-0 truncate text-sm font-medium" data-handoff="page-badge">{{ page?.title ?? 'Page' }}</span>
+      <UInput
+        v-if="renaming"
+        v-model="renameDraft"
+        size="xs"
+        autofocus
+        class="w-28"
+        data-handoff="variant-rename"
+        @keyup.enter="finishRename"
+        @blur="finishRename"
+      />
+      <UDropdownMenu v-else :items="variantMenu" :content="{ align: 'start' }">
+        <UButton
+          color="neutral"
+          variant="soft"
+          size="xs"
+          :icon="currentId === liveId ? 'i-lucide-star' : 'i-lucide-circle-dashed'"
+          :label="current?.name ?? 'A'"
+          trailing-icon="i-lucide-chevron-down"
+          data-handoff="variant-switch"
+        />
+      </UDropdownMenu>
+      <span class="flex-1" />
       <span v-if="saveState === 'saved' && !dirty" class="text-xs text-muted">Saved</span>
       <UButton
         icon="i-lucide-save"
