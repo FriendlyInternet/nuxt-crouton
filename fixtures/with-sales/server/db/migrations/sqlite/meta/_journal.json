@@ -8,6 +8,13 @@
       "when": 1792163539044,
       "tag": "0000_low_the_hand",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792838919488,
+      "tag": "0001_great_oracle",
+      "breakpoints": true
     }
   ]
 }
