@@ -17,7 +17,7 @@
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layout'
 import type { NodePath, DropEdge } from '@fyit/crouton-layout/app/utils/layout-edit'
-import { useBoardDrag, edgeFor, isWithin, samePath, type BoardDragPayload } from '~/utils/board-drag'
+import { useBoardDrag, isWithin, samePath } from '~/utils/board-drag'
 
 defineOptions({ name: 'BoardTree' })
 
@@ -28,13 +28,12 @@ const props = withDefaults(defineProps<{
 }>(), { path: () => [], selected: null })
 
 const emit = defineEmits<{
-  drop: [at: NodePath, edge: DropEdge, payload: BoardDragPayload]
   resize: [at: NodePath, sizes: number[]]
   select: [at: NodePath]
 }>()
 
 const { blocks, resolveComponentName, sanitizeConfig } = useCroutonLayoutBlocks()
-const { dragging, start, end } = useBoardDrag()
+const { payload, hover, arm, consumeClick } = useBoardDrag()
 
 const isLeaf = computed(() => props.node.type === 'leaf')
 const componentName = computed(() => (props.node.type === 'leaf' ? resolveComponentName(props.node.blockId) : null))
@@ -43,44 +42,21 @@ const isSelected = computed(() => !!props.selected && samePath(props.selected, p
 
 // A pane can't be dropped onto itself or into its own subtree.
 const canAccept = computed(() => {
-  const d = dragging.value
+  const d = payload.value
   if (!d) return false
   if (d.kind === 'pane' && isWithin(props.path, d.path)) return false
   return true
 })
 
-// ── drop target ──────────────────────────────────────────────────────────────
-const hoverEdge = ref<DropEdge | null>(null)
-const paneEl = ref<HTMLElement | null>(null)
+// Drop feedback comes from the shared drag state: the drag resolves the pane
+// under the pointer with elementFromPoint, so this pane only has to compare paths.
+const hoverEdge = computed<DropEdge | null>(() =>
+  hover.value && samePath(hover.value.path, props.path) ? hover.value.edge : null,
+)
 
-function onDragOver(e: DragEvent) {
-  if (!canAccept.value || !paneEl.value) return
-  e.preventDefault()
-  e.stopPropagation()
-  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
-  hoverEdge.value = edgeFor(e, paneEl.value.getBoundingClientRect())
-}
-function onDragLeave(e: DragEvent) {
-  // Leaving to a child element still counts as "over"; only clear when truly out.
-  if (paneEl.value && e.relatedTarget instanceof Node && paneEl.value.contains(e.relatedTarget)) return
-  hoverEdge.value = null
-}
-function onDrop(e: DragEvent) {
-  if (!canAccept.value || !paneEl.value) return
-  e.preventDefault()
-  e.stopPropagation()
-  const edge = edgeFor(e, paneEl.value.getBoundingClientRect())
-  const payload = dragging.value
-  hoverEdge.value = null
-  if (payload) emit('drop', props.path, edge, payload)
-}
-
-// ── drag source (the pane's grab handle) ─────────────────────────────────────
-function onHandleDragStart(e: DragEvent) {
-  start(e, { kind: 'pane', path: props.path })
-}
-function onHandleDragEnd() {
-  end()
+// The grip arms a pointer drag of this pane (short hold on touch, movement on mouse).
+function onGripDown(e: PointerEvent) {
+  arm(e, { kind: 'pane', path: props.path, label: blockName.value }, { holdMs: 150 })
 }
 
 // Split sizes come back from reka as percentages, in child order.
@@ -116,7 +92,6 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
           :node="child"
           :path="[...path, i]"
           :selected="selected"
-          @drop="(at, edge, payload) => emit('drop', at, edge, payload)"
           @resize="(at, sizes) => emit('resize', at, sizes)"
           @select="at => emit('select', at)"
         />
@@ -127,16 +102,11 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
   <!-- Leaf or nested: a container-query pane that is also a drop target. -->
   <div
     v-else
-    ref="paneEl"
     class="board-pane relative h-full w-full croutonpane"
     :class="{ 'board-pane--selected': isSelected, 'board-pane--target': canAccept }"
     :data-edge="hoverEdge ?? undefined"
     :data-path="path.join('.')"
     data-handoff="board-pane"
-    @dragover="onDragOver"
-    @dragenter.prevent
-    @dragleave="onDragLeave"
-    @drop="onDrop"
     @click="emit('select', path)"
   >
     <template v-if="isLeaf">
@@ -156,17 +126,14 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
       :interactive="false"
     />
 
-    <!-- Grab handle: the drag source for moving this pane. Native drag, so the
-         browser draws the drag image and the tree is untouched until drop. -->
+    <!-- Grab handle: hold briefly, then drag this pane onto another pane. -->
     <button
       type="button"
-      class="board-grip absolute right-1 top-1 z-10 flex items-center gap-1 rounded-md bg-elevated/90 px-1.5 py-1 text-[11px] text-muted shadow-sm backdrop-blur touch-none cursor-grab active:cursor-grabbing"
-      draggable="true"
+      class="board-grip absolute right-1 top-1 z-10 flex items-center gap-1 rounded-md bg-elevated/90 px-1.5 py-1 text-[11px] text-muted shadow-sm backdrop-blur touch-none select-none cursor-grab active:cursor-grabbing"
       data-handoff="pane-grip"
       :aria-label="`Move ${blockName}`"
-      @dragstart="onHandleDragStart"
-      @dragend="onHandleDragEnd"
-      @click.stop="emit('select', path)"
+      @pointerdown="onGripDown"
+      @click.stop="consumeClick() || emit('select', path)"
     >
       <span v-if="isSelected" class="max-w-28 truncate">{{ blockName }}</span>
       <UIcon name="i-lucide-grip-vertical" class="size-3.5" />
@@ -185,7 +152,7 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
 .board-pane--target { outline-color: color-mix(in oklch, var(--ui-primary) 35%, transparent); }
 
 /* The grip stays discreet until the pane is hovered / selected / being targeted. */
-.board-grip { opacity: .55; transition: opacity .15s; }
+.board-grip { opacity: .55; transition: opacity .15s; -webkit-touch-callout: none; }
 .board-pane:hover .board-grip, .board-pane--selected .board-grip { opacity: 1; }
 
 /* Drop feedback: a thick bar on the chosen edge; a full ring means "replace / inside". */
