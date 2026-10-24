@@ -40,7 +40,7 @@ onUnmounted(() => {
 
 // Requeue all failed jobs (status 9 → 0) so the spooler resends them —
 // the recovery action after a printer ran out of paper or was offline.
-const toast = useToast()
+const toast = useNotify()
 const resending = ref(false)
 
 async function resendFailedJobs() {
