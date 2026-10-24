@@ -10,8 +10,8 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "typecheck": "nuxt typecheck",
-    "cf:staging": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler deploy --env staging",
-    "cf:version": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler versions upload --env staging"
+    "cf:staging": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging",
+    "cf:version": "NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler versions upload --config .output/server/wrangler.json --env staging"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.4",
