@@ -37,7 +37,7 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 | `types/config.ts` | `CroutonAuthConfig` configuration type |
 | `types/connector.ts` | `BetterAuthConnector` interface |
 | `app/utils/security.ts` | Client-side security utilities (public API for consumer apps) |
-| `seed/index.ts` | Seed provider (`@fyit/crouton-auth/seed`) — upserts the team `organization`; optional staff user/account/member behind `--with-staff` |
+| `seed/index.ts` | Seed provider (`@fyit/crouton-auth/seed`) — upserts the team `organization`; optional staff user/account/member behind `--with-staff`, password from `CROUTON_SEED_STAFF_PASSWORD` only |
 
 ## Public Utilities
 
@@ -522,10 +522,16 @@ Consuming apps must regenerate migrations (`npx nuxt db generate`) after upgradi
 Ships a `SeedProvider` (id `auth`, no deps, runs first) for the composable
 seeding system (epic #82, contract in `@fyit/crouton-core/shared/seed`). It
 upserts the team `organization` (id `seed:org:<slug>`, slug e.g. `test1`) that
-every domain provider hangs off. With `--with-staff` it also seeds a known staff
-login — `user` + credential `account` (password hashed via `better-auth/crypto`'s
-`hashPassword`, the scrypt envelope login verifies against) + owner `member`.
-Idempotent (stable ids). Run via an app's `crouton-seed` / `db:seed:*` scripts.
+every domain provider hangs off. With `--with-staff` it also seeds a staff
+login (`claude-verify@test.local`) — `user` + credential `account` (password hashed via
+`better-auth/crypto`'s `hashPassword`, the scrypt envelope login verifies against) + owner
+`member`. Idempotent (stable ids). Run via an app's `crouton-seed` / `db:seed:*` scripts.
+
+**The staff password comes only from `CROUTON_SEED_STAFF_PASSWORD`** (#2357) — a repo
+secret that `deploy-app.yml` passes to staging seeds; set it yourself for a local seed.
+Never write a password into the seed: this repo is public. Unset → no staff login is
+seeded (with a warning) and an already-seeded staff account's password is cleared, so
+an old password stops working.
 
 ## Dependencies
 
