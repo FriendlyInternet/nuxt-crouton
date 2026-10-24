@@ -104,9 +104,12 @@ Inputs: `app`, `workspace` (apps|pocs), `environment`, `staging-url`/`production
 4. Optional `wrangler secret bulk` from `WORKER_SECRETS_JSON` (see §3 trap).
 5. Preview-review bridge (#607): staging + PR-tied only — pushes `NUXT_CROUTON_REVIEW_*` Worker secrets so in-page overlay comments post to the PR as `nuxt-harness[bot]`.
 6. `BETTER_AUTH_SECRET` auto-generated (`openssl rand -hex 32`) if the Worker has none; never rotates an existing one; skips (with `::warning::`) if `wrangler secret list` fails.
-7. Review login seeded (staging only, #608): deterministic `review+<app>-pr<N>@example.com` via `scripts/seed-review-login.mjs`.
-8. Deployed smoke: `scripts/smoke-deployed.mjs` (login + CRUD + screenshot, artifact `smoke-<app>`). Report-only unless `smoke.required` in `deploy.config.json`.
-9. Sticky PR comment (marker `<!-- deploy-staging:<app> -->`) with staging URL + test login.
+7. Demo data seeded (staging only, #1370): `crouton-seed` into the staging or PR-preview DB — the ONLY seed per deploy (#2366); `"seed": false` in `deploy.config.json` opts out.
+8. Review login seeded (staging only, #608): deterministic `review+<app>-<key>@example.com` via `scripts/seed-review-login.mjs`; password derived from the required `REVIEW_SEED_SECRET`, reset on rotation (#2358). The one-click sign-in link is **emailed** to the owner (Resend), never posted.
+9. Deployed smoke: `scripts/smoke-deployed.mjs` (login + CRUD + screenshot, artifact `smoke-<app>`). Report-only unless `smoke.required` in `deploy.config.json`.
+10. Sticky PR comment (marker `<!-- deploy-staging:<app> -->`) with the staging URL and the review login's email — no password, no link (PR comments are public, #2358).
+
+**Before proposing or adding a step here, grep `.github/workflows/` for the command it would run** (e.g. `crouton-seed`, `seed-review-login`, `smoke-deployed`) and extend the existing step instead of adding a second. #2366 built a duplicate seed step because the #1370 one wasn't checked first (#2378).
 
 Concurrency: `deploy-<app>-<env>`, `cancel-in-progress: false` (a cancel mid-migration is unsafe).
 
