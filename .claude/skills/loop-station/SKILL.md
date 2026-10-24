@@ -151,6 +151,13 @@ observatory panel (#1065) and the advisor's dead-weight rule (#1066) read it.
 > `history.jsonl` commits for size. The record carries `source: 'ci-rollup'`
 > and `scope: 'pipeline'` so a consumer can't over-read it: **0 means "never
 > fired in CI"**, not "never used" (interactive coverage is #1067).
+>
+> Where the skill counts come from (#2403): the four claude-code-action review gates run with
+> an allowlist that excludes the `Skill` tool, so their traces never carry a skill. The **pi
+> worker** does: pi loads a skill by `read`ing its `SKILL.md`, and `pi-telemetry.mjs --session`
+> turns each such read into a `kind:'skill'` event (`lib/skill-loads.mjs`). So the dead-weight
+> panel's counts are **pipeline-worker usage** — the usage that matters once work is fully
+> pipeline — and `skillAware` in the viewer flips on with the first such event.
 
 ## Files
 
