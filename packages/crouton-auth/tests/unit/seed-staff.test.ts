@@ -1,19 +1,20 @@
 /**
- * The seeded staff login (`crouton-seed --with-staff`) takes its password from a
- * secret, never from the code (#2357, epic #2356).
+ * The seed no longer creates a staff login at all (#2357, epic #2356).
  *
- * Before: `claude-verify@test.local` was seeded as the team OWNER with a password
- * written in seed/index.ts — a public repo — so anyone could log into every staging
- * app that runs the seed. These cases are the contract for the fix.
+ * Before: `claude-verify@test.local` was seeded (with `--with-staff`) as the team
+ * OWNER, with a password written in seed/index.ts — a public repo — so anyone could
+ * log into every staging app that ran the seed. The per-app review login (created by
+ * the deploy itself, password from a secret) covers the same need for every app, so
+ * the staff login is removed instead of moved to a secret.
+ *
+ * These cases are the contract for that removal.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { verifyPassword } from 'better-auth/crypto'
 import { provider } from '../../seed/index'
 
-const ENV = 'CROUTON_SEED_STAFF_PASSWORD'
-const STAFF_EMAIL = 'claude-verify@test.local'
+const LEGACY_EMAIL = 'claude-verify@test.local'
 
 /** A fake SeedContext that records what the provider asked for. */
 function fakeCtx(withStaff: boolean) {
@@ -31,79 +32,47 @@ function fakeCtx(withStaff: boolean) {
   return { ctx: ctx as any, upserts, raws }
 }
 
-const rowsFor = (upserts: ReturnType<typeof fakeCtx>['upserts'], table: string) =>
-  upserts.filter(u => u.table === table)
+const tables = (upserts: ReturnType<typeof fakeCtx>['upserts']) => upserts.map(u => u.table)
 
 afterEach(() => {
   vi.unstubAllEnvs()
-  vi.restoreAllMocks()
 })
 
-describe('seeded staff login (#2357)', () => {
-  it('secret set → creates the staff login with exactly that password (hashed, never stored plain)', async () => {
-    vi.stubEnv(ENV, 'a-long-random-secret-value')
-    const { ctx, upserts } = fakeCtx(true)
+describe('no staff login is seeded (#2357)', () => {
+  for (const withStaff of [true, false]) {
+    it(`withStaff=${withStaff} → only the team is seeded: no user, account or member rows`, async () => {
+      vi.stubEnv('CROUTON_SEED_STAFF_PASSWORD', 'even-if-a-secret-is-set')
+      const { ctx, upserts } = fakeCtx(withStaff)
 
-    await provider.seed(ctx)
+      await provider.seed(ctx)
 
-    const [user] = rowsFor(upserts, 'user')
-    expect(user?.values.email).toBe(STAFF_EMAIL)
-    const [account] = rowsFor(upserts, 'account')
-    expect(account?.values.providerId).toBe('credential')
-    expect(account?.values.password).not.toBe('a-long-random-secret-value')
-    expect(await verifyPassword({ hash: account!.values.password, password: 'a-long-random-secret-value' })).toBe(true)
-    expect(rowsFor(upserts, 'member')).toHaveLength(1)
-  })
+      expect(tables(upserts)).toEqual(['organization'])
+    })
+  }
 
-  it('secret missing → no staff login is created, and a warning says why', async () => {
-    vi.stubEnv(ENV, '')
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { ctx, upserts } = fakeCtx(true)
-
-    await provider.seed(ctx)
-
-    expect(rowsFor(upserts, 'user')).toHaveLength(0)
-    expect(rowsFor(upserts, 'member')).toHaveLength(0)
-    expect(rowsFor(upserts, 'account').filter(a => a.values.password)).toHaveLength(0)
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining(ENV))
-  })
-
-  it('secret missing → an ALREADY-seeded staff account loses its old password (so the published one stops working)', async () => {
-    vi.stubEnv(ENV, '')
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { ctx, raws } = fakeCtx(true)
+  it('every seed clears the old staff account\'s password, so the published one stops working', async () => {
+    const { ctx, raws } = fakeCtx(false)
 
     await provider.seed(ctx)
 
     const clear = raws.find(sql => /update\s+["`]?account["`]?\s+set\s+["`]?password["`]?\s*=\s*null/i.test(sql))
-    expect(clear, 'expected a statement nulling the staff account password').toBeTruthy()
+    expect(clear, 'expected a statement nulling the old staff account password').toBeTruthy()
   })
 
-  it('a whitespace-only secret counts as missing', async () => {
-    vi.stubEnv(ENV, '   ')
-    vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { ctx, upserts } = fakeCtx(true)
+  it('every seed signs the old staff account out of any open session', async () => {
+    const { ctx, raws } = fakeCtx(false)
 
     await provider.seed(ctx)
 
-    expect(rowsFor(upserts, 'user')).toHaveLength(0)
+    const signOut = raws.find(sql => /delete\s+from\s+["`]?session["`]?/i.test(sql))
+    expect(signOut, 'expected a statement deleting the old staff account\'s sessions').toBeTruthy()
   })
 
-  it('without --with-staff → no staff rows at all, whatever the secret', async () => {
-    vi.stubEnv(ENV, 'a-long-random-secret-value')
-    const { ctx, upserts, raws } = fakeCtx(false)
-
-    await provider.seed(ctx)
-
-    expect(rowsFor(upserts, 'user')).toHaveLength(0)
-    expect(rowsFor(upserts, 'account')).toHaveLength(0)
-    expect(raws).toHaveLength(0)
-    // the team itself is still seeded
-    expect(rowsFor(upserts, 'organization')).toHaveLength(1)
-  })
-
-  it('the old published password is gone from the seed code', () => {
+  it('the seed code holds no password and no staff email', () => {
     const src = readFileSync(resolve(__dirname, '../../seed/index.ts'), 'utf8')
     expect(src).not.toContain('VerifyCart2026')
+    expect(src).not.toContain('hashPassword')
+    // the legacy email may appear only to identify the account being disabled
+    expect(src.split(LEGACY_EMAIL).length - 1).toBeLessThanOrEqual(1)
   })
 })
