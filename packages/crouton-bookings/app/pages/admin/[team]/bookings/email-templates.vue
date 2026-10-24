@@ -308,7 +308,7 @@ function getLocationName(locationId: string | null) {
 </script>
 
 <template>
-  <div class="p-6 space-y-8">
+  <div class="p-4 sm:p-6 space-y-8">
     <!-- Page Header -->
     <div class="flex items-center justify-between">
       <div>
