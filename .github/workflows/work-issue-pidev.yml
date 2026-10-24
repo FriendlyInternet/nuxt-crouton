@@ -537,8 +537,17 @@ jobs:
             # REVISE: stack on the PR as it stands — never reset it to the base (that would wipe it).
             git checkout -f -B "$BR" "$REV_START" 2>&1 | tail -1
             # Whole-PR diff base, so the visual-change + evidence checks still see the PR's .vue
-            # changes and a held UI PR STAYS held after a non-visual revision.
-            BASE_SHA="$(git merge-base "origin/${BASE}" HEAD)"
+            # changes and a held UI PR STAYS held after a non-visual revision. The checkout is
+            # depth-1, so origin/<base> has no parents: when the base moved on since the PR branched
+            # (the normal case for `main`), merge-base finds nothing, exits 1 and errexit killed the
+            # step in ~1s (#2467). Unshallow the base first (~1s — the PR fetch already brought most
+            # of the history); if it still fails, fall back to the PR head rather than crash.
+            git fetch -q --unshallow origin "$BASE" 2>/dev/null || git fetch -q origin "$BASE" 2>/dev/null || true
+            BASE_SHA="$(git merge-base "origin/${BASE}" HEAD 2>/dev/null || true)"
+            if [ -z "$BASE_SHA" ]; then
+              echo "::warning::no merge-base with ${BASE} — the visual check sees only this revision (#2446)"
+              BASE_SHA="$REV_START"
+            fi
           else
             git checkout -f -B "$BR" "origin/${BASE}" 2>&1 | tail -1
             # The branch point, captured BEFORE the two commits below, so "what did this run change"
@@ -581,7 +590,18 @@ jobs:
             # REVISE (#2446): push only if this run added a commit, and only on top of the head we
             # started from (lease) — a concurrent push is refused, never overwritten.
             if [ "$(git rev-parse HEAD)" != "$REV_START" ]; then
-              git push -u --force-with-lease="${BR}:${REV_START}" origin "HEAD:${BR}" 2>&1 | tail -2; HAVE_COMMITS=1
+              # The lease refuses to overwrite a push someone made to the PR while this ran. That is
+              # the right call — but say so, don't crash (a bare `git push | tail` + pipefail killed
+              # the step with "workflow bug" and no explanation).
+              if PUSH_OUT="$(git push -u --force-with-lease="${BR}:${REV_START}" origin "HEAD:${BR}" 2>&1)"; then
+                echo "$PUSH_OUT" | tail -2; HAVE_COMMITS=1
+              else
+                echo "$PUSH_OUT" | tail -4
+                echo "::error::revise push refused — ${BR} changed while this run worked (#2446)"
+                echo "revise_conflict=1" >> "$GITHUB_OUTPUT"
+                CPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+                [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **Not pushed — this PR changed while I was working on [your comment](%s).** Nothing was overwritten. If the newer commit already covers it, ignore this; otherwise comment again and I will redo it on top.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+              fi
             else
               echo "revise: no new commit on ${BR}"
             fi
@@ -600,7 +620,7 @@ jobs:
               echo "revised=1" >> "$GITHUB_OUTPUT"
               FILES="$(git diff --name-status "$REV_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
               [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES")" 2>&1 | tail -1 || true
-            else
+            elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
               REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
               if [ "${REPLIED:-0}" -gt 0 ]; then
                 echo "revise: answered on the PR without a code change"
@@ -837,7 +857,8 @@ jobs:
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
-              else gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
+              # A revision never RELEASES a PR — releasing is the owner's `lgtm` (#2446).
+              elif [ -z "${REV_START:-}" ]; then gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
               # NB a re-dispatch that still touches UI keeps the hold — DRAFT_FLAG is set above.
               echo "PR #${EXISTING} already open for ${BR} (draft=$([ "$ACCEPT" = fail ] && echo yes || echo no))"
             fi
@@ -948,9 +969,11 @@ jobs:
           # The finish step already proved the outcome (a pushed commit or a reply) and said so on
           # the PR; a revise that produced neither is failed by its own step above.
           REVISED: ${{ steps.finish.outputs.revised }}
+          REVISE_CONFLICT: ${{ steps.finish.outputs.revise_conflict }}
         with:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
+            if (process.env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
             if (process.env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
             const since = '${{ steps.t0.outputs.ts }}'
             const sinceMs = new Date(since).getTime()
