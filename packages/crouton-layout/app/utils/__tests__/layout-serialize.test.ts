@@ -13,6 +13,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import type { LayoutTree } from '@fyit/crouton-core/app/types/layout'
+import { resolveLayoutAtWidth } from '../layout-responsive'
 import { sanitizeLayoutTree } from '@fyit/crouton-core/app/utils/layout-tree'
 import {
   serializeLayoutTree,
@@ -55,6 +56,26 @@ describe('#987 serializeLayoutTree / parseLayoutTree — canonical, diffable tre
   it('1. round-trips losslessly (parse∘serialize === sanitize)', () => {
     const back = parseLayoutTree(serializeLayoutTree(richTree))
     expect(back).toEqual(sanitizeLayoutTree(richTree))
+  })
+
+  it('1b. round-trips a recipe placement + reveal, omits them when absent (#2418)', () => {
+    const t: LayoutTree = { renderer: 'panes', root: { type: 'leaf', blockId: 'form', collapse: { edge: 'bottom', affordance: 'button', placement: 'nav', reveal: 'modal' } } }
+    const s = serializeLayoutTree(t)
+    expect(JSON.parse(s).root.collapse).toEqual({ edge: 'bottom', affordance: 'button', placement: 'nav', reveal: 'modal' })
+    expect(parseLayoutTree(s)).toEqual(t)
+    const plain: LayoutTree = { renderer: 'panes', root: { type: 'leaf', blockId: 'form', collapse: { edge: 'right', affordance: 'tab' } } }
+    expect(serializeLayoutTree(plain)).not.toContain('placement')
+  })
+
+  it('1c. keeps an explicit empty `collapsed` on a breakpoint — "nothing hidden here" is a statement, not an omission (#2418)', () => {
+    const t: LayoutTree = {
+      renderer: 'panes',
+      root: { type: 'leaf', blockId: 'form' },
+      breakpoints: [{ minWidth: 390, collapsed: ['form'] }, { minWidth: 1280, collapsed: [] }],
+    }
+    const back = parseLayoutTree(serializeLayoutTree(t))!
+    expect(back.breakpoints?.[1]).toEqual({ minWidth: 1280, collapsed: [] })
+    expect(resolveLayoutAtWidth(back, 1280).collapsed).toEqual([])
   })
 
   it('2. is canonical: key order in the INPUT does not change the OUTPUT', () => {
