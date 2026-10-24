@@ -44,11 +44,6 @@ const { current, recent, unread, markAllSeen, dismiss } = useCroutonStatus()
 const pageChrome = useState<{ hideNav?: boolean, hideAuthControls?: boolean }>('pageChrome', () => ({}))
 const scopedSession = useState<{ displayName: string } | null>('crouton:scoped-session', () => null)
 
-// useNotify() routes success/info/warning to the feed only while this is true
-const statusBarActive = useState<boolean>('crouton-status-bar-active', () => false)
-onMounted(() => { statusBarActive.value = true })
-onUnmounted(() => { statusBarActive.value = false })
-
 const loginUrl = computed(() => `/auth/login?redirect=${encodeURIComponent(route.fullPath)}&dismissible=1`)
 
 async function logoutScopedSession() {
@@ -134,7 +129,7 @@ const menuItems = computed<DropdownMenuItem[][]>(() => {
         ...recent.value.map(m => ({
           label: m.text,
           icon: m.icon,
-          description: timeAgo(m.timestamp),
+          description: m.description ? `${m.description} · ${timeAgo(m.timestamp)}` : timeAgo(m.timestamp),
           class: TYPE_ICON_COLOR[m.type],
           onSelect: (e: Event) => e.preventDefault()
         } as DropdownMenuItem))

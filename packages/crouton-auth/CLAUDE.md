@@ -97,7 +97,7 @@ const safeUrl = sanitizeRedirectUrl(redirectParam)  // '/' on external URLs
 - `AuthSidebar`, `TeamSection`
 
 ### Pill
-- `CroutonUserPill` (`app/components/Crouton/UserPill.vue`) — one pill for account + status (member / PIN visitor / signed out). Menu from `useUserMenuItems()`, status from `useCroutonStatus()`; sets `crouton-status-bar-active` while mounted. Props: `showStatus`, `compact`, `placement`, `extraItems`, `useModal`. Core ships a no-op stub (`stubs/CroutonUserPill.vue`).
+- `CroutonUserPill` (`app/components/Crouton/UserPill.vue`) — one pill for account + status (member / PIN visitor / signed out). Menu from `useUserMenuItems()`, status from `useCroutonStatus()`; marks the app as pill-bearing via `appConfig.crouton.status = 'pill'` (app.config.ts) so `useNotify()` routes every notification to the feed — never from mount state. Props: `showStatus`, `compact`, `placement`, `extraItems`, `useModal`. Core ships a no-op stub (`stubs/CroutonUserPill.vue`).
 
 ## Server Utilities
 

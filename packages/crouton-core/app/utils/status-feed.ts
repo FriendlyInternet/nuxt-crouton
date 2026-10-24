@@ -3,6 +3,8 @@ export type StatusType = 'success' | 'info' | 'warning' | 'error'
 export interface StatusMessage {
   id: string
   text: string
+  /** Secondary text shown in the Recent list */
+  description?: string
   icon?: string
   type: StatusType
   timestamp: number
