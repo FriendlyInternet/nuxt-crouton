@@ -609,6 +609,7 @@ This applies to every agent and sub-agent, and every capture method: Playwright 
 | Add/modify a page type (in a package or via `publishable`) | Always supply `name` + `description` + `icon` (required on `CroutonPageType`; surface in the pages page-type picker). See `packages/crouton-pages/CLAUDE.md` (Page Type Registration / Publishable Collections) |
 | Add new package | Create `packages/{name}/CLAUDE.md`, then run `node scripts/gen-package-catalog.mjs` (refreshes the task-decompose package catalog for the #292 package-fit check; `--check` verifies it's current) |
 | Add/modify/remove a skill (`.claude/skills/`) | Run `node scripts/gen-skills-doc.mjs` (regenerates `writeups/architecture/skills-and-triggers.html`; add new skills to its `META` map, and to a `FLOWS` lane if the skill fires on a specific trigger — the generator hard-fails if `FLOWS` references a skill that no longer exists). CI `skills-doc.yml` enforces it. |
+| Change which model a workflow runs on | Edit `.claude/pipeline-models.json` (`light` / `default` / `hard`) — every workflow reads its tier from it at run time (#2161). Never hard-code a model in a workflow: `node scripts/gen-routing.mjs --check` (CI) fails on one. |
 | Change an agent's model / add a route or tier | Edit `.claude/routing.json` (the model-routing source of truth, #864), then run `node scripts/gen-routing.mjs` (regenerates `writeups/architecture/routing-registry.md`; `--check` also flags drift vs `.claude/agents/*` frontmatter). |
 
 ## Claude Code Configuration
