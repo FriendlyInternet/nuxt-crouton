@@ -24,6 +24,9 @@ import {
   type NodePath, type DropEdge,
 } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { resolveLayoutAtWidth, patchBreakpoint, removeBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
+import { setCollapseRecipe } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { normalizeCollapseRecipe, LAYOUT_COLLAPSE_EDGES, type LayoutCollapseRecipe } from '@fyit/crouton-core/app/types/layout'
+import { BOARD_HIDDEN_KEY, collectHidden, collapsePlacement, collapseReveal, type HiddenItem } from '~/utils/board-hidden'
 import { useElementSize } from '@vueuse/core'
 import { useBoardDrag, type BoardDragPayload } from '~/utils/board-drag'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
@@ -77,6 +80,67 @@ const writeTarget = computed<number | null>(() => {
 })
 const dirty = ref(false)
 const selected = ref<NodePath | null>(null)
+
+// ── Hidden blocks at this width → triggers (#2418) ────────────────────────────
+const hiddenSet = computed(() => new Set(resolved.value?.collapsed ?? []))
+const hiddenItems = computed<HiddenItem[]>(() => collectHidden(root.value, hiddenSet.value, id => ({
+  label: blocks.value[id]?.name ?? id,
+  icon: blocks.value[id]?.icon ?? 'i-lucide-box',
+})))
+const navItems = computed(() => hiddenItems.value.filter(i => collapsePlacement(i.recipe) === 'nav'))
+const edgeItems = computed(() => hiddenItems.value.filter(i => collapsePlacement(i.recipe) === 'edge'))
+const revealing = ref<HiddenItem | null>(null)
+function openHidden(blockId: string) {
+  revealing.value = hiddenItems.value.find(i => i.blockId === blockId) ?? null
+}
+provide(BOARD_HIDDEN_KEY, { navItems, items: hiddenItems, open: openHidden })
+const revealKind = computed(() => (revealing.value ? collapseReveal(revealing.value.recipe) : null))
+const revealSide = computed(() => {
+  const e = revealing.value?.recipe.edge ?? 'right'
+  return e === 'left' || e === 'right' ? e : 'bottom'
+})
+
+// Hide/show lives on a breakpoint: the one in view, or a new one at this width.
+function toggleHiddenSelected() {
+  const v = current.value
+  const leaf = selectedLeaf.value
+  if (!v || !leaf) return
+  const w = writeTarget.value ?? effWidth.value
+  const hasBp = (v.tree.breakpoints ?? []).some(b => b.minWidth === w)
+  // A fresh breakpoint starts from what's hidden here now, so toggling one block
+  // doesn't silently un-hide the others inherited from a lower checkpoint.
+  let base = hasBp ? v.tree : patchBreakpoint(v.tree, w, { collapsed: [...hiddenSet.value] })
+  // Hidden lists lock upward like everything else. A higher breakpoint that never
+  // stated its own list is pinned to what it showed before this change, so hiding
+  // a block on the phone can't leak into a desktop layout you already authored.
+  for (const b of base.breakpoints ?? []) {
+    if (b.minWidth > w && b.collapsed === undefined)
+      base = patchBreakpoint(base, b.minWidth, { collapsed: resolveLayoutAtWidth(v.tree, b.minWidth).collapsed })
+  }
+  // Flip relative to what is SHOWN at this width (possibly inherited), not to the
+  // breakpoint's own list — otherwise "show" on an inheriting breakpoint hides instead.
+  const shown = new Set(hiddenSet.value)
+  if (shown.has(leaf.blockId)) shown.delete(leaf.blockId)
+  else shown.add(leaf.blockId)
+  v.tree = patchBreakpoint(base, w, { collapsed: [...shown] })
+  dirty.value = true
+}
+function setRecipe(patch: Partial<LayoutCollapseRecipe>) {
+  const leaf = selectedLeaf.value
+  if (!root.value || !leaf) return
+  const next = normalizeCollapseRecipe({ ...normalizeCollapseRecipe(leaf.collapse), ...patch })
+  writeRoot(setCollapseRecipe(root.value, leaf.blockId, next))
+}
+const selectedRecipe = computed(() => normalizeCollapseRecipe(selectedLeaf.value?.collapse))
+const selectedHidden = computed(() => !!selectedLeaf.value && hiddenSet.value.has(selectedLeaf.value.blockId))
+const placementItems = [{ label: 'On its edge', value: 'edge' }, { label: 'In the nav', value: 'nav' }]
+const edgeItemsOpts = LAYOUT_COLLAPSE_EDGES.map(e => ({ label: e[0]!.toUpperCase() + e.slice(1), value: e }))
+const revealItems = [
+  { label: 'Slideover', value: 'slideover' },
+  { label: 'Bottom sheet', value: 'sheet' },
+  { label: 'Modal', value: 'modal' },
+  { label: 'Full page', value: 'page' },
+]
 
 function starterRoot(): LayoutNode {
   return {
@@ -431,6 +495,7 @@ async function saveBoard() {
           :key="boardKey"
           :node="root"
           :selected="selected"
+          :hidden="hiddenSet"
           @resize="onResize"
           @select="onSelect"
         />
@@ -456,6 +521,35 @@ async function saveBoard() {
       {{ dragPayload.label }}
     </div>
 
+    <!-- Edge triggers for hidden blocks placed on an edge (#2418). -->
+    <div
+      v-for="item in edgeItems"
+      :key="item.blockId"
+      class="edge-trigger pointer-events-auto fixed z-30"
+      :data-edge="item.recipe.edge"
+    >
+      <UButton
+        :icon="item.icon"
+        :label="item.recipe.affordance === 'dot' ? undefined : item.label"
+        size="xs"
+        color="neutral"
+        variant="solid"
+        :data-edge-trigger="item.blockId"
+        @click="openHidden(item.blockId)"
+      />
+    </div>
+
+    <!-- The hidden block, opened the way its recipe says. -->
+    <USlideover v-if="revealKind === 'slideover'" :open="!!revealing" :side="revealSide" :title="revealing?.label" @update:open="v => { if (!v) revealing = null }">
+      <template #body><CroutonLayoutRenderer v-if="revealing" :node="revealing.leaf" :interactive="false" /></template>
+    </USlideover>
+    <UDrawer v-else-if="revealKind === 'sheet'" :open="!!revealing" :title="revealing?.label" @update:open="v => { if (!v) revealing = null }">
+      <template #body><div class="max-h-[70dvh] overflow-auto"><CroutonLayoutRenderer v-if="revealing" :node="revealing.leaf" :interactive="false" /></div></template>
+    </UDrawer>
+    <UModal v-else-if="revealKind === 'modal' || revealKind === 'page'" :open="!!revealing" :title="revealing?.label" :fullscreen="revealKind === 'page'" @update:open="v => { if (!v) revealing = null }">
+      <template #body><CroutonLayoutRenderer v-if="revealing" :node="revealing.leaf" :interactive="false" /></template>
+    </UModal>
+
     <!-- Bottom sheet: the selected pane's options. -->
     <UDrawer v-model:open="sheetOpen" :overlay="false" :modal="false" :handle="true">
       <template #content>
@@ -473,7 +567,24 @@ async function saveBoard() {
               @update:model-value="v => setField(f.name, v)"
             />
           </UFormField>
-          <p v-if="selectedLeaf && !selectFields.length" class="text-sm text-muted">No options for this block.</p>
+          <template v-if="selectedLeaf">
+            <USeparator />
+            <div class="flex items-center justify-between">
+              <span class="text-sm">Hidden at this width</span>
+              <USwitch :model-value="selectedHidden" data-handoff="hidden-toggle" @update:model-value="toggleHiddenSelected" />
+            </div>
+            <template v-if="selectedHidden">
+              <UFormField label="Trigger">
+                <USelect :model-value="collapsePlacement(selectedRecipe)" :items="placementItems" class="w-full" data-handoff="recipe-placement" @update:model-value="v => setRecipe({ placement: v as LayoutCollapseRecipe['placement'] })" />
+              </UFormField>
+              <UFormField v-if="collapsePlacement(selectedRecipe) === 'edge'" label="Edge">
+                <USelect :model-value="selectedRecipe.edge" :items="edgeItemsOpts" class="w-full" @update:model-value="v => setRecipe({ edge: v as LayoutCollapseRecipe['edge'] })" />
+              </UFormField>
+              <UFormField label="Opens as">
+                <USelect :model-value="collapseReveal(selectedRecipe)" :items="revealItems" class="w-full" data-handoff="recipe-reveal" @update:model-value="v => setRecipe({ reveal: v as LayoutCollapseRecipe['reveal'] })" />
+              </UFormField>
+            </template>
+          </template>
           <UButton v-if="selected" color="error" variant="soft" icon="i-lucide-trash-2" label="Remove from page" @click="removeSelected" />
         </div>
       </template>
@@ -482,6 +593,10 @@ async function saveBoard() {
 </template>
 
 <style scoped>
+.edge-trigger[data-edge='right'] { right: 8px; top: 50%; transform: translateY(-50%); }
+.edge-trigger[data-edge='left'] { left: 8px; top: 50%; transform: translateY(-50%); }
+.edge-trigger[data-edge='top'] { top: 96px; left: 50%; transform: translateX(-50%); }
+.edge-trigger[data-edge='bottom'] { bottom: 16px; left: 50%; transform: translateX(-50%); }
 .board-frame { position: absolute; left: 0; top: 0; background: var(--ui-bg); }
 .board-frame--scaled { outline: 1px solid var(--ui-border); box-shadow: 0 0 0 9999px color-mix(in oklch, var(--ui-bg-elevated) 70%, transparent); }
 /* Chips scroll horizontally on a swipe; a held chip becomes a drag (pointer events). */

@@ -4,23 +4,33 @@
  * with `sizing: { height: 'hug' }` → a short bar wherever it lands. App-owned
  * chrome block; resolved by name via `<component :is>`.
  */
-const items = [
-  { icon: 'i-lucide-home', label: 'Home' },
-  { icon: 'i-lucide-search', label: 'Search' },
-  { icon: 'i-lucide-plus', label: 'Add' },
-  { icon: 'i-lucide-user', label: 'You' },
+import { BOARD_HIDDEN_KEY } from '~/utils/board-hidden'
+
+// Hidden blocks whose trigger is "in the nav" (#2418) become this bar's items;
+// without any, the demo items show what the bar looks like.
+const hidden = inject(BOARD_HIDDEN_KEY, null)
+const demo = [
+  { icon: 'i-lucide-home', label: 'Home', blockId: '' },
+  { icon: 'i-lucide-search', label: 'Search', blockId: '' },
+  { icon: 'i-lucide-plus', label: 'Add', blockId: '' },
+  { icon: 'i-lucide-user', label: 'You', blockId: '' },
 ]
+const items = computed(() => (hidden?.navItems.value.length ? hidden.navItems.value : demo))
 </script>
 
 <template>
   <div class="flex h-16 items-center justify-around border-t border-default bg-elevated px-2">
-    <div
+    <button
       v-for="item in items"
       :key="item.label"
+      type="button"
       class="flex flex-col items-center gap-0.5 text-muted"
+      :class="item.blockId ? 'text-default' : ''"
+      :data-nav-item="item.blockId || undefined"
+      @click.stop="item.blockId && hidden?.open(item.blockId)"
     >
       <UIcon :name="item.icon" class="size-5" />
       <span class="text-[10px]">{{ item.label }}</span>
-    </div>
+    </button>
   </div>
 </template>

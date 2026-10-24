@@ -25,7 +25,9 @@ const props = withDefaults(defineProps<{
   node: LayoutNode
   path?: NodePath
   selected?: NodePath | null
-}>(), { path: () => [], selected: null })
+  /** blockIds hidden at the current width (#2418): rendered as a strip, not the block. */
+  hidden?: Set<string>
+}>(), { path: () => [], selected: null, hidden: () => new Set<string>() })
 
 const emit = defineEmits<{
   resize: [at: NodePath, sizes: number[]]
@@ -39,6 +41,8 @@ const isLeaf = computed(() => props.node.type === 'leaf')
 const componentName = computed(() => (props.node.type === 'leaf' ? resolveComponentName(props.node.blockId) : null))
 const safeConfig = computed(() => (props.node.type === 'leaf' ? sanitizeConfig(props.node.blockId, props.node.config) : {}))
 const isSelected = computed(() => !!props.selected && samePath(props.selected, props.path))
+const isHidden = computed(() => props.node.type === 'leaf' && props.hidden.has(props.node.blockId))
+const blockIcon = computed(() => (props.node.type === 'leaf' ? blocks.value[props.node.blockId]?.icon ?? 'i-lucide-box' : 'i-lucide-box'))
 
 // A pane can't be dropped onto itself or into its own subtree.
 const canAccept = computed(() => {
@@ -92,6 +96,7 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
           :node="child"
           :path="[...path, i]"
           :selected="selected"
+          :hidden="hidden"
           @resize="(at, sizes) => emit('resize', at, sizes)"
           @select="at => emit('select', at)"
         />
@@ -103,16 +108,27 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
   <div
     v-else
     class="board-pane relative h-full w-full croutonpane"
-    :class="{ 'board-pane--selected': isSelected, 'board-pane--target': canAccept }"
+    :class="{ 'board-pane--selected': isSelected, 'board-pane--target': canAccept, 'board-pane--hidden': isHidden }"
     :data-edge="hoverEdge ?? undefined"
     :data-path="path.join('.')"
     data-handoff="board-pane"
     @click="emit('select', path)"
   >
     <template v-if="isLeaf">
+      <!-- Hidden at this width (#2418): a strip stands in for the block, so you can
+           still see it's part of the page, select it, drop beside it, and un-hide it. -->
+      <div
+        v-if="isHidden"
+        class="flex h-full w-full items-center gap-2 bg-elevated/60 px-3 py-2 text-xs text-muted"
+        data-handoff="hidden-strip"
+      >
+        <UIcon name="i-lucide-eye-off" class="size-3.5 shrink-0" />
+        <UIcon :name="blockIcon" class="size-3.5 shrink-0" />
+        <span class="truncate">{{ blockName }} · hidden at this width</span>
+      </div>
       <component
         :is="componentName"
-        v-if="componentName"
+        v-else-if="componentName"
         v-bind="safeConfig"
         class="h-full w-full overflow-auto"
       />
@@ -150,6 +166,7 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
 .board-pane { outline: 1px solid transparent; outline-offset: -1px; transition: outline-color .15s; }
 .board-pane--selected { outline-color: var(--ui-primary); }
 .board-pane--target { outline-color: color-mix(in oklch, var(--ui-primary) 35%, transparent); }
+.board-pane--hidden { background: repeating-linear-gradient(135deg, transparent 0 8px, color-mix(in oklch, var(--ui-border) 60%, transparent) 8px 9px); }
 
 /* The grip stays discreet until the pane is hovered / selected / being targeted. */
 .board-grip { opacity: .55; transition: opacity .15s; -webkit-touch-callout: none; }
