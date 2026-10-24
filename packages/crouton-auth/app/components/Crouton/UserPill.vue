@@ -74,10 +74,10 @@ const TYPE_ICON_COLOR: Record<string, string> = {
 }
 
 const TYPE_SURFACE: Record<string, string> = {
-  success: 'bg-success/10 border-success/30 text-success',
-  info: 'bg-info/10 border-info/30 text-info',
-  warning: 'bg-warning/10 border-warning/30 text-warning',
-  error: 'bg-error/10 border-error/30 text-error'
+  success: 'bg-default bg-linear-to-r from-success/10 to-success/10 border-success/30 text-success',
+  info: 'bg-default bg-linear-to-r from-info/10 to-info/10 border-info/30 text-info',
+  warning: 'bg-default bg-linear-to-r from-warning/10 to-warning/10 border-warning/30 text-warning',
+  error: 'bg-default bg-linear-to-r from-error/10 to-error/10 border-error/30 text-error'
 }
 
 const TYPE_DOT: Record<string, string> = {
@@ -181,7 +181,7 @@ function retry() {
       <!-- Status message: widens via max-width; the feed owns the lifetime -->
       <div
         class="overflow-hidden transition-[max-width,opacity] duration-300 ease-out"
-        :class="status ? 'max-w-[260px] opacity-100' : 'max-w-0 opacity-0'"
+        :class="status ? 'max-w-[min(260px,calc(100vw-8rem))] opacity-100' : 'max-w-0 opacity-0'"
         aria-live="polite"
       >
         <span v-if="status" class="flex items-center gap-2 whitespace-nowrap pl-3 pr-1 text-sm">
