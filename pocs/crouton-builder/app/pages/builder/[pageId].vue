@@ -16,13 +16,15 @@
  * row via the canonical `layout-serialize` (specs `board-persistence`,
  * `layouttree-serialise`).
  */
-import type { LayoutNode, LayoutTree, LayoutBreakpoint, LayoutLeaf } from '@fyit/crouton-core/app/types/layout'
+import type { LayoutNode, LayoutTree, LayoutLeaf } from '@fyit/crouton-core/app/types/layout'
 import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize'
 import {
   getNode, makeLeaf, dropBlock, dropNode, applyPaneDrop, detachNode, findNodePath,
   nestInside, applySizes, setConfig, removeNode,
   type NodePath, type DropEdge,
 } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { resolveLayoutAtWidth, patchBreakpoint, removeBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
+import { useElementSize } from '@vueuse/core'
 import { useBoardDrag, type BoardDragPayload } from '~/utils/board-drag'
 import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
@@ -38,9 +40,41 @@ useHead({ title: () => `Builder · ${page.value?.title ?? 'Page'}` })
 const { blocks, blocksList } = useCroutonLayoutBlocks()
 const { payload: dragPayload, point: dragPoint, arm, onDrop: registerDrop, consumeClick } = useBoardDrag()
 
-// ── The tree ───────────────────────────────────────────────────────────────────
-const root = shallowRef<LayoutNode | null>(null)
-const breakpoints = ref<LayoutBreakpoint[] | undefined>()
+// ── Width: design at any size (#874 model) ────────────────────────────────────
+// `frameWidth` null = fit the screen. Wider than the screen → the frame scales
+// down to fit, so a desktop layout is visible (and editable) on a phone.
+const boardEl = ref<HTMLElement | null>(null)
+const { width: fitWidth, height: fitHeight } = useElementSize(boardEl)
+const frameWidth = ref<number | null>(null)
+const effWidth = computed(() => Math.round(frameWidth.value ?? fitWidth.value))
+const scale = computed(() => (fitWidth.value && effWidth.value > fitWidth.value ? fitWidth.value / effWidth.value : 1))
+const frameStyle = computed(() => ({
+  width: `${effWidth.value}px`,
+  height: `${fitHeight.value / scale.value}px`,
+  transform: `scale(${scale.value})`,
+  transformOrigin: 'top left',
+}))
+const WIDTH_PRESETS = [
+  { label: 'Phone', width: 390, icon: 'i-lucide-smartphone' },
+  { label: 'Tablet', width: 768, icon: 'i-lucide-tablet' },
+  { label: 'Laptop', width: 1024, icon: 'i-lucide-laptop' },
+  { label: 'Desktop', width: 1280, icon: 'i-lucide-monitor' },
+]
+
+// ── The tree, resolved at the current width ───────────────────────────────────
+// The variant's tree holds the base root + authored breakpoints (min-width locks
+// upward). What the board shows is the resolution at `effWidth`; what an edit
+// writes is the breakpoint you are looking at — or a new one at an explicit width.
+const tree = computed<LayoutTree | null>(() => current.value?.tree ?? null)
+const resolved = computed(() => (tree.value && effWidth.value ? resolveLayoutAtWidth(tree.value, effWidth.value) : null))
+const root = computed<LayoutNode | null>(() => resolved.value?.root ?? null)
+const activeBp = computed<number | null>(() => resolved.value?.activeBreakpoint ?? null)
+const breakpointList = computed(() => (tree.value?.breakpoints ?? []).map(b => b.minWidth))
+// Where an edit lands: an explicit width with no checkpoint yet → a new one there.
+const writeTarget = computed<number | null>(() => {
+  if (frameWidth.value !== null) return effWidth.value
+  return activeBp.value
+})
 const dirty = ref(false)
 const selected = ref<NodePath | null>(null)
 
@@ -87,25 +121,31 @@ watch([page, pageId] as const, ([p, id]) => {
   dirty.value = false
 }, { immediate: true })
 
-// The board edits `root` in place; the current variant's tree is written back on
-// every commit, so switching variants never loses an unsaved edit.
 function showVariant(id: string) {
-  const v = variants.value.find(x => x.id === id)
-  if (!v) return
+  if (!variants.value.some(x => x.id === id)) return
   currentId.value = id
-  root.value = v.tree.root
-  breakpoints.value = v.tree.breakpoints
   selected.value = null
 }
-function syncCurrent() {
+/** Write the edited arrangement into the current variant: the breakpoint in view, or the base. */
+function writeRoot(next: LayoutNode | null) {
   const v = current.value
-  if (v) v.tree = { renderer: 'panes', root: root.value ?? starterRoot(), breakpoints: breakpoints.value }
+  if (!v) return
+  const r = next ?? starterRoot()
+  v.tree = writeTarget.value === null
+    ? { ...v.tree, root: r }
+    : patchBreakpoint(v.tree, writeTarget.value, { root: r })
+  dirty.value = true
+}
+function resetBreakpoint() {
+  const v = current.value
+  if (!v || activeBp.value === null) return
+  v.tree = removeBreakpoint(v.tree, activeBp.value)
+  dirty.value = true
 }
 
 function duplicateVariant() {
   const v = current.value
   if (!v) return
-  syncCurrent()
   const copy: BoardVariant = { id: newId(), name: nextName(), tree: parseLayoutTree(serializeLayoutTree(v.tree)) ?? v.tree }
   variants.value = [...variants.value, copy]
   showVariant(copy.id)
@@ -151,9 +191,7 @@ const variantMenu = computed(() => [
 ])
 
 function commit(next: LayoutNode | null) {
-  root.value = next
-  dirty.value = true
-  syncCurrent()
+  writeRoot(next)
 }
 
 // ── Drops ──────────────────────────────────────────────────────────────────────
@@ -189,9 +227,7 @@ function onDrop(at: NodePath, edge: DropEdge, payload: BoardDragPayload) {
 
 function onResize(at: NodePath, sizes: number[]) {
   if (!root.value) return
-  root.value = applySizes(root.value, at, sizes)
-  dirty.value = true
-  syncCurrent()
+  writeRoot(applySizes(root.value, at, sizes))
 }
 
 // ── Selection + the bottom sheet ──────────────────────────────────────────────
@@ -238,12 +274,50 @@ function tapAdd(blockId: string) {
   commit(applyPaneDrop(r, { path: at, edge }, newLeaf(blockId)))
 }
 
+// ── Width chip: drag sideways for any width, tap for presets ──────────────────
+const widthLabel = computed(() => (frameWidth.value === null ? `Fit · ${effWidth.value}px` : `${effWidth.value}px`))
+const widthMenu = computed(() => [
+  [{ label: 'Fit the screen', icon: 'i-lucide-maximize', onSelect: () => { frameWidth.value = null } },
+    ...WIDTH_PRESETS.map(p => ({ label: `${p.label} · ${p.width}`, icon: p.icon, onSelect: () => { frameWidth.value = p.width } }))],
+  breakpointList.value.length
+    ? breakpointList.value.map(w => ({ label: `≥ ${w}px · own layout`, icon: activeBp.value === w ? 'i-lucide-check' : 'i-lucide-ruler', onSelect: () => { frameWidth.value = w } }))
+    : [{ label: 'No breakpoints yet — change something at a width to add one', disabled: true }],
+  activeBp.value !== null
+    ? [{ label: `Remove the ≥ ${activeBp.value}px layout`, icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: resetBreakpoint }]
+    : [],
+])
+let widthDrag: { startX: number, startW: number } | null = null
+function onWidthDown(e: PointerEvent) {
+  if (e.button !== 0) return
+  widthDrag = { startX: e.clientX, startW: effWidth.value }
+  const el = e.currentTarget as HTMLElement
+  try { el.setPointerCapture(e.pointerId) }
+  catch {}
+  const move = (ev: PointerEvent) => {
+    if (!widthDrag) return
+    const dx = ev.clientX - widthDrag.startX
+    if (Math.abs(dx) < 6 && frameWidth.value === null) return
+    ev.preventDefault()
+    let w = Math.max(320, Math.min(1600, widthDrag.startW + dx * 2))
+    for (const p of WIDTH_PRESETS) if (Math.abs(w - p.width) < 10) w = p.width
+    frameWidth.value = Math.round(w)
+  }
+  const up = () => {
+    widthDrag = null
+    window.removeEventListener('pointermove', move)
+    window.removeEventListener('pointerup', up)
+    window.removeEventListener('pointercancel', up)
+  }
+  window.addEventListener('pointermove', move)
+  window.addEventListener('pointerup', up)
+  window.addEventListener('pointercancel', up)
+}
+
 // ── Save ───────────────────────────────────────────────────────────────────────
 const { update } = useCollectionMutation('builderPages')
 const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
 async function saveBoard() {
   if (!root.value) return
-  syncCurrent()
   saveState.value = 'saving'
   try {
     await update(pageId.value, {
@@ -290,6 +364,19 @@ async function saveBoard() {
           data-handoff="variant-switch"
         />
       </UDropdownMenu>
+      <UDropdownMenu :items="widthMenu" :content="{ align: 'start' }">
+        <UButton
+          color="neutral"
+          variant="soft"
+          size="xs"
+          icon="i-lucide-move-horizontal"
+          :label="widthLabel"
+          class="touch-none select-none cursor-ew-resize"
+          data-handoff="width-chip"
+          @pointerdown="onWidthDown"
+        />
+      </UDropdownMenu>
+      <UBadge v-if="activeBp !== null" color="primary" variant="subtle" size="xs" data-handoff="bp-badge">≥ {{ activeBp }}</UBadge>
       <span class="flex-1" />
       <span v-if="saveState === 'saved' && !dirty" class="text-xs text-muted">Saved</span>
       <UButton
@@ -320,14 +407,21 @@ async function saveBoard() {
     </nav>
 
     <!-- Board: the page, full-bleed at the real device width. -->
-    <main class="relative min-h-0 flex-1" data-handoff="board">
-      <BoardTree
+    <main ref="boardEl" class="relative min-h-0 flex-1 overflow-hidden" data-handoff="board">
+      <div
         v-if="root"
-        :node="root"
-        :selected="selected"
-        @resize="onResize"
-        @select="onSelect"
-      />
+        class="board-frame"
+        :class="{ 'board-frame--scaled': scale < 1 }"
+        :style="frameStyle"
+        :data-width="effWidth"
+      >
+        <BoardTree
+          :node="root"
+          :selected="selected"
+          @resize="onResize"
+          @select="onSelect"
+        />
+      </div>
       <div
         v-else
         class="flex h-full items-center justify-center p-6 text-center text-sm text-muted"
@@ -375,6 +469,8 @@ async function saveBoard() {
 </template>
 
 <style scoped>
+.board-frame { position: absolute; left: 0; top: 0; background: var(--ui-bg); }
+.board-frame--scaled { outline: 1px solid var(--ui-border); box-shadow: 0 0 0 9999px color-mix(in oklch, var(--ui-bg-elevated) 70%, transparent); }
 /* Chips scroll horizontally on a swipe; a held chip becomes a drag (pointer events). */
 .board-chip { touch-action: pan-x; -webkit-touch-callout: none; }
 </style>
