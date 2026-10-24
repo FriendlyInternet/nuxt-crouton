@@ -42,7 +42,11 @@ export default defineConfig({
     alias: {
       '#app': resolve(__dirname, 'tests/mocks/nuxt-app'),
       '#imports': resolve(__dirname, 'tests/mocks/imports'),
-      'nitropack/runtime': resolve(__dirname, 'tests/mocks/nitropack-runtime')
+      'nitropack/runtime': resolve(__dirname, 'tests/mocks/nitropack-runtime'),
+      // seed/index.ts imports the seed contract from crouton-core, which isn't a
+      // dependency of this package (core extends auth, not the reverse) — point the
+      // test runner at the sibling source so the seed provider can be unit-tested (#2357).
+      '@fyit/crouton-core/shared/seed': resolve(__dirname, '../crouton-core/shared/seed/index.ts')
     }
   }
 })
