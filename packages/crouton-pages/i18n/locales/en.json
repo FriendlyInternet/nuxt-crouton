@@ -98,10 +98,8 @@
     "nav": {
       "menu": "Menu",
       "theme": "Theme",
-      "signOut": "Sign out",
       "openMenu": "Open navigation menu",
-      "adminMenu": "Admin menu",
-      "user": "User"
+      "manageSite": "Manage site"
     },
     "collection": {
       "itemUnavailable": "Item Unavailable",
