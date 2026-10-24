@@ -94,7 +94,7 @@ const safeUrl = sanitizeRedirectUrl(redirectParam)  // '/' on external URLs
 - `EmailLogs` — Auth email log viewer with stats, filtering, and error details
 
 ### Sidebar Components
-- `AuthSidebar`, `TeamSection`, `UserMenu`
+- `AuthSidebar`, `TeamSection`
 
 ### Pill
 - `CroutonUserPill` (`app/components/Crouton/UserPill.vue`) — one pill for account + status (member / PIN visitor / signed out). Menu from `useUserMenuItems()`, status from `useCroutonStatus()`; sets `crouton-status-bar-active` while mounted. Props: `showStatus`, `compact`, `placement`, `extraItems`, `useModal`. Core ships a no-op stub (`stubs/CroutonUserPill.vue`).
