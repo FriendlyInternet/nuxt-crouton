@@ -26,6 +26,8 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
+      # #2446: dispatch the pi worker in revise mode (workflow_dispatch is allowed from GITHUB_TOKEN).
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -86,6 +88,38 @@ jobs:
         if: steps.state.outputs.open == 'true'
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # ── Feedback on a pi-built PR → revise that PR (#2446) ──────────────────────
+      # When this issue already has an open PR on `work-<issue>` (the pi worker's branch), a
+      # change request means "change that PR". The Claude responder below cannot do that — on
+      # #2414 it answered "✅ resumed" and changed nothing. So re-run the pi worker on that branch
+      # with this comment as its instruction (revise mode, the `feedback` input), and skip the
+      # responder. Approvals are untouched: they fall through to the merge step as before.
+      # Same decision as the PR-side route (scripts/revise-route.mjs), so the two can't drift.
+      - name: Route feedback on a pi-built PR to its worker
+        id: revise
+        if: steps.state.outputs.open == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { shouldRevise } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/revise-route.mjs`)
+            const issue_number = context.payload.issue.number
+            const c = context.payload.comment
+            const d = shouldRevise({ body: c.body, authorAssociation: c.author_association, userType: c.user.type })
+            if (!d.revise) { core.setOutput('revise', 'false'); core.info(`not a revision: ${d.reason}`); return }
+            const prs = await github.rest.pulls.list({ ...context.repo, state: 'open', head: `${context.repo.owner}:work-${issue_number}`, per_page: 5 })
+            const pr = prs.data[0]
+            if (!pr) { core.setOutput('revise', 'false'); core.info('no open work-<issue> PR — the responder handles it'); return }
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
+              inputs: { issue: String(issue_number), feedback: String(c.id) },
+            })
+            const runs = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/work-issue-pidev.yml`
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _revision from your reply (#2446)_\n\n'
+                + `🔧 **Revising PR #${pr.number} from your reply.** The pi worker is re-running on its branch with your comment as the instruction. `
+                + `Its commit lands on the PR, or it says plainly that it changed nothing. 🔗 [Follow the run](${runs})` })
+            core.setOutput('revise', 'true')
+
       # ── pi DESIGN-HOLD re-dispatch (#1828) ───────────────────────────────────────
       # A pi decompose sign-off hold (Option C, #1821) is NOT a gate PR — it holds the EPIC
       # with a "🎨 Design sign-off" comment and no children. The generic claude `/task-decompose`
@@ -105,7 +139,7 @@ jobs:
           owner: FriendlyInternet
       - name: Re-dispatch a pi design-hold to the pi decomposer
         id: piredispatch
-        if: steps.state.outputs.open == 'true'
+        if: steps.state.outputs.open == 'true' && steps.revise.outputs.revise != 'true'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token-early.outputs.token }}
@@ -166,7 +200,7 @@ jobs:
       - id: agent
         # Skip when we re-dispatched a pi design-hold above (#1828) — the pi decomposer builds it,
         # not this generic claude resume (which would just re-block and double-decompose).
-        if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true'
+        if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true' && steps.revise.outputs.revise != 'true'
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

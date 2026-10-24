@@ -6,7 +6,7 @@ import type { NavigationMenuItem, DropdownMenuItem } from '@nuxt/ui'
  *
  * Two-pill floating nav:
  * - Left pill: Page navigation links (hidden when only 1 page)
- * - Right pill: User menu (or login link), language switcher, dark mode toggle
+ * - Right pill: user/status pill, language switcher, dark mode toggle
  *
  * Responsive behavior:
  * - Desktop (md+): Full horizontal pills
@@ -17,7 +17,6 @@ import type { NavigationMenuItem, DropdownMenuItem } from '@nuxt/ui'
  */
 
 const { navigation, isLoading, isActive } = useNavigation()
-const { user, userInitials, dropdownItems: userDropdownItems } = useUserMenuItems({ useModal: true })
 const { currentTeam, isAdmin } = useTeam()
 const { teamSlug: teamSlugRef, teamId: teamIdRef } = useTeamContext()
 const { appsList, getAppAllRoutes } = useCroutonApps()
@@ -68,31 +67,6 @@ const pageChrome = useState<{ hideNav: boolean, hideAuthControls: boolean }>('pa
 // Show left pill only when more than 1 page and the page doesn't hide it
 const showPageNav = computed(() => menuItems.value.length > 1 && !pageChrome.value.hideNav)
 
-// Login button / user avatar / admin menu visibility
-const showAuthControls = computed(() => !pageChrome.value.hideAuthControls)
-
-// Scoped visitor session (e.g. a kassa volunteer who redeemed a PIN). Published
-// by the owning addon (crouton-sales) into shared state — display-only here.
-// Shown even when member auth controls are hidden: it's the visitor's *own*
-// session, and `hideAuthControls` only hides the team-member login. Logout is
-// the addon's full teardown, fired via a hook so we stay package-agnostic.
-// Member login returns to the current page (otherwise you land on /auth/login
-// with no way back to a kassa / scoped page).
-// dismissible=1 → on a normal public page the member-login modal can be
-// closed back to the page (there's content behind it). Hard members/admin
-// 401s open the modal without this flag, staying non-dismissable.
-const route = useRoute()
-const loginUrl = computed(() => `/auth/login?redirect=${encodeURIComponent(route.fullPath)}&dismissible=1`)
-
-const scopedSession = useState<{ displayName: string } | null>('crouton:scoped-session', () => null)
-async function logoutScopedSession() {
-  await (useNuxtApp().hooks as any).callHook('crouton:scoped-session:logout')
-  // Re-gate: a scoped page without a session must fall back to its access gate,
-  // so re-login is the PIN (not the member email/password form). A full reload
-  // re-runs the SSR scope check (the token was revoked server-side).
-  reloadNuxtApp({ force: true })
-}
-
 const toggleColorMode = () => {
   colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
 }
@@ -117,7 +91,8 @@ const themeQuickItems = computed<DropdownMenuItem[][]>(() => {
 // controls. See useCroutonNavPill.
 const { visibleActions: navPillActions } = useCroutonNavPill()
 
-// Admin dropdown menu items — mirrors AdminSidebar logic dynamically
+// Admin menu items — mirrors AdminSidebar logic dynamically. Surfaced inside the
+// user pill's menu as a "Manage site" submenu (admins only).
 const adminPrefix = computed(() => {
   const teamParam = teamSlugRef.value || teamIdRef.value || currentTeam.value?.slug || ''
   return teamParam ? `/admin/${teamParam}` : '/admin'
@@ -189,6 +164,12 @@ const adminDropdownItems = computed<DropdownMenuItem[][]>(() => {
 
   return groups
 })
+
+const manageSiteItems = computed<DropdownMenuItem[]>(() =>
+  isAdmin.value && currentTeam.value?.slug
+    ? [{ label: t('pages.nav.manageSite'), icon: 'i-lucide-settings', children: adminDropdownItems.value }]
+    : []
+)
 
 // Shared pill styles
 // `pointer-events-auto` belongs HERE, on the visible pill — not on the wrapper's
@@ -311,81 +292,8 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
       <!-- Right pill: auth controls (unless the page hides them) + language + dark mode (pinned right) -->
       <div :class="[pillClass, 'px-2 py-1', showPageNav && !dockBottom && 'absolute right-0']">
         <ClientOnly>
-          <template v-if="showAuthControls">
-            <!-- Authenticated: Avatar dropdown -->
-            <UDropdownMenu
-              v-if="user"
-              :items="userDropdownItems"
-              :content="{ align: 'end', side: 'bottom' }"
-              :ui="{ content: 'w-56' }"
-            >
-              <UButton
-                variant="ghost"
-                color="neutral"
-                size="sm"
-                class="rounded-full"
-              >
-                <template #leading>
-                  <UAvatar
-                    :src="user?.image ?? undefined"
-                    :alt="user?.name ?? t('pages.nav.user')"
-                    :text="userInitials"
-                    size="2xs"
-                  />
-                </template>
-              </UButton>
-            </UDropdownMenu>
-
-            <!-- Not authenticated: Login button (suppressed when a scoped
-                 visitor session is active — they're already signed in). -->
-            <UButton
-              v-else-if="!scopedSession"
-              :to="loginUrl"
-              icon="i-lucide-log-in"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :label="t('auth.signIn')"
-              :ui="{ label: 'hidden md:inline' }"
-            />
-
-            <!-- Admin menu -->
-            <UDropdownMenu
-              v-if="user && isAdmin && currentTeam?.slug"
-              :items="adminDropdownItems"
-              :content="{ align: 'end', side: 'bottom' }"
-              :ui="{ content: 'w-48' }"
-            >
-              <UButton
-                icon="i-lucide-settings"
-                color="neutral"
-                variant="ghost"
-                size="sm"
-                :aria-label="t('pages.nav.adminMenu')"
-              />
-            </UDropdownMenu>
-
-            <!-- Divider only when the member section actually rendered something. -->
-            <USeparator v-if="user || !scopedSession" orientation="vertical" class="h-5 md:mx-1" />
-          </template>
-        </ClientOnly>
-
-        <!-- Scoped visitor session (e.g. a kassa volunteer). Their own session,
-             so it shows even when member auth controls are hidden; never
-             alongside a member avatar (`!user`). -->
-        <ClientOnly>
-          <template v-if="scopedSession && !user">
-            <span class="text-sm text-muted max-w-24 md:max-w-28 truncate">{{ scopedSession.displayName }}</span>
-            <UButton
-              icon="i-lucide-log-out"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :aria-label="t('pages.nav.signOut')"
-              @click="logoutScopedSession"
-            />
-            <USeparator orientation="vertical" class="h-5 md:mx-1" />
-          </template>
+          <CroutonUserPill placement="inline" use-modal :extra-items="manageSiteItems" />
+          <USeparator orientation="vertical" class="h-5 md:mx-1" />
         </ClientOnly>
 
         <!-- Package-contributed pill actions (e.g. the edit-page pencil).

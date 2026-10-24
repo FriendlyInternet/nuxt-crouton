@@ -29,10 +29,10 @@ concurrency:
 
 jobs:
   simplify-review:
-    # Skip drafts and bot-authored PRs (agent/Dependabot noise isn't worth a quality pass).
+    # Skip drafts and Dependabot. Pipeline PRs (nuxt-harness[bot]) ARE reviewed: they are most of the code that reaches main (#2427). A held draft is reviewed on ready_for_review.
     if: >
       github.event.pull_request.draft == false &&
-      github.event.pull_request.user.type != 'Bot'
+      github.event.pull_request.user.login != 'dependabot[bot]'
     # Fork PRs never land on the self-hosted box (untrusted code on our hardware — runbook §5).
     runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20

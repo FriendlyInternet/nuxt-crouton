@@ -92,6 +92,8 @@ A probabilistic runtime needs gates where a human should decide. A gate proposes
 - **Schema** — agree the data model before generating from it.
 - **UI** — agree the look (preview or mockup) before building.
 - **Test** — agree a committed *failing* test as the contract before writing the logic. Done = it passes.
+  (An unattended pipeline can't wait for that agreement: there the test ships *with* the code and a
+  missing test is made visible, not blocking — the stack adapter says how.)
 - **Code review** — the diff, for correctness + simplification.
 
 One shared loop: hold on a `blocked` status; the **only** resume signal is a reply comment containing

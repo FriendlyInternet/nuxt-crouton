@@ -32,7 +32,7 @@ const workspacePath = (event: SalesEvent) =>
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
+  <div class="p-4 sm:p-6 space-y-6">
     <div class="flex items-end justify-between gap-4 flex-wrap">
       <div>
         <h1 class="text-2xl font-bold tracking-tight">{{ t('sales.events.title') }}</h1>
@@ -57,13 +57,14 @@ const workspacePath = (event: SalesEvent) =>
       v-else-if="events?.length"
       class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
     >
-      <div
+      <!-- A real link, so the card is keyboard- and screen-reader-reachable (#2419). -->
+      <NuxtLink
         v-for="event in events"
         :key="event.id"
-        role="link"
-        class="group rounded-xl border border-default bg-default p-5 cursor-pointer
-               transition-all duration-150 hover:border-primary/50 hover:shadow-md"
-        @click="navigateTo(workspacePath(event))"
+        :to="workspacePath(event)"
+        class="group block rounded-xl border border-default bg-default p-5
+               transition-all duration-150 hover:border-primary/50 hover:shadow-md
+               focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
         <div class="flex items-start justify-between gap-3">
           <h3 class="font-semibold text-lg leading-tight truncate group-hover:text-primary transition-colors">
@@ -78,14 +79,14 @@ const workspacePath = (event: SalesEvent) =>
              The block's own "Open kassa" reaches the POS from there — no
              separate "Kassa openen" shortcut, no "Werkruimte" duplicate. -->
         <p class="text-muted text-sm mt-4 inline-flex items-center gap-1.5 group-hover:text-primary transition-colors">
-          <UIcon name="i-lucide-arrow-right" class="size-4" />
+          <UIcon name="i-lucide-arrow-right" class="size-4" aria-hidden="true" />
           {{ t('sales.events.workspace') }}
         </p>
-      </div>
+      </NuxtLink>
     </div>
 
     <div v-else class="text-center text-muted p-12 border border-dashed border-default rounded-xl">
-      <UIcon name="i-lucide-calendar-off" class="w-8 h-8 mx-auto mb-2" />
+      <UIcon name="i-lucide-calendar-off" class="w-8 h-8 mx-auto mb-2" aria-hidden="true" />
       <p class="font-medium">{{ t('sales.events.noEvents') }}</p>
     </div>
   </div>

@@ -300,5 +300,14 @@
     "statusUnknown": "Inconnu",
     "noLogs": "Aucun journal d'e-mail trouvé.",
     "errorDetails": "Détails de l'erreur"
+  },
+  "userPill": {
+    "accountAndStatus": "Compte et statut",
+    "recent": "Récent",
+    "helper": "assistant",
+    "signIn": "Se connecter",
+    "signOutHelper": "Quitter la session d'assistant",
+    "retry": "Réessayer",
+    "justNow": "à l'instant"
   }
 }

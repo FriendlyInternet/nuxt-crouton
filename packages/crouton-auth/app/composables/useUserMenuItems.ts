@@ -2,7 +2,7 @@
  * useUserMenuItems
  *
  * Shared composable that builds the user dropdown menu items.
- * Used by both SidebarUserMenu (auth sidebar) and CroutonPagesNav (public nav)
+ * Used by both CroutonUserPill and CroutonPagesNav (public nav)
  * so theme items, language switching, dark mode, and logout are always in sync.
  *
  * Reads theme items from the shared useState key populated by the
