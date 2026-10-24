@@ -32,7 +32,7 @@ const workspacePath = (event: SalesEvent) =>
 </script>
 
 <template>
-  <div class="p-6 space-y-6">
+  <div class="p-4 sm:p-6 space-y-6">
     <div class="flex items-end justify-between gap-4 flex-wrap">
       <div>
         <h1 class="text-2xl font-bold tracking-tight">{{ t('sales.events.title') }}</h1>
