@@ -96,6 +96,9 @@ const safeUrl = sanitizeRedirectUrl(redirectParam)  // '/' on external URLs
 ### Sidebar Components
 - `AuthSidebar`, `TeamSection`, `UserMenu`
 
+### Pill
+- `CroutonUserPill` (`app/components/Crouton/UserPill.vue`) — one pill for account + status (member / PIN visitor / signed out). Menu from `useUserMenuItems()`, status from `useCroutonStatus()`; sets `crouton-status-bar-active` while mounted. Props: `showStatus`, `compact`, `placement`, `extraItems`, `useModal`. Core ships a no-op stub (`stubs/CroutonUserPill.vue`).
+
 ## Server Utilities
 
 ### Team Auth Functions (from `@crouton/auth/server`)
@@ -547,7 +550,7 @@ pnpm test:integration  # Integration tests only
 ## Naming Conventions
 
 ```
-Component: AuthLoginForm, TeamSwitcher, AccountSettings
+Component: AuthLoginForm, TeamSwitcher, AccountSettings, CroutonUserPill
 Composable: useAuth, useTeam, useSession
 API: /api/auth/[...all] (Better Auth handles routing)
 Middleware: auth, guest, team-context
