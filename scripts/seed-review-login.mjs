@@ -11,7 +11,10 @@
  *
  * Flow (all via the public auth routes the browser uses):
  *   1. POST /api/auth/sign-up/email   (autoSignIn → session cookie). An existing
- *      user (redeploy) returns USER_ALREADY_EXISTS → treated as already-seeded.
+ *      user (redeploy) returns USER_ALREADY_EXISTS → sign in with the given password.
+ *      If that fails the account holds an OLD password (e.g. the review secret was
+ *      rotated, #2358): with --db/--sqlite the password is reset to the given one
+ *      (hashed with better-auth's own helper) and sign-in is retried.
  *   2. GET  /api/auth/get-session     → capture the review user's id + whether
  *      the session already has an active organization.
  *   3a. --seed-team given (#832): attach the review user to the SEEDED demo org
@@ -26,9 +29,12 @@
  *      + /set-active so the reviewer lands INSIDE the app. Apps with
  *      autoCreateOnSignup / defaultTeamSlug already have an active org → skipped.
  *
- * Best-effort by contract: this NEVER throws a non-zero exit for an auth-level
- * problem (it prints a warning and exits 0) so a seed hiccup can't fail a deploy.
- * Only a usage error (missing --url/--email/--password) exits non-zero.
+ * Best-effort by contract: an auth-level hiccup prints a warning and exits 0 so it
+ * can't fail a deploy. Two exits are non-zero: a usage error (missing
+ * --url/--email/--password), and an existing account that still refuses the given
+ * password after the reset attempt — the caller only advertises a login on exit 0
+ * (#1369), so a login known NOT to work must not exit 0 (#2358). The deploy step
+ * wraps this in `if`, so neither fails the deploy.
  *
  * Staging only — the caller (deploy-app.yml) gates this to environment != production.
  */
@@ -120,6 +126,28 @@ function sqlStr(v) {
   return `'${String(v).replace(/'/g, "''")}'`
 }
 
+/**
+ * better-auth's own password hasher. This script runs from the repo ROOT, where
+ * better-auth doesn't resolve (pnpm keeps it under the packages that depend on it),
+ * so resolve it from crouton-auth — the package every crouton app's auth comes from.
+ */
+async function loadHashPassword() {
+  const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
+  const { hashPassword } = await import(pathToFileURL(req.resolve('better-auth/crypto')).href)
+  return hashPassword
+}
+
+/**
+ * SQL that sets the credential password of the user with `email` to `password`
+ * (hashed exactly like a signup, so login verifies it). Touches nothing else —
+ * the account, its team membership and anything it created stay as they are (#2358).
+ */
+export async function resetPasswordSql(email, password, hashPassword) {
+  const hash = await (hashPassword || await loadHashPassword())(password)
+  return `UPDATE "account" SET "password" = ${sqlStr(hash)} ` +
+    `WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ${sqlStr(email)});`
+}
+
 function warn(msg) {
   console.warn(`[seed-review-login] ⚠ ${msg}`)
 }
@@ -207,10 +235,20 @@ async function main() {
       if (res.status === 422 || /USER_ALREADY_EXISTS|already exists/i.test(String(code))) {
         info(`user ${email} already exists — already seeded, reusing.`)
         // Re-establish a session for the org check below.
-        const { res: si } = await post('/api/auth/sign-in/email', { email, password })
+        let { res: si } = await post('/api/auth/sign-in/email', { email, password })
+        if (!si.ok && (args.db || args.sqlite)) {
+          // The account holds an old password (secret rotated, #2358) — reset it, retry.
+          info('existing user refuses this password — resetting it to the current one.')
+          try {
+            execSeedSql(args, await resetPasswordSql(email, password))
+            ;({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
+          } catch (e) {
+            warn(`password reset failed: ${e?.message || e}`)
+          }
+        }
         if (!si.ok) {
-          info('existing user present; could not re-sign-in (password may differ) — login still works for the reviewer.')
-          process.exit(0)
+          warn(`existing user ${email} still refuses the current password — NOT advertising this login.`)
+          process.exit(1)
         }
       } else {
         warn(`sign-up failed (${code}) — skipping. The reviewer can still register manually.`)

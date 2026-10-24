@@ -91,9 +91,10 @@ on:
       # secrets manually (they persist across deploys).
       WORKER_SECRETS_JSON:
         required: false
-      # Optional repo-level secret used only to derive the throwaway review login's
-      # password (#608). Absent → a fixed fallback salt is used (fine: staging is
-      # throwaway + isolated and the creds are posted publicly on the PR anyway).
+      # Repo-level secret the review login's password is derived from (#608). There is
+      # deliberately NO fallback salt: one written here would let anyone reading this
+      # public repo compute every review password (#2358). Absent → no review login is
+      # seeded (warning), and the pre-prod gate refuses to run blind.
       REVIEW_SEED_SECRET:
         required: false
 
@@ -170,7 +171,12 @@ jobs:
             exit 1
           fi
           # Same deterministic creds the staging seed step derives on push to main.
-          SALT="${REVIEW_SEED_SECRET:-crouton-review-seed}"
+          if [ -z "$REVIEW_SEED_SECRET" ]; then
+            echo "::error::REVIEW_SEED_SECRET is not set, so there is no staging review login to smoke with (#2358). Add it as a repository Actions secret, let a merge to main redeploy staging, then re-dispatch."
+            exit 1
+          fi
+          SALT="$REVIEW_SEED_SECRET"
+          echo "::add-mask::$(printf '%s' "${SALT}:${APP}:main" | sha256sum | cut -c1-24)"
           EMAIL="review+${APP}-main@example.com"
           PW="$(printf '%s' "${SALT}:${APP}:main" | sha256sum | cut -c1-24)"
           MANIFEST="$WORKSPACE/$APP/deploy.config.json"
@@ -603,8 +609,14 @@ jobs:
           # Stable per-preview key: the PR number when this is a PR, else the ref.
           if [ -n "$PR_NUMBER" ]; then KEY="pr${PR_NUMBER}"; else KEY="$(printf '%s' "$REF_NAME" | tr -c 'a-zA-Z0-9' '-')"; fi
           EMAIL="review+${APP}-${KEY}@example.com"
-          # Deterministic password so redeploys reprint the same working login.
-          SALT="${REVIEW_SEED_SECRET:-crouton-review-seed}"
+          # Deterministic password so redeploys reuse the same working login. Derived from
+          # the secret ONLY — no fallback salt, which would make it public (#2358).
+          if [ -z "$REVIEW_SEED_SECRET" ]; then
+            echo "::warning::REVIEW_SEED_SECRET is not set — no review login seeded for ${APP} (#2358). Add it as a repository Actions secret."
+            echo "### ⚠️ No review login (${APP}) — \`REVIEW_SEED_SECRET\` is not set." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          SALT="$REVIEW_SEED_SECRET"
           PW="$(printf '%s' "${SALT}:${APP}:${KEY}" | sha256sum | cut -c1-24)"
           echo "::add-mask::$PW"
           # Attach the review login to the SEEDED demo team (#832) so the advertised
@@ -627,13 +639,15 @@ jobs:
             LANDING="$(node -p "(require('./$WORKSPACE/$APP/deploy.config.json').reviewLogin||{}).landing||''" 2>/dev/null || echo '')"
             LOGIN_URL="$(node -e 'const [u,e,p,l]=process.argv.slice(1); const q=new URLSearchParams({email:e,password:p}); if(l) q.set("redirect",l); process.stdout.write(`${u}/auth/login?${q}`)' "$DEPLOY_URL" "$EMAIL" "$PW" "$LANDING")"
             echo "login_url=$LOGIN_URL" >> "$GITHUB_OUTPUT"
+            echo "::add-mask::$LOGIN_URL"
+            # The password and the one-click link (which carries it) are NOT written here:
+            # Actions summaries are public on this repo (#2358). The link is emailed to
+            # the owner by the "Email the review sign-in link" step below.
             {
-              echo "### 🔑 Review test login (${APP})"
-              echo "- **One-click:** [open ${APP} signed-in]($LOGIN_URL) — the form arrives prefilled; click Sign in."
+              echo "### 🔑 Review login ready (${APP})"
               echo "- **URL:** $DEPLOY_URL"
               echo "- **Email:** \`$EMAIL\`"
-              echo "- **Password:** \`$PW\`"
-              echo "_Disposable account on an isolated, throwaway staging DB._"
+              echo "- The one-click sign-in link is emailed to the owner (never posted here)."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::warning::Review-login seed FAILED for ${APP} at ${DEPLOY_URL} — not advertising a login that doesn't work (#1369)."
@@ -781,6 +795,39 @@ jobs:
           fi
           echo "::warning::Deployed-preview smoke failed (report-only; set smoke.required=true in $APP/deploy.config.json to gate)."
 
+      # The one-click review sign-in link carries the password, so it goes ONLY by email to
+      # the owner — never into the PR comment, run summary or logs, which are public on
+      # this repo (#2358). Same Resend rail as the digests. Unset key/vars → a warning and
+      # no email; the deploy stays green either way.
+      - name: Email the review sign-in link
+        id: email-login
+        if: ${{ inputs.environment != 'production' && steps.seed.outputs.login_url != '' }}
+        continue-on-error: true
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          EMAIL_FROM: ${{ vars.RESEND_FROM }}
+          EMAIL_TO: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
+          APP: ${{ inputs.app }}
+          URL: ${{ steps.deploy.outputs.url }}
+          LOGIN_URL: ${{ steps.seed.outputs.login_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -z "$RESEND_API_KEY" ] || [ -z "$EMAIL_FROM" ] || [ -z "$EMAIL_TO" ]; then
+            echo "::warning::RESEND_API_KEY / RESEND_FROM / REVIEW_LOGIN_EMAIL (or DIGEST_REPORT_EMAIL) not set — review sign-in link not emailed."
+            exit 0
+          fi
+          WHAT="staging"; [ -n "$PR_NUMBER" ] && WHAT="PR #$PR_NUMBER preview"
+          SUBJECT="🔑 Sign in to ${APP} (${WHAT})"
+          jq -n --arg from "$EMAIL_FROM" --arg to "$EMAIL_TO" --arg subject "$SUBJECT" \
+                --arg app "$APP" --arg url "$URL" --arg login "$LOGIN_URL" --arg what "$WHAT" '
+            {from:$from, to:[$to], subject:$subject,
+             text: ("Sign in to " + $app + " (" + $what + "): " + $login + "\n\nThe form opens prefilled — tap Sign in.\nSite: " + $url),
+             html: ("<p><a href=\"" + $login + "\"><b>Sign in to " + $app + "</b></a> (" + $what + ")</p><p>The form opens prefilled — tap <b>Sign in</b>.</p><p style=\"color:#888\">" + $url + "</p>")}' \
+          | curl -sS -f -X POST https://api.resend.com/emails \
+              -H "Authorization: Bearer $RESEND_API_KEY" -H "Content-Type: application/json" \
+              -d @- -o /dev/null -w 'Resend HTTP %{http_code}\n' \
+          && echo "sent=true" >> "$GITHUB_OUTPUT"
+
       # On PRs, post/update a sticky comment with the isolated staging URL.
       - name: Comment staging URL on PR
         if: ${{ inputs.environment != 'production' && github.event_name == 'pull_request' && steps.deploy.outputs.url != '' }}
@@ -790,15 +837,13 @@ jobs:
             const url = '${{ steps.deploy.outputs.url }}'
             const app = '${{ inputs.app }}'
             const email = `${{ steps.seed.outputs.email }}`
-            const password = `${{ steps.seed.outputs.password }}`
-            const loginUrl = `${{ steps.seed.outputs.login_url }}`
+            const emailed = '${{ steps.email-login.outputs.sent }}' === 'true'
             const marker = `<!-- deploy-staging:${app} -->`
-            // Disposable test login (#608) — only present when the seed step ran + produced creds.
-            // Leads with the one-click link (the form arrives prefilled — #1153 fixed the apply,
-            // it never auto-submits) and keeps the raw creds as the paste-in fallback.
-            const oneClick = loginUrl ? `\n\n🔑 **[Open ${app} signed-in](${loginUrl})** — prefilled login, one click on Sign in.` : ''
-            const login = (email && password)
-              ? `${oneClick}\n\n<details><summary>…or paste the creds</summary>\n\n\`\`\`\nEmail:    ${email}\nPassword: ${password}\n\`\`\`\n</details>\n_Disposable account on this isolated, throwaway staging DB._`
+            // Review login (#608). The password and the one-click link that carries it are
+            // NEVER posted here — PR comments are public on this repo (#2358). The link goes
+            // to the owner by email (step above); this only says the login exists.
+            const login = email
+              ? `\n\n🔑 Review login \`${email}\` — ${emailed ? 'the sign-in link was emailed to the owner.' : 'sign-in link **not** emailed (email isn\'t configured — see the run\'s warnings).'}`
               : ''
             const pr = context.issue.number
             const body = `${marker}\n🚀 **${app}** preview for this PR: ${url}${login}\n\n<sub>🤖 \`${app}-pr${pr}\` — a Worker of its own, with its own auto-provisioned D1 + KV. Not shared staging; nothing else deploys over it, and it is deleted when this PR closes (#2020).</sub>`
