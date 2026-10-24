@@ -47,7 +47,7 @@ collections/printers/
 |-------|------|----------|
 | id | string (primary key) | Auto |
 | eventId | string (→ events) | Yes |
-| locationId | string (→ locations) | Yes |
+| locationId | string (→ locations) | Kitchen printers only |
 | title | string | Yes |
 | ipAddress | string | Yes |
 | port | string | No |

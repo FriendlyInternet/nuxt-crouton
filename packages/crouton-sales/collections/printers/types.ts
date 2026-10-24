@@ -28,7 +28,7 @@ export interface SalesPrinter {
   teamId: string
   owner: string
   eventId: string
-  locationId: string
+  locationId?: string | null
   title: string
   ipAddress: string
   port?: string
