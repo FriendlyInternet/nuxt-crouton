@@ -45,7 +45,7 @@ const k = (n: number) => (n / 1000).toFixed(1) + 'k'
       />
       <p v-else class="trend__empty">
         Only {{ rows.length }} data point{{ rows.length === 1 ? '' : 's' }} so far — the trend grows one
-        point per merge that touches <code>CLAUDE.md</code> / skills / agents.
+        point per merge that touches <code>CLAUDE.md</code> (or a file it imports) / skills / agents.
       </p>
     </ClientOnly>
   </div>
