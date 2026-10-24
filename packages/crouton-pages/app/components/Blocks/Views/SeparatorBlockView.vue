@@ -65,7 +65,7 @@ function handleOpenPanel() {
           </span>
           <div v-if="attrs.label" class="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
           <!-- Action buttons -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5 flex-shrink-0">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5 flex-shrink-0">
             <UButton
               color="neutral"
               variant="ghost"
