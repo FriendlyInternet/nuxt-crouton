@@ -61,7 +61,7 @@ function handleOpenPanel() {
           <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
             {{ t('pages.blockLibrary.twoColumn.name') }} · {{ splitLabel }}
           </span>
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"

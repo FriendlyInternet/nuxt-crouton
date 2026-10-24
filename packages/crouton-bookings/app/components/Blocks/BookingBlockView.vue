@@ -100,7 +100,7 @@ function handleOpenPanel() {
           </div>
           <!-- Action buttons — UButton so themes reach them (#1410, same
                pattern as the crouton-pages block views) -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"
