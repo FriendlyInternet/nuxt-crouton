@@ -54,3 +54,37 @@ describe('validateConfig — empty scaffold', () => {
     expect(result.valid).toBe(false)
   })
 })
+
+// #1472 — an unknown dialect (a typo like 'mysql' or 'postgres') used to print
+// "defaulting to 'pg'" as a warning, but nothing defaulted to anything: the value
+// went straight to the schema generator, which then broke. Nothing defaults to pg
+// any more either (#1450). It is a config bug, so validation now refuses it.
+describe('validateConfig — dialect', () => {
+  let log: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    log = vi.spyOn(console, 'log').mockImplementation(() => {})
+  })
+  afterEach(() => {
+    log.mockRestore()
+  })
+
+  const base = { collections: [{ name: 'notes', fieldsFile: './schemas/notes.json' }], targets: [{ layer: 'main', collections: ['notes'] }] }
+  const dialectErrors = (r: { errors: string[] }) => r.errors.filter(e => /dialect/i.test(e))
+
+  it('refuses an unknown dialect, naming the value and the allowed ones', async () => {
+    const result = await validateConfig({ ...base, dialect: 'mysql' })
+    expect(result.valid).toBe(false)
+    expect(dialectErrors(result)).toEqual([expect.stringMatching(/'mysql'.*'sqlite'.*'pg'/)])
+  })
+
+  it('never claims to default to pg', async () => {
+    const result = await validateConfig({ ...base, dialect: 'mysql' })
+    expect([...result.errors, ...result.warnings].join('\n')).not.toMatch(/defaulting to 'pg'/)
+  })
+
+  it.each(['sqlite', 'pg', undefined])('accepts dialect %s', async (dialect) => {
+    const result = await validateConfig({ ...base, dialect })
+    expect(dialectErrors(result)).toEqual([])
+  })
+})
