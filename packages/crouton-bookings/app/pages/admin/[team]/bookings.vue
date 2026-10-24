@@ -49,31 +49,10 @@ const tabs = computed(() => [
 </script>
 
 <template>
-  <!--
-    Body carries no padding: each tab page owns its own gutter, so a second
-    layer here pushed content past the tab bar (#2369).
-  -->
-  <UDashboardPanel :ui="{ body: 'p-0 sm:p-0' }">
-    <template #header>
-      <UDashboardNavbar :title="t('bookings.admin.sectionTitle')">
-        <template #leading>
-          <UDashboardSidebarCollapse />
-        </template>
-      </UDashboardNavbar>
-
-      <UNavigationMenu
-        :items="tabs"
-        orientation="horizontal"
-        highlight
-        highlight-color="primary"
-        class="border-b border-default px-1.5 sm:px-3.5"
-      />
-    </template>
-
-    <template #body>
-      <div class="max-w-5xl mx-auto w-full">
-        <NuxtPage />
-      </div>
-    </template>
-  </UDashboardPanel>
+  <CroutonTabsPanel
+    :title="t('bookings.admin.sectionTitle')"
+    :tabs="tabs"
+  >
+    <NuxtPage />
+  </CroutonTabsPanel>
 </template>
