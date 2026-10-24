@@ -157,9 +157,19 @@ async function main() {
   log(`origin=${origin} app=${app || '-'} surfaces=${surfaces.length} (${reason}) viewport=${viewport.width}x${viewport.height}`)
   if (!surfaces.length) return
 
+  const kept = await captureAll({ origin, args, viewport, surfaces, outDir, app })
+
+  // The workflow reads these lines to know what to commit. No captures ⇒ no output ⇒ the
+  // sign-off gate withholds (honest), rather than a decoy.
+  for (const f of kept) console.log(`captured=${f}`)
+  if (!kept.length) log('no valid captures — the sign-off gate will withhold (nothing to show)')
+}
+
+/** Sign in, open one browser, capture each surface. Returns the kept files (may be empty). */
+async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
   const { loggedIn, jar } = await signIn(origin, args.email, args.password, log)
   const browser = await launchChromium(log)
-  if (!browser) return // evidence is not a gate — no browser ⇒ the sign-off gate withholds
+  if (!browser) return [] // evidence is not a gate — no browser ⇒ the sign-off gate withholds
 
   mkdirSync(resolve(outDir), { recursive: true })
   const kept = []
@@ -173,11 +183,7 @@ async function main() {
   } finally {
     await browser.close().catch(() => {})
   }
-
-  // The workflow reads these lines to know what to commit. No captures ⇒ no output ⇒ the
-  // sign-off gate withholds (honest), rather than a decoy.
-  for (const f of kept) console.log(`captured=${f}`)
-  if (!kept.length) log('no valid captures — the sign-off gate will withhold (nothing to show)')
+  return kept
 }
 
 /**
