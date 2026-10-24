@@ -150,10 +150,14 @@ preview's isolated D1 so a reviewer can open the URL and be **inside the app in 
 step** — no register → create-team wall. `deploy-app.yml` runs
 `scripts/seed-review-login.mjs` against the deployed Worker (the app's own
 `/api/auth/sign-up/email` + a team via `organization/create` when the app doesn't
-auto-make one), then prints a `🔑 Test login` block in the PR's staging comment.
-Creds are **deterministic per preview** (so redeploys reprint the same working login,
-no user pile-up) and the step is best-effort (never fails the deploy). Optional repo
-secret `REVIEW_SEED_SECRET` salts the password; **production seeds nothing**.
+auto-make one). The PR's staging comment only says the login exists — the password
+and the one-click sign-in link (which carries it) are **emailed to the owner** (Resend;
+`vars.REVIEW_LOGIN_EMAIL`, else `vars.DIGEST_REPORT_EMAIL`), never posted: PR comments
+and run summaries are public on this repo (#2358). Creds are **deterministic per
+preview** (redeploys reuse the same login, no user pile-up), derived from the
+**required** repo secret `REVIEW_SEED_SECRET` — no fallback salt; unset → no review
+login. A rotated secret resets the existing account's password on the next deploy.
+The step is best-effort (never fails the deploy); **production seeds nothing**.
 
 ## Migrating a Pages app → Workers
 

@@ -147,7 +147,7 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` | deploy/db workflows | Token scopes: account Workers Scripts/D1/KV/R2 Edit + zone Workers Routes + DNS Edit (details: `deploy` skill, Credentials) |
 | `WORKER_SECRETS_JSON` | `deploy-app.yml` | Optional bundle of Worker secrets — **see the trap below** |
 | `RESEND_API_KEY` | digests, red-team email | Email rail; steps skip green when unset |
-| `REVIEW_SEED_SECRET` | deploy-app.yml | Optional salt for review-login passwords |
+| `REVIEW_SEED_SECRET` | deploy-app.yml | **Required** salt for review-login passwords — unset → no review login, pre-prod gate refuses (#2358) |
 | `PI_PROVIDER_KEY` | pi.dev variants | pi's model-provider key; required by `decompose-on-issue-pidev.yml` (live on the `delegate-pi` label, #1017) and `a11y-daily-pidev.yml` (dispatch-only). Funding state not verifiable from the repo — if a pi run errors at the agent step, check this key's credit first |
 
 ### The WORKER_SECRETS_JSON trap (fixed under [#1094](https://github.com/FriendlyInternet/nuxt-crouton/issues/1094))
