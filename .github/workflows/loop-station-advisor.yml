@@ -45,6 +45,16 @@ jobs:
         if: steps.advisor.outputs.actionable != 'true'
         run: echo "Loop Station advisor — nothing actionable this week; no issue filed."
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Only here does the LLM run — to turn deterministic findings into a human-readable
       # recommendation issue. Pinned to the same SHA as the repo's other claude-code-action
       # workflows — bump together.
@@ -61,7 +71,7 @@ jobs:
           # create/update issues via tool calls directly; headless CI denies un-allowlisted
           # tools, so without the grant the agent can't file the issue — the sweep-shaped
           # form, same as a11y-daily.yml / red-team-daily.yml.
-          claude_args: "--model claude-sonnet-5 --max-turns 12 --permission-mode bypassPermissions"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 12 --permission-mode bypassPermissions"
           prompt: |
             You are the **Loop Station advisor** (#933). Read `advisor-findings.json` in
             the repo root — it lists DETERMINISTIC findings about the harness's own

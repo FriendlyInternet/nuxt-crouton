@@ -61,6 +61,16 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs light)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
       - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         id: agent
@@ -78,7 +88,7 @@ jobs:
           # without this the agent can't write a11y-verdict.json / post the comment → fails OPEN.
           # Haiku, not Sonnet (#1272/#823): reports-only a11y review — ARIA/label/alt/tabindex
           # pattern-matching that Haiku handles at ~3× lower cost. Reversible if axe findings slip.
-          claude_args: "--model claude-haiku-4-5-20251001 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **a11y subagent** defined in `.claude/agents/a11y.md`.
             Input: { scope: "diff", depth: "quick", fix: false }.

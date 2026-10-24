@@ -13,12 +13,16 @@ on:
       - '.claude/agents/**'          # an agent model change is the drift we guard against
       - 'scripts/gen-routing.mjs'
       - 'writeups/architecture/routing-registry.md'
+      - '.claude/pipeline-models.json'   # the ONE model setting (#2161)
+      - '.github/workflows/**'           # a hard-coded model in a workflow is drift (#2161)
   push:
     branches: [main]
     paths:
       - '.claude/routing.json'
       - '.claude/agents/**'
       - 'scripts/gen-routing.mjs'
+      - '.claude/pipeline-models.json'
+      - '.github/workflows/**'
 
 # Cancel superseded PR runs when a new commit is pushed; each PR is its own group
 # (ref in the key). cancel-in-progress is event-conditional so a push→main run is
@@ -36,5 +40,5 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
-      - name: Verify routing registry is current + matches agent frontmatter
+      - name: Verify routing registry is current + no model drift (agents / model setting / workflows)
         run: node scripts/gen-routing.mjs --check

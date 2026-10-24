@@ -1,12 +1,12 @@
 // The pure model-resolution rule (#2161). A wrong model breaks every dispatch, so these pin
 // the contract: a valid tier returns its configured model; anything unusable throws (so the
-// CLI exits non-zero and the workflow's `|| echo <fallback>` takes over — never an empty model).
+// CLI exits non-zero and the workflow step fails loudly — never an empty or stale model).
 //   node --test scripts/resolve-pipeline-model.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { resolveModel, VALID_TIERS } from './resolve-pipeline-model.mjs'
 
-const CFG = { provider: 'claude-bridge', default: 'claude-sonnet-5', hard: 'claude-opus-4-8' }
+const CFG = { provider: 'claude-bridge', light: 'claude-haiku-4-5', default: 'claude-sonnet-5', hard: 'claude-opus-4-8' }
 
 test('default tier resolves to the configured default model', () => {
   assert.equal(resolveModel(CFG, 'default'), 'claude-sonnet-5')
@@ -14,6 +14,10 @@ test('default tier resolves to the configured default model', () => {
 
 test('hard tier resolves to the configured hard model', () => {
   assert.equal(resolveModel(CFG, 'hard'), 'claude-opus-4-8')
+})
+
+test('light tier resolves to the configured light model', () => {
+  assert.equal(resolveModel(CFG, 'light'), 'claude-haiku-4-5')
 })
 
 test('a model value is trimmed', () => {
@@ -40,8 +44,8 @@ test('a non-object config throws', () => {
   assert.throws(() => resolveModel(null, 'default'), /config must be an object/)
 })
 
-test('VALID_TIERS is exactly the two the pipeline uses', () => {
-  assert.deepEqual(VALID_TIERS, ['default', 'hard'])
+test('VALID_TIERS is exactly the three the workflows use', () => {
+  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard'])
 })
 
 // The committed config must itself be resolvable for both tiers — a broken checked-in file

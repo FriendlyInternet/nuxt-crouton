@@ -87,6 +87,16 @@ jobs:
       - id: t0
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Pinned to the same SHA as claude.yml — keep these in sync when bumping.
       # AUTH: uses the subscription CLAUDE_CODE_OAUTH_TOKEN (not a metered API key).
       # This REVERSES the old "OAuth is interactive-only, never in CI" rule (#652/#823)
@@ -98,7 +108,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "/task-decompose #${{ github.event.issue.number }}"
-          claude_args: "--model claude-sonnet-5 --max-turns 30"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 30"
           show_full_output: true
           # WS5 (#535): the `delegate` label is now applied by the Nuxt Harness App, so this run is
           # actored as nuxt-harness[bot]. Allow exactly that bot past the bot-actor guard — nothing
