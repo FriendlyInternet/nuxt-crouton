@@ -11,7 +11,7 @@
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "typecheck": "nuxt typecheck",
     "cf:deploy": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler --cwd .output deploy && node scripts/sync-wrangler-ids.mjs && npx wrangler d1 migrations apply velo-db --remote",
-    "cf:staging": "NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && npx wrangler d1 migrations apply velo-staging-db --env staging --remote && (pnpm db:seed:staging || true)",
+    "cf:staging": "NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs && npx wrangler d1 migrations apply velo-staging-db --env staging --remote && (pnpm db:seed:staging || echo '::warning title=Staging seed failed::velo staging seed failed — logins and demo data may be missing (#2361)')",
     "sync:ids": "node scripts/sync-wrangler-ids.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "npx wrangler d1 migrations apply velo-db --local",

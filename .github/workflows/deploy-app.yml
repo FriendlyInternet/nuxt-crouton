@@ -308,7 +308,7 @@ jobs:
             node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
             npx wrangler d1 migrations apply "$PREVIEW_DB" \
               --config .output/server/wrangler.json --remote
-            (pnpm db:seed:staging || true)
+            (pnpm db:seed:staging || echo "::warning title=Staging seed failed::${{ inputs.app }} preview seed failed — logins and demo data may be missing (#2361)")
           else
             pnpm run cf:staging | tee deploy.log
           fi
