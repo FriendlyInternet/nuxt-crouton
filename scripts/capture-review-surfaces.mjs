@@ -17,12 +17,15 @@
 //       "do": ["click:[data-review=data-tab]", "wait:800", "click:[aria-label='Filters']"] }
 //   ]
 // Falls back to a single surface at reviewLogin.landing (or "/") when none are declared.
+// A PR can name its own surface instead (`<!-- review-surface: <app> <path> -->`, #2433), and a
+// PR held for visual sign-off that names none gets no capture rather than the landing page.
 //
 // Usage:
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
-//        [--manifest apps/<app>/deploy.config.json] [--out writeups/ui-proposals] [--desktop]
+//        [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out writeups/ui-proposals] [--desktop]
+//   PR_BODY (env): the PR body, read for review-surface markers (#2433).
 //
-// Output: writeups/ui-proposals/pr<N>-<name>.png for each surface that captured a NON-blank page.
+// Output: writeups/ui-proposals/pr<N>-<app>-<name>.png for each surface that captured a NON-blank page.
 // Prints `captured=<file>` per kept shot (the workflow commits them). NEVER exits non-zero on a
 // capture miss — a missing capture just means no evidence, and the sign-off gate withholds.
 
@@ -40,9 +43,53 @@ export function slug(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'surface'
 }
 
-/** The committed filename for one surface of one PR. */
-export function outName(pr, name) {
-  return `pr${String(pr).replace(/\D/g, '')}-${slug(name)}.png`
+/**
+ * The committed filename for one surface of one PR. With `app`, the app is part of the name:
+ * a packages PR deploys several apps, and without it their captures overwrote each other
+ * (#2420: kassa's replaced velo's) (#2433).
+ */
+export function outName(pr, name, app) {
+  const prefix = `pr${String(pr).replace(/\D/g, '')}`
+  return app ? `${prefix}-${slug(app)}-${slug(name)}.png` : `${prefix}-${slug(name)}.png`
+}
+
+// The marker work-issue-pidev.yml puts on a PR held for visual sign-off (deploy-detect.mjs #2140).
+const HOLD_MARKER = '<!-- deploy-preview: full-watch -->'
+
+/**
+ * Surfaces a PR declares for one app (#2433), copied there from its issue:
+ *   <!-- review-surface: <app> <path> [name:<x>] [wait:<ms>] [click:<selector>] -->
+ * The worker knows which screen it changed; the app's fixed landing page usually doesn't show it.
+ */
+export function parsePrSurfaces(prBody, app) {
+  const out = []
+  for (const m of String(prBody || '').matchAll(/<!--\s*review-surface:\s*(.+?)\s*-->/g)) {
+    const [forApp, path, ...rest] = m[1].split(/\s+/)
+    if (forApp !== app || !path) continue
+    const nameTok = rest.find(t => t.startsWith('name:'))
+    const steps = rest.filter(t => !t.startsWith('name:'))
+    const base = nameTok ? nameTok.slice(5) : (path.split('?')[0].split('/').filter(Boolean).pop() || 'surface')
+    let name = slug(base)
+    while (out.some(s => s.name === name)) name = `${name}-${out.length + 1}`
+    out.push({ name, path: path.startsWith('/') ? path : `/${path}`, do: steps })
+  }
+  return out
+}
+
+/**
+ * What to capture for one app on one PR (#2433):
+ *  - surfaces the PR declares for this app win;
+ *  - a PR held for visual sign-off that declares none gets NOTHING: the landing page would pass
+ *    the gate while showing nothing of the change (#2045), so the PR shows evidence as missing;
+ *  - any other PR keeps the manifest's surfaces / landing, as before.
+ */
+export function resolveSurfaces({ manifest, prBody, app }) {
+  const declared = parsePrSurfaces(prBody, app)
+  if (declared.length) return { surfaces: declared, reason: 'declared on the PR' }
+  if (String(prBody || '').includes(HOLD_MARKER)) {
+    return { surfaces: [], reason: `held for visual sign-off but declares no review-surface for ${app} — not capturing the start page (#2433)` }
+  }
+  return { surfaces: parseSurfaces(manifest), reason: 'app default' }
 }
 
 /**
@@ -105,12 +152,24 @@ async function main() {
   const origin = String(args.url).replace(/\/$/, '')
   const outDir = args.out || 'writeups/ui-proposals'
   const viewport = args.desktop ? { width: 1280, height: 900 } : { width: 390, height: 844 } // phone-first (#722)
-  const surfaces = parseSurfaces(loadManifest(args.manifest))
-  log(`origin=${origin} surfaces=${surfaces.length} viewport=${viewport.width}x${viewport.height}`)
+  const app = args.app || ''
+  const { surfaces, reason } = resolveSurfaces({ manifest: loadManifest(args.manifest), prBody: process.env.PR_BODY || '', app })
+  log(`origin=${origin} app=${app || '-'} surfaces=${surfaces.length} (${reason}) viewport=${viewport.width}x${viewport.height}`)
+  if (!surfaces.length) return
 
+  const kept = await captureAll({ origin, args, viewport, surfaces, outDir, app })
+
+  // The workflow reads these lines to know what to commit. No captures ⇒ no output ⇒ the
+  // sign-off gate withholds (honest), rather than a decoy.
+  for (const f of kept) console.log(`captured=${f}`)
+  if (!kept.length) log('no valid captures — the sign-off gate will withhold (nothing to show)')
+}
+
+/** Sign in, open one browser, capture each surface. Returns the kept files (may be empty). */
+async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
   const { loggedIn, jar } = await signIn(origin, args.email, args.password, log)
   const browser = await launchChromium(log)
-  if (!browser) return // evidence is not a gate — no browser ⇒ the sign-off gate withholds
+  if (!browser) return [] // evidence is not a gate — no browser ⇒ the sign-off gate withholds
 
   mkdirSync(resolve(outDir), { recursive: true })
   const kept = []
@@ -118,17 +177,13 @@ async function main() {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 2 })
     if (loggedIn && jar.size) await context.addCookies(jarToContextCookies(jar, origin))
     for (const surface of surfaces) {
-      const file = await captureSurface(context, origin, surface, `${outDir}/${outName(args.pr, surface.name)}`)
+      const file = await captureSurface(context, origin, surface, `${outDir}/${outName(args.pr, surface.name, app)}`)
       if (file) kept.push(file)
     }
   } finally {
     await browser.close().catch(() => {})
   }
-
-  // The workflow reads these lines to know what to commit. No captures ⇒ no output ⇒ the
-  // sign-off gate withholds (honest), rather than a decoy.
-  for (const f of kept) console.log(`captured=${f}`)
-  if (!kept.length) log('no valid captures — the sign-off gate will withhold (nothing to show)')
+  return kept
 }
 
 /**
