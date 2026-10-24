@@ -37,7 +37,7 @@ URLs always include `[team]` param (industry standard: Linear, Notion, Vercel, G
 | `types/config.ts` | `CroutonAuthConfig` configuration type |
 | `types/connector.ts` | `BetterAuthConnector` interface |
 | `app/utils/security.ts` | Client-side security utilities (public API for consumer apps) |
-| `seed/index.ts` | Seed provider (`@fyit/crouton-auth/seed`) — upserts the team `organization`; creates no login, and switches off the retired staff login (#2357) |
+| `seed/index.ts` | Seed provider (`@fyit/crouton-auth/seed`) — upserts the team `organization`; creates no login (#2357, #2365) |
 
 ## Public Utilities
 
@@ -525,13 +525,9 @@ upserts the team `organization` (id `seed:org:<slug>`, slug e.g. `test1`) that
 every domain provider hangs off. Idempotent (stable ids). Run via an app's
 `crouton-seed` / `db:seed:*` scripts.
 
-**It creates no login** (#2357). People and smoke tests get in through the per-app
+**It creates no login** (#2357, #2365). People and smoke tests get in through the per-app
 review login, which the deploy creates itself (password from a secret, sign-in link
-emailed to the owner). The seed used to create a staff login (`claude-verify@test.local`,
-team owner) with a password written in this public repo; every seed now clears that
-account's password and ends its sessions, so the published password stops working on
-stagings that already have it. Never write a password into a seed. The `--with-staff`
-flag is now a no-op here; its removal is #2365.
+emailed to the owner). Never write a password into a seed: this repo is public.
 
 ## Dependencies
 

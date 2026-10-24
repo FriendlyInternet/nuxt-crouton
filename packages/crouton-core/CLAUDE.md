@@ -130,7 +130,7 @@ runtime), exported at `@fyit/crouton-core/shared/seed`:
   `seedId(...parts)` / `seedOrgId(slug)` derive stable ids so re-runs upsert
   instead of duplicating.
 - `topoSort(providers)` + `collectSeedSql({ providers, teamSlug, teamId, locale,
-  withStaff, createPageWithBlocks })` order providers by `dependsOn` and return
+  createPageWithBlocks })` order providers by `dependsOn` and return
   the combined SQL. The CLI `crouton-seed` command wraps this with discovery +
   `wrangler d1 execute` transport (see crouton-cli CLAUDE.md).
 - `runSeedSql(execute, options)` (#797) — the **dev-only executor** for a

@@ -28,8 +28,6 @@ export interface SeedAppOptions {
   team?: string
   /** Locale demo content is authored in (defaults to `nl`). */
   locale?: string
-  /** Also seed optional staff/login accounts. */
-  withStaff?: boolean
   /** Print the SQL instead of executing it (no wrangler call). */
   dryRun?: boolean
 }
@@ -338,13 +336,12 @@ async function buildSeedChunks(opts: {
   teamSlug: string
   teamId: string
   locale: string
-  withStaff?: boolean
 }): Promise<Array<{ label: string, sql: string }>> {
-  const { core, providers, createPageWithBlocks, appDir, teamSlug, teamId, locale, withStaff } = opts
+  const { core, providers, createPageWithBlocks, appDir, teamSlug, teamId, locale } = opts
   const chunks: Array<{ label: string, sql: string }> = []
   for (const provider of providers) {
     const psql: string = await core.collectSeedSql({
-      providers: [provider], teamSlug, teamId, locale, withStaff, createPageWithBlocks,
+      providers: [provider], teamSlug, teamId, locale, createPageWithBlocks,
     })
     if (psql.trim()) chunks.push({ label: `provider:${provider.id}`, sql: psql })
   }
@@ -427,7 +424,7 @@ export async function seedApp(options: SeedAppOptions): Promise<string> {
   // warns + is skipped instead of sinking the whole seed.
   const chunks = await buildSeedChunks({
     core, providers, createPageWithBlocks, appDir,
-    teamSlug, teamId, locale, withStaff: options.withStaff,
+    teamSlug, teamId, locale,
   })
 
   const sql = chunks.map(c => c.sql).join('\n')

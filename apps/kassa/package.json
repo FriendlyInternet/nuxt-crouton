@@ -18,9 +18,9 @@
     "db:migrate:prod": "npx wrangler d1 migrations apply kassa-db --remote",
     "db:migrate:staging": "npx wrangler d1 migrations apply kassa-staging-db --env staging --remote",
     "db:seed": "pnpm db:seed:local",
-    "db:seed:local": "crouton-seed --db kassa-db --with-staff",
+    "db:seed:local": "crouton-seed --db kassa-db",
     "db:seed:remote": "crouton-seed --db kassa-db --remote",
-    "db:seed:staging": "crouton-seed --db kassa-staging-db --remote --with-staff",
+    "db:seed:staging": "crouton-seed --db kassa-staging-db --remote",
     "logs": "npx wrangler tail kassa"
   },
   "dependencies": {

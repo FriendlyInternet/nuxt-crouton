@@ -49,7 +49,6 @@ doesn't exist yet, the seed fails with a recipe (run `pnpm dev` once to create +
 | `--dir <path>` | cwd | App directory (where package.json lives) |
 | `--team <slug>` | `test1` | Team slug to seed |
 | `--locale <l>` | `nl` | Locale demo content is authored in |
-| `--with-staff` | false | Also seed an optional staff login (better-auth credential) |
 | `--dry-run` | false | Print SQL instead of running wrangler |
 
 **How it works:** BFS-discovers every `@fyit/crouton-*` package reachable from the

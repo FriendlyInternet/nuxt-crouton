@@ -47,11 +47,6 @@ const main = defineCommand({
       description: 'Locale for demo content',
       default: 'nl'
     },
-    'with-staff': {
-      type: 'boolean',
-      description: 'Also seed optional staff/login accounts',
-      default: false
-    },
     'dry-run': {
       type: 'boolean',
       description: 'Print the SQL instead of executing it',
@@ -66,7 +61,6 @@ const main = defineCommand({
       dir: args.dir,
       team: args.team,
       locale: args.locale,
-      withStaff: args['with-staff'],
       dryRun: args['dry-run']
     })
   }
