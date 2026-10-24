@@ -158,8 +158,6 @@
     "errorCount": "{count} fout | {count} fouten"
   },
   "statusBar": {
-    "ready": "Klaar",
-    "justNow": "zojuist",
     "secondsAgo": "{count}s geleden",
     "minutesAgo": "{count}m geleden",
     "hoursAgo": "{count}u geleden",

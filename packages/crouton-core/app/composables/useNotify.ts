@@ -6,6 +6,7 @@ interface NotifyOptions {
   icon?: string
   collection?: string
   operation?: string
+  retry?: () => void
 }
 
 const LEVEL_DEFAULTS: Record<NotifyLevel, { icon: string; color: string }> = {
@@ -20,20 +21,21 @@ export function useNotify() {
   const statusBarActive = useState<boolean>('crouton-status-bar-active', () => false)
 
   function notify(level: NotifyLevel, title: string, options: NotifyOptions = {}) {
-    const { target = 'auto', description, icon, collection, operation } = options
+    const { target = 'auto', description, icon, collection, operation, retry } = options
     const defaults = LEVEL_DEFAULTS[level]
 
     const useStatusBar = target === 'statusbar'
       || (target === 'auto' && (level === 'success' || level === 'info' || level === 'warning') && statusBarActive.value)
 
     if (useStatusBar) {
-      const { addMessage } = useAdminStatusBar()
-      addMessage({
+      const { push } = useCroutonStatus()
+      push({
         text: title,
         icon: icon || defaults.icon,
-        type: level === 'error' ? 'error' : level === 'warning' ? 'warning' : 'success',
+        type: level,
         collection,
         operation,
+        retry,
       })
       return
     }

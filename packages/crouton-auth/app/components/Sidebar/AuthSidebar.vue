@@ -43,7 +43,6 @@ const props = withDefaults(defineProps<Props>(), {
 
 // ThemeCompactPicker is globally registered by crouton-themes when active.
 // resolveComponent returns the string name when not found — we check for that.
-// UserMenu reads theme items directly from shared state set by the themes plugin.
 const themeCompactPicker = resolveComponent('ThemeCompactPicker')
 const hasThemePicker = typeof themeCompactPicker !== 'string'
 
@@ -254,9 +253,6 @@ const navItems = computed(() => props.navigationItems ?? defaultNavItems.value)
         <span class="text-xs text-muted">{{ t('account.theme') }}</span>
         <component :is="themeCompactPicker" size="xs" />
       </div>
-
-      <!-- User Menu — theme items are read directly from shared state inside UserMenu -->
-      <SidebarUserMenu :collapsed="collapsed" />
     </template>
   </UDashboardSidebar>
 </template>

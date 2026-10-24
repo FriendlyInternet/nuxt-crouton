@@ -15,6 +15,7 @@ const { t } = useT()
 
 <template>
   <UDashboardGroup>
+    <CroutonUserPill placement="fixed" />
     <CroutonAdminSidebar context="super" />
     <div class="flex flex-col flex-1 min-w-0 min-h-0">
       <ImpersonationBanner />
@@ -30,7 +31,6 @@ const { t } = useT()
           </div>
         </UDashboardPanel>
       </div>
-      <CroutonAdminStatusBar />
     </div>
   </UDashboardGroup>
 </template>

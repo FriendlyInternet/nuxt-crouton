@@ -492,7 +492,7 @@ volunteers can't wander into the team login. Two switches in the editor
 toolbar's settings popover write sparse booleans into `config`:
 
 - `hideNav` — hides the page-navigation pill (center/hamburger).
-- `hideAuthControls` — hides login button, user avatar, and admin menu. The
+- `hideAuthControls` — hides the member login/avatar/admin menu inside `CroutonUserPill` (a scoped visitor's own pill still shows). The
   **language switcher and color-mode toggle always stay** in the right pill.
 
 Plumbing: the public route (`[team]/[locale]/[...slug].vue`) publishes the
@@ -505,7 +505,7 @@ when the page type changes.
 
 ### The floating nav pill (`Nav.vue`) — theme quick-select + action slot
 
-The right pill (bottom-left on full-screen pages) hosts the user/admin controls plus:
+The right pill (bottom-left on full-screen pages) hosts `<CroutonUserPill placement="inline" use-modal>` (account/status/sign-in, scoped-visitor sign-out, and a "Manage site" admin submenu passed via `extra-items`, admins only — the pill itself honours `hideAuthControls`) plus:
 
 - **Theme quick-select** — a palette `UDropdownMenu` reading the shared
   `crouton:themePreferenceItems` state (filled by the crouton-themes base layer's

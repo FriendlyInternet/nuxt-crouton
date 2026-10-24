@@ -300,5 +300,14 @@
     "statusUnknown": "Unknown",
     "noLogs": "No email logs found.",
     "errorDetails": "Error Details"
+  },
+  "userPill": {
+    "accountAndStatus": "Account and status",
+    "recent": "Recent",
+    "helper": "helper",
+    "signIn": "Sign in",
+    "signOutHelper": "Sign out of helper session",
+    "retry": "Retry",
+    "justNow": "just now"
   }
 }
