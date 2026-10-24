@@ -504,7 +504,11 @@ jobs:
           #     commit so a generator regression bisects cleanly and doesn't drown the decision.
           stage_bucket "$RUNNER_TEMP/generated.txt"
           if [ "$NGEN" -gt 0 ] && ! git diff --cached --quiet; then
-            git commit -q -m "generate: derived output for #${ISSUE}" -m "🤖 pi worker — generator/CLI output (e.g. crouton generate), committed separately from the inputs (#1849). Refs #${ISSUE}"
+            # A run with no inputs commit is ONE commit: give it the issue title, not "generate: …".
+            # The splitter files every change the session ledger doesn't list as authored under
+            # "generated", so a hand-written run lands here entirely (#2427).
+            if [ "$(git rev-parse HEAD)" = "$BASE_SHA" ]; then GEN_SUBJECT="$TITLE"; else GEN_SUBJECT="generate: derived output for #${ISSUE}"; fi
+            git commit -q -m "$GEN_SUBJECT" -m "🤖 pi worker — generator/CLI output (e.g. crouton generate), committed separately from the inputs (#1849). Refs #${ISSUE}"
             echo "commit 2: $NGEN generated file(s)"
           fi
           N=$((NIN + NGEN))
@@ -729,7 +733,7 @@ jobs:
             fi
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
-                --title "$(git log -1 --format=%s)" \
+                --title "$TITLE" \
                 --body "$(printf 'Closes #%s%s\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE")" 2>&1 | tail -3
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
