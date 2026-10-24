@@ -40,9 +40,12 @@
   </CroutonTable>
 
   <!-- List Layout -->
+  <!-- Rows carry their own px-4 sm:px-6 (matching CollectionViewer's header), so the
+       panel body adds none — otherwise rows sit indented past the title (#2369). -->
   <UDashboardPanel
     v-else-if="activeLayout === 'list'"
     :id="collection || 'crouton-list'"
+    :ui="{ body: 'p-0 sm:p-0' }"
   >
     <template #header>
       <slot name="header">
