@@ -23,7 +23,7 @@ export async function requireTeamEvent(event: H3Event) {
   }
 
   const db = useDB()
-  const { salesEvents } = await import('~~/layers/sales/collections/events/server/database/schema')
+  const { salesEvents } = await import('../../collections/events/server/database/schema')
   const [salesEvent] = await db
     .select()
     .from(salesEvents)

@@ -75,10 +75,10 @@ function handleOpenPanel() {
               <rect x="3" y="3" width="18" height="6" rx="1" />
               <rect x="3" y="15" width="18" height="6" rx="1" />
             </svg>
-            Button Row
+            {{ t('pages.blockLibrary.buttonRow.name') }}
           </span>
           <!-- Action buttons -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"
@@ -138,7 +138,7 @@ function handleOpenPanel() {
               <rect x="3" y="3" width="18" height="6" rx="1" />
               <rect x="3" y="15" width="18" height="6" rx="1" />
             </svg>
-            <span class="text-sm font-medium">No buttons — double-click to add</span>
+            <span class="text-sm font-medium">{{ t('pages.blockViews.noButtons') }}</span>
           </div>
         </div>
       </div>

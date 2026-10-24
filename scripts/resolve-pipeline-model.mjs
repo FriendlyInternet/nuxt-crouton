@@ -9,19 +9,20 @@
  * dispatch runs on the new model, no workflow change.
  *
  * PURE CORE + THIN CLI, so the resolution rule is unit-tested without the fs:
- *   resolveModel(config, tier)  — 'default' | 'hard' → the model id from the config.
+ *   resolveModel(config, tier)  — 'light' | 'default' | 'hard' → the model id from the config.
  * The CLI reads .claude/pipeline-models.json (repo-relative to cwd — the checkout root in CI
  * and the repo root locally) and prints the model. On ANY failure it exits non-zero and prints
- * nothing to stdout, so the caller's `|| echo <fallback>` decides the safe default VISIBLY in
- * the workflow rather than a broken empty PI_MODEL reaching pi.
+ * nothing to stdout, so the calling workflow step fails loudly rather than an empty or stale
+ * model reaching the agent (no fallback literal in the workflows — that was the drift, #2161).
  *
+ *   node scripts/resolve-pipeline-model.mjs light     → prints e.g. claude-haiku-4-5
  *   node scripts/resolve-pipeline-model.mjs default   → prints e.g. claude-sonnet-5
  *   node scripts/resolve-pipeline-model.mjs hard      → prints e.g. claude-opus-4-8
  */
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
-export const VALID_TIERS = ['default', 'hard']
+export const VALID_TIERS = ['light', 'default', 'hard']
 
 /** PURE. Given the parsed config + a tier, return the model id. Throws on anything unusable. */
 export function resolveModel(config, tier) {

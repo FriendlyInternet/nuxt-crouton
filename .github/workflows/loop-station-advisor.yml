@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   advisor:
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     # id-token MUST be at the job level for claude-code-action's OIDC (see claude.yml).
     permissions:
@@ -28,13 +28,13 @@ jobs:
       issues: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
 
       # Deterministic gate — no LLM. Writes findings + sets `actionable`.
       - name: Analyze inventory (deterministic gate)
@@ -45,10 +45,20 @@ jobs:
         if: steps.advisor.outputs.actionable != 'true'
         run: echo "Loop Station advisor — nothing actionable this week; no issue filed."
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Only here does the LLM run — to turn deterministic findings into a human-readable
       # recommendation issue. Pinned to the same SHA as the repo's other claude-code-action
       # workflows — bump together.
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         id: llm
         if: steps.advisor.outputs.actionable == 'true'
         # An LLM outage must not kill the run before the deterministic fallback below —
@@ -61,7 +71,7 @@ jobs:
           # create/update issues via tool calls directly; headless CI denies un-allowlisted
           # tools, so without the grant the agent can't file the issue — the sweep-shaped
           # form, same as a11y-daily.yml / red-team-daily.yml.
-          claude_args: "--model claude-sonnet-5 --max-turns 12 --permission-mode bypassPermissions"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 12 --permission-mode bypassPermissions"
           prompt: |
             You are the **Loop Station advisor** (#933). Read `advisor-findings.json` in
             the repo root — it lists DETERMINISTIC findings about the harness's own

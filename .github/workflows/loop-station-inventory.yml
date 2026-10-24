@@ -13,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'CLAUDE.md'
+      - 'AGENTS.md'   # imported by CLAUDE.md → always-on too (#2387)
       - '.claude/skills/**'
       - '.claude/agents/**'
   workflow_dispatch: # manual re-measure of the current HEAD
@@ -27,26 +28,27 @@ concurrency:
 jobs:
   inventory:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # Push with the Harness App, not GITHUB_TOKEN (#1133). The `main` ruleset requires
       # a PR, and GitHub Actions cannot be a ruleset bypass actor (422: "must be part of
       # the ruleset source or owner organization") — only an installed App can, and
       # `nuxt-harness` is on the bypass list. A GITHUB_TOKEN push would be rejected.
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # full history so the commit-back rebases cleanly
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
 
       # Best-effort: pull the causing PR number out of the merge commit subject
       # ("Merge #NN — …" / "… (#NN)"). Recorded on the data point; empty is fine.
@@ -87,7 +89,7 @@ jobs:
 
       - name: Upload record artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: loop-station-record
           path: loop-station.record.json

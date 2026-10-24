@@ -7,28 +7,12 @@
  */
 import type { TeamThemeSettings } from '../composables/useTeamTheme'
 import { applyThemeSettings } from '../composables/useTeamTheme'
-import { THEME_PRESET_REGISTRY, type ThemePresetName } from '@fyit/crouton-themes/presets'
+import { pickThemeOverride, shouldClearOverride } from '../utils/theme-override'
 
 // Storage + state keys owned by @fyit/crouton-themes useThemeSwitcher (its
 // STORAGE_KEY + the 'crouton-theme' useState). Named here so the coupling is
 // explicit and greppable.
 const OVERRIDE_KEY = 'nuxt-crouton-theme'
-
-// The three deciders below are split into trivially-small pure functions on
-// purpose: the fallow CRAP gate degrades to cyc²+cyc at zero coverage, so each
-// unit stays tiny and independently testable (theme-override.test.ts).
-
-/** The user's saved pick, or null when none / 'default' / not a real preset. */
-function pickThemeOverride(stored: string | null, allowUserThemes: boolean): ThemePresetName | null {
-  if (!allowUserThemes || !stored || stored === 'default') return null
-  return stored in THEME_PRESET_REGISTRY ? (stored as ThemePresetName) : null
-}
-
-/** A locked team (allowUserThemes=false) drops a lingering saved override so it
- *  can't reappear on the next reload (admins still preview live via the switcher). */
-function shouldClearOverride(stored: string | null, allowUserThemes: boolean): boolean {
-  return !allowUserThemes && !!stored && stored !== 'default'
-}
 
 /** The preset useThemeSwitcher's 'crouton-theme' state shows as active
  *  ('default' for a custom/absent preset) — keeps the pill in sync and makes its
@@ -50,8 +34,11 @@ function activePresetName(theme: TeamThemeSettings): string {
 function resolveEffectiveTheme(teamTheme: TeamThemeSettings, allowUserThemes: boolean): TeamThemeSettings {
   if (!import.meta.client) return teamTheme
   const stored = localStorage.getItem(OVERRIDE_KEY)
-  if (shouldClearOverride(stored, allowUserThemes)) localStorage.setItem(OVERRIDE_KEY, 'default')
-  const override = pickThemeOverride(stored, allowUserThemes)
+  // Only themes this app ships (their variant is built) may apply — localStorage
+  // is per origin, so a pick from another app on the same host leaks in (#2257).
+  const registered = (useAppConfig() as any)?.ui?.button?.variants?.variant
+  if (shouldClearOverride(stored, allowUserThemes, registered)) localStorage.setItem(OVERRIDE_KEY, 'default')
+  const override = pickThemeOverride(stored, allowUserThemes, registered)
   const effective = override ? { ...teamTheme, preset: override } : teamTheme
   useState<string>('crouton-theme').value = activePresetName(effective)
   return effective

@@ -56,7 +56,8 @@ export default function () {
     // Check if we've reached maximum depth
     if (croutonStates.value.length >= MAX_DEPTH) {
       const notify = useNotify()
-      notify.warning('Maximum depth reached', { description: 'Cannot open more than 5 nested forms' })
+      const { t } = useT()
+      notify.warning(t('form.maxDepthTitle'), { description: t('form.maxDepthDescription', { count: MAX_DEPTH }) })
       return
     }
 
@@ -135,7 +136,8 @@ export default function () {
         return
       } catch (error) {
         const notify = useNotify()
-        notify.error('Uh oh! Something went wrong.', { description: String(error) })
+        const { t } = useT()
+        notify.error(t('form.somethingWentWrong'), { description: String(error) })
         croutonStates.value.pop()
         return
       }

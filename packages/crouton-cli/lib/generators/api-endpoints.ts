@@ -1,4 +1,5 @@
 // API endpoint generators using @crouton/auth for team authentication
+import { serverManagedFields } from '../utils/system-fields.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
 
 // Wire-facing body schema for the generated endpoints (#1403): accepts null on
@@ -190,8 +191,8 @@ export function generatePatchEndpoint(data: Record<string, any>, config: Record<
   // Check if this collection has translations
   const hasTranslations = config?.translations?.collections?.[plural] || config?.translations?.collections?.[singular]
 
-  // System fields that should not be in PATCH body — they are managed by the server
-  const systemFields = new Set(['id', 'teamId', 'owner', 'createdAt', 'updatedAt', 'createdBy', 'updatedBy', 'path', 'depth'])
+  // System fields that should not be in PATCH body — they are managed by the server (one list: system-fields.ts)
+  const systemFields = serverManagedFields()
 
   // Generate field selection for update with date conversion (exclude id and system fields)
   const patchableFields = fields.filter((f) => !systemFields.has(f.name))

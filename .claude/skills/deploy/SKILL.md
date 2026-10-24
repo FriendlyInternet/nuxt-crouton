@@ -108,10 +108,12 @@ git add apps/{app}/wrangler.jsonc && git commit -m "chore({app}): commit provisi
 There is **one generic workflow for all apps** — `.github/workflows/deploy-apps.yml`
 (#481/#638; the old per-app `deploy-<app>.yml` callers are retired — don't create one).
 An app opts in by adding a `deploy.config.json` next to its `package.json`. **Model on
-`apps/velo/deploy.config.json`.** Set: `stagingUrl`, `productionUrl`, `layerPackages`,
-and `watchPaths` (the app + its extended `crouton*` packages + lockfile). The workflow's
-`detect` job matches changed files against `watchPaths` and fans out one reusable
-`deploy-app.yml` call per affected app. Merge to `main`/open a PR → isolated staging
+`apps/velo/deploy.config.json`.** Set: `stagingUrl`, `productionUrl` and `layerPackages`.
+Do **not** write a `watchPaths` list: the workflow's `detect` job derives it from the app's
+`package.json` — the app dir, the lockfile and every `@fyit/*` dependency, transitively
+(#2397) — so adding a package to the app is enough. `watchPaths` is only for paths that
+can't be derived (rare). `detect` then fans out one reusable `deploy-app.yml` call per
+affected app. Merge to `main`/open a PR → isolated staging
 with the URL commented on the PR; manual dispatch (app + environment inputs) →
 production (#347). The fan-out uses `secrets: inherit`.
 
@@ -144,16 +146,36 @@ Two ways:
 - **Local:** `pnpm cf:staging` from the app dir.
 - **Production is never routine** — ship it deliberately via the **`/deploy-production`** skill.
 
+### Demo data on staging (#2366)
+Every **staging** and PR-preview deploy runs `crouton-seed` itself, once (the *Seed collection + demo data* (#1370)
+step in `deploy-app.yml`), so the app gets its packages' demo data and the `test1` team the
+review login joins — **no seed line in the app's `cf:staging` script**. The app only needs
+`@fyit/crouton-cli` as a dependency. Opt out with `"seed": false` in `deploy.config.json`.
+A failed seed warns on the run; it never fails the deploy. Production never seeds.
+
+### Apps without a database or sign-in (#2377)
+A standalone viewer (e.g. `pocs/loop-station`: no NuxtHub, no D1, no auth) deploys through the
+same pipeline: the PR preview skips the D1 provision/migrate when the built config declares no
+database, and `"reviewLogin": false` in `deploy.config.json` skips the review login + email and
+turns the smoke into a plain "page answers 200" check. Without NuxtHub, set
+`nitro.cloudflare.deployConfig: true` so the build writes `.output/server/wrangler.json`, which the
+PR preview rewrites. Put any pre-build data step in a `build:before` hook, not only in `package.json`
+scripts — the PR preview runs a bare `nuxt build`.
+
 ### Auto-seeded review login on staging previews (#608)
 Every **staging** deploy auto-seeds a throwaway, loginable test account on the
 preview's isolated D1 so a reviewer can open the URL and be **inside the app in one
 step** — no register → create-team wall. `deploy-app.yml` runs
 `scripts/seed-review-login.mjs` against the deployed Worker (the app's own
 `/api/auth/sign-up/email` + a team via `organization/create` when the app doesn't
-auto-make one), then prints a `🔑 Test login` block in the PR's staging comment.
-Creds are **deterministic per preview** (so redeploys reprint the same working login,
-no user pile-up) and the step is best-effort (never fails the deploy). Optional repo
-secret `REVIEW_SEED_SECRET` salts the password; **production seeds nothing**.
+auto-make one). The PR's staging comment only says the login exists — the password
+and the one-click sign-in link (which carries it) are **emailed to the owner** (Resend;
+`vars.REVIEW_LOGIN_EMAIL`, else `vars.DIGEST_REPORT_EMAIL`), never posted: PR comments
+and run summaries are public on this repo (#2358). Creds are **deterministic per
+preview** (redeploys reuse the same login, no user pile-up), derived from the
+**required** repo secret `REVIEW_SEED_SECRET` — no fallback salt; unset → no review
+login. A rotated secret resets the existing account's password on the next deploy.
+The step is best-effort (never fails the deploy); **production seeds nothing**.
 
 ## Migrating a Pages app → Workers
 

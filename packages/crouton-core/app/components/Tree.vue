@@ -14,7 +14,7 @@
             name="i-lucide-loader-2"
             class="animate-spin"
           />
-          <span class="text-sm">Loading...</span>
+          <span class="text-sm">{{ t('common.loading') }}</span>
         </div>
       </div>
 
@@ -44,10 +44,10 @@
           class="w-12 h-12 mx-auto mb-4 opacity-50"
         />
         <p class="text-lg font-medium mb-2">
-          No items yet
+          {{ t('collection.noItemsYet') }}
         </p>
         <p class="text-sm">
-          Create your first item to see the tree structure.
+          {{ t('tree.createFirstItem') }}
         </p>
       </div>
     </div>
@@ -58,6 +58,8 @@
 import { computed } from 'vue'
 import type { Component } from 'vue'
 import type { HierarchyConfig, CollabPresenceConfig } from '../types/table'
+
+const { t } = useT()
 
 export interface TreeNode {
   id: string

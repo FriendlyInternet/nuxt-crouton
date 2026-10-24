@@ -1,6 +1,6 @@
 // init-app.ts — Orchestrate the full app creation pipeline:
 // scaffold-app → generate → doctor → summary
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { access } from 'node:fs/promises'
 import consola from 'consola'
 
@@ -42,21 +42,30 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
     return
   }
 
+  // scaffoldApp returns appDir relative to the caller's cwd (`apps/<name>`).
+  // Step 2 chdirs into the app, so every path handed to a step must be absolute
+  // or it gets resolved a second time against the new cwd (#1357).
+  const appPath = resolve(appDir)
+
   // ── Step 2: generate (config-based) ───────────────────────────────────
-  const configPath = join(appDir, 'crouton.config.js')
+  const configPath = join(appPath, 'crouton.config.js')
   const hasConfig = await access(configPath).then(() => true).catch(() => false)
   let collectionsGenerated = false
 
   if (hasConfig) {
     consola.start('Step 2/4 — Generating collections from config...')
+    const callerCwd = process.cwd()
     try {
       const { runConfig } = await import('./generate-collection.ts')
-      process.chdir(appDir)
+      // generated files land in cwd, so generate from inside the app
+      process.chdir(appPath)
       await runConfig({ configPath })
       collectionsGenerated = true
       consola.success('Step 2/4 — Collections generated')
     } catch (error) {
       consola.warn('Step 2/4 — Generate skipped (no collections in config yet)')
+    } finally {
+      process.chdir(callerCwd)
     }
   } else {
     console.log('  Step 2/4 — No crouton.config.js found, skipping generate')
@@ -71,7 +80,7 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
   let needsManualMigrations = false
   if (collectionsGenerated) {
     consola.start('Step 3/4 — Generating migrations...')
-    const result = await generateMigrations(appDir)
+    const result = await generateMigrations(appPath)
     if (result.generated) {
       consola.success('Step 3/4 — Migrations generated')
     } else if (result.reason === 'deferred') {
@@ -90,7 +99,7 @@ export async function initApp(name: string, options: InitAppOptions = {}): Promi
   consola.start('Step 4/4 — Running doctor checks...')
   try {
     const { doctor, printReport } = await import('./doctor.ts')
-    const result = await doctor(appDir)
+    const result = await doctor(appPath)
     consola.success('Step 4/4 — Doctor complete')
     printReport(result)
   } catch (error) {

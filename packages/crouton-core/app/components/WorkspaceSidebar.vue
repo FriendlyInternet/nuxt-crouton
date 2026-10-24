@@ -169,7 +169,7 @@ defineExpose({ focusSearch })
     >
       <UIcon name="i-lucide-inbox" class="size-8 mb-2 opacity-50" />
       <p class="text-sm">
-        {{ searchQuery ? (t('common.noResults') || 'No results found') : (t('collection.noItemsYet') || 'No items yet') }}
+        {{ searchQuery ? t('common.noResults') : t('collection.noItemsYet') }}
       </p>
       <UButton
         v-if="!searchQuery"

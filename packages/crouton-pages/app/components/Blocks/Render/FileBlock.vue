@@ -16,6 +16,7 @@ interface Props {
 }
 
 defineProps<Props>()
+const { t } = useT()
 </script>
 
 <template>
@@ -25,8 +26,8 @@ defineProps<Props>()
       v-if="!attrs.file"
       color="neutral"
       icon="i-lucide-file"
-      title="No file configured"
-      description="Edit this block to add a file."
+      :title="t('pages.blockRender.noFileTitle')"
+      :description="t('pages.blockRender.noFileDescription')"
     />
 
     <!-- Render download button -->
@@ -37,7 +38,7 @@ defineProps<Props>()
       class="inline-flex items-center gap-2.5 rounded-lg border border-[var(--ui-border)] bg-[var(--ui-bg)] px-5 py-3 text-sm font-medium text-[var(--ui-text)] shadow-sm transition-colors hover:bg-[var(--ui-bg-elevated)] hover:border-[var(--ui-border-hover)]"
     >
       <UIcon :name="attrs.icon || 'i-lucide-download'" class="size-4.5 shrink-0" />
-      <span>{{ attrs.label || 'Download file' }}</span>
+      <span>{{ attrs.label || t('pages.blockRender.downloadFile') }}</span>
     </a>
   </div>
 </template>

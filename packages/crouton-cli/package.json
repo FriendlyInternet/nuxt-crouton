@@ -10,9 +10,6 @@
   },
   "exports": {
     ".": "./bin/crouton-generate.js",
-    "./lib/scaffold-app": "./lib/scaffold-app.mjs",
-    "./lib/doctor": "./lib/doctor.mjs",
-    "./lib/init-app": "./lib/init-app.mjs",
     "./lib/utils/config-builder": "./lib/utils/config-builder.ts",
     "./lib/utils/manifest-loader": "./lib/utils/manifest-loader.ts",
     "./*": "./*"
@@ -72,6 +69,6 @@
     "@types/better-sqlite3": "^7.6.0",
     "@types/node": "^22.0.0",
     "@types/pluralize": "^0.0.33",
-    "vitest": "^2.1.0"
+    "vitest": "catalog:"
   }
 }

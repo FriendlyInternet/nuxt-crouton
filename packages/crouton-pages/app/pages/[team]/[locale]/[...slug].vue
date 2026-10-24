@@ -266,24 +266,26 @@ const localePrefixFor = (loc: string) => `${hideTeamInUrl.value ? '' : `/${team.
 const buildSeoUrl = (loc: string, path: string) =>
   `${siteUrl}${localePrefixFor(loc)}/${path}`.replace(/\/+$/, '') || `${siteUrl}${localePrefixFor(loc)}`
 
-// SEO meta (server-only — crawlers read SSR HTML)
-useServerSeoMeta({
-  title: page.value?.seoTitle || page.value?.title || 'Page',
-  description: page.value?.seoDescription || undefined,
-  // Open Graph
-  ogTitle: page.value?.seoTitle || page.value?.title || 'Page',
-  ogDescription: page.value?.seoDescription || undefined,
-  ogImage: toAbsoluteUrl(page.value?.ogImage, siteUrl),
-  ogUrl: buildSeoUrl(urlLocale.value, canonicalPath.value),
-  ogType: 'website',
-  // Twitter Card
-  twitterCard: page.value?.ogImage ? 'summary_large_image' : 'summary',
-  twitterTitle: page.value?.seoTitle || page.value?.title || 'Page',
-  twitterDescription: page.value?.seoDescription || undefined,
-  twitterImage: toAbsoluteUrl(page.value?.ogImage, siteUrl),
-  // Robots
-  robots: page.value?.robots === 'noindex' ? 'noindex, nofollow' : undefined
-})
+// SEO meta (server-only — crawlers read SSR HTML). useServerSeoMeta left unhead 3.
+if (import.meta.server) {
+  useSeoMeta({
+    title: page.value?.seoTitle || page.value?.title || t('pages.editor.defaultPageType'),
+    description: page.value?.seoDescription || undefined,
+    // Open Graph
+    ogTitle: page.value?.seoTitle || page.value?.title || t('pages.editor.defaultPageType'),
+    ogDescription: page.value?.seoDescription || undefined,
+    ogImage: toAbsoluteUrl(page.value?.ogImage, siteUrl),
+    ogUrl: buildSeoUrl(urlLocale.value, canonicalPath.value),
+    ogType: 'website',
+    // Twitter Card
+    twitterCard: page.value?.ogImage ? 'summary_large_image' : 'summary',
+    twitterTitle: page.value?.seoTitle || page.value?.title || t('pages.editor.defaultPageType'),
+    twitterDescription: page.value?.seoDescription || undefined,
+    twitterImage: toAbsoluteUrl(page.value?.ogImage, siteUrl),
+    // Robots
+    robots: page.value?.robots === 'noindex' ? 'noindex, nofollow' : undefined
+  })
+}
 
 // Build hreflang links for SEO
 const alternateLinks = computed(() => {
@@ -308,7 +310,7 @@ const alternateLinks = computed(() => {
     const translatedSlug = parsedTranslations?.[loc.code]?.slug || baseSlug
     const localePath = ancestorPrefix ? `${ancestorPrefix}/${translatedSlug}` : translatedSlug
     return {
-      rel: 'alternate',
+      rel: 'alternate' as const,
       hreflang: loc.code,
       href: buildSeoUrl(loc.code, localePath)
     }
@@ -317,8 +319,8 @@ const alternateLinks = computed(() => {
 
 // Page title and hreflang links for head
 useHead({
-  title: () => page.value?.title || 'Page',
-  link: () => [
+  title: () => page.value?.title || t('pages.editor.defaultPageType'),
+  link: computed(() => [
     // Canonical URL (absolute)
     {
       rel: 'canonical',
@@ -326,7 +328,7 @@ useHead({
     },
     // hreflang alternatives
     ...alternateLinks.value
-  ]
+  ])
 })
 </script>
 

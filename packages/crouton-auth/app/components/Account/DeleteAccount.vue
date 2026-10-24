@@ -31,7 +31,7 @@ const notify = useNotify()
 // Get auth client
 function useAuthClient() {
   const nuxtApp = useNuxtApp()
-  return nuxtApp.$authClient as ReturnType<typeof import('better-auth/vue').createAuthClient>
+  return nuxtApp.$authClient as unknown as ReturnType<typeof import('better-auth/vue').createAuthClient>
 }
 const authClient = useAuthClient()
 
@@ -63,18 +63,18 @@ async function handleDelete() {
     })
 
     if (result.error) {
-      throw new Error(result.error.message ?? 'Failed to delete account')
+      throw new Error(result.error.message ?? t('account.failedToDeleteAccount'))
     }
 
-    notify.success('Account deleted', { description: 'Your account has been permanently deleted.' })
+    notify.success(t('account.accountDeleted'), { description: t('account.accountDeletedDescription') })
 
     // Sign out and redirect
     await logout()
     emit('deleted')
     await navigateTo('/')
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to delete account'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('account.failedToDeleteAccount')
+    notify.error(t('common.error'), { description: message })
   } finally {
     deleteLoading.value = false
   }
@@ -163,30 +163,31 @@ watch(showModal, (open) => {
           </UAlert>
 
           <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium mb-2">
-                {{ t('account.enterYourPasswordLabel') }}
-              </label>
+            <UFormField
+              name="password"
+              :label="t('account.enterYourPasswordLabel')"
+            >
               <UInput
                 v-model="password"
                 type="password"
                 :placeholder="t('auth.password')"
                 icon="i-lucide-lock"
                 :disabled="isLoading"
+                class="w-full"
               />
-            </div>
+            </UFormField>
 
-            <div>
-              <label class="block text-sm font-medium mb-2">
+            <UFormField name="confirmText">
+              <template #label>
                 {{ t('account.typeToConfirmPrefix') }} <strong class="font-mono text-error">{{ confirmationRequired }}</strong> {{ t('account.typeToConfirmSuffix') }}
-              </label>
+              </template>
               <UInput
                 v-model="confirmText"
                 :placeholder="confirmationRequired"
                 :disabled="isLoading"
-                class="font-mono"
+                class="font-mono w-full"
               />
-            </div>
+            </UFormField>
           </div>
 
           <div class="flex justify-end gap-3">

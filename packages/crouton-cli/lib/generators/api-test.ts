@@ -17,7 +17,7 @@
 // is driven with a plain fake H3 event. The e2e fixture smoke still owns the real
 // boot + CRUD; this is the unit-level complement.
 //
-// On by default; suppressed by `--no-tests` (same gate as the schema-smoke). The
+// Opt-in via `--tests` (same gate as the schema-smoke; off by default, #2286). The
 // assertions are engineered to be schema-shape-independent (mock/control-flow
 // driven); the only body-shape-dependent case (invalid-body → rejected) is
 // emitted only when an invalid sample is derivable, degrading gracefully.
@@ -37,7 +37,7 @@ function apiPathFor(layer: string, plural: string, collection: string): string {
 /**
  * Generate the source of a `<Collection>.api.test.ts` handler test.
  * Returns the file content as a string (the orchestrator decides whether to
- * write it, honouring `--no-tests`).
+ * write it, honouring `--tests`).
  */
 export function generateApiTest(data: Record<string, any>, config: Record<string, any> | null = null): string {
   const { layer, plural, singular, camelCase, pascalCase, pascalCasePlural, layerPascalCase, originalCollectionName } = data
@@ -237,7 +237,7 @@ export function generateApiTest(data: Record<string, any>, config: Record<string
  * schema-smoke can't — team-scoping (unauthenticated → rejected; queries called
  * with the resolved team id) and error paths (invalid body → rejected, missing
  * id → 400, not-found → 404). Runtime-free: no Nuxt/DB, no network.
- * Regenerate with --force; suppress with --no-tests.
+ * Regenerate with --force --tests.
  */
 `
 

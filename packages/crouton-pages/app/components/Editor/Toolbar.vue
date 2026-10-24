@@ -14,10 +14,8 @@
  *   v-model:status="state.status"
  *   v-model:visibility="state.visibility"
  *   :action="action"
- *   :status-config="statusConfig"
- *   :visibility-config="visibilityConfig"
- *   :status-dropdown-items="statusDropdownItems"
- *   :visibility-dropdown-items="visibilityDropdownItems"
+ *   v-model:status="state.status"
+ *   v-model:visibility="state.visibility"
  *   :is-regular-page="isRegularPage"
  *   :is-saving="isSaving"
  *   :show-close="showClose"
@@ -58,14 +56,6 @@ interface Props {
   status: string
   /** Current page visibility */
   visibility: string
-  /** Status config map */
-  statusConfig: Record<string, StatusConfigEntry>
-  /** Visibility config map */
-  visibilityConfig: Record<string, VisibilityConfigEntry>
-  /** Dropdown items for status selector */
-  statusDropdownItems: DropdownItem[][]
-  /** Dropdown items for visibility selector */
-  visibilityDropdownItems: DropdownItem[][]
   /** Whether to show the AI generator button (regular pages only) */
   isRegularPage: boolean
   /** Whether AI package is available */
@@ -93,10 +83,9 @@ const props = withDefaults(defineProps<Props>(), {
   hasAi: false
 })
 
-// Note: status/visibility changes flow through the parent-provided dropdown
-// items (statusDropdownItems / visibilityDropdownItems), whose onSelect mutate
-// the page state directly — so this toolbar has no update:status/visibility emit.
 const emit = defineEmits<{
+  'update:status': [value: string]
+  'update:visibility': [value: string]
   'show-ai-generator': []
   'show-preview': []
   'cancel': []
@@ -106,6 +95,35 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useT()
+
+// The status / visibility menus (#2326): the toolbar owns their labels, icons and
+// items; picking one emits the new value, the editor writes it into the record.
+const statusConfig: Record<string, StatusConfigEntry> = {
+  draft: { color: 'warning', icon: 'i-lucide-pencil', label: t('pages.status.draft') },
+  published: { color: 'success', icon: 'i-lucide-check', label: t('pages.status.published') },
+  archived: { color: 'error', icon: 'i-lucide-archive', label: t('pages.status.archived') },
+}
+const statusDropdownItems = computed<DropdownItem[][]>(() => [
+  Object.entries(statusConfig).map(([status, config]) => ({
+    label: config.label,
+    slot: status,
+    onSelect: () => emit('update:status', status),
+  })),
+])
+const visibilityConfig: Record<string, VisibilityConfigEntry> = {
+  public: { icon: 'i-lucide-globe', label: t('pages.visibility.public') },
+  members: { icon: 'i-lucide-users', label: t('pages.visibility.members') },
+  admin: { icon: 'i-lucide-shield', label: t('pages.visibility.admin') },
+  scoped: { icon: 'i-lucide-key-round', label: t('pages.visibility.scoped') },
+  hidden: { icon: 'i-lucide-eye-off', label: t('pages.visibility.hidden') },
+}
+const visibilityDropdownItems = computed<DropdownItem[][]>(() => [
+  Object.entries(visibilityConfig).map(([visibility, config]) => ({
+    label: config.label,
+    slot: visibility,
+    onSelect: () => emit('update:visibility', visibility),
+  })),
+])
 
 // Mobile overflow menu (shown below @lg): the secondary actions that are
 // individual buttons on wide screens collapse into a single "⋯" dropdown so the

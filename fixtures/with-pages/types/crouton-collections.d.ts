@@ -14,11 +14,9 @@
  *
  * ## Registered Collections
  * - mainItems: MainItem
- * - pagesPages: PagesPage
  */
 
 import type { MainItem, MainItemFormData, NewMainItem } from './layers/main/collections/items/types'
-import type { PagesPage, PagesPageFormData, NewPagesPage } from './layers/pages/collections/pages/types'
 
 declare module '#crouton/types' {
   interface CollectionTypeMap {
@@ -26,11 +24,6 @@ declare module '#crouton/types' {
       Item: MainItem
       FormData: MainItemFormData
       NewItem: NewMainItem
-    }
-    pagesPages: {
-      Item: PagesPage
-      FormData: PagesPageFormData
-      NewItem: NewPagesPage
     }
   }
 }

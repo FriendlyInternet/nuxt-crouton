@@ -6,7 +6,7 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
+  modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -15,7 +15,6 @@ export default defineNuxtConfig({
     '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-bookings',
-    './layers/bookings'
   ],
   hub: {
     db: 'sqlite',

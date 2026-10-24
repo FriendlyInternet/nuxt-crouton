@@ -26,12 +26,6 @@
       "port": 3004
     },
     {
-      "name": "triage",
-      "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "./apps/triage", "dev"],
-      "port": 3005
-    },
-    {
       "name": "velo",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "./apps/velo", "dev"],

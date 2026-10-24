@@ -10,11 +10,13 @@ export default {
   // Minimal e2e fixture variant: one simple collection for generic list + CRUD,
   // plus the crouton-assets picker surface.
   collections: [
-    { name: 'items', fieldsFile: './schemas/items.json' }
+    { name: 'items', fieldsFile: './schemas/items.json' },
+    // #2311: a field that references the package-owned assets collection
+    { name: 'galleries', fieldsFile: './schemas/galleries.json' }
   ],
 
   targets: [
-    { layer: 'main', collections: ['items'] }
+    { layer: 'main', collections: ['items', 'galleries'] }
   ],
 
   dialect: 'sqlite'

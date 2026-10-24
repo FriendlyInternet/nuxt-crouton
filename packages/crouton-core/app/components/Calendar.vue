@@ -44,8 +44,10 @@ const props = withDefaults(defineProps<Props>(), {
   numberOfMonths: undefined,
   year: undefined,
   picker: false,
-  placeholder: 'Select a date'
+  placeholder: undefined
 })
+
+const { t } = useT()
 
 const emit = defineEmits<{
   'update:date': [value: Date | null]
@@ -153,7 +155,7 @@ const formattedDate = computed(() => {
   <UPopover v-if="picker && !range && !isYearMode">
     <UButton
       icon="i-lucide-calendar"
-      :label="formattedDate || placeholder"
+      :label="formattedDate || placeholder || t('calendar.placeholder')"
       :color="formattedDate ? 'neutral' : 'neutral'"
       variant="outline"
       :disabled="disabled"

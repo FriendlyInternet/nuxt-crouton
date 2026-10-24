@@ -1,17 +1,5 @@
 {
   "stagingUrl": "https://velo.pmcp.dev",
   "productionUrl": "https://velo.friendlyinter.net",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages @fyit/crouton",
-  "watchPaths": [
-    "apps/velo/**",
-    "packages/crouton/**",
-    "packages/crouton-core/**",
-    "packages/crouton-auth/**",
-    "packages/crouton-i18n/**",
-    "packages/crouton-assets/**",
-    "packages/crouton-bookings/**",
-    "packages/crouton-email/**",
-    "packages/crouton-pages/**",
-    "pnpm-lock.yaml"
-  ]
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages"
 }

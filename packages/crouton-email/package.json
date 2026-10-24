@@ -40,19 +40,22 @@
     "dev": "nuxi dev playground",
     "dev:prepare": "nuxi prepare",
     "lint": "eslint .",
-    "typecheck": "nuxt typecheck"
+    "typecheck": "nuxt typecheck",
+    "test": "vitest run"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^5.0.0",
     "resend": "^4.0.0",
-    "vue-email": "^0.8.0"
+    "html-to-text": "^9.0.5"
   },
   "devDependencies": {
     "@nuxt/kit": "^3.14.0",
     "@nuxt/schema": "^3.14.0",
     "nuxt": "catalog:",
     "typescript": "catalog:",
-    "vue": "catalog:"
+    "vue": "catalog:",
+    "@types/html-to-text": "^9.0.4",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@nuxt/ui": "^4.3.0",
@@ -83,7 +86,6 @@
     "nuxt",
     "nuxt-layer",
     "email",
-    "vue-email",
     "resend",
     "templates",
     "verification",

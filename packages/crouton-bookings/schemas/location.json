@@ -125,6 +125,16 @@
       "help": "Date ranges when the location is closed (holidays, maintenance, etc.)"
     }
   },
+  "offerFullDay": {
+    "type": "boolean",
+    "meta": {
+      "label": "Offer a full-day option",
+      "default": false,
+      "area": "main",
+      "group": "scheduling",
+      "help": "Adds a full-day option next to the named slots. It blocks the other slots on that date, and any booked slot blocks it."
+    }
+  },
   "inventoryMode": {
     "type": "boolean",
     "meta": {

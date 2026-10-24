@@ -1,7 +1,0 @@
-{
-  "name": { "type": "string" },
-  "databaseId": { "type": "string", "meta": { "required": true } },
-  "accountId": { "type": "string", "meta": { "required": true } },
-  "categoryProperty": { "type": "string", "meta": { "required": true } },
-  "layout": { "type": "json", "meta": { "required": true } }
-}

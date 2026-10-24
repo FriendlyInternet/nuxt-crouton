@@ -21,7 +21,6 @@
  *
  * ## Registered Collections
  * - mainItems (main/items)
- * - pagesPages (pages/pages)
  */
 
 export const queryRegistry: Record<string, {
@@ -33,11 +32,5 @@ export const queryRegistry: Record<string, {
       .then(m => m.getAllMainItems),
     getByIds: () => import('~~/layers/main/collections/items/server/database/queries')
       .then(m => m.getMainItemsByIds),
-  },
-  pagesPages: {
-    getAll: () => import('~~/layers/pages/collections/pages/server/database/queries')
-      .then(m => m.getAllPagesPages),
-    getByIds: () => import('~~/layers/pages/collections/pages/server/database/queries')
-      .then(m => m.getPagesPagesByIds),
   },
 }

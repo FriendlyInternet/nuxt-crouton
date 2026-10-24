@@ -672,22 +672,6 @@ async function handleUpgrade(planId: string) {
 
 ## Server Utilities
 
-### Team Auth Connector (`#crouton/team-auth`)
-
-The connector provides authorization helpers for API routes.
-
-**Setup in nuxt.config.ts:**
-
-```typescript
-export default defineNuxtConfig({
-  nitro: {
-    alias: {
-      '#crouton/team-auth': '@crouton/auth/server/utils/team-auth'
-    }
-  }
-})
-```
-
 ### Authorization Helpers
 
 ```typescript
@@ -702,7 +686,7 @@ import {
   getUserTeams,
   canUserCreateTeam,
   isTeamMemberWithEvent,
-} from '#crouton/team-auth'
+} from '@crouton/auth/server'
 
 // In API routes
 export default defineEventHandler(async (event) => {
@@ -730,7 +714,7 @@ export default defineEventHandler(async (event) => {
 
 ```typescript
 // server/api/teams/[teamId]/projects.get.ts
-import { resolveTeamAndCheckMembership } from '#crouton/team-auth'
+import { resolveTeamAndCheckMembership } from '@crouton/auth/server'
 
 export default defineEventHandler(async (event) => {
   // Automatically validates:
@@ -751,7 +735,7 @@ export default defineEventHandler(async (event) => {
 
 ```typescript
 // server/api/teams/[teamId]/settings.put.ts
-import { requireTeamAdmin } from '#crouton/team-auth'
+import { requireTeamAdmin } from '@crouton/auth/server'
 
 export default defineEventHandler(async (event) => {
   // Only admins and owners can update settings

@@ -101,6 +101,13 @@ vi.stubGlobal('useNuxtApp', () => ({
 
 vi.stubGlobal('refreshNuxtData', mockRefreshNuxtData)
 
+// #2289: the only package that reads `beforeData` off the crouton:mutation hook is
+// crouton-events; apps that don't extend it must not pay a GET before every PATCH.
+let mockInstalledApps: string[] = []
+vi.stubGlobal('useCroutonApps', () => ({
+  hasApp: (id: string) => mockInstalledApps.includes(id)
+}))
+
 vi.stubGlobal('useAppConfig', () => ({
   croutonCollections: mockCollectionsConfig
 }))
@@ -396,6 +403,41 @@ describe('useCollectionMutation', () => {
       await update('post-1', { categoryId: 'cat-1' })
 
       expect(mockRefreshNuxtData).toHaveBeenCalledWith('collection-item:categories:cat-1')
+    })
+  })
+
+  describe('update pre-fetch for change tracking (#2289)', () => {
+    beforeEach(() => { mockInstalledApps = [] })
+
+    it('sends exactly one request (the PATCH) when no package records change diffs', async () => {
+      mockFetch.mockResolvedValue({ id: 'prod-1', name: 'Updated' })
+      const { update } = useCollectionMutation('products')
+      await update('prod-1', { name: 'Updated' })
+      expect(mockFetch).toHaveBeenCalledTimes(1)
+      expect(mockFetch.mock.calls[0]![1]).toEqual(expect.objectContaining({ method: 'PATCH' }))
+      expect(mockCallHook).toHaveBeenCalledWith('crouton:mutation', expect.objectContaining({ operation: 'update', beforeData: undefined }))
+    })
+
+    it('fetches the item first and hands it to the hook when crouton-events is installed', async () => {
+      mockInstalledApps = ['events']
+      mockFetch
+        .mockResolvedValueOnce([{ id: 'prod-1', name: 'Old' }])
+        .mockResolvedValueOnce({ id: 'prod-1', name: 'Updated' })
+      const { update } = useCollectionMutation('products')
+      await update('prod-1', { name: 'Updated' })
+      expect(mockFetch).toHaveBeenCalledTimes(2)
+      expect(mockFetch).toHaveBeenNthCalledWith(1, '/api/teams/test-team/shop-products', expect.objectContaining({ method: 'GET', query: { ids: 'prod-1' } }))
+      expect(mockCallHook).toHaveBeenCalledWith('crouton:mutation', expect.objectContaining({ beforeData: { id: 'prod-1', name: 'Old' } }))
+    })
+
+    it('still PATCHes when the pre-fetch fails', async () => {
+      mockInstalledApps = ['events']
+      mockFetch
+        .mockRejectedValueOnce(new Error('offline'))
+        .mockResolvedValueOnce({ id: 'prod-1', name: 'Updated' })
+      const { update } = useCollectionMutation('products')
+      await expect(update('prod-1', { name: 'Updated' })).resolves.toEqual({ id: 'prod-1', name: 'Updated' })
+      expect(mockCallHook).toHaveBeenCalledWith('crouton:mutation', expect.objectContaining({ beforeData: undefined }))
     })
   })
 

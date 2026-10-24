@@ -3,7 +3,6 @@
 
 import { readFile, writeFile, access } from 'node:fs/promises'
 import { parseModule, generateCode } from 'magicast'
-import { getFrameworkPackages } from './framework-packages.ts'
 
 async function pathExists(filePath: string): Promise<boolean> {
   try {
@@ -118,47 +117,6 @@ export async function isInNuxtConfigExtends(configPath: string, packageName: str
   return content.includes(packageName)
 }
 
-/**
- * Sync framework packages in nuxt.config.ts based on features config.
- * Removes getCroutonLayers() usage if present, then ensures all
- * feature-based packages are in the extends array.
- */
-export async function syncFrameworkPackages(configPath: string, features: Record<string, boolean | Record<string, unknown>> = {}): Promise<{ synced: boolean; packages?: string[]; reason?: string }> {
-  if (!await pathExists(configPath)) {
-    return { synced: false, reason: 'nuxt.config.ts not found' }
-  }
-
-  let code = await readFile(configPath, 'utf-8')
-  let modified = false
-
-  // Remove getCroutonLayers() import if present
-  const importRegex = /import\s*\{\s*getCroutonLayers\s*\}\s*from\s*['"]@fyit\/crouton['"]\s*\n?/g
-  if (importRegex.test(code)) {
-    code = code.replace(importRegex, '')
-    modified = true
-  }
-
-  // Remove ...getCroutonLayers() spread if present
-  const spreadRegex = /\.\.\.getCroutonLayers\([^)]*\),?\s*/g
-  if (spreadRegex.test(code)) {
-    code = code.replace(spreadRegex, '')
-    modified = true
-  }
-
-  if (modified) {
-    await writeFile(configPath, code, 'utf-8')
-  }
-
-  // Get framework packages based on features
-  const packages = getFrameworkPackages(features)
-
-  // Add each package to extends (handles deduplication)
-  for (const pkg of packages) {
-    await addToNuxtConfigExtends(configPath, pkg)
-  }
-
-  return { synced: true, packages }
-}
 
 /**
  * Deep-merge `source` into `target`, creating nested objects as needed.

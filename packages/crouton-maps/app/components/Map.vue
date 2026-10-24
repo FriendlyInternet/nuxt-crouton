@@ -2,7 +2,16 @@
 import { VMap } from '@geoql/v-maplibre'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import '@geoql/v-maplibre/style.css'
+import { getWorkerUrl, setWorkerUrl } from 'maplibre-gl'
 import type { LngLatLike, Map as MaplibreMap } from 'maplibre-gl'
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url'
+
+// @geoql/v-maplibre ships its own prebuilt worker (v3.0.1 → maplibre 6.10.0) and
+// installs it unless a worker URL is already set. A worker from a different
+// maplibre version than the main thread fails every vector tile ("Cannot read
+// properties of undefined (reading 'width')"), so point maplibre at the worker
+// from the SAME maplibre-gl we load. (#2291)
+if (import.meta.client && !getWorkerUrl()) setWorkerUrl(maplibreWorkerUrl)
 
 interface Props {
   /** Map container ID (default: auto-generated) — must be unique per map */
@@ -40,6 +49,7 @@ const emit = defineEmits<{
 
 // Get map config (style/center/zoom defaults)
 const config = useMapConfig()
+const { t } = useT()
 
 // Dark mode detection — auto-switch map style
 const colorMode = useColorMode()
@@ -71,20 +81,23 @@ const handleMapLoad = (map: MaplibreMap) => {
   mapInstance.value = map
   isLoaded.value = true
   error.value = null
+  // The center watcher ignores changes until the map is loaded, so a center
+  // that arrived while loading (e.g. an async geocode) would be lost — sync it.
+  if (props.center) map.jumpTo({ center: props.center })
   emit('load', map)
 }
 
 // Handle map error
 const handleMapError = (err: Error | { message?: string } | unknown) => {
-  const errorMessage = (err as { message?: string })?.message || 'Failed to load map'
+  const errorMessage = (err as { message?: string })?.message || t('maps.loadFailed')
   error.value = errorMessage
   isLoaded.value = false
   emit('error', errorMessage)
 }
 
 // Default easing function for flyTo
-const defaultEasing = (t: number): number => {
-  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+const defaultEasing = (x: number): number => {
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
 }
 
 // Watch for style changes (e.g. dark mode toggle) and update the map

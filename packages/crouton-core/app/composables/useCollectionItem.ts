@@ -43,7 +43,7 @@ export async function useCollectionItem<T = any>(
     throw new Error(`Collection "${collection}" not registered`)
   }
 
-  const apiPath = getProxiedEndpoint(config, config.apiPath || collection)
+  const apiPath = config.apiPath || collection
 
   // Handle all three types: string, Ref<string>, () => string
   const itemId = computed(() => {
@@ -95,7 +95,7 @@ export async function useCollectionItem<T = any>(
     }
   )
 
-  // Handle response based on fetch strategy and apply proxy transform
+  // Handle response based on fetch strategy
   // - RESTful endpoints return single object
   // - Query-based endpoints return array (extract first item)
   const item = computed(() => {
@@ -108,7 +108,7 @@ export async function useCollectionItem<T = any>(
       rawItem = Array.isArray(response) ? (response[0] || null) : response
     }
 
-    return rawItem ? (applyProxyTransform(rawItem, config) as T | null) : null
+    return (rawItem as T | null) ?? null
   })
 
   return { item, pending, error, refresh }

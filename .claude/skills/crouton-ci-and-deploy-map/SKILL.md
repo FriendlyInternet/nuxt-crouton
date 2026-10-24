@@ -63,7 +63,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 
 ### Agent pipeline (see §5 for the chain)
 
-`claude.yml` (@claude mention) · `decompose-on-issue.yml` (`delegate` label) · `comment-dispatch.yml` (`/delegate` comment) · `resume-on-comment.yml` (reply on `status:blocked`) · `close-epic-on-comment.yml` (`/close-epic`) · `schedule-waves.yml` (baton pass) · `automerge-epic-subpr.yml` · `fix-ci-on-failure.yml` · `pipeline-pr-status.yml` · plus the pi.dev variants: `decompose-on-issue-pidev.yml` (**LIVE** — promoted past dispatch-only in #1017: fires when a human applies the `delegate-pi` label, plus manual dispatch; default model tuned in #1019; has run for real under `delegate-pi`) and `a11y-daily-pidev.yml` (still dispatch-only + `AGENT_HARNESS` gated); both need a funded `PI_PROVIDER_KEY` to complete. Also `mac-mini-smoke.yml` (self-hosted-runner proof, #610).
+`claude.yml` (@claude mention) · `decompose-on-issue.yml` (`delegate` label) · `comment-dispatch.yml` (`/delegate` comment) · `resume-on-comment.yml` (reply on `status:blocked`) · `close-epic-on-comment.yml` (`/close-epic`) · `schedule-waves.yml` (baton pass) · `automerge-epic-subpr.yml` · `fix-ci-on-failure.yml` · `pipeline-pr-status.yml` · plus the pi.dev variants: `decompose-on-issue-pidev.yml` (**LIVE** — promoted past dispatch-only in #1017: fires when a human applies the `delegate-pi` label, plus manual dispatch; default model tuned in #1019; has run for real under `delegate-pi`) and `a11y-daily-pidev.yml` (still dispatch-only + `AGENT_HARNESS` gated); both run on GitHub-hosted `ubuntu-latest` on the Claude SUBSCRIPTION via the `claude-bridge` pi provider (npm `pi-claude-bridge`, pinned in `.pi/settings.json` with the other extensions) — `.github/actions/setup-pi` installs a pinned pi + `claude` CLI, preflights `CLAUDE_CODE_OAUTH_TOKEN`, and asserts the provider is registered before pi starts; every pi call passes `--approve` or the project's extension list is ignored (#2275). The older `pi-claude-cli` extension is dead against pi 1.x (registers, then every turn ends silently). The mac-mini and its `mac-mini-smoke.yml` / `pi-box-apply.yml` are retired (#2275).
 
 ### Digests & scheduled reports (real cadence in §4)
 
@@ -77,7 +77,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 | `strip-status-on-close.yml` | issue closed | Strips `status:*` labels (#641) |
 | `cleanup-epic-branches.yml` | PR closed | Deletes `epic/*` head branch only when merged into main (#613) |
 | `cleanup-merged-branches.yml` | weekly cron + dispatch | Dry-run unless `vars.CLEANUP_BRANCHES_APPLY=true` |
-| `project-status.yml` / `backfill-project.yml` | PR/issue events / dispatch | Projects-v2 board automation |
+| `project-status.yml` | PR/issue events | Projects-v2 board automation (the one-off `backfill-project.yml` was retired in #2338 after its 2026-06 board migration) |
 | `db-clone.yml` | dispatch | D1 mirror between envs (`db-clone` skill) |
 | `db-counts.yml` | dispatch | Read-only row counts of any app DB — the safe "what's in there" check (#384) |
 | `teardown-app.yml` | dispatch | CF/branch/issue teardown (`remove-app` skill) — runs in CI because the interactive agent has no Cloudflare creds |
@@ -88,7 +88,7 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 
 **Root CLAUDE.md's deploy section and the `deploy` skill's Step 4 describe this pattern too (fixed under [#1093](https://github.com/FriendlyInternet/nuxt-crouton/issues/1093) — older copies described retired per-app `deploy-<app>.yml` callers).** Reality (epic #481): one generic `deploy-apps.yml` whose `detect` job matrixes over every `apps/<name>/deploy.config.json` whose `watchPaths` match the changed files. Rationale (from the workflow header): the agent pipeline's App token lacks the `workflows` scope, so bots cannot push `.github/workflows/` files — but they CAN push `apps/<name>/deploy.config.json`. Trust the workflow files.
 
-`deploy.config.json` exists for the launched apps plus several pocs — list them fresh (`ls apps/*/deploy.config.json pocs/*/deploy.config.json`). Velo's fields (the shape): `stagingUrl`, `productionUrl`, `layerPackages` (space-separated `@fyit/*` list), `watchPaths` (app dir + each extended package + lockfile). Optional: `"smoke": { "required": true }` makes the post-deploy smoke gate the run (default is report-only; velo doesn't set it); `"secrets": { "required": true }` fails the deploy if `WORKER_SECRETS_JSON` resolves empty (§3 trap, #1094).
+`deploy.config.json` exists for the launched apps plus several pocs — list them fresh (`ls apps/*/deploy.config.json pocs/*/deploy.config.json`). Velo's fields (the shape): `stagingUrl`, `productionUrl`, `layerPackages` (space-separated `@fyit/*` list), `watchPaths` is **derived** by `scripts/deploy-detect.mjs` from the app's `package.json` — app dir + lockfile + every `@fyit/*` dep, transitively (#2397) — so it's normally absent; set it only for extra paths that can't be derived. Optional: `"smoke": { "required": true }` makes the post-deploy smoke gate the run (default is report-only; velo doesn't set it); `"secrets": { "required": true }` fails the deploy if `WORKER_SECRETS_JSON` resolves empty (§3 trap, #1094).
 
 **Prod gating is structural, not conventional:** `deploy-apps.yml` hard-codes `environment=staging` for `push`/`pull_request` events; only `workflow_dispatch` with the explicit `production` choice produces a production matrix entry (#318/#347). Corrected (#2140 — the previous copy here predated #2020 and was wrong): **a PR deploy is ISOLATED, not the same staging Worker/DB as merge-to-main.** `deploy-app.yml` rewrites the built wrangler config for a `pull_request` event (`scripts/lib/pr-preview-wrangler.mjs`, #2020) into a per-PR Worker (`<app>-pr<n>`), strips every D1/KV/R2 id so wrangler auto-provisions fresh (migrated + seeded) resources, and drops the custom-domain route so it publishes to its own `*.workers.dev` URL — `<app>.pmcp.dev` is untouched by any PR. Two PRs on the same app never collide. This is not POC-only; it applies to any `apps/*` PR.
 
@@ -104,9 +104,12 @@ Inputs: `app`, `workspace` (apps|pocs), `environment`, `staging-url`/`production
 4. Optional `wrangler secret bulk` from `WORKER_SECRETS_JSON` (see §3 trap).
 5. Preview-review bridge (#607): staging + PR-tied only — pushes `NUXT_CROUTON_REVIEW_*` Worker secrets so in-page overlay comments post to the PR as `nuxt-harness[bot]`.
 6. `BETTER_AUTH_SECRET` auto-generated (`openssl rand -hex 32`) if the Worker has none; never rotates an existing one; skips (with `::warning::`) if `wrangler secret list` fails.
-7. Review login seeded (staging only, #608): deterministic `review+<app>-pr<N>@example.com` via `scripts/seed-review-login.mjs`.
-8. Deployed smoke: `scripts/smoke-deployed.mjs` (login + CRUD + screenshot, artifact `smoke-<app>`). Report-only unless `smoke.required` in `deploy.config.json`.
-9. Sticky PR comment (marker `<!-- deploy-staging:<app> -->`) with staging URL + test login.
+7. Demo data seeded (staging only, #1370): `crouton-seed` into the staging or PR-preview DB — the ONLY seed per deploy (#2366); `"seed": false` in `deploy.config.json` opts out.
+8. Review login seeded (staging only, #608): deterministic `review+<app>-<key>@example.com` via `scripts/seed-review-login.mjs`; password derived from the required `REVIEW_SEED_SECRET`, reset on rotation (#2358). The one-click sign-in link is **emailed** to the owner (Resend), never posted.
+9. Deployed smoke: `scripts/smoke-deployed.mjs` (login + CRUD + screenshot, artifact `smoke-<app>`). Report-only unless `smoke.required` in `deploy.config.json`.
+10. Sticky PR comment (marker `<!-- deploy-staging:<app> -->`) with the staging URL and the review login's email — no password, no link (PR comments are public, #2358).
+
+**Before proposing or adding a step here, grep `.github/workflows/` for the command it would run** (e.g. `crouton-seed`, `seed-review-login`, `smoke-deployed`) and extend the existing step instead of adding a second. #2366 built a duplicate seed step because the #1370 one wasn't checked first (#2378).
 
 Concurrency: `deploy-<app>-<env>`, `cancel-in-progress: false` (a cancel mid-migration is unsafe).
 
@@ -128,9 +131,12 @@ NITRO_PRESET=cloudflare_module nuxt build && npx wrangler --cwd .output deploy \
 NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs \
   && npx wrangler deploy --config .output/server/wrangler.json --env staging \
   && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs \
-  && npx wrangler d1 migrations apply velo-staging-db --env staging --remote \
-  && (pnpm db:seed:staging || true)
+  && npx wrangler d1 migrations apply velo-staging-db --env staging --remote
 ```
+
+The demo seed is **not** in the app script: `deploy-app.yml`'s *Seed collection + demo data* (#1370) step runs
+`crouton-seed` for every app after the deploy (staging + PR previews; opt out with
+`"seed": false` in `deploy.config.json`; production never seeds) — #2366.
 
 ### Migrations in CI + the #138 rule
 
@@ -147,7 +153,7 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` | deploy/db workflows | Token scopes: account Workers Scripts/D1/KV/R2 Edit + zone Workers Routes + DNS Edit (details: `deploy` skill, Credentials) |
 | `WORKER_SECRETS_JSON` | `deploy-app.yml` | Optional bundle of Worker secrets — **see the trap below** |
 | `RESEND_API_KEY` | digests, red-team email | Email rail; steps skip green when unset |
-| `REVIEW_SEED_SECRET` | deploy-app.yml | Optional salt for review-login passwords |
+| `REVIEW_SEED_SECRET` | deploy-app.yml | **Required** salt for review-login passwords — unset → no review login, pre-prod gate refuses (#2358) |
 | `PI_PROVIDER_KEY` | pi.dev variants | pi's model-provider key; required by `decompose-on-issue-pidev.yml` (live on the `delegate-pi` label, #1017) and `a11y-daily-pidev.yml` (dispatch-only). Funding state not verifiable from the repo — if a pi run errors at the agent step, check this key's credit first |
 
 ### The WORKER_SECRETS_JSON trap (fixed under [#1094](https://github.com/FriendlyInternet/nuxt-crouton/issues/1094))
@@ -156,7 +162,7 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 
 ### Actions vars
 
-`AGENT_RUNNER` (swap agent jobs to the self-hosted mac-mini; default ubuntu-latest) · `AGENT_HARNESS` (`pi` opt-in) · `CLEANUP_BRANCHES_APPLY` · `LABEL_READY_EPICS_APPLY` (write-gates for otherwise dry-run jobs) · `DIGEST_REPORT_EMAIL` / `DIGEST_EMAIL_FROM` / `RESEND_FROM` / `RED_TEAM_REPORT_EMAIL` (email rails) · `PROJECT_NAME` · `UNLIGHTHOUSE_SITE`.
+`AGENT_RUNNER` (only the pi.dev workers: work-issue-pidev, decompose-on-issue-pidev, a11y-daily-pidev; set to `ubuntu-latest` since #2275 — no self-hosted runner exists, so any other value queues forever) · `HOSTED_RUNNER` (everything else that was on the mac-mini — deploys and the claude-code-action reviews, which run on the subscription via `CLAUDE_CODE_OAUTH_TOKEN` on any machine; default ubuntu-latest, #2275) · `AGENT_HARNESS` (`pi` opt-in) · `CLEANUP_BRANCHES_APPLY` · `LABEL_READY_EPICS_APPLY` (write-gates for otherwise dry-run jobs) · `DIGEST_REPORT_EMAIL` / `DIGEST_EMAIL_FROM` / `RESEND_FROM` / `RED_TEAM_REPORT_EMAIL` (email rails) · `PROJECT_NAME` · `UNLIGHTHOUSE_SITE`.
 
 ### Three auth rules every agent workflow obeys
 

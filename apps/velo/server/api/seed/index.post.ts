@@ -21,12 +21,12 @@ import { readFileSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { hashPassword } from 'better-auth/crypto'
 import { organization, member, user, account } from '~~/server/db/schema'
-import { bookingsLocations } from '~~/layers/bookings/collections/locations/server/database/schema'
-import { bookingsSettings } from '~~/layers/bookings/collections/settings/server/database/schema'
-import { bookingsEmailtemplates } from '~~/layers/bookings/collections/emailtemplates/server/database/schema'
-import { bookingsBookings } from '~~/layers/bookings/collections/bookings/server/database/schema'
-import { bookingsEmaillogs } from '~~/layers/bookings/collections/emaillogs/server/database/schema'
-import { pagesPages } from '~~/layers/pages/collections/pages/server/database/schema'
+import { bookingsLocations } from '@fyit/crouton-bookings/collections/locations/server/database/schema'
+import { bookingsSettings } from '@fyit/crouton-bookings/collections/settings/server/database/schema'
+import { bookingsEmailtemplates } from '@fyit/crouton-bookings/collections/emailtemplates/server/database/schema'
+import { bookingsBookings } from '@fyit/crouton-bookings/collections/bookings/server/database/schema'
+import { bookingsEmaillogs } from '@fyit/crouton-bookings/collections/emaillogs/server/database/schema'
+import { pagesPages } from '@fyit/crouton-pages/collections/pages/server/database/schema'
 import { parseCSV, parseFrontmatter, parseDate, parseDateTime, convertEmailBody } from '~~/server/utils/seed-parsers'
 
 // ---------------------------------------------------------------------------
@@ -243,9 +243,11 @@ async function seedUsersAndMembers(db: any, log: string[], now: Date, orgId: str
       banned: false
     })
 
-    // Create a credential account
-    // Set password for dev account, no password for others
-    const devPassword = email === 'hi@maartenlauwaert.eu' ? await hashPassword('pmcppaulmcparty') : undefined
+    // Create a credential account. The owner's local dev password comes from
+    // VELO_DEV_OWNER_PASSWORD (your .env) — never a literal: this repo is public (#2360).
+    // Unset → no password; sign in with "Forgot password". Everyone else: no password.
+    const ownerPassword = process.env.VELO_DEV_OWNER_PASSWORD?.trim()
+    const devPassword = email === 'hi@maartenlauwaert.eu' && ownerPassword ? await hashPassword(ownerPassword) : undefined
     await (db as any).insert(account).values({
       id: nanoid(),
       userId,

@@ -1,14 +1,14 @@
-# CLAUDE.md - @fyit/crouton
+# CLAUDE.md - @fyit/crouton-core
 
 ## Package Purpose
 
 Core CRUD layer for Nuxt applications. Provides composables, components, and server utilities for building data-driven admin panels with team-scoped access, nested forms, and smart caching.
 
-**Single-install experience:** Installing `@fyit/crouton` automatically includes i18n, auth, and admin packages - no need to install them separately.
+**One layer to extend:** `@fyit/crouton-core` bundles i18n, auth, and admin (it extends `@fyit/crouton-i18n`, `@fyit/crouton-auth`, `@fyit/crouton-admin`) and registers `@nuxthub/core`, `@nuxt/ui`, `@vueuse/nuxt`, `@nuxt/image`, `@nuxtjs/seo` itself. An app switches crouton on by **extending** it — `extends: ['@fyit/crouton-core', '@fyit/crouton-pages', './layers/shop']` — and adds each addon package the same way. There is no crouton entry in `modules` (the optional `@fyit/crouton-devtools` is the only one); `crouton.config.js` `features` is generation input, not a package switch (#2286).
 
 ## Auto-Included Packages
 
-When you extend `@fyit/crouton`, you automatically get:
+When you extend `@fyit/crouton-core`, you automatically get:
 
 | Package | Provides | Routes |
 |---------|----------|--------|
@@ -25,7 +25,7 @@ When you extend `@fyit/crouton`, you automatically get:
 // nuxt.config.ts - BEFORE (manual)
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-auth',
     '@fyit/crouton-admin',
     '@fyit/crouton-i18n',
@@ -36,8 +36,8 @@ export default defineNuxtConfig({
 // nuxt.config.ts - AFTER (auto-included)
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',           // Includes auth, admin, i18n
-    '@fyit/crouton-bookings',       // Optional apps
+    '@fyit/crouton-core',      // Includes auth, admin, i18n
+    '@fyit/crouton-bookings',  // Optional apps
   ]
 })
 
@@ -46,6 +46,7 @@ export default defineNuxtConfig({
 | File | Purpose |
 |------|---------|
 | `shared/seed/` | Composable seeding contract + runner core (`SeedProvider`, `SeedContext`, `buildUpsert`, `seedId`, `collectSeedSql`) — exported at `@fyit/crouton-core/shared/seed` |
+| `shared/utils/query-registry.ts` | The process-wide server query registry (#2309): `registerCollectionQueries` (a package's Nitro plugin merges its collections in), `resolveQueryRegistry` (package entries + the app's generated `queryRegistry`, app wins), `collectionQueries` (one entry from a lazy queries import + the `getAll<Name>`/`get<Name>ByIds` stem). Exported at `@fyit/crouton-core/shared/utils/query-registry`; consumed by crouton-pages' public collection endpoints |
 | `server/utils/encryption.ts` | AES-256-GCM encryption for storing third-party secrets at rest |
 | `server/utils/tiptap-renderer.ts` | Server-side TipTap JSON to HTML conversion (auto-imported by Nitro) |
 | `app/composables/useCrouton.ts` | Modal/slideover state management (nested up to 5 levels) |
@@ -68,13 +69,12 @@ export default defineNuxtConfig({
 | `app/components/ImportButton.vue` | Ready-to-use import button with file picker |
 | `app/components/ImportPreviewModal.vue` | Multi-step import preview with mapping, validation, and progress |
 | `app/components/SubBar.vue` | `CroutonSubBar` — Thin **presentational** secondary bar that sits under a primary toolbar/header: a bordered, padded horizontal strip with `#leading` / default / `#trailing` slots, optionally `sticky` over a scrolling container (`bordered` prop, default true). **`auto-hide`** (implies sticky) slides it up on scroll-down and reveals it on scroll-up — a capture-phase scroll listener tracks whichever ancestor actually scrolls, so the bar must live INSIDE that scroll container. Owns ONLY layout (spacing, divider, bg, horizontal-overflow scroll, sticky) — **never** the tabs/filter/dropdown logic it hosts (that's slot content; a `mode="tabs\|filters"` prop would be the smell to stop). Consumers (#307): pages editor language bar (leading=language dropdown, trailing=Preview), and — planned — sales settings tabs + the orders filter bar. |
+| `app/components/TabsPanel.vue` | `CroutonTabsPanel` — **the** shell for a tabbed admin section (#2380); use it instead of hand-rolling `UDashboardPanel` + `UDashboardNavbar` + `UNavigationMenu`. Props: `title`, `tabs` (`NavigationMenuItem[]`, flat or grouped), `maxWidth?` (default `max-w-5xl`, left-aligned). Default slot = the tab's page (`<NuxtPage />`). One top-bar row: sidebar toggle/collapse, title (screen-reader only on phones), full-label tabs that swipe sideways and auto-scroll the active tab into view. **Gutter convention:** the body adds no padding — each tab page owns it with `p-4 sm:p-6` (16/24px = the top bar's inset; `CroutonCollectionViewer` already matches). Consumers: crouton-admin `team.vue`, crouton-bookings `bookings.vue`, crouton-sales `sales.vue`. |
 | `app/components/WorkspaceLayout.vue` | `CroutonWorkspaceLayout` — Reusable split-panel workspace shell (resizable sidebar + content, state machine, URL sync, mobile slideover, keyboard shortcuts). Used by crouton-pages and crouton-flow. On mobile the detail opens in a full-screen `USlideover`; the shell renders a **back bar** to dismiss it (there's no tappable backdrop). A consumer that folds its own back affordance into the detail (pages' editor toolbar) sets **`content-provides-back`** to suppress that bar and uses the **`onClose`** content-slot prop to deselect. |
 | `app/composables/useTeamContext.ts` | Team context access (teamId, teamSlug from route or auth) |
 | `app/composables/useImageCrop.ts` | Cropperjs v2 composable for image cropping |
 | `app/components/ImageCropper.vue` | Reusable image crop modal with rotate/zoom/aspect ratio |
 | `app/components/ImageUpload.vue` | File picker with optional crop support |
-| `app/components/UsersAvatarUpload.vue` | Avatar upload with 1:1 circular crop |
-| `app/components/DropZone.vue` | Drag-and-drop file upload zone (VueUse) |
 | `app/components/QrCode.vue` | `CroutonQrCode` — renders any string (usually a URL) as an inline SVG QR code via `uqr` (zero-dep, SSR-safe). Props: `data`, `size?` (px). |
 | `app/components/DeleteButton.vue` | `CroutonDeleteButton` — two-step pill delete (click arms "sure?", click again emits `confirm`; mouseleave disarms). Props: `loading?`, `expanded?` (always show the label; collapsed mode is an icon pill that expands on hover — pointer-only, so forms/touch surfaces pass `expanded`). Parent performs the delete. A `UButton` (soft, neutral→error) so themes reach it (#1410); free height + `min-h-7`: stretches to match neighbors in a `flex items-stretch` row (sales form footers pair it with `CroutonFormActionButton class="flex-1"`). |
 | `server/api/upload-image.post.ts` | Authenticated file upload to blob storage |
@@ -131,7 +131,7 @@ runtime), exported at `@fyit/crouton-core/shared/seed`:
   `seedId(...parts)` / `seedOrgId(slug)` derive stable ids so re-runs upsert
   instead of duplicating.
 - `topoSort(providers)` + `collectSeedSql({ providers, teamSlug, teamId, locale,
-  withStaff, createPageWithBlocks })` order providers by `dependsOn` and return
+  createPageWithBlocks })` order providers by `dependsOn` and return
   the combined SQL. The CLI `crouton-seed` command wraps this with discovery +
   `wrangler d1 execute` transport (see crouton-cli CLAUDE.md).
 - `runSeedSql(execute, options)` (#797) — the **dev-only executor** for a
@@ -272,6 +272,10 @@ useNuxtApp().hook('crouton:mutation', ({ operation, collection, itemId, data }) 
 })
 ```
 
+`update` events carry `beforeData` (the item as it was) **only when `@fyit/crouton-events` is
+installed** (`useCroutonApps().hasApp('events')`): fetching it costs a GET before every PATCH,
+and crouton-events is the one listener that reads it (#2289).
+
 ## Keyboard Shortcuts
 
 Power-user keyboard shortcuts via `useCroutonShortcuts()`:
@@ -395,6 +399,7 @@ Routes from child apps are automatically included in the parent's sidebar group.
 
 - **Auto-includes**: `@nuxthub/core`, `@nuxt/ui`, `@fyit/crouton-i18n`, `@fyit/crouton-auth`, `@fyit/crouton-admin`
 - **Runtime deps**: `@libsql/client` (required for SQLite - pnpm doesn't hoist from layers)
+- **Icon sets**: `@iconify-json/lucide` — installed sets are bundled by Nuxt UI, so icons render on the server render and offline (no iconify API calls). Declared here so apps don't rely on another workspace's deps being hoisted (#2240)
 - **Required by**: App packages (e.g., `crouton-bookings`)
 - **Peer deps**: `nuxt ^4.0.0`
 
@@ -423,7 +428,7 @@ ensureBlob(file, { maxSize: '10MB', types: ['image/png'] })
 ```typescript
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: ['@fyit/crouton'],
+  extends: ['@fyit/crouton-core'],
 
   hub: {
     db: 'postgresql',  // Use PostgreSQL instead

@@ -57,10 +57,10 @@ export default defineEventHandler(async (event) => {
   let booking: any
   try {
     const { bookingsBookings } = await import(
-      '~~/layers/bookings/collections/bookings/server/database/schema'
+      '../../../../../../../collections/bookings/server/database/schema'
     )
     const { bookingsLocations } = await import(
-      '~~/layers/bookings/collections/locations/server/database/schema'
+      '../../../../../../../collections/locations/server/database/schema'
     )
 
     const results = await db
@@ -119,7 +119,7 @@ export default defineEventHandler(async (event) => {
   const locationContent = resolveTranslatedField(ld?.content, tr, 'content', locale)
 
   // Resolve slot IDs to human-readable labels
-  const slotLabel = resolveSlotLabels(booking.slot, ld?.slots as any)
+  const slotLabel = resolveSlotLabels(booking.slot, ld?.slots as any, locale)
 
   const bookingContext: BookingEmailContext = {
     id: booking.id,

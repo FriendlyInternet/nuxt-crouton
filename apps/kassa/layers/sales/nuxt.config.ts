@@ -1,28 +1,5 @@
-import { basename } from 'path'
-
-const layerName = basename(__dirname)
-
-export default defineNuxtConfig({
-  components: {
-    dirs: [
-      {
-        path: './components',
-        prefix: layerName,
-        global: true // Makes them available globally
-      }
-    ]
-  },
-  extends: [
-    './collections/events',
-    './collections/products',
-    './collections/categories',
-    './collections/orders',
-    './collections/orderitems',
-    './collections/locations',
-    './collections/clients',
-    './collections/eventsettings',
-    './collections/printers',
-    './collections/printqueues',
-    './collections/kdsbumps'
-  ]
-})
+// The sales collections ship with @fyit/crouton-sales (#2278). This folder only
+// keeps kassa's own demo rows (collections/*/seed.json), which crouton-seed reads
+// from layers/*/collections/*/seed.json. Empty config so Nuxt's layers/ auto-scan
+// has something to load.
+export default defineNuxtConfig({})

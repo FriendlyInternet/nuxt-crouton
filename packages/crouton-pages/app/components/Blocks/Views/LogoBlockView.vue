@@ -67,7 +67,7 @@ function handleOpenPanel() {
             {{ t('pages.blocks.typeLabels.logos') }}
           </span>
           <!-- Action buttons -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"
@@ -128,8 +128,8 @@ function handleOpenPanel() {
             {{ t('pages.blocks.logos.noLogos') }}
           </div>
           <div v-if="attrs.marquee || (attrs.align && attrs.align !== 'center') || (attrs.size && attrs.size !== 'md')" class="flex items-center justify-center gap-1 mt-2">
-            <span v-if="attrs.marquee" class="text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">marquee</span>
-            <span v-if="attrs.align === 'between'" class="text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">space-between</span>
+            <span v-if="attrs.marquee" class="text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">{{ t('pages.blockLibrary.logo.fields.marquee.label') }}</span>
+            <span v-if="attrs.align === 'between'" class="text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">{{ t('pages.blockLibrary.logo.fields.align.options.between') }}</span>
             <span v-if="attrs.size && attrs.size !== 'md'" class="text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">{{ attrs.size }}</span>
           </div>
         </div>

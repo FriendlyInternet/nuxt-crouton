@@ -8,7 +8,7 @@ A powerful CLI tool for generating complete CRUD collections in Nuxt Crouton app
 - 🗄️ **Multi-Database Support** - PostgreSQL and SQLite
 - 🎯 **Type-Safe** - Full TypeScript support with Zod validation
 - 🌱 **Seed Data** - Generate realistic test data with drizzle-seed
-- ✅ **Tests by Default** - Emits a Zod schema-smoke test + an API route handler test (auth/team-scope + 400/403/404 paths) per collection (`--no-tests` to skip)
+- ✅ **Optional Tests** - `--tests` emits a Zod schema-smoke test + an API route handler test (auth/team-scope + 400/403/404 paths) per collection
 - 🔧 **Customizable** - Modify generated code to fit your needs
 - 📦 **Zero Config** - Works out of the box with sensible defaults
 
@@ -100,7 +100,9 @@ Create a `crouton.config.js` file:
 
 ```javascript
 export default {
-  schemaPath: './product-schema.json',
+  collections: [
+    { name: 'products', fieldsFile: './schemas/products.json' }
+  ],
   dialect: 'sqlite',
   targets: [
     {
@@ -142,7 +144,7 @@ crouton-generate <layer> <collection> [options]
 - `--seed` - Generate seed data file with realistic test data
 - `--count <number>` - Number of seed records to generate (default: 25)
 - `--no-translations` - Skip translation fields
-- `--no-tests` - Skip the per-collection tests — schema-smoke + API route handler test (both emitted by default)
+- `--tests` - Also emit the per-collection tests — schema-smoke + API route handler test (off by default)
 - `--force` - Force generation even if files exist
 - `--no-db` - Skip database table creation
 - `--dry-run` - Preview what will be generated
@@ -155,13 +157,16 @@ The configuration file allows you to define all generation settings in one place
 ```javascript
 // crouton.config.js
 export default {
-  // Path to your JSON schema file
-  schemaPath: './product-schema.json',
+  // Collections and their JSON schema files (paths resolve relative to this file)
+  collections: [
+    { name: 'products', fieldsFile: './schemas/products.json' },
+    { name: 'categories', fieldsFile: './schemas/categories.json', hierarchy: true }
+  ],
 
   // Database dialect
   dialect: 'sqlite',
 
-  // Target layers and collections
+  // Target layers and the collections (by name) they receive
   targets: [
     {
       layer: 'shop',
@@ -379,23 +384,23 @@ The seed generator auto-detects field names and generates appropriate data (emai
 
 - Node.js 18+
 - Nuxt 3 or 4
-- @fyit/crouton installed
+- @fyit/crouton-core installed
 - Drizzle ORM configured
 
 ## Integration with Nuxt Crouton
 
-This generator is designed to work seamlessly with [@fyit/crouton](https://www.npmjs.com/package/@fyit/crouton).
+This generator is designed to work seamlessly with [@fyit/crouton-core](https://www.npmjs.com/package/@fyit/crouton-core).
 
 First, install and configure Nuxt Crouton:
 
 ```bash
-pnpm add @fyit/crouton
+pnpm add @fyit/crouton-core
 ```
 
 ```typescript
 // nuxt.config.ts
 export default defineNuxtConfig({
-  extends: ['@fyit/crouton']
+  extends: ['@fyit/crouton-core']
 })
 ```
 
@@ -476,5 +481,5 @@ MIT © FYIT
 ## Links
 
 - [GitHub Repository](https://github.com/FriendlyInternet/nuxt-crouton)
-- [Nuxt Crouton Package](https://www.npmjs.com/package/@fyit/crouton)
+- [Nuxt Crouton Core Package](https://www.npmjs.com/package/@fyit/crouton-core)
 - [Report Issues](https://github.com/FriendlyInternet/nuxt-crouton/issues)

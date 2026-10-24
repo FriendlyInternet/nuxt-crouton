@@ -12,7 +12,10 @@ const props = defineProps<{
 // call something dead weight. A single local session under-counts → no verdict.
 // Sample data proves nothing → size only, no counts shown at all.
 const BIG = 4000
-const canJudge = computed(() => props.source.kind === 'ci')
+// …and only when that rollup has actually seen a skill (#2388): a window in which no
+// traced run could call one proves nothing about any skill.
+const canJudge = computed(() => props.source.kind === 'ci' && props.source.skillAware)
+const blindToSkills = computed(() => props.source.kind === 'ci' && !props.source.skillAware)
 const hasCounts = computed(() => props.source.kind !== 'sample')
 const isDead = (r: { tokens: number; invocations: number }) =>
   canJudge.value && r.tokens >= BIG && r.invocations === 0
@@ -29,6 +32,10 @@ const k = (n: number) => (n / 1000).toFixed(1) + 'k'
     <p v-if="canJudge" class="inv__note">
       <strong>{{ deadCount }}</strong> dead-weight skill{{ deadCount === 1 ? '' : 's' }}
       <span class="inv__sub">(≥{{ k(BIG) }} tok · 0 invocations in {{ source.windowDays ?? '?' }}d · {{ source.scope ?? 'pipeline' }} scope)</span>
+    </p>
+    <p v-else-if="blindToSkills" class="inv__note">
+      <span class="pill pill-src pill-src--warn">⚠ rollup sees no skills</span>
+      <span class="inv__sub">{{ source.label }} recorded tool calls only — the traced runs can't invoke skills (#2388); size only, no verdicts</span>
     </p>
     <p v-else-if="source.kind === 'local'" class="inv__note">
       <span class="pill pill-src">local session only</span>
@@ -50,6 +57,7 @@ const k = (n: number) => (n / 1000).toFixed(1) + 'k'
           <td>
             <span v-if="!hasCounts" class="pill pill-none">no data</span>
             <span v-else-if="isDead(r)" class="pill pill-dead">dead weight</span>
+            <span v-else-if="r.invocations === 0 && blindToSkills" class="pill pill-idle">not observed</span>
             <span v-else-if="r.invocations === 0" class="pill pill-idle">{{ canJudge ? 'unused' : '0 · session' }}</span>
             <span v-else class="pill pill-live">{{ r.invocations }}×</span>
           </td>

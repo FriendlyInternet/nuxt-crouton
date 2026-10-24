@@ -50,9 +50,9 @@ function handleOpenPanel() {
       <div class="p-3">
         <div class="flex items-center justify-between mb-2">
           <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-            FAQ
+            {{ t('pages.blockLibrary.faq.name') }}
           </span>
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"
@@ -83,7 +83,7 @@ function handleOpenPanel() {
             {{ attrs.headline }}
           </p>
           <h3 class="text-base font-bold text-gray-900 dark:text-white mb-2">
-            {{ attrs.title || 'FAQ' }}
+            {{ attrs.title || t('pages.blockLibrary.faq.name') }}
           </h3>
           <div class="space-y-1">
             <div
@@ -95,10 +95,10 @@ function handleOpenPanel() {
               <span class="truncate">{{ item.question }}</span>
             </div>
             <span v-if="(attrs.items || []).length > 3" class="text-xs text-gray-400 pl-5">
-              +{{ attrs.items.length - 3 }} more
+              {{ t('pages.blockViews.moreCount', { count: attrs.items.length - 3 }) }}
             </span>
             <span v-if="!attrs.items?.length" class="text-xs text-gray-400 italic">
-              No questions yet
+              {{ t('pages.blockViews.noQuestions') }}
             </span>
           </div>
         </div>
