@@ -17,6 +17,7 @@
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layout'
 import type { NodePath, DropEdge } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { isSubtreeCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { useBoardDrag, isWithin, samePath } from '~/utils/board-drag'
 
 defineOptions({ name: 'BoardTree' })
@@ -42,6 +43,14 @@ const componentName = computed(() => (props.node.type === 'leaf' ? resolveCompon
 const safeConfig = computed(() => (props.node.type === 'leaf' ? sanitizeConfig(props.node.blockId, props.node.config) : {}))
 const isSelected = computed(() => !!props.selected && samePath(props.selected, props.path))
 const isHidden = computed(() => props.node.type === 'leaf' && props.hidden.has(props.node.blockId))
+// A split only lays out the children that still show something at this width;
+// a hidden pane gives its space back (its trigger lives elsewhere). Original
+// indices are kept so paths (drops, selection) stay valid.
+const visibleChildren = computed(() =>
+  props.node.type === 'split'
+    ? props.node.children.map((child, i) => ({ child, i })).filter(({ child }) => !isSubtreeCollapsed(child, props.hidden))
+    : [],
+)
 const blockIcon = computed(() => (props.node.type === 'leaf' ? blocks.value[props.node.blockId]?.icon ?? 'i-lucide-box' : 'i-lucide-box'))
 
 // A pane can't be dropped onto itself or into its own subtree.
@@ -77,18 +86,19 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
   <!-- Split: one reka group, recursing per child with the child's path. -->
   <SplitterGroup
     v-if="node.type === 'split'"
+    :key="visibleChildren.map(v => v.i).join('-')"
     :direction="node.direction"
     class="h-full w-full"
     @layout="onLayout"
   >
-    <template v-for="(child, i) in node.children" :key="i">
+    <template v-for="({ child, i }, vi) in visibleChildren" :key="i">
       <SplitterResizeHandle
-        v-if="i > 0"
+        v-if="vi > 0"
         class="relative shrink-0 bg-border hover:bg-primary data-[state=drag]:bg-primary transition-colors data-[orientation=horizontal]:w-1.5 data-[orientation=vertical]:h-1.5"
         data-handoff="pane-resize-handle"
       />
       <SplitterPanel
-        :default-size="panelDefault(child, node.children.length)"
+        :default-size="panelDefault(child, visibleChildren.length)"
         :min-size="panelMin(child)"
         class="overflow-hidden"
       >
@@ -104,31 +114,21 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
     </template>
   </SplitterGroup>
 
-  <!-- Leaf or nested: a container-query pane that is also a drop target. -->
+  <!-- Leaf or nested: a container-query pane that is also a drop target. A leaf
+       hidden at this width renders nothing — its trigger lives on an edge or in the nav. -->
   <div
-    v-else
+    v-else-if="!isHidden"
     class="board-pane relative h-full w-full croutonpane"
-    :class="{ 'board-pane--selected': isSelected, 'board-pane--target': canAccept, 'board-pane--hidden': isHidden }"
+    :class="{ 'board-pane--selected': isSelected, 'board-pane--target': canAccept }"
     :data-edge="hoverEdge ?? undefined"
     :data-path="path.join('.')"
     data-handoff="board-pane"
     @click="emit('select', path)"
   >
     <template v-if="isLeaf">
-      <!-- Hidden at this width (#2418): a strip stands in for the block, so you can
-           still see it's part of the page, select it, drop beside it, and un-hide it. -->
-      <div
-        v-if="isHidden"
-        class="flex h-full w-full items-center gap-2 bg-elevated/60 px-3 py-2 text-xs text-muted"
-        data-handoff="hidden-strip"
-      >
-        <UIcon name="i-lucide-eye-off" class="size-3.5 shrink-0" />
-        <UIcon :name="blockIcon" class="size-3.5 shrink-0" />
-        <span class="truncate">{{ blockName }} · hidden at this width</span>
-      </div>
       <component
         :is="componentName"
-        v-else-if="componentName"
+        v-if="componentName"
         v-bind="safeConfig"
         class="h-full w-full overflow-auto"
       />
@@ -166,7 +166,6 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
 .board-pane { outline: 1px solid transparent; outline-offset: -1px; transition: outline-color .15s; }
 .board-pane--selected { outline-color: var(--ui-primary); }
 .board-pane--target { outline-color: color-mix(in oklch, var(--ui-primary) 35%, transparent); }
-.board-pane--hidden { background: repeating-linear-gradient(135deg, transparent 0 8px, color-mix(in oklch, var(--ui-border) 60%, transparent) 8px 9px); }
 
 /* The grip stays discreet until the pane is hovered / selected / being targeted. */
 .board-grip { opacity: .55; transition: opacity .15s; -webkit-touch-callout: none; }

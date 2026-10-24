@@ -25,6 +25,7 @@ import {
 } from '@fyit/crouton-layout/app/utils/layout-edit'
 import { resolveLayoutAtWidth, patchBreakpoint, removeBreakpoint } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { setCollapseRecipe } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { isSubtreeCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { normalizeCollapseRecipe, LAYOUT_COLLAPSE_EDGES, type LayoutCollapseRecipe } from '@fyit/crouton-core/app/types/layout'
 import { BOARD_HIDDEN_KEY, collectHidden, collapsePlacement, collapseReveal, type HiddenItem } from '~/utils/board-hidden'
 import { useElementSize } from '@vueuse/core'
@@ -102,9 +103,12 @@ const revealSide = computed(() => {
 
 // Hide/show lives on a breakpoint: the one in view, or a new one at this width.
 function toggleHiddenSelected() {
+  if (selectedLeaf.value) toggleHiddenBlock(selectedLeaf.value.blockId)
+}
+function toggleHiddenBlock(blockId: string) {
   const v = current.value
-  const leaf = selectedLeaf.value
-  if (!v || !leaf) return
+  if (!v) return
+  const leaf = { blockId }
   const w = writeTarget.value ?? effWidth.value
   const hasBp = (v.tree.breakpoints ?? []).some(b => b.minWidth === w)
   // A fresh breakpoint starts from what's hidden here now, so toggling one block
@@ -133,6 +137,13 @@ function setRecipe(patch: Partial<LayoutCollapseRecipe>) {
 }
 const selectedRecipe = computed(() => normalizeCollapseRecipe(selectedLeaf.value?.collapse))
 const selectedHidden = computed(() => !!selectedLeaf.value && hiddenSet.value.has(selectedLeaf.value.blockId))
+// Editing a hidden block's recipe from the list (it has no pane to tap any more).
+function selectHidden(item: HiddenItem) {
+  const path = findNodePath(root.value, item.leaf)
+  selected.value = path
+  sheetOpen.value = true
+}
+const allHidden = computed(() => !!root.value && isSubtreeCollapsed(root.value, hiddenSet.value))
 const placementItems = [{ label: 'On its edge', value: 'edge' }, { label: 'In the nav', value: 'nav' }]
 const edgeItemsOpts = LAYOUT_COLLAPSE_EDGES.map(e => ({ label: e[0]!.toUpperCase() + e.slice(1), value: e }))
 const revealItems = [
@@ -453,6 +464,17 @@ async function saveBoard() {
         />
       </UDropdownMenu>
       <UBadge v-if="activeBp !== null" color="primary" variant="subtle" size="xs" data-handoff="bp-badge">≥ {{ activeBp }}</UBadge>
+      <UButton
+        v-if="hiddenItems.length"
+        size="xs"
+        color="neutral"
+        variant="soft"
+        icon="i-lucide-eye-off"
+        :label="String(hiddenItems.length)"
+        aria-label="Hidden blocks"
+        data-handoff="hidden-count"
+        @click="sheetOpen = true"
+      />
       <span class="flex-1" />
       <span v-if="saveState === 'saved' && !dirty" class="text-xs text-muted">Saved</span>
       <UButton
@@ -485,7 +507,13 @@ async function saveBoard() {
     <!-- Board: the page, full-bleed at the real device width. -->
     <main ref="boardEl" class="relative min-h-0 flex-1 overflow-hidden" data-handoff="board">
       <div
-        v-if="root"
+        v-if="root && allHidden"
+        class="flex h-full items-center justify-center p-6 text-center text-sm text-muted"
+      >
+        Everything on this page is hidden at this width — use the triggers, or tap the eye-off count to show blocks again.
+      </div>
+      <div
+        v-else-if="root"
         class="board-frame"
         :class="{ 'board-frame--scaled': scale < 1 }"
         :style="frameStyle"
@@ -553,7 +581,7 @@ async function saveBoard() {
     <!-- Bottom sheet: the selected pane's options. -->
     <UDrawer v-model:open="sheetOpen" :overlay="false" :modal="false" :handle="true">
       <template #content>
-        <div class="space-y-4 p-4 pb-8">
+        <div class="space-y-4 p-4 pb-24">
           <div class="flex items-center gap-2">
             <UIcon :name="selectedDef?.icon ?? 'i-lucide-box'" class="size-4" />
             <span class="font-medium">{{ selectedDef?.name ?? selectedLeaf?.blockId ?? 'Pane' }}</span>
@@ -586,6 +614,17 @@ async function saveBoard() {
             </template>
           </template>
           <UButton v-if="selected" color="error" variant="soft" icon="i-lucide-trash-2" label="Remove from page" @click="removeSelected" />
+          <template v-if="hiddenItems.length">
+            <USeparator />
+            <p class="text-xs uppercase tracking-wide text-muted">Hidden at this width</p>
+            <div v-for="item in hiddenItems" :key="item.blockId" class="flex items-center gap-2" :data-hidden-row="item.blockId">
+              <UIcon :name="item.icon" class="size-4 shrink-0" />
+              <span class="min-w-0 flex-1 truncate text-sm">{{ item.label }}</span>
+              <span class="text-xs text-muted">{{ collapsePlacement(item.recipe) === 'nav' ? 'nav' : item.recipe.edge }} · {{ collapseReveal(item.recipe) }}</span>
+              <UButton size="xs" color="neutral" variant="ghost" icon="i-lucide-settings-2" aria-label="Settings" @click="selectHidden(item)" />
+              <UButton size="xs" color="neutral" variant="soft" icon="i-lucide-eye" label="Show" @click="toggleHiddenBlock(item.blockId)" />
+            </div>
+          </template>
         </div>
       </template>
     </UDrawer>
