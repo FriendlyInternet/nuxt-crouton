@@ -89,17 +89,11 @@ const hiddenItems = computed<HiddenItem[]>(() => collectHidden(root.value, hidde
   icon: blocks.value[id]?.icon ?? 'i-lucide-box',
 })))
 const navItems = computed(() => hiddenItems.value.filter(i => collapsePlacement(i.recipe) === 'nav'))
-const edgeItems = computed(() => hiddenItems.value.filter(i => collapsePlacement(i.recipe) === 'edge'))
-const revealing = ref<HiddenItem | null>(null)
+const hiddenLayer = ref<{ open: (id: string) => void } | null>(null)
 function openHidden(blockId: string) {
-  revealing.value = hiddenItems.value.find(i => i.blockId === blockId) ?? null
+  hiddenLayer.value?.open(blockId)
 }
 provide(BOARD_HIDDEN_KEY, { navItems, items: hiddenItems, open: openHidden })
-const revealKind = computed(() => (revealing.value ? collapseReveal(revealing.value.recipe) : null))
-const revealSide = computed(() => {
-  const e = revealing.value?.recipe.edge ?? 'right'
-  return e === 'left' || e === 'right' ? e : 'bottom'
-})
 
 // Hide/show lives on a breakpoint: the one in view, or a new one at this width.
 function toggleHiddenSelected() {
@@ -486,6 +480,16 @@ async function saveBoard() {
         data-handoff="board-save"
         @click="saveBoard"
       />
+      <UButton
+        icon="i-lucide-external-link"
+        color="neutral"
+        variant="ghost"
+        size="sm"
+        aria-label="View page"
+        :to="page?.slug ? `/site/${page.slug}` : undefined"
+        :disabled="!page?.slug"
+        data-handoff="view-page"
+      />
     </header>
 
     <!-- Palette strip: drag a chip onto a pane edge, or tap to add beside the selection. -->
@@ -549,34 +553,8 @@ async function saveBoard() {
       {{ dragPayload.label }}
     </div>
 
-    <!-- Edge triggers for hidden blocks placed on an edge (#2418). -->
-    <div
-      v-for="item in edgeItems"
-      :key="item.blockId"
-      class="edge-trigger pointer-events-auto fixed z-30"
-      :data-edge="item.recipe.edge"
-    >
-      <UButton
-        :icon="item.icon"
-        :label="item.recipe.affordance === 'dot' ? undefined : item.label"
-        size="xs"
-        color="neutral"
-        variant="solid"
-        :data-edge-trigger="item.blockId"
-        @click="openHidden(item.blockId)"
-      />
-    </div>
-
-    <!-- The hidden block, opened the way its recipe says. -->
-    <USlideover v-if="revealKind === 'slideover'" :open="!!revealing" :side="revealSide" :title="revealing?.label" @update:open="v => { if (!v) revealing = null }">
-      <template #body><CroutonLayoutRenderer v-if="revealing" :node="revealing.leaf" :interactive="false" /></template>
-    </USlideover>
-    <UDrawer v-else-if="revealKind === 'sheet'" :open="!!revealing" :title="revealing?.label" @update:open="v => { if (!v) revealing = null }">
-      <template #body><div class="max-h-[70dvh] overflow-auto"><CroutonLayoutRenderer v-if="revealing" :node="revealing.leaf" :interactive="false" /></div></template>
-    </UDrawer>
-    <UModal v-else-if="revealKind === 'modal' || revealKind === 'page'" :open="!!revealing" :title="revealing?.label" :fullscreen="revealKind === 'page'" @update:open="v => { if (!v) revealing = null }">
-      <template #body><CroutonLayoutRenderer v-if="revealing" :node="revealing.leaf" :interactive="false" /></template>
-    </UModal>
+    <!-- Triggers + reveal for blocks hidden at this width (shared with the served page). -->
+    <BoardHiddenBlocks ref="hiddenLayer" :items="hiddenItems" />
 
     <!-- Bottom sheet: the selected pane's options. -->
     <UDrawer v-model:open="sheetOpen" :overlay="false" :modal="false" :handle="true">
@@ -632,10 +610,6 @@ async function saveBoard() {
 </template>
 
 <style scoped>
-.edge-trigger[data-edge='right'] { right: 8px; top: 50%; transform: translateY(-50%); }
-.edge-trigger[data-edge='left'] { left: 8px; top: 50%; transform: translateY(-50%); }
-.edge-trigger[data-edge='top'] { top: 96px; left: 50%; transform: translateX(-50%); }
-.edge-trigger[data-edge='bottom'] { bottom: 16px; left: 50%; transform: translateX(-50%); }
 .board-frame { position: absolute; left: 0; top: 0; background: var(--ui-bg); }
 .board-frame--scaled { outline: 1px solid var(--ui-border); box-shadow: 0 0 0 9999px color-mix(in oklch, var(--ui-bg-elevated) 70%, transparent); }
 /* Chips scroll horizontally on a swipe; a held chip becomes a drag (pointer events). */
