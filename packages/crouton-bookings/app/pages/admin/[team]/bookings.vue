@@ -49,7 +49,11 @@ const tabs = computed(() => [
 </script>
 
 <template>
-  <UDashboardPanel>
+  <!--
+    Body carries no padding: each tab page owns its own gutter, so a second
+    layer here pushed content past the tab bar (#2369).
+  -->
+  <UDashboardPanel :ui="{ body: 'p-0 sm:p-0' }">
     <template #header>
       <UDashboardNavbar :title="t('bookings.admin.sectionTitle')">
         <template #leading>
@@ -62,7 +66,7 @@ const tabs = computed(() => [
         orientation="horizontal"
         highlight
         highlight-color="primary"
-        class="border-b border-default px-4"
+        class="border-b border-default px-1.5 sm:px-3.5"
       />
     </template>
 
