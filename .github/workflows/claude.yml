@@ -34,6 +34,16 @@ jobs:
         with:
           fetch-depth: 1
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Pinned to v1.0.162 (Claude Code 2.1.198). Re-pinned from v1.0.92 during the #658
       # proof run: a timeout-killed session poisoned the old pin's per-runner action cache
       # (runbook §2a) — a NEW ref also means a fresh `_work/_actions` directory on every
@@ -46,7 +56,7 @@ jobs:
       - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          claude_args: "--model claude-sonnet-5 --max-turns 100 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 100 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           show_full_output: true
 
       # Loop Station WS2 (#929) / usage rollup (#1064): ship this runner's

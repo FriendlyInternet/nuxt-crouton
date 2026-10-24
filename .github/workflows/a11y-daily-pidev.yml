@@ -41,9 +41,9 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi. Default claude-haiku-4-5 on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
+        description: "Model for pi. Blank = the light model in .claude/pipeline-models.json (#2161), on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
         required: false
-        default: "claude-haiku-4-5"
+        default: ""
         type: string
       provider:
         description: "pi provider. Default claude-bridge = Claude SUBSCRIPTION via Claude Code + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275; replaced the silent pi-claude-cli; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
@@ -105,9 +105,18 @@ jobs:
       # PI_PROVIDER_KEY. Skills (#888): the `.pi/skills` symlink bridge does NOT load — pi's
       # discovery ignores it — so skills are passed via the explicit `--skill .claude/skills`
       # flag (our SKILL.md format is drop-in portable).
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs light)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       - id: pi
         env:
-          PI_MODEL: ${{ inputs.model || 'claude-haiku-4-5' }}
+          PI_MODEL: ${{ inputs.model || steps.model.outputs.model }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           # Headless subscription auth (#2119/#2275): the long-lived OAuth token (claude
           # setup-token, 1y) the CLI reads from env; installed + preflighted by setup-pi.

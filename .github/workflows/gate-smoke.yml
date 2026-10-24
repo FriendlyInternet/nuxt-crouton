@@ -72,6 +72,16 @@ jobs:
         if: matrix.gate == 'a11y'
         run: pnpm install --frozen-lockfile
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Same engine + allowlist as the real gate workflows (#834's fix) — the
       # smoke MUST use the identical permission grant, or it isn't testing
       # the thing that shipped fail-open.
@@ -80,7 +90,7 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
-          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **${{ matrix.gate }} subagent** defined in
             `.claude/agents/${{ matrix.gate }}.md`.

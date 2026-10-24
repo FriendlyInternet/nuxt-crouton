@@ -72,9 +72,9 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi. Default claude-sonnet-5-5 on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
+        description: "Model for pi. Blank = the default in .claude/pipeline-models.json (#2161), on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
         required: false
-        default: "claude-sonnet-5-5"
+        default: ""
         type: string
       provider:
         description: "pi provider. Default claude-bridge = Claude SUBSCRIPTION via Claude Code + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275; replaced the silent pi-claude-cli; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
@@ -290,14 +290,14 @@ jobs:
       - id: t0
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      # Resolve the pipeline's models from the ONE editable knob (#2161): .claude/pipeline-
-      # models.json (read via scripts/resolve-pipeline-model.mjs). Switch a model there — no
-      # workflow edit. `|| echo <fallback>` keeps the current defaults visible if the config is
-      # missing/broken, so PI_MODEL is never empty.
+      # Resolve the pipeline's models from the ONE setting (#2161): .claude/pipeline-models.json,
+      # read via scripts/resolve-pipeline-model.mjs. Switch a model there — no workflow edit.
+      # No fallback literal: it had to be bumped by hand on every model change and would
+      # silently run a stale model; a broken config now fails this step loudly instead.
       - id: model
         run: |
-          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default 2>/dev/null || echo claude-sonnet-5-5)"
-          HARD="$(node scripts/resolve-pipeline-model.mjs hard 2>/dev/null || echo claude-opus-5-5)"
+          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
+          HARD="$(node scripts/resolve-pipeline-model.mjs hard)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
           echo "hard=$HARD" >> "$GITHUB_OUTPUT"
           echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"

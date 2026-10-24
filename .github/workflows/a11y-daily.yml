@@ -49,6 +49,16 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs light)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
       - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
@@ -60,7 +70,7 @@ jobs:
           # (MCP) + writes reports; the gate-package-edits hook still protects packages/.
           # Haiku, matching the a11y agent's small tier (#1272/#823) — the deep sweep's value is
           # the deterministic @axe-core/playwright run, not LLM depth; Haiku drives it at ~3× less.
-          claude_args: "--model claude-haiku-4-5-20251001 --max-turns 60 --permission-mode bypassPermissions"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 60 --permission-mode bypassPermissions"
           prompt: |
             Run the **`/a11y`** skill (`.claude/skills/a11y/SKILL.md`) at
             **depth=deep, scope=repo**. Sweep the `vuejs-accessibility/*` eslint rules across

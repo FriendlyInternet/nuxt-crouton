@@ -52,6 +52,16 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
       - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
@@ -61,7 +71,7 @@ jobs:
           # deep sweep couldn't write its report, update the standing issue, or file security
           # issues. Broader than the per-PR gate's allowlist because this run also files GitHub
           # issues (MCP) + writes reports; the gate-package-edits hook still protects packages/.
-          claude_args: "--model claude-sonnet-5 --max-turns 60 --permission-mode bypassPermissions"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 60 --permission-mode bypassPermissions"
           prompt: |
             Run the **`/red-team`** skill (`.claude/skills/red-team/SKILL.md`) at
             **depth=deep, scope=repo**. Fan out the `red-team` subagent across the
