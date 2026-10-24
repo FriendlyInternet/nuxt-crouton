@@ -63,6 +63,44 @@ export function latestDelta(history: HistoryRecord[]): { tokens: number; tokeniz
   const latest = recs[recs.length - 1]
   if (!latest) return null
   const tokenizer = latest.tokenizer || 'unknown'
-  const prev = [...recs.slice(0, -1)].reverse().find((r) => (r.tokenizer || 'unknown') === tokenizer)
+  const prev = recs.slice(0, -1).reverse().find((r) => (r.tokenizer || 'unknown') === tokenizer)
   return { tokens: latest.totals.alwaysOnTokens, tokenizer, delta: prev ? latest.totals.alwaysOnTokens - prev.totals.alwaysOnTokens : null }
+}
+
+/** "6 Oct" for a `week` label (ISO date string), always in UTC. */
+export function shortDate(week: string): string {
+  return new Date(`${week}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
+}
+
+export interface IdleStretch { from: string; to: string; weeks: number }
+
+/**
+ * Runs of ≥ `minWeeks` consecutive weeks in which NO tokenizer has a value —
+ * the stretches worth naming under the chart ("no merges here").
+ */
+export function idleStretches(rows: WeeklyRow[], tokenizers: string[], minWeeks = 4): IdleStretch[] {
+  const out: IdleStretch[] = []
+  let start = -1
+  const flush = (end: number) => {
+    const weeks = end - start + 1
+    if (start >= 0 && weeks >= minWeeks) out.push({ from: rows[start]!.week, to: rows[end]!.week, weeks })
+    start = -1
+  }
+  rows.forEach((r, i) => {
+    const empty = tokenizers.every((t) => r[t] === undefined)
+    if (empty && start < 0) start = i
+    if (!empty) flush(i - 1)
+  })
+  if (start >= 0) flush(rows.length - 1)
+  return out
+}
+
+/** One plain sentence for assistive tech — the chart itself is a picture. */
+export function describeTrend(history: HistoryRecord[]): string {
+  const rows = weeklyRows(history)
+  const head = latestDelta(history)
+  if (!rows.length || !head) return 'No context-budget records yet.'
+  const k = (n: number) => `${(n / 1000).toFixed(1)}k`
+  const delta = head.delta == null ? 'first point for this tokenizer' : head.delta === 0 ? 'unchanged' : `${head.delta > 0 ? 'up' : 'down'} ${k(Math.abs(head.delta))} since the previous ${head.tokenizer} point`
+  return `Always-on context budget, ${shortDate(rows[0]!.week)} to ${shortDate(rows[rows.length - 1]!.week)}, one point per week. Latest: ${k(head.tokens)} tokens (${head.tokenizer} tokenizer), ${delta}.`
 }

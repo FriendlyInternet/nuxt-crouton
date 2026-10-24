@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { weeklyRows, latestDelta, weekStart } from '../app/utils/trend'
+import { weeklyRows, latestDelta, weekStart, idleStretches, shortDate, describeTrend } from '../app/utils/trend'
 
 const rec = (at: string, tokenizer: string, tokens: number) =>
   ({ generatedAt: at, tokenizer, totals: { alwaysOnTokens: tokens } }) as any
@@ -61,5 +61,20 @@ describe('on the committed history', () => {
     const d = latestDelta(history)!
     expect(d.tokenizer).toBe('anthropic')
     expect(Math.abs(d.delta ?? 0)).toBeLessThan(1500) // no fake ±4k tokenizer step
+  })
+})
+
+describe('idleStretches / shortDate / describeTrend', () => {
+  it('names runs of ≥ minWeeks empty weeks, including one at the end', () => {
+    const rows = [{ week: 'w1', a: 1 }, { week: 'w2' }, { week: 'w3' }, { week: 'w4' }, { week: 'w5' }, { week: 'w6', a: 2 }, { week: 'w7' }, { week: 'w8' }]
+    expect(idleStretches(rows, ['a'], 4)).toEqual([{ from: 'w2', to: 'w5', weeks: 4 }])
+    expect(idleStretches(rows, ['a'], 2)).toEqual([{ from: 'w2', to: 'w5', weeks: 4 }, { from: 'w7', to: 'w8', weeks: 2 }])
+  })
+  it('shortDate is UTC and compact', () => {
+    expect(shortDate('2026-10-05')).toBe('5 Oct')
+  })
+  it('describeTrend reads as one plain sentence', () => {
+    const h = [rec('2026-07-01T00:00:00Z', 'anthropic', 19000), rec('2026-07-08T00:00:00Z', 'anthropic', 19860)]
+    expect(describeTrend(h)).toBe('Always-on context budget, 29 Jun to 6 Jul, one point per week. Latest: 19.9k tokens (anthropic tokenizer), up 0.9k since the previous anthropic point.')
   })
 })
