@@ -4,14 +4,14 @@
   "private": true,
   "version": "0.1.0",
   "scripts": {
-    "dev": "node scripts/prepare-data.mjs && nuxt dev",
-    "build": "node scripts/prepare-data.mjs && nuxt build",
-    "generate": "node scripts/prepare-data.mjs && nuxt generate",
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "typecheck": "nuxt typecheck",
-    "cf:staging": "node scripts/prepare-data.mjs && NITRO_PRESET=cloudflare_module nuxt build && npx wrangler deploy --env staging",
-    "cf:version": "node scripts/prepare-data.mjs && NITRO_PRESET=cloudflare_module nuxt build && npx wrangler versions upload --env staging"
+    "cf:staging": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler deploy --env staging",
+    "cf:version": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler versions upload --env staging"
   },
   "dependencies": {
     "@fyit/crouton-themes": "workspace:*",
