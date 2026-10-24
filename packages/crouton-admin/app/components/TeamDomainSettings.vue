@@ -43,7 +43,7 @@ async function togglePublicSite(value: boolean) {
   } catch (e: unknown) {
     // Revert on failure
     publicSiteEnabled.value = !value
-    const message = e instanceof Error ? e.message : 'Failed to save site settings'
+    const message = e instanceof Error ? e.message : t('teams.domains.siteSettingsFailed')
     notify.error(t('common.error') || 'Error', { description: message })
   } finally {
     isSavingSiteSettings.value = false
@@ -97,7 +97,7 @@ async function addDomain() {
       description: t('teams.domains.addDnsRecord') || 'Add the DNS record to verify ownership.'
     })
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to add domain'
+    const message = e instanceof Error ? e.message : t('teams.domains.addFailed')
     notify.error(t('common.error') || 'Error', { description: message })
   } finally {
     isAddingDomain.value = false
@@ -123,7 +123,7 @@ async function verifyDomain(domainId: string) {
       })
     }
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Verification failed'
+    const message = e instanceof Error ? e.message : t('teams.domains.verificationFailed')
     notify.error(t('common.error') || 'Error', { description: message })
   } finally {
     verifyingDomainId.value = null
@@ -142,7 +142,7 @@ async function setPrimary(domainId: string) {
     })
     notify.success(t('teams.domains.primarySet') || 'Primary domain updated')
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to set primary domain'
+    const message = e instanceof Error ? e.message : t('teams.domains.setPrimaryFailed')
     notify.error(t('common.error') || 'Error', { description: message })
   } finally {
     settingPrimaryId.value = null
@@ -158,7 +158,7 @@ async function deleteDomain(domainId: string) {
     domains.value = domains.value.filter(d => d.id !== domainId)
     notify.success(t('teams.domains.domainDeleted') || 'Domain removed')
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to delete domain'
+    const message = e instanceof Error ? e.message : t('teams.domains.deleteFailed')
     notify.error(t('common.error') || 'Error', { description: message })
   } finally {
     deletingDomainId.value = null

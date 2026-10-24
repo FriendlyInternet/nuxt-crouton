@@ -321,7 +321,7 @@ export type LogoSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl'
 export interface LogoItem {
   /** Whether this item is an icon name or an image URL */
   type?: LogoItemType
-  /** Icon name (e.g., 'i-simple-icons-github') or image URL */
+  /** Icon name (e.g., 'i-lucide-github') or image URL */
   value: string
   /** Alt text when value is an image URL */
   alt?: string

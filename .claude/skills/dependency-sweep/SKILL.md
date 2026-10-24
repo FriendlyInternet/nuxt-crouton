@@ -92,21 +92,44 @@ re-run. Establish a clean **baseline** typecheck before blaming a bump.
 
 - Follow **ISSUE-FIRST**: the dependency epic is **#233**; open/`update` the
   relevant sub-issue (safe-bump issue, or a new `type:fix pkg:*` for a red dep).
-- Commit with **`/commit`** — `chore(root): …`, reference `(#NN)`. The deliverable
-  is `pnpm-workspace.yaml` + `pnpm-lock.yaml` (+ any `pnpm.overrides`).
+- Commit with **`/commit`** — `chore(root): <YYYY> Q<n> dependency sweep — …`,
+  reference `(#NN)`. The deliverable is `pnpm-workspace.yaml` + `pnpm-lock.yaml`
+  (+ any `pnpm.overrides`).
+- **One short-lived branch per sweep**: `chore/dependency-sweep-<YYYY>q<n>` off
+  `main`. Never a long-lived "deps" branch — the lockfile conflicts on almost
+  every merge and an unmerged branch protects nothing.
 - Open a PR (don't push to `main`); the e2e smoke runs in CI as the real gate
   (the local container can't download the Playwright chromium binary).
+- **Label the PR and every follow-up issue `deps`.** That label is the timeline:
+  `gh pr list --label deps --state all` · `git log --grep "dependency sweep"`.
 
 ## Step 6 — If this was the recurring sweep
 
 Re-arm the cadence: open next quarter's **"Quarterly dependency sweep — due
 <+3 months>"** ticket (link #233), then close the current one. Re-check the
-standing deliberate/wait items (#235 @nuxt/ui, #236 wrangler, #237 TS6/vue-router5)
-each sweep.
+standing deliberate/wait items each sweep — open `deps` issues
+(`gh issue list --label deps`); the majors watchlist is #2226.
+
+## Gotchas from the 2026 Q4 sweep (#244)
+
+- **Peers can resolve to a version your overrides forbid.** After bumps, the
+  lockfile kept `@unhead/vue@3` / `@tiptap/core@3.27` peer snapshots alongside the
+  overridden ones. Check `grep "^  '<pkg>@" pnpm-lock.yaml` for duplicates; fix by
+  regenerating from `main`'s lockfile, then `pnpm dedupe`.
+- **The tiptap pin moves WITH `@nuxt/ui`.** It's a single-copy dedupe pin at the
+  lowest version every peer accepts — when `@nuxt/ui` raises its tiptap floor,
+  raise the pin, or extensions resolve newer than core and the build fails with
+  `"…" is not exported by @tiptap/core`.
+- **`@nuxt/ui` 4.11+ and nuxt ≥4.5 ship unhead 3** — move them together (#2222).
+- **Run typecheck with `--no-bail`** (`pnpm -r --no-bail --filter './apps/*'
+  typecheck`) — the default stops at the first red app and hides the rest.
+- **Typecheck green ≠ build green.** Missing-export errors only show at bundle
+  time; build one app (`cd apps/kassa && pnpm build`) before pushing.
 
 ## Known catalog gaps (carry forward)
 
 - Several packages pin **drizzle** directly instead of via `catalog:`, so old
   copies linger after a bump. Catalog-ising those is a separate cleanup.
-- `vitest` / `@vitest/coverage-v8` / `happy-dom` / `@nuxt/kit|schema` are
-  deliberately **not** cataloged yet (version spreads need a real migration — #141).
+- `vitest` / `@vitest/coverage-v8` / `@vitest/ui` / `happy-dom` are cataloged
+  since #2291. `@nuxt/kit|schema` are still **not** cataloged (version spreads
+  need a real migration — #141).

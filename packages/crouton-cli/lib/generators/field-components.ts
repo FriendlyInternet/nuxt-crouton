@@ -56,9 +56,11 @@ function generateInputComponent(field: Record<string, any>, fieldPascalCase: str
     for (const [propName, propDef] of Object.entries(properties)) {
       const def = propDef as any
       const label = def.label || capitalizeFirst(propName)
-      const inputInfo = getInputInfoForProperty(def.type)
+      // The manifest decides the control (attached by loadFields as def.component);
+      // a property that reaches us without one renders UInput (#2286).
+      const component = def.component || 'UInput'
 
-      if (inputInfo.component === 'UInputNumber') {
+      if (component === 'UInputNumber') {
         const minAttr = def.min != null ? ` :min="${def.min}"` : ''
         const placeholder = def.default != null ? ` placeholder="${def.default}"` : ''
         formFields.push(`      <UFormField class="w-24">
@@ -67,12 +69,16 @@ function generateInputComponent(field: Record<string, any>, fieldPascalCase: str
           size="xl"${minAttr}${placeholder}
         />
       </UFormField>`)
-      } else if (inputInfo.component === 'USwitch') {
+      } else if (component === 'UCheckbox') {
         formFields.push(`      <UFormField>
-        <USwitch v-model="model.${propName}" />
+        <UCheckbox v-model="model.${propName}" />
         <span class="text-sm ml-2">${label}</span>
       </UFormField>`)
-      } else if (inputInfo.component === 'UTextarea') {
+      } else if (component === 'CroutonCalendar') {
+        formFields.push(`      <UFormField class="flex-1">
+        <CroutonCalendar v-model:date="model.${propName}" />
+      </UFormField>`)
+      } else if (component === 'UTextarea') {
         formFields.push(`      <UFormField class="flex-1">
         <UTextarea
           v-model="model.${propName}"
@@ -83,7 +89,7 @@ function generateInputComponent(field: Record<string, any>, fieldPascalCase: str
       </UFormField>`)
       } else {
         formFields.push(`      <UFormField class="flex-1">
-        <UInput
+        <${component}
           v-model="model.${propName}"
           class="w-full"
           size="xl"
@@ -325,7 +331,9 @@ function generateTranslatableFormField(propName: string, label: string, propDef:
  * Generate form field markup for a non-translatable property
  */
 function generateNonTranslatableFormField(propName: string, label: string, propDef: Record<string, any>, isRequired: boolean): string {
-  const inputType = getInputTypeForProperty(propDef.type)
+  // Manifest control (def.component via loadFields); CroutonCalendar binds v-model:date.
+  const inputType = propDef.component || 'UInput'
+  const vModel = inputType === 'CroutonCalendar' ? 'v-model:date' : 'v-model'
   const placeholder = propDef.placeholder || `Enter ${label.toLowerCase()}`
 
   // Non-translatable fields only shown in English locale
@@ -337,40 +345,11 @@ function generateNonTranslatableFormField(propName: string, label: string, propD
       ${isRequired ? 'required' : ''}
     >
       <${inputType}
-        v-model="model.${propName}"
+        ${vModel}="model.${propName}"
         placeholder="${placeholder}"
         class="w-full"
       />
     </UFormField>`
-}
-
-/**
- * Get appropriate input component for property type (legacy, used by translatable generator)
- */
-function getInputTypeForProperty(type: string): string {
-  const inputMap: Record<string, string> = {
-    string: 'UInput',
-    text: 'UTextarea',
-    number: 'UInputNumber',
-    boolean: 'USwitch',
-    date: 'UInput type="date"'
-  }
-  return inputMap[type] || 'UInput'
-}
-
-/**
- * Get component name for property type (clean, no inline attrs)
- */
-function getInputInfoForProperty(type: string): { component: string } {
-  const map: Record<string, string> = {
-    string: 'UInput',
-    text: 'UTextarea',
-    number: 'UInputNumber',
-    decimal: 'UInputNumber',
-    boolean: 'USwitch',
-    date: 'UInput'
-  }
-  return { component: map[type] || 'UInput' }
 }
 
 /**

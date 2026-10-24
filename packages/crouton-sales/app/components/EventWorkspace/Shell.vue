@@ -29,7 +29,7 @@
 // be embedded mid-page.
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { Ref } from 'vue'
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 
 const props = withDefaults(defineProps<{
   /** Slug of the event to render. */

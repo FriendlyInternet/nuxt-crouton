@@ -8,10 +8,10 @@ collections into a laid-out admin surface — the editor, the renderer, the
 deterministic default-layout pass, the placeable blocks, and the `layout_configs`
 storage.
 
-It is **default-on**: `@fyit/crouton` (the meta-layer) extends this layer, exactly
-the way `crouton-core` auto-includes `crouton-i18n` / `crouton-auth` / `crouton-admin`.
-A fresh `crouton init` app gets the layout engine with zero extra wiring; an app can
-opt out by disabling the module from a layer.
+An app switches it on by **extending** it next to core (`extends: ['@fyit/crouton-core',
+'@fyit/crouton-layout', …]`, as the fixtures do). It is not bundled by `crouton-core` the
+way `crouton-i18n` / `crouton-auth` / `crouton-admin` are, so an app that doesn't list it
+has no layout engine.
 
 ## Dependency direction (HARD RULE)
 
@@ -78,7 +78,7 @@ empty layer; subsequent PRs move the code in:
 | `app/components/LayoutForm.vue` | `CroutonLayoutForm` — real data-bound **form** block (inline create form for a collection). |
 | `app/components/LayoutSpikeStats.vue` | `CroutonLayoutSpikeStats` — generic KPI demo block, registered as `stats`. |
 | `app/app.config.ts` | The default `croutonLayoutBlocks` registry (collection-list / entity-form / stats), defu-merged across layers (packages add their own, e.g. bookings' `bookings-calendar`). |
-| `crouton.manifest.ts` | `bundled: true` → default-on via `getCroutonLayers()`. |
+| `crouton.manifest.ts` | Declares `bundled: true`, which the CLI reads as "core already provides it" (`crouton init` / `doctor` skip it) — so add the layer to `extends` by hand. |
 
 ## Key Files
 

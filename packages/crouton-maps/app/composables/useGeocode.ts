@@ -44,6 +44,7 @@ export function useGeocode() {
   const loading = ref(false)
   const error = ref<string | null>(null)
   const config = useMapConfig()
+  const { t } = useT()
 
   /**
    * Forward geocoding: Convert address to coordinates
@@ -62,7 +63,7 @@ export function useGeocode() {
       })
 
       if (!response.features || response.features.length === 0) {
-        error.value = 'No results found'
+        error.value = t('maps.geocode.noResults')
         return null
       }
 
@@ -76,7 +77,7 @@ export function useGeocode() {
         context: extractContext(feature.context)
       }
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : 'Geocoding failed'
+      const errorMessage = e instanceof Error ? e.message : t('maps.geocode.failed')
       error.value = errorMessage
       console.error('[nuxt-crouton-maps] Geocoding error:', e)
       return null
@@ -104,7 +105,7 @@ export function useGeocode() {
       })
 
       if (!response.features || response.features.length === 0) {
-        error.value = 'No results found'
+        error.value = t('maps.geocode.noResults')
         return null
       }
 
@@ -117,7 +118,7 @@ export function useGeocode() {
         context: extractContext(feature.context)
       }
     } catch (e) {
-      const errorMessage = e instanceof Error ? e.message : 'Reverse geocoding failed'
+      const errorMessage = e instanceof Error ? e.message : t('maps.geocode.reverseFailed')
       error.value = errorMessage
       console.error('[nuxt-crouton-maps] Reverse geocoding error:', e)
       return null

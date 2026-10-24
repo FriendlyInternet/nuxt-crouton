@@ -10,6 +10,7 @@
  * - Proper header spacing
  * - Responsive layout structure
  */
+const { t } = useT()
 </script>
 
 <template>
@@ -19,7 +20,7 @@
       <ImpersonationBanner />
       <div class="flex flex-1 min-h-0 overflow-hidden [&>div]:min-h-0">
         <UDashboardPanel>
-          <UDashboardNavbar title="Super Admin">
+          <UDashboardNavbar :title="t('home.superAdmin')">
             <template #leading>
               <UDashboardSidebarCollapse />
             </template>

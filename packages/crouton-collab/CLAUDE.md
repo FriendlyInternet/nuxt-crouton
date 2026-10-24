@@ -637,7 +637,7 @@ type CollabStructure = 'map' | 'array' | 'xmlFragment' | 'text'
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton`
+- **Extends**: `@fyit/crouton-core`
 - **Runtime**: `yjs`, `y-protocols`
 - **Dev**: `@cloudflare/workers-types`
 

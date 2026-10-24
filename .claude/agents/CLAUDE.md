@@ -169,7 +169,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   applied `delegate` to #456/#457 instead of spawning workers — both child runs were bot-rejected,
   no PR, no deploy.)
   **The one sanctioned exception — event-driven mode (`PIPELINE_MODE=event-driven`, the pi harness):**
-  pi-claude-cli can't drive an in-process `Agent` tree, so there the decomposer hands off by
+  the pi harness (claude-bridge provider) can't drive an in-process `Agent` tree, so there the decomposer hands off by
   **labeling** (`work-this` / `delegate-pi`) **via the Harness App token** (`GH_TOKEN`) and STOPS —
   a fresh single-use run works each child. That path is safe because the App token is actored as
   `nuxt-harness[bot]` — the **one allowed bot** whose adds cascade and pass the guard — so #457 stays

@@ -16,8 +16,6 @@ Fetch and manage collection data with automatic caching and reactivity.
 | `useCollection` | Simplified collection fetching (legacy pattern) | [Data](/api-reference/composables/data-composables#usecollection) |
 | `useCollectionItem` | Fetch and manage a single collection item | [Data](/api-reference/composables/data-composables#usecollectionitem) |
 | `useCollections` | Access all registered collections metadata | [Data](/api-reference/composables/data-composables#usecollections) |
-| `useCollectionProxy` | Create reactive proxy for collection operations | [Data](/api-reference/composables/data-composables#usecollectionproxy) |
-| `useExternalCollection` | Fetch data from external APIs | [Data](/api-reference/composables/data-composables#useexternalcollection) |
 
 ### Query Composables
 Fetch collection data with advanced query capabilities.
@@ -48,7 +46,6 @@ Build interactive data tables with sorting, filtering, and pagination.
 |------------|---------|----------|
 | `useTableColumns` | Define and configure table columns | [Table](/api-reference/composables/table-composables#usetablecolumns) |
 | `useTableData` | Manage table data with sorting and pagination | [Table](/api-reference/composables/table-composables#usetabledata) |
-| `useTableSearch` | Add search functionality to tables | [Table](/api-reference/composables/table-composables#usetablesearch) |
 
 ### Utility Composables
 Specialized helpers for translations, assets, formatting, and more.
@@ -59,11 +56,9 @@ Specialized helpers for translations, assets, formatting, and more.
 | `useEntityTranslations` | Handle entity-specific translations | [Utility](/api-reference/composables/utility-composables#useentitytranslations) |
 | `useAssetUpload` | Manage file uploads with progress tracking | [Utility](/api-reference/composables/utility-composables#useassetupload) |
 | `useTeamContext` | Multi-tenancy team context management | [Utility](/api-reference/composables/utility-composables#useteamcontext) |
-| `useUsers` | User management operations | [Utility](/api-reference/composables/utility-composables#useusers) |
 | `useCroutonError` | Centralized error handling | [Utility](/api-reference/composables/utility-composables#usecroutonerror) |
 | `useT` | Translation helper with collection context | [Utility](/api-reference/composables/utility-composables#uset) |
 | `useDependentFieldResolver` | Resolve dependent field values | [Utility](/api-reference/composables/utility-composables#usedependentfieldresolver) |
-| `useExpandableSlideover` | Manage expandable slideover state | [Utility](/api-reference/composables/utility-composables#useexpandableslideover) |
 
 ## Detailed Documentation
 

@@ -21,6 +21,7 @@ interface ScheduleRuleLocation {
  * 3. Date not in a blocked range, or slot not in blockedSlots → blockedDates
  */
 export function useScheduleRules(location: Ref<ScheduleRuleLocation | null | undefined>) {
+  const { t } = useT()
   // --- Field parsers ---
 
   const openDays = computed<number[] | null>(() => {
@@ -177,14 +178,14 @@ export function useScheduleRules(location: Ref<ScheduleRuleLocation | null | und
    * Returns null if date is available.
    */
   function getBlockedReason(date: Date | DateValue): string | null {
-    if (!isLocationOpenOnDate(date)) return 'Closed'
+    if (!isLocationOpenOnDate(date)) return t('bookings.calendar.closed')
 
     const dateKey = toDateKey(date)
     for (const blocked of blockedDates.value) {
       if (!blocked.startDate || !blocked.endDate) continue
       if (dateKey >= blocked.startDate && dateKey <= blocked.endDate) {
         if (!blocked.blockedSlots || blocked.blockedSlots.length === 0) {
-          return blocked.reason || 'Blocked'
+          return blocked.reason || t('bookings.calendar.blocked')
         }
       }
     }

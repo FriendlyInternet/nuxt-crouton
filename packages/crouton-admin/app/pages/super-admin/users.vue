@@ -11,7 +11,7 @@ definePageMeta({
 
 const { t } = useT()
 
-useSeoMeta({ title: 'Users - Super Admin' })
+useSeoMeta({ title: () => t('superAdmin.pageTitle', { page: t('superAdmin.users.title') }) })
 
 const search = ref('')
 const debouncedSearch = ref('')

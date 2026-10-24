@@ -15,6 +15,7 @@ import type { PasskeyInfo, AddPasskeyOptions } from './useAuth'
 import { requireAuthClient } from '../../types/auth-client'
 
 export function usePasskeys() {
+  const { t } = useT()
   const config = useAuthConfig()
   const { refresh } = useSession()
 
@@ -41,12 +42,12 @@ export function usePasskeys() {
       const result = await requireAuthClient().signIn.passkey()
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Passkey login failed')
+        throw new Error(result.error.message ?? t('auth.passkeyLoginFailed'))
       }
 
       await refresh()
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Passkey login failed'
+      error.value = e instanceof Error ? e.message : t('auth.passkeyLoginFailed')
       throw e
     } finally {
       loading.value = false
@@ -66,12 +67,12 @@ export function usePasskeys() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Passkey autofill failed')
+        throw new Error(result.error.message ?? t('auth.passkeyLoginFailed'))
       }
 
       await refresh()
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Passkey autofill failed'
+      error.value = e instanceof Error ? e.message : t('auth.passkeyLoginFailed')
       throw e
     } finally {
       loading.value = false
@@ -95,10 +96,10 @@ export function usePasskeys() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Add passkey failed')
+        throw new Error(result.error.message ?? t('account.passkey.failedToAddPasskey'))
       }
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Add passkey failed'
+      error.value = e instanceof Error ? e.message : t('account.passkey.failedToAddPasskey')
       throw e
     } finally {
       loading.value = false
@@ -116,17 +117,17 @@ export function usePasskeys() {
       const result = await requireAuthClient().passkey.listUserPasskeys()
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'List passkeys failed')
+        throw new Error(result.error.message ?? t('account.passkey.failedToLoadPasskeys'))
       }
 
       return (result.data ?? []).map((p: { id: string, name?: string, createdAt: string | Date, credentialID: string }) => ({
         id: p.id,
-        name: p.name ?? 'Passkey',
+        name: p.name ?? t('account.passkey.unnamed'),
         createdAt: new Date(p.createdAt),
         credentialId: p.credentialID
       }))
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'List passkeys failed'
+      error.value = e instanceof Error ? e.message : t('account.passkey.failedToLoadPasskeys')
       throw e
     } finally {
       loading.value = false
@@ -144,10 +145,10 @@ export function usePasskeys() {
       const result = await requireAuthClient().passkey.deletePasskey({ id })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Delete passkey failed')
+        throw new Error(result.error.message ?? t('account.passkey.failedToDeletePasskey'))
       }
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Delete passkey failed'
+      error.value = e instanceof Error ? e.message : t('account.passkey.failedToDeletePasskey')
       throw e
     } finally {
       loading.value = false
@@ -165,7 +166,7 @@ export function usePasskeys() {
       console.warn('[@crouton/auth] Passkey update not yet supported by Better Auth')
       throw new Error('Passkey update is not currently supported. Delete and re-add instead.')
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Update passkey failed'
+      error.value = e instanceof Error ? e.message : t('account.passkey.failedToUpdatePasskey')
       throw e
     } finally {
       loading.value = false

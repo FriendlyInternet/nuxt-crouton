@@ -16,6 +16,10 @@ export default defineNuxtConfig({
     name: 'crouton-assets'
   },
 
+  // The assets collection this package owns end to end (#2278):
+  // schema, queries, routes, list, composable.
+  extends: [join(currentDir, 'collections/assets')],
+
   // Enable blob storage for asset uploads
   // NuxtHub will merge this with the app's hub config
   hub: {

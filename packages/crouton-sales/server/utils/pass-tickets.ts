@@ -23,10 +23,8 @@ export const OUTSTANDING_DEFINITION = {
 } as const
 
 /**
- * The tables the outstanding predicate reads. INJECTED, not imported — they live
- * in the consuming app's generated layer (`~~/layers/sales/...`), which a package
- * unit test cannot resolve. Keeping them parameters is what makes this testable
- * at all (same reason as `handover.ts` / `per-product-totals.ts`).
+ * The tables the outstanding predicate reads. INJECTED, not imported, so a unit
+ * test can pass a throwaway in-memory schema (same as `per-product-totals.ts`).
  */
 export interface OutstandingOrderTables {
   orders: any

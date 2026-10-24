@@ -70,7 +70,7 @@ function handleOpenPanel() {
             {{ t('pages.blocks.typeLabels.fileDownload') }}
           </span>
           <!-- Action buttons -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"
@@ -107,7 +107,7 @@ function handleOpenPanel() {
             </svg>
             <div class="min-w-0 flex-1">
               <p class="text-sm font-medium text-gray-700 dark:text-gray-300 truncate">
-                {{ attrs.label || 'Download file' }}
+                {{ attrs.label || t('pages.blockRender.downloadFile') }}
               </p>
               <p v-if="attrs.fileName" class="text-xs text-gray-400 truncate">
                 {{ attrs.fileName }}

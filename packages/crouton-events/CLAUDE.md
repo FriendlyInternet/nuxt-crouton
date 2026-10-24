@@ -43,7 +43,7 @@ User Action → nuxt-crouton mutation → crouton:mutation hook
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-events'
   ],
   runtimeConfig: {
@@ -150,7 +150,7 @@ Query events with filters and export as JSON/CSV.
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton` (required)
+- **Extends**: `@fyit/crouton-core` (required)
 - **Peer deps**: `nuxt ^4.0.0`, `@nuxt/ui ^4.0.0`
 
 ## Storage Estimate

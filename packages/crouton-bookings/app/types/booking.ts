@@ -17,6 +17,10 @@ export interface EmailTriggerStatus {
   sentAt?: string | null
   /** For scheduled emails like reminders - when they will be sent */
   scheduledFor?: string | null
+  /** Why the latest attempt failed (provider message), when it did */
+  error?: string | null
+  /** When the latest send attempt happened */
+  attemptedAt?: string | null
 }
 
 /**
@@ -71,6 +75,8 @@ export interface LocationData {
   openDays?: number[] | string | null
   slotSchedule?: SlotSchedule | string | null
   blockedDates?: BlockedDateItem[] | string | null
+  /** Offer the built-in full day next to named slots (#2261) */
+  offerFullDay?: boolean | null
   // Inventory mode fields
   inventoryMode?: boolean
   quantity?: number

@@ -14,7 +14,7 @@
  * the model actually pinned in .claude/agents/<route>.md — so the "current" column can't
  * silently lie. (Pin-back/sync into the agent files is the NEXT step, not this skeleton.)
  */
-import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -26,7 +26,10 @@ const check = process.argv.includes('--check')
 
 const cfg = JSON.parse(readFileSync(SRC, 'utf8'))
 const tiers = cfg.tiers || {}
-const FULL = { haiku: 'claude-haiku-4-5', sonnet: 'claude-sonnet-5', opus: 'claude-opus-4-8' }
+// The full model ids come from the ONE model setting (#2161), so this registry can't
+// disagree with what the workflows actually run.
+const MODELS = JSON.parse(readFileSync(join(ROOT, '.claude/pipeline-models.json'), 'utf8'))
+const FULL = { haiku: MODELS.light, sonnet: MODELS.default, opus: MODELS.hard }
 const full = (short) => FULL[short] || short
 
 // Read the model actually pinned in an agent file (frontmatter `model:`), or null.
@@ -38,6 +41,27 @@ function agentModel(name) {
 }
 
 const drift = []
+
+// Drift guard 1 (#2161): routing.json's `pi` column must name the same models as the setting.
+const TIER_SETTING = { small: 'light', medium: 'default', large: 'hard' }
+for (const [tier, key] of Object.entries(TIER_SETTING)) {
+  const pi = tiers[tier]?.pi
+  if (pi && pi !== MODELS[key]) {
+    drift.push(`  • routing.json tiers.${tier}.pi is ${pi} but .claude/pipeline-models.json ${key} is ${MODELS[key]}`)
+  }
+}
+
+// Drift guard 2 (#2161): no workflow may hard-code a model — they read the setting through
+// scripts/resolve-pipeline-model.mjs. Comment lines are allowed to mention models.
+const WF = join(ROOT, '.github/workflows')
+const MODEL_LITERAL = /\bclaude-(?:opus|sonnet|haiku)-\d[\w-]*/
+for (const f of readdirSync(WF).filter((n) => /\.ya?ml$/.test(n))) {
+  readFileSync(join(WF, f), 'utf8').split('\n').forEach((line, i) => {
+    if (line.trim().startsWith('#')) return
+    const m = line.match(MODEL_LITERAL)
+    if (m) drift.push(`  • .github/workflows/${f}:${i + 1} hard-codes ${m[0]} — read it from .claude/pipeline-models.json instead`)
+  })
+}
 const rows = Object.entries(cfg.routes || {}).map(([name, r]) => {
   const t = tiers[r.tier] || {}
   const actual = agentModel(name)
@@ -99,7 +123,7 @@ if (check) {
     stale = true
   }
   if (drift.length) {
-    console.error('✗ routing.json drifts from agent frontmatter:\n' + drift.join('\n'))
+    console.error('✗ model drift (agent frontmatter / model setting / workflows):\n' + drift.join('\n'))
     stale = true
   }
   if (stale) process.exit(1)
@@ -107,5 +131,5 @@ if (check) {
 } else {
   writeFileSync(OUT, out)
   console.log(`✓ wrote ${OUT.replace(ROOT + '/', '')} (${rows.length} routes)`)
-  if (drift.length) console.warn('⚠ drift vs agent frontmatter:\n' + drift.join('\n'))
+  if (drift.length) console.warn('⚠ model drift (agent frontmatter / model setting / workflows):\n' + drift.join('\n'))
 }

@@ -16,6 +16,7 @@ const emit = defineEmits<{
 }>()
 
 const { members, loadMembers } = useTeam()
+const { t } = useT()
 
 // Load members on mount
 const loading = ref(true)
@@ -75,7 +76,7 @@ function onMemberSelected(userId: string) {
       :items="(memberItems as any[])"
       value-key="value"
       :loading="loading"
-      placeholder="Select a team member..."
+      :placeholder="t('pages.blockEditors.teamMemberPlaceholder')"
       searchable
       class="w-full"
       @update:model-value="onMemberSelected"

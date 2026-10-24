@@ -75,7 +75,7 @@ async function handleBookingChange() {
 </script>
 
 <template>
-  <div class="h-full p-4 flex flex-col gap-3">
+  <div class="h-full p-4 sm:p-6 flex flex-col gap-3">
     <!-- Impersonation banner -->
     <Transition
       enter-active-class="transition-all duration-300 ease-out"
@@ -128,7 +128,7 @@ async function handleBookingChange() {
         :settings="firstSettings"
         :loading="loading"
         title=""
-        :empty-message="isPreview ? t('bookings.admin.noBookingsForUser', { name: impersonatedUser?.name || 'this user' }) : t('bookings.admin.noBookingsForTeam')"
+        :empty-message="isPreview ? t('bookings.admin.noBookingsForUser', { name: impersonatedUser?.name || t('bookings.admin.thisUser') }) : t('bookings.admin.noBookingsForTeam')"
         @created="handleBookingChange"
         @updated="handleBookingChange"
       />

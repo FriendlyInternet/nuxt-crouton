@@ -72,16 +72,16 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi. Default claude-sonnet-5 on the Claude SUBSCRIPTION (provider=pi-claude-cli). glm-5.2 available via provider=zai if you want the GLM plan."
+        description: "Model for pi. Blank = the default in .claude/pipeline-models.json (#2161), on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
         required: false
-        default: "claude-sonnet-5"
+        default: ""
         type: string
       provider:
-        description: "pi provider. Default pi-claude-cli = Claude SUBSCRIPTION via the mini's `claude` login (#1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
+        description: "pi provider. Default claude-bridge = Claude SUBSCRIPTION via Claude Code + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275; replaced the silent pi-claude-cli; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
         required: false
-        default: "pi-claude-cli"
+        default: "claude-bridge"
         type: choice
-        options: ["pi-claude-cli", "zai", "anthropic"]
+        options: ["claude-bridge", "zai", "anthropic"]
   # PROMOTED past dispatch-only (#1017): a human applying the `delegate-pi` label starts a pi
   # run. We fire on EVERY labeled event but the job `if` gates to the exact `delegate-pi` label,
   # so a worker later adding `status:in-progress` does NOT re-fire (the claude flow's #535 lesson).
@@ -120,14 +120,14 @@ jobs:
       # ── PUSH PATH (#1004 piece 1) — mint a Harness App token so pi's pushes CASCADE ──
       # Same app as automerge-epic-subpr.yml. A GITHUB_TOKEN push would NOT re-trigger
       # downstream workflows (#572); an App-installation token does.
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
           token: ${{ steps.app-token.outputs.token }}   # writes the App token into the git remote → pushes cascade
@@ -158,7 +158,7 @@ jobs:
       # Contract: scripts/pipeline-loop-guard.test.mjs.
       - name: Gather claim facts
         id: claim-facts
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
@@ -190,7 +190,7 @@ jobs:
       # this step is I/O only. Contract: scripts/resume-decomposed.test.mjs.
       - name: Gather sub-issues
         id: subs
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
@@ -223,7 +223,7 @@ jobs:
 
       - name: Dispatch the open children
         if: ${{ steps.resume.outputs.resume == '1' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           DISPATCH: ${{ steps.resume.outputs.dispatch }}
           REASON: ${{ steps.resume.outputs.reason }}
@@ -247,19 +247,19 @@ jobs:
               `🌳 **Already decomposed — resumed the tree instead of re-planning it.**\n\n`
               + (done.length ? `Dispatched: ${done.join(' · ')}\n\n` : `Nothing dispatchable right now — every open child is waiting on a sibling.\n\n`)
               + `_${process.env.REASON}_\n\n`
-              + `<sub>🤖 pi.dev harness (CI · mac-mini) · resume-decomposed #2048 · <a href="${runUrl}">run log</a></sub>` })
+              + `<sub>🤖 pi.dev harness (CI) · resume-decomposed #2048 · <a href="${runUrl}">run log</a></sub>` })
             core.info(`Resumed #${issue_number}: ${done.join(', ') || '(all blocked)'}`)
 
       # Everything below is the CLASSIFY path — skipped entirely once the tree was
       # resumed (#2048), so a decomposed epic costs a few API calls instead of an
       # install, a package warm and an eleven-minute pi run that cannot succeed.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         if: ${{ steps.resume.outputs.resume != '1' }}
         with:
           # per-job dest — the default ~/setup-pnpm collides between the two
           # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
           dest: ${{ runner.temp }}/setup-pnpm
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         if: ${{ steps.resume.outputs.resume != '1' }}
         with:
           node-version: 22
@@ -267,6 +267,16 @@ jobs:
       - name: Install
         if: ${{ steps.resume.outputs.resume != '1' }}
         run: pnpm install --frozen-lockfile
+
+      # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
+      # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
+      # proves the token answers + the provider registers BEFORE the pi run — a dead token must fail here in seconds, not
+      # surface 30 minutes later as an empty plan.
+      - name: Set up pi + Claude CLI (subscription)
+        if: ${{ steps.resume.outputs.resume != '1' }}
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
 
       # Warm @fyit/* dist so the agent's `crouton init`/generate/migrate doesn't cold-build
       # ~30 packages one-at-a-time mid-run (the #1213/#1247 tax — ~15-20 min). Content-addressed
@@ -280,43 +290,41 @@ jobs:
       - id: t0
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
 
-      # Resolve the pipeline's models from the ONE editable knob (#2161): .claude/pipeline-
-      # models.json (read via scripts/resolve-pipeline-model.mjs). Switch a model there — no
-      # workflow edit. `|| echo <fallback>` keeps the current defaults visible if the config is
-      # missing/broken, so PI_MODEL is never empty.
+      # Resolve the pipeline's models from the ONE setting (#2161): .claude/pipeline-models.json,
+      # read via scripts/resolve-pipeline-model.mjs. Switch a model there — no workflow edit.
+      # No fallback literal: it had to be bumped by hand on every model change and would
+      # silently run a stale model; a broken config now fails this step loudly instead.
       - id: model
         run: |
-          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default 2>/dev/null || echo claude-sonnet-5)"
-          HARD="$(node scripts/resolve-pipeline-model.mjs hard 2>/dev/null || echo claude-opus-4-8)"
+          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default)"
+          HARD="$(node scripts/resolve-pipeline-model.mjs hard)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
           echo "hard=$HARD" >> "$GITHUB_OUTPUT"
           echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
-      # the worker PR) act as the Harness App and cascade. ANTHROPIC_API_KEY = the
-      # funded metered key (NOT a subscription — subscription OAuth must not back CI).
+      # the worker PR) act as the Harness App and cascade.
       - id: pi
         if: ${{ steps.resume.outputs.resume != '1' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
-          # Everything on the Claude SUBSCRIPTION (#1669). delegate-hard still escalates,
-          # but now by MODEL (default → hard) on the same subscription provider — no metered
-          # lane. Headless subscription auth: the mini's runner runs `claude` in a session that
-          # can't reach the macOS Keychain, so CLAUDE_CODE_OAUTH_TOKEN (claude setup-token, 1y)
-          # authenticates the CLI from env instead of the keychain login (#2119).
+          # Everything on the Claude SUBSCRIPTION (#1669, owner's instruction). delegate-hard
+          # still escalates, but by MODEL (default → hard) on the same provider — no metered
+          # lane. Headless subscription auth on a GitHub-hosted runner (#2275):
+          # CLAUDE_CODE_OAUTH_TOKEN (claude setup-token, 1y) authenticates the Claude Code child that
+          # claude-bridge spawns; the CLI is installed + preflighted by setup-pi (#2119).
           # #2161: both models come from the resolve step (.claude/pipeline-models.json), not a
           # hardcoded literal — switch a model there, not here. delegate-hard picks `hard`.
           PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
-          PI_PROVIDER: ${{ inputs.provider || 'pi-claude-cli' }}
+          PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           # PIPELINE_MODE=event-driven is inherited from the JOB-level env (above). The pi prompt
           # branches on it to the PLAN-ONLY directive (#1696); the apply step gates on it too.
         run: |
           set -uo pipefail
-          command -v pi >/dev/null 2>&1 || npm i -g @earendil-works/pi-coding-agent
           # The Harness App identity for any commits pi makes (so they're attributable
           # and not a masquerading human — the #862 lesson).
           git config user.name  "nuxt-harness[bot]"
@@ -482,7 +490,7 @@ jobs:
       # silence after comment-dispatch's "🟢 On it" is its own mystery — just a calm one.
       - name: Not picked up — the issue is already claimed
         if: ${{ always() && steps.claim.outcome == 'failure' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           CLAIM_REASON: ${{ steps.claim.outputs.claim_reason }}
@@ -502,7 +510,7 @@ jobs:
         # deliverable, and its comment lands BEFORE t0 so the since-t0 scan
         # would never see it and would false-fail a successful run.
         if: ${{ always() && steps.claim.outcome != 'failure' && steps.resume.outputs.resume != '1' }}
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}
           CLAUDE_CONCLUSION: ${{ steps.pi.outputs.conclusion }}
@@ -780,7 +788,7 @@ jobs:
 
       - name: Upload pi telemetry artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: pi-telemetry-${{ github.run_id }}
           path: pi-telemetry-out/

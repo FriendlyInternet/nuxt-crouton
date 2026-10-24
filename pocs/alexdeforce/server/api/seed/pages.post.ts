@@ -15,7 +15,7 @@ import { eq } from 'drizzle-orm'
 import { readdirSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { organization, member } from '~~/server/db/schema'
-import { pagesPages } from '~~/layers/pages/collections/pages/server/database/schema'
+import { pagesPages } from '@fyit/crouton-pages/collections/pages/server/database/schema'
 
 const SOURCE_DIR = '/Users/pmcp/Projects/alexdeforce_v2/content/pages'
 

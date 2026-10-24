@@ -5,7 +5,7 @@
 // deterministic, runtime-free surface: a schema-valid record parses, and an
 // invalid one is rejected. This is the unit-level complement to the e2e fixture
 // smoke (which owns boot + CRUD) — no Nuxt/DB runtime, no mocks, just zod, so it
-// stays green for any schema. On by default; suppressed by `--no-tests`.
+// stays green for any schema. Opt-in via `--tests` (off by default, #2286).
 //
 // The sample is derived at generation time from the same field metadata the
 // schema is built from, so it must mirror the schema's required-field rules
@@ -14,13 +14,10 @@
 // `.min(1)` on an array, dates are `z.coerce.date()` (accept an ISO string),
 // and translatable fields are validated under `translations.<defaultLocale>`.
 
+import { AUTO_GENERATED_FIELDS, SYSTEM_FIELD_GROUPS } from '../utils/system-fields.ts'
 // Auto-generated / system columns and hierarchy columns are injected by the
 // runtime, not part of the create/validate schema — never sampled here.
-export const AUTO_FIELDS = new Set([
-  'id', 'teamId', 'owner',
-  'createdAt', 'updatedAt', 'createdBy', 'updatedBy',
-  'parentId', 'path', 'depth', 'order',
-])
+export const AUTO_FIELDS = new Set([...AUTO_GENERATED_FIELDS, ...SYSTEM_FIELD_GROUPS.hierarchy])
 
 function isDependentField(field: Record<string, any>): boolean {
   return Boolean((field.meta?.dependsOn && field.meta?.dependsOnCollection) || field.meta?.displayAs === 'slotButtonGroup')
@@ -112,7 +109,7 @@ export function buildCollectionSample(data: Record<string, any>, config: Record<
 /**
  * Generate the source of a `<Collection>.test.ts` schema-smoke test.
  * Returns the file content as a string (the orchestrator decides whether to
- * write it, honouring `--no-tests`).
+ * write it, honouring `--tests`).
  */
 export function generateCollectionTest(data: Record<string, any>, config: Record<string, any> | null = null): string {
   const { layer, plural, pascalCase, pascalCasePlural, layerPascalCase, layerCamelCase } = data
@@ -148,7 +145,7 @@ export function generateCollectionTest(data: Record<string, any>, config: Record
  *
  * Schema-smoke test (#785): asserts the generated Zod schema accepts a valid
  * record and rejects an invalid one. Runtime-free (zod only) — the e2e fixture
- * smoke owns boot + CRUD. Regenerate with --force; suppress with --no-tests.
+ * smoke owns boot + CRUD. Regenerate with --force --tests.
  */
 `
 

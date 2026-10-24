@@ -27,8 +27,7 @@ export async function validateConfig(config: Record<string, any> | null): Promis
   // A freshly scaffolded app has no schema/collections yet — that's the
   // documented next step, not a validation failure. Route it to a neutral
   // success message instead of the "Validation failed" ❌ path (#1741).
-  const isEmptyScaffold = !config.schemaPath
-    && Array.isArray(config.collections) && config.collections.length === 0
+  const isEmptyScaffold = Array.isArray(config.collections) && config.collections.length === 0
     && (!config.targets || config.targets.length === 0)
   if (isEmptyScaffold) {
     console.log('  ✓ Scaffolded — add a schema to `schemas/`, list it in `crouton.config.js`, then run `crouton config`')
@@ -56,30 +55,8 @@ export async function validateConfig(config: Record<string, any> | null): Promis
         errors.push(`❌ Schema file not found for collection '${col.name}': ${col.fieldsFile}`)
       }
     }
-  } else if (config.schemaPath) {
-    // Simple format with single schema
-    const schemaPath = path.resolve(config.schemaPath)
-    try {
-      const stats = await fsp.stat(schemaPath)
-      if (stats.isDirectory()) {
-        errors.push(
-          `schemaPath '${config.schemaPath}' is a directory, not a file.\n`
-          + `   When using targets[], use the enhanced format with a collections[] array\n`
-          + `   where each collection specifies its own fieldsFile:\n\n`
-          + `   collections: [\n`
-          + `     { name: 'products', fieldsFile: '${config.schemaPath}/products.json' },\n`
-          + `     { name: 'categories', fieldsFile: '${config.schemaPath}/categories.json' },\n`
-          + `   ],\n`
-          + `   targets: [...]\n`
-        )
-      } else {
-        console.log(`✓ Schema file found: ${config.schemaPath}`)
-      }
-    } catch {
-      errors.push(`Schema file not found: ${config.schemaPath}`)
-    }
   } else {
-    errors.push('No schema configuration found (need either schemaPath or collections array)')
+    errors.push('No collections[] in configuration (the old schemaPath format was removed in #2290)')
   }
 
   // Validate targets
@@ -100,9 +77,9 @@ export async function validateConfig(config: Record<string, any> | null): Promis
     console.log(`  ✓ Found ${config.targets.length} layers, ${totalCollections} collections`)
   }
 
-  // Validate dialect
+  // Validate dialect — a typo is a config bug, not something to default around (#1472)
   if (config.dialect && !['pg', 'sqlite'].includes(config.dialect)) {
-    warnings.push(`Unknown dialect '${config.dialect}', defaulting to 'pg'`)
+    errors.push(`Unknown dialect '${config.dialect}' — use 'sqlite' (the default) or 'pg'`)
   }
 
   // Check if collections in targets match defined collections (for enhanced format)

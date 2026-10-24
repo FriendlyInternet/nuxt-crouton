@@ -41,6 +41,7 @@ const editorViewComponent = computed(() => {
 })
 
 const { t } = useT()
+const { blockName, blockDescription } = useBlockI18n()
 const innerRef = ref<HTMLElement | null>(null)
 
 function findEditorId(): string | undefined {
@@ -91,9 +92,9 @@ function handleOpenPanel() {
         <div class="p-3">
           <div class="flex items-center justify-between mb-2">
             <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-              {{ blockDef.name }}
+              {{ blockName(blockDef) }}
             </span>
-            <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+            <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
               <UButton
                 color="neutral"
                 variant="ghost"
@@ -119,7 +120,7 @@ function handleOpenPanel() {
             </div>
           </div>
           <div class="bg-gray-50/50 dark:bg-gray-800/30 rounded-lg p-4 border border-gray-100 dark:border-gray-700/50">
-            <p class="text-sm text-muted">{{ blockDef.description }}</p>
+            <p class="text-sm text-muted">{{ blockDescription(blockDef) }}</p>
           </div>
         </div>
       </div>
@@ -129,7 +130,7 @@ function handleOpenPanel() {
         v-else
         class="p-3 rounded bg-warning/10 border border-warning/20"
       >
-        <p class="text-sm text-warning">Unknown addon block: {{ node.type.name }}</p>
+        <p class="text-sm text-warning">{{ t('pages.blockViews.unknownAddon', { name: node.type.name }) }}</p>
       </div>
     </div>
   </NodeViewWrapper>

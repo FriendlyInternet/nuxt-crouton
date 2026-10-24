@@ -36,6 +36,34 @@ const { t } = useT()
 const { currentTeam, updateTeam, isOwner, isAdmin } = useTeam()
 const notify = useNotify()
 
+// Logo upload (#2259) — uploads straight away, saved with "Save Changes"
+const isUploadingLogo = ref(false)
+const logoPreview = computed({
+  get: () => state.logo || undefined,
+  set: () => {} // preview follows state.logo; uploads set it below
+})
+
+async function handleLogoSelected(file: File | null) {
+  if (!file) {
+    state.logo = ''
+    return
+  }
+  isUploadingLogo.value = true
+  try {
+    const formData = new FormData()
+    formData.append('file', file)
+    // /api/upload-image returns the blob pathname; images are served at /images/<pathname>
+    const result = await $fetch<{ pathname: string }>('/api/upload-image', { method: 'POST', body: formData })
+    if (result?.pathname) state.logo = `/images/${result.pathname}`
+  }
+  catch (e: unknown) {
+    notify.error(t('common.error'), { description: e instanceof Error ? e.message : String(e) })
+  }
+  finally {
+    isUploadingLogo.value = false
+  }
+}
+
 // Form state (populated from current team)
 const state = reactive({
   name: '',
@@ -84,7 +112,8 @@ function validate(formState: Partial<typeof state>): FormError[] {
     errors.push({ name: 'slug', message: t('teams.slugValidation') })
   }
 
-  if (formState.logo && !/^https?:\/\//.test(formState.logo)) {
+  // An uploaded logo is served from /images/…; a pasted one must be http(s)
+  if (formState.logo && !/^(https?:\/\/|\/images\/)/.test(formState.logo)) {
     errors.push({ name: 'logo', message: t('teams.logoInvalidUrl') })
   }
 
@@ -148,6 +177,8 @@ function resetForm() {
       <UAvatar
         v-if="state.logo"
         :src="state.logo"
+        :ui="{ image: 'object-contain' }"
+        :as="{ img: 'img' }"
         :alt="state.name"
         size="xl"
       />
@@ -186,7 +217,7 @@ function resetForm() {
             {{ t('teams.teamNamePlaceholder') }}
           </p>
         </div>
-        <UFormField name="name" class="flex items-start">
+        <UFormField name="name" class="w-full">
           <UInput
             v-model="state.name"
             :placeholder="t('teams.teamNamePlaceholder')"
@@ -207,7 +238,7 @@ function resetForm() {
             {{ t('teams.urlSlugHint') }}
           </p>
         </div>
-        <UFormField name="slug" class="flex items-start">
+        <UFormField name="slug" class="w-full">
           <UInput
             v-model="state.slug"
             :placeholder="$t('teams.yourSlug')"
@@ -218,24 +249,27 @@ function resetForm() {
         </UFormField>
       </div>
 
-      <!-- Logo URL -->
+      <!-- Logo -->
       <div class="grid grid-cols-1 gap-4 py-6 sm:grid-cols-2 sm:gap-8">
         <div>
           <p class="font-medium text-sm">
-            {{ t('teams.logoUrl') }}
+            {{ t('teams.logo') }}
           </p>
           <p class="text-sm text-muted mt-0.5">
-            {{ t('teams.logoUrlHint') }}
+            {{ t('teams.logoHint') }}
           </p>
         </div>
-        <UFormField name="logo" class="flex items-start">
-          <UInput
-            v-model="state.logo"
-            placeholder="https://example.com/logo.png"
-            icon="i-lucide-image"
-            :disabled="isLoading || !isAdmin"
-            class="w-full"
+        <UFormField name="logo" class="w-full">
+          <CroutonImageUpload
+            v-model="logoPreview"
+            fit="contain"
+            :disabled="isLoading || isUploadingLogo || !isAdmin"
+            class="w-full max-w-xs"
+            @file-selected="handleLogoSelected"
           />
+          <p v-if="isUploadingLogo" class="text-xs text-muted mt-2">
+            {{ t('teams.logoUploading') }}
+          </p>
         </UFormField>
       </div>
 

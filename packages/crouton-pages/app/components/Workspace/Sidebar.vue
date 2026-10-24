@@ -298,7 +298,7 @@ defineExpose({
         :variant="reorderMode.isActive.value ? undefined : 'ghost'"
         icon="i-lucide-arrow-up-down"
         :disabled="pending"
-        aria-label="Reorder pages"
+        :aria-label="t('pages.sidebar.reorder')"
         :aria-pressed="reorderMode.isActive.value"
         @click="toggleReorderMode"
       />

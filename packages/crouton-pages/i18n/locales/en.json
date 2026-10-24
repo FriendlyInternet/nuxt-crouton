@@ -16,7 +16,8 @@
         "description": "The site footer, composed from blocks. One per site; shown on every page."
       },
       "collectionDerived": {
-        "description": "Publishes items from this collection as standalone pages."
+        "description": "Publishes items from this collection as standalone pages.",
+        "name": "{name} Page"
       }
     },
     "workspace": {
@@ -25,7 +26,8 @@
       "emptyDescription": "Choose a page from the sidebar to edit, or create a new one.",
       "keyboardShortcuts": "Keyboard shortcuts",
       "newPage": "New page",
-      "search": "Search"
+      "search": "Search",
+      "selectPageToEdit": "Select a page to edit"
     },
     "notFound": "Page not found",
     "notFoundDescription": "The page you are looking for does not exist.",
@@ -96,7 +98,10 @@
     "nav": {
       "menu": "Menu",
       "theme": "Theme",
-      "signOut": "Sign out"
+      "signOut": "Sign out",
+      "openMenu": "Open navigation menu",
+      "adminMenu": "Admin menu",
+      "user": "User"
     },
     "collection": {
       "itemUnavailable": "Item Unavailable",
@@ -188,7 +193,16 @@
       "blocks": "blocks",
       "tapToEdit": "Tap to edit",
       "seoGenerate": "Generate with AI",
-      "seoGenerateFailed": "Could not generate a description"
+      "seoGenerateFailed": "Could not generate a description",
+      "titlePlaceholder": "Untitled page",
+      "slugPlaceholder": "page-url-slug",
+      "seoTitlePlaceholder": "Defaults to the page title",
+      "seoDescriptionPlaceholder": "One-line summary for search & shares",
+      "fullscreen": "Fullscreen",
+      "editingFullscreen": "Editing in fullscreen…",
+      "blockPlaceholder": "Type / to insert a block...",
+      "item": "Item",
+      "anonymous": "Anonymous"
     },
     "sidebar": {
       "drafts": "Drafts",
@@ -196,7 +210,8 @@
       "createFirst": "Create first page",
       "changes": "{count} change | {count} changes",
       "discard": "Discard",
-      "publish": "Publish"
+      "publish": "Publish",
+      "reorder": "Reorder pages"
     },
     "seo": {
       "pageTitle": "Page Title",
@@ -229,7 +244,9 @@
         "fileDownload": "File Download",
         "video": "Video",
         "logos": "Logos",
-        "image": "Image"
+        "image": "Image",
+        "cta": "CTA",
+        "cards": "Cards"
       },
       "editBlock": "Edit block properties",
       "deleteBlock": "Delete block",
@@ -359,11 +376,6 @@
         "viewportDesktop": "Desktop",
         "notSecurityNotice": "A hidden block is still present in the page source — this controls what is shown, not what is accessible. For content that must stay private, set the visibility of the page itself."
       }
-    },
-    "fieldGroups": {
-      "info": "Info",
-      "extra": "Extra",
-      "content": "Content"
     },
     "blockLibrary": {
       "hero": {
@@ -963,6 +975,100 @@
             }
           }
         }
+      },
+      "pane": {
+        "name": "Pane Layout",
+        "description": "A resizable, nestable pane layout composed from registered blocks"
+      },
+      "map": {
+        "name": "Map",
+        "description": "Embed an interactive map with a location pin",
+        "fields": {
+          "address": {
+            "label": "Place name",
+            "description": "Display label for the location (for reference only)"
+          },
+          "lat": {
+            "label": "Latitude",
+            "description": "Center latitude (e.g. 37.7749)"
+          },
+          "lng": {
+            "label": "Longitude",
+            "description": "Center longitude (e.g. -122.4194)"
+          },
+          "zoom": {
+            "label": "Zoom",
+            "options": {
+              "8": "Country (8)",
+              "10": "Region (10)",
+              "12": "City (12)",
+              "14": "Neighbourhood (14)",
+              "16": "Street (16)"
+            }
+          },
+          "style": {
+            "label": "Map style",
+            "options": {
+              "streets": "Streets",
+              "light": "Light",
+              "dark": "Dark",
+              "satellite": "Satellite",
+              "outdoors": "Outdoors"
+            }
+          },
+          "height": {
+            "label": "Height"
+          },
+          "markerLabel": {
+            "label": "Marker popup",
+            "description": "Text shown in the popup when the pin is clicked"
+          }
+        }
+      },
+      "collectionMap": {
+        "name": "Collection Map",
+        "description": "Show collection items as markers on an interactive map",
+        "fields": {
+          "collection": {
+            "label": "Collection",
+            "description": "Select a collection with location data"
+          },
+          "title": {
+            "label": "Title",
+            "description": "Optional heading above the map"
+          },
+          "coordinateField": {
+            "label": "Coordinate field",
+            "description": "Override the auto-detected coordinate field name"
+          },
+          "labelField": {
+            "label": "Label field",
+            "description": "Field to use for marker popup (uses title field if empty)"
+          },
+          "style": {
+            "label": "Map style",
+            "options": {
+              "streets": "Streets",
+              "light": "Light",
+              "dark": "Dark",
+              "satellite": "Satellite",
+              "outdoors": "Outdoors"
+            }
+          },
+          "zoom": {
+            "label": "Fallback zoom",
+            "options": {
+              "8": "Country (8)",
+              "10": "Region (10)",
+              "12": "City (12)",
+              "14": "Neighbourhood (14)",
+              "16": "Street (16)"
+            }
+          },
+          "height": {
+            "label": "Height"
+          }
+        }
       }
     },
     "scopedGate": {
@@ -977,6 +1083,77 @@
       "locked": "Too many attempts — try again later",
       "exhausted": "This access code is no longer available",
       "guestName": "Guest"
+    },
+    "paneBlock": {
+      "invalid": "This pane layout could not be rendered."
+    },
+    "blockViews": {
+      "moreCount": "+{count} more",
+      "noButtons": "No buttons — double-click to add",
+      "noCards": "No cards yet",
+      "noContact": "No contact set",
+      "loadingMember": "Loading member...",
+      "noQuestions": "No questions yet",
+      "noImages": "No images yet — double-click to add",
+      "noTitle": "No title set",
+      "noUrl": "No URL",
+      "noStats": "No stats yet",
+      "unknownAddon": "Unknown addon block: {name}",
+      "heroImage": "Hero image",
+      "heroTitle": "Hero Title",
+      "sectionTitle": "Section Title",
+      "leftColumn": "Left column",
+      "rightColumn": "Right column"
+    },
+    "blockRender": {
+      "noImageTitle": "No image configured",
+      "noImageDescription": "Edit this block to add an image.",
+      "noVideoTitle": "No video configured",
+      "noVideoDescription": "Edit this block to add a video.",
+      "noButtonsTitle": "No buttons configured",
+      "noButtonsDescription": "Edit this block to add buttons.",
+      "noUrlTitle": "No URL configured",
+      "noUrlDescription": "Edit this block to enter an embeddable URL.",
+      "noFormUrlTitle": "No form URL configured",
+      "noFormUrlDescription": "Edit this block to enter a subscribe endpoint URL.",
+      "noFileTitle": "No file configured",
+      "noFileDescription": "Edit this block to add a file.",
+      "subscribed": "Thanks for subscribing!",
+      "emailPlaceholder": "Enter your email",
+      "subscribe": "Subscribe",
+      "download": "Download",
+      "button": "Button",
+      "downloadFile": "Download file",
+      "collectionNotFound": "Collection \"{name}\" not found",
+      "loading": "Loading...",
+      "noContactInfo": "No contact information",
+      "noImages": "No images added yet"
+    },
+    "blockEditors": {
+      "statN": "Stat {n}",
+      "newStat": "New Stat",
+      "addStat": "Add Stat",
+      "value": "Value",
+      "valuePlaceholder": "e.g. 10000",
+      "label": "Label",
+      "labelPlaceholder": "e.g. Happy Customers",
+      "prefix": "Prefix",
+      "prefixPlaceholder": "e.g. $",
+      "suffix": "Suffix",
+      "suffixPlaceholder": "e.g. %, +, /7",
+      "imageN": "Image {n}",
+      "altPlaceholder": "Alt text (optional)",
+      "addImage": "Add Image",
+      "teamMemberPlaceholder": "Select a team member...",
+      "imageUrlPlaceholder": "https://example.com/image.jpg or /images/...",
+      "videoUrlPlaceholder": "https://example.com/video.mp4 or /images/...",
+      "optionalLinkPlaceholder": "https://example.com (optional link)",
+      "cropImage": "Crop Image"
+    },
+    "collections": {
+      "pages": {
+        "title": "Pages"
+      }
     }
   },
   "common": {

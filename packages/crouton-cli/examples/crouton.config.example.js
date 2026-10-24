@@ -17,34 +17,19 @@
 
 export default {
   // ============================================================
-  // FEATURE FLAGS (Unified Config)
+  // PACKAGE CONFIGURATION (not a switch)
   // ============================================================
-  // Which crouton packages to enable.
+  // Which crouton packages this app uses is decided by `extends` in
+  // nuxt.config.ts (#2286). `crouton config` merges a package's collections
+  // and runs its generator hooks when the app extends it — nothing here turns
+  // a package on. @fyit/crouton-core already bundles auth, admin and i18n;
+  // don't list those in extends separately (duplicate layer loading).
   //
-  // IMPORTANT: @fyit/crouton-core BUNDLES these packages automatically:
-  //   - @fyit/crouton-auth  (Better Auth with teams)
-  //   - @fyit/crouton-admin (Admin dashboard)
-  //   - @fyit/crouton-i18n  (Multi-language support)
-  //
-  // DO NOT add auth, admin, or i18n to your nuxt.config.ts extends array
-  // separately - they are included via crouton-core. Adding them separately
-  // causes duplicate layer loading and SSR errors.
-  //
-  // Optional features (disabled by default):
+  // `features.<alias>` only holds a package's prompted configuration, written
+  // by `crouton config` when the package's manifest asks questions:
   features: {
-    editor: true,     // TipTap rich text editor
-    pages: true,      // CMS pages system
-    // bookings: true // Booking system
-    // sales: true    // Point of Sale
-    // email: true    // Email with Resend
-    // assets: true   // Media library
-    // events: true   // Audit trail
-    // collab: true   // Real-time collaboration
-
-    // AI/LLM integration - supports boolean or object config
-    // ai: true,  // Uses OpenAI gpt-4o-mini by default
-    // ai: { defaultModel: 'claude-sonnet-4-20250514' },  // Use Anthropic Claude
-    // ai: { defaultModel: 'gpt-4o' },  // Use specific OpenAI model
+    // bookings: { config: { email: { enabled: true } } },
+    // ai: { defaultModel: 'claude-sonnet-4-20250514' },  // read by @fyit/crouton at runtime
   },
 
   // ============================================================
@@ -77,9 +62,9 @@ export default {
     {
       name: 'products', // Collection name (plural, kebab-case recommended)
       fieldsFile: './schemas/products.json', // Path to JSON schema file
-      // tests: false // Skip the per-collection tests for this collection — the
-      //              // schema-smoke (#785) + the API route handler test (#791);
-      //              // both emitted by default, equivalent to the global --no-tests flag
+      // tests: true // Also emit the per-collection tests for this collection — the
+      //             // schema-smoke (#785) + the API route handler test (#791);
+      //             // off by default (#2286), equivalent to the global --tests flag
     },
 
     // Collection with hierarchy support (tree structure)
@@ -132,7 +117,7 @@ export default {
     },
 
     // Publishable collection (auto-registers as page type in crouton-pages)
-    // Requires: features.pages enabled and @fyit/crouton-pages installed
+    // Requires: @fyit/crouton-pages in nuxt.config.ts extends
     // Items can be published as standalone pages with URLs, SEO, and status
     {
       name: 'bikes',

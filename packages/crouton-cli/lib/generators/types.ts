@@ -1,4 +1,5 @@
 // Generator for TypeScript types
+import { SYSTEM_FIELD_GROUPS, metadataFields as systemMetadataFields } from '../utils/system-fields.ts'
 import { toCase } from '../utils/helpers.ts'
 
 /**
@@ -124,10 +125,7 @@ export function generateTypes(data: Record<string, any>, config: Record<string, 
     : ''
 
   // Build the omit list for New${prefixedPascalCase} type
-  const omitFields = ['id']
-  if (useMetadata) {
-    omitFields.push('createdAt', 'updatedAt', 'createdBy', 'updatedBy')
-  }
+  const omitFields = [...SYSTEM_FIELD_GROUPS.id, ...systemMetadataFields(useMetadata)]
   const omitList = omitFields.map(f => `'${f}'`).join(' | ')
 
   // Generate AI context header

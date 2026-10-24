@@ -31,7 +31,7 @@ const providerLabel = computed(() => {
   if (url.includes('figma.com')) return 'Figma'
   if (attrs.value.provider === 'youtube') return 'YouTube'
   if (attrs.value.provider === 'figma') return 'Figma'
-  return 'Embed'
+  return t('pages.blockLibrary.embed.name')
 })
 
 const truncatedUrl = computed(() => {
@@ -82,7 +82,7 @@ function handleOpenPanel() {
             {{ providerLabel }}
           </span>
           <!-- Action buttons -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"

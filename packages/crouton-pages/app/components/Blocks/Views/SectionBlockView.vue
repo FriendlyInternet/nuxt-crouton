@@ -57,10 +57,10 @@ function handleOpenPanel() {
         <!-- Block Header -->
         <div class="flex items-center justify-between mb-2">
           <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-            Section
+            {{ t('pages.blockLibrary.section.name') }}
           </span>
           <!-- Action buttons -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"
@@ -92,7 +92,7 @@ function handleOpenPanel() {
             {{ attrs.headline }}
           </p>
           <h3 class="text-base font-bold text-gray-900 dark:text-white mb-1">
-            {{ attrs.title || 'Section Title' }}
+            {{ attrs.title || t('pages.blockViews.sectionTitle') }}
           </h3>
           <p v-if="attrs.description" class="text-sm text-gray-500 dark:text-gray-400 mb-2 line-clamp-2">
             {{ attrs.description }}
@@ -106,7 +106,7 @@ function handleOpenPanel() {
               {{ feature.title }}
             </span>
             <span v-if="attrs.features.length > 4" class="text-xs text-gray-400">
-              +{{ attrs.features.length - 4 }} more
+              {{ t('pages.blockViews.moreCount', { count: attrs.features.length - 4 }) }}
             </span>
           </div>
         </div>

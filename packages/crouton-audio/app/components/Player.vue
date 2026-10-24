@@ -79,7 +79,7 @@ defineExpose({
       <div
         ref="waveformRef"
         class="h-full min-h-24"
-        :class="{ 'opacity-0': loadingProgress === 0 }"
+        :class="{ 'opacity-0': player.loadingProgress.value === 0 }"
       />
 
       <!-- Loading overlay -->

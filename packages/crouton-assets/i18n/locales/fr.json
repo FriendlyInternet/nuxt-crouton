@@ -31,7 +31,16 @@
       "noResults": "Aucun asset ne correspond à votre filtre",
       "empty": "Aucun asset pour le moment",
       "select": "Sélectionner",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "clearSelection": "Effacer la sélection",
+      "assetCount": "{count} asset | {count} assets"
+    }
+  },
+  "crouton": {
+    "collections": {
+      "assets": {
+        "title": "Médias"
+      }
     }
   }
 }

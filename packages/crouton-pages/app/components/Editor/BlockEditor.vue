@@ -32,7 +32,6 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  placeholder: 'Type / to insert a block...',
   editable: true
 })
 
@@ -154,7 +153,7 @@ defineExpose({
   <CroutonEditorBlocks
     ref="editorBlocksRef"
     v-model="content"
-    :placeholder="placeholder"
+    :placeholder="placeholder ?? t('pages.editor.blockPlaceholder')"
     :editable="editable"
     :extensions="pageBlockExtensions"
     :suggestion-items="blockSuggestionItems"

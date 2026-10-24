@@ -10,6 +10,26 @@ export default defineCroutonManifest({
   aiHint: 'use when app has media uploads or file management',
   dependencies: [],
 
+  layer: {
+    name: 'crouton',
+    editable: false,
+    reason: 'The table is croutonAssets (crouton_assets), shared by every app that extends this package.',
+  },
+
+  // The collection below ships from this package (collections/assets), end to end (#2278).
+  // The CLI refuses to generate it into an app; `collections` stays as the
+  // package's self-description for AI hints and docs.
+  ownsCollections: true,
+
+  collections: [
+    {
+      name: 'asset',
+      tableName: 'croutonAssets',
+      description: 'Media library: uploaded files in blob storage with alt text and dimensions',
+      schemaPath: './assets-schema.json',
+    },
+  ],
+
   // Registers as 'assets' app — detectable via useCroutonApps().hasApp('assets')
   croutonApp: {
     id: 'assets',

@@ -27,7 +27,7 @@ describe('writeDefaultLayout', () => {
     const dir = makeDir()
     const r = await writeDefaultLayout({
       cwd: dir,
-      features: { bookings: true },
+      packages: ['crouton-bookings'],
       allCollections: [{ name: 'booking', layer: 'bookings' }],
     })
     expect(r.written).toBe(true)
@@ -49,7 +49,7 @@ describe('writeDefaultLayout', () => {
     const dir = makeDir()
     const r = await writeDefaultLayout({
       cwd: dir,
-      features: {},
+      packages: [],
       allCollections: [{ name: 'item', layer: 'main' }],
     })
     expect(r.pattern).toBe('master-detail')

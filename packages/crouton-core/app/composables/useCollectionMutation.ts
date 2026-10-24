@@ -193,8 +193,9 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
   }
 
   /**
-   * Update an existing item
-   * Fetches the item before updating to enable beforeData tracking for change diffs
+   * Update an existing item.
+   * When crouton-events is installed, fetches the item first so the
+   * crouton:mutation hook can carry `beforeData` for its change diff (#2289).
    */
   const update = async (id: string, updates: any) => {
     const baseUrl = getApiBasePath()
@@ -202,18 +203,22 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
     const correlationId = generateCorrelationId()
     const timestamp = Date.now()
 
-    // Fetch the current item state before applying updates (for change tracking)
-    // Uses query-based fetch (?ids=) to match generated endpoint pattern
+    // The pre-fetch costs a second round-trip on every edit, and crouton-events is
+    // the only hook listener that reads `beforeData` (collab and bookings don't).
+    // Detection via the croutonApps registry — the documented stub pattern, not a
+    // probe of the hook table (#2289).
     let beforeData: Record<string, unknown> | undefined
-    try {
-      const items = await $fetch<Record<string, unknown>[]>(baseUrl, {
-        method: 'GET',
-        query: { ids: id },
-        credentials: 'include'
-      })
-      beforeData = Array.isArray(items) ? items[0] : items
-    } catch (_fetchError) {
-      // Non-critical: continue with update even if we can't fetch beforeData
+    if (useCroutonApps().hasApp('events')) {
+      try {
+        const items = await $fetch<Record<string, unknown>[]>(baseUrl, {
+          method: 'GET',
+          query: { ids: id },
+          credentials: 'include'
+        })
+        beforeData = Array.isArray(items) ? items[0] : items
+      } catch (_fetchError) {
+        // Non-critical: continue with update even if we can't fetch beforeData
+      }
     }
 
     try {

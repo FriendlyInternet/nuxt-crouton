@@ -20,8 +20,8 @@
     "db:migrate:prod": "npx wrangler d1 migrations apply pins-db --remote"
   },
   "dependencies": {
-    "@fyit/crouton": "workspace:*",
     "@fyit/crouton-core": "workspace:*",
+    "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-layout": "workspace:*",
     "drizzle-orm": "catalog:",

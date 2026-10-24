@@ -163,13 +163,13 @@ watch(() => props.modelValue?.label, (newLabel) => {
 
     <!-- Label input (translatable) -->
     <UFormField
-      :label="`Label (${editingLocale.toUpperCase()})${editingLocale === requiredLocale ? ' *' : ''}`"
+      :label="`${t('options.labelForLocale', { locale: editingLocale.toUpperCase() })}${editingLocale === requiredLocale ? ' *' : ''}`"
       :required="editingLocale === requiredLocale"
     >
       <UInput
         :model-value="getTranslation(editingLocale)"
         :placeholder="editingLocale !== requiredLocale && getTranslation(requiredLocale)
-          ? `Fallback: ${getTranslation(requiredLocale)}`
+          ? t('options.fallbackValue', { value: getTranslation(requiredLocale) })
           : t('options.displayName')"
         class="w-full"
         @update:model-value="setTranslation(editingLocale, $event)"

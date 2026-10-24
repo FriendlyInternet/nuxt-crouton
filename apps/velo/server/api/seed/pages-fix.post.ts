@@ -6,7 +6,7 @@
  */
 import { eq } from 'drizzle-orm'
 import { organization } from '~~/server/db/schema'
-import { pagesPages } from '~~/layers/pages/collections/pages/server/database/schema'
+import { pagesPages } from '@fyit/crouton-pages/collections/pages/server/database/schema'
 
 // ---------------------------------------------------------------------------
 // TipTap JSON builders

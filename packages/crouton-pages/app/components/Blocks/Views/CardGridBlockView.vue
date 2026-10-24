@@ -57,10 +57,10 @@ function handleOpenPanel() {
         <!-- Block Header -->
         <div class="flex items-center justify-between mb-2">
           <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-            Cards
+            {{ t('pages.blocks.typeLabels.cards') }}
           </span>
           <!-- Action buttons -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"
@@ -92,7 +92,7 @@ function handleOpenPanel() {
             {{ attrs.headline }}
           </p>
           <h3 class="text-base font-bold text-gray-900 dark:text-white mb-1">
-            {{ attrs.title || 'Card Grid' }}
+            {{ attrs.title || t('pages.blockLibrary.cardGrid.name') }}
           </h3>
           <p v-if="attrs.description" class="text-sm text-gray-500 dark:text-gray-400 mb-2 line-clamp-1">
             {{ attrs.description }}
@@ -106,10 +106,10 @@ function handleOpenPanel() {
               {{ card.title }}
             </span>
             <span v-if="(attrs.cards || []).length > 4" class="text-xs text-gray-400">
-              +{{ attrs.cards.length - 4 }} more
+              {{ t('pages.blockViews.moreCount', { count: attrs.cards.length - 4 }) }}
             </span>
             <span v-if="!attrs.cards?.length" class="text-xs text-gray-400 italic">
-              No cards yet
+              {{ t('pages.blockViews.noCards') }}
             </span>
           </div>
         </div>

@@ -27,6 +27,7 @@ import type {
 } from '../../types/admin'
 
 export function useAdminTeams() {
+  const { t } = useT()
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -73,7 +74,7 @@ export function useAdminTeams() {
       totalPages.value = response.totalPages
 
       return response
-    }, 'Failed to fetch teams')
+    }, t('superAdmin.teams.failedToLoadTeams'))
   }
 
   /**
@@ -82,7 +83,7 @@ export function useAdminTeams() {
   async function getTeam(teamId: string): Promise<AdminTeamDetail> {
     return withLoading(
       () => $fetch<AdminTeamDetail>(`/api/admin/teams/${teamId}`),
-      'Failed to fetch team'
+      t('superAdmin.teams.failedToLoadTeam')
     )
   }
 

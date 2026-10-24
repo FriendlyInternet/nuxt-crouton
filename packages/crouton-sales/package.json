@@ -6,6 +6,7 @@
   "main": "./nuxt.config.ts",
   "files": [
     "app",
+    "collections",
     "server",
     "schemas",
     "seed",
@@ -22,6 +23,9 @@
       "types": "./seed/index.ts"
     },
     "./schemas/*": "./schemas/*",
+    "./collections/*/types": "./collections/*/types.ts",
+    "./collections/*/server/database/schema": "./collections/*/server/database/schema.ts",
+    "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts",
     "./server/utils/generate-print-queues": {
       "import": "./server/utils/generate-print-queues.ts",
       "types": "./server/utils/generate-print-queues.ts"
@@ -79,6 +83,6 @@
     "better-sqlite3": "^12.4.1",
     "drizzle-orm": "catalog:",
     "unbuild": "^3.6.1",
-    "vitest": "^4.0.0"
+    "vitest": "catalog:"
   }
 }

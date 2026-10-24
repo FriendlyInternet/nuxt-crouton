@@ -344,7 +344,7 @@ interface EditorVariableGroup {
 export default defineNuxtConfig({
   modules: ['@nuxt/ui'],  // Required (v3.4.0+)
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-editor'
   ]
 })
@@ -425,7 +425,7 @@ const variables = [
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton`
+- **Extends**: `@fyit/crouton-core`
 - **Requires**: `@nuxt/ui ^3.4.0` (provides TipTap integration)
 - **Peer deps**: `@nuxt/icon ^1.0.0`
 

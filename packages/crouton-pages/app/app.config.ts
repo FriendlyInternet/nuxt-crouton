@@ -1,4 +1,11 @@
+import { pagesPagesConfig } from '../collections/pages/app/composables/usePagesPages'
+// The pages collection ships with this package (#2278); registering it here
+// means a consuming app lists nothing for pages in its own app.config.
+
 export default defineAppConfig({
+  croutonCollections: {
+    pagesPages: pagesPagesConfig
+  },
   // App auto-discovery registration for crouton-pages
   croutonApps: {
     pages: {

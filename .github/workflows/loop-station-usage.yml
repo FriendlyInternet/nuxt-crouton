@@ -1,6 +1,9 @@
 name: loop-station-usage
 
 # Cross-run usage rollup (Loop Station WS-A, #1064). Weekly: download the week's
+# claude-code-action traces AND the pi worker/decomposer telemetry (pi-telemetry-*,
+# trace-shaped pi-trace.jsonl; its ledger-rows.jsonl has no kind/name and is ignored
+# by the aggregate) — before #2388 the pipeline's own runs never reached this rollup.
 # loop-station-trace-* artifacts (shipped by ./.github/actions/loop-station-trace
 # from every LLM workflow), aggregate them into per-skill/agent invocation counts,
 # and commit ONE record to writeups/loop-station/usage.jsonl. Deterministic, no
@@ -31,21 +34,21 @@ jobs:
     timeout-minutes: 15
     steps:
       # Push with the Harness App, not GITHUB_TOKEN — see loop-station-inventory.yml (#1133).
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # full history so the commit-back rebases cleanly
           token: ${{ steps.app-token.outputs.token }}
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 22
 
       # List this window's trace artifacts. `gh api` exits non-zero on API
       # failure → the job fails loudly instead of recording a false quiet week.
@@ -55,7 +58,7 @@ jobs:
         run: |
           CUTOFF=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
           gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
-            --jq ".artifacts[] | select(.name | startswith(\"loop-station-trace-\")) | select(.expired == false) | select(.created_at >= \"${CUTOFF}\") | \"\(.id) \(.name)\"" \
+            --jq ".artifacts[] | select((.name | startswith(\"loop-station-trace-\")) or (.name | startswith(\"pi-telemetry-\"))) | select(.expired == false) | select(.created_at >= \"${CUTOFF}\") | \"\(.id) \(.name)\"" \
             > artifacts.txt
           echo "$(wc -l < artifacts.txt) artifact(s) in window (cutoff ${CUTOFF})"
 
@@ -108,7 +111,7 @@ jobs:
 
       - name: Upload record artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: loop-station-usage-record
           path: usage.record.json

@@ -22,13 +22,11 @@ on:
   # (`base_ref_changed` is not a default activity type), so a `branches: [main]`
   # filter silently skipped typecheck/tests on #1668 and auto-merge treated the
   # absent checks as passing. Running on every PR regardless of base is the fix.
+  # And deliberately NO `paths:` filter on pull_request either (#2334): `E2E Gate` below is
+  # a REQUIRED check on main, and a required check that never reports blocks the PR forever.
+  # The `changes` job re-implements the same path set; the heavy jobs skip on it and the
+  # gate still reports (the ci.yml / #1698 shape).
   pull_request:
-    paths:
-      - 'packages/**'
-      - 'fixtures/**'
-      - 'e2e/**'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/e2e.yml'
   schedule:
     - cron: '0 4 * * *'   # nightly full-matrix backstop (selection can't silently hide a regression)
   workflow_dispatch:        # manual full-matrix run
@@ -41,14 +39,51 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Did this change touch anything e2e cares about? Replaces the workflow-level `paths:`
+  # filter so the gate always reports (#2334). Non-PR events are always relevant.
+  changes:
+    name: Detect relevant changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "Non-PR event ($EVENT) → relevant (full matrix)."
+            exit 0
+          fi
+          git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+          base="$(git merge-base "origin/$BASE_REF" HEAD)"
+          files="$(git diff --name-only "$base" HEAD)"
+          echo "changed files:"; echo "$files" | sed 's/^/  /'
+          if echo "$files" | grep -qE '^(packages/|fixtures/|e2e/|pnpm-lock\.yaml$|\.github/workflows/e2e\.yml$)'; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "relevant=false  (no e2e-relevant paths — fixtures skip, E2E Gate still reports)" >&2
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # Decide which fixtures to run. PR → only what's affected; everything else → all.
   detect:
+    needs: changes
+    if: needs.changes.outputs.relevant == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
       any: ${{ steps.set.outputs.any }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0   # need history for the PR base...head diff
       - id: set
@@ -121,12 +156,13 @@ jobs:
     if: needs.detect.outputs.any == 'true'
     name: E2E (${{ matrix.fixture }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     # Every fixture runs inside the official, version-matched Playwright image
     # (Chromium + system libs baked in) — proven on with-assets in #393. This
     # drops the flaky `playwright install --with-deps` apt step that
     # intermittently hung CI for ~an hour. The tag must track @playwright/test
     # ^1.57 — keep them in sync (#395).
-    container: mcr.microsoft.com/playwright:v1.57.0-jammy
+    container: mcr.microsoft.com/playwright:v1.64.0-jammy
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
@@ -137,20 +173,18 @@ jobs:
       E2E_FIXTURE: ${{ matrix.fixture }}
       NODE_OPTIONS: '--max-old-space-size=8192'
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The repo is checked out as root inside the Playwright image, so mark the
       # workspace safe to keep git from tripping on dubious ownership.
       - name: Trust workspace dir (container)
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -183,8 +217,29 @@ jobs:
       # index.html to see each test's video, trace timeline, and screenshots.
       - name: Upload visual-QA report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: visual-qa-${{ matrix.fixture }}
           path: playwright-report/
           retention-days: 14
+
+  # Always-reporting gate (#2334) — the REQUIRED check on main (ruleset context "E2E Gate").
+  # Mirrors ci.yml's `gate`: green when every job succeeded or was legitimately skipped
+  # (irrelevant PR → changes=false → detect/e2e skipped → gate green in under a minute).
+  gate:
+    name: E2E Gate
+    if: always()
+    needs: [changes, detect, e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Every needed job succeeded or was legitimately skipped
+        run: |
+          echo '${{ toJSON(needs) }}' > needs.json
+          cat needs.json
+          bad="$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key)=\(.value.result)"' needs.json)"
+          if [ -n "$bad" ]; then
+            echo "::error::E2E Gate FAILED — not every job succeeded or skipped:"; echo "$bad"
+            exit 1
+          fi
+          echo "E2E Gate PASSED"

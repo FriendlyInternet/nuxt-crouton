@@ -7,7 +7,7 @@
           {{ t('admin.translations.title') }}
         </h2>
         <p class="text-sm text-gray-500 dark:text-gray-400">
-          System translations with team overrides
+          {{ t('admin.translations.subtitle') }}
         </p>
       </div>
       <UButton
@@ -15,7 +15,7 @@
         color="primary"
         @click="openNewModal"
       >
-        Add Translation
+        {{ t('admin.translations.addTranslation') }}
       </UButton>
     </div>
 
@@ -112,7 +112,7 @@
           variant="subtle"
           size="sm"
         >
-          {{ row.original.hasOverride ? 'Overridden' : 'System' }}
+          {{ row.original.hasOverride ? t('admin.translations.overridden') : t('admin.translations.system') }}
         </UBadge>
       </template>
 
@@ -144,8 +144,7 @@
       class="flex items-center justify-between pt-2"
     >
       <span class="text-sm text-gray-500">
-        {{ (currentPage - 1) * pageSize + 1 }}–{{ Math.min(currentPage * pageSize, filteredItems.length) }}
-        of {{ filteredItems.length }} translations
+        {{ t('admin.translations.paginationSummary', { from: (currentPage - 1) * pageSize + 1, to: Math.min(currentPage * pageSize, filteredItems.length), total: filteredItems.length }) }}
       </span>
       <UPagination
         v-model="currentPage"
@@ -159,7 +158,7 @@
       <template #content>
         <div class="p-6 space-y-4">
           <h3 class="text-lg font-semibold text-gray-900 dark:text-white">
-            {{ isNewMode ? 'New Translation' : t('admin.translations.editOverride') }}
+            {{ isNewMode ? t('admin.translations.newTranslation') : t('admin.translations.editOverride') }}
           </h3>
 
           <!-- Key Path: searchable select for new, read-only for override -->
@@ -169,7 +168,7 @@
               v-model="newKeyPath"
               :items="availableKeyItems"
               value-key="value"
-              placeholder="Search translation keys..."
+              :placeholder="t('admin.translations.searchKeysPlaceholder')"
               icon="i-lucide-search"
               class="w-full"
             />
@@ -186,7 +185,7 @@
             v-if="isNewMode && newKeyPath && selectedKeySystemValues"
             class="space-y-2 bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3"
           >
-            <label class="text-xs font-medium text-gray-500">Current value</label>
+            <label class="text-xs font-medium text-gray-500">{{ t('admin.translations.currentValue') }}</label>
             <div
               v-for="locale in locales"
               :key="locale"
@@ -223,7 +222,7 @@
             <USeparator />
           </template>
 
-          <UFormField :label="isNewMode ? 'Values' : t('admin.translations.teamOverrideValues')">
+          <UFormField :label="isNewMode ? t('admin.translations.values') : t('admin.translations.teamOverrideValues')">
             <div class="w-full space-y-2">
               <div
                 v-for="locale in locales"
@@ -252,7 +251,7 @@
               color="primary"
               @click="isNewMode ? createNew() : saveOverride()"
             >
-              {{ isNewMode ? 'Create' : (editingItem?.hasOverride ? 'Update' : 'Create') + ' Override' }}
+              {{ isNewMode ? t('common.create') : (editingItem?.hasOverride ? t('admin.translations.updateOverride') : t('admin.translations.createOverride')) }}
             </UButton>
           </div>
         </div>
@@ -332,14 +331,14 @@ const items = computed(() => {
 })
 
 // Table columns
-const columns = [
-  { accessorKey: 'keyPath', header: 'Key' },
-  { accessorKey: 'category', header: 'Category' },
-  { accessorKey: 'systemValues', header: 'Value (EN)' },
-  { accessorKey: 'teamValues', header: 'Override' },
-  { accessorKey: 'status', header: 'Status' },
+const columns = computed(() => [
+  { accessorKey: 'keyPath', header: t('admin.translations.columnKey') },
+  { accessorKey: 'category', header: t('admin.translations.columnCategory') },
+  { accessorKey: 'systemValues', header: t('admin.translations.columnValueEn') },
+  { accessorKey: 'teamValues', header: t('admin.translations.columnOverride') },
+  { accessorKey: 'status', header: t('admin.translations.columnStatus') },
   { accessorKey: 'actions', header: '' }
-]
+])
 
 // Locales for override form (derived from i18n config)
 const { locales: i18nLocales, getLocaleMessage } = useI18n()
@@ -469,7 +468,7 @@ async function saveOverride() {
   )
 
   if (Object.keys(values).length === 0) {
-    notify.warning('At least one translation value is required')
+    notify.warning(t('admin.translations.valueRequired'))
     return
   }
 
@@ -480,7 +479,7 @@ async function saveOverride() {
         method: 'PATCH',
         body: { values }
       })
-      notify.success('Override updated')
+      notify.success(t('admin.translations.overrideUpdated'))
     } else {
       // Create new override
       await $fetch(`/api/teams/${teamSlug.value}/translations-ui`, {
@@ -492,13 +491,13 @@ async function saveOverride() {
           values
         }
       })
-      notify.success('Override created')
+      notify.success(t('admin.translations.overrideCreated'))
     }
 
     showModal.value = false
     await refresh()
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : 'Failed to save override'
+    const errorMessage = err instanceof Error ? err.message : t('admin.translations.saveOverrideFailed')
     notify.error(errorMessage)
   }
 }
@@ -508,7 +507,7 @@ async function createNew() {
   const category = keyPath.split('.')[0] || 'custom'
 
   if (!keyPath) {
-    notify.warning('Key path is required')
+    notify.warning(t('admin.translations.keyPathRequired'))
     return
   }
 
@@ -517,7 +516,7 @@ async function createNew() {
   )
 
   if (Object.keys(values).length === 0) {
-    notify.warning('At least one translation value is required')
+    notify.warning(t('admin.translations.valueRequired'))
     return
   }
 
@@ -526,11 +525,11 @@ async function createNew() {
       method: 'POST',
       body: { keyPath, category, values }
     })
-    notify.success('Translation created')
+    notify.success(t('admin.translations.translationCreated'))
     showModal.value = false
     await refresh()
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : 'Failed to create translation'
+    const errorMessage = err instanceof Error ? err.message : t('admin.translations.createFailed')
     notify.error(errorMessage)
   }
 }
@@ -542,10 +541,10 @@ async function deleteOverride(item: TranslationWithOverride) {
     await $fetch(`/api/teams/${teamSlug.value}/translations-ui/${item.overrideId}`, {
       method: 'DELETE'
     })
-    notify.success('Override removed')
+    notify.success(t('admin.translations.overrideRemoved'))
     await refresh()
   } catch (err: unknown) {
-    const errorMessage = err instanceof Error ? err.message : 'Failed to delete override'
+    const errorMessage = err instanceof Error ? err.message : t('admin.translations.deleteOverrideFailed')
     notify.error(errorMessage)
   }
 }

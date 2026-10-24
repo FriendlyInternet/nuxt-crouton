@@ -9,11 +9,16 @@
     "./seed": {
       "import": "./seed/index.ts",
       "types": "./seed/index.ts"
-    }
+    },
+    "./collections/*/types": "./collections/*/types.ts",
+    "./collections/*/server/database/schema": "./collections/*/server/database/schema.ts",
+    "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts"
   },
   "files": [
     "app",
     "server",
+    "collections",
+    "schemas",
     "seed",
     "i18n",
     "nuxt.config.ts",

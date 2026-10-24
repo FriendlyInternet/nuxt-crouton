@@ -7,6 +7,7 @@
   "files": [
     "app",
     "server",
+    "collections",
     "schemas",
     "seed",
     "i18n",
@@ -30,7 +31,10 @@
     "./server/utils/booking-emails": {
       "types": "./dist/server/utils/booking-emails.d.ts",
       "import": "./dist/server/utils/booking-emails.mjs"
-    }
+    },
+    "./collections/*/types": "./collections/*/types.ts",
+    "./collections/*/server/database/schema": "./collections/*/server/database/schema.ts",
+    "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts"
   },
   "scripts": {
     "build": "unbuild",

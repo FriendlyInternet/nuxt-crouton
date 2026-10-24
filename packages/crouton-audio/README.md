@@ -21,7 +21,7 @@ pnpm add @fyit/crouton-audio
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-audio'
   ]
 })

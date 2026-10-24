@@ -41,7 +41,7 @@ pnpm --filter velo dev                              # or: cd apps/velo && pnpm d
 
 | App | Port | | POC | Port |
 |---|---|---|---|---|
-| apps/triage | 3005 | | pocs/alexdeforce | 3001 |
+| — | | | pocs/alexdeforce | 3001 |
 | apps/velo | 3006 | | pocs/sintlukas | 3003 |
 | apps/kassa | 3007 | | pocs/crouton-builder-demo | 3010 |
 | e2e fixtures | 3000 | | pocs/crouton-builder **and** pocs/kvr | **3011 — collision**; run one with `--port` |
@@ -85,11 +85,11 @@ page.on('pageerror', e => console.log('PAGEERROR', e.message))
 **Package demo data** — every app has `db:seed` scripts (verified in the apps' `package.json`):
 
 ```bash
-pnpm --filter velo db:seed          # = crouton-seed --db velo-db --with-staff (local)
-pnpm --filter velo db:seed:staging  # = crouton-seed --db velo-staging-db --remote --with-staff
+pnpm --filter velo db:seed          # = crouton-seed --db velo-db (local)
+pnpm --filter velo db:seed:staging  # = crouton-seed --db velo-staging-db --remote
 ```
 
-`crouton-seed` (bin: `packages/crouton-cli/bin/crouton-seed.mjs`) discovers `SeedProvider`s from every extended `@fyit/crouton-*` package, emits idempotent upsert SQL, and executes it via `npx wrangler d1 execute <db> --local|--remote`. Flags (verified): `--db` (required) `--remote` `--dir` `--team` (default `test1`) `--locale` (default `nl`) `--with-staff` `--dry-run`. It also seeds the app's default layout: `crouton.layout.json` → a `layout_configs` row with id `default` (#709; `lib/seed-app.ts`).
+`crouton-seed` (bin: `packages/crouton-cli/bin/crouton-seed.mjs`) discovers `SeedProvider`s from every extended `@fyit/crouton-*` package, emits idempotent upsert SQL, and executes it via `npx wrangler d1 execute <db> --local|--remote`. Flags (verified): `--db` (required) `--remote` `--dir` `--team` (default `test1`) `--locale` (default `nl`) `--dry-run`. It also seeds the app's default layout: `crouton.layout.json` → a `layout_configs` row with id `default` (#709; `lib/seed-app.ts`).
 
 **⚠️ THE seed-visibility trap (code-derived, not reproduced end-to-end):** a local `crouton-seed` writes via `wrangler d1 execute --local` into `<app>/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite` (miniflare = wrangler's local Cloudflare simulator), but `nuxt dev` with `hub: { db: 'sqlite' }` reads `<app>/.data/db/sqlite.db`. `seed-app.ts` has **no copy step** into `.data/` (verified: it only shells out to `wrangler d1 execute` — re-check with the seed grep in the re-verify block). So locally-seeded data may never appear in the dev app. `crouton db-pull` handles the split explicitly — `lib/db-pull.ts` copies the imported DB to `.data/db/sqlite.db` and marks `_hub_migrations` applied. If seeded data "doesn't show up", this split is why; workaround is copying the sqlite file into `.data/db/sqlite.db` by hand (stop dev first).
 

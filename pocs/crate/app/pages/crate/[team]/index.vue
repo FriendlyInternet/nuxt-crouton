@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { CratePile, CrateTrack } from '~/composables/useCrate'
+import type { HintWord } from '~/composables/useCrateHints'
 
 definePageMeta({ layout: false, middleware: ['auth'] })
 useHead({ title: 'Crate', meta: [{ name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' }] })
@@ -57,6 +58,25 @@ function step(delta: 1 | -1) {
   show(list[Math.max(0, Math.min(list.length - 1, target))], true)
 }
 
+// ── Genre hints + new piles (#2212) ───────────────────────────────────────
+const hints = useCrateHints(crate, current)
+const newPile = ref<{ start: (prefill?: { name?: string, parentId?: string | null }) => void }>()
+const newPileOpen = ref(false)
+function onWord(w: HintWord) {
+  const pile = w.pileId ? crate.piles.value.find(p => p.id === w.pileId) : undefined
+  if (pile) togglePile(pile)
+  else newPile.value?.start({ name: w.word, parentId: w.parentId })
+}
+function fileSuggestion(pile: CratePile) {
+  if (!current.value) return
+  pin()
+  crate.fileInto(current.value, pile)
+}
+async function onCreate(name: string, parentId: string | null, fileTrack: boolean) {
+  if (fileTrack) pin()
+  await crate.createPile(name, parentId, fileTrack ? current.value : null)
+}
+
 const inPiles = computed(() => current.value ? leafPiles(current.value) : [])
 const deckOther = computed(() => current.value ? otherTags(current.value) : [])
 
@@ -99,8 +119,18 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
           :ticked="!!current && isIn(current, pile)"
           :can-open="children(pile.id).length > 0"
           :disabled="!current"
+          :glow="hints.glow(pile)"
           @toggle="togglePile(pile)"
           @open="openLevel(pile)"
+        />
+        <UButton
+          block
+          variant="outline"
+          color="neutral"
+          icon="i-lucide-plus"
+          label="New pile"
+          class="border-dashed py-2.5"
+          @click="newPile?.start({ parentId: levelId })"
         />
       </div>
     </main>
@@ -117,7 +147,20 @@ const trayLabel = computed(() => level.value ? `Loose in ${level.value.name}` : 
       @prev="step(-1)"
       @list="listOpen = true"
       @remove="removeFromDeck"
-    />
+    >
+      <template #hints>
+        <CrateHints
+          :sources="hints.sources.value"
+          :suggestions="hints.suggestions.value"
+          :path-label="pathLabel"
+          :is-in-pile="(id) => !!current && isIn(current, crate.piles.value.find(p => p.id === id)!)"
+          @word="onWord"
+          @file="fileSuggestion"
+        />
+      </template>
+    </CrateDeck>
+
+    <CrateNewPile ref="newPile" v-model:open="newPileOpen" :piles="crate.piles.value" :path-label="pathLabel" :track="current" @create="onCreate" />
 
     <CrateTrackList
       v-model:open="listOpen"

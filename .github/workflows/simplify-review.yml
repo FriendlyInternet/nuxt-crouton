@@ -34,7 +34,7 @@ jobs:
       github.event.pull_request.draft == false &&
       github.event.pull_request.user.type != 'Bot'
     # Fork PRs never land on the self-hosted box (untrusted code on our hardware — runbook §5).
-    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ github.event.pull_request.head.repo.fork && 'ubuntu-latest' || vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 20
     # permissions MUST be job-level: GitHub job-level `permissions` fully OVERRIDES (does not
     # merge with) any workflow-level block, so `id-token: write` has to be here or the
@@ -44,13 +44,23 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history so the agent can diff the PR against its base branch.
           fetch-depth: 0
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         id: agent
         # Report-only workflow, but keep continue-on-error so a `max_turns`/SDK flake can't turn
         # the run red — the sticky comment + verdict are the deliverable; the final step never
@@ -70,7 +80,7 @@ jobs:
           # noisy false positive is the failure mode — precision matters more than the cheaper
           # tier here (mirrors red-team's reports-but-judgment tier). Reversible via routing.json
           # + the #865 scoreboard.
-          claude_args: "--model claude-sonnet-5 --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --allowedTools Bash,Write,Edit,Read,Grep,Glob"
           prompt: |
             Act as the **simplify subagent** defined in `.claude/agents/simplify.md`.
             Input: { scope: "diff", depth: "quick", fix: false }.
@@ -131,7 +141,7 @@ jobs:
             --out finding-candidate.json || true
       - name: Upload finding candidate
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: loop-station-finding-${{ github.run_id }}
           path: finding-candidate.json
