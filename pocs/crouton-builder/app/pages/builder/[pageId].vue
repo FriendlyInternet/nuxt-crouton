@@ -225,10 +225,22 @@ function onDrop(at: NodePath, edge: DropEdge, payload: BoardDragPayload) {
   commit(applyPaneDrop(lifted, { path: targetPath, edge }, detached))
 }
 
+// reka reports the group layout on mount and whenever its panels re-register, not
+// only on a drag — so a report that changes nothing is ignored (it would otherwise
+// dirty the board, and on a width/variant switch feed stale proportions into the
+// breakpoint just switched to).
 function onResize(at: NodePath, sizes: number[]) {
-  if (!root.value) return
-  writeRoot(applySizes(root.value, at, sizes))
+  const r = root.value
+  if (!r) return
+  const split = getNode(r, at)
+  if (!split || split.type !== 'split') return
+  const same = split.children.every((c, i) => Math.abs((c.defaultSize ?? 100 / split.children.length) - (sizes[i] ?? -1)) < 0.05)
+  if (same) return
+  writeRoot(applySizes(r, at, sizes))
 }
+// The splitters remount when the arrangement being edited changes, so they register
+// their panels with the stored sizes instead of carrying the previous view's proportions.
+const boardKey = computed(() => `${currentId.value}:${activeBp.value ?? 'base'}`)
 
 // ── Selection + the bottom sheet ──────────────────────────────────────────────
 const sheetOpen = ref(false)
@@ -416,6 +428,7 @@ async function saveBoard() {
         :data-width="effWidth"
       >
         <BoardTree
+          :key="boardKey"
           :node="root"
           :selected="selected"
           @resize="onResize"
