@@ -149,6 +149,10 @@ Don't stop at the issue you were asked about; closing the leaf without checking 
 4. Use meta labels where they apply: `epic`, `spike`, `needs-triage`.
 5. **Link issues & PRs when talking to the user.** Any time you mention an issue/PR in a chat reply, render it as a clickable link to the full URL (`[#303](https://github.com/FriendlyInternet/nuxt-crouton/issues/303)`, `[#376](https://github.com/FriendlyInternet/nuxt-crouton/pull/376)`) so the owner can open it in one click. This is a **chat-reply** convention only — commit messages keep bare `(#NN)`, and PR bodies use `Closes #NN` (not a URL) so GitHub auto-closes the issue on merge.
 
+## Design handoff (epics that change a visual surface)
+
+If the design lives in a canvas the pipeline can't open, don't re-describe it in prose. Export one PNG per board/state and run `node scripts/design-handoff.mjs <epic> <png…> --post` — it commits them under `writeups/design/<epic>/` (with a `README.md` naming each file) and upserts a "🎨 Design" section with inline images into the epic body. Workers should `read` those PNGs before building; `ui-proposal` shows them next to the preview.
+
 ## Structure
 
 - **Epic** — one tracking issue per initiative. Body: goals, a checklist of workstreams, links to design docs. Labels: `epic` + the primary `pkg:`/`app:` it spans.

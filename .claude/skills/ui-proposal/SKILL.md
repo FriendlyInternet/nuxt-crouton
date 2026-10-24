@@ -23,6 +23,10 @@ you iterate, and an `approve`/`lgtm` comment unblocks the build.
 - **Skip** for pure `<script>`/composables/types, `server/**`, config, tests, and docs — no
   visible result, no gate.
 
+## Reference design (if the epic has one)
+
+If `writeups/design/<epic>/` exists (see `scripts/design-handoff.mjs`), `read` its PNGs **before building** — they are the spec. When you post the preview URL, embed the matching reference PNG right beside it so the reviewer compares reference and live side by side.
+
 ## Which path to choose
 
 | | Default (live preview) | Fallback (`--static`) |
