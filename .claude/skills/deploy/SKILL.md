@@ -151,6 +151,15 @@ review login joins — **no seed line in the app's `cf:staging` script**. The ap
 `@fyit/crouton-cli` as a dependency. Opt out with `"seed": false` in `deploy.config.json`.
 A failed seed warns on the run; it never fails the deploy. Production never seeds.
 
+### Apps without a database or sign-in (#2377)
+A standalone viewer (e.g. `pocs/loop-station`: no NuxtHub, no D1, no auth) deploys through the
+same pipeline: the PR preview skips the D1 provision/migrate when the built config declares no
+database, and `"reviewLogin": false` in `deploy.config.json` skips the review login + email and
+turns the smoke into a plain "page answers 200" check. Without NuxtHub, set
+`nitro.cloudflare.deployConfig: true` so the build writes `.output/server/wrangler.json`, which the
+PR preview rewrites. Put any pre-build data step in a `build:before` hook, not only in `package.json`
+scripts — the PR preview runs a bare `nuxt build`.
+
 ### Auto-seeded review login on staging previews (#608)
 Every **staging** deploy auto-seeds a throwaway, loginable test account on the
 preview's isolated D1 so a reviewer can open the URL and be **inside the app in one

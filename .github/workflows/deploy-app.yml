@@ -280,7 +280,9 @@ jobs:
             # way the app's own first deploy does) and no custom-domain route.
             echo "PR preview for #$PR_NUM — rewriting the built config"
             NITRO_PRESET=cloudflare_module npx nuxt build
-            node scripts/inject-wrangler-env.mjs
+            # Crouton apps ship inject-wrangler-env.mjs; a standalone viewer (e.g. pocs/loop-station,
+            # no NuxtHub, no DB) doesn't — skip it there instead of failing the preview (#2377).
+            if [ -f scripts/inject-wrangler-env.mjs ]; then node scripts/inject-wrangler-env.mjs; fi
             PREVIEW_OUT="$(node "$GITHUB_WORKSPACE/scripts/pr-preview-wrangler.mjs" \
               .output/server/wrangler.json "${{ inputs.app }}" "$PR_NUM")"
             PREVIEW_DB="$(printf '%s\n' "$PREVIEW_OUT" | sed -n 's/^db=//p')"
@@ -295,19 +297,27 @@ jobs:
             # first, so passing --config cannot re-create #138's doubled path (a green step that
             # migrates nothing) — the silent version of the same bug.
             if [ -z "$PREVIEW_DB" ]; then
-              echo "::error::pr-preview-wrangler produced no db name — the preview would have NO schema."
-              exit 1
+              # An app that declares no D1 database has no schema to migrate (#2377). One that DOES
+              # declare a database but got no name back is still the #2078 failure — keep failing it.
+              if [ "$(jq '(.d1_databases // []) | length' .output/server/wrangler.json)" = "0" ]; then
+                echo "No D1 database declared for ${{ inputs.app }} — preview deployed without one."
+              else
+                echo "::error::pr-preview-wrangler produced no db name — the preview would have NO schema."
+                exit 1
+              fi
             fi
             # Expose the preview DB so the seed + review-login steps target IT, not shared
             # staging (#2169 — the seed-side sibling of #2167's secret targeting).
-            echo "preview_db=$PREVIEW_DB" >> "$GITHUB_OUTPUT"
-            # The deploy above just PROVISIONED that database, but the built config still
-            # carries no `database_id` — it is stripped on purpose so wrangler auto-provisions
-            # (#2020). Remote D1 operations need the id, so resolve it by name now that it
-            # exists. Without this the migrate fails "missing a database_id" (#2085).
-            node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
-            npx wrangler d1 migrations apply "$PREVIEW_DB" \
-              --config .output/server/wrangler.json --remote
+            if [ -n "$PREVIEW_DB" ]; then
+              echo "preview_db=$PREVIEW_DB" >> "$GITHUB_OUTPUT"
+              # The deploy above just PROVISIONED that database, but the built config still
+              # carries no `database_id` — it is stripped on purpose so wrangler auto-provisions
+              # (#2020). Remote D1 operations need the id, so resolve it by name now that it
+              # exists. Without this the migrate fails "missing a database_id" (#2085).
+              node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
+              npx wrangler d1 migrations apply "$PREVIEW_DB" \
+                --config .output/server/wrangler.json --remote
+            fi
           else
             pnpm run cf:staging | tee deploy.log
           fi
@@ -613,6 +623,12 @@ jobs:
           PREVIEW_DB: ${{ steps.deploy.outputs.preview_db }}
         run: |
           set -o pipefail
+          # An app without sign-in (e.g. pocs/loop-station) sets "reviewLogin": false — no account
+          # to create and no sign-in email to send (#2377).
+          if [ "$(jq -r '.reviewLogin == false' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null)" = "true" ]; then
+            echo "${APP} has no sign-in (deploy.config.json \"reviewLogin\": false) — no review login."
+            exit 0
+          fi
           # Stable per-preview key: the PR number when this is a PR, else the ref.
           if [ -n "$PR_NUMBER" ]; then KEY="pr${PR_NUMBER}"; else KEY="$(printf '%s' "$REF_NAME" | tr -c 'a-zA-Z0-9' '-')"; fi
           EMAIL="review+${APP}-${KEY}@example.com"
@@ -751,6 +767,18 @@ jobs:
           WORKSPACE: ${{ inputs.workspace }}
         run: |
           MANIFEST="$WORKSPACE/$APP/deploy.config.json"
+          # No sign-in to smoke ("reviewLogin": false, #2377): just check the page answers 200.
+          if [ "$(jq -r '.reviewLogin == false' "$MANIFEST" 2>/dev/null)" = "true" ]; then
+            CODE="$(curl -sS -o /dev/null -w '%{http_code}' "$URL" 2>/dev/null)" || true
+            if [ "$CODE" = "200" ]; then
+              echo "result=pass" >> "$GITHUB_OUTPUT"
+              echo "### ✅ Deployed-preview smoke ($APP) — page answers 200 (no sign-in to check)" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "result=fail" >> "$GITHUB_OUTPUT"
+              echo "### ❌ Deployed-preview smoke ($APP) — page answered $CODE" >> "$GITHUB_STEP_SUMMARY"
+            fi
+            exit 0
+          fi
           if node scripts/smoke-deployed.mjs --url "$URL" --email "$EMAIL" --password "$PW" --app "$APP" --manifest "$MANIFEST"; then
             echo "result=pass" >> "$GITHUB_OUTPUT"
             echo "### ✅ Deployed-preview smoke ($APP) — passed" >> "$GITHUB_STEP_SUMMARY"
