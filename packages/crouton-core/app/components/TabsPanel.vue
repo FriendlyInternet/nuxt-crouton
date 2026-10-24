@@ -57,10 +57,12 @@ withDefaults(defineProps<{
 
         <template #trailing>
           <!-- Full bar height so the active underline sits on the bar's bottom edge.
-               Scrolls sideways instead of truncating labels. -->
+               Scrolls sideways instead of truncating labels. overflow-y-hidden is required:
+               overflow-x-auto makes y auto too, and UNavigationMenu's (unused) dropdown
+               viewport sits below the tabs, so the row could be dragged vertically (#2399). -->
           <div
             ref="tabsEl"
-            class="flex-1 min-w-0 self-stretch overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            class="flex-1 min-w-0 self-stretch overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
             <UNavigationMenu
               :items="tabs"
