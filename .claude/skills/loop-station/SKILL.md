@@ -24,7 +24,7 @@ clean and reproducible.
 
 ## What it measures
 
-Walking root `CLAUDE.md` + every skill (`.claude/skills/**`) + every agent
+Walking root `CLAUDE.md` **plus every file it `@imports`** (`AGENTS.md` — Claude Code inlines those into every session, so they are always-on too, #2387) + every skill (`.claude/skills/**`) + every agent
 (`.claude/agents/**`) + each LLM CI workflow's `prompt:` block:
 
 - **tokens per artifact** — via Anthropic `count_tokens` when `ANTHROPIC_API_KEY`

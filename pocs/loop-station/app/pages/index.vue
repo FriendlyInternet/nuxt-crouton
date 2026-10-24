@@ -58,7 +58,7 @@ const maxCold = computed(() => Math.max(1, ...coldWrites.value.map((c) => c.tota
     <section class="grid grid--2">
       <KoPanel class="panel">
         <div class="panel__inner">
-          <h2 class="panel__h">Context budget · CLAUDE.md <span class="tag">tokens / merge</span></h2>
+          <h2 class="panel__h">Context budget · CLAUDE.md + imports <span class="tag">tokens / merge</span></h2>
           <BudgetTrend :history="data?.history ?? []" />
         </div>
       </KoPanel>
