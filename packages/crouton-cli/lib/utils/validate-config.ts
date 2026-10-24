@@ -77,9 +77,9 @@ export async function validateConfig(config: Record<string, any> | null): Promis
     console.log(`  ✓ Found ${config.targets.length} layers, ${totalCollections} collections`)
   }
 
-  // Validate dialect
+  // Validate dialect — a typo is a config bug, not something to default around (#1472)
   if (config.dialect && !['pg', 'sqlite'].includes(config.dialect)) {
-    warnings.push(`Unknown dialect '${config.dialect}', defaulting to 'pg'`)
+    errors.push(`Unknown dialect '${config.dialect}' — use 'sqlite' (the default) or 'pg'`)
   }
 
   // Check if collections in targets match defined collections (for enhanced format)

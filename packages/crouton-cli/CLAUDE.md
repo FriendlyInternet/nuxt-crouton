@@ -351,7 +351,7 @@ crouton db-pull --config ./custom-wrangler.jsonc
 | Option | Description |
 |--------|-------------|
 | `--fields-file <path>` | Schema JSON file |
-| `--dialect <pg\|sqlite>` | Database dialect (default: sqlite for the direct command; `crouton config` has no flag — it reads the config file's `dialect`, falling back to `sqlite` when omitted or empty) |
+| `--dialect <pg\|sqlite>` | Database dialect (default: sqlite for the direct command; `crouton config` has no flag — it reads the config file's `dialect`, falling back to `sqlite` when omitted or empty; any other value fails validation, #1472) |
 | `--hierarchy` | Enable tree structure |
 | `--seed` | Generate seed data file (drizzle-seed) |
 | `--count <number>` | Number of seed records (default: 25) |
