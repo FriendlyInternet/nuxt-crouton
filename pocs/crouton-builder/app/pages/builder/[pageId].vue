@@ -36,7 +36,7 @@ const page = computed(() => (pages.value as BuilderPage[]).find(p => p.id === pa
 useHead({ title: () => `Builder · ${page.value?.title ?? 'Page'}` })
 
 const { blocks, blocksList } = useCroutonLayoutBlocks()
-const { dragging, start, end } = useBoardDrag()
+const { payload: dragPayload, point: dragPoint, arm, onDrop: registerDrop, consumeClick } = useBoardDrag()
 
 // ── The tree ───────────────────────────────────────────────────────────────────
 const root = shallowRef<LayoutNode | null>(null)
@@ -79,6 +79,7 @@ function newLeaf(blockId: string): LayoutLeaf {
 }
 
 function onDrop(at: NodePath, edge: DropEdge, payload: BoardDragPayload) {
+  if (!import.meta.client) return
   const r = root.value
   if (payload.kind === 'block') {
     if (!r) return commit(newLeaf(payload.blockId))
@@ -130,9 +131,17 @@ function removeSelected() {
   sheetOpen.value = false
 }
 
-// ── Palette strip: native drag sources ────────────────────────────────────────
-function onChipDragStart(e: DragEvent, blockId: string) {
-  start(e, { kind: 'block', blockId })
+// The drag resolves its target itself; the page only supplies what a drop does.
+registerDrop(onDrop)
+
+// ── Palette strip: hold a chip, then drag it onto a pane edge ─────────────────
+function onChipDown(e: PointerEvent, blockId: string) {
+  arm(e, { kind: 'block', blockId, label: blocks.value[blockId]?.name ?? blockId }, { holdMs: 250 })
+}
+// A tap (pointer never activated a drag) still adds beside the selection.
+function onChipClick(blockId: string) {
+  if (consumeClick()) return
+  tapAdd(blockId)
 }
 // Tap-to-add for one-handed use: lands to the right of the selected pane, or the root.
 function tapAdd(blockId: string) {
@@ -184,12 +193,10 @@ async function saveBoard() {
         v-for="b in blocksList"
         :key="b.id"
         type="button"
-        class="flex shrink-0 items-center gap-1.5 rounded-full border border-default bg-elevated px-3 py-1.5 text-xs cursor-grab active:cursor-grabbing select-none"
-        draggable="true"
+        class="board-chip flex shrink-0 items-center gap-1.5 rounded-full border border-default bg-elevated px-3 py-1.5 text-xs cursor-grab active:cursor-grabbing select-none"
         :data-block="b.id"
-        @dragstart="onChipDragStart($event, b.id)"
-        @dragend="end()"
-        @click="tapAdd(b.id)"
+        @pointerdown="onChipDown($event, b.id)"
+        @click="onChipClick(b.id)"
       >
         <UIcon :name="b.icon ?? 'i-lucide-box'" class="size-3.5" />
         {{ b.name }}
@@ -202,20 +209,29 @@ async function saveBoard() {
         v-if="root"
         :node="root"
         :selected="selected"
-        @drop="onDrop"
         @resize="onResize"
         @select="onSelect"
       />
       <div
         v-else
         class="flex h-full items-center justify-center p-6 text-center text-sm text-muted"
-        @dragover.prevent
-        @drop.prevent="dragging?.kind === 'block' && onDrop([], 'center', dragging)"
+        data-handoff="board-pane"
+        data-path=""
       >
         Empty page — drag a block here, or tap one below.
       </div>
     </main>
 
+
+    <!-- What you're carrying, following the finger. Not part of the tree. -->
+    <div
+      v-if="dragPayload && dragPoint"
+      class="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-full bg-primary px-3 py-1 text-xs font-medium text-inverted shadow-lg"
+      :style="{ left: dragPoint.x + 'px', top: (dragPoint.y - 12) + 'px' }"
+      data-handoff="drag-label"
+    >
+      {{ dragPayload.label }}
+    </div>
 
     <!-- Bottom sheet: the selected pane's options. -->
     <UDrawer v-model:open="sheetOpen" :overlay="false" :modal="false" :handle="true">
@@ -241,3 +257,8 @@ async function saveBoard() {
     </UDrawer>
   </div>
 </template>
+
+<style scoped>
+/* Chips scroll horizontally on a swipe; a held chip becomes a drag (pointer events). */
+.board-chip { touch-action: pan-x; -webkit-touch-callout: none; }
+</style>
