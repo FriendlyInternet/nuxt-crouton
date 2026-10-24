@@ -13,3 +13,12 @@ export function clamp(n: number, min: number, max: number): number {
   if (min > max) throw new RangeError(`clamp: min (${min}) is greater than max (${max})`)
   return Math.min(Math.max(n, min), max)
 }
+
+/** `value` as a percentage of `total`, rounded to `precision` decimal places. */
+export function percentOf(value: number, total: number, precision = 1): number {
+  if (total === 0) throw new RangeError('percentOf: total must not be zero')
+  const factor = 10 ** precision
+  const result = Math.round((value / total) * 100 * factor) / factor
+  // Avoid returning -0 for tiny negative ratios that round to zero.
+  return result === 0 ? 0 : result
+}
