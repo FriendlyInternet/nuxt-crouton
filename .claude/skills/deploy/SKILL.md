@@ -145,7 +145,7 @@ Two ways:
 - **Production is never routine** — ship it deliberately via the **`/deploy-production`** skill.
 
 ### Demo data on staging (#2366)
-Every **staging** and PR-preview deploy runs `crouton-seed` itself (the *Seed demo data*
+Every **staging** and PR-preview deploy runs `crouton-seed` itself, once (the *Seed collection + demo data* (#1370)
 step in `deploy-app.yml`), so the app gets its packages' demo data and the `test1` team the
 review login joins — **no seed line in the app's `cf:staging` script**. The app only needs
 `@fyit/crouton-cli` as a dependency. Opt out with `"seed": false` in `deploy.config.json`.
