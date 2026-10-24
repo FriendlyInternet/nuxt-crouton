@@ -60,40 +60,34 @@ export interface MutationStatusInput {
   userName?: string
 }
 
-/** Map a `crouton:mutation` event to the status text + icon ("<FirstName> saved X"). */
-export function mutationStatus(input: MutationStatusInput, t: Translate): { text: string, icon: string } {
-  const { operation, collection, itemIds, itemName, userName } = input
-  const label = statusCollectionLabel(collection)
-  const shortName = itemName && itemName.length > 30 ? `${itemName.slice(0, 30)}…` : itemName
-  const user = userName || t('statusBar.defaultUser')
+interface StatusText { text: string, icon: string }
 
-  if (operation === 'create') {
+type StatusBuilder = (input: MutationStatusInput, ctx: { t: Translate, user: string, label: string, name?: string }) => StatusText
+
+const MUTATION_STATUS: Record<string, StatusBuilder> = {
+  create: (_input, { t, user, label, name }) => ({
+    text: name ? t('statusBar.createdNamed', { user, label, name }) : t('statusBar.created', { user, label }),
+    icon: 'i-lucide-plus',
+  }),
+  update: (_input, { t, user, label, name }) => ({
+    text: name ? t('statusBar.savedNamed', { user, name }) : t('statusBar.saved', { user, label }),
+    icon: 'i-lucide-check',
+  }),
+  delete: ({ itemIds }, { t, user, label }) => {
+    const count = itemIds?.length || 1
     return {
-      text: shortName
-        ? t('statusBar.createdNamed', { user, label, name: shortName })
-        : t('statusBar.created', { user, label }),
-      icon: 'i-lucide-plus',
-    }
-  }
-  if (operation === 'update') {
-    return {
-      text: shortName
-        ? t('statusBar.savedNamed', { user, name: shortName })
-        : t('statusBar.saved', { user, label }),
-      icon: 'i-lucide-check',
-    }
-  }
-  if (operation === 'delete') {
-    const count = Array.isArray(itemIds) ? itemIds.length : 1
-    return {
-      text: count > 1
-        ? t('statusBar.deletedMultiple', { user, count, label })
-        : t('statusBar.deleted', { user, label }),
+      text: count > 1 ? t('statusBar.deletedMultiple', { user, count, label }) : t('statusBar.deleted', { user, label }),
       icon: 'i-lucide-trash-2',
     }
-  }
-  if (operation === 'move' || operation === 'reorder') {
-    return { text: t('statusBar.reordered', { user, label }), icon: 'i-lucide-arrow-up-down' }
-  }
-  return { text: t('statusBar.done'), icon: 'i-lucide-check' }
+  },
+  move: (_input, { t, user, label }) => ({ text: t('statusBar.reordered', { user, label }), icon: 'i-lucide-arrow-up-down' }),
+}
+MUTATION_STATUS.reorder = MUTATION_STATUS.move!
+
+/** Map a `crouton:mutation` event to the status text + icon ("<FirstName> saved X"). */
+export function mutationStatus(input: MutationStatusInput, t: Translate): StatusText {
+  const { operation, collection, itemName, userName } = input
+  const name = itemName && itemName.length > 30 ? `${itemName.slice(0, 30)}…` : itemName
+  const ctx = { t, user: userName || t('statusBar.defaultUser'), label: statusCollectionLabel(collection), name }
+  return MUTATION_STATUS[operation]?.(input, ctx) ?? { text: t('statusBar.done'), icon: 'i-lucide-check' }
 }
