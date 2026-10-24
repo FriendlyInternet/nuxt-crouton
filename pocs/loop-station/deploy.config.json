@@ -1,4 +1,5 @@
 {
   "stagingUrl": "https://loop-station.pmcp.dev",
-  "layerPackages": "@fyit/crouton-themes"
+  "layerPackages": "@fyit/crouton-themes",
+  "seed": false
 }

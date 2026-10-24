@@ -302,7 +302,6 @@ jobs:
             node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
             npx wrangler d1 migrations apply "$PREVIEW_DB" \
               --config .output/server/wrangler.json --remote
-            (pnpm db:seed:staging || echo "::warning title=Staging seed failed::${{ inputs.app }} preview seed failed — logins and demo data may be missing (#2361)")
           else
             pnpm run cf:staging | tee deploy.log
           fi
@@ -585,6 +584,32 @@ jobs:
       # a redeploy reprints the SAME working login instead of piling up users; an
       # existing user is detected and reused. Best-effort — a seed hiccup never fails
       # the deploy. Staging only; production seeds nothing.
+      # Demo data for EVERY app (#2366): the shared deploy seeds staging + PR previews itself,
+      # so a new app gets the demo team (which the review login below joins) without copying a
+      # seed line into its own scripts. Opt out with `"seed": false` in deploy.config.json.
+      # Production never seeds. A failed seed warns and the deploy carries on (#2361).
+      - name: Seed demo data (staging only)
+        if: ${{ inputs.environment != 'production' && steps.deploy.outputs.url != '' }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          APP: ${{ inputs.app }}
+          PREVIEW_DB: ${{ steps.deploy.outputs.preview_db }}
+        run: |
+          if [ "$(jq -r '.seed == false' deploy.config.json 2>/dev/null)" = "true" ]; then
+            echo "${APP} opts out of the demo seed (deploy.config.json \"seed\": false)."
+            exit 0
+          fi
+          if [ ! -x node_modules/.bin/crouton-seed ]; then
+            echo "::warning title=No demo seed::${APP} doesn't depend on @fyit/crouton-cli, so it can't be seeded — add it, or set \"seed\": false (#2366)."
+            exit 0
+          fi
+          DB="${PREVIEW_DB:-${APP}-staging-db}"
+          echo "Seeding demo data into ${DB}"
+          if ! node_modules/.bin/crouton-seed --db "$DB" --remote; then
+            echo "::warning title=Staging seed failed::${APP} demo seed into ${DB} failed — demo data and the review login's team may be missing (#2361)"
+            echo "### ⚠️ Demo seed failed (${APP}) — see this step's log." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Seed review login (staging only)
         id: seed
         if: ${{ inputs.environment != 'production' && steps.deploy.outputs.url != '' }}
