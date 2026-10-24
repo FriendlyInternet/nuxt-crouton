@@ -1142,10 +1142,11 @@ jobs:
           SESSION_DIR="$RUNNER_TEMP/pi-session"
           if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then echo "pi telemetry dir: $TELE_DIR"; else TELE_DIR="/nonexistent"; fi
           if node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --session "$SESSION_DIR" > pi-telemetry-out/pi-trace.jsonl 2>/dev/null; then
-            echo "pi trace: $(wc -l < pi-telemetry-out/pi-trace.jsonl) lines ($(grep -c '"kind":"skill"' pi-telemetry-out/pi-trace.jsonl || true) skill loads)"
+            # ::notice:: so the result is readable via the check-runs annotations API, not only the raw log (#2435)
+            echo "::notice title=pi telemetry::trace $(wc -l < pi-telemetry-out/pi-trace.jsonl) lines, $(grep -c '"kind":"skill"' pi-telemetry-out/pi-trace.jsonl || true) skill loads, $(find "$SESSION_DIR" -maxdepth 1 -name "*.jsonl" 2>/dev/null | wc -l) session file(s)"
           else
             rm -f pi-telemetry-out/pi-trace.jsonl
-            echo "no pi telemetry found (no subagents, no skill loads in $SESSION_DIR). Skipping trace."
+            echo "::notice title=pi telemetry::no trace — no subagents and no skill loads; $(find "$SESSION_DIR" -maxdepth 1 -name "*.jsonl" 2>/dev/null | wc -l) session file(s) in $SESSION_DIR"
           fi
           if [ -d "$TELE_DIR" ]; then
             node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
