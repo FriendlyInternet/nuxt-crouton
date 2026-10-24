@@ -51,6 +51,9 @@ export default defineNuxtConfig({
           brand: {
             name: 'Velotheek',
             primaryColor: '#0F766E',
+            // Production default. Staging overrides it at runtime with the Worker var
+            // NUXT_PUBLIC_CROUTON_EMAIL_BRAND_URL (wrangler.jsonc → env.staging.vars), so
+            // a booking email sent from velo.pmcp.dev links back to staging (#2405).
             url: 'https://velo.friendlyinter.net'
           }
         }
