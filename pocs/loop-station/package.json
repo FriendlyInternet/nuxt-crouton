@@ -14,12 +14,13 @@
     "cf:version": "NITRO_PRESET=cloudflare_module nuxt build && npx wrangler versions upload --env staging"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^1.1.4",
+    "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-themes": "workspace:*",
     "@nuxt/ui": "catalog:",
-    "nuxt-charts": "^2.1.2",
     "@vue-flow/core": "^1.41.2",
-    "@dagrejs/dagre": "^1.1.4",
     "nuxt": "catalog:",
+    "nuxt-charts": "^2.1.2",
     "vue": "catalog:",
     "vue-router": "catalog:"
   },

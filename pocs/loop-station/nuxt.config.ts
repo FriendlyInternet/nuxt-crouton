@@ -6,7 +6,9 @@ import { execFileSync } from 'node:child_process'
 // inspired) so the observatory reads like a physical instrument — no crouton-core,
 // no DB, no auth. The loop graph is Vue Flow + dagre auto-layout.
 export default defineNuxtConfig({
-  modules: ['@nuxt/ui', 'nuxt-charts'],
+  // crouton-devtools installs the in-page review overlay (feedback toolkit) on review builds —
+  // PR previews must have it (#2070); production builds ship nothing (#2377).
+  modules: ['@nuxt/ui', 'nuxt-charts', '@fyit/crouton-devtools'],
   extends: ['@fyit/crouton-themes/ko'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: false },

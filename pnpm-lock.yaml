@@ -1773,6 +1773,9 @@ importers:
       '@dagrejs/dagre':
         specifier: ^1.1.4
         version: 1.1.8
+      '@fyit/crouton-devtools':
+        specifier: workspace:*
+        version: link:../../packages/crouton-devtools
       '@fyit/crouton-themes':
         specifier: workspace:*
         version: link:../../packages/crouton-themes
