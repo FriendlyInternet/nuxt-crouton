@@ -562,6 +562,13 @@ on `status:blocked`; approval is a **comment** containing `lgtm`/`approve` (not 
 #572) and unblocks the code. (The CI `test` job already hard-gates `pnpm test` — this gate is about
 *order*, writing the test first, not enforcement.)
 
+**Two lanes, two shapes (owner decision 2026-10-24, #2441).** The *interactive* lane holds for a
+test `lgtm` as above. The *pipeline* lane (`work-issue-pidev.yml`) does **not** hold: the worker
+ships code **and** tests in one PR, and the finish step's tests gate (#1885) opens the PR as a
+**draft** when a `packages/*` logic file lands with no test — visible, not blocking. So a pipeline
+ticket for package logic says "tests included" and must not ask for a test-first hold; a worker
+that meets one in a ticket follows this rule and says so in its done comment.
+
 ## Documentation Organization
 
 ```
