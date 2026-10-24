@@ -597,12 +597,14 @@ jobs:
           if [ -n "${REV_START:-}" ]; then
             RPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
             if [ "$HAVE_COMMITS" = "1" ]; then
+              echo "revised=1" >> "$GITHUB_OUTPUT"
               FILES="$(git diff --name-status "$REV_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
               [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES")" 2>&1 | tail -1 || true
             else
               REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
               if [ "${REPLIED:-0}" -gt 0 ]; then
                 echo "revise: answered on the PR without a code change"
+                echo "revised=1" >> "$GITHUB_OUTPUT"
               else
                 echo "::error::revise produced no commit and no reply (#2446)"
                 echo "revise_noop=1" >> "$GITHUB_OUTPUT"
@@ -627,6 +629,12 @@ jobs:
           # executable here.
           COMMITTED="$RUNNER_TEMP/committed-all.txt"
           cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | grep . | sort -u > "$COMMITTED" || true
+          # Deleted paths are committed too, but they are not code that lands: drop them so a
+          # deletion is never "logic with no test" and never picks the app to typecheck (#2446).
+          if [ -s "$RUNNER_TEMP/deleted.txt" ]; then
+            grep -vxF -f "$RUNNER_TEMP/deleted.txt" "$COMMITTED" > "$COMMITTED.tmp" || true
+            mv "$COMMITTED.tmp" "$COMMITTED"
+          fi
           # ⚠️ NO `|| true` HERE (#2012). It used to swallow the exit code, and on 2026-08-05 that
           # cost four undiagnosable runs: `pi-finish.mjs` died with MODULE_NOT_FOUND (it imports a
           # sibling relatively, and the sibling has to be stashed alongside it — see the stash step),
@@ -935,9 +943,15 @@ jobs:
           FINISH_OUTCOME: ${{ steps.finish.outcome }}
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           TRIGGER: ${{ github.event_name }}
+          # #2446: a revision stacks on the EXISTING PR, so there is no fresh PR for the checks below
+          # to find — they read it as "produced nothing" and paged the owner on a successful run.
+          # The finish step already proved the outcome (a pushed commit or a reply) and said so on
+          # the PR; a revise that produced neither is failed by its own step above.
+          REVISED: ${{ steps.finish.outputs.revised }}
         with:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
+            if (process.env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
             const since = '${{ steps.t0.outputs.ts }}'
             const sinceMs = new Date(since).getTime()
 
