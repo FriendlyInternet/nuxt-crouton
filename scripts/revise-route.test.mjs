@@ -19,6 +19,7 @@ test('approvals, agent comments, commands and bots do not revise', () => {
   assert.equal(shouldRevise(owner('lgtm')).revise, false)
   assert.equal(shouldRevise(owner('✅')).revise, false)
   assert.equal(shouldRevise(owner('> 🤖 **Claude Code** · interactive agent · …\n\nstatus')).revise, false)
+  assert.equal(shouldRevise(owner('> 🤖 **pi.dev harness** · agent pipeline (CI) · …\n\n**Worker:** do X')).revise, false)
   assert.equal(shouldRevise(owner('/close-epic')).revise, false)
   assert.equal(shouldRevise(owner('🚀')).revise, false)
   assert.equal(shouldRevise(owner('   ')).revise, false)
@@ -38,4 +39,11 @@ test('routePrComment needs an open work-<N> PR', () => {
   assert.equal(routePrComment({ pr: { headRef: 'work-7', state: 'open' }, comment: c }).revise, true)
   assert.equal(routePrComment({ pr: { headRef: 'work-7', state: 'closed' }, comment: c }).revise, false)
   assert.equal(routePrComment({ pr: { headRef: 'feat/x', state: 'open' }, comment: c }).revise, false)
+})
+
+test('an interactive-agent comment that addresses the worker revises (#2453)', () => {
+  const body = '> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`\'s account (not Maarten) · _change request_\n\n👀 **review** — not lgtm yet.\n**Worker:** add the preview page and push.\n'
+  const d = shouldRevise(owner(body))
+  assert.equal(d.revise, true)
+  assert.match(d.reason, /addressed to the worker/)
 })

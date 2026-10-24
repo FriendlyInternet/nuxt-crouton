@@ -36,7 +36,17 @@ export function shouldRevise({ body, authorAssociation, userType } = {}) {
   if (!text) return { revise: false, reason: 'empty comment' }
   // Agent comments post from the owner's account (interactive sessions), so `userType` can't
   // tell them apart. The mandatory 🤖 provenance header can.
-  if (/^>\s*🤖/u.test(text)) return { revise: false, reason: 'an agent comment (🤖 header)' }
+  // An agent comment (🤖 provenance header). The PIPELINE's own comments are never feedback.
+  // An INTERACTIVE agent posts from the owner's account on the owner's behalf (#2453): its
+  // status/FYI comments must not re-trigger a worker, but a change request it addresses to
+  // the worker explicitly — a line starting `**Worker:**` — is the owner's feedback and revises.
+  if (/^>\s*🤖/u.test(text)) {
+    const interactive = /^>\s*🤖[^\n]*interactive agent/iu.test(text)
+    const addressesWorker = /^\s*\*\*Worker:\*\*/mu.test(text)
+    if (!interactive) return { revise: false, reason: 'a pipeline comment (🤖 header)' }
+    if (!addressesWorker) return { revise: false, reason: 'an interactive-agent comment without a **Worker:** line' }
+    return { revise: true, reason: 'an interactive-agent change request addressed to the worker' }
+  }
   if (isApproval(text)) return { revise: false, reason: 'an approval — approve-draft-pr releases it' }
   if (parseCommand(text)) return { revise: false, reason: 'a pipeline command, not feedback' }
   if (/^\//.test(text)) return { revise: false, reason: 'a slash command' }
