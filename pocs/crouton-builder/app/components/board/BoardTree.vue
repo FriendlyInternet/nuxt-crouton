@@ -35,12 +35,10 @@ const emit = defineEmits<{
   select: [at: NodePath]
 }>()
 
-const { blocks, resolveComponentName, sanitizeConfig } = useCroutonLayoutBlocks()
+const { blocks } = useCroutonLayoutBlocks()
 const { payload, hover, arm, consumeClick } = useBoardDrag()
 
 const isLeaf = computed(() => props.node.type === 'leaf')
-const componentName = computed(() => (props.node.type === 'leaf' ? resolveComponentName(props.node.blockId) : null))
-const safeConfig = computed(() => (props.node.type === 'leaf' ? sanitizeConfig(props.node.blockId, props.node.config) : {}))
 const isSelected = computed(() => !!props.selected && samePath(props.selected, props.path))
 const isHidden = computed(() => props.node.type === 'leaf' && props.hidden.has(props.node.blockId))
 // A split only lays out the children that still show something at this width;
@@ -125,17 +123,13 @@ const blockName = computed(() => (props.node.type === 'leaf' ? blocks.value[prop
     data-handoff="board-pane"
     @click="emit('select', path)"
   >
-    <template v-if="isLeaf">
-      <component
-        :is="componentName"
-        v-if="componentName"
-        v-bind="safeConfig"
-        class="h-full w-full overflow-auto"
-      />
-      <div v-else class="h-full w-full flex items-center justify-center p-4 text-sm text-error text-center">
-        Unknown block: <code>{{ (node as any).blockId }}</code>
-      </div>
-    </template>
+    <!-- A leaf renders through the package renderer (registry resolution, config
+         sanitising, the admin fill-and-scroll); a nested app renders read-only. -->
+    <CroutonLayoutRenderer
+      v-if="isLeaf"
+      :node="node"
+      :interactive="true"
+    />
     <CroutonLayoutRenderer
       v-else
       :node="(node as any).layout.root"
