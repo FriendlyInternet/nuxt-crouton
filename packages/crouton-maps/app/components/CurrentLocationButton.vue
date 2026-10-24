@@ -35,7 +35,7 @@ const emit = defineEmits<{
 }>()
 
 const { getCurrentLocation, loading, error } = useCurrentLocation()
-const toast = useToast()
+const toast = useNotify()
 const { t } = useT()
 
 async function handleClick() {

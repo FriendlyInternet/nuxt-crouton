@@ -25,10 +25,10 @@ concurrency:
 
 jobs:
   frontend-review:
-    # Skip drafts and bot-authored PRs (no point scanning Dependabot/agent noise here).
+    # Skip drafts and Dependabot. Pipeline PRs (nuxt-harness[bot]) ARE reviewed: they are most of the code that reaches main (#2427). A held draft is reviewed on ready_for_review.
     if: >
       github.event.pull_request.draft == false &&
-      github.event.pull_request.user.type != 'Bot'
+      github.event.pull_request.user.login != 'dependabot[bot]'
     # Fork PRs never land on the self-hosted box, even with AGENT_RUNNER set — this job
     # checks out the PR's code and runs an agent (bash) over it, so a fork head means
     # untrusted code on our hardware. Security policy: runbook §5 (#656).

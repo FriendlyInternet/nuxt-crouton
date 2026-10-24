@@ -158,8 +158,6 @@
     "errorCount": "{count} erreur | {count} erreurs"
   },
   "statusBar": {
-    "ready": "Prêt",
-    "justNow": "à l'instant",
     "secondsAgo": "il y a {count}s",
     "minutesAgo": "il y a {count}m",
     "hoursAgo": "il y a {count}h",

@@ -18,7 +18,7 @@ const props = defineProps<{
 }>()
 
 const { t } = useT()
-const toast = useToast()
+const toast = useNotify()
 const nuxtApp = useNuxtApp()
 const { format: formatPrice } = useSalesCurrency(() => props.event.currency)
 

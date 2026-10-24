@@ -300,5 +300,14 @@
     "statusUnknown": "Onbekend",
     "noLogs": "Geen e-mail logs gevonden.",
     "errorDetails": "Foutdetails"
+  },
+  "userPill": {
+    "accountAndStatus": "Account en status",
+    "recent": "Recent",
+    "helper": "helper",
+    "signIn": "Inloggen",
+    "signOutHelper": "Uitloggen uit helper-sessie",
+    "retry": "Opnieuw",
+    "justNow": "zojuist"
   }
 }

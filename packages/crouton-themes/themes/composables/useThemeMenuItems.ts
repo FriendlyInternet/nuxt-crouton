@@ -2,7 +2,7 @@
 // Returns DropdownMenuItem[] compatible with UDropdownMenu
 // Designed for injecting theme selection into any user menu
 //
-// Usage in UserMenu:
+// Usage in CroutonUserPill:
 //   const { themeMenuItem } = useThemeMenuItems()
 //   // Add themeMenuItem to your preferenceItems prop
 
