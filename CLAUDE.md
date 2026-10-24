@@ -514,7 +514,10 @@ In an interactive session, do the same by hand. Be conservative — when unsure 
 That comment is the *only* thing that resumes the pipeline — a 👍 reaction and the `ui-approved`
 label do **not** trigger anything (`resume-on-comment.yml` fires only on `issue_comment`; reactions
 raise no event and no workflow listens for the label) (#572). Anything else is a change request —
-iterate (redeploy for live-preview, re-render for `--static`) until approved (#310).
+iterate (redeploy for live-preview, re-render for `--static`) until approved (#310). On a
+**pi-built PR** (head `work-<N>`), a change-request comment **on the PR** (or on its issue)
+re-runs the pi worker on that branch with the comment as its instruction and stacks a commit
+on the PR — `revise-on-pr-comment.yml` → `work-issue-pidev.yml` `feedback` input (#2446).
 
 ## Schema Sign-Off (review the data model before you generate) — epic #314
 
