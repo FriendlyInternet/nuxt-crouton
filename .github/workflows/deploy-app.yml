@@ -96,11 +96,6 @@ on:
       # throwaway + isolated and the creds are posted publicly on the PR anyway).
       REVIEW_SEED_SECRET:
         required: false
-      # Password for the `--with-staff` staging login (#2357). Lives ONLY here — the seed
-      # code holds no password. Absent → the staging seed creates no staff login and
-      # clears any old one's password. Staging only; production never gets it.
-      CROUTON_SEED_STAFF_PASSWORD:
-        required: false
 
 jobs:
   deploy:
@@ -251,8 +246,6 @@ jobs:
         env:
           # BETTER_AUTH_* are only needed by the prerender pass at build time.
           BETTER_AUTH_SECRET: prerender-placeholder
-          # Read by `crouton-seed --with-staff` inside cf:staging (#2357). Staging only.
-          CROUTON_SEED_STAFF_PASSWORD: ${{ inputs.environment != 'production' && secrets.CROUTON_SEED_STAFF_PASSWORD || '' }}
           BETTER_AUTH_URL: ${{ inputs.environment == 'production' && inputs['production-url'] || inputs['staging-url'] }}
           # REVIEW OVERLAY (#2070) — set HERE, not in each app's cf:staging script.
           # The flag existed only in the CLI's scaffold template (scaffold-app.ts), so the
