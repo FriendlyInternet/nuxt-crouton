@@ -243,9 +243,11 @@ async function seedUsersAndMembers(db: any, log: string[], now: Date, orgId: str
       banned: false
     })
 
-    // Create a credential account
-    // Set password for dev account, no password for others
-    const devPassword = email === 'hi@maartenlauwaert.eu' ? await hashPassword('pmcppaulmcparty') : undefined
+    // Create a credential account. The owner's local dev password comes from
+    // VELO_DEV_OWNER_PASSWORD (your .env) — never a literal: this repo is public (#2360).
+    // Unset → no password; sign in with "Forgot password". Everyone else: no password.
+    const ownerPassword = process.env.VELO_DEV_OWNER_PASSWORD?.trim()
+    const devPassword = email === 'hi@maartenlauwaert.eu' && ownerPassword ? await hashPassword(ownerPassword) : undefined
     await (db as any).insert(account).values({
       id: nanoid(),
       userId,
