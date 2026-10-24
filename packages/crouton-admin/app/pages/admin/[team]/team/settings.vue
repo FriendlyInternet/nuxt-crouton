@@ -36,7 +36,7 @@ function handleSaved() {
 </script>
 
 <template>
-  <div class="p-6">
+  <div class="p-4 sm:p-6">
     <!-- Not a team admin -->
     <div
       v-if="!isAdmin"
