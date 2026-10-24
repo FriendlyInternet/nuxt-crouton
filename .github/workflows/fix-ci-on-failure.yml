@@ -192,6 +192,10 @@ jobs:
       - if: steps.gate.outputs.proceed == 'true'
         uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
+          # Pipeline PRs are pushed by the harness bot, and the action refuses a bot-initiated
+          # run unless the bot is allow-listed — without this the fixer never ran on any
+          # pipeline PR (#2447; same guard as decompose-on-issue.yml).
+          allowed_bots: "nuxt-harness[bot],github-actions[bot]"
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.app-token.outputs.token }}
           # bypassPermissions REQUIRED (#834/#2165): headless CI denies un-allowlisted tools, so
