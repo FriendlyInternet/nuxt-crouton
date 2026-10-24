@@ -10,7 +10,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  watchPathToRegExp, fileMatchesAny, computeMatrix, resolveChangedFiles, DetectError, ZERO_SHA
+  watchPathToRegExp, fileMatchesAny, computeMatrix, resolveChangedFiles, DetectError, ZERO_SHA,
+  deriveWatchPaths
 } from './deploy-detect.mjs'
 
 // A stand-in for the injected git: declared-resolvable refs + canned diffs.
@@ -242,4 +243,58 @@ test('#2087: the push path is untouched — still first-parent two-dot', () => {
   })
   assert.equal(r.source, 'push:first-parent')
   assert.deepEqual(r.files, ['apps/velo/x.ts'])
+})
+
+// ── #2397: watchPaths derived from package.json ──────────────────────────────
+
+test('#2397: every @fyit/* dep (deps + devDeps) becomes a packages/<pkg>/** watch path', () => {
+  const w = deriveWatchPaths({
+    app: 'velo',
+    pkg: {
+      dependencies: { '@fyit/crouton-core': 'workspace:*', '@fyit/crouton-maps': 'workspace:*', nuxt: 'catalog:' },
+      devDependencies: { '@fyit/crouton-cli': 'workspace:*', wrangler: 'catalog:' }
+    }
+  })
+  assert.deepEqual(w, [
+    'apps/velo/**', 'pnpm-lock.yaml',
+    'packages/crouton-core/**', 'packages/crouton-maps/**', 'packages/crouton-cli/**'
+  ])
+})
+
+test('#2397: explicit watchPaths are kept and deduplicated against the derived set', () => {
+  const w = deriveWatchPaths({
+    app: 'velo',
+    pkg: { dependencies: { '@fyit/crouton-core': 'workspace:*' } },
+    explicit: ['apps/velo/**', 'packages/crouton-core/**', 'packages/crouton/**', '']
+  })
+  assert.deepEqual(w, ['apps/velo/**', 'pnpm-lock.yaml', 'packages/crouton-core/**', 'packages/crouton/**'])
+})
+
+test('#2397: an app with no package.json still watches itself and the lockfile', () => {
+  assert.deepEqual(deriveWatchPaths({ app: 'x' }), ['apps/x/**', 'pnpm-lock.yaml'])
+})
+
+test('#2397 regression: a crouton-maps change deploys velo even though deploy.config.json never listed it', () => {
+  const velo = {
+    app: 'velo',
+    watchPaths: deriveWatchPaths({ app: 'velo', pkg: { dependencies: { '@fyit/crouton-maps': 'workspace:*' } }, explicit: ['packages/crouton-core/**'] })
+  }
+  const { include } = computeMatrix({ event: 'push', changedFiles: ['packages/crouton-maps/app/x.vue'], apps: [velo] })
+  assert.deepEqual(include.map(i => i.app), ['velo'])
+})
+
+test('#2397: transitive @fyit deps are watched too (velo gets crouton-auth through crouton-core)', () => {
+  const workspace = {
+    '@fyit/crouton-core': { dependencies: { '@fyit/crouton-auth': 'workspace:*', '@fyit/crouton-i18n': 'workspace:*' } },
+    '@fyit/crouton-auth': { dependencies: { '@fyit/crouton-core': 'workspace:*' } } // cycle must terminate
+  }
+  const w = deriveWatchPaths({
+    app: 'velo',
+    pkg: { dependencies: { '@fyit/crouton-core': 'workspace:*' } },
+    readPkg: n => workspace[n] || null
+  })
+  assert.deepEqual(w, [
+    'apps/velo/**', 'pnpm-lock.yaml',
+    'packages/crouton-core/**', 'packages/crouton-auth/**', 'packages/crouton-i18n/**'
+  ])
 })

@@ -108,10 +108,12 @@ git add apps/{app}/wrangler.jsonc && git commit -m "chore({app}): commit provisi
 There is **one generic workflow for all apps** — `.github/workflows/deploy-apps.yml`
 (#481/#638; the old per-app `deploy-<app>.yml` callers are retired — don't create one).
 An app opts in by adding a `deploy.config.json` next to its `package.json`. **Model on
-`apps/velo/deploy.config.json`.** Set: `stagingUrl`, `productionUrl`, `layerPackages`,
-and `watchPaths` (the app + its extended `crouton*` packages + lockfile). The workflow's
-`detect` job matches changed files against `watchPaths` and fans out one reusable
-`deploy-app.yml` call per affected app. Merge to `main`/open a PR → isolated staging
+`apps/velo/deploy.config.json`.** Set: `stagingUrl`, `productionUrl` and `layerPackages`.
+Do **not** write a `watchPaths` list: the workflow's `detect` job derives it from the app's
+`package.json` — the app dir, the lockfile and every `@fyit/*` dependency, transitively
+(#2397) — so adding a package to the app is enough. `watchPaths` is only for paths that
+can't be derived (rare). `detect` then fans out one reusable `deploy-app.yml` call per
+affected app. Merge to `main`/open a PR → isolated staging
 with the URL commented on the PR; manual dispatch (app + environment inputs) →
 production (#347). The fan-out uses `secrets: inherit`.
 
