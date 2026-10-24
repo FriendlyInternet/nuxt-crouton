@@ -39,7 +39,9 @@ const OVERRIDES = {
 }
 
 // Files under .claude/agents that are documentation, not agents.
-const AGENT_SKIP = new Set(['CLAUDE.md'])
+// pi-operating-contract.md is a prompt fragment injected verbatim into the pi
+// workflows (#1022) — pure prose, no frontmatter by design — not an agent definition.
+const AGENT_SKIP = new Set(['CLAUDE.md', 'pi-operating-contract.md'])
 
 function parseFrontmatter(text) {
   const m = text.match(/^---\n([\s\S]*?)\n---/)

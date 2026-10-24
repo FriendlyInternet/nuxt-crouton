@@ -22,7 +22,6 @@ export interface UploadAssetResult {
 
 export const useAssetUpload = () => {
   const { getTeamId } = useTeamContext()
-  const { getConfig } = useCollections()
   const uploading = ref(false)
   const error = ref<Error | null>(null)
   const progress = ref(0)
@@ -39,8 +38,10 @@ export const useAssetUpload = () => {
     metadata: AssetMetadata = {},
     collection?: string
   ): Promise<UploadAssetResult> => {
-    const collectionKey = collection || 'croutonAssets'
-    const resolvedCollection = getConfig(collectionKey)?.apiPath || collectionKey
+    // Create through the collection mutation so every list showing this
+    // collection refetches; a raw $fetch left the media library stale.
+    // Resolved before the first await, while the Nuxt context is still set.
+    const { create } = useCollectionMutation(collection || 'croutonAssets')
     uploading.value = true
     error.value = null
     progress.value = 0
@@ -63,17 +64,14 @@ export const useAssetUpload = () => {
         throw new Error('Team context not available')
       }
 
-      const asset = await $fetch<UploadAssetResult>(`/api/teams/${teamId}/${resolvedCollection}`, {
-        method: 'POST',
-        body: {
-          filename: metadata.filename || file.name,
-          pathname: uploadResult.pathname,
-          contentType: uploadResult.contentType,
-          size: uploadResult.size,
-          alt: metadata.alt || '',
-          ...(metadata.translations && Object.keys(metadata.translations).length > 0 && { translations: metadata.translations }),
-          uploadedAt: new Date()
-        }
+      const asset: UploadAssetResult = await create({
+        filename: metadata.filename || file.name,
+        pathname: uploadResult.pathname,
+        contentType: uploadResult.contentType,
+        size: uploadResult.size,
+        alt: metadata.alt || '',
+        ...(metadata.translations && Object.keys(metadata.translations).length > 0 && { translations: metadata.translations }),
+        uploadedAt: new Date()
       })
 
       progress.value = 100

@@ -47,7 +47,9 @@ CMS-like page management system for Nuxt Crouton. Provides:
 | `server/api/teams/[id]/pages.get.ts` | Get published pages for navigation (supports `?pageType=` filter) |
 | `server/api/teams/[id]/pages/[slug].get.ts` | Get single page by slug |
 | `app/stubs/AIPageGenerator.vue` | Stub for AI page generator (real impl in crouton-ai) |
-| `nuxt.config.ts` | Layer configuration |
+| `collections/pages/` | **The `pagesPages` collection, owned end to end (#2278)** — schema, queries, CRUD routes, types, list, composable. See *The `pages` collection ships with this package* |
+| `server/db/schema.ts` | Re-exports `pagesPages` so NuxtHub / `db:generate` in each consuming app picks up the table |
+| `nuxt.config.ts` | Layer configuration (extends `collections/pages`) |
 | `seed/index.ts` | Seed provider + `createPageWithBlocks` helper (`@fyit/crouton-pages/seed`) — injected onto `SeedContext` for block packages |
 
 ## Architecture
@@ -81,80 +83,42 @@ CroutonPagesRenderer
                                                   └── Fetches item → resolves {Name}Detail or CroutonDetail
 ```
 
-## Package + Generated Layer Workflow
+## The `pages` collection ships with this package (#2278)
 
-The pages system uses a split architecture where the **package provides UI components** and the **generated layer provides the data layer**.
-
-### What the Package Provides
+The package owns the `pagesPages` collection end to end. Nothing about it is generated into an app.
 
 ```
-packages/nuxt-crouton-pages/
-├── app/components/
-│   ├── Form.vue          # CroutonPagesForm - admin CRUD form
-│   ├── Card.vue          # CroutonPagesCard - tree view card
-│   ├── List.vue          # CroutonPagesList - convenience wrapper
-│   ├── Renderer.vue      # Public page display
-│   └── Editor/, Blocks/  # Block editor components
-├── app/pages/
-│   └── admin/[team]/pages.vue  # Admin page management route
-├── app/composables/      # usePageTypes, useDomainContext, etc.
-├── app/app.config.ts     # Registers componentName: 'CroutonPagesForm'
-└── server/api/           # Public read APIs
+packages/crouton-pages/collections/pages/     # a Nuxt layer, extended by nuxt.config.ts
+├── types.ts                                  # PagesPage, NewPagesPage
+├── app/composables/usePagesPages.ts          # columns, zod schema, pagesPagesConfig
+├── app/components/List.vue                   # PagesPagesList
+├── server/api/teams/[id]/pages-pages/        # CRUD + move/reorder routes
+└── server/database/{schema,queries}.ts       # pages_pages table + query functions
 ```
 
-### What the Generated Layer Provides
-
-```
-apps/{app}/layers/pages/collections/pages/
-├── types.ts                          # Generated TypeScript types
-├── app/composables/usePagesPages.ts  # Columns, schema, config
-├── server/api/.../                   # Admin CRUD APIs
-└── server/database/                  # Schema + queries
-```
-
-### How Form Resolution Works
-
-1. **Package registers component**: In `app/app.config.ts`:
-   ```typescript
-   croutonCollections: {
-     pagesPages: {
-       componentName: 'CroutonPagesForm'
-     }
-   }
-   ```
-
-2. **Admin route uses CroutonCollection**: The package's `/admin/[team]/pages.vue` uses `CroutonCollection` with tree layout
-
-3. **Form resolution**: When user clicks create/edit, `CroutonForm` resolves to `CroutonPagesForm` via the `componentName` registration
-
-4. **Data from generated layer**: The form uses composables and APIs from the generated layer
+- `nuxt.config.ts` extends `collections/pages`; `app/app.config.ts` registers `pagesPages` under
+  `croutonCollections`; `server/db/schema.ts` re-exports the table so each app's `db:generate`
+  picks it up. Table name, API path and registry key are byte-identical to what apps used to
+  generate, so a deployed database needs no migration.
+- **Moved from kassa's generated layer** (it carried the real hand edits: null-tolerant types
+  #1403, partial-locale PATCH #1414, pagination, server timing). The one change on the way in:
+  the default-locale check (`translations.<locale>.title` + `.slug` required) now reads the
+  app's locale at runtime (`useRuntimeConfig(event).croutonI18n.defaultLocale`) in the POST and
+  PATCH handlers instead of a hardcoded `nl`. The client zod schema no longer names a locale.
+- **Apps must not generate it**: the manifest sets `ownsCollections: true`, so `crouton config`
+  refuses `pages/pages`. An app gets pages by extending `@fyit/crouton-pages`, nothing else.
+- **App server code** (seed scripts) imports the table from
+  `@fyit/crouton-pages/collections/pages/server/database/schema` (also `…/queries`, `…/types`).
+- Changing a column = edit `collections/pages/server/database/schema.ts` here, then `db:generate`
+  in each app. `schemas/pages.json` is the manifest's AI-hint description, not a generator input:
+  change both together.
+- The admin editor is `Workspace/Editor.vue`; the generated `PagesPagesList` is the plain list.
 
 ### Using Pages in a New App
 
-1. **Install package**: Add to `nuxt.config.ts`:
-   ```typescript
-   extends: ['@fyit/crouton-pages']
-   ```
-
-2. **Generate collection**: Create `schemas/pages.json` and run:
-   ```bash
-   pnpm crouton generate
-   ```
-
-3. **Run migrations**:
-   ```bash
-   pnpm db:migrate
-   ```
-
-4. **Use**: Navigate to `/admin/[team]/pages` - package provides the UI
-
-### Important: No Generated Components Needed
-
-The generated layer should **NOT** have a `Form.vue` or `List.vue` - these are provided by the package. If the CLI generates them, they can be deleted. The generated layer only needs:
-- `types.ts` - TypeScript types
-- `app/composables/usePagesPages.ts` - Columns and schema
-- `server/api/` - CRUD APIs
-- `server/database/` - Database schema and queries
+1. Extend the package in `nuxt.config.ts`: `extends: ['@fyit/crouton-core', '@fyit/crouton-pages']`
+2. `pnpm db:generate` → the `pages_pages` table lands in the app's migrations
+3. Navigate to `/admin/[team]/pages`
 
 ## Page Type Registration
 
@@ -338,6 +302,61 @@ Block properties with `type: 'image'` are rendered with `ImageEditor.vue`, which
 - Upload via `CroutonImageUpload` (auto-uploads to `/api/upload-image`)
 - Direct URL input mode
 - Emits image URL string via `v-model`
+
+### Per-block visibility (`blockVisibility`)
+
+Every block — core **and** addon — carries an optional `blockVisibility` attr
+holding per-block display conditions. It rides the same rails as `blockSize`:
+defined in `app/editor/extensions/block-utils.ts`, registered once as a TipTap
+**global attribute** (`page-blocks.ts` `addGlobalAttributes()` +
+`addon-block-factory.ts`), so no block type registers it individually.
+
+```ts
+interface BlockVisibility {
+  audience?: 'anonymous' | 'authenticated'        // omitted = anyone
+  roles?: ('owner' | 'admin' | 'member')[]        // naming any role implies authenticated
+  viewports?: ('mobile' | 'tablet' | 'desktop')[] // omitted/empty = all
+}
+```
+
+Sparse by design — the editor deletes keys that stop restricting anything and
+stores `null` rather than `{}`, so a block nobody configured carries nothing and
+needs no migration. Serializes into the page's existing `content` JSON (and to
+`data-block-visibility` on the HTML round-trip). Logic lives in
+`app/utils/block-visibility.ts`, unit-tested in `test/block-visibility.test.ts`.
+
+**⚠️ Presentation filter, NOT a security boundary.** A hidden block is still in
+the page payload; it just isn't displayed. Gate sensitive content with the
+page-level `visibility` field, which is enforced server-side. The property panel
+says so in as many words — the failure mode is an author assuming otherwise.
+
+**Why the two axes resolve differently.** The public page route declares
+`defineRouteRules({ swr: 3600 })` (`app/pages/[team]/[locale]/[...slug].vue`), so
+its HTML is cached for an hour and **shared between visitors**. Therefore:
+
+- **viewport → CSS classes** on the existing per-block wrapper in
+  `BlockContent.vue`. One hide-class per *excluded* band (`max-md:hidden`,
+  `md:max-lg:hidden`, `lg:hidden` — boundaries 768/1024, matching `Nav.vue` and
+  `layouts/public.vue`). Resolves per-device in the browser: cache-safe, no JS,
+  no flicker. These class strings must stay **whole literals** or Tailwind's
+  scanner purges them.
+- **audience/roles → after hydration only.** `audienceResolved` is false during
+  SSR *and* the first client render (so hydration matches), then true on mount.
+  Reading auth state during SSR would bake one visitor's session into the shared
+  cached HTML.
+
+A block with **no** audience gate takes neither path — no wrapper class, no
+deferral, byte-identical to before the feature existed. `hasAudienceGate()` is
+what decides that, and viewport-only blocks deliberately return false.
+
+Auth is read defensively: crouton-auth is not a dependency of this package, so
+`useSession()`/`useTeam()` are resolved in try/catch and an unknowable reader
+means **show** the block — a missing auth package can never blank a page. Same
+for corrupt stored values: every unusable input fails *open*.
+
+Editor previews (`BlockPropertyPanel`, `BlockEditorWithPreview`) pass
+`ignore-visibility` so an author always sees the block being configured, even
+one they just hid from themselves.
 
 ### Adding Custom Blocks
 
@@ -713,9 +732,9 @@ The server plugin sets `event.context.routingMode = 'locale'` which makes `useDo
 Collection-binder pages with `visibility: 'public'` and `status: 'published'` automatically expose their bound collection via unauthenticated endpoints. These endpoints:
 - Resolve team by slug or ID
 - Validate a published public binder exists for the requested collection
-- Use the app's generated query registry (`server/utils/crouton-query-registry.ts`) for data access
+- Resolve the collection's queries through `resolveQueryRegistry` (`@fyit/crouton-core/shared/utils/query-registry`): the app's generated `server/utils/crouton-query-registry.ts` PLUS the entries each owning package registers at runtime (sales, bookings, pages, assets — `server/plugins/query-registry.ts`), app winning on a clash (#2309). `pagesPages` itself is registered the same way
 - Filter items to `status: 'published'` only
-- Strip internal fields (`createdBy`, `updatedBy`)
+- Strip internal fields via `server/utils/strip-internal-fields.ts`: audit ids (`createdBy`, `updatedBy`, `owner`, `userId`) and every joined user object (`ownerUser`, `createdByUser`, …), recursively through hydrated FK rows and arrays — the registry functions are the admin queries, which join staff emails. Only the public-safe collections of each package are registered at all (see each package's `server/query-registry.ts`)
 - Cache responses with SWR (5 min)
 
 The `CollectionBinderRenderer` auto-switches to public endpoints when not in `/admin/` and the page visibility is `'public'`.
@@ -737,7 +756,7 @@ Part of the composable seeding system (epic #82, contract in
 
 ## Dependencies
 
-- **Extends**: `@fyit/crouton`, `@fyit/crouton-editor`
+- **Extends**: `@fyit/crouton-core`, `@fyit/crouton-editor`
 - **Uses**: Collection tree/sortable for admin page list
 - **Uses**: Domain table from `@fyit/crouton-auth`
 
@@ -755,7 +774,7 @@ The pages package replaces the dashboard with a pages-based system:
 ### Migration
 
 1. Install `nuxt-crouton-pages` layer
-2. Generate pages collection: `pnpm crouton generate`
+2. Generate the migration: `pnpm db:generate` (the `pages` collection ships with the package)
 3. Create pages in admin: `/admin/[team]/pages`
 4. Enable redirect (optional):
 

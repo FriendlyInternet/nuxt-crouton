@@ -155,7 +155,7 @@ not-found failure message keeps a one-line hint pointing back at this permission
   subscribe to events. This is also #515's "appoint the App to release" signal.
 - **GitHub Checks (WS4):** the gates (artifact-gate / schema-review / UI sign-off / deploy) become
   Check Runs instead of bot comments.
-- **review-bridge (other half of WS2):** the `/api/_review` endpoint (#491, in `packages/crouton-devtools`)
+- **review-bridge (other half of WS2):** the `/api/_feedback` endpoint (#491, in `packages/crouton-devtools`)
   swaps its PAT for an App installation token the same way — tracked separately (package HARD GATE).
 - **Provenance:** once comments post as `nuxt-harness[bot]`, the `require-comment-provenance` hook
   band-aid (#497) can be retired for App-posted comments.

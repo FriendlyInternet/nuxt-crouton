@@ -11,10 +11,10 @@
  * </script>
  * ```
  */
-import { useAuthClient } from '../../types/auth-client'
+import { requireAuthClient } from '../../types/auth-client'
 
 export function usePasswordReset() {
-  const authClient = useAuthClient()
+  const { t } = useT()
 
   const loading = ref(false)
   const error = ref<string | null>(null)
@@ -23,16 +23,16 @@ export function usePasswordReset() {
     loading.value = true
     error.value = null
     try {
-      const result = await authClient.requestPasswordReset({
+      const result = await requireAuthClient().requestPasswordReset({
         email,
         redirectTo: window.location.origin + '/auth/reset-password'
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Request failed')
+        throw new Error(result.error.message ?? t('auth.resetRequestFailed'))
       }
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Request failed'
+      error.value = e instanceof Error ? e.message : t('auth.resetRequestFailed')
       throw e
     } finally {
       loading.value = false
@@ -43,16 +43,16 @@ export function usePasswordReset() {
     loading.value = true
     error.value = null
     try {
-      const result = await authClient.resetPassword({
+      const result = await requireAuthClient().resetPassword({
         token,
         newPassword: password
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Reset failed')
+        throw new Error(result.error.message ?? t('auth.passwordResetFailed'))
       }
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Reset failed'
+      error.value = e instanceof Error ? e.message : t('auth.passwordResetFailed')
       throw e
     } finally {
       loading.value = false

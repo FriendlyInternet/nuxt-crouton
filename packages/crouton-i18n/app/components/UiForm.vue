@@ -67,33 +67,33 @@
     >
       <!-- Key Path -->
       <UFormField
-        label="Key Path"
+        :label="t('admin.translations.keyPath')"
         name="keyPath"
         required
       >
         <UInput
           v-model="state.keyPath"
-          placeholder="e.g., table.search"
+          :placeholder="t('admin.translations.keyPathPlaceholder')"
           :disabled="!!activeItem?.id"
         />
       </UFormField>
 
       <!-- Category -->
       <UFormField
-        label="Category"
+        :label="t('admin.translations.category')"
         name="category"
         required
       >
         <UInput
           v-model="state.category"
-          placeholder="e.g., table"
+          :placeholder="t('admin.translations.categoryPlaceholder')"
           :disabled="!!activeItem?.id"
         />
       </UFormField>
 
       <!-- Translations Input -->
       <UFormField
-        label="Translations"
+        :label="t('admin.translations.translations')"
         name="values"
         required
       >
@@ -107,12 +107,12 @@
 
       <!-- Description -->
       <UFormField
-        label="Description"
+        :label="t('admin.translations.description')"
         name="description"
       >
         <UTextarea
           v-model="state.description"
-          placeholder="Optional description"
+          :placeholder="t('admin.translations.descriptionPlaceholder')"
           :rows="3"
         />
       </UFormField>
@@ -132,7 +132,7 @@
           :loading="loading !== 'notLoading'"
           :disabled="loading !== 'notLoading'"
         >
-          {{ action === 'create' ? 'Create' : 'Update' }}
+          {{ action === 'create' ? t('common.create') : t('common.update') }}
         </UButton>
       </div>
     </UForm>

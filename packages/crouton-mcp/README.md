@@ -215,7 +215,7 @@ npx @modelcontextprotocol/inspector node dist/index.js
 
 ## Related
 
-- [@fyit/crouton](https://www.npmjs.com/package/@fyit/crouton) - Core Crouton package
+- [@fyit/crouton-core](https://www.npmjs.com/package/@fyit/crouton-core) - Core Crouton package
 - [@fyit/crouton-cli](https://www.npmjs.com/package/@fyit/crouton-cli) - CLI generator
 
 ## License

@@ -11,7 +11,10 @@
  *
  * Flow (all via the public auth routes the browser uses):
  *   1. POST /api/auth/sign-up/email   (autoSignIn → session cookie). An existing
- *      user (redeploy) returns USER_ALREADY_EXISTS → treated as already-seeded.
+ *      user (redeploy) returns USER_ALREADY_EXISTS → sign in with the given password.
+ *      If that fails the account holds an OLD password (e.g. the review secret was
+ *      rotated, #2358): with --db/--sqlite the password is reset to the given one
+ *      (hashed with better-auth's own helper) and sign-in is retried.
  *   2. GET  /api/auth/get-session     → capture the review user's id + whether
  *      the session already has an active organization.
  *   3a. --seed-team given (#832): attach the review user to the SEEDED demo org
@@ -26,14 +29,19 @@
  *      + /set-active so the reviewer lands INSIDE the app. Apps with
  *      autoCreateOnSignup / defaultTeamSlug already have an active org → skipped.
  *
- * Best-effort by contract: this NEVER throws a non-zero exit for an auth-level
- * problem (it prints a warning and exits 0) so a seed hiccup can't fail a deploy.
- * Only a usage error (missing --url/--email/--password) exits non-zero.
+ * Best-effort by contract: an auth-level hiccup prints a warning and exits 0 so it
+ * can't fail a deploy. Two exits are non-zero: a usage error (missing
+ * --url/--email/--password), and an existing account that still refuses the given
+ * password after the reset attempt — the caller only advertises a login on exit 0
+ * (#1369), so a login known NOT to work must not exit 0 (#2358). The deploy step
+ * wraps this in `if`, so neither fails the deploy.
  *
  * Staging only — the caller (deploy-app.yml) gates this to environment != production.
  */
 
 import { execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
 
 function parseArgs(argv) {
   const out = {}
@@ -46,8 +54,55 @@ function parseArgs(argv) {
     else if (a === '--team') out.team = argv[++i]
     else if (a === '--seed-team') out.seedTeam = argv[++i]
     else if (a === '--db') out.db = argv[++i]
+    else if (a === '--sqlite') out.sqlite = argv[++i]
   }
   return out
+}
+
+/**
+ * Run the seeded-team member upsert. Two transports for the SAME statement:
+ * `--db` → remote D1 via wrangler (the deploy path, #832); `--sqlite` → the local
+ * `.data/db/sqlite.db` file `nuxt dev` reads (the `pnpm preview` path, #1777).
+ * better-sqlite3 is native, so it's required lazily — the remote path never loads it.
+ */
+function execSeedSql(args, sql) {
+  if (args.sqlite) {
+    // node:sqlite (built in since Node 22) over better-sqlite3 on purpose: this
+    // script runs from the repo ROOT, where better-sqlite3 does not resolve — it
+    // belongs to crouton-cli. Requiring it here failed silently into the
+    // "fresh empty team" fallback, which is the very bug #832 fixed. Keep
+    // better-sqlite3 as a fallback for a runtime without node:sqlite.
+    let db
+    try {
+      const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite')
+      db = new DatabaseSync(args.sqlite)
+    } catch {
+      const Database = createRequire(import.meta.url)('better-sqlite3')
+      db = new Database(args.sqlite)
+    }
+    try { db.exec(sql) } finally { db.close() }
+    return
+  }
+  // execFileSync (no shell) passes the SQL as one argv entry — quotes/JSON need no
+  // escaping. wrangler resolves the D1 db by name account-wide, so repo-root cwd is
+  // fine. CF creds come from the deploy step's env.
+  execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${sql}`, '--yes'], {
+    stdio: 'inherit',
+    env: process.env
+  })
+}
+
+/**
+ * Build the one-click review-login URL: the login form reads `?email=`/`?password=`
+ * and prefills without auto-submitting (crouton-auth `auth-modal-router.client.ts`,
+ * apply fixed in #1153). URLSearchParams is load-bearing — the `+` in
+ * `review+<app>-<key>@example.com` decodes as a SPACE unencoded, so a hand-built
+ * link logs in as the wrong address.
+ */
+export function buildLoginUrl({ url, email, password, landing }) {
+  const q = new URLSearchParams({ email, password })
+  if (landing) q.set('redirect', landing)
+  return `${new URL(url).origin}/auth/login?${q}`
 }
 
 /**
@@ -69,6 +124,28 @@ const seedOrgId = slug => seedId('org', slug)
 /** Single-quote-escape a value for an inline SQLite string literal. */
 function sqlStr(v) {
   return `'${String(v).replace(/'/g, "''")}'`
+}
+
+/**
+ * better-auth's own password hasher. This script runs from the repo ROOT, where
+ * better-auth doesn't resolve (pnpm keeps it under the packages that depend on it),
+ * so resolve it from crouton-auth — the package every crouton app's auth comes from.
+ */
+async function loadHashPassword() {
+  const req = createRequire(new URL('../packages/crouton-auth/package.json', import.meta.url))
+  const { hashPassword } = await import(pathToFileURL(req.resolve('better-auth/crypto')).href)
+  return hashPassword
+}
+
+/**
+ * SQL that sets the credential password of the user with `email` to `password`
+ * (hashed exactly like a signup, so login verifies it). Touches nothing else —
+ * the account, its team membership and anything it created stay as they are (#2358).
+ */
+export async function resetPasswordSql(email, password, hashPassword) {
+  const hash = await (hashPassword || await loadHashPassword())(password)
+  return `UPDATE "account" SET "password" = ${sqlStr(hash)} ` +
+    `WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ${sqlStr(email)});`
 }
 
 function warn(msg) {
@@ -102,7 +179,7 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const { url, email, password } = args
   if (!url || !email || !password) {
-    console.error('Usage: seed-review-login.mjs --url <deployedUrl> --email <e> --password <p> [--name <n>] [--team <t>]')
+    console.error('Usage: seed-review-login.mjs --url <url> --email <e> --password <p> [--name <n>] [--team <t>] [--seed-team <slug> (--db <d1> | --sqlite <path>)]')
     process.exit(2)
   }
 
@@ -158,10 +235,20 @@ async function main() {
       if (res.status === 422 || /USER_ALREADY_EXISTS|already exists/i.test(String(code))) {
         info(`user ${email} already exists — already seeded, reusing.`)
         // Re-establish a session for the org check below.
-        const { res: si } = await post('/api/auth/sign-in/email', { email, password })
+        let { res: si } = await post('/api/auth/sign-in/email', { email, password })
+        if (!si.ok && (args.db || args.sqlite)) {
+          // The account holds an old password (secret rotated, #2358) — reset it, retry.
+          info('existing user refuses this password — resetting it to the current one.')
+          try {
+            execSeedSql(args, await resetPasswordSql(email, password))
+            ;({ res: si } = await post('/api/auth/sign-in/email', { email, password }))
+          } catch (e) {
+            warn(`password reset failed: ${e?.message || e}`)
+          }
+        }
         if (!si.ok) {
-          info('existing user present; could not re-sign-in (password may differ) — login still works for the reviewer.')
-          process.exit(0)
+          warn(`existing user ${email} still refuses the current password — NOT advertising this login.`)
+          process.exit(1)
         }
       } else {
         warn(`sign-up failed (${code}) — skipping. The reviewer can still register manually.`)
@@ -193,7 +280,7 @@ async function main() {
   //     fresh-org fallback (3b) is skipped; on failure (e.g. an app that doesn't
   //     seed test1 → no such org) it falls through to 3b so the reviewer still
   //     lands inside a team rather than at a create-team wall.
-  if (args.seedTeam && args.db && userId) {
+  if (args.seedTeam && (args.db || args.sqlite) && userId) {
     const orgId = seedOrgId(args.seedTeam)
     const memberId = seedId('member', args.seedTeam, email)
     const createdAt = Math.floor(Date.now() / 1000)
@@ -205,14 +292,20 @@ async function main() {
       `ON CONFLICT("id") DO UPDATE SET ` +
       `"userId"=excluded."userId","organizationId"=excluded."organizationId","role"=excluded."role";`
     try {
-      // execFileSync (no shell) passes the SQL as one argv entry — quotes/JSON
-      // need no escaping. wrangler resolves the D1 db by name account-wide, so
-      // repo-root cwd is fine. CF creds come from the deploy step's env.
-      execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${sql}`, '--yes'], {
+      execSeedSql(args, sql)
+      info(`attached ${email} to seeded team "${args.seedTeam}" (${orgId}).`)
+      // Make the seeded team the review account's ONLY membership so a fresh browser
+      // login resolves it as the ACTIVE org. Without this, an `autoCreateOnSignup` app
+      // also mints a personal workspace that wins as trySetDefaultOrg's "first org",
+      // leaving the reviewer in an empty team while the seeded data sits in test1 (#1185).
+      // Scoped to this throwaway review user; the orphaned personal org is harmless.
+      const pruneSql =
+        `DELETE FROM "member" WHERE "userId"=${sqlStr(userId)} AND "organizationId"<>${sqlStr(orgId)};`
+      execFileSync('npx', ['wrangler', 'd1', 'execute', args.db, '--remote', `--command=${pruneSql}`, '--yes'], {
         stdio: 'inherit',
         env: process.env
       })
-      info(`attached ${email} to seeded team "${args.seedTeam}" (${orgId}).`)
+      info(`pruned ${email}'s other memberships — seeded team is now sole/active.`)
       const { res: sa } = await post('/api/auth/organization/set-active', { organizationId: orgId })
       if (sa.ok) {
         info('set seeded team active for the session.')
@@ -223,7 +316,7 @@ async function main() {
     } catch (e) {
       warn(`seeded-team attach failed: ${e?.message || e} — falling back to a fresh review team.`)
     }
-  } else if (args.seedTeam && args.db && !userId) {
+  } else if (args.seedTeam && (args.db || args.sqlite) && !userId) {
     warn('no session user id — cannot attach to the seeded team; falling back to a fresh review team.')
   }
 
@@ -254,4 +347,6 @@ async function main() {
   process.exit(0)
 }
 
-main()
+// Only run as a CLI — the module is also imported for `buildLoginUrl` (by
+// scripts/app-preview.mjs and the unit test), and importing must not seed.
+if (import.meta.url === pathToFileURL(process.argv[1] || '').href) main()

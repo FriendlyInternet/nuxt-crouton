@@ -12,7 +12,7 @@
  * Async setup (event lookup) — hosts wrap it in <Suspense>.
  */
 import type { Ref } from 'vue'
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 
 const props = defineProps<{
   eventSlug: string
@@ -43,6 +43,13 @@ const meta = computed(() => ({
 // selects inside OrdersTab, count feeds the chip).
 const ordersFiltersOpen = ref(false)
 const ordersFilterCount = ref(0)
+
+// Data filters (#2186): the same funnel the Shell's data pane got in #2147 —
+// selects live in DataPanel, the toggle lives in this pane's header, the count
+// feeds the chip. PaneHost never had it, so a deep-entry Data card on narrow
+// screens had no way to filter; this brings it to parity with the orders pane.
+const dataFiltersOpen = ref(false)
+const dataFilterCount = ref(0)
 
 // Settings save API — handed up by SettingsTab once its async setup resolves
 // (#1321). The Save lives in a fixed FOOTER below the scroll area, so a long
@@ -77,23 +84,41 @@ const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
             @click="ordersFiltersOpen = !ordersFiltersOpen"
           />
         </UChip>
+        <UChip
+          v-else-if="pane === 'data'"
+          :show="dataFilterCount > 0"
+          :text="dataFilterCount"
+          size="xl"
+          inset
+        >
+          <UButton
+            icon="i-lucide-filter"
+            size="xs"
+            color="neutral"
+            :variant="dataFiltersOpen ? 'soft' : 'ghost'"
+            :aria-label="t('sales.workspace.filters')"
+            @click="dataFiltersOpen = !dataFiltersOpen"
+          />
+        </UChip>
       </SalesEventWorkspacePaneHeader>
 
       <div class="flex-1 overflow-y-auto p-4 pt-2">
-        <Suspense v-if="pane === 'orders'">
-          <SalesEventWorkspaceOrdersTab
-            v-model:filters-open="ordersFiltersOpen"
-            :event="event"
-            @update:active-filter-count="ordersFilterCount = $event"
-          />
-          <template #fallback>
-            <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
-          </template>
-        </Suspense>
+        <SalesEventWorkspaceOrdersPaneBody
+          v-if="pane === 'orders'"
+          v-model:filters-open="ordersFiltersOpen"
+          :event="event"
+          @update:active-filter-count="ordersFilterCount = $event"
+        />
 
         <SalesEventWorkspaceClientsPanel v-else-if="pane === 'clients'" :event="event" />
 
-        <SalesEventWorkspaceDataPanel v-else-if="pane === 'data'" :event="event" :team-param="teamParam" />
+        <SalesEventWorkspaceDataPanel
+          v-else-if="pane === 'data'"
+          v-model:filters-open="dataFiltersOpen"
+          :event="event"
+          :team-param="teamParam"
+          @update:active-filter-count="dataFilterCount = $event"
+        />
 
         <Suspense v-else-if="pane === 'settings'">
           <SalesEventWorkspaceSettingsTab :event="event" hide-save-bar tabbed @register="settingsTab = $event" />
@@ -105,15 +130,13 @@ const settingsSaving = computed(() => settingsTab.value?.saving.value ?? false)
 
       <!-- Settings Save: a fixed footer outside the scroll area (content
            scrolls above it, never behind). -->
-      <div
+      <SalesEventWorkspaceSettingsSaveBar
+          class="px-4"
         v-if="pane === 'settings'"
-        class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-4 py-3"
-      >
-        <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
-        <UButton :loading="settingsSaving" :disabled="!settingsDirty" :color="settingsDirty ? 'primary' : 'neutral'" :variant="settingsDirty ? 'solid' : 'soft'" @click="settingsTab?.save()">
-          {{ t('sales.common.save') }}
-        </UButton>
-      </div>
+        :dirty="settingsDirty"
+        :saving="settingsSaving"
+        @save="settingsTab?.save()"
+      />
     </template>
   </div>
 </template>

@@ -123,10 +123,14 @@
           "title": "Keukenscherm",
           "live": "live",
           "active": "{count} actief",
-          "allCaughtUp": "Alles bijgewerkt — geen open bestellingen.",
-          "bump": "Klaar",
+          "allCaughtUp": "Niets af te geven — alles is buiten.",
+          "bump": "Afgegeven",
+          "tapToConfirm": "Tik om te bevestigen",
           "staff": "personeel",
-          "eventNotFound": "Evenement niet gevonden"
+          "eventNotFound": "Evenement niet gevonden",
+          "stale": "Wordt niet bijgewerkt",
+          "staleHint": "Dit scherm heeft geen verbinding meer met de server — de getoonde bestellingen kunnen verouderd zijn. Controleer de verbinding.",
+          "connecting": "verbinden"
         }
       },
       "salesOrders": {
@@ -203,7 +207,17 @@
       "orders": "Bestellingen",
       "avgOrder": "Gem. bestelling",
       "topProducts": "Topproducten",
-      "noSalesYet": "Nog geen verkoop"
+      "noSalesYet": "Nog geen verkoop",
+      "outstanding": "Wachten nog",
+      "perProduct": {
+        "title": "Per product",
+        "sold": "Verkocht",
+        "outstanding": "Nog uit",
+        "allLocations": "Alles",
+        "stillOut": "{count} nog uit",
+        "directHandover": "Deze locatie geeft direct mee — hier kan niets blijven staan",
+        "total": "Totaal"
+      }
     },
     "common": {
       "save": "Opslaan",
@@ -247,6 +261,9 @@
       "noHelperPinTitle": "Geen helper-pincode ingesteld voor dit evenement",
       "noHelperPinDescription": "Op een afgeschermde pagina wordt dit blok ontgrendeld met de helper-pincode van het evenement — zonder pincode kunnen vrijwilligers niet inloggen. Stel de pincode in bij de instellingen van het evenement.",
       "product": "Product",
+      "category": "Categorie",
+      "price": "Prijs",
+      "noCategory": "Zonder categorie",
       "total": "Totaal",
       "kitchenDisplay": "Keukenscherm",
       "orders": "Bestellingen",
@@ -275,7 +292,8 @@
       "locationRemarkPlaceholder": "Voeg een opmerking toe voor deze locatie…",
       "remark": "Opmerking",
       "remarkPlaceholder": "Typ de opmerking…",
-      "staffOrder": "Personeelsbestelling"
+      "staffOrder": "Personeelsbestelling",
+      "staffOrderShort": "Personeel"
     },
     "products": {
       "title": "Producten",
@@ -283,8 +301,7 @@
       "noProducts": "Geen producten beschikbaar",
       "outOfStock": "Uitverkocht",
       "options": "Opties",
-      "addToCart": "Toevoegen aan winkelwagen",
-      "inCart": "Besteld"
+      "addToCart": "Toevoegen aan winkelwagen"
     },
     "categories": {
       "all": "Alles",
@@ -343,7 +360,10 @@
       "clientHelp": "Selecteer een bestaande klant of maak een nieuwe aan",
       "clientRequired": "Klant vereist",
       "clientRequiredDescription": "Dit evenement vereist een klant. Selecteer of maak er een aan.",
-      "deleteError": "Kon bestelling niet verwijderen"
+      "deleteError": "Kon bestelling niet verwijderen",
+      "cancel": "Annuleren",
+      "cancelConfirm": "Zeker?",
+      "cancelError": "Kon bestelling niet annuleren"
     },
     "events": {
       "title": "Evenementen",
@@ -360,7 +380,6 @@
       "eventNotFound": "Event niet gevonden",
       "selectEvent": "Selecteer event...",
       "duplicate": "Dupliceren",
-      "openPos": "Kassa openen",
       "settings": "Instellingen"
     },
     "form": {
@@ -491,6 +510,8 @@
       "filters": "Filters",
       "resetFilters": "Filters wissen",
       "allClients": "Alle klanten",
+      "allProducts": "Alle producten",
+      "allCategories": "Alle categorieën",
       "allPrintStatuses": "Alle statussen",
       "printBusy": "Bezig",
       "addPrinter": "Printer toevoegen",
@@ -532,7 +553,7 @@
       "noLocations": "Geen locaties",
       "noHelpers": "Er zijn momenteel geen helpers ingelogd.",
       "expires": "Verloopt",
-      "addProduct": "Product toevoegen",
+      "addProduct": "Product",
       "loadingProducts": "Producten laden...",
       "noProducts": "Geen producten",
       "inThisCategory": " in deze categorie",
@@ -554,7 +575,7 @@
       "currency": "Valuta",
       "currencyEur": "Euro (€)",
       "currencyUsd": "Dollar ($)",
-      "showInactive": "Inactieve producten",
+      "showInactive": "Inactieve",
       "editCatalog": "Bewerken",
       "doneEditing": "Klaar",
       "clientsPanel": {
@@ -587,7 +608,12 @@
         "dataStat": "omzet",
         "settingsDesc": "Eventgegevens, printers, bontekst en helpers",
         "settingsStat": "printers"
-      }
+      },
+      "outstanding": "{count} in bereiding",
+      "outstandingActive": "{count} in bereiding (gefilterd)",
+      "outstandingNone": "Niets in bereiding",
+      "outstandingFilter": "Toon alleen deze",
+      "outstandingFilterClear": "Toon alle bestellingen"
     },
     "helpers": {
       "title": "Actieve helpers",

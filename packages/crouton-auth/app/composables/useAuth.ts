@@ -21,7 +21,7 @@
  * ```
  */
 import type { User } from '../../types'
-import { useAuthClient } from '../../types/auth-client'
+import { useAuthClient, requireAuthClient } from '../../types/auth-client'
 
 export interface LoginCredentials {
   email: string
@@ -165,7 +165,7 @@ export function useAuth() {
     }
 
     try {
-      const result = await authClient.signIn.email({
+      const result = await requireAuthClient().signIn.email({
         email: credentials.email,
         password: credentials.password,
         rememberMe: credentials.rememberMe
@@ -216,7 +216,7 @@ export function useAuth() {
     loading.value = true
     error.value = null
     try {
-      const result = await authClient.signIn.social({
+      const result = await requireAuthClient().signIn.social({
         provider: provider as 'github' | 'google' | 'discord',
         callbackURL: window.location.origin + '/auth/callback'
       })
@@ -245,7 +245,7 @@ export function useAuth() {
         throw new Error('Magic link is not enabled')
       }
 
-      const result = await authClient.signIn.magicLink({
+      const result = await requireAuthClient().signIn.magicLink({
         email,
         callbackURL: window.location.origin + '/auth/callback'
       })
@@ -277,7 +277,7 @@ export function useAuth() {
     try {
       // Ensure name is always a string (Better Auth requires it)
       const displayName = (data.name ?? data.email.split('@')[0]) as string
-      const result = await authClient.signUp.email({
+      const result = await requireAuthClient().signUp.email({
         email: data.email,
         password: data.password,
         name: displayName
@@ -328,7 +328,7 @@ export function useAuth() {
     loading.value = true
     error.value = null
     try {
-      await authClient.signOut()
+      await requireAuthClient().signOut()
       // Clear session state
       await clear()
     } catch (e: unknown) {

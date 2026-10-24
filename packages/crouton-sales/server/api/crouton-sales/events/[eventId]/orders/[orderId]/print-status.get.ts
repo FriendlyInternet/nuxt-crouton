@@ -10,7 +10,7 @@
  */
 import { eq, and } from 'drizzle-orm'
 import { requireScopedAccessToResource } from '@fyit/crouton-auth/server/utils/scoped-access'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
+import { salesOrders } from '../../../../../../../collections/orders/server/database/schema'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 
 export default defineEventHandler(async (event) => {

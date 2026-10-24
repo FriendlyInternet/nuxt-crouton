@@ -30,6 +30,18 @@ Read the issue, then ask each — answer with one line of evidence (a link, a pa
    we're on Workers; it patches a file that's been deleted/rewritten.)
 3. **Duplicate / colliding?** — is there an open issue or epic for the same thing? (Reuse the
    `/issue-dedup` search. If yes, this is a merge, not two builds.)
+3b. **Already being worked — right now?** — the one an issue search misses, because the
+   collision isn't another *issue*, it's another *runner*. Check all three:
+   - the issue is **closed** (someone finished while you were reading it),
+   - an **open or merged PR** references it (`search_pull_requests "<N> in:body"`, then confirm a
+     `Closes #N`-style keyword — `Follow-up to #N` is not a claim),
+   - **`status:in-progress`** is on it and was stamped recently (check the label's event
+     timestamp, not just its presence — a crashed run leaves a stale one).
+   > Any of those → **🛑 Drop** (or 🔁 into "review/finish the existing PR"). This cost three
+   > duplicate builds on 2026-08-05 alone: #1478 started 8 min *after* #1473 closed its issue,
+   > and #1889 opened while #1888 was already open. The pipeline half of this gate is the
+   > `claim-guard` in `scripts/pipeline-loop-guard.mjs` (#1890) — it cannot see interactive
+   > sessions, which is exactly how #1622 and #1889 happened. **You are that half.**
 4. **Premise still true?** — does the "we think that…" hypothesis still hold, or did reality
    change? A wrong premise makes a perfectly-built feature worthless.
 5. **Cheaper alternative?** — is there a smaller change, an existing composable/skill, or a

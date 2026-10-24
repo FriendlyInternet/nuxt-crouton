@@ -13,6 +13,8 @@ export interface Field {
   zod: string
   default: string
   tsType: string
+  /** Form control declared by the manifest for this field's (canonical) type; undefined for unknown types (#2286) */
+  component?: string
 }
 
 export async function loadFields(p: string, typeMapping: Record<string, any>): Promise<Field[]> {
@@ -57,6 +59,8 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
     // sees the canonical name. typeMapping carries `canonical` for both canonical
     // and alias keys; fall back to mapType for unknown types (#285).
     const resolvedType = typeMapping[meta?.type]?.canonical ?? mapType(meta?.type, validTypes)
+
+    attachPropertyComponents(fieldMeta, typeMapping)
     return {
       name,
       type: resolvedType,
@@ -65,7 +69,24 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
       refScope: meta?.refScope,
       zod: typeMapping[resolvedType]?.zod || 'z.string()',
       default: typeMapping[resolvedType]?.default || '\'\'',
-      tsType: typeMapping[resolvedType]?.tsType || 'string'
+      tsType: typeMapping[resolvedType]?.tsType || 'string',
+      component: typeMapping[resolvedType]?.component
     }
   })
+}
+
+// Repeater item properties get the same treatment as fields: the manifest's
+// `component` for their (canonical) type, so the item Input.vue renders what the
+// manifest says instead of a private per-type map (#2286). Types are left as
+// written — the property TS mapping has its own fallback — only `component` is
+// attached, and an explicit `component` on the property wins.
+function attachPropertyComponents(fieldMeta: Record<string, any>, typeMapping: Record<string, any>): void {
+  const properties = fieldMeta.properties
+  if (!properties || typeof properties !== 'object') return
+  for (const def of Object.values(properties as Record<string, any>)) {
+    if (!def || typeof def !== 'object' || def.component) continue
+    const canonical = typeMapping[def.type]?.canonical ?? def.type
+    const component = typeMapping[canonical]?.component
+    if (component) def.component = component
+  }
 }

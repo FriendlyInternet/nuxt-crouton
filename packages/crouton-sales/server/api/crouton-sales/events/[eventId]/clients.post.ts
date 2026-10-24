@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { requireScopedAccessToResource } from '@fyit/crouton-auth/server/utils/scoped-access'
-import { salesClients } from '~~/layers/sales/collections/clients/server/database/schema'
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
+import { salesClients } from '../../../../../collections/clients/server/database/schema'
+import { salesEvents } from '../../../../../collections/events/server/database/schema'
 import { nanoid } from 'nanoid'
 
 // Helper-authenticated endpoint: create a new client for the event's team

@@ -9,6 +9,9 @@
 //
 // This hook reconstructs the RESULTING file content (so it sees the post-edit state),
 // parses it, and blocks if any `settled` entry has an empty/missing `signedOff`.
+// Only `settled` is gated — `stopgap`/`new`/`proposed` are allowed without a sign-off
+// (`proposed` is the A0-retrofit pending state: drafted-from-artifacts, awaiting the
+// human's A1 reconcile, at which point it flips to `settled` with the recorded token).
 //
 // Scope: only files whose path ends in `spec.json`. Anything else → allow.
 // Fail-open on unparseable JSON (a half-written file is the editor's problem, not this

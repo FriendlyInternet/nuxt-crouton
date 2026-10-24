@@ -27,7 +27,10 @@ the only thing it writes.
 - **✅ Epics ready to close** — all sub-issues closed but the epic still open, split by the
   action each needs (read from the `status:ready-to-close` / `status:needs-postmortem` label
   the labeller stamps — see below): *run the postmortem then close* vs *postmortem done, just
-  close*.
+  close*. Any entry whose `epic/<number>-*` branch still carries commits not on `main`
+  (`git cherry origin/main origin/<branch>` non-empty) is annotated with a ⚠️ warning line —
+  the exact failure mode from #1976, where four deliverables went missing because an epic
+  branch was never merged (#1982). Report-only: it never blocks closing, it just says so.
 - **🚧 Epics with active work but not marked in-progress** — a sub-issue is
   `status:in-progress` but the epic isn't, so it reads as "open, not started" (#980). The
   labeller reconciles this (see below); the digest just surfaces it.

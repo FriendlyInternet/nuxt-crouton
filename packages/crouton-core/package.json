@@ -10,8 +10,8 @@
     "./shared/seed": "./shared/seed/index.ts",
     "./shared/utils/date": "./shared/utils/date.ts",
     "./shared/utils/fs": "./shared/utils/fs.ts",
-    "./shared/types/scaffold": "./shared/types/scaffold.ts",
-    "./shared/utils/scaffold": "./shared/utils/scaffold.ts",
+    "./shared/utils/d1": "./shared/utils/d1.ts",
+    "./shared/utils/query-registry": "./shared/utils/query-registry.ts",
     "./app/types/app": "./app/types/app.ts",
     "./app/types/block-definition": "./app/types/block-definition.ts",
     "./app/types/layout": "./app/types/layout.ts",
@@ -30,8 +30,6 @@
     "build": "unbuild",
     "dev": "unbuild --stub",
     "prepack": "pnpm build",
-    "sync-stub": "tsx scripts/sync-stub.ts",
-    "sync-stub:fix": "tsx scripts/sync-stub.ts --fix",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -39,11 +37,9 @@
     "app",
     "server",
     "shared",
-    "registry",
     "types",
     "dist",
     "nuxt.config.ts",
-    "crouton-team-auth.d.ts",
     "crouton-hooks.d.ts"
   ],
   "keywords": [
@@ -70,11 +66,12 @@
     "@fyit/crouton-admin": "workspace:*",
     "@fyit/crouton-auth": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
+    "@iconify-json/lucide": "^1.2.68",
     "@nuxt/kit": "^4.0.0",
     "@nuxthub/core": "^0.10.0",
-    "@nuxt/image": "^1.11.0",
+    "@nuxt/image": "^2.1.0",
     "@nuxt/ui": "catalog:",
-    "@nuxtjs/seo": "^3.3.0",
+    "@nuxtjs/seo": "^6.0.1",
     "@tailwindcss/typography": "^0.5.19",
     "@vueuse/core": "^13.3.0",
     "@vueuse/integrations": "^13.3.0",
@@ -93,10 +90,10 @@
     "@types/papaparse": "^5.5.2",
     "@types/pluralize": "^0.0.33",
     "@types/sortablejs": "^1.15.8",
-    "@vitest/coverage-v8": "^2.1.9",
-    "happy-dom": "^16.6.0",
+    "@vitest/coverage-v8": "catalog:",
+    "happy-dom": "catalog:",
     "tsx": "^4.19.2",
     "unbuild": "^3.6.1",
-    "vitest": "^2.1.0"
+    "vitest": "catalog:"
   }
 }

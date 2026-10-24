@@ -1,0 +1,70 @@
+{
+  "$comment": "Declared app↔package schema divergences (#1769). Each entry says WHY a consumer copy differs from packages/*/schemas. Undeclared behavioural drift fails CI. Regenerate with: node scripts/check-schema-drift.mjs --update",
+  "pocs/crouton-builder/schemas/pages.json": {
+    "package": "packages/crouton-pages/schemas/pages.json",
+    "reason": "Not the CMS pages collection — the builder POC reuses the `pages` name for its own canvas model (`board`, `isHome`; no content/layout/SEO/visibility). It shares only a basename with crouton-pages, which is what pairs them here.",
+    "fields": [
+      "-config",
+      "-content",
+      "-layout",
+      "-ogImage",
+      "-pageType",
+      "-publishedAt",
+      "-robots",
+      "-seoDescription",
+      "-seoTitle",
+      "-visibility",
+      "+board",
+      "+isHome",
+      "$hierarchy",
+      "slug.maxLength",
+      "slug.translatable",
+      "status.maxLength",
+      "status.options",
+      "title.maxLength",
+      "title.translatable"
+    ]
+  },
+  "pocs/kvr/schemas/settings.json": {
+    "package": "packages/crouton-bookings/schemas/settings.json",
+    "reason": "Intentional — kvr is a work-permit app, not a booking app: it drops the package's `groups`/`statuses` repeaters and adds its own `recipients` email list.",
+    "fields": [
+      "-groups",
+      "-statuses",
+      "+recipients"
+    ]
+  },
+  "pocs/sintlukas/schemas/categories.json": {
+    "package": "packages/crouton-sales/schemas/categories.json",
+    "reason": "Not really the same collection — sintlukas reuses the `categories` NAME for CMS categories (colour, thumbnail, background, sidebar flag) rather than crouton-sales' event-scoped POS categories. The basename collision is what pairs them here.",
+    "fields": [
+      "-displayOrder",
+      "-eventId",
+      "-id",
+      "+background",
+      "+color",
+      "+isSidebar",
+      "+order",
+      "+thumbnail",
+      "title.translatable"
+    ]
+  },
+  "pocs/sintlukas/schemas/locations.json": {
+    "package": "packages/crouton-sales/schemas/locations.json",
+    "reason": "Not really the same collection — sintlukas' `locations` are school campuses with addresses and coordinates, not crouton-sales' event-scoped prep stations (hence also no `requiresHandover`). Basename collision, as with categories.json above.",
+    "fields": [
+      "-eventId",
+      "-id",
+      "-requiresHandover",
+      "+city",
+      "+info",
+      "+isMain",
+      "+location",
+      "+order",
+      "+street",
+      "+zip",
+      "title.maxLength",
+      "title.translatable"
+    ]
+  }
+}

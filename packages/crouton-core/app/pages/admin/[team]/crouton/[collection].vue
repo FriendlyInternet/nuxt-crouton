@@ -15,6 +15,7 @@ definePageMeta({
 const route = useRoute()
 const { getConfig } = useCollections()
 const { collectionWithCapital } = useFormatCollections()
+const { t } = useT()
 
 const collectionName = computed(() => route.params.collection as string)
 
@@ -24,7 +25,7 @@ const collectionConfig = computed(() => getConfig(collectionName.value))
 // Verify collection exists in registry (reactive — no loading flash; the
 // viewer's own Suspense skeleton covers the data-loading phase)
 const error = computed(() =>
-  collectionConfig.value ? null : `Collection not found: ${collectionName.value}`
+  collectionConfig.value ? null : t('collection.notFound', { collection: collectionName.value })
 )
 
 // Format collection name for display

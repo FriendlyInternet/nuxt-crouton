@@ -21,7 +21,7 @@ import {
 } from '@fyit/crouton-auth/server/utils/pairing-code'
 // App-owned collection schema, reached through the consuming app's alias —
 // the same route `server/plugins/scoped-access.ts` already uses.
-import { salesEvents } from '~~/layers/sales/collections/events/server/database/schema'
+import { salesEvents } from '../../collections/events/server/database/schema'
 
 /** #1366's routers. Listed and revoked alongside tills. */
 const PRINT_DEVICE_RESOURCE_TYPE = 'print-device'

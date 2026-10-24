@@ -82,14 +82,21 @@ if (data.staleEpics?.length) {
   // Split by the action each epic needs (#763): postmortem-first vs just-close.
   const needsPm = data.staleEpics.filter((e) => e.state !== 'ready-to-close')
   const ready = data.staleEpics.filter((e) => e.state === 'ready-to-close')
+  // #1982: an epic whose branch still carries commits not on main must never read as
+  // safely closeable — this is exactly the #1976 failure mode. Annotate instead of
+  // silently allowing closure; report-only, so it doesn't block anything itself.
+  const epicLine = (e) => {
+    const base = `- ${link(e.number, e.title, e.url)} — ${e.children}/${e.children} children closed`
+    return e.branchAhead
+      ? `${base}\n  - ⚠️ \`${e.branchAhead.branch}\` is ${e.branchAhead.aheadCount} commit(s) ahead of \`main\` — do NOT close yet`
+      : base
+  }
   const lines = ['All sub-issues are closed but the epic is still open:']
   if (needsPm.length) {
-    lines.push('', '**Run the postmortem, then close:**',
-      ...needsPm.map((e) => `- ${link(e.number, e.title, e.url)} — ${e.children}/${e.children} children closed`))
+    lines.push('', '**Run the postmortem, then close:**', ...needsPm.map(epicLine))
   }
   if (ready.length) {
-    lines.push('', '**Postmortem done — ready to close:**',
-      ...ready.map((e) => `- ${link(e.number, e.title, e.url)} — ${e.children}/${e.children} children closed`))
+    lines.push('', '**Postmortem done — ready to close:**', ...ready.map(epicLine))
   }
   sections.push(['✅ Epics ready to close', lines])
 }

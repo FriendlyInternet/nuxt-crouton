@@ -2,8 +2,10 @@
 /**
  * Event Workspace page
  *
- * Thin wrapper around <SalesEventWorkspaceShell />. The shell owns the header,
- * panes and data fetching; this page just supplies the route params.
+ * Renders the SAME adaptive event-workspace block the CMS pages use
+ * (SalesBlocksEventWorkspaceRender): desktop = the multi-pane shell inline,
+ * mobile = the "Open kassa" launcher + pane-opening buttons. One workspace
+ * experience everywhere (#2186) — no separate admin-only version.
  *
  * @route /admin/[team]/sales/events/[slug]
  */
@@ -15,6 +17,6 @@ const eventSlug = computed(() => route.params.slug as string)
 
 <template>
   <div class="p-6">
-    <SalesEventWorkspaceShell :event-slug="eventSlug" />
+    <SalesBlocksEventWorkspaceRender :attrs="{ eventSlug }" />
   </div>
 </template>

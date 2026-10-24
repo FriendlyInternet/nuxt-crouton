@@ -17,21 +17,21 @@ const BRANCH = 'epic/1685-single-use-pipeline'
 
 test('parse reads a full wrapped block', () => {
   const body = `Some issue text.\n\n<!-- pipeline: epic=1685 depth=2 epic_branch=${BRANCH} -->`
-  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH })
+  assert.deepEqual(parsePipelineBlock(body), { epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null })
 })
 
 test('parse tolerates extra whitespace and key order', () => {
   const body = `<!--   pipeline:   epic_branch=${BRANCH}    epic=42   depth=0   -->`
-  assert.deepEqual(parsePipelineBlock(body), { epic: 42, depth: 0, epic_branch: BRANCH })
+  assert.deepEqual(parsePipelineBlock(body), { epic: 42, depth: 0, epic_branch: BRANCH, dispatch: null })
 })
 
 test('parse returns nulls for a subset / absent keys', () => {
   assert.deepEqual(parsePipelineBlock('<!-- pipeline: epic_branch=main -->'),
-    { epic: null, depth: null, epic_branch: 'main' })
+    { epic: null, depth: null, epic_branch: 'main', dispatch: null })
   assert.deepEqual(parsePipelineBlock('no block here'),
-    { epic: null, depth: null, epic_branch: null })
-  assert.deepEqual(parsePipelineBlock(''), { epic: null, depth: null, epic_branch: null })
-  assert.deepEqual(parsePipelineBlock(undefined), { epic: null, depth: null, epic_branch: null })
+    { epic: null, depth: null, epic_branch: null, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(''), { epic: null, depth: null, epic_branch: null, dispatch: null })
+  assert.deepEqual(parsePipelineBlock(undefined), { epic: null, depth: null, epic_branch: null, dispatch: null })
 })
 
 test('parse reads the legacy bare `pipeline:` line WS1 emitted (back-compat)', () => {
@@ -41,7 +41,7 @@ test('parse reads the legacy bare `pipeline:` line WS1 emitted (back-compat)', (
 
 test('parse ignores unknown keys and bad ints', () => {
   assert.deepEqual(parsePipelineBlock('<!-- pipeline: epic=notanint depth=3 wave=2 -->'),
-    { epic: null, depth: 3, epic_branch: null })
+    { epic: null, depth: 3, epic_branch: null, dispatch: null })
 })
 
 test('depth=0 is preserved, not dropped as falsy', () => {
@@ -49,7 +49,7 @@ test('depth=0 is preserved, not dropped as falsy', () => {
 })
 
 test('format emits only present keys in a stable order', () => {
-  assert.equal(formatPipelineBlock({ epic: 1685, depth: 2, epic_branch: BRANCH }),
+  assert.equal(formatPipelineBlock({ epic: 1685, depth: 2, epic_branch: BRANCH, dispatch: null }),
     `<!-- pipeline: epic=1685 depth=2 epic_branch=${BRANCH} -->`)
   assert.equal(formatPipelineBlock({ epic_branch: BRANCH }),
     `<!-- pipeline: epic_branch=${BRANCH} -->`)
@@ -58,9 +58,9 @@ test('format emits only present keys in a stable order', () => {
 })
 
 test('write appends a block to a body that has none', () => {
-  const out = writePipelineBlock('Issue body.', { epic: 1685, depth: 1, epic_branch: BRANCH })
+  const out = writePipelineBlock('Issue body.', { epic: 1685, depth: 1, epic_branch: BRANCH, dispatch: null })
   assert.match(out, /^Issue body\.\n\n<!-- pipeline: epic=1685 depth=1 epic_branch=/)
-  assert.deepEqual(parsePipelineBlock(out), { epic: 1685, depth: 1, epic_branch: BRANCH })
+  assert.deepEqual(parsePipelineBlock(out), { epic: 1685, depth: 1, epic_branch: BRANCH, dispatch: null })
 })
 
 test('write is idempotent — same context twice is byte-identical', () => {
@@ -74,7 +74,7 @@ test('write replaces an existing block in place (no duplication)', () => {
   const start = writePipelineBlock('Body', { epic: 1, depth: 0, epic_branch: 'main' })
   const updated = writePipelineBlock(start, { depth: 1, epic_branch: BRANCH })
   // epic preserved from the merge, depth+branch updated, still exactly one block.
-  assert.deepEqual(parsePipelineBlock(updated), { epic: 1, depth: 1, epic_branch: BRANCH })
+  assert.deepEqual(parsePipelineBlock(updated), { epic: 1, depth: 1, epic_branch: BRANCH, dispatch: null })
   assert.equal((updated.match(/<!-- pipeline:/g) || []).length, 1)
 })
 
@@ -94,5 +94,25 @@ test('a partial update with explicit nulls preserves siblings (the CLI write pat
   // parseTokens yields null for absent keys; `write depth=1` must NOT wipe epic/epic_branch.
   const start = writePipelineBlock('Body', { epic: 1685, depth: 0, epic_branch: BRANCH })
   const updated = writePipelineBlock(start, { epic: null, depth: 1, epic_branch: null })
-  assert.deepEqual(parsePipelineBlock(updated), { epic: 1685, depth: 1, epic_branch: BRANCH })
+  assert.deepEqual(parsePipelineBlock(updated), { epic: 1685, depth: 1, epic_branch: BRANCH, dispatch: null })
+})
+
+// ── #1923: `dispatch` — the trigger label a blocked child should be released with ────
+// #1750 withholds the trigger label from a blocked child, which threw away the leaf-vs-split
+// call the decomposer had already made. The wave scheduler then released everything with
+// `delegate`, burning a decompose run to re-derive it — and free to re-classify the child
+// differently than its parent planned. Carrying it on the block is what fixes that.
+test('dispatch round-trips and stays absent when not set', () => {
+  const out = writePipelineBlock('Body', { epic: 7, depth: 1, epic_branch: BRANCH, dispatch: 'work-this' })
+  assert.match(out, /dispatch=work-this/)
+  assert.equal(parsePipelineBlock(out).dispatch, 'work-this')
+  // absent → null, so callers fall back to `delegate` and pre-existing epics are untouched
+  assert.equal(parsePipelineBlock(writePipelineBlock('Body', { epic: 7 })).dispatch, null)
+})
+
+test('a partial update does not clobber a recorded dispatch', () => {
+  const start = writePipelineBlock('Body', { epic: 7, depth: 0, dispatch: 'work-this' })
+  const updated = writePipelineBlock(start, { depth: 1 })
+  assert.equal(parsePipelineBlock(updated).dispatch, 'work-this', 'survives an unrelated update')
+  assert.equal(parsePipelineBlock(updated).depth, 1)
 })

@@ -17,6 +17,7 @@ import {
   shouldRelease,
   formatHoldComment,
   formatReleaseComment,
+  releaseLabel,
   HOLD_MARKER,
 } from './wave-gate.mjs'
 
@@ -33,11 +34,17 @@ test('parseBlockers dedupes and tolerates no line', () => {
   assert.deepEqual(parseBlockers(undefined), [])
 })
 
-test('isDispatched catches both in-flight labels, in either shape', () => {
+test('isDispatched catches every in-flight label, in either shape', () => {
   assert.equal(isDispatched(['delegate']), true)
   assert.equal(isDispatched([{ name: 'status:in-progress' }]), true)
   assert.equal(isDispatched([{ name: 'type:feat' }]), false)
   assert.equal(isDispatched([]), false)
+  // #1750: the event-driven pipeline sends a leaf straight to the single-use worker with
+  // `work-this` (never `delegate`), and a still-splitting child gets `delegate-pi`. Missing
+  // these made an issue a worker was already building look un-dispatched, so the scheduler
+  // would pile `delegate` on top and start a redundant run against live work.
+  assert.equal(isDispatched(['work-this']), true)
+  assert.equal(isDispatched([{ name: 'delegate-pi' }]), true)
 })
 
 // ── summarizeChecks ──────────────────────────────────────────────────────────
@@ -137,4 +144,39 @@ test('the hold comment is deduped, self-resolving and overridable', () => {
 test('the release comment names the blocker and only claims green when it is', () => {
   assert.match(formatReleaseComment({ doneNumber: 1655, branchStatus: 'success' }), /Its branch is green/)
   assert.doesNotMatch(formatReleaseComment({ doneNumber: 1655, branchStatus: 'unknown' }), /green/)
+})
+
+// ── #1923: release with the label the decomposer already chose ───────────────────────
+// Measured on the #1750 live-fire: #1919/#1920 were planned as leaves, blocked, then released
+// with `delegate` — each costing a decompose run purely to re-derive `{"leaf": true}`.
+test('releaseLabel honours a recorded dispatch, else falls back to delegate', () => {
+  assert.equal(releaseLabel('<!-- pipeline: epic=1 depth=1 dispatch=work-this -->'), 'work-this')
+  assert.equal(releaseLabel('<!-- pipeline: epic=1 depth=2 dispatch=delegate-pi -->'), 'delegate-pi')
+  // no record → exactly today's behaviour. Hand-sequenced epics and everything predating the
+  // event-driven pipeline must keep working untouched.
+  assert.equal(releaseLabel('<!-- pipeline: epic=1 depth=1 -->'), 'delegate')
+  assert.equal(releaseLabel('Blocked-by: #12\n\njust prose'), 'delegate')
+  assert.equal(releaseLabel(''), 'delegate')
+  assert.equal(releaseLabel(undefined), 'delegate')
+})
+
+test('an unrecognised dispatch value is NOT applied as a label', () => {
+  // the body is model-authored and this value becomes a label that starts a run — allow-list only
+  for (const bad of ['status:blocked', 'epic', 'rm -rf', 'WORK-THIS', 'delegate-hard']) {
+    assert.equal(releaseLabel(`<!-- pipeline: epic=1 dispatch=${bad} -->`), 'delegate', `must reject: ${bad}`)
+  }
+})
+
+test('shouldRelease carries the label through, and the comment names it', () => {
+  const d = shouldRelease({
+    blockerStates: ['closed'], labels: [], branchStatus: 'success',
+    body: '<!-- pipeline: epic=1 depth=1 dispatch=work-this -->',
+  })
+  assert.equal(d.release, true)
+  assert.equal(d.label, 'work-this')
+  assert.match(formatReleaseComment({ doneNumber: 5, branchStatus: 'success', label: d.label }), /applied `work-this`/)
+  // a held decision carries no label — nothing is applied
+  assert.equal(shouldRelease({ blockerStates: ['open'], body: '<!-- pipeline: dispatch=work-this -->' }).label, undefined)
+  // and the comment's default keeps the old wording for callers that pass nothing
+  assert.match(formatReleaseComment({ doneNumber: 5, branchStatus: 'success' }), /applied `delegate`/)
 })

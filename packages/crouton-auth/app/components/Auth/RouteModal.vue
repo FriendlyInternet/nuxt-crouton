@@ -138,11 +138,11 @@ const oauthButtons = computed<ButtonProps[]>(() => {
   if (hasOAuth.value && oauthProviders.value.length > 0) {
     for (const provider of oauthProviders.value) {
       const cfg = providerConfig[provider] || { icon: 'i-lucide-user', name: provider }
-      result.push({ label: `Continue with ${cfg.name}`, icon: cfg.icon, onClick: () => handleOAuth(provider) })
+      result.push({ label: t('auth.continueWith', { provider: cfg.name }), icon: cfg.icon, onClick: () => handleOAuth(provider) })
     }
   }
   if (passkeyAvailable.value) {
-    result.push({ label: 'Sign in with Passkey', icon: 'i-lucide-fingerprint', onClick: handlePasskey })
+    result.push({ label: t('auth.signInWithPasskey'), icon: 'i-lucide-fingerprint', onClick: handlePasskey })
   }
   return result
 })
@@ -152,9 +152,9 @@ async function handleOAuth(provider: string) {
   try {
     await loginWithOAuth(provider)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'OAuth login failed'
+    const message = e instanceof Error ? e.message : t('auth.oauthLoginFailed')
     formError.value = message
-    notify.error('Error', { description: message })
+    notify.error(t('common.error'), { description: message })
   }
 }
 
@@ -164,9 +164,9 @@ async function handlePasskey() {
     await loginWithPasskey()
     await handleSuccess()
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Passkey login failed'
+    const message = e instanceof Error ? e.message : t('auth.passkeyLoginFailed')
     formError.value = message
-    notify.error('Error', { description: message })
+    notify.error(t('common.error'), { description: message })
   }
 }
 
@@ -182,7 +182,7 @@ const loginFields = computed<AuthFormField[]>(() => {
   }
   return [
     { name: 'email', type: 'email', label: t('auth.email'), placeholder: 'you@example.com', required: true },
-    { name: 'password', type: 'password', label: t('auth.password'), placeholder: 'Enter your password', required: true },
+    { name: 'password', type: 'password', label: t('auth.password'), placeholder: t('auth.placeholders.password'), required: true },
     { name: 'rememberMe', type: 'checkbox', label: t('auth.rememberMe') }
   ]
 })
@@ -193,16 +193,26 @@ const loginSubmitButton = computed(() => ({
   block: true
 }))
 
-// Prefill credentials from a shared link (e.g. /auth/login?email=…&password=…)
-// when the login form mounts. Fills the fields only — the user still clicks
-// Sign in (we never auto-submit). Re-applies if the form remounts (e.g. magic-
-// link toggle) while still in login mode.
+// Prefill credentials from a shared link (e.g. /auth/login?email=…&password=…).
+// Fills the fields only — the user still clicks Sign in (we never auto-submit).
+//
+// This watches the form ref AND the prefill values, `immediate` + `flush: 'post'`
+// (#1153): UAuthForm builds its own `state`, so the values can only be written
+// once that object exists. The old one-shot `watch(loginFormRef)` fired exactly
+// once — before `form.state` was ready it early-returned forever, and a prefill
+// arriving after mount (in-app nav → the router plugin opens the modal on an
+// already-mounted form) was never applied. Watching both sources means whichever
+// lands last still fills the form.
 const loginFormRef = useTemplateRef('loginForm')
-watch(loginFormRef, (form) => {
-  if (!form?.state) return
-  if (state.value.prefillEmail) form.state.email = state.value.prefillEmail
-  if (state.value.prefillPassword) form.state.password = state.value.prefillPassword
-})
+watch(
+  [loginFormRef, () => state.value.prefillEmail, () => state.value.prefillPassword],
+  ([form, email, password]) => {
+    if (!form?.state) return
+    if (email) form.state.email = email
+    if (password) form.state.password = password
+  },
+  { immediate: true, flush: 'post' }
+)
 
 async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: string, rememberMe?: boolean }>) {
   formError.value = null
@@ -214,14 +224,24 @@ async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: 
     return
   }
 
+  // The login UAuthForm carries no `:schema`, so `required` on the fields is
+  // cosmetic — an empty submit would reach the server and surface the raw Zod
+  // error (`[body.email] Invalid input: expected string, received undefined`).
+  // Answer it here instead (#1153).
+  if (!event.data.email || !event.data.password) {
+    submitting.value = false
+    formError.value = t('auth.credentialsRequired')
+    return
+  }
+
   try {
     await login({ email: event.data.email, password: event.data.password!, rememberMe: event.data.rememberMe || false })
     await handleSuccess()
   } catch (e: unknown) {
     submitting.value = false
-    const message = e instanceof Error ? e.message : 'Login failed'
+    const message = e instanceof Error ? e.message : t('auth.loginFailed')
     formError.value = message
-    notify.error('Error', { description: message })
+    notify.error(t('common.error'), { description: message })
   }
 }
 
@@ -230,11 +250,11 @@ async function handleMagicLink(email: string) {
     await loginWithMagicLink(email)
     magicLinkSent.value = true
     magicLinkEmail.value = email
-    notify.success('Check your email', { description: 'We sent you a magic link to sign in.' })
+    notify.success(t('auth.checkYourInbox'), { description: t('auth.magicLinkSentDescription') })
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Magic link failed'
+    const message = e instanceof Error ? e.message : t('auth.magicLinkFailed')
     formError.value = message
-    notify.error('Error', { description: message })
+    notify.error(t('common.error'), { description: message })
   }
 }
 
@@ -243,10 +263,10 @@ async function handleMagicLink(email: string) {
 const minPasswordLength = 8
 
 const registerFields = computed<AuthFormField[]>(() => [
-  { name: 'name', type: 'text', label: t('forms.fullName'), placeholder: 'John Doe', required: true },
+  { name: 'name', type: 'text', label: t('forms.fullName'), placeholder: t('auth.placeholders.name'), required: true },
   { name: 'email', type: 'email', label: t('auth.email'), placeholder: 'you@example.com', required: true, readonly: !!state.value.prefillEmail },
-  { name: 'password', type: 'password', label: t('auth.password'), placeholder: `At least ${minPasswordLength} characters`, required: true },
-  { name: 'confirmPassword', type: 'password', label: t('auth.confirmPassword'), placeholder: 'Confirm your password', required: true }
+  { name: 'password', type: 'password', label: t('auth.password'), placeholder: t('auth.placeholders.atLeastChars', { min: minPasswordLength }), required: true },
+  { name: 'confirmPassword', type: 'password', label: t('auth.confirmPassword'), placeholder: t('auth.placeholders.confirmPassword'), required: true }
 ])
 
 const registerFormRef = useTemplateRef('registerForm')
@@ -283,13 +303,13 @@ async function onRegisterSubmit(event: FormSubmitEvent<{ name: string, email: st
   submitting.value = true
   try {
     await register({ name: event.data.name, email: event.data.email, password: event.data.password })
-    notify.success('Account created', { description: 'Welcome! Your account has been created.' })
+    notify.success(t('auth.accountCreated'), { description: t('auth.accountCreatedDescription') })
     await handleSuccess()
   } catch (e: unknown) {
     submitting.value = false
-    const message = e instanceof Error ? e.message : 'Registration failed'
+    const message = e instanceof Error ? e.message : t('auth.registrationFailed')
     formError.value = message
-    notify.error('Error', { description: message })
+    notify.error(t('common.error'), { description: message })
   }
 }
 
@@ -314,12 +334,12 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
     await forgotPassword(event.data.email)
     emailSent.value = true
     sentEmail.value = event.data.email
-    notify.success('Email sent', { description: 'Check your inbox for a password reset link.' })
+    notify.success(t('auth.emailSent'), { description: t('auth.resetLinkSentDescription') })
   } catch {
     // Don't reveal if email exists — always show success
     emailSent.value = true
     sentEmail.value = event.data.email
-    notify.success('Email sent', { description: 'If an account exists with this email, you will receive a reset link.' })
+    notify.success(t('auth.emailSent'), { description: t('auth.resetLinkIfAccountExists') })
   } finally {
     submitting.value = false
   }
@@ -344,7 +364,7 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
             icon="i-lucide-arrow-left"
             @click="handleGoHome"
           >
-            Go home
+            {{ t('auth.goHome') }}
           </UButton>
         </div>
         <Transition
@@ -375,7 +395,7 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 {{ t('auth.checkYourInbox') }}
               </h2>
               <p class="mt-2 text-muted">
-                We sent a magic link to <span class="font-medium text-highlighted">{{ magicLinkEmail }}</span>
+                {{ t('auth.magicLinkSentTo') }} <span class="font-medium text-highlighted">{{ magicLinkEmail }}</span>
               </p>
             </div>
             <UButton
@@ -398,7 +418,7 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
               :disabled="submitting"
               :title="showMagicLink ? t('auth.signInWithMagicLink') : t('auth.welcomeBack')"
               :icon="showMagicLink ? 'i-lucide-wand-2' : 'i-lucide-lock'"
-              :separator="hasPassword && oauthButtons.length > 0 ? 'or' : undefined"
+              :separator="hasPassword && oauthButtons.length > 0 ? t('auth.or') : undefined"
               @submit="onLoginSubmit"
             >
               <template #description>
@@ -521,7 +541,7 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
             :disabled="submitting"
             :title="t('auth.createYourAccount')"
             icon="i-lucide-user-plus"
-            :separator="oauthButtons.length > 0 ? 'or' : undefined"
+            :separator="oauthButtons.length > 0 ? t('auth.or') : undefined"
             @submit="onRegisterSubmit"
           >
             <template #description>
@@ -632,7 +652,7 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 {{ t('auth.checkYourInbox') }}
               </h2>
               <p class="mt-2 text-muted">
-                We sent a password reset link to
+                {{ t('auth.resetLinkSentTo') }}
                 <span class="font-medium text-highlighted">{{ sentEmail }}</span>
               </p>
             </div>
@@ -642,7 +662,7 @@ async function onForgotPasswordSubmit(event: FormSubmitEvent<{ email: string }>)
                 block
                 @click="emailSent = false; sentEmail = ''"
               >
-                Try another email
+                {{ t('auth.tryAnotherEmail') }}
               </UButton>
               <UButton
                 color="neutral"

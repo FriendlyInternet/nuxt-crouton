@@ -29,7 +29,7 @@
 // be embedded mid-page.
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { Ref } from 'vue'
-import type { SalesEvent } from '~~/layers/sales/collections/events/types'
+import type { SalesEvent } from '../../../collections/events/types'
 
 const props = withDefaults(defineProps<{
   /** Slug of the event to render. */
@@ -206,6 +206,13 @@ const hasGutter = computed(() =>
 // selects live in OrdersTab — state is lifted here, count feeds the chip.
 const ordersFiltersOpen = ref(false)
 const ordersFilterCount = ref(0)
+
+// Data-pane filters (#2147): same pattern — product/category selects + the
+// personnel toggle live in DataPanel, the toggle button lives in the pane
+// header, state is lifted here so the chip count is visible even while the
+// panel itself is collapsed.
+const dataFiltersOpen = ref(false)
+const dataFilterCount = ref(0)
 
 // Kassa height: fill the viewport from wherever the module actually starts —
 // hosts differ wildly (admin page with navbar, chrome-less full-screen CMS
@@ -404,17 +411,12 @@ const kassaHeightStyle = computed(() =>
                 />
               </UChip>
             </SalesEventWorkspacePaneHeader>
-            <div class="flex-1 overflow-y-auto p-4 pt-2">
-              <Suspense>
-                <SalesEventWorkspaceOrdersTab
-                  v-model:filters-open="ordersFiltersOpen"
-                  :event="event"
-                  @update:active-filter-count="ordersFilterCount = $event"
-                />
-                <template #fallback>
-                  <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
-                </template>
-              </Suspense>
+            <div class="flex-1 overflow-y-auto">
+              <SalesEventWorkspaceOrdersPaneBody
+                v-model:filters-open="ordersFiltersOpen"
+                :event="event"
+                @update:active-filter-count="ordersFilterCount = $event"
+              />
             </div>
           </SplitterPanel>
         </template>
@@ -442,9 +444,25 @@ const kassaHeightStyle = computed(() =>
               icon="i-lucide-chart-line"
               :title="t('sales.workspace.dataPanel.title')"
               @close="dataOpen = false"
-            />
-            <div class="flex-1 overflow-y-auto p-4 pt-2">
-              <SalesEventWorkspaceDataPanel :event="event" :team-param="teamParam" />
+            >
+              <UChip :show="dataFilterCount > 0" :text="dataFilterCount" size="xl" inset>
+                <UButton
+                  icon="i-lucide-filter"
+                  size="xs"
+                  color="neutral"
+                  :variant="dataFiltersOpen ? 'soft' : 'ghost'"
+                  :aria-label="t('sales.workspace.filters')"
+                  @click="dataFiltersOpen = !dataFiltersOpen"
+                />
+              </UChip>
+            </SalesEventWorkspacePaneHeader>
+            <div class="flex-1 overflow-y-auto min-w-0 flex flex-col">
+              <SalesEventWorkspaceDataPanel
+                v-model:filters-open="dataFiltersOpen"
+                :event="event"
+                :team-param="teamParam"
+                @update:active-filter-count="dataFilterCount = $event"
+              />
             </div>
           </SplitterPanel>
         </template>
@@ -471,12 +489,12 @@ const kassaHeightStyle = computed(() =>
                 </template>
               </Suspense>
             </div>
-            <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-3 py-3">
-              <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
-              <UButton :loading="settingsSaving" :disabled="!settingsDirty" :color="settingsDirty ? 'primary' : 'neutral'" :variant="settingsDirty ? 'solid' : 'soft'" @click="settingsTab?.save()">
-                {{ t('sales.common.save') }}
-              </UButton>
-            </div>
+            <SalesEventWorkspaceSettingsSaveBar
+              class="px-3"
+              :dirty="settingsDirty"
+              :saving="settingsSaving"
+              @save="settingsTab?.save()"
+            />
           </SplitterPanel>
         </template>
       </SplitterGroup>
@@ -616,16 +634,11 @@ const kassaHeightStyle = computed(() =>
             </UChip>
           </SalesEventWorkspacePaneHeader>
           <div class="flex-1 overflow-y-auto p-4 pt-2">
-            <Suspense>
-              <SalesEventWorkspaceOrdersTab
-                v-model:filters-open="ordersFiltersOpen"
-                :event="event"
-                @update:active-filter-count="ordersFilterCount = $event"
-              />
-              <template #fallback>
-                <div class="p-6 text-center text-muted">{{ t('sales.common.loading') }}</div>
-              </template>
-            </Suspense>
+            <SalesEventWorkspaceOrdersPaneBody
+              v-model:filters-open="ordersFiltersOpen"
+              :event="event"
+              @update:active-filter-count="ordersFilterCount = $event"
+            />
           </div>
         </div>
       </template>
@@ -661,9 +674,25 @@ const kassaHeightStyle = computed(() =>
             icon="i-lucide-chart-line"
             :title="t('sales.workspace.dataPanel.title')"
             @close="dataSlideoverOpen = false"
-          />
+          >
+            <UChip :show="dataFilterCount > 0" :text="dataFilterCount" size="xl" inset>
+              <UButton
+                icon="i-lucide-filter"
+                size="xs"
+                color="neutral"
+                :variant="dataFiltersOpen ? 'soft' : 'ghost'"
+                :aria-label="t('sales.workspace.filters')"
+                @click="dataFiltersOpen = !dataFiltersOpen"
+              />
+            </UChip>
+          </SalesEventWorkspacePaneHeader>
           <div class="flex-1 overflow-y-auto p-4 pt-2">
-            <SalesEventWorkspaceDataPanel :event="event" :team-param="teamParam" />
+            <SalesEventWorkspaceDataPanel
+              v-model:filters-open="dataFiltersOpen"
+              :event="event"
+              :team-param="teamParam"
+              @update:active-filter-count="dataFilterCount = $event"
+            />
           </div>
         </div>
       </template>
@@ -692,12 +721,12 @@ const kassaHeightStyle = computed(() =>
               </template>
             </Suspense>
           </div>
-          <div class="flex-none flex items-center justify-end gap-3 border-t border-default bg-default px-3 py-3">
-            <span v-if="settingsDirty" class="text-sm text-muted">{{ t('sales.workspace.unsavedChanges') }}</span>
-            <UButton :loading="settingsSaving" :disabled="!settingsDirty" :color="settingsDirty ? 'primary' : 'neutral'" :variant="settingsDirty ? 'solid' : 'soft'" @click="settingsTab?.save()">
-              {{ t('sales.common.save') }}
-            </UButton>
-          </div>
+          <SalesEventWorkspaceSettingsSaveBar
+            class="px-3"
+            :dirty="settingsDirty"
+            :saving="settingsSaving"
+            @save="settingsTab?.save()"
+          />
         </div>
       </template>
     </USlideover>

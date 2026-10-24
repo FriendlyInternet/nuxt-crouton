@@ -47,17 +47,12 @@ All tools accept `collection` (string) and `teamId` (string) params. They call e
 ## Configuration
 
 ```typescript
-// nuxt.config.ts — enabled via unified module
+// nuxt.config.ts — opt in by extending the layer
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton'],
-  crouton: {
-    mcpToolkit: true  // Opt-in (disabled by default)
+  extends: ['@fyit/crouton-core', '@fyit/crouton-mcp-toolkit'],
+  croutonMcpToolkit: {
+    enabled: true  // default: on in dev, off in production
   }
-})
-
-// Or via layer extends
-export default defineNuxtConfig({
-  extends: ['@fyit/crouton-mcp-toolkit']
 })
 ```
 
@@ -121,7 +116,7 @@ npx @modelcontextprotocol/inspector http://localhost:3000/mcp
 - **Requires**: `@nuxtjs/mcp-toolkit` (peer dep)
 - **Uses**: `@fyit/crouton-auth` (for team auth, dynamic import)
 - **Reads**: `appConfig.croutonCollections` (from crouton-core)
-- **Integrates with**: `@fyit/crouton` unified module (feature flag: `mcpToolkit`)
+- **Enabled by**: extending the layer (`extends`); options under the `croutonMcpToolkit` config key
 
 ## Testing
 

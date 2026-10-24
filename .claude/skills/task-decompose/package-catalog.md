@@ -10,12 +10,11 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 
 | Package | Dir | What it provides (when to reach for it) |
 |---------|-----|------------------------------------------|
-| `@fyit/crouton` | `packages/crouton` | Unified Nuxt CRUD framework with opt-in features |
+| `@fyit/canary-target` | `packages/canary-target` | Disposable target for the worker-pipeline canary rig (#1878). Never published, never imported. |
 | `@fyit/crouton-admin` | `packages/crouton-admin` | Admin dashboard and user management for Nuxt applications using crouton-auth |
 | `@fyit/crouton-ai` | `packages/crouton-ai` | AI integration layer for Nuxt Crouton |
 | `@fyit/crouton-analytics` | `packages/crouton-analytics` | Provider-agnostic usage analytics for nuxt-crouton — PostHog default, swappable backend, lean-loop events |
 | `@fyit/crouton-assets` | `packages/crouton-assets` | Asset management layer extending nuxt-crouton for centralized media library |
-| `@fyit/crouton-atelier` | `packages/crouton-atelier` | Visual app builder for Nuxt Crouton — compose apps from pre-defined blocks |
 | `@fyit/crouton-audio` | `packages/crouton-audio` | Audio player layer for Crouton with waveform visualization (wraps WaveSurfer.js) |
 | `@fyit/crouton-auth` | `packages/crouton-auth` | Authentication layer for Nuxt applications using Better Auth with teams, passkeys, and 2FA support |
 | `@fyit/crouton-bookings` | `packages/crouton-bookings` | Booking system layer for Nuxt Crouton - slot-based and inventory-based reservations |
@@ -23,7 +22,6 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-cli` | `packages/crouton-cli` | CLI for Nuxt Crouton - Generate complete CRUD collections with API, components, and database schema |
 | `@fyit/crouton-collab` | `packages/crouton-collab` | Real-time collaboration layer for Nuxt Crouton using Yjs CRDTs |
 | `@fyit/crouton-core` | `packages/crouton-core` | Base CRUD layer for FYIT scaffolded collections |
-| `@fyit/crouton-designer` | `packages/crouton-designer` | AI-guided schema designer for Nuxt Crouton applications |
 | `@fyit/crouton-devtools` | `packages/crouton-devtools` | DevTools integration for Nuxt Crouton - visual inspection and management of CRUD collections |
 | `@fyit/crouton-editor` | `packages/crouton-editor` | Rich text editor layer extending nuxt-crouton (wraps Nuxt UI Editor) |
 | `@fyit/crouton-email` | `packages/crouton-email` | Email infrastructure for Nuxt applications using Vue Email templates and Resend delivery |
@@ -31,7 +29,7 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-feedback` | `packages/crouton-feedback` | Drop-in in-page feedback toolkit for any Nuxt UI app — a glasses launcher with a mobile console (eruda) and a pin-a-comment Annotate tool that sends to a pluggable destination (webhook / Slack / Discord / GitHub) |
 | `@fyit/crouton-flow` | `packages/crouton-flow` | Vue Flow integration for nuxt-crouton - graph/DAG visualization for collections |
 | `@fyit/crouton-i18n` | `packages/crouton-i18n` | i18n layer extending nuxt-crouton for multi-language support |
-| `@fyit/crouton-layout` | `packages/crouton-layout` | Deterministic layout engine for Nuxt Crouton — the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Default-on via @fyit/crouton. |
+| `@fyit/crouton-layout` | `packages/crouton-layout` | Deterministic layout engine for Nuxt Crouton — the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Opt in by extending it next to @fyit/crouton-core. |
 | `@fyit/crouton-maps` | `packages/crouton-maps` | Map integration layer for Nuxt Crouton with MapLibre GL (@geoql/v-maplibre), OpenFreeMap tiles, and Nominatim geocoding — no API keys required |
 | `@fyit/crouton-mcp` | `packages/crouton-mcp` | MCP server for AI-powered Crouton collection generation |
 | `@fyit/crouton-mcp-toolkit` | `packages/crouton-mcp-toolkit` | MCP Toolkit integration for Crouton - expose collections to AI assistants via Model Context Protocol |
@@ -40,4 +38,3 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-sales` | `packages/crouton-sales` | POS/Sales system for Nuxt Crouton - products, categories, orders, and optional thermal receipt printing |
 | `@fyit/crouton-themes` | `packages/crouton-themes` | Swappable themes for Nuxt UI applications |
 | `@fyit/crouton-three` | `packages/crouton-three` | TresJS (Three.js for Vue) integration for Nuxt Crouton — 3D scenes, glTF model viewer, keyboard controls, and a pages block for interactive 3D content and games |
-| `@fyit/crouton-triage` | `packages/crouton-triage` | Discussion-to-task triage system for Nuxt Crouton - AI analysis, multi-source adapters (Slack, Figma, Notion), domain routing |

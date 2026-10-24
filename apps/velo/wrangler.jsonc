@@ -37,6 +37,11 @@
   "env": {
     "staging": {
       "routes": [{ "pattern": "velo.pmcp.dev", "custom_domain": true }],
+      // Public runtime vars (not secrets). Booking emails link back to staging, not
+      // production (#2405). Wrangler does NOT inherit top-level vars into an env.
+      "vars": {
+        "NUXT_PUBLIC_CROUTON_EMAIL_BRAND_URL": "https://velo.pmcp.dev"
+      },
       "d1_databases": [
         {
           "binding": "DB",

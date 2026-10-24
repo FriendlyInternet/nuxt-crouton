@@ -10,9 +10,10 @@
  * run reported success ("green but it didn't happen").
  *
  * Two guarantees here:
- *   1. `resolveChangedFiles` NEVER swallows a diff failure. On push-to-main it prefers the
- *      merge's first-parent diff (`HEAD~1..HEAD` — the net change, robust to concurrent
- *      pushes, unlike before..after), and if it cannot resolve ANY base it throws.
+ *   1. `resolveChangedFiles` NEVER swallows a diff failure. On push-to-main it diffs the whole
+ *      push (`before..after`, so every commit of a rebase merge counts — #2396), falls back to
+ *      the first-parent diff (`HEAD~1..HEAD`) only when `before` can't be trusted, and if it
+ *      cannot resolve ANY base it throws.
  *   2. An EMPTY changed-file set on a triggered push/PR is treated as a compute failure,
  *      not "deploy nothing": the workflow's own `paths:` filter guarantees ≥1 watched file
  *      changed, so empty ⇒ the diff broke ⇒ fail loud (red run → report-failed-deploy
@@ -28,6 +29,15 @@ import { readdirSync, existsSync, readFileSync, appendFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
 export const ZERO_SHA = '0000000000000000000000000000000000000000'
+
+// #2140: the ONE carve-out from #1297's "PRs only deploy their own app" rule. A PR the pi
+// worker opened as a UI-sign-off hold (work-issue-pidev.yml, #1748) is never a fan-out — it's
+// exactly one known app, held specifically so a human can look at it — so it opts back into
+// the app's full watchPaths instead of the PR-restricted `apps/<app>/**`. Kept as a literal
+// HTML-comment marker (not a label) so no extra GitHub API call is needed: the PR body is
+// already on the `pull_request` event payload. Must match the marker work-issue-pidev.yml
+// appends to HOLD_NOTE — grep both on change.
+export const UI_SIGNOFF_MARKER = '<!-- deploy-preview: full-watch -->'
 
 export class DetectError extends Error {}
 
@@ -52,7 +62,10 @@ export function fileMatchesAny(file, patterns = []) {
  *   "production" choice reaches production; anything else → staging — the #318 whitelist).
  * - push / pull_request: STAGING only (#318). A pull_request deploys ONLY the app whose OWN
  *   paths (`apps/<app>/**`) changed (#1297 — a shared-package break is caught by the fixture
- *   smoke + the rung-2 push deploy, not a per-PR fan-out). A push keeps the full watchPaths.
+ *   smoke + the rung-2 push deploy, not a per-PR fan-out) — UNLESS the PR carries the
+ *   UI_SIGNOFF_MARKER (#2140), in which case it matches the full watchPaths like a push does,
+ *   so the app it needs sign-off on actually gets a live preview. A push always keeps the full
+ *   watchPaths.
  */
 function toEntry(a, environment) {
   return {
@@ -73,21 +86,22 @@ function dispatchInclude(dispatchApp, dispatchEnv, apps) {
   return [toEntry(a, dispatchEnv === 'production' ? 'production' : 'staging')]
 }
 
-// push / pull_request → STAGING only. A pull_request matches only the app's OWN paths (#1297);
-// a push matches its full watchPaths (incl. shared packages).
-function changeInclude(event, changedFiles, apps) {
+// push / pull_request → STAGING only. A pull_request matches only the app's OWN paths (#1297),
+// unless it's a UI-sign-off hold (fullWatchPr, #2140) — then, like a push, it matches the full
+// watchPaths (incl. shared packages).
+function changeInclude(event, changedFiles, apps, fullWatchPr) {
   const include = []
   for (const a of apps) {
-    const patterns = event === 'pull_request' ? [`apps/${a.app}/**`] : (a.watchPaths || [])
+    const patterns = (event === 'pull_request' && !fullWatchPr) ? [`apps/${a.app}/**`] : (a.watchPaths || [])
     if (changedFiles.some(f => f && fileMatchesAny(f, patterns))) include.push(toEntry(a, 'staging'))
   }
   return include
 }
 
-export function computeMatrix({ event, changedFiles = [], dispatchApp = '', dispatchEnv = '', apps = [] }) {
+export function computeMatrix({ event, changedFiles = [], dispatchApp = '', dispatchEnv = '', apps = [], fullWatchPr = false }) {
   const include = event === 'workflow_dispatch'
     ? dispatchInclude(dispatchApp, dispatchEnv, apps)
-    : changeInclude(event, changedFiles, apps)
+    : changeInclude(event, changedFiles, apps, fullWatchPr)
   return { include, any: include.length > 0 }
 }
 
@@ -101,17 +115,40 @@ export function resolveChangedFiles({ event, baseSha, headSha, git }) {
     // A PR's base.sha is always a real, fetched commit — if it won't resolve, something is
     // genuinely wrong; don't paper over it.
     if (!git.isResolvable(baseSha)) throw new DetectError(`PR base sha not resolvable: ${baseSha || '(empty)'}`)
-    return { files: git.diff(baseSha, headSha), source: 'pr:base..head' }
+    // THREE-dot (#2087). `git diff A B` is the symmetric difference of two TREES, so a branch
+    // that has fallen behind `main` reports everything that landed on main meanwhile as its
+    // own change — in reverse. #2080 changed two files under packages/crouton-cli and the
+    // two-dot diff reported 21, including apps/{kassa,triage,velo}/nuxt.config.ts (which
+    // #2074 had just added to main). That scheduled all three app deploys for a PR that
+    // touches no app, and they went red — the visible cost is spurious failures on unrelated
+    // PRs. `A...B` diffs from the MERGE BASE, which is what "what did this PR change" means.
+    //
+    // It can only ever over-deploy, never under — so nothing was silently skipped, and the
+    // fix cannot introduce a missed deploy either.
+    if (!git.hasMergeBase(baseSha, headSha)) {
+      // No merge base (a shallow checkout that doesn't reach it). Fail loud rather than
+      // silently falling back to two-dot — that fallback IS this bug, and #1499's rule is
+      // that an unresolvable diff must never quietly become a wrong answer.
+      throw new DetectError(
+        `PR merge-base not resolvable for ${baseSha}...${headSha} — the checkout is probably too `
+        + `shallow. Refusing to fall back to a two-dot diff, which reports every commit that `
+        + `landed on the base branch since this one forked as if this PR made it (#2087).`,
+      )
+    }
+    return { files: git.diffFrom(baseSha, headSha), source: 'pr:base...head' }
   }
-  // push-to-main: prefer the tip's first-parent diff — for a merge commit that IS the net PR
-  // change, and it doesn't depend on github.event.before (which is wrong under concurrent
-  // pushes — the #1477 cause). Fall back to before..after only if HEAD~1 is unavailable
-  // (e.g. an unexpectedly shallow checkout); if neither resolves, fail loud.
-  if (git.isResolvable('HEAD~1')) return { files: git.diff('HEAD~1', 'HEAD'), source: 'push:first-parent' }
-  if (baseSha && baseSha !== ZERO_SHA && git.isResolvable(baseSha)) {
+  // push-to-main: diff the WHOLE push, before..after (#2396). A rebase or fast-forward merge
+  // (this repo's no-squash policy) pushes N commits at once; the old `HEAD~1..HEAD` saw only
+  // the last one, so an app touched only by an earlier commit was silently not deployed. The
+  // checkout is at `after` (github.sha), so before..after is exactly what this push added —
+  // a concurrent push gets its own run with its own range. Only when `before` can't be
+  // trusted (all-zero on a new branch, not fetched, or not an ancestor after a force-push)
+  // fall back to the tip's first-parent diff; if neither resolves, fail loud (#1499).
+  if (baseSha && baseSha !== ZERO_SHA && git.isResolvable(baseSha) && git.isAncestor(baseSha, headSha)) {
     return { files: git.diff(baseSha, headSha), source: 'push:before..after' }
   }
-  throw new DetectError('cannot resolve a diff base on push (no HEAD~1, no usable before-sha)')
+  if (git.isResolvable('HEAD~1')) return { files: git.diff('HEAD~1', 'HEAD'), source: 'push:first-parent' }
+  throw new DetectError('cannot resolve a diff base on push (no usable before-sha, no HEAD~1)')
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
@@ -128,7 +165,71 @@ function realGit() {
     },
     diff(a, b) {
       return run(['diff', '--name-only', a, b]).split('\n').map(s => s.trim()).filter(Boolean)
+    },
+    // THREE-dot: from the merge base of a and b (#2087). A separate method, not a flag on
+    // `diff`, so the injected fake can answer the two differently — the old fake returned one
+    // canned list for `diff(a, b)` and therefore could not express the distinction at all,
+    // which is why every existing test passed against the wrong diff form.
+    diffFrom(a, b) {
+      return run(['diff', '--name-only', `${a}...${b}`]).split('\n').map(s => s.trim()).filter(Boolean)
+    },
+    // `git merge-base` is the only honest way to ask this. NOT `isResolvable('a...b')` —
+    // that runs `rev-parse --verify 'a...b^{commit}'`, which a RANGE can never satisfy, so
+    // the guard threw on every PR. The unit fake happily declared the range resolvable, so
+    // the tests agreed with the code and both were wrong; only running it against the real
+    // repo showed it. Twice in one change, the same lesson.
+    // `--is-ancestor` exits 0 when a is an ancestor of b, 1 when not (force-push).
+    isAncestor(a, b) {
+      try {
+        run(['merge-base', '--is-ancestor', a, b])
+        return true
+      } catch {
+        return false
+      }
+    },
+    hasMergeBase(a, b) {
+      try {
+        run(['merge-base', a, b])
+        return true
+      } catch {
+        return false
+      }
     }
+  }
+}
+
+/**
+ * Derive an app's watchPaths from what it actually depends on (#2397). The hand-written
+ * `watchPaths` in deploy.config.json was authored once at setup and never re-derived, so a
+ * package added to the app later (velo → crouton-maps, crouton-devtools) silently never
+ * triggered a staging redeploy. The app's package.json already names every `@fyit/<pkg>` it
+ * consumes, so the watch list is: the app itself, the lockfile, one `packages/<pkg>/**` per
+ * `@fyit/*` dependency (deps + devDeps), plus anything still listed explicitly. PURE.
+ */
+export function deriveWatchPaths({ app, pkg = {}, explicit = [], readPkg = () => null }) {
+  // Walk @fyit/* deps transitively: velo never lists crouton-auth itself, it comes in through
+  // crouton-core, yet an auth change must still redeploy velo. `readPkg(name)` returns the
+  // package.json of a workspace package (null if unknown); injected so the walk stays pure.
+  const seen = new Set()
+  const visit = (p) => {
+    const deps = { ...(p?.dependencies || {}), ...(p?.devDependencies || {}) }
+    for (const n of Object.keys(deps)) {
+      if (!n.startsWith('@fyit/') || seen.has(n)) continue
+      seen.add(n)
+      visit(readPkg(n))
+    }
+  }
+  visit(pkg)
+  const fromDeps = [...seen].map(n => `packages/${n.slice('@fyit/'.length)}/**`)
+  const all = [`apps/${app}/**`, 'pnpm-lock.yaml', ...fromDeps, ...explicit.filter(Boolean)]
+  return [...new Set(all)]
+}
+
+function readJson(path) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return null
   }
 }
 
@@ -138,19 +239,21 @@ function loadApps(root = 'apps') {
   for (const name of readdirSync(root)) {
     const cfgPath = `${root}/${name}/deploy.config.json`
     if (!existsSync(cfgPath)) continue // not opted in
-    let cfg = {}
-    try {
-      cfg = JSON.parse(readFileSync(cfgPath, 'utf8'))
-    } catch {
-      continue
-    }
+    const cfg = readJson(cfgPath)
+    if (!cfg) continue
+    const pkg = readJson(`${root}/${name}/package.json`) || {}
     out.push({
       app: name,
       stagingUrl: cfg.stagingUrl || '',
       productionUrl: cfg.productionUrl || '',
       layerPackages: cfg.layerPackages || '',
       requireWorkerSecrets: cfg.secrets?.required ?? false,
-      watchPaths: Array.isArray(cfg.watchPaths) ? cfg.watchPaths : []
+      watchPaths: deriveWatchPaths({
+        app: name,
+        pkg,
+        explicit: Array.isArray(cfg.watchPaths) ? cfg.watchPaths : [],
+        readPkg: n => readJson(`packages/${n.slice('@fyit/'.length)}/package.json`)
+      })
     })
   }
   return out
@@ -181,12 +284,20 @@ function main() {
     }
   }
 
+  // #2140: a UI-sign-off-held PR (work-issue-pidev.yml) carries this marker in its body so it
+  // opts into the full watchPaths instead of the PR-restricted apps/<app>/** — see
+  // UI_SIGNOFF_MARKER above. github.event.pull_request.body is already on the event payload,
+  // so this needs no extra API call.
+  const fullWatchPr = event === 'pull_request' && (process.env.PR_BODY || '').includes(UI_SIGNOFF_MARKER)
+  if (fullWatchPr) console.log('UI sign-off hold marker found on the PR body — matching full watchPaths (#2140)')
+
   const { include, any } = computeMatrix({
     event,
     changedFiles,
     dispatchApp: process.env.DISPATCH_APP || '',
     dispatchEnv: process.env.DISPATCH_ENV || '',
-    apps
+    apps,
+    fullWatchPr
   })
   const matrix = JSON.stringify({ include })
   const out = process.env.GITHUB_OUTPUT

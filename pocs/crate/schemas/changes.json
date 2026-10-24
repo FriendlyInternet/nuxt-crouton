@@ -1,0 +1,8 @@
+{
+  "groupId": { "type": "string", "meta": { "required": true, "maxLength": 64, "label": "User action (one undo step)" } },
+  "trackId": { "type": "string", "refTarget": "tracks", "meta": { "required": true, "label": "Track" } },
+  "before": { "type": "array", "meta": { "label": "Tags before" } },
+  "after": { "type": "array", "meta": { "label": "Tags after" } },
+  "summary": { "type": "string", "meta": { "maxLength": 300, "label": "Summary (e.g. + Rythms)" } },
+  "undoOf": { "type": "string", "meta": { "maxLength": 64, "label": "groupId this change reverts (empty = normal change)" } }
+}

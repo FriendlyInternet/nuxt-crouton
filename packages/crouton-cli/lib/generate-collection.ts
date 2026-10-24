@@ -9,12 +9,16 @@ import { loadConfig } from 'c12'
 
 // Import utilities
 import { toCase, toSnakeCase } from './utils/helpers.ts'
-import { loadTypeMapping, discoverManifests, getGeneratorDetectors, getGeneratorContributions } from './utils/manifest-bridge.ts'
+import { loadTypeMapping, discoverManifests, getGeneratorDetectors, getGeneratorContributions } from './utils/manifest-loader.ts'
 import type { DetectionResult, DetectedField, FormEnhancement, ListEnhancement, GeneratorContribution } from '@fyit/crouton-core/shared/manifest'
 import { detectRequiredDependencies, displayMissingDependencies, ensureLayersExtended } from './utils/module-detector.ts'
 import { setupCroutonCssSource, displayManualCssSetupInstructions } from './utils/css-setup.ts'
-import { syncFrameworkPackages, addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-config.ts'
+import { addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-config.ts'
+import { resolveExtendedPackages } from './utils/extended-packages.ts'
 import { addNamedSchemaExport, getSchemaPath } from './utils/update-schema-index.ts'
+import { validateRefTargets } from './utils/validate-ref-targets.ts'
+import { assertNoOwnedCollections, ownedRefTargets, ownedRefTargetNames, type OwnedRefTarget } from './utils/owned-collections.ts'
+import { resolveRefCollectionKey } from './utils/ref-collection.ts'
 import { generateMigrations, DuplicateTableError } from './utils/generate-migrations.ts'
 import { addToAppConfig, resolveAppConfigPath } from './utils/update-app-config.ts'
 import { loadFields } from './utils/load-fields.ts'
@@ -120,7 +124,7 @@ interface WriteScaffoldOptions {
   hierarchy?: boolean
   seed?: boolean
   seedCount?: number
-  noTests?: boolean
+  tests?: boolean
 }
 
 interface RunConfigOptions {
@@ -129,7 +133,7 @@ interface RunConfigOptions {
   dryRun?: boolean
   only?: string
   noAutoMerge?: boolean
-  noTests?: boolean
+  tests?: boolean
 }
 
 interface RunGenerateOptions {
@@ -145,7 +149,7 @@ interface RunGenerateOptions {
   hierarchy?: boolean
   seed?: boolean
   seedCount?: number
-  noTests?: boolean
+  tests?: boolean
 }
 
 // ---------------------------------------------------------------------------
@@ -161,6 +165,7 @@ function computeDetection(
   collectionConfig: Record<string, any> | null,
   detectors: Map<string, any>,
   layerCamelCase: string,
+  collectionLayerMap?: Map<string, string>,
 ): DetectionResult {
   const allNonIdFields = fields.filter(f => f.name !== 'id')
 
@@ -200,11 +205,12 @@ function computeDetection(
       })
     : []) as unknown as DetectedField[]
 
-  // Pre-compute resolvedCollection for refTarget asset fields (used by contribution)
+  // Pre-compute resolvedCollection for refTarget asset fields (used by contribution).
+  // Through the TARGET's layer: `refTarget: "assets"` is `croutonAssets`, whatever layer
+  // the referencing collection lives in (#2311).
   for (const f of assetFields) {
     if (f.refTarget && !f.resolvedCollection) {
-      const refCases = toCase(f.refTarget as string)
-      f.resolvedCollection = `${layerCamelCase}${refCases.pascalCasePlural}`
+      f.resolvedCollection = resolveRefCollectionKey(f.refTarget as string, layerCamelCase, collectionLayerMap)
     }
   }
 
@@ -862,13 +868,13 @@ async function applyManifestEnhancements(params: {
   // Discover manifests (cached after first call) and compute detection results
   const manifests = await discoverManifests()
   const detectors = await getGeneratorDetectors(manifests)
-  data.detected = computeDetection(fields, collectionConfig, detectors, layerCamelCase)
+  data.detected = computeDetection(fields, collectionConfig, detectors, layerCamelCase, data.collectionLayerMap)
 
-  // Run contribution functions and attach enhancement results to data
-  // Include: core packages, explicitly enabled features, AND packages whose detector matched fields
+  // Run contribution functions and attach enhancement results to data.
+  // Include: the packages the app extends (#2286 — the only on-switch; core brings
+  // auth/admin/i18n with it) AND packages whose detector matched fields.
   const allContributions = await getGeneratorContributions(manifests)
-  const enabledFeatures = new Set(Object.keys(config?.features || {}))
-  const corePackages = new Set(['crouton-core', 'crouton-auth', 'crouton-admin', 'crouton-i18n', 'crouton-bookings', 'crouton-pages'])
+  const extendedPackages = new Set(resolveExtendedPackages(process.cwd()))
 
   // Auto-include packages that detected matching fields in this collection's schema
   const detected = data.detected as DetectionResult
@@ -879,12 +885,10 @@ async function applyManifestEnhancements(params: {
   if (detected.collabEnabled) detectedPackages.add('crouton-collab')
 
   const contributions = allContributions.filter(({ packageId }) =>
-    corePackages.has(packageId)
-    || enabledFeatures.has(packageId.replace(/^crouton-/, ''))
-    || detectedPackages.has(packageId)
+    extendedPackages.has(packageId) || detectedPackages.has(packageId)
   )
   // Auto-detect formComponent from package contributions (when not explicitly configured).
-  // Scope to `contributions` (core + enabled features + detector-matched), NOT
+  // Scope to `contributions` (extended + detector-matched), NOT
   // `allContributions` — otherwise a package the app doesn't use (e.g. crouton-sales
   // reserving "location"/"product"/"category"/"printer") forces its bespoke form on
   // an unrelated collection and skips Form.vue generation (#558).
@@ -919,10 +923,10 @@ function printDryRunPlan(params: {
   fields: Field[]
   seed: boolean
   seedCount: number
-  noTests: boolean
+  tests: boolean
   noDb: boolean
 }): void {
-  const { base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, noTests, noDb } = params
+  const { base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, tests, noDb } = params
   const apiPath = `${layer}-${cases.plural}`
   console.log('DRY RUN - Would generate:')
   if (hierarchy.enabled) {
@@ -965,7 +969,7 @@ function printDryRunPlan(params: {
     console.log(`• ${base}/server/database/seed.ts (${seedCount} records)`)
   }
   console.log(`• ${base}/types.ts`)
-  if (!noTests) {
+  if (tests) {
     console.log(`• ${base}/${layerPascalCase}${cases.pascalCasePlural}.test.ts (schema smoke)`)
     console.log(`• ${base}/${layerPascalCase}${cases.pascalCasePlural}.api.test.ts (route handlers)`)
   }
@@ -1020,7 +1024,9 @@ async function createCollectionDirs(base: string, apiPath: string, hierarchy: Hi
 
 // Map every configured collection name to its layer (used by the queries
 // generator to resolve cross-collection references).
-function buildCollectionLayerMap(config: Record<string, any> | null): Map<string, string> {
+// Package-owned collections (#2311) are added by plural directory name; the app's own
+// entries win on a clash (an app `shop/assets` next to the assets package stays the app's).
+function buildCollectionLayerMap(config: Record<string, any> | null, owned?: Map<string, OwnedRefTarget>): Map<string, string> {
   const map = new Map<string, string>()
   if (config?.targets) {
     for (const t of config.targets) {
@@ -1029,7 +1035,26 @@ function buildCollectionLayerMap(config: Record<string, any> | null): Map<string
       }
     }
   }
+  for (const [dir, target] of owned ?? []) {
+    if (!map.has(dir)) map.set(dir, target.layer)
+  }
   return map
+}
+
+// Every name a `refTarget` may legitimately use (#1957). BOTH forms are accepted because
+// `refTarget` names the generated DIRECTORY — which is the PLURAL — while the config (and so
+// `buildCollectionLayerMap`) is keyed by the collection name as written. apps/velo configures
+// `location` and its schema correctly says `refTarget: "locations"`; checking only the config
+// key would reject that valid, shipping schema. Verified by scanning every schema in the repo.
+// Plus every collection an extended package owns (#2311), in both spellings.
+function buildKnownRefTargets(config: Record<string, any> | null, owned?: Map<string, OwnedRefTarget>): Set<string> {
+  const names = new Set<string>()
+  for (const key of buildCollectionLayerMap(config).keys()) {
+    names.add(key)
+    names.add(toCase(key).plural.toLowerCase())
+  }
+  for (const name of ownedRefTargetNames(owned ?? new Map())) names.add(name)
+  return names
 }
 
 // Build the core file set every collection gets: components, composable, CRUD
@@ -1047,8 +1072,10 @@ function buildCoreScaffoldFiles(params: {
   layerPascalCase: string
   hierarchy: HierarchyConfig
   sortable: SortableConfig
+  /** refTarget (plural dir) → the owning package's schema export (#2311) */
+  owned?: Map<string, OwnedRefTarget>
 }): GeneratedFile[] {
-  const { base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable } = params
+  const { base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable, owned } = params
 
   // All endpoints now use @crouton/auth for team-based authentication
   const files: GeneratedFile[] = [
@@ -1083,7 +1110,7 @@ function buildCoreScaffoldFiles(params: {
     },
     {
       path: path.join(base, 'server', 'database', 'queries.ts'),
-      content: generateQueries(data, config, layer, buildCollectionLayerMap(config))
+      content: generateQueries(data, config, layer, data.collectionLayerMap ?? buildCollectionLayerMap(config, owned), owned)
     },
     {
       path: path.join(base, 'server', 'database', 'schema.ts'),
@@ -1208,7 +1235,7 @@ function buildSeedFiles(params: {
 }
 
 // Build the per-collection tests — the schema-smoke test (#785) and the API
-// route handler test (#791). Caller gates on --no-tests.
+// route handler test (#791). Caller gates on --tests (off by default, #2286).
 function buildCollectionTestFiles(params: {
   base: string
   data: Record<string, any>
@@ -1219,8 +1246,8 @@ function buildCollectionTestFiles(params: {
   const { base, data, config, cases, layerPascalCase } = params
   const files: GeneratedFile[] = []
 
-  // Emit a schema-smoke test next to the collection (#785) — on by default,
-  // suppressed by --no-tests. Runtime-free (zod only): asserts the generated
+  // Emit a schema-smoke test next to the collection (#785) — opt-in via --tests since
+  // #2286 (generated CRUD is covered by the e2e fixture smoke). Runtime-free (zod only): asserts the generated
   // Zod schema accepts a valid record and rejects an invalid one. The e2e
   // fixture smoke owns boot + CRUD; this is the unit-level complement.
   files.push({
@@ -1233,7 +1260,7 @@ function buildCollectionTestFiles(params: {
   // Drives the generated handlers with mocked team-auth + queries and a fake
   // H3 event to cover team-scoping (unauth → rejected; queries called with the
   // resolved team id) and error paths (invalid body → rejected, missing id →
-  // 400, not-found → 404). Same --no-tests gate.
+  // 400, not-found → 404). Same --tests gate.
   files.push({
     path: path.join(base, `${layerPascalCase}${cases.pascalCasePlural}.api.test.ts`),
     content: generateApiTest(data, config),
@@ -1309,7 +1336,20 @@ async function registerCollectionInAppConfig(params: {
   }
 }
 
-async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, noTests = false }: WriteScaffoldOptions): Promise<void> {
+async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, tests = false }: WriteScaffoldOptions): Promise<void> {
+  // REFUSE an unresolvable relation BEFORE anything is written or installed (#1957). The queries
+  // generator would otherwise fall through its `// or unknown — fall back to existing behavior`
+  // branch and emit an import to a collection that does not exist, turning a local, obvious
+  // mistake into an opaque build failure minutes later (the #1825 chores case). We hold the full
+  // collection map right here, so this is the cheapest possible place to catch it.
+  // A collection an EXTENDED package owns (`refTarget: "assets"`) is a valid target too (#2311):
+  // the queries file imports its table from the package, the UI uses its registered key.
+  const owned = ownedRefTargets(await discoverManifests(), resolveExtendedPackages(process.cwd()))
+  validateRefTargets(fields, buildKnownRefTargets(config, owned), collection)
+
+  // REFUSE a collection a package ships end to end (#2278) — a second copy would fork it.
+  assertNoOwnedCollections({ targets: [{ layer, collections: [collection] }] }, await discoverManifests())
+
   const cases = toCase(collection)
   const base = path.resolve('layers', layer, 'collections', cases.plural)
 
@@ -1326,12 +1366,14 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   // Typed as Record<string, any> so contribution results can be attached dynamically
   const data: Record<string, any> = buildGeneratorData({ layer, collection, fields, hierarchy, sortable, collab, config, collectionConfig })
   const { layerPascalCase, layerCamelCase } = data
+  // refTarget → owning layer, for every generator that turns a reference into a collection key
+  data.collectionLayerMap = buildCollectionLayerMap(config, owned)
 
   // Manifest-driven detection + contributions (may auto-detect the form component)
   collectionConfig = await applyManifestEnhancements({ data, fields, config, collectionConfig, dialect, collection })
 
   if (dryRun) {
-    printDryRunPlan({ base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, noTests, noDb })
+    printDryRunPlan({ base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, tests, noDb })
     return
   }
 
@@ -1341,10 +1383,10 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
 
   // Generate all files using modules
   const files: GeneratedFile[] = [
-    ...buildCoreScaffoldFiles({ base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable }),
+    ...buildCoreScaffoldFiles({ base, apiPath, data, config, collectionConfig, dialect, layer, cases, layerPascalCase, hierarchy, sortable, owned }),
     ...await buildRepeaterComponentFiles(base, fields, data),
     ...buildSeedFiles({ base, data, config, seed, seedCount }),
-    ...(noTests ? [] : buildCollectionTestFiles({ base, data, config, cases, layerPascalCase }))
+    ...(tests ? buildCollectionTestFiles({ base, data, config, cases, layerPascalCase }) : [])
   ]
 
   // Write all files. Per-collection scaffold files are user-editable, so regeneration
@@ -1367,7 +1409,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     for (const p of preserved) console.log(`     · ${path.relative(base, p)}`)
   }
 
-  // Note: team-auth utility is now provided by @fyit/crouton package
+  // Note: team-auth utility is provided by @fyit/crouton-auth (bundled via crouton-core)
   // No need to generate it per-layer
 
   // Update the layer root + root nuxt.config (and i18n locale files when needed)
@@ -1377,7 +1419,7 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   if (!noDb) {
     await createDatabaseTable({ name: collection, layer, fields, force })
 
-    // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton
+    // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton-core
     console.log(`↻ Ensuring translations_ui table...`)
     await exportI18nSchema(force)
   }
@@ -1459,7 +1501,7 @@ async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer
     }
   }
 
-  // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton
+  // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton-core
   // Note: exportI18nSchema() already calls registerTranslationsUiCollection() internally
   console.log(`\n↻ Ensuring translations_ui table...`)
   await exportI18nSchema(force)
@@ -1532,7 +1574,7 @@ async function composeDefaultLayoutStep(allCollections: Array<{ name: string; la
     const { writeDefaultLayout } = await import('./compose-layout.ts')
     const layoutResult = await writeDefaultLayout({
       allCollections,
-      features: config.features,
+      packages: resolveExtendedPackages(process.cwd()),
       cwd: process.cwd(),
     })
     if (layoutResult.written) {
@@ -1608,7 +1650,7 @@ async function loadAndPrepareConfig(options: RunConfigOptions): Promise<Record<s
   if (!config.flags) config.flags = {}
   if (options.force) config.flags.force = true
   if (options.dryRun) config.flags.dryRun = true
-  if (options.noTests) config.flags.noTests = true
+  if (options.tests) config.flags.tests = true
 
   // Single-collection filter
   const onlyCollection = options.only || null
@@ -1620,28 +1662,10 @@ async function loadAndPrepareConfig(options: RunConfigOptions): Promise<Record<s
   return config
 }
 
-// Sync framework packages in the root nuxt.config extends for enabled features.
-async function syncFeaturePackages(config: Record<string, any>): Promise<void> {
-  if (!config.features) return
-
-  console.log('\n' + '═'.repeat(60))
-  console.log('  FRAMEWORK PACKAGES')
-  console.log('═'.repeat(60) + '\n')
-  console.log('↻ Syncing framework packages...')
-  const nuxtConfigPath = path.resolve('nuxt.config.ts')
-  const result = await syncFrameworkPackages(nuxtConfigPath, config.features)
-  if (result.synced) {
-    console.log(`✓ Synced ${result.packages.length} framework packages to extends`)
-    result.packages.forEach(pkg => console.log(`  • ${pkg}`))
-  } else {
-    console.log(`⚠ Could not sync framework packages: ${result.reason}`)
-  }
-}
-
 // Persist prompted feature configs: runtimeConfig into nuxt.config.ts and the
 // feature's config object back into crouton.config.js.
 async function persistPromptedConfigs(
-  promptedConfigs: import('./utils/manifest-merge.ts').PromptedConfig[],
+  promptedConfigs: import('./utils/manifest-configuration.ts').PromptedConfig[],
   config: Record<string, any>
 ): Promise<void> {
   const nuxtConfigPath = path.resolve('nuxt.config.ts')
@@ -1684,26 +1708,13 @@ async function persistPromptedConfigs(
   }
 }
 
-// Auto-merge package manifest collections for enabled features
-// (may prompt interactively for manifest configuration options).
-async function autoMergeFeatureCollections(config: Record<string, any>, options: RunConfigOptions): Promise<void> {
-  if (!config.features || options.noAutoMerge) return
+// Ask the setup questions of the packages the app extends (prompts
+// interactively, defaults in CI) and persist the answers.
+async function applyPackageConfiguration(config: Record<string, any>, options: RunConfigOptions): Promise<void> {
+  if (options.noAutoMerge) return
 
-  const { mergeManifestCollections } = await import('./utils/manifest-merge.ts')
-  const mergeResult = await mergeManifestCollections(config)
-  const promptedConfigs: import('./utils/manifest-merge.ts').PromptedConfig[] = mergeResult.promptedConfigs
-
-  if (mergeResult.merged > 0) {
-    console.log('\n' + '═'.repeat(60))
-    console.log('  PACKAGE COLLECTIONS (auto-merged)')
-    console.log('═'.repeat(60))
-    mergeResult.collections.forEach(c =>
-      console.log(`  + ${c.layer}/${c.name} (from @fyit/crouton-${c.feature})`)
-    )
-    if (mergeResult.skipped.length > 0) {
-      console.log(`\n  Already in config: ${mergeResult.skipped.join(', ')}`)
-    }
-  }
+  const { applyManifestConfiguration } = await import('./utils/manifest-configuration.ts')
+  const promptedConfigs = await applyManifestConfiguration(config, resolveExtendedPackages(process.cwd()))
 
   // Persist prompted configs: update nuxt.config.ts runtimeConfig + crouton.config.js
   if (promptedConfigs.length > 0 && !options.dryRun) {
@@ -1774,7 +1785,7 @@ async function generateConfigEntry(params: {
     collectionConfig: collectionConfig, // Pass individual collection config for hierarchy detection
     seed: !!collectionSeed,
     seedCount: collectionSeed?.count || config?.seed?.defaultCount || 25,
-    noTests: config.flags?.noTests || collectionConfig?.tests === false || false
+    tests: config.flags?.tests === true || collectionConfig?.tests === true
   })
 
   return { name: collectionName, layer, fields }
@@ -1827,51 +1838,6 @@ async function runEnhancedConfigFormat(config: Record<string, any>, typeMapping:
   })
 }
 
-// Original simple config format (schemaPath + targets[]): every target collection
-// shares the one schema; then run the batch post-generation steps.
-async function runSimpleConfigFormat(config: Record<string, any>, typeMapping: any): Promise<void> {
-  const fields = await loadFields(config.schemaPath, typeMapping)
-
-  // Track all collections for batch db:generate
-  const allCollections: Array<{ name: string; layer: string; fields: Field[] }> = []
-
-  // Process each target
-  for (const target of config.targets) {
-    for (const collection of target.collections) {
-      console.log(`\nGenerating collection '${collection}' in layer '${target.layer}'...`)
-
-      // Check for global seed settings (this code path doesn't have per-collection config)
-      const globalSeed = config?.seed?.enabled === true || config?.flags?.seed === true
-
-      await writeScaffold({
-        layer: target.layer,
-        collection,
-        fields,
-        dialect: resolveDialect(config),
-        autoRelations: config.flags?.autoRelations || false,
-        dryRun: config.flags?.dryRun || false,
-        noDb: true, // Skip individual db:generate
-        force: config.flags?.force || false,
-        noTranslations: config.flags?.noTranslations || false,
-        config: config,
-        seed: globalSeed,
-        seedCount: config?.seed?.defaultCount || 25,
-        noTests: config.flags?.noTests || false
-      })
-
-      allCollections.push({ name: collection, layer: target.layer, fields })
-    }
-  }
-
-  await runPostGeneration({
-    allCollections,
-    config,
-    dryRun: config.flags?.dryRun || false,
-    noDb: config.flags?.noDb || false,
-    force: config.flags?.force || false,
-  })
-}
-
 /**
  * Run config-based generation.
  */
@@ -1890,24 +1856,16 @@ export async function runConfig(options: RunConfigOptions = {}): Promise<void> {
       process.exit(1)
     }
 
-    // Sync framework packages based on features config
-    await syncFeaturePackages(config)
+    // Refuse packaged collections before anything is written (#2278)
+    assertNoOwnedCollections(config, await discoverManifests())
 
-    // Auto-merge package manifest collections for enabled features
-    await autoMergeFeatureCollections(config, options)
+    // Ask the setup questions of the packages the app extends
+    await applyPackageConfiguration(config, options)
 
-    // Handle both config formats
     if (config.collections && config.targets) {
-      // Enhanced config format with collections array
       await runEnhancedConfigFormat(config, typeMapping)
-    } else if (config.targets && config.schemaPath) {
-      // Original simple config format
-      await runSimpleConfigFormat(config, typeMapping)
     } else {
-      console.error('Error: Invalid config file')
-      console.error('Config must have either:')
-      console.error('  1. collections[] and targets[] (enhanced format)')
-      console.error('  2. schemaPath and targets[] (simple format)')
+      console.error('Error: Invalid config file — it needs collections[] and targets[] (the old schemaPath format was removed in #2290)')
       process.exit(1)
     }
   } catch (error: any) {
@@ -1975,7 +1933,7 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
       hierarchy: options.hierarchy || false,
       seed: options.seed || false,
       seedCount: options.seedCount || 25,
-      noTests: options.noTests || false
+      tests: options.tests || false
     }
 
     // Validate CLI arguments

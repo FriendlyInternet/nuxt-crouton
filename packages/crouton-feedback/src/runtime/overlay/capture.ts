@@ -8,6 +8,8 @@
  * Extracted from @fyit/crouton-devtools (epic #960) with neutral naming.
  */
 
+import { type EnvProfile, formatEnv } from './envProfile'
+
 export interface AnnotationBox {
   x: number
   y: number
@@ -26,6 +28,8 @@ export interface Annotation {
   boundingBox: AnnotationBox
   /** What the reviewer typed. */
   commentText: string
+  /** The environment it was reported from (#1181) — device/browser/size/touch. */
+  env: EnvProfile | null
   /** ISO timestamp. */
   createdAt: string
 }
@@ -98,19 +102,21 @@ export function formatAnnotationMarkdown(a: Annotation): string {
     `- **Component:** ${a.componentFile ? `\`${a.componentFile}\`` : '_unknown_'}`,
     `- **Element:** \`${a.cssSelector}\`${b ? ` _(bbox ${b.x},${b.y} ${b.width}×${b.height})_` : ''}`,
     `- **Page:** \`${a.route}\``,
+    ...(a.env ? [`- **Env:** ${formatEnv(a.env)}`] : []),
     '',
     `> ${a.commentText.replace(/\n/g, '\n> ')}`
   ].join('\n')
 }
 
 /** Assemble the full annotation payload from a clicked element. */
-export function buildAnnotation(el: Element, commentText: string, route: string): Annotation {
+export function buildAnnotation(el: Element, commentText: string, route: string, env: EnvProfile | null = null): Annotation {
   return {
     route,
     cssSelector: cssSelectorFor(el),
     componentFile: componentFileFor(el),
     boundingBox: boundingBoxFor(el),
     commentText,
+    env,
     createdAt: new Date().toISOString()
   }
 }

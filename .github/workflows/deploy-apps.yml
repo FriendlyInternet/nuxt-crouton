@@ -84,11 +84,12 @@ jobs:
   # job fans out over. push/pull_request → STAGING only (env hard-coded below, #318).
   detect:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     outputs:
       matrix: ${{ steps.set.outputs.matrix }}
       any: ${{ steps.set.outputs.any }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - id: set
@@ -98,6 +99,10 @@ jobs:
           DISPATCH_ENV: ${{ github.event.inputs.environment }}
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.after }}
+          # #2140: a UI-sign-off-held PR carries a marker in its body so deploy-detect.mjs
+          # opts it into the full watchPaths (the #2020 isolated per-PR preview) instead of
+          # the PR-restricted apps/<app>/** that #1297 set for everything else.
+          PR_BODY: ${{ github.event.pull_request.body }}
         # The decision lives in the pure, unit-tested scripts/deploy-detect.mjs (mirrors
         # scripts/packages-guard.mjs). It fixes #1499: the old inline bash used
         # `git diff … 2>/dev/null || true`, which turned a FAILED diff into an empty one —
@@ -126,7 +131,6 @@ jobs:
       environment: ${{ matrix.environment }}
       staging-url: ${{ matrix.stagingUrl }}
       production-url: ${{ matrix.productionUrl }}
-      layer-packages: ${{ matrix.layerPackages }}
       # PR-tied deploys wire the preview-review bridge to this PR (#607); on a manual
       # dispatch use the optional review_pr input; empty → the bridge stays off.
       review-pr: ${{ github.event.pull_request.number || github.event.inputs.review_pr }}
@@ -148,11 +152,12 @@ jobs:
     needs: [detect, deploy]
     if: always() && github.event_name == 'pull_request' && needs.deploy.result == 'cancelled'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       pull-requests: write
     steps:
       - name: Comment "bumped, not broken" on the PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const body = [

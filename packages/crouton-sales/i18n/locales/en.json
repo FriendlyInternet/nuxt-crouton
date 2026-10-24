@@ -123,10 +123,14 @@
           "title": "Kitchen Display",
           "live": "live",
           "active": "{count} active",
-          "allCaughtUp": "All caught up — no open orders.",
-          "bump": "Bump",
+          "allCaughtUp": "Nothing to send out — everything has gone out.",
+          "bump": "Sent out",
+          "tapToConfirm": "Tap to confirm",
           "staff": "staff",
-          "eventNotFound": "Event not found"
+          "eventNotFound": "Event not found",
+          "stale": "Not updating",
+          "staleHint": "This board has lost contact with the server — the orders shown may be out of date. Check the connection.",
+          "connecting": "connecting"
         }
       },
       "salesOrders": {
@@ -203,7 +207,17 @@
       "orders": "Orders",
       "avgOrder": "Avg. order",
       "topProducts": "Top products",
-      "noSalesYet": "No sales yet"
+      "noSalesYet": "No sales yet",
+      "outstanding": "Still waiting",
+      "perProduct": {
+        "title": "Per product",
+        "sold": "Sold",
+        "outstanding": "Still out",
+        "allLocations": "All",
+        "stillOut": "{count} still out",
+        "directHandover": "This location hands over directly — nothing can be outstanding here",
+        "total": "Total"
+      }
     },
     "common": {
       "save": "Save",
@@ -247,6 +261,9 @@
       "noHelperPinTitle": "No helper PIN set for this event",
       "noHelperPinDescription": "On a scoped page this block is unlocked with the event’s helper PIN — without one, volunteers cannot log in. Set the PIN in the event’s settings.",
       "product": "Product",
+      "category": "Category",
+      "price": "Price",
+      "noCategory": "No category",
       "total": "Total",
       "kitchenDisplay": "Kitchen Display",
       "orders": "Orders",
@@ -275,7 +292,8 @@
       "locationRemarkPlaceholder": "Add a remark for this location…",
       "remark": "Remark",
       "remarkPlaceholder": "Type the remark…",
-      "staffOrder": "Staff order"
+      "staffOrder": "Staff order",
+      "staffOrderShort": "Staff"
     },
     "products": {
       "title": "Products",
@@ -283,8 +301,7 @@
       "noProducts": "No products available",
       "outOfStock": "Out of stock",
       "options": "Options",
-      "addToCart": "Add to Cart",
-      "inCart": "Ordered"
+      "addToCart": "Add to Cart"
     },
     "categories": {
       "all": "All",
@@ -343,7 +360,10 @@
       "clientHelp": "Select an existing client or create a new one",
       "clientRequired": "Client required",
       "clientRequiredDescription": "This event requires a client. Please select or create one.",
-      "deleteError": "Could not delete order"
+      "deleteError": "Could not delete order",
+      "cancel": "Cancel",
+      "cancelConfirm": "Sure?",
+      "cancelError": "Could not cancel order"
     },
     "events": {
       "title": "Events",
@@ -360,7 +380,6 @@
       "eventNotFound": "Event not found",
       "selectEvent": "Select event...",
       "duplicate": "Duplicate",
-      "openPos": "Open POS",
       "settings": "Settings"
     },
     "form": {
@@ -488,6 +507,8 @@
       "noOrders": "No orders yet",
       "noOrdersFiltered": "No orders match these filters",
       "allPrinters": "All printers",
+      "allProducts": "All products",
+      "allCategories": "All categories",
       "filters": "Filters",
       "resetFilters": "Reset filters",
       "allClients": "All clients",
@@ -532,7 +553,7 @@
       "noLocations": "No locations",
       "noHelpers": "No helpers currently logged in.",
       "expires": "Expires",
-      "addProduct": "Add Product",
+      "addProduct": "Product",
       "loadingProducts": "Loading products...",
       "noProducts": "No products",
       "inThisCategory": " in this category",
@@ -554,7 +575,7 @@
       "currency": "Currency",
       "currencyEur": "Euro (€)",
       "currencyUsd": "Dollar ($)",
-      "showInactive": "Inactive products",
+      "showInactive": "Inactive",
       "editCatalog": "Edit",
       "doneEditing": "Done",
       "clientsPanel": {
@@ -587,7 +608,12 @@
         "dataStat": "revenue",
         "settingsDesc": "Event details, printers, receipt text and helpers",
         "settingsStat": "printers"
-      }
+      },
+      "outstanding": "{count} in progress",
+      "outstandingActive": "{count} in progress (filtered)",
+      "outstandingNone": "Nothing in progress",
+      "outstandingFilter": "Show only these",
+      "outstandingFilterClear": "Show all orders"
     },
     "helpers": {
       "title": "Active Helpers",

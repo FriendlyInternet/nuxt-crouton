@@ -1,0 +1,8 @@
+{
+  "greeting": "Bonjour",
+  "farewell": "Au revoir",
+  "canary": {
+    "label": "Canari",
+    "description": "Ce dossier existe uniquement pour le banc d'essai canary. Rien ici n'est réel."
+  }
+}

@@ -6,6 +6,7 @@
   "main": "./nuxt.config.ts",
   "files": [
     "app",
+    "collections",
     "server",
     "schemas",
     "seed",
@@ -22,6 +23,9 @@
       "types": "./seed/index.ts"
     },
     "./schemas/*": "./schemas/*",
+    "./collections/*/types": "./collections/*/types.ts",
+    "./collections/*/server/database/schema": "./collections/*/server/database/schema.ts",
+    "./collections/*/server/database/queries": "./collections/*/server/database/queries.ts",
     "./server/utils/generate-print-queues": {
       "import": "./server/utils/generate-print-queues.ts",
       "types": "./server/utils/generate-print-queues.ts"
@@ -61,6 +65,7 @@
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-printing": "workspace:*",
     "@nuxt/ui": "catalog:",
+    "@vueuse/integrations": "^13.3.0",
     "nanoid": "^5.0.0",
     "reka-ui": "^2.9.0"
   },
@@ -69,10 +74,15 @@
     "@fyit/crouton-core": "workspace:*",
     "@fyit/crouton-auth": "workspace:*",
     "@nuxtjs/i18n": "^9.0.0 || ^10.0.0",
-    "zod": "^3.0.0"
+    "zod": "^3.0.0",
+    "@tiptap/vue-3": "^3.0.0",
+    "vue-i18n": "^10.0.0 || ^11.0.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "better-sqlite3": "^12.4.1",
+    "drizzle-orm": "catalog:",
     "unbuild": "^3.6.1",
-    "vitest": "^4.0.0"
+    "vitest": "catalog:"
   }
 }

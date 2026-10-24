@@ -1,5 +1,6 @@
 // Generator for database queries
 import { toKebabCase, pascal } from '../utils/helpers.ts'
+import { collectFilterFields } from '../utils/filter-fields.ts'
 
 // Shared context for the tree-query template builders below
 interface TreeQueryContext {
@@ -358,7 +359,8 @@ function buildSchemaImports(
   singleReferences: Record<string, any>[],
   arrayReferences: Record<string, any>[],
   currentLayer: string,
-  collectionLayerMap: Map<string, string>
+  collectionLayerMap: Map<string, string>,
+  ownedTargets: Map<string, { importPath: string }> = new Map()
 ): string {
   let schemaImports = ''
   const allReferences = [...singleReferences, ...arrayReferences]
@@ -374,6 +376,10 @@ function buildSchemaImports(
       // NuxtHub v0.10+ expects schema at server/db/schema.ts
       const schemaExportName = collection === 'users' ? 'user' : collection
       schemaImports += `import { ${schemaExportName} } from '~~/server/db/schema'
+`
+    } else if (ownedTargets.has(collection.toLowerCase())) {
+      // Package-owned collection (#2311) — the table lives in the package, not under layers/
+      schemaImports += `import * as ${collection}Schema from '${ownedTargets.get(collection.toLowerCase())!.importPath}'
 `
     } else {
       // Local or cross-layer collection
@@ -790,7 +796,14 @@ export async function delete${ctx.prefixedPascalCase}(
 }`
 }
 
-export function generateQueries(data: Record<string, any>, config: Record<string, any> | null = null, currentLayer: string = '', collectionLayerMap: Map<string, string> = new Map()): string {
+export function generateQueries(
+  data: Record<string, any>,
+  config: Record<string, any> | null = null,
+  currentLayer: string = '',
+  collectionLayerMap: Map<string, string> = new Map(),
+  // refTarget (plural dir) → the owning package's schema export (#2311)
+  ownedTargets: Map<string, { importPath: string }> = new Map(),
+): string {
   const { singular, camelCase, camelCasePlural, plural, pascalCase, pascalCasePlural, layer, layerPascalCase } = data
   // Use layer-prefixed table name to match schema export
   // Convert layer to camelCase to ensure valid JavaScript identifier
@@ -813,11 +826,11 @@ export function generateQueries(data: Record<string, any>, config: Record<string
   // Detect reference fields for LEFT JOINs and post-query processing
   const { singleReferences, arrayReferences } = detectReferenceFields(data, config)
 
-  // Foreign-key fields usable to scope getAll* (e.g. ?eventId=...). Excludes the
-  // owner/createdBy/updatedBy user refs — only real FK columns (eventId, categoryId, …).
-  const filterFields = singleReferences.filter(r => !r.isUserReference).map(r => r.fieldName)
+  // Reference fields usable to scope getAll* (e.g. ?eventId=…, ?assigneeId=…, ?owner=…).
+  // Shared with api-endpoints.ts so the emitted params and this opts type cannot drift.
+  const filterFields = collectFilterFields(data, config)
 
-  const schemaImports = buildSchemaImports(singleReferences, arrayReferences, currentLayer, collectionLayerMap)
+  const schemaImports = buildSchemaImports(singleReferences, arrayReferences, currentLayer, collectionLayerMap, ownedTargets)
   const { selectClause, leftJoins, aliasDefinitions } = buildSelectJoins(singleReferences, tableName, getTargetLayerCamelCase)
 
   // Post-query processing for JSON/repeater fields and array references

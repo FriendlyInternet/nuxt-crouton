@@ -16,9 +16,14 @@ export default defineCroutonManifest({
   },
 
   dependencies: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-editor',
   ],
+
+  // The collection below ships from this package (collections/pages), end to end (#2278).
+  // The CLI refuses to generate it into an app; `collections` stays as the
+  // package's self-description for AI hints and docs.
+  ownsCollections: true,
 
   collections: [
     {

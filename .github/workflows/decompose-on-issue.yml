@@ -26,7 +26,7 @@ jobs:
       vars.AGENT_HARNESS != 'pi' &&
       ((github.event.action == 'labeled' && github.event.label.name == 'delegate') ||
        (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate')))
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
     # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to
@@ -38,7 +38,7 @@ jobs:
       issues: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
 
@@ -51,26 +51,51 @@ jobs:
       # must *trigger* project-status.yml (which maps status:in-progress → the board's "In progress"
       # column) — and events from the default GITHUB_TOKEN do NOT trigger other workflows. A
       # default-token add would set the label but never move the board card. (#1218)
-      - uses: actions/create-github-app-token@v1
+      #
+      # And the ADD must be FRESH (#1968). project-status.yml fires on `issues: labeled`, and GitHub
+      # raises no such event when the label is already present — so on an issue that already carries
+      # `status:in-progress` (a re-dispatch, a resume, a human who set it before applying `delegate`)
+      # a bare add succeeds, warns nothing, and the card never moves. Remove first, exactly as
+      # comment-dispatch/resume-on-comment/canary/fix-ci-on-failure already do (the #1750 lesson).
+      # Still safe re: re-trigger — both events name `status:in-progress`, not `delegate`.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
       - name: Mark the issue in-progress
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
+            const issue_number = context.payload.issue.number
+            const LABEL = 'status:in-progress'
+            const had = (context.payload.issue.labels || [])
+              .some((l) => (typeof l === 'string' ? l : l.name) === LABEL)
+            if (had) {
+              // 404 here just means someone removed it between the event and now — the add still runs.
+              try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: LABEL }) }
+              catch (e) { core.warning(`could not remove ${LABEL} before re-adding: ${e.message}`) }
+            }
             try {
-              await github.rest.issues.addLabels({
-                ...context.repo, issue_number: context.payload.issue.number, labels: ['status:in-progress'],
-              })
-            } catch (e) { core.warning(`could not add status:in-progress: ${e.message}`) }
+              await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: [LABEL] })
+              core.info(`applied ${LABEL} to #${issue_number}${had ? ' (removed first, for a fresh labeled event)' : ''}`)
+            } catch (e) { core.warning(`could not add ${LABEL}: ${e.message}`) }
 
       # Timestamp the run start so the artifact-gate can tell "produced during this run"
       # from pre-existing comments/PRs.
       - id: t0
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
 
       # Pinned to the same SHA as claude.yml — keep these in sync when bumping.
       # AUTH: uses the subscription CLAUDE_CODE_OAUTH_TOKEN (not a metered API key).
@@ -78,12 +103,12 @@ jobs:
       # on the owner's instruction that Anthropic now permits subscription auth for
       # unattended automation (#1669; supporting source pending on that issue — if it
       # does not cover automation, revert). Runs on the mac-mini runner.
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         id: claude
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: "/task-decompose #${{ github.event.issue.number }}"
-          claude_args: "--model claude-sonnet-5 --max-turns 30"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 30"
           show_full_output: true
           # WS5 (#535): the `delegate` label is now applied by the Nuxt Harness App, so this run is
           # actored as nuxt-harness[bot]. Allow exactly that bot past the bot-actor guard — nothing
@@ -103,7 +128,7 @@ jobs:
       # the claude OIDC), so it never trips the bot-actor guard.
       - name: Artifact-gate — fail if the agent produced nothing
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           # #661: let the gate read WHY the agent produced nothing (billing / underspecified /
           # genuine no-op) so the failure comment is actionable instead of a generic message.
@@ -258,7 +283,7 @@ jobs:
             const det = detail ? `\n\n<details><summary>agent's final message</summary>\n\n> ${detail.replace(/\n/g, '\n> ')}\n</details>` : ''
             const body = why
               ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${det}${foot}`
-              : `🔴 **@pmcp — this run produced nothing** — no PR, no sign-off hold (a bare "spawning the worker…" progress comment doesn't count).\n\n**Fix:** re-apply \`delegate\` to retry; if it recurs the issue is underspecified — add a description + acceptance criteria.${foot}`
+              : `🔴 **@pmcp — this run produced nothing** — no PR, no sign-off hold (a bare "spawning the worker…" progress comment doesn't count).\n\n**Fix:** open the run log before changing anything. Only if the log shows the agent genuinely had nothing to act on is the issue underspecified. To retry, re-apply \`delegate\`.${foot}`
 
             await github.rest.issues.createComment({ ...context.repo, issue_number, body })
             core.setFailed(`Artifact-gate: run on #${issue_number} produced no deliverable (no PR, not held for sign-off).`)
@@ -269,7 +294,7 @@ jobs:
       # cancellation (the artifact-gate `if: always()` above already runs in that case).
       - name: Flag a timeout / cancellation
         if: cancelled()
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = context.payload.issue.number

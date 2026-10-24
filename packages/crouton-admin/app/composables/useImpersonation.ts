@@ -25,6 +25,7 @@
 import type { ImpersonationState } from '../../types/admin'
 
 export function useImpersonation() {
+  const { t } = useT()
   // SSR-safe shared state via useState
   const impersonationState = useState<ImpersonationState>('impersonation-state', () => ({
     isImpersonating: false,
@@ -54,7 +55,7 @@ export function useImpersonation() {
       hasCheckedStatus.value = true
       return state
     } catch (e: unknown) {
-      error.value = e instanceof Error ? e.message : 'Failed to check impersonation status'
+      error.value = e instanceof Error ? e.message : t('admin.impersonation.statusFailed')
       // Don't throw - just return current state
       return impersonationState.value
     } finally {
@@ -83,7 +84,7 @@ export function useImpersonation() {
       // The session has been modified on the server, so we need a full refresh
       window.location.href = window.location.pathname
     } catch (e: unknown) {
-      const errorMessage = e instanceof Error ? e.message : 'Failed to start impersonation'
+      const errorMessage = e instanceof Error ? e.message : t('admin.impersonation.startFailed')
       error.value = errorMessage
       throw new Error(errorMessage)
     } finally {
@@ -110,7 +111,7 @@ export function useImpersonation() {
       // The session has been modified on the server, so we need a full refresh
       window.location.href = redirectTo
     } catch (e: unknown) {
-      const errorMessage = e instanceof Error ? e.message : 'Failed to stop impersonation'
+      const errorMessage = e instanceof Error ? e.message : t('admin.impersonation.stopFailed')
       error.value = errorMessage
       throw new Error(errorMessage)
     } finally {

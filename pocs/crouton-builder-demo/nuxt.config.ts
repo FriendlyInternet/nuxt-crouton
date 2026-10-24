@@ -7,9 +7,9 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   // @fyit/crouton-devtools registers the dev/review launcher — Console (eruda) + Annotate (pin
-  // feedback → /api/_review → PR comment). Activated on staging by NUXT_PUBLIC_CROUTON_REVIEW=true
+  // feedback → /api/_feedback → PR comment). Activated on staging by NUXT_PUBLIC_CROUTON_REVIEW=true
   // (set in cf:staging); zero production footprint. Supersedes the deprecated /eruda extends layer.
-  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
+  modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -22,8 +22,6 @@ export default defineNuxtConfig({
     '@fyit/crouton-i18n',
     '@fyit/crouton-pages',
     '@fyit/crouton-ai', // optional AI add-on — enables ✨ Magic v2 (gated via hasApp('ai'), #909)
-    // Generated collection layers must come last
-    './layers/pages'
   ],
 
   hub: {

@@ -1,6 +1,5 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -11,7 +10,6 @@ export default defineNuxtConfig({
     '@fyit/crouton-i18n',
     '@fyit/crouton-bookings',
     './layers/main',
-    './layers/bookings',
   ],
 
   hub: {

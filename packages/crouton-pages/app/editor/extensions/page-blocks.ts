@@ -8,7 +8,7 @@
 import { Extension } from '@tiptap/core'
 import Highlight from '@tiptap/extension-highlight'
 import type { CroutonBlockDefinition } from '@fyit/crouton-core/app/types/block-definition'
-import { blockSizeAttribute } from './block-utils'
+import { blockSizeAttribute, blockVisibilityAttribute } from './block-utils'
 import { HeroBlock } from './hero-block'
 import { SectionBlock } from './section-block'
 import { CTABlock } from './cta-block'
@@ -122,7 +122,7 @@ export const PageBlocks = Extension.create<PageBlocksOptions>({
     return [
       {
         types: [...coreBlockTypes, ...addonBlockTypes],
-        attributes: blockSizeAttribute
+        attributes: { ...blockSizeAttribute, ...blockVisibilityAttribute }
       }
     ]
   },

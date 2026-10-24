@@ -7,7 +7,7 @@
  *
  * Also shows a resend verification email option.
  */
-import { useAuthClient } from '../../../types/auth-client'
+import { requireAuthClient } from '../../../types/auth-client'
 
 definePageMeta({
   layout: 'auth'
@@ -46,9 +46,8 @@ async function verifyEmail() {
   verifyError.value = null
 
   try {
-    const authClient = useAuthClient()
     // Better Auth 1.4.x requires query wrapper for token
-    const result = await authClient.verifyEmail({
+    const result = await requireAuthClient().verifyEmail({
       query: { token: token.value! }
     })
 
@@ -77,8 +76,7 @@ async function resendVerification() {
   resending.value = true
 
   try {
-    const authClient = useAuthClient()
-    const result = await authClient.sendVerificationEmail({
+    const result = await requireAuthClient().sendVerificationEmail({
       email: user.value.email,
       callbackURL: window.location.origin + '/auth/verify-email'
     })

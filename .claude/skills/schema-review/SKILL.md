@@ -86,6 +86,32 @@ on any line and leave an **inline comment pinned to that exact field** ("make th
   committed `.md`, revises the schema field-by-field, re-renders, and replies to/resolves each
   thread. When running this skill by hand, point the reviewer at the committed `.md` in the diff.
 
+## Unresolved relations — the thing this gate exists to catch
+
+A field typed `relation` with **no `refTarget`** is the highest-value thing on the page: it is
+the one detail that makes the relation buildable, and it is the easiest to approve without
+noticing. The renderer marks it **⚠ not set** in the References column and replaces the
+relationships sketch with a warning naming each offender. It never reports "No relationships"
+for a collection that has relation fields.
+
+**Do not approve a schema carrying one.** Name the collection each points at, and check that
+collection is actually being generated — a target that doesn't exist produces an import to a
+missing file and fails the *build*, minutes later, with an error that names none of this.
+
+If **people** are the intended target, say so explicitly: in crouton they come from the
+auth/team side, not a generated collection, so it likely needs a different field type rather
+than a relation.
+
+Pass `--strict` to make it a hard gate (exit 1) — use that for a pre-generate check or CI. It
+is **off by default** because the decompose apply step calls this inside a best-effort guard,
+where a non-zero exit would drop the schema artifact from the sign-off comment entirely and
+hide the problem instead of showing it.
+
+> Minted by the #1825 chores POC: `assignee` and `lastDoneBy` were approved as untargeted
+> relations, the summary read "_No relationships._", the build instruction then invented
+> "references household members/users", the worker turned that into `refTarget: "users"`, and
+> the generated code imported a `users` collection nobody ever created.
+
 ## Conventions
 - One review per collection; re-render after every schema edit so the artifact never drifts.
 - The field table is the source of truth for review — keep it honest (mirror the actual JSON,

@@ -89,7 +89,7 @@ describe('generateTypes', () => {
     expect(result).toContain('items: string[]')
     expect(result).toContain('activeItem: ShopProduct | Record<string, never>')
     expect(result).toContain('collection: string')
-    expect(result).toContain('loading: string')
+    expect(result).toContain('loading?: string')
     expect(result).toContain("action: 'create' | 'update' | 'delete'")
   })
 })

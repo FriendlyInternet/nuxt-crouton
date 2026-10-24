@@ -485,7 +485,7 @@ export default defineEventHandler(async (event) => {
 
     // Try to get page from pagesPages table
     try {
-      const pagesSchema = await import('~~/layers/pages/collections/pages/server/database/schema')
+      const pagesSchema = await import('../../../../../collections/pages/server/database/schema')
       const { sql } = await import('drizzle-orm')
 
       const ctx: PageLookupCtx = { database, pagesSchema, sql, teamId: team.id, locale }

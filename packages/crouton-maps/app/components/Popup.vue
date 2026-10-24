@@ -37,7 +37,7 @@ const createPopup = async () => {
   try {
     // Dynamic import for client-side only
     const maplibregl = await import('maplibre-gl')
-    const Popup = maplibregl.Popup || maplibregl.default?.Popup
+    const Popup = maplibregl.Popup
 
     if (!Popup) {
       console.error('[CroutonMapPopup] Failed to load MapLibre Popup')

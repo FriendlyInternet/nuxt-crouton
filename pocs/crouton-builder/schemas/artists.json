@@ -1,0 +1,58 @@
+{
+  "name": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "label": "Name",
+      "area": "main"
+    }
+  },
+  "genre": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "label": "Genre",
+      "area": "main",
+      "default": "electronic",
+      "options": [
+        { "value": "electronic", "label": "Electronic" },
+        { "value": "rock", "label": "Rock" },
+        { "value": "jazz", "label": "Jazz" },
+        { "value": "hip-hop", "label": "Hip-hop" },
+        { "value": "pop", "label": "Pop" }
+      ]
+    }
+  },
+  "image": {
+    "type": "image",
+    "meta": {
+      "label": "Photo",
+      "area": "main",
+      "help": "Shown by the list block's cards variant"
+    }
+  },
+  "bio": {
+    "type": "text",
+    "meta": {
+      "label": "Bio",
+      "area": "main"
+    }
+  },
+  "rating": {
+    "type": "number",
+    "meta": {
+      "label": "Rating",
+      "default": 3,
+      "area": "sidebar",
+      "help": "1–5 — feeds the Artists · Stats KPI block"
+    }
+  },
+  "active": {
+    "type": "boolean",
+    "meta": {
+      "label": "Active",
+      "default": true,
+      "area": "sidebar"
+    }
+  }
+}

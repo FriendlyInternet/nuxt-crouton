@@ -5,3 +5,4 @@
 export * from '@fyit/crouton-auth/server/database/schema/auth'
 export * from './translations-ui'
 export { mainItems } from '../../layers/main/collections/items/server/database/schema'
+export { mainGalleries } from '../../layers/main/collections/galleries/server/database/schema'

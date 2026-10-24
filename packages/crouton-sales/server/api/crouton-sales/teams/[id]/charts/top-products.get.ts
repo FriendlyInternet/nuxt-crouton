@@ -5,19 +5,19 @@
  * Optional ?eventId= narrows to a single event; omitted ⇒ team-wide.
  * Used by the salesChartBlock's `top-products` chart kind.
  */
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { personnelFilter } from '../../../../../utils/personnel-filter'
-import { salesOrders } from '~~/layers/sales/collections/orders/server/database/schema'
-import { salesOrderitems } from '~~/layers/sales/collections/orderitems/server/database/schema'
-import { salesProducts } from '~~/layers/sales/collections/products/server/database/schema'
+import { chartOrderScope } from '../../../../../utils/chart-scope'
+import { productCategoryCondition } from '../../../../../utils/product-category-filter'
+import { salesOrders } from '../../../../../../collections/orders/server/database/schema'
+import { salesOrderitems } from '../../../../../../collections/orderitems/server/database/schema'
+import { salesProducts } from '../../../../../../collections/products/server/database/schema'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
   const db = useDB()
 
-  const { eventId, personnel } = getQuery(event)
-  const eventFilter = eventId ? eq(salesOrders.eventId, String(eventId)) : undefined
+  const { eventId, personnel, productIds, categoryIds } = getQuery(event)
 
   // quantity is stored as TEXT → cast to a number before summing.
   const quantityExpr = sql<number>`sum(cast(${salesOrderitems.quantity} as real))`
@@ -30,7 +30,10 @@ export default defineEventHandler(async (event) => {
     .from(salesOrderitems)
     .innerJoin(salesOrders, eq(salesOrderitems.orderId, salesOrders.id))
     .innerJoin(salesProducts, eq(salesOrderitems.productId, salesProducts.id))
-    .where(and(eq(salesOrders.teamId, team.id), eventFilter, personnelFilter(personnel)))
+    .where(and(
+      chartOrderScope(salesOrders, { teamId: team.id, eventId, personnel }),
+      productCategoryCondition(salesProducts.id, salesProducts.categoryId, { productIds, categoryIds })
+    ))
     .groupBy(salesProducts.title)
     .orderBy(desc(quantityExpr))
     .limit(10)

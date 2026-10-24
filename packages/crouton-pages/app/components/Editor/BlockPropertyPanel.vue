@@ -11,8 +11,9 @@
  * - Prevents feedback loops and focus stealing
  */
 import type { Node } from '@tiptap/pm/model'
-import type { BlockType, BlockPropertySchema, BlockSize } from '../../types/blocks'
+import type { BlockType, BlockPropertySchema, BlockSize, BlockVisibility, BlockAudienceRole, BlockViewport } from '../../types/blocks'
 import { getBlockDefinition } from '../../utils/block-registry'
+import { parseBlockVisibility } from '../../utils/block-visibility'
 
 const { t } = useT()
 const { blockName, fieldLabel, fieldDescription, fieldOptions } = useBlockI18n()
@@ -135,11 +136,79 @@ const blockSizeOptions = [
   { label: t('pages.blocks.sizeFull'), value: 'full' as BlockSize }
 ]
 
+// ---------------------------------------------------------------------------
+// Visibility (universal for all block types)
+//
+// Written to the `blockVisibility` attr as a SPARSE object: a key is only
+// present when it restricts something, so a block the author never configured
+// stores nothing at all.
+// ---------------------------------------------------------------------------
+
+const visibility = computed<BlockVisibility>(
+  () => parseBlockVisibility(localAttrs.value.blockVisibility) ?? {}
+)
+
+const audienceOptions = [
+  { label: t('pages.blocks.visibility.audienceAll'), value: 'all' },
+  { label: t('pages.blocks.visibility.audienceAnonymous'), value: 'anonymous' },
+  { label: t('pages.blocks.visibility.audienceAuthenticated'), value: 'authenticated' }
+]
+
+const roleOptions: { label: string, value: BlockAudienceRole }[] = [
+  { label: t('pages.blocks.visibility.roleOwner'), value: 'owner' },
+  { label: t('pages.blocks.visibility.roleAdmin'), value: 'admin' },
+  { label: t('pages.blocks.visibility.roleMember'), value: 'member' }
+]
+
+const viewportOptions: { label: string, value: BlockViewport }[] = [
+  { label: t('pages.blocks.visibility.viewportMobile'), value: 'mobile' },
+  { label: t('pages.blocks.visibility.viewportTablet'), value: 'tablet' },
+  { label: t('pages.blocks.visibility.viewportDesktop'), value: 'desktop' }
+]
+
+/** Roles only narrow a logged-in audience, so the picker is hidden otherwise. */
+const showRoles = computed(() => visibility.value.audience === 'authenticated')
+
+/** Apply a patch, dropping keys that no longer restrict anything. */
+function updateVisibility(patch: Partial<BlockVisibility>) {
+  const next: BlockVisibility = { ...visibility.value, ...patch }
+
+  if (!next.audience) delete next.audience
+  if (next.audience !== 'authenticated' || !next.roles?.length) delete next.roles
+  if (!next.viewports?.length || next.viewports.length === 3) delete next.viewports
+
+  // An empty object is no restriction — store nothing rather than `{}`.
+  onFieldChange('blockVisibility', Object.keys(next).length ? next : null)
+}
+
+function onAudienceChange(value: unknown) {
+  updateVisibility({ audience: value === 'all' ? undefined : value as BlockVisibility['audience'] })
+}
+
+function toggleRole(role: BlockAudienceRole, checked: boolean) {
+  const current = visibility.value.roles ?? []
+  updateVisibility({ roles: checked ? [...current, role] : current.filter(r => r !== role) })
+}
+
+function toggleViewport(viewport: BlockViewport, checked: boolean) {
+  // Absent means "all", so start from all three when narrowing for the first time.
+  const current = visibility.value.viewports ?? ['mobile', 'tablet', 'desktop']
+  const next = checked ? [...current, viewport] : current.filter(v => v !== viewport)
+  // Never let the author switch every screen off — that just hides the block.
+  updateVisibility({ viewports: next.length ? next : undefined })
+}
+
+function isViewportOn(viewport: BlockViewport): boolean {
+  return !visibility.value.viewports || visibility.value.viewports.includes(viewport)
+}
+
+/** True when the block carries any restriction — drives the summary badge. */
+const isRestricted = computed(() => Object.keys(visibility.value).length > 0)
+
 // Handle delete
 function onDelete() {
   emit('delete')
 }
-t
 </script>
 
 <template>
@@ -182,7 +251,7 @@ t
       </UButton>
       <div v-if="showPreview" class="relative overflow-hidden bg-muted/10" style="height: 200px;">
         <div style="transform: scale(0.33); transform-origin: top center; width: 303%; margin-left: -101.5%; pointer-events: none;">
-          <CroutonPagesBlockContent :content="previewDoc as any" class="p-4" />
+          <CroutonPagesBlockContent :content="previewDoc as any" ignore-visibility class="p-4" />
         </div>
       </div>
     </div>
@@ -200,6 +269,85 @@ t
             @update:model-value="onFieldChange('blockSize', $event)"
           />
         </UFormField>
+
+        <!-- Visibility (universal for all block types) -->
+        <UCollapsible>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            block
+            class="group justify-between px-0"
+            trailing-icon="i-lucide-chevron-down"
+            :ui="{ trailingIcon: 'group-data-[state=open]:rotate-180 transition-transform duration-200' }"
+          >
+            <span class="flex items-center gap-2 text-sm font-medium">
+              <UIcon :name="isRestricted ? 'i-lucide-eye-off' : 'i-lucide-eye'" class="size-4" />
+              {{ t('pages.blocks.visibility.title') }}
+              <UBadge v-if="isRestricted" color="warning" variant="subtle" size="sm">
+                {{ t('pages.blocks.visibility.restricted') }}
+              </UBadge>
+            </span>
+          </UButton>
+
+          <template #content>
+            <div class="space-y-4 pt-3">
+              <UFormField
+                :label="t('pages.blocks.visibility.audience')"
+                :description="t('pages.blocks.visibility.audienceHelp')"
+                name="blockVisibilityAudience"
+              >
+                <USelect
+                  :model-value="visibility.audience || 'all'"
+                  :items="audienceOptions as any"
+                  value-key="value"
+                  class="w-full"
+                  @update:model-value="onAudienceChange($event)"
+                />
+              </UFormField>
+
+              <UFormField
+                v-if="showRoles"
+                :label="t('pages.blocks.visibility.roles')"
+                :description="t('pages.blocks.visibility.rolesHelp')"
+                name="blockVisibilityRoles"
+              >
+                <div class="flex flex-col gap-2">
+                  <UCheckbox
+                    v-for="role in roleOptions"
+                    :key="role.value"
+                    :model-value="visibility.roles?.includes(role.value) ?? false"
+                    :label="role.label"
+                    @update:model-value="toggleRole(role.value, $event as boolean)"
+                  />
+                </div>
+              </UFormField>
+
+              <UFormField
+                :label="t('pages.blocks.visibility.viewports')"
+                :description="t('pages.blocks.visibility.viewportsHelp')"
+                name="blockVisibilityViewports"
+              >
+                <div class="flex flex-col gap-2">
+                  <UCheckbox
+                    v-for="viewport in viewportOptions"
+                    :key="viewport.value"
+                    :model-value="isViewportOn(viewport.value)"
+                    :label="viewport.label"
+                    @update:model-value="toggleViewport(viewport.value, $event as boolean)"
+                  />
+                </div>
+              </UFormField>
+
+              <UAlert
+                v-if="isRestricted"
+                color="neutral"
+                variant="subtle"
+                icon="i-lucide-info"
+                :description="t('pages.blocks.visibility.notSecurityNotice')"
+              />
+            </div>
+          </template>
+        </UCollapsible>
 
         <USeparator />
 

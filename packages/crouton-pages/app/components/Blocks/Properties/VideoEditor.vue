@@ -273,7 +273,7 @@ function handleAssetSelected(asset: Record<string, any>) {
     <div v-if="mode === 'url'" class="space-y-2">
       <UInput
         v-model="urlInput"
-        placeholder="https://example.com/video.mp4 or /images/..."
+        :placeholder="t('pages.blockEditors.videoUrlPlaceholder')"
         size="sm"
         class="w-full"
       >

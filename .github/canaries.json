@@ -1,0 +1,89 @@
+{
+  "$comment": [
+    "Canary specs for the worker pipeline (#1878). Config-as-data, same convention as",
+    "digests.yml / labels.yml / deploy.config.json.",
+    "",
+    "Each canary is a FIXED issue whose correct outcome is known in advance, re-dispatched on",
+    "demand. `expect` keys must exist in ASSERTIONS (scripts/canary.mjs) — an unknown key FAILS",
+    "rather than passing silently, so the rig cannot quietly stop checking.",
+    "",
+    "TWO TARGETS, both disposable and never merged (branches are closed + deleted on each",
+    "dispatch, so a worker's edits are thrown away):",
+    "  • pocs/canary — a tsc-only package, used by four canaries. NOT in fixtures/ because the",
+    "    acceptance gate resolves an app only from ^(apps|pocs)/ (planAcceptance,",
+    "    scripts/pi-finish.mjs); a fixtures/ path would leave both acceptance canaries neutral.",
+    "  • packages/canary-target — used by packages-logic-needs-test alone, because the tests gate",
+    "    keys on ^packages/[^/]+/ (planTestsGate) and no poc path can reach it.",
+    "See each target's README.md / CLAUDE.md before changing anything there.",
+    "",
+    "All five canaries are wired. `issue: null` would mean 'specified but not yet wired' — the",
+    "verify workflow skips such a canary and warns. A wired canary that produced no observation",
+    "FAILS rather than being skipped (checkAll), so 'never dispatched' can't read as a pass.",
+    "",
+    "Two failure classes are covered on purpose (#1876 + #1885): the pipeline BREAKING, and the",
+    "pipeline running perfectly while shipping something incomplete."
+  ],
+  "canaries": [
+    {
+      "id": "locale-3-files",
+      "issue": 1927,
+      "target": "pocs/canary/i18n/",
+      "why": "#1876 defect 1 — the last file of a commit bucket was dropped, and in #1874 the dropped one was the only file that mattered. Three files in, three files out; nl.json asserted BY NAME because a count alone would pass on the wrong three.",
+      "task": "change the `farewell` string in all three of pocs/canary/i18n/{nl,en,fr}.json",
+      "expect": {
+        "prOpened": true,
+        "draft": false,
+        "changedFileCount": 3,
+        "filesInclude": ["nl.json"],
+        "commentsExclude": "likely underspecified"
+      }
+    },
+    {
+      "id": "app-acceptance-pass",
+      "issue": 1928,
+      "target": "pocs/canary/src/greeting.ts",
+      "why": "The acceptance gate's happy path — an apps/pocs change must resolve an APP_DIR and typecheck clean. Guards the #1876 APP_DIR probe that used to kill the whole finish step on a no-match.",
+      "task": "add an exported `farewell(locale, name)` to pocs/canary/src/greeting.ts, mirroring `greet`",
+      "expect": {
+        "prOpened": true,
+        "draft": false,
+        "runRecordIncludes": "acceptance: passed"
+      }
+    },
+    {
+      "id": "acceptance-red",
+      "issue": 1929,
+      "target": "pocs/canary/src/greeting.ts",
+      "why": "A genuinely broken deliverable must open as a DRAFT so automerge (#339) skips it. If this canary ever goes non-draft, red work can land. The failure is REAL (a tight `Locale` union rejects the new key), not staged — a staged failure would prove nothing about the gate.",
+      "task": "add a German greeting to the GREETINGS map in pocs/canary/src/greeting.ts WITHOUT widening the `Locale` union",
+      "expect": {
+        "prOpened": true,
+        "draft": true,
+        "runRecordIncludes": "acceptance: FAILED"
+      }
+    },
+    {
+      "id": "packages-logic-needs-test",
+      "issue": 1932,
+      "target": "packages/canary-target/src/index.ts",
+      "why": "#1885 — the worker shipped #1875's logic with none of its five agreed tests, and every check went green. Clause (7) now requires the test; this asserts it actually appears. The only canary that cannot use pocs/canary: planTestsGate keys on ^packages/[^/]+/, which no poc path matches — hence the disposable packages/canary-target.",
+      "task": "add a pure percentOf() helper to packages/canary-target/src/index.ts AND its test in test/",
+      "expect": {
+        "prOpened": true,
+        "filesMatch": "\\.(test|spec)\\.",
+        "draft": false
+      }
+    },
+    {
+      "id": "genuine-no-op",
+      "issue": 1930,
+      "target": "pocs/canary/README.md",
+      "why": "The one canary that SHOULD produce nothing. It guards the artifact-gate's honesty: no PR is correct here, but the failure comment must not assert a cause it never checked (#1751, #1876 defect 3).",
+      "task": "an issue asking for something already true of pocs/canary/README.md, so there is nothing to build",
+      "expect": {
+        "prOpened": false,
+        "commentsExclude": "likely underspecified"
+      }
+    }
+  ]
+}

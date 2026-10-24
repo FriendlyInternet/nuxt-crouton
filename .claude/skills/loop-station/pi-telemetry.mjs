@@ -16,6 +16,10 @@
  * pi-otel GenAI spans (richer, tool-level nesting) are NOT collected yet — no OTLP receiver
  * is wired — so WS2 from pi is at AGENT granularity for now (one node per subagent). When
  * pi-otel spans are collected, tool-level children can be layered in (TODO, see schema doc §3).
+ *   3. Skill loads (#2403)       from the native session JSONL: pi has no skill tool — the model
+ *      `read`s `.claude/skills/<name>/SKILL.md`, so each such read is a `kind:'skill'` event
+ *      (lib/skill-loads.mjs). This is the usage side of the dead-weight join; a single-use
+ *      worker with no subagents still produces a trace from these.
  *
  * HARD PRIVACY RULE (parity with the WS2 transcript parser): forward names + ids + durations
  * + token counts + cost ONLY. NEVER forward message content, task/prompt text, cwd, or tool I/O.
@@ -27,6 +31,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
+import { skillLoadsFromSession } from './lib/skill-loads.mjs'
 
 function num(v) {
   if (v === null || v === undefined || v === '') return null
@@ -202,27 +207,58 @@ export function readSubagentMetas(dir) {
 }
 
 /**
- * One-shot: a pi telemetry directory → WS2 trace events (with the leading `meta` header line
- * the data seam expects). Returns { events, meta } or null if no metas found.
+ * Read every pi session JSONL under `dir` (the per-run `--session-dir`, or a sessions tree)
+ * and return the skill-load events across them (#2403). Local FS only; skips unreadable files.
  */
-export function buildPiTrace(dir) {
+export function readSessionSkillLoads(dir) {
+  const out = []
+  if (!dir || !fs.existsSync(dir)) return out
+  const stack = [dir]
+  while (stack.length) {
+    const cur = stack.pop()
+    let entries
+    try { entries = fs.readdirSync(cur, { withFileTypes: true }) } catch { continue }
+    for (const e of entries) {
+      const full = path.join(cur, e.name)
+      if (e.isDirectory()) { stack.push(full); continue }
+      if (!e.name.endsWith('.jsonl')) continue
+      try { out.push(...skillLoadsFromSession(fs.readFileSync(full, 'utf8'))) } catch { /* skip bad file */ }
+    }
+  }
+  return out
+}
+
+/**
+ * One-shot: a pi telemetry directory (+ optionally the run's session dir) → WS2 trace events
+ * (with the leading `meta` header line the data seam expects). Agent events come from the
+ * subagent metas; skill events from the session JSONL (#2403). Returns { events, meta } or
+ * null when neither surface yielded anything.
+ */
+export function buildPiTrace(dir, opts = {}) {
   const metas = readSubagentMetas(dir)
-  if (!metas.length) return null
-  const events = subagentMetasToWs2Events(metas)
+  const events = [
+    ...subagentMetasToWs2Events(metas),
+    ...readSessionSkillLoads(opts.sessionDir),
+  ].sort((a, b) => Date.parse(a.ts || 0) - Date.parse(b.ts || 0))
+  if (!events.length) return null
   return {
     meta: { kind: 'meta', source: 'pi', harness: 'pi', eventCount: events.length },
     events,
   }
 }
 
-// ── CLI: `node pi-telemetry.mjs <pi-telemetry-dir> [--ledger]` ─────────────────────────────
-// Default prints WS2 trace.jsonl (meta header + events). With --ledger, prints one ledger
-// record slice per subagent (JSONL). Used by prepare-data.mjs and for manual inspection.
+// ── CLI: `node pi-telemetry.mjs <pi-telemetry-dir> [--session <dir>] [--ledger]` ───────────
+// Default prints WS2 trace.jsonl (meta header + events). `--session` adds the run's pi
+// session dir so skill loads are traced too (#2403). With --ledger, prints one ledger record
+// slice per subagent (JSONL). Used by prepare-data.mjs and for manual inspection.
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const dir = process.argv[2]
-  const ledger = process.argv.includes('--ledger')
-  if (!dir) {
-    console.error('usage: node pi-telemetry.mjs <pi-telemetry-dir> [--ledger]')
+  const args = process.argv.slice(2)
+  const sessIdx = args.indexOf('--session')
+  const sessionDir = sessIdx >= 0 ? args[sessIdx + 1] : undefined
+  const dir = args.find((a, i) => !a.startsWith('--') && !(sessIdx >= 0 && i === sessIdx + 1))
+  const ledger = args.includes('--ledger')
+  if (!dir && !sessionDir) {
+    console.error('usage: node pi-telemetry.mjs <pi-telemetry-dir> [--session <pi-session-dir>] [--ledger]')
     process.exit(1)
   }
   if (ledger) {
@@ -230,8 +266,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       console.log(JSON.stringify(runOutcomeToLedgerRecord(subagentMetaToRunOutcome(m))))
     }
   } else {
-    const trace = buildPiTrace(dir)
-    if (!trace) { console.error('no subagent metas found'); process.exit(1) }
+    const trace = buildPiTrace(dir, { sessionDir })
+    if (!trace) { console.error('no subagent metas and no skill loads found'); process.exit(1) }
     console.log(JSON.stringify(trace.meta))
     for (const e of trace.events) console.log(JSON.stringify(e))
   }

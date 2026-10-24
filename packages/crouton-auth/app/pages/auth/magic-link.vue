@@ -7,7 +7,7 @@
  *
  * This page automatically verifies the magic link token and signs the user in.
  */
-import { useAuthClient } from '../../../types/auth-client'
+import { requireAuthClient } from '../../../types/auth-client'
 
 definePageMeta({
   layout: 'auth'
@@ -44,9 +44,8 @@ async function verifyMagicLink() {
   verifyError.value = null
 
   try {
-    const authClient = useAuthClient()
     // Better Auth 1.4.x requires query wrapper for token
-    const result = await authClient.magicLink.verify({
+    const result = await requireAuthClient().magicLink.verify({
       query: { token: token.value! }
     })
 

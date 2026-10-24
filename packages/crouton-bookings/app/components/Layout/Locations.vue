@@ -15,15 +15,16 @@ const props = withDefaults(defineProps<{
   scope?: 'personal' | 'team'
 }>(), { scope: 'team' })
 
+const { t } = useT()
 const { locations } = useBookingsList({ scope: props.scope })
 const { filters, toggleLocation } = useBookingsLayoutFilters()
 
 /** Location titles may be a plain string or an i18n object ({ en, nl, ... }). */
 function locName(loc: { title?: unknown }): string {
-  const t = loc.title
-  if (typeof t === 'string') return t
-  if (t && typeof t === 'object') {
-    const o = t as Record<string, string>
+  const title = loc.title
+  if (typeof title === 'string') return title
+  if (title && typeof title === 'object') {
+    const o = title as Record<string, string>
     return o.en ?? o.nl ?? Object.values(o)[0] ?? ''
   }
   return ''
@@ -40,7 +41,7 @@ function isSelected(id: string): boolean {
       v-if="!(locations && locations.length)"
       class="text-sm text-muted text-center p-4"
     >
-      No locations yet.
+      {{ t('bookings.panel.noLocations') }}
     </p>
     <button
       v-for="loc in locations ?? []"

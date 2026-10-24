@@ -34,15 +34,24 @@ concurrency:
 
 jobs:
   measure:
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      # Push with the Harness App, not GITHUB_TOKEN — see loop-station-inventory.yml (#1133).
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # full history so the commit-back rebases cleanly
+          token: ${{ steps.app-token.outputs.token }}
 
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
@@ -88,7 +97,7 @@ jobs:
               echo "::warning::$app wrangler dry-run failed — recording client bundle only"
             fi
 
-            # shellcheck disable=SC2086 — SERVER_ARG is intentionally unquoted (empty or a flag pair)
+            # shellcheck disable=SC2086 # SERVER_ARG is intentionally unquoted (empty or a flag pair)
             node scripts/perf/bundle-size.mjs --app "$app" --dir "$ASSETS" $SERVER_ARG --commit "$SHA" --pretty \
               | node scripts/perf/append-bundle-history.mjs
             ANY=1

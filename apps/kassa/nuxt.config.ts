@@ -12,7 +12,11 @@ const isCloudflare = preset.startsWith('cloudflare')
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton'],
+  // See apps/velo/nuxt.config.ts — crouton-devtools is what installs the review
+  // overlay under the `NUXT_PUBLIC_CROUTON_REVIEW` gate; without it a review
+  // preview has nothing to pin a comment on (#2073). Gates itself off in a
+  // normal production build.
+  modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -50,8 +54,6 @@ export default defineNuxtConfig({
     '@fyit/crouton-themes/riso',
     '@fyit/crouton-themes/eink',
     '@fyit/crouton-themes/blueprint',
-    './layers/sales',
-    './layers/pages'
   ],
   appConfig: {
     croutonApps: {
@@ -71,6 +73,8 @@ export default defineNuxtConfig({
 
   // Disable OG Image to reduce bundle size for Cloudflare (saves ~4MB)
   ogImage: { enabled: false },
+  // og:site_name + schema-org site name — Site Config v4 no longer infers it
+  site: { name: 'Kassa' },
 
   // Disable passkeys for Cloudflare Workers (tsyringe incompatibility)
   croutonAuth: {

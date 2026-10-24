@@ -1,7 +1,7 @@
 {
   "name": "@fyit/crouton-layout",
   "version": "0.1.0",
-  "description": "Deterministic layout engine for Nuxt Crouton — the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Default-on via @fyit/crouton.",
+  "description": "Deterministic layout engine for Nuxt Crouton \u2014 the layout editor, renderer, default-layout compose pass, placeable blocks, and layout_configs storage. Opt in by extending it next to @fyit/crouton-core.",
   "type": "module",
   "main": "./nuxt.config.ts",
   "exports": {
@@ -10,6 +10,7 @@
     "./app/utils/layout-viability": "./app/utils/layout-viability.ts",
     "./app/utils/layout-edit": "./app/utils/layout-edit.ts",
     "./app/utils/layout-serialize": "./app/utils/layout-serialize.ts",
+    "./app/utils/layout-responsive": "./app/utils/layout-responsive.ts",
     "./app/utils/layout-ticket": "./app/utils/layout-ticket.ts",
     "./app/utils/layout-compose-bridge": "./app/utils/layout-compose-bridge.ts",
     "./app/utils/layout-snap": "./app/utils/layout-snap.ts",
@@ -53,8 +54,8 @@
     "nuxt": "^4.0.0"
   },
   "devDependencies": {
-    "@vitest/coverage-v8": "^2.1.9",
-    "happy-dom": "^16.6.0",
-    "vitest": "^2.1.0"
+    "@vitest/coverage-v8": "catalog:",
+    "happy-dom": "catalog:",
+    "vitest": "catalog:"
   }
 }

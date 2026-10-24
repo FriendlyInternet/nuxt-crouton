@@ -19,7 +19,7 @@ jobs:
       !github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
       contains(github.event.issue.labels.*.name, 'status:blocked')
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     permissions:
       contents: write
@@ -27,7 +27,7 @@ jobs:
       issues: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
 
@@ -43,7 +43,7 @@ jobs:
       # deterministic-merge fallback must survive this early exit.
       - name: Re-check the issue is still open
         id: state
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = context.payload.issue.number
@@ -71,7 +71,7 @@ jobs:
       - name: React 👀 — resume picked up
         if: steps.state.outputs.open == 'true'
         id: eyes
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             try {
@@ -85,6 +85,50 @@ jobs:
       - id: t0
         if: steps.state.outputs.open == 'true'
         run: echo "ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      # ── pi DESIGN-HOLD re-dispatch (#1828) ───────────────────────────────────────
+      # A pi decompose sign-off hold (Option C, #1821) is NOT a gate PR — it holds the EPIC
+      # with a "🎨 Design sign-off" comment and no children. The generic claude `/task-decompose`
+      # resume below does not build from it (it just re-blocks and says "still iterating"). So for
+      # that shape we instead re-run the PI decomposer: on any owner reply, remove status:blocked
+      # and re-apply `delegate-pi` (remove-then-add → a fresh `labeled` event) so decompose-on-issue-
+      # pidev re-runs — and with #1828's prompt change it now SPLITS into build children (it reads the
+      # approval/answers in the thread). The label MUST be applied with the App token, or the
+      # `labeled` event won't cascade to the decompose workflow (GITHUB_TOKEN events are suppressed,
+      # #572). When we take this path we set `redispatch=true` and the claude agent step below skips.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token-early
+        if: steps.state.outputs.open == 'true'
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - name: Re-dispatch a pi design-hold to the pi decomposer
+        id: piredispatch
+        if: steps.state.outputs.open == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token-early.outputs.token }}
+          script: |
+            const issue_number = context.payload.issue.number
+            // A pi design-hold = a "🎨 Design sign-off" comment exists AND the epic has no children yet.
+            const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number, per_page: 100 })
+            const hasHold = comments.some(c => (c.body || '').includes('🎨 Design sign-off needed before building'))
+            let noChildren = true
+            try {
+              const subs = await github.paginate('GET /repos/{owner}/{repo}/issues/{issue_number}/sub_issues', { ...context.repo, issue_number, per_page: 100 })
+              noChildren = subs.length === 0
+            } catch (e) { core.warning(`sub-issue check: ${e.message}`) }
+            if (!(hasHold && noChildren)) { core.setOutput('redispatch', 'false'); core.info('Not a pi design-hold — the claude resume path handles it.'); return }
+            // Re-dispatch: clear the block, then remove-then-add delegate-pi for a fresh labeled event.
+            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'status:blocked' }) } catch (e) {}
+            try { await github.rest.issues.removeLabel({ ...context.repo, issue_number, name: 'delegate-pi' }) } catch (e) {}
+            await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['delegate-pi'] })
+            await github.rest.issues.createComment({ ...context.repo, issue_number,
+              body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1828)_\n\n'
+                + '🔨 **Approved — rebuilding.** Re-running the pi decomposer on your reply; it will split this epic into build children now (not another design hold). Watch for the sub-issues + their PRs.' })
+            core.setOutput('redispatch', 'true')
+            core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
 
       # ── Collect the answer payload across media (WS5, #1191) ─────────────────────
       # The owner may answer in the medium the question came in — a top-level reply, an
@@ -103,6 +147,16 @@ jobs:
             || echo '_(answer-payload collection skipped — resume from the top-level thread)_' > .resume-answer.md
           echo "── collected answer payload ──"; cat .resume-answer.md
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Pinned to the same SHA as claude.yml — keep these in sync when bumping.
       # AUTH: uses the subscription CLAUDE_CODE_OAUTH_TOKEN (not a metered API key).
       # This REVERSES the old "OAuth is interactive-only, never in CI" rule (#652/#823)
@@ -110,8 +164,10 @@ jobs:
       # unattended automation (#1669; supporting source pending on that issue — if it
       # does not cover automation, revert). Runs on the mac-mini runner.
       - id: agent
-        if: steps.state.outputs.open == 'true'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+        # Skip when we re-dispatched a pi design-hold above (#1828) — the pi decomposer builds it,
+        # not this generic claude resume (which would just re-block and double-decompose).
+        if: steps.state.outputs.open == 'true' && steps.piredispatch.outputs.redispatch != 'true'
+        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
@@ -124,7 +180,7 @@ jobs:
             `node scripts/ticket-excalidraw-import.mjs <png>` to decode the scene before acting.
             Then incorporate the answer, remove the `status:blocked` label, and continue via
             /task-decompose #${{ github.event.issue.number }}.
-          claude_args: "--model claude-sonnet-5 --max-turns 30"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 30"
           show_full_output: true
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
@@ -136,7 +192,7 @@ jobs:
       # event would NOT reach schedule-waves and the chain stalls (the #572 first-attempt
       # regression). An App installation token is a non-GITHUB_TOKEN actor, so its merge
       # fires schedule-waves → close issue → release next workstream. (#535/#519 WS5.)
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         if: always()
         with:
@@ -157,14 +213,19 @@ jobs:
       - name: Merge the gate PR on approval
         id: mergegate
         if: always()
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const issue_number = context.payload.issue.number
             const body = context.payload.comment.body || ''
             // Approval only — a change-request reply must NOT merge anything.
-            if (!/\b(approve|approved|lgtm)\b/i.test(body)) {
+            // ONE definition of "approval" (#2051/#2094): isApproval() understands the
+            // whole-line ✅ gesture and strips code/quotes first, so a quoted or backticked
+            // `lgtm` can no longer merge a PR (the #2004 shape). The repo is checked out at
+            // the top of this job, so the tested module is importable here.
+            const { isApproval } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/approval.mjs`)
+            if (!isApproval(body)) {
               core.info('Comment is not an approval — nothing to merge.'); return
             }
 
@@ -273,7 +334,7 @@ jobs:
       - name: Artifact-gate — fail if the resume produced nothing
         id: gate
         if: always() && steps.state.outputs.open == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           # Why the merge step passed over each candidate PR, if it did (#1663). Passed via
           # env, not `${{ }}` inside the script — the value is multi-line and interpolating
@@ -361,7 +422,7 @@ jobs:
       # is already explained by the artifact-gate above, so we don't duplicate it (#1216).
       - name: React outcome — 🚀 done / 😕 failed
         if: always() && steps.state.outputs.open == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const comment_id = context.payload.comment.id
@@ -397,7 +458,7 @@ jobs:
       # top of the job's `user.type != 'Bot'` guard).
       - name: Comment ✅ — visible success
         if: success() && steps.state.outputs.open == 'true' && steps.gate.outputs.newComment != 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = context.payload.issue.number
@@ -415,7 +476,7 @@ jobs:
       # A cancelled resume (the 30-min timeout) must announce itself, not vanish silently (#1220).
       - name: Flag a timeout / cancellation
         if: cancelled()
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = context.payload.issue.number
@@ -436,24 +497,39 @@ jobs:
   # approval AND the issue actually has a pending gate PR (open, into an `epic/*`
   # branch). An approval word on an ordinary issue is ignored.
   explain-skipped-approval:
+    # The contains() tests are a CHEAP PRE-FILTER ONLY (#2004) — the decision is
+    # isApproval() below. The check emoji are listed too (#2094): a bare ✅ used to
+    # slip past this prefilter entirely, so a wasted check-approval got no explainer.
     if: |
       !github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
       !contains(github.event.issue.labels.*.name, 'status:blocked') &&
-      (contains(github.event.comment.body, 'lgtm') || contains(github.event.comment.body, 'approve'))
+      (contains(github.event.comment.body, 'lgtm') ||
+       contains(github.event.comment.body, 'approve') ||
+       contains(github.event.comment.body, '✅') ||
+       contains(github.event.comment.body, '✔') ||
+       contains(github.event.comment.body, '☑'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       issues: write
       pull-requests: read
     steps:
-      - uses: actions/github-script@v7
+      # Needed so the script can import the unit-tested matcher (scripts/approval.mjs) —
+      # same pattern as approve-draft-pr.yml (#2051/#2094).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const issue_number = context.payload.issue.number
             const body = context.payload.comment.body || ''
-            // Re-check precisely — the job `if` is a coarse prefilter.
-            if (!/\b(approve|approved|lgtm)\b/i.test(body)) return
+            // Re-check precisely — the job `if` is a coarse prefilter; one definition of
+            // "approval" everywhere (#2051/#2094), including the whole-line ✅ gesture.
+            const { isApproval } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/approval.mjs`)
+            if (!isApproval(body)) return
 
             // Is there really a gate waiting? Only then is silence a bug worth explaining.
             let gatePR = null

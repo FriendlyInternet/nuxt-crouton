@@ -48,6 +48,45 @@ const jobs = ref<KdsJob[]>([])
 // source of truth — the next refresh confirms it's gone.
 const bumping = ref<Set<string>>(new Set())
 
+// Two-step tap-to-arm-then-confirm (#2115): a single tap in a busy kitchen
+// shouldn't bump an order. Tapping a resting card arms it (reveals a
+// full-card confirm overlay); tapping the overlay bumps it. Tapping anywhere
+// else, or letting it sit for a few seconds, disarms it again.
+const armedId = ref<string | null>(null)
+const justConfirmed = ref<string | null>(null)
+const DISARM_MS = 4000
+let disarmTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearDisarmTimer() {
+  if (disarmTimer) {
+    clearTimeout(disarmTimer)
+    disarmTimer = null
+  }
+}
+
+function arm(job: KdsJob) {
+  armedId.value = job.id
+  clearDisarmTimer()
+  disarmTimer = setTimeout(() => {
+    if (armedId.value === job.id) armedId.value = null
+  }, DISARM_MS)
+}
+
+function disarm() {
+  armedId.value = null
+  clearDisarmTimer()
+}
+
+async function confirmBump(job: KdsJob) {
+  clearDisarmTimer()
+  armedId.value = null
+  justConfirmed.value = job.id
+  await bump(job)
+  if (justConfirmed.value === job.id) justConfirmed.value = null
+}
+
+onUnmounted(() => clearDisarmTimer())
+
 async function resolveEvent() {
   if (!eventSlug.value || !teamParam.value) return
   try {
@@ -64,6 +103,9 @@ async function resolveEvent() {
 // Locations this screen shows, as a query param; empty = the whole event.
 const locationsParam = computed(() => (props.attrs.locations || []).filter(Boolean).join(','))
 
+/** When the feed last answered. Drives the staleness indicator (#1766). */
+const lastOkAt = ref<number | null>(null)
+
 async function refresh() {
   if (!eventId.value) return
   try {
@@ -72,9 +114,12 @@ async function refresh() {
       { query: locationsParam.value ? { locations: locationsParam.value } : undefined }
     )
     jobs.value = res.jobs
+    lastOkAt.value = Date.now()
   }
   catch {
-    // Transient blip — keep the last board until the next poll.
+    // Keep the last board — a single dropped poll is genuinely transient. But
+    // `lastOkAt` deliberately does NOT advance, so a feed that stays broken
+    // stops presenting itself as live (#1766).
   }
 }
 
@@ -99,13 +144,14 @@ async function bump(job: KdsJob) {
 const active = computed(() => jobs.value.filter(j => !bumping.value.has(j.id)))
 
 // Poll every 2s; pause when the tab is hidden.
+const POLL_MS = 2000
 let timer: ReturnType<typeof setInterval> | null = null
 function tick() { if (document.visibilityState !== 'hidden') refresh() }
 
 onMounted(async () => {
   await resolveEvent()
   await refresh()
-  timer = setInterval(tick, 2000)
+  timer = setInterval(tick, POLL_MS)
   document.addEventListener('visibilitychange', tick)
 })
 onUnmounted(() => {
@@ -119,6 +165,14 @@ onMounted(() => {
   const t2 = setInterval(() => (now.value = Date.now()), 1000)
   onUnmounted(() => clearInterval(t2))
 })
+// Is the board still telling the truth? `now` already ticks every second, so
+// this re-evaluates on its own without a second timer (#1766).
+const health = computed(() => boardHealth({
+  now: now.value,
+  lastOkAt: lastOkAt.value,
+  pollMs: POLL_MS
+}))
+
 function ago(iso: string) {
   const s = Math.max(0, Math.floor((now.value - new Date(iso).getTime()) / 1000))
   if (s < 60) return `${s}s`
@@ -154,11 +208,36 @@ function ago(iso: string) {
           <UIcon name="i-lucide-chef-hat" class="size-6 text-primary" />
           <h2 class="text-xl font-bold tracking-tight text-highlighted">{{ t('sales.blocks.kitchenDisplay.ui.title') }}</h2>
         </div>
-        <div class="flex items-center gap-2 text-sm text-muted">
-          <span class="inline-block size-2 rounded-full bg-success animate-pulse" />
-          {{ t('sales.blocks.kitchenDisplay.ui.live') }} · {{ t('sales.blocks.kitchenDisplay.ui.active', { count: active.length }) }}
+        <div class="flex items-center gap-2 text-sm" :class="health === 'stale' ? 'text-warning' : 'text-muted'">
+          <span
+            class="inline-block size-2 rounded-full"
+            :class="{
+              'bg-success animate-pulse': health === 'live',
+              'bg-warning': health === 'stale',
+              'bg-muted animate-pulse': health === 'connecting'
+            }"
+          />
+          <template v-if="health === 'stale'">{{ t('sales.blocks.kitchenDisplay.ui.stale') }}</template>
+          <template v-else-if="health === 'connecting'">{{ t('sales.blocks.kitchenDisplay.ui.connecting') }}</template>
+          <template v-else>{{ t('sales.blocks.kitchenDisplay.ui.live') }}</template>
+          · {{ t('sales.blocks.kitchenDisplay.ui.active', { count: active.length }) }}
         </div>
       </header>
+
+      <!--
+        A frozen board is worse than an empty one: staff work from tickets that
+        stopped being true. Say so loudly rather than letting the tiles imply
+        they are current (#1766).
+      -->
+      <UAlert
+        v-if="health === 'stale'"
+        color="warning"
+        variant="subtle"
+        icon="i-lucide-wifi-off"
+        class="mb-4"
+        :title="t('sales.blocks.kitchenDisplay.ui.stale')"
+        :description="t('sales.blocks.kitchenDisplay.ui.staleHint')"
+      />
 
       <div v-if="active.length === 0" class="flex flex-col items-center justify-center text-center text-dimmed py-32">
         <UIcon name="i-lucide-check-check" class="size-12 mb-3 text-success" />
@@ -173,8 +252,9 @@ function ago(iso: string) {
         <div
           v-for="o in active"
           :key="o.id"
-          class="rounded-2xl bg-muted ring ring-default shadow-sm overflow-hidden flex flex-col"
+          class="relative rounded-2xl bg-muted ring ring-default shadow-sm overflow-hidden flex flex-col"
           :class="o.isPersonnel ? 'ring-warning/60' : ''"
+          @click="armedId !== o.id && arm(o)"
         >
           <div
             class="flex items-center justify-between px-4 py-3 border-b border-default"
@@ -201,14 +281,29 @@ function ago(iso: string) {
           </div>
 
           <UButton
-            color="success"
+            color="neutral"
+            variant="soft"
             size="lg"
             block
             icon="i-lucide-check"
             :label="t('sales.blocks.kitchenDisplay.ui.bump')"
             class="rounded-none font-bold uppercase tracking-wide"
-            @click="bump(o)"
+            @click.stop="armedId !== o.id && arm(o)"
           />
+
+          <!-- Armed state: full-card confirm overlay (#2115) -->
+          <Transition name="confirm-overlay">
+            <button
+              v-if="armedId === o.id"
+              type="button"
+              class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-success text-inverted font-bold uppercase tracking-wide cursor-pointer"
+              @click.stop="confirmBump(o)"
+            >
+              <UIcon :name="justConfirmed === o.id ? 'i-lucide-check-circle-2' : 'i-lucide-check'" class="size-10" />
+              <span class="text-lg">{{ t('sales.blocks.kitchenDisplay.ui.bump') }}</span>
+              <span class="text-xs font-normal normal-case opacity-80">{{ t('sales.blocks.kitchenDisplay.ui.tapToConfirm') }}</span>
+            </button>
+          </Transition>
         </div>
       </TransitionGroup>
     </UCard>
@@ -219,4 +314,7 @@ function ago(iso: string) {
 .order-enter-active, .order-leave-active { transition: all .35s ease; }
 .order-enter-from { opacity: 0; transform: translateY(-10px) scale(.97); }
 .order-leave-to { opacity: 0; transform: scale(.92); }
+
+.confirm-overlay-enter-active, .confirm-overlay-leave-active { transition: opacity .15s ease; }
+.confirm-overlay-enter-from, .confirm-overlay-leave-to { opacity: 0; }
 </style>

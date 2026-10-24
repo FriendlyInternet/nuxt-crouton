@@ -16,6 +16,8 @@
  */
 import { ref, computed, watch } from 'vue'
 
+const { t } = useT()
+
 interface Props {
   /** Email value (v-model) */
   modelValue?: string
@@ -65,8 +67,8 @@ const isValid = computed(() => {
 // Internal error message
 const internalError = computed(() => {
   if (!touched.value) return ''
-  if (!localValue.value) return 'Email is required'
-  if (!isValid.value) return 'Please enter a valid email'
+  if (!localValue.value) return t('email.emailRequired')
+  if (!isValid.value) return t('email.invalidEmail')
   return ''
 })
 

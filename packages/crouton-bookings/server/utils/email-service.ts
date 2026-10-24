@@ -722,6 +722,13 @@ export async function getBatchBookingEmailStats(
 /**
  * Get detailed email status per trigger type for multiple bookings in batch
  */
+/** Log timestamp (Date | epoch | string) → ISO string, or null. */
+function toIso(value: unknown): string | null {
+  if (value === null || value === undefined || value === '') return null
+  const date = value instanceof Date ? value : new Date(value as string | number)
+  return Number.isNaN(date.getTime()) ? null : date.toISOString()
+}
+
 export async function getBatchBookingEmailDetails(
   bookings: Array<{ id: string; date: string | Date; createdAt?: string | Date | null }>,
   teamId: string
@@ -752,6 +759,8 @@ export async function getBatchBookingEmailDetails(
               triggerType: bookingsEmaillogs.triggerType,
               status: bookingsEmaillogs.status,
               sentAt: bookingsEmaillogs.sentAt,
+              error: bookingsEmaillogs.error,
+              createdAt: bookingsEmaillogs.createdAt,
             })
             .from(bookingsEmaillogs)
             .where(
@@ -785,6 +794,8 @@ export async function getBatchBookingEmailDetails(
           triggerType: bookingsEmaillogs.triggerType,
           status: bookingsEmaillogs.status,
           sentAt: bookingsEmaillogs.sentAt,
+          error: bookingsEmaillogs.error,
+          createdAt: bookingsEmaillogs.createdAt,
         })
         .from(bookingsEmaillogs)
         .where(
@@ -815,16 +826,22 @@ export async function getBatchBookingEmailDetails(
 
     for (const booking of bookings) {
       const logs = logsByBooking.get(booking.id) ?? []
+      // Latest log per trigger — a retry after a failure must win over the failure
+      const latestLog = (trigger: string) => logs
+        .filter(l => l.triggerType === trigger)
+        .sort((x, y) => Number(y.createdAt ?? 0) - Number(x.createdAt ?? 0))[0]
       const results: EmailTriggerStatusResult[] = []
       const bookingDate = new Date(booking.date)
 
       // Confirmation (booking_created)
-      const confirmationLog = logs.find(l => l.triggerType === 'booking_created')
+      const confirmationLog = latestLog('booking_created')
       if (confirmationLog) {
         results.push({
           triggerType: 'booking_created',
           status: confirmationLog.status as EmailTriggerStatusResult['status'],
           sentAt: confirmationLog.sentAt || null,
+          error: confirmationLog.error || null,
+          attemptedAt: toIso(confirmationLog.createdAt),
         })
       } else if (hasConfirmationTemplate) {
         results.push({
@@ -835,12 +852,14 @@ export async function getBatchBookingEmailDetails(
       }
 
       // Reminder (reminder_before)
-      const reminderLog = logs.find(l => l.triggerType === 'reminder_before')
+      const reminderLog = latestLog('reminder_before')
       if (reminderLog) {
         results.push({
           triggerType: 'reminder_before',
           status: reminderLog.status as EmailTriggerStatusResult['status'],
           sentAt: reminderLog.sentAt || null,
+          error: reminderLog.error || null,
+          attemptedAt: toIso(reminderLog.createdAt),
         })
       } else if (reminderTemplate) {
         const daysOffset = Math.abs(reminderTemplate.daysOffset || 1)
@@ -854,22 +873,26 @@ export async function getBatchBookingEmailDetails(
       }
 
       // Cancellation (booking_cancelled)
-      const cancelLog = logs.find(l => l.triggerType === 'booking_cancelled')
+      const cancelLog = latestLog('booking_cancelled')
       if (cancelLog || hasCancelTemplate) {
         results.push({
           triggerType: 'booking_cancelled',
           status: cancelLog?.status as EmailTriggerStatusResult['status'] || 'not_sent',
           sentAt: cancelLog?.sentAt || null,
+          error: cancelLog?.error || null,
+          attemptedAt: toIso(cancelLog?.createdAt),
         })
       }
 
       // Follow-up (follow_up_after)
-      const followUpLog = logs.find(l => l.triggerType === 'follow_up_after')
+      const followUpLog = latestLog('follow_up_after')
       if (followUpLog) {
         results.push({
           triggerType: 'follow_up_after',
           status: followUpLog.status as EmailTriggerStatusResult['status'],
           sentAt: followUpLog.sentAt || null,
+          error: followUpLog.error || null,
+          attemptedAt: toIso(followUpLog.createdAt),
         })
       } else if (followUpTemplate) {
         const daysOffset = Math.abs(followUpTemplate.daysOffset || 1)
@@ -946,6 +969,10 @@ export interface EmailTriggerStatusResult {
   status: 'sent' | 'pending' | 'failed' | 'not_sent'
   sentAt?: string | null
   scheduledFor?: string | null
+  /** Provider error message of the latest log (set when it failed) */
+  error?: string | null
+  /** When the latest log was written (the send attempt) */
+  attemptedAt?: string | null
 }
 
 /**

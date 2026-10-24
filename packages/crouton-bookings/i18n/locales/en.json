@@ -56,7 +56,8 @@
       "viewAsUser": "View as user",
       "exit": "Exit",
       "noBookingsForUser": "No bookings for {name}",
-      "noBookingsForTeam": "No bookings yet for this team"
+      "noBookingsForTeam": "No bookings yet for this team",
+      "thisUser": "this user"
     },
     "locations": {
       "title": "Locations",
@@ -126,6 +127,13 @@
         "clickToSend": "Click to send",
         "clickToResend": "Click to resend",
         "clickToRetry": "Click to retry"
+      },
+      "sendEmailConfirm": {
+        "title": "Send the {type} email?",
+        "to": "It goes to {email}.",
+        "toUnknown": "It goes to the person who made this booking.",
+        "send": "Send email",
+        "cancel": "Cancel"
       }
     },
     "createCard": {
@@ -198,10 +206,14 @@
       "schedulingHint": "Define when this location is available for bookings.",
       "slots": "Slots",
       "addTimeSlot": "Add Time Slot",
+      "offerFullDay": "Offer a full-day option",
+      "offerFullDayHint": "Adds \"All day\" next to these slots. Booking it blocks the other slots that day, and any booked slot blocks it.",
       "translations": "Translations",
+      "tabLocation": "Location",
       "tabSettings": "Settings",
       "tabBookings": "Bookings",
-      "tabContent": "Content"
+      "tabContent": "Content",
+      "unknownMember": "Unknown"
     },
     "emailTemplates": {
       "title": "Email Templates",
@@ -299,11 +311,13 @@
       "emailSent": "Email sent",
       "emailSentDescription": "Confirmation email has been resent successfully",
       "emailFailed": "Failed to send email",
-      "errorOccurred": "An error occurred"
+      "errorOccurred": "An error occurred",
+      "emailNotEnabled": "Email module is not enabled",
+      "resendFailed": "Failed to resend email"
     },
     "block": {
       "booking": "Booking",
-      "membersOnly": "Members only",
+      "hiddenWhenLoggedOut": "Hidden when logged out",
       "teamView": "Team view",
       "editBlock": "Edit block properties",
       "deleteBlock": "Delete block"
@@ -345,6 +359,194 @@
         "sat": "Sat",
         "sun": "Sun"
       }
+    },
+    "blocks": {
+      "booking": {
+        "name": "Booking",
+        "description": "Embed a booking panel",
+        "fields": {
+          "title": {
+            "label": "Title",
+            "description": "Optional heading above the booking panel"
+          },
+          "emptyMessage": {
+            "label": "Empty message",
+            "description": "Shown when there are no bookings yet"
+          },
+          "loggedOut": {
+            "label": "Logged-out visitors see",
+            "description": "Booking needs an account. Show a login prompt, or hide the block.",
+            "options": {
+              "prompt": "A login prompt",
+              "hide": "Nothing"
+            }
+          },
+          "scope": {
+            "label": "Booking scope",
+            "description": "Which bookings the visitor sees",
+            "options": {
+              "personal": "Their own bookings",
+              "team": "All team bookings"
+            }
+          }
+        }
+      }
+    },
+    "pageTypes": {
+      "booking": {
+        "name": "Booking page",
+        "description": "Interactive booking page with calendar and availability"
+      }
+    },
+    "weekStrip": {
+      "previousWeek": "Previous week",
+      "nextWeek": "Next week",
+      "fullyBookedDay": "Fully booked: {day}",
+      "addBookingDay": "Add booking: {day}"
+    },
+    "emailVariables": {
+      "customerName": {
+        "label": "Customer Name",
+        "description": "The name of the person who made the booking"
+      },
+      "customerEmail": {
+        "label": "Customer Email",
+        "description": "The email address of the customer"
+      },
+      "bookingDate": {
+        "label": "Booking Date",
+        "description": "The date of the booking (formatted)"
+      },
+      "bookingSlot": {
+        "label": "Time Slot",
+        "description": "The time slot(s) of the booking"
+      },
+      "bookingReference": {
+        "label": "Booking Reference",
+        "description": "Unique booking reference number"
+      },
+      "locationName": {
+        "label": "Location Name",
+        "description": "The name of the booking location"
+      },
+      "locationTitle": {
+        "label": "Location Title",
+        "description": "The title of the booking location"
+      },
+      "locationStreet": {
+        "label": "Street Address",
+        "description": "The street address of the location"
+      },
+      "locationCity": {
+        "label": "City",
+        "description": "The city of the location"
+      },
+      "locationAddress": {
+        "label": "Full Address",
+        "description": "The complete address of the location"
+      },
+      "locationContent": {
+        "label": "Location Content",
+        "description": "The content/description of the location"
+      },
+      "teamName": {
+        "label": "Team Name",
+        "description": "The name of the team/business"
+      },
+      "teamEmail": {
+        "label": "Team Email",
+        "description": "Contact email of the team/business"
+      },
+      "teamPhone": {
+        "label": "Team Phone",
+        "description": "Contact phone of the team/business"
+      }
+    },
+    "collections": {
+      "locations": {
+        "title": "Locations"
+      },
+      "bookings": {
+        "title": "Bookings"
+      },
+      "settings": {
+        "title": "Settings"
+      },
+      "emailtemplates": {
+        "title": "Email Templates"
+      },
+      "emaillogs": {
+        "title": "Email Logs"
+      }
+    },
+    "fields": {
+      "location": "Location",
+      "locationMap": "Location Map",
+      "date": "Date",
+      "slot": "Time Slot",
+      "group": "Age Group",
+      "quantity": "Quantity",
+      "status": "Status",
+      "title": "Title",
+      "color": "Color",
+      "street": "Street",
+      "zip": "Zip Code",
+      "city": "City",
+      "content": "Content",
+      "slots": "Time Slots",
+      "openDays": "Open Days",
+      "slotSchedule": "Slot Schedule",
+      "blockedDates": "Blocked Dates",
+      "inventoryMode": "Inventory Mode",
+      "maxBookingsPerMonth": "Max Bookings Per Month",
+      "allowedMemberIds": "Allowed Members",
+      "translations": "Translations",
+      "statuses": "Statuses",
+      "groups": "Age Groups",
+      "name": "Name",
+      "subject": "Subject",
+      "body": "Body",
+      "fromEmail": "From Email",
+      "triggerType": "Trigger Type",
+      "recipientType": "Send To",
+      "isActive": "Active",
+      "daysOffset": "Days Offset",
+      "locationId": "Location",
+      "bookingId": "Booking",
+      "templateId": "Template",
+      "recipientEmail": "Recipient Email",
+      "sentAt": "Sent At",
+      "error": "Error"
+    },
+    "actions": {
+      "addTimeSlot": "Add Time Slot",
+      "addBlockedPeriod": "Add Blocked Period",
+      "addStatus": "Add Status",
+      "addGroup": "Add Group"
+    },
+    "tabs": {
+      "scheduling": "Scheduling",
+      "address": "Address"
+    },
+    "messages": {
+      "geocoding": "Geocoding address...",
+      "enterOnePerLine": "Enter one value per line"
+    },
+    "triggerTypes": {
+      "booking_created": "Booking Created",
+      "reminder_before": "Reminder Before",
+      "booking_cancelled": "Booking Cancelled",
+      "follow_up_after": "Follow Up After"
+    },
+    "recipientTypes": {
+      "customer": "Customer",
+      "admin": "Admin",
+      "both": "Both"
+    },
+    "emailStatus": {
+      "pending": "Pending",
+      "sent": "Sent",
+      "failed": "Failed"
     }
   }
 }

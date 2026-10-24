@@ -92,33 +92,6 @@ export function planProductImport(input: {
 }
 
 /**
- * Cloudflare D1 caps a query at 100 BOUND PARAMETERS, and a multi-row INSERT binds one per
- * column per row — so the ceiling is on `rows × columns`, not on rows. Writing a whole
- * import in one statement 500'd on staging at 43 products × 17 columns = 731 parameters,
- * while passing locally where SQLite allows 32 766 (#1707).
- *
- * https://developers.cloudflare.com/d1/platform/limits/
- *
- * Chunk size is DERIVED from the row's own shape rather than hardcoded, so it stays correct
- * when a collection gains a column (the failure mode is silent: a wider row just fits fewer
- * per statement). A row too wide to ever fit still yields one row per statement — a chunk
- * size of 0 would loop forever.
- */
-export const D1_MAX_BOUND_PARAMS = 100
-
-export function chunkForBoundParams<T extends Record<string, unknown>>(
-  rows: T[],
-  maxParams = D1_MAX_BOUND_PARAMS,
-): T[][] {
-  if (!rows.length) return []
-  const columns = Math.max(Object.keys(rows[0] as object).length, 1)
-  const size = Math.max(Math.floor(maxParams / columns), 1)
-  const chunks: T[][] = []
-  for (let i = 0; i < rows.length; i += size) chunks.push(rows.slice(i, i + size))
-  return chunks
-}
-
-/**
  * Turn planned rows into insertable product values. `order` continues after the event's
  * current highest so an import lands at the end of the list instead of colliding with
  * existing positions. Ids and timestamps are injected so this stays pure.

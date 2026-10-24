@@ -31,11 +31,13 @@ import { execSync } from 'node:child_process'
 import { makeCounter } from './lib/tokens.mjs'
 import { redundancy } from './lib/redundancy.mjs'
 import { scorecard } from './lib/scorecard.mjs'
+import { resolveImports } from './lib/imports.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 const rel = (p) => relative(ROOT, p).split('\\').join('/')
 const read = (p) => readFileSync(p, 'utf8')
 const PRETTY = process.argv.includes('--pretty')
+
 
 // ── collect the artifacts ─────────────────────────────────────────────────────
 
@@ -71,10 +73,17 @@ function layerOf(text, name) {
 function collectArtifacts() {
   const arts = []
 
-  // Root CLAUDE.md — the always-on context. No layer (it's the constitution itself).
+  // Root CLAUDE.md — the always-on context — PLUS everything it imports (#2387).
+  // Claude Code inlines a line that is just `@<path>` (e.g. `@AGENTS.md`) into the
+  // session context, so an imported file is as always-on as CLAUDE.md itself. Each
+  // import is its own artifact row (kind `claudemd`, alwaysOn) so the table still
+  // shows them separately; `totals.alwaysOnTokens` is their sum. No layer — this is
+  // the constitution itself.
   const rootClaude = join(ROOT, 'CLAUDE.md')
   if (existsSync(rootClaude)) {
-    arts.push({ path: rel(rootClaude), kind: 'claudemd', alwaysOn: true, text: read(rootClaude) })
+    for (const p of resolveImports(rootClaude, { root: ROOT })) {
+      arts.push({ path: rel(p), kind: 'claudemd', alwaysOn: true, text: read(p) })
+    }
   }
 
   // Skills: a skill is either a top-level `.claude/skills/<name>.md` (single-file)
@@ -216,7 +225,7 @@ async function main() {
   const card = scorecard({ alwaysOnTokens, artifacts: counted, redundancy: red })
 
   return {
-    schema: 2,
+    schema: 3, // 3: imports of CLAUDE.md count as always-on (#2387)
     generatedAt: process.env.LOOP_STATION_NOW || new Date().toISOString(),
     commit: gitSha(),
     pr: process.env.LOOP_STATION_PR ? Number(process.env.LOOP_STATION_PR) : null,

@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   red-team-daily:
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
     # Job-level permissions (see red-team.yml for why id-token MUST be here). No issues/PR
     # write — this workflow does NOT post to GitHub; disclosure is by private email only.
@@ -35,25 +35,35 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 1
 
       # The deep pass may boot a fixture for dynamic confirmation — give it node + pnpm + deps.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
           # per-job dest — the default ~/setup-pnpm collides between the two
           # self-hosted runners on the mac mini box (ENOTEMPTY, #1255)
           dest: ${{ runner.temp }}/setup-pnpm
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
+
       # Pinned to the same SHA as the repo's other claude-code-action workflows — bump together.
-      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+      - uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           show_full_output: true
@@ -61,7 +71,7 @@ jobs:
           # deep sweep couldn't write its report, update the standing issue, or file security
           # issues. Broader than the per-PR gate's allowlist because this run also files GitHub
           # issues (MCP) + writes reports; the gate-package-edits hook still protects packages/.
-          claude_args: "--model claude-sonnet-5 --max-turns 60 --permission-mode bypassPermissions"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 60 --permission-mode bypassPermissions"
           prompt: |
             Run the **`/red-team`** skill (`.claude/skills/red-team/SKILL.md`) at
             **depth=deep, scope=repo**. Fan out the `red-team` subagent across the

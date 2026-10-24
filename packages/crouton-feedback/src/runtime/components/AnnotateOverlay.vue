@@ -23,15 +23,15 @@ function onSend(): void {
     <!-- hover / selected highlight -->
     <div
       v-if="(selecting || panel) && hover"
-      class="pointer-events-none fixed z-[2147483640] rounded-sm bg-primary/10 ring-2 ring-primary transition-all duration-75"
-      :style="{ left: `${hover.x}px`, top: `${hover.y}px`, width: `${hover.width}px`, height: `${hover.height}px` }"
+      class="pointer-events-none fixed rounded-sm bg-primary/10 ring-2 ring-primary transition-all duration-75"
+      :style="{ left: `${hover.x}px`, top: `${hover.y}px`, width: `${hover.width}px`, height: `${hover.height}px`, zIndex: 2147483640 }"
     />
 
     <!-- comment panel -->
     <div
       v-if="panel"
-      class="fixed z-[2147483647] w-72"
-      :style="{ left: `${panel.left}px`, top: `${panel.top}px` }"
+      class="fixed w-72"
+      :style="{ left: `${panel.left}px`, top: `${panel.top}px`, zIndex: 2147483647 }"
     >
       <div class="rounded-xl bg-default p-3 shadow-xl ring ring-default">
         <p class="mb-2 text-xs text-muted">
@@ -59,7 +59,8 @@ function onSend(): void {
     <!-- toast -->
     <div
       v-if="toast"
-      class="fixed bottom-16 left-1/2 z-[2147483647] -translate-x-1/2 rounded-lg bg-inverted px-3.5 py-2 text-sm text-inverted shadow-lg"
+      class="fixed bottom-16 left-1/2 -translate-x-1/2 rounded-lg bg-inverted px-3.5 py-2 text-sm text-inverted shadow-lg"
+      style="z-index: 2147483647"
     >
       {{ toast }}
     </div>

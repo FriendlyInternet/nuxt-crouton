@@ -38,9 +38,11 @@ If the behaviour is still being explored (not signed off), it's **too early** �
    - **`hook`** — the `data-handoff`/`data-testid` selector that locates this state on the running
      page, so the *same walk* runs on POC **and** the graduated app. Plant one if the state has no
      stable anchor yet (see the `data-handoff` convention in `pocs/CLAUDE.md`).
-   - **`status`** — `settled` (the contract, preserve) · `stopgap` (known-temporary fake, replace at
-     graduation) · `new` (an addition the POC left open). Pick honestly; `stopgap`/`new` are not
-     lesser — they tell graduation which gate governs the behaviour.
+   - **`status`** — `settled` (the contract, preserve — needs `signedOff`) · `stopgap` (known-temporary
+     fake, replace at graduation) · `new` (an addition the POC left open) · `proposed` (drafted but not
+     yet signed off — captured from artifacts at A0 retrofit, or proposed ahead of confirmation; flips
+     to `settled` once a human reconciles it). Pick honestly; `stopgap`/`new`/`proposed` are not
+     lesser — they tell graduation which gate governs the behaviour and whether it's confirmed yet.
 
 3. **`settled` requires a recorded sign-off.** Only set `status: "settled"` with `signedOff`
    populated by the approval token (`lgtm vNN` / a comment ref). **Done is derived from this, never
@@ -58,7 +60,7 @@ If the behaviour is still being explored (not signed off), it's **too early** �
    ```bash
    node -e 'const s=require("./<poc>/spec.json"); if(!Array.isArray(s))throw"not array";
      const ids=new Set(); for(const e of s){ if(ids.has(e.id))throw"dup id "+e.id; ids.add(e.id);
-       if(!["settled","stopgap","new"].includes(e.status))throw"bad status "+e.id;
+       if(!["settled","stopgap","new","proposed"].includes(e.status))throw"bad status "+e.id;
        if(e.status==="settled"&&!(e.signedOff||"").trim())throw"settled w/o signoff "+e.id; }
      console.log("spec ok:",s.length,"entries")'
    ```

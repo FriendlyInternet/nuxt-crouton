@@ -26,7 +26,7 @@ Add to your Nuxt layers:
 // nuxt.config.ts
 export default defineNuxtConfig({
   extends: [
-    '@fyit/crouton',
+    '@fyit/crouton-core',
     '@fyit/crouton-events' // Add this
   ]
 })

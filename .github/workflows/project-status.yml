@@ -46,18 +46,19 @@ permissions:
 jobs:
   set-status:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       # Mint an org-scoped Nuxt Harness App installation token. `owner` (no
       # `repositories`) yields a token carrying the org-level grants — here
       # Organization → Projects: Read & write — which is what writing the
       # org board requires. (#546)
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
           private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
           owner: FriendlyInternet
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PROJECT_NAME: ${{ vars.PROJECT_NAME || 'Crouton' }}
         with:
@@ -72,6 +73,12 @@ jobs:
               switch ((name || '').toLowerCase()) {
                 case 'status:in-progress': return 'In progress'
                 case 'status:blocked':     return 'Blocked'
+                // #2083 — the auto-merge shared-code hold moved off `status:blocked` onto its
+                // own label. This case is load-bearing: the switch returns null for anything
+                // unknown, which is a silent no-op, so without it those PRs would simply stop
+                // appearing on the board with nothing in the log to say so. Same column —
+                // they are still parked awaiting a human — but a distinguishable label.
+                case 'status:needs-merge': return 'Blocked'
                 default:                   return null
               }
             }

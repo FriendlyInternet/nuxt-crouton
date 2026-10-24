@@ -202,5 +202,5 @@ describe('getSeedGenerator', () => {
 })
 
 // typeMapping has been removed from helpers.mjs — it now lives in
-// crouton-core/crouton.manifest.ts and is loaded via manifest-bridge.mjs.
+// crouton-core/crouton.manifest.ts and is loaded via manifest-loader.ts.
 // See tests/unit/utils/manifest-loader.test.ts for type mapping tests.

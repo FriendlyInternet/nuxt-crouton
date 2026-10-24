@@ -51,12 +51,12 @@ const roleOptions = computed(() => {
     {
       label: t('teams.member'),
       value: 'member',
-      description: 'Can view and use team resources'
+      description: t('teams.inviteForm.memberRoleDescription')
     },
     {
       label: t('teams.admin'),
       value: 'admin',
-      description: 'Can manage members and settings'
+      description: t('teams.inviteForm.adminRoleDescription')
     }
   ]
 
@@ -65,7 +65,7 @@ const roleOptions = computed(() => {
     roles.push({
       label: t('teams.owner'),
       value: 'owner',
-      description: 'Full control over the team'
+      description: t('teams.inviteForm.ownerRoleDescription')
     })
   }
 
@@ -94,7 +94,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
   emit('submit', { email: event.data.email, role: event.data.role })
 
   if (!canInviteMembers.value) {
-    notify.error('Permission denied', { description: 'You do not have permission to invite members.' })
+    notify.error(t('teams.permissionDenied'), { description: t('teams.inviteForm.noPermission') })
     return
   }
 
@@ -105,7 +105,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
       role: event.data.role
     })
 
-    notify.success('Invitation sent', { description: `Invitation has been sent to ${event.data.email}.` })
+    notify.success(t('teams.inviteForm.sent'), { description: t('teams.inviteForm.sentDescription', { email: event.data.email }) })
 
     emit('success', event.data.email, event.data.role)
 
@@ -113,8 +113,8 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
     state.email = ''
     state.role = 'member'
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to send invitation'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('teams.inviteForm.failedToSend')
+    notify.error(t('common.error'), { description: message })
   } finally {
     internalLoading.value = false
   }
@@ -133,7 +133,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
         {{ t('teams.inviteMember') }}
       </h3>
       <p class="text-sm text-muted mt-1">
-        Send an invitation to join your team.
+        {{ t('teams.inviteForm.description') }}
       </p>
     </div>
 
@@ -158,7 +158,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
     >
       <template #hint>
         <span class="text-xs text-muted">
-          The role determines what the member can do.
+          {{ t('teams.inviteForm.roleHint') }}
         </span>
       </template>
       <URadioGroup

@@ -1,0 +1,58 @@
+{
+  "title": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "label": "Title",
+      "area": "main"
+    }
+  },
+  "slug": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "unique": true,
+      "label": "URL Slug",
+      "area": "main",
+      "help": "URL-friendly identifier — the page's route segment under /builder"
+    }
+  },
+  "isHome": {
+    "type": "boolean",
+    "meta": {
+      "label": "Home page",
+      "default": false,
+      "area": "sidebar",
+      "help": "The site's ★ home page (LayoutDocument isHome) — exactly one per site"
+    }
+  },
+  "status": {
+    "type": "string",
+    "meta": {
+      "required": true,
+      "default": "draft",
+      "label": "Status",
+      "area": "sidebar",
+      "options": [
+        { "value": "draft", "label": "Draft" },
+        { "value": "published", "label": "Published" }
+      ]
+    }
+  },
+  "showInNavigation": {
+    "type": "boolean",
+    "meta": {
+      "label": "Show in navigation",
+      "default": true,
+      "area": "sidebar"
+    }
+  },
+  "board": {
+    "type": "json",
+    "meta": {
+      "label": "Builder board",
+      "area": "meta",
+      "help": "The page's builder canvas, source of truth the builder edits: candidate layout nodes (each a LayoutTree) + canvas positions, the ★ page node id, and region pins (top|bottom|main). The real page render ASSEMBLES from this: pinned-top nodes → sticky top bar, pinned-bottom → sticky bottom bar, the ★ node's tree → scrolling main."
+    }
+  }
+}

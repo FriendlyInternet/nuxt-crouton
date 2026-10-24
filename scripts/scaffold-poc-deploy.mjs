@@ -22,7 +22,7 @@
 // nuxt.config `modules` (scaffold-app.ts), so the overlay is active on every POC staging
 // preview — every preview URL is review-ready. deploy-app.yml always builds the devtools
 // dist before `nuxt prepare` (#745), so it loads regardless of this script's layerPackages
-// default. A PR-tied deploy also gets the /api/_review bridge wired (deploy-app.yml's
+// default. A PR-tied deploy also gets the /api/_feedback bridge wired (deploy-app.yml's
 // review-pr input + the NUXT_CROUTON_REVIEW_GITHUB_APP_* repo secrets → GitHub App PR
 // commenting as nuxt-harness[bot]).
 
@@ -62,7 +62,7 @@ const config = {
   stagingUrl: `https://${name}.pmcp.dev`,
   // Space-separated pnpm filter names of dist-consumed framework packages built before
   // the app (pure source layers without a build script are skipped automatically).
-  layerPackages: '@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton',
+  layerPackages: '@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n',
 }
 
 const outPath = resolve(pocDir, 'deploy.config.json')

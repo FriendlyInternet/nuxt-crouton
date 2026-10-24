@@ -244,6 +244,36 @@ function retiredProjects() {
   return results.sort((a, b) => b.ageDays - a.ageDays)
 }
 
+// ── Epic branch ahead of main (#1982) ─────────────────────────────────────────
+// Guard against an epic being stamped ready-to-close while its epic/* branch still
+// carries commits that never reached main — the exact failure mode from #1976 (four
+// deliverables went missing because the epic branch was never merged). For each
+// candidate epic, resolve its `epic/<number>-*` branch (if any) and run
+// `git cherry origin/main origin/<branch>` — non-empty output means the branch has
+// commits not reachable from main. Report-only: this never blocks anything itself,
+// it just surfaces the fact so a human doesn't close the epic blind.
+function epicBranchAheadOfMain(epicNumber) {
+  const git = (cmd) => execSync(cmd, { encoding: 'utf8' }).trim()
+  let branches
+  try {
+    branches = git("git for-each-ref --format='%(refname:short)' refs/remotes/origin")
+      .split('\n')
+      .filter(Boolean)
+      .map((b) => b.replace(/^origin\//, ''))
+  } catch {
+    return null // no main ref / shallow checkout — skip rather than guess
+  }
+  const branch = branches.find((b) => b.startsWith(`epic/${epicNumber}-`))
+  if (!branch) return null // no matching epic branch — nothing to check
+  try {
+    const cherry = git(`git cherry origin/main "origin/${branch}"`)
+    const aheadCount = cherry ? cherry.split('\n').filter(Boolean).length : 0
+    return aheadCount > 0 ? { branch, aheadCount } : null
+  } catch {
+    return null // branch ref not resolvable locally — skip rather than guess
+  }
+}
+
 // ── Issue / PR drift (API) ───────────────────────────────────────────────────
 const COMPONENT_RE = /^(pkg|app|worker|poc):/
 
@@ -291,7 +321,15 @@ async function gather() {
       const state = names.includes('status:ready-to-close')
         ? 'ready-to-close'
         : 'needs-postmortem' // default until/unless a postmortem marker flips the label
-      staleEpics.push({ number: e.number, title: e.title, url: e.html_url, children: kids.length, state })
+      const branchAhead = epicBranchAheadOfMain(e.number)
+      staleEpics.push({
+        number: e.number,
+        title: e.title,
+        url: e.html_url,
+        children: kids.length,
+        state,
+        branchAhead
+      })
     } else if (!names.includes('status:in-progress')) {
       const active = kids.filter(
         (k) => k.state === 'open' && labelNames(k).includes('status:in-progress')

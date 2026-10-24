@@ -64,10 +64,10 @@ function handleOpenPanel() {
         <!-- Block Header -->
         <div class="flex items-center justify-between mb-2">
           <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-            Hero
+            {{ t('pages.blockLibrary.hero.name') }}
           </span>
           <!-- Action buttons -->
-          <div class="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5">
+          <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
             <UButton
               color="neutral"
               variant="ghost"
@@ -99,7 +99,7 @@ function handleOpenPanel() {
           <div v-if="attrs.image" class="flex-shrink-0">
             <img
               :src="attrs.image"
-              :alt="attrs.title || 'Hero image'"
+              :alt="attrs.title || t('pages.blockViews.heroImage')"
               class="w-16 h-16 object-cover rounded"
             />
           </div>
@@ -110,7 +110,7 @@ function handleOpenPanel() {
               {{ attrs.headline }}
             </p>
             <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-1 truncate">
-              {{ attrs.title || 'Hero Title' }}
+              {{ attrs.title || t('pages.blockViews.heroTitle') }}
             </h2>
             <p v-if="attrs.description" class="text-sm text-gray-500 dark:text-gray-400 line-clamp-2">
               {{ attrs.description }}

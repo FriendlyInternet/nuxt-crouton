@@ -52,12 +52,12 @@ const SCHEMA = JSON.stringify({
 const PKG_JSON = JSON.stringify({
   name: 'regen-fixture',
   private: true,
-  dependencies: { '@fyit/crouton': '*', '@fyit/crouton-i18n': '*' }
+  dependencies: { '@fyit/crouton-core': '*', '@fyit/crouton-i18n': '*' }
 })
 
 // The detector also requires the base layer to be EXTENDED in nuxt.config.ts, not just
 // present in package.json — otherwise it reports a critical "installed but not extended".
-const NUXT_CONFIG = `export default defineNuxtConfig({ extends: ['@fyit/crouton'] })\n`
+const NUXT_CONFIG = `export default defineNuxtConfig({ extends: ['@fyit/crouton-core'] })\n`
 
 const POST_HANDLER =
   'layers/shop/collections/widgets/server/api/teams/[id]/shop-widgets/index.post.ts'
@@ -73,7 +73,7 @@ let dir: string
 // migration/nuxt-prepare step, which would otherwise time out in a bare temp dir.
 async function generate(extraArgs: string[] = []) {
   return runCLI(
-    ['generate', 'shop', 'widgets', '--fields-file=widget-schema.json', '--noDb', '--no-tests', ...extraArgs],
+    ['generate', 'shop', 'widgets', '--fields-file=widget-schema.json', '--noDb', ...extraArgs],
     dir
   )
 }

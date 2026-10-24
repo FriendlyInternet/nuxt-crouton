@@ -12,7 +12,7 @@ definePageMeta({
 </script>
 
 <template>
-  <div class="py-6">
+  <div class="p-4 sm:p-6">
     <AdminEmailLogs />
   </div>
 </template>

@@ -23,7 +23,7 @@ PR touches pocs/<name>/** (POC has a deploy.config.json)  →  deploy-pocs.yml (
 
 > **Review overlay is ON by default for all POC staging deploys (#596).** `deploy-pocs.yml` passes
 > `enable-review: true` to `deploy-app.yml`, so every POC preview is built with
-> `NUXT_PUBLIC_CROUTON_REVIEW=true` (the `@fyit/crouton-devtools` overlay + source stamper + `/api/_review`
+> `NUXT_PUBLIC_CROUTON_REVIEW=true` (the `@fyit/crouton-devtools` overlay + source stamper + `/api/_feedback`
 > bridge). The PR comment includes overlay usage instructions. For the bridge to post `🎯 Preview feedback`
 > comments, set the `NUXT_CROUTON_REVIEW_GITHUB_APP_*` repo-level secrets (see
 > `writeups/setup/review-bridge-token-setup.md`); the overlay still renders without them.
@@ -39,6 +39,7 @@ PR touches pocs/<name>/** (POC has a deploy.config.json)  →  deploy-pocs.yml (
 ## Wire a POC for previews
 
 1. **Scaffold the POC first** (it must exist at `pocs/<name>` with a `wrangler.jsonc` that has an `env.staging` block: id-less `<name>-staging-db` + route `<name>.pmcp.dev`, and `cf:staging` in its `package.json` — the app scaffold produces these, mirroring `apps/velo`).
+   > **Add `cf:version` alongside `cf:staging`** (#1836). The `mode: version` dispatch — immutable side-by-side previews — runs the POC's own `cf:version`, and **nothing generates it**: a POC wired for deploy but missing it fails the dispatch. Copy the POC's own `cf:staging` and swap `wrangler deploy` for `wrangler versions upload`, dropping the id-sync and migrate steps (a version upload activates nothing, so there's no DB to migrate). Mirror *that* POC's script, not a template — `loop-station`, for one, prepares data first and skips `inject-wrangler-env`. `deploy-pocs.yml` now fails fast and tells you if it's missing.
 2. **Generate + commit the initial D1 migrations.** Collections are **not** migrated by `crouton config`/`crouton init`, so a fresh POC has none — and the deploy's remote-migrate step then fails with *"No migrations present"*. Use the **`db-migrations`** build-first workaround: `NITRO_PRESET=node-server nuxt build` until `.nuxt/hub/db/schema.mjs` appears → `pnpm db:generate` → **commit** `pocs/<name>/server/db/migrations/sqlite/**`. (Don't skip this — it's the step that bit library-catalog, #457.)
 3. **Opt the POC in — config only, NO workflow file:**
    ```bash
@@ -49,7 +50,7 @@ PR touches pocs/<name>/** (POC has a deploy.config.json)  →  deploy-pocs.yml (
 
 ## Auth on a fresh preview (so it's testable)
 
-A freshly deployed Worker has no users. To make the preview testable *with auth*, the POC's **`seed` script provisions a known admin** against the remote D1 (run it post-deploy, or have CI do it), and the admin creds are handed back alongside the URL. (Self-registration on the preview also works if the POC enables it.) See the per-app `seed`/`shots` scripts.
+A freshly deployed Worker has no users and no data. CI handles both for every POC: the shared deploy seeds the demo data (#2366 — the POC only needs `@fyit/crouton-cli`; `"seed": false` in `deploy.config.json` opts out) and then creates the per-app review login, whose sign-in link is emailed to the owner (#2358). Don't add a seed line or a known admin to the POC's own scripts.
 
 ## Requirements / gotchas
 

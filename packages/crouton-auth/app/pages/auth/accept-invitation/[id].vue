@@ -19,6 +19,7 @@ definePageMeta({
 const route = useRoute()
 const router = useRouter()
 const notify = useNotify()
+const { t } = useT()
 
 const { loggedIn } = useAuth()
 const { acceptInvitation, rejectInvitation } = useTeam()
@@ -61,17 +62,17 @@ async function handleAccept() {
   try {
     await acceptInvitation(invitationId.value)
     accepted.value = true
-    notify.success('Invitation accepted', {
-      description: `You have joined ${invite.value?.organizationName}.`
+    notify.success(t('teams.invitationAccepted'), {
+      description: t('teams.invitationPage.joinedTeam', { team: invite.value?.organizationName ?? '' })
     })
 
     setTimeout(() => {
       router.push('/')
     }, 1500)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to accept invitation'
+    const message = e instanceof Error ? e.message : t('teams.failedToAcceptInvitation')
     acceptError.value = message
-    notify.error('Error', { description: message })
+    notify.error(t('common.error'), { description: message })
   } finally {
     accepting.value = false
   }
@@ -80,11 +81,11 @@ async function handleAccept() {
 async function handleReject() {
   try {
     await rejectInvitation(invitationId.value)
-    notify.success('Invitation declined')
+    notify.success(t('teams.invitationDeclined'))
     await router.push('/')
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to decline invitation'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('teams.failedToDeclineInvitation')
+    notify.error(t('common.error'), { description: message })
   }
 }
 
@@ -113,7 +114,7 @@ function goToLogin() {
         class="size-12 animate-spin text-primary"
       />
       <p class="mt-4 text-muted">
-        Loading invitation...
+        {{ t('teams.invitationPage.loading') }}
       </p>
     </div>
 
@@ -128,10 +129,10 @@ function goToLogin() {
           class="size-12 text-muted"
         />
         <h1 class="mt-4 text-2xl font-bold text-highlighted">
-          Invitation Not Found
+          {{ t('teams.invitationPage.notFound') }}
         </h1>
         <p class="mt-2 text-muted">
-          This invitation link is invalid or has been removed.
+          {{ t('teams.invitationPage.notFoundDescription') }}
         </p>
       </div>
       <NuxtLink
@@ -143,7 +144,7 @@ function goToLogin() {
           color="neutral"
           variant="outline"
         >
-          Go to homepage
+          {{ t('teams.invitationPage.goToHomepage') }}
         </UButton>
       </NuxtLink>
     </div>
@@ -159,11 +160,11 @@ function goToLogin() {
           class="size-12 text-muted"
         />
         <h1 class="mt-4 text-2xl font-bold text-highlighted">
-          Invitation {{ invite.status === 'expired' ? 'Expired' : 'Already Used' }}
+          {{ invite.status === 'expired' ? t('teams.invitationPage.expired') : t('teams.invitationPage.alreadyUsed') }}
         </h1>
         <p class="mt-2 text-muted">
-          This invitation has {{ invite.status === 'expired' ? 'expired' : `already been ${invite.status}` }}.
-          Please ask the team admin to send a new invitation.
+          {{ invite.status === 'expired' ? t('teams.invitationPage.expiredDescription') : t('teams.invitationPage.alreadyUsedDescription') }}
+          {{ t('teams.invitationPage.askForNew') }}
         </p>
       </div>
       <NuxtLink
@@ -175,7 +176,7 @@ function goToLogin() {
           color="neutral"
           variant="outline"
         >
-          Go to homepage
+          {{ t('teams.invitationPage.goToHomepage') }}
         </UButton>
       </NuxtLink>
     </div>
@@ -200,11 +201,11 @@ function goToLogin() {
         />
 
         <h1 class="mt-4 text-2xl font-bold text-highlighted">
-          You're invited!
+          {{ t('teams.invitationPage.youreInvited') }}
         </h1>
         <p class="mt-2 text-muted">
           <span class="font-medium text-highlighted">{{ invite.inviterName }}</span>
-          invited you to join
+          {{ t('teams.invitationPage.invitedYouToJoin') }}
         </p>
         <p class="text-lg font-semibold text-highlighted">
           {{ invite.organizationName }}
@@ -228,7 +229,7 @@ function goToLogin() {
           class="size-8 animate-spin text-primary"
         />
         <p class="mt-2 text-muted">
-          Joining {{ invite.organizationName }}...
+          {{ t('teams.invitationPage.joining', { team: invite.organizationName }) }}
         </p>
       </div>
 
@@ -237,8 +238,8 @@ function goToLogin() {
         <UAlert
           color="success"
           icon="i-lucide-check-circle"
-          title="You're in!"
-          :description="`Welcome to ${invite.organizationName}. Redirecting...`"
+          :title="t('teams.invitationPage.youreIn')"
+          :description="t('teams.invitationPage.welcomeRedirecting', { team: invite.organizationName })"
         />
       </div>
 
@@ -247,7 +248,7 @@ function goToLogin() {
         <UAlert
           color="error"
           icon="i-lucide-alert-triangle"
-          title="Could not accept invitation"
+          :title="t('teams.invitationPage.couldNotAccept')"
           :description="acceptError"
         />
         <UButton
@@ -255,7 +256,7 @@ function goToLogin() {
           block
           @click="handleAccept"
         >
-          Try again
+          {{ t('auth.magicLink.tryAgain') }}
         </UButton>
       </div>
 
@@ -264,14 +265,14 @@ function goToLogin() {
         v-else-if="!loggedIn"
         class="space-y-3"
       >
-        <USeparator label="Get started" />
+        <USeparator :label="t('auth.getStarted')" />
 
         <UButton
           block
           size="lg"
           @click="goToRegister"
         >
-          Create an account
+          {{ t('teams.invitationPage.createAccount') }}
         </UButton>
         <UButton
           block
@@ -280,7 +281,7 @@ function goToLogin() {
           variant="outline"
           @click="goToLogin"
         >
-          I already have an account
+          {{ t('teams.invitationPage.haveAccount') }}
         </UButton>
       </div>
 
@@ -294,7 +295,7 @@ function goToLogin() {
           size="lg"
           @click="handleAccept"
         >
-          Accept invitation
+          {{ t('teams.invitationPage.acceptInvitation') }}
         </UButton>
         <UButton
           block
@@ -303,7 +304,7 @@ function goToLogin() {
           variant="ghost"
           @click="handleReject"
         >
-          Decline
+          {{ t('teams.decline') }}
         </UButton>
       </div>
     </div>

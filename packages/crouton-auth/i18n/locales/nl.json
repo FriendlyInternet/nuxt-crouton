@@ -1,12 +1,15 @@
 {
   "onboarding": {
     "createTeamTitle": "Maak Je Eerste Team",
-    "createTeamDescription": "Begin door een werkruimte voor je projecten aan te maken."
+    "createTeamDescription": "Begin door een werkruimte voor je projecten aan te maken.",
+    "settingUpWorkspace": "Je werkruimte wordt klaargezet",
+    "justAMoment": "Even geduld…"
   },
   "auth": {
     "resetLinkSentDescription": "We hebben een link om je wachtwoord te resetten naar je e-mail gestuurd. Klik op de link om je wachtwoord te resetten.",
     "magicLinkSentDescription": "We hebben een magic link naar je e-mail gestuurd. Klik op de link om in te loggen.",
     "tryAnotherEmail": "Probeer een ander e-mailadres",
+    "enterEmailAndPassword": "Voer je e-mailadres en wachtwoord in.",
     "continueWith": "Doorgaan met {provider}",
     "placeholders": {
       "email": "jij{'@'}voorbeeld.com",
@@ -15,7 +18,8 @@
       "currentPassword": "Voer huidig wachtwoord in",
       "newPassword": "Voer nieuw wachtwoord in",
       "name": "Jan Jansen",
-      "atLeastChars": "Minimaal {min} tekens"
+      "atLeastChars": "Minimaal {min} tekens",
+      "confirmNewPassword": "Bevestig je nieuwe wachtwoord"
     },
     "twoFactor": {
       "authenticationCode": "Authenticatiecode",
@@ -63,7 +67,29 @@
       "verificationFailed": "Verificatie van magische link mislukt",
       "tryAgain": "Opnieuw proberen",
       "expiredHint": "De magische link is mogelijk verlopen. Vraag een nieuwe aan via de inlogpagina."
-    }
+    },
+    "resetRequestFailed": "Kon de resetlink niet versturen",
+    "credentialsRequired": "Vul je e-mailadres en wachtwoord in",
+    "signInWithPasskey": "Inloggen met passkey",
+    "oauthLoginFailed": "Inloggen via deze dienst mislukt",
+    "passkeyLoginFailed": "Inloggen met passkey mislukt",
+    "loginFailed": "Inloggen mislukt",
+    "magicLinkFailed": "Kon de magic link niet versturen",
+    "registrationFailed": "Registratie mislukt",
+    "accountCreated": "Account aangemaakt",
+    "accountCreatedDescription": "Welkom! Je account is aangemaakt.",
+    "resetLinkIfAccountExists": "Als er een account met dit e-mailadres bestaat, ontvang je een resetlink.",
+    "goHome": "Naar de startpagina",
+    "or": "of",
+    "magicLinkSentTo": "We hebben een magic link gestuurd naar",
+    "resetLinkSentTo": "We hebben een link om je wachtwoord te resetten gestuurd naar",
+    "passwordResetSuccessDescription": "Je wachtwoord is succesvol gereset.",
+    "passwordResetFailed": "Wachtwoord resetten mislukt",
+    "signedOut": "Uitgelogd",
+    "signedOutDescription": "Je bent uitgelogd.",
+    "failedToSignOut": "Uitloggen mislukt",
+    "signInToAccess": "Log in om deze inhoud te bekijken",
+    "emailSent": "E-mail verstuurd"
   },
   "teams": {
     "slugValidation": "Slug mag alleen kleine letters, cijfers en koppeltekens bevatten",
@@ -92,7 +118,47 @@
     "permissionDeniedDescription": "Alleen teameigenaren en beheerders kunnen instellingen wijzigen.",
     "settingsSaved": "Instellingen opgeslagen",
     "settingsSavedDescription": "Teaminstellingen zijn bijgewerkt.",
-    "failedToSaveSettings": "Instellingen opslaan mislukt"
+    "failedToSaveSettings": "Instellingen opslaan mislukt",
+    "invitationPage": {
+      "joinedTeam": "Je bent lid geworden van {team}.",
+      "loading": "Uitnodiging laden...",
+      "notFound": "Uitnodiging niet gevonden",
+      "notFoundDescription": "Deze uitnodigingslink is ongeldig of werd verwijderd.",
+      "goToHomepage": "Naar de startpagina",
+      "expired": "Uitnodiging verlopen",
+      "alreadyUsed": "Uitnodiging al gebruikt",
+      "expiredDescription": "Deze uitnodiging is verlopen.",
+      "alreadyUsedDescription": "Deze uitnodiging werd al gebruikt.",
+      "askForNew": "Vraag de teambeheerder om een nieuwe uitnodiging te sturen.",
+      "youreInvited": "Je bent uitgenodigd!",
+      "invitedYouToJoin": "nodigt je uit voor",
+      "joining": "Bezig met lid worden van {team}...",
+      "youreIn": "Je bent erbij!",
+      "welcomeRedirecting": "Welkom bij {team}. Je wordt doorgestuurd...",
+      "couldNotAccept": "Kon de uitnodiging niet accepteren",
+      "createAccount": "Account aanmaken",
+      "haveAccount": "Ik heb al een account",
+      "acceptInvitation": "Uitnodiging accepteren"
+    },
+    "failedToAcceptInvitation": "Uitnodiging accepteren mislukt",
+    "failedToDeclineInvitation": "Uitnodiging weigeren mislukt",
+    "failedToResendInvitation": "Uitnodiging opnieuw versturen mislukt",
+    "failedToCancelInvitation": "Uitnodiging annuleren mislukt",
+    "failedToDeleteTeam": "Team verwijderen mislukt",
+    "emailTemplates": "E-mailsjablonen",
+    "unknownMember": "Onbekend",
+    "slugPlaceholder": "mijn-team",
+    "inviteForm": {
+      "memberRoleDescription": "Kan teamonderdelen bekijken en gebruiken",
+      "adminRoleDescription": "Kan leden en instellingen beheren",
+      "ownerRoleDescription": "Volledige controle over het team",
+      "noPermission": "Je hebt geen toestemming om leden uit te nodigen.",
+      "sent": "Uitnodiging verstuurd",
+      "sentDescription": "De uitnodiging is verstuurd naar {email}.",
+      "failedToSend": "Uitnodiging versturen mislukt",
+      "description": "Stuur een uitnodiging om lid te worden van je team.",
+      "roleHint": "De rol bepaalt wat het lid kan doen."
+    }
   },
   "account": {
     "profileDescription": "Werk je persoonlijke gegevens bij.",
@@ -115,7 +181,9 @@
       "passkeyRemovedDescription": "De passkey is verwijderd.",
       "failedToLoadPasskeys": "Passkeys laden mislukt",
       "failedToAddPasskey": "Passkey toevoegen mislukt",
-      "failedToDeletePasskey": "Passkey verwijderen mislukt"
+      "failedToDeletePasskey": "Passkey verwijderen mislukt",
+      "unnamed": "Passkey",
+      "failedToUpdatePasskey": "Passkey bijwerken mislukt"
     },
     "sessions": {
       "title": "Actieve sessies",
@@ -130,8 +198,40 @@
       "failedToRevokeOthers": "Andere sessies intrekken mislukt",
       "lastActive": "Laatst actief",
       "loading": "Sessies laden...",
-      "noSessions": "Geen actieve sessies gevonden"
-    }
+      "noSessions": "Geen actieve sessies gevonden",
+      "unknown": "Onbekend",
+      "browserOnOs": "{browser} op {os}"
+    },
+    "twoFactor": {
+      "failedToLoadSetup": "Kon de 2FA-instelcode niet laden",
+      "verifyFailed": "Verificatie mislukt",
+      "failedToLoadStatus": "Kon de 2FA-status niet laden",
+      "failedToEnable": "2FA inschakelen mislukt",
+      "invalidCode": "Ongeldige code",
+      "enabled": "2FA ingeschakeld",
+      "enabledDescription": "Tweestapsverificatie is nu actief.",
+      "disabled": "2FA uitgeschakeld",
+      "disabledDescription": "Tweestapsverificatie is uitgeschakeld.",
+      "failedToDisable": "2FA uitschakelen mislukt",
+      "failedToGenerateCodes": "Herstelcodes aanmaken mislukt",
+      "copied": "Gekopieerd",
+      "codesCopied": "Herstelcodes gekopieerd naar het klembord"
+    },
+    "linked": {
+      "failedToLoad": "Accounts laden mislukt",
+      "failedToLink": "Account koppelen mislukt",
+      "failedToUnlink": "Account ontkoppelen mislukt",
+      "unlinked": "Account ontkoppeld",
+      "unlinkedDescription": "Je {provider}-account is ontkoppeld."
+    },
+    "accountDeleted": "Account verwijderd",
+    "accountDeletedDescription": "Je account is definitief verwijderd.",
+    "failedToDeleteAccount": "Account verwijderen mislukt",
+    "darkMode": "Donkere modus",
+    "theme": "Thema",
+    "user": "Gebruiker",
+    "emailChangeFailed": "E-mailadres wijzigen mislukt",
+    "yourName": "Je naam"
   },
   "admin": {
     "passwordResetSent": "Wachtwoord reset verstuurd",

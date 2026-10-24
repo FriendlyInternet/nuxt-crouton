@@ -15,6 +15,21 @@ definePageMeta({
   layout: false,
   middleware: [
     async () => {
+      // Captured BEFORE the await below (#1839).
+      //
+      // Nuxt's context is only bound for the SYNCHRONOUS part of a middleware;
+      // normally its build-time unctx transform patches every `await` to re-bind
+      // afterwards. That transform does not reach this callback: it descends into
+      // `definePageMeta.middleware` only when the value is directly a function,
+      // and skips it when the value is an ARRAY (unctx `transformFunctionBody`
+      // early-returns on anything that isn't a Function/Arrow expression).
+      //
+      // So here the context really is gone after `await`, and a bare navigateTo()
+      // threw "[nuxt] instance unavailable" — a 500 on every signed-in load of
+      // '/'. runWithContext re-binds it explicitly, which also means this keeps
+      // working regardless of the array form or the transform's coverage.
+      const nuxtApp = useNuxtApp()
+
       const { loggedIn } = useAuth()
       if (!loggedIn.value) return navigateTo('/auth/login')
 
@@ -22,7 +37,9 @@ definePageMeta({
       // No slug: fall through and render the team-less message. Never spin.
       if (!slug) return
 
-      return navigateTo(`/admin/${slug}/sales/events`, { replace: true })
+      return nuxtApp.runWithContext(() =>
+        navigateTo(`/admin/${slug}/sales/events`, { replace: true })
+      )
     }
   ]
 })
@@ -65,7 +82,7 @@ async function signOut() {
   -->
   <div class="min-h-screen flex items-center justify-center bg-(--ui-bg)">
     <div class="text-center space-y-3 px-6">
-      <UIcon name="i-lucide-users" class="size-8 text-(--ui-text-dimmed)" />
+      <UIcon name="i-lucide-users" class="size-8 text-(--ui-text-dimmed)" aria-hidden="true" />
       <p class="text-(--ui-text-muted)">
         Geen team gevonden voor dit account. Vraag een uitnodiging aan je teambeheerder.
       </p>

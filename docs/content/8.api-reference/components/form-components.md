@@ -1052,7 +1052,7 @@ const handleUploaded = async (close: () => void, assetId: string) => {
 
 ## Calendar
 
-Interactive date picker component for selecting single dates or date ranges. Wraps Nuxt UI's `<UCalendar>` with timezone-aware date handling. Part of the base `@fyit/crouton` package.
+Interactive date picker component for selecting single dates or date ranges. Wraps Nuxt UI's `<UCalendar>` with timezone-aware date handling. Part of the base `@fyit/crouton-core` package.
 
 ::callout{icon="i-lucide-info" color="blue"}
 **Timezone Handling**: Calendar uses `@internationalized/date` library to handle timezone conversions transparently. You can pass JavaScript `Date` objects or timestamps (numbers), and the component handles the rest.
@@ -1524,7 +1524,7 @@ const date = ref<Date | null>(new Date())
 
 ## CalendarYear
 
-Year calendar view component that displays all 12 months in a responsive grid. Ideal for year-at-a-glance scheduling, availability views, or selecting dates across the entire year. Part of the base `@fyit/crouton` package.
+Year calendar view component that displays all 12 months in a responsive grid. Ideal for year-at-a-glance scheduling, availability views, or selecting dates across the entire year. Part of the base `@fyit/crouton-core` package.
 
 ::callout{icon="i-lucide-info" color="blue"}
 **Year View**: Unlike the standard `Calendar` component which shows 1-2 months, `CalendarYear` displays all 12 months simultaneously in a responsive grid layout.
@@ -1634,7 +1634,7 @@ Each month is displayed in its own card with the month name header.
 
 ## CroutonDate
 
-Read-only date display component that shows both absolute and relative timestamps. Commonly used in tables, cards, and detail views. Part of the base `@fyit/crouton` package.
+Read-only date display component that shows both absolute and relative timestamps. Commonly used in tables, cards, and detail views. Part of the base `@fyit/crouton-core` package.
 
 ::callout{icon="i-lucide-triangle-alert" color="amber"}
 **Display Only**: This is NOT an input component. For date selection, use `<Calendar>`. This component is for displaying dates in a user-friendly format.
@@ -1904,7 +1904,7 @@ const date = new Date()
 
 ## CroutonImageUpload
 
-Simple file picker with preview for direct image uploads. Part of the base `@fyit/crouton` package.
+Simple file picker with preview for direct image uploads. Part of the base `@fyit/crouton-core` package.
 
 ### Props
 
@@ -1991,7 +1991,7 @@ const handleUpload = async (file: File | null) => {
 
 ## CroutonAvatarUpload
 
-Specialized variant of CroutonImageUpload for avatar/profile images. Part of the base `@fyit/crouton` package.
+Specialized variant of CroutonImageUpload for avatar/profile images. Part of the base `@fyit/crouton-core` package.
 
 ### Props
 
@@ -2913,242 +2913,6 @@ The component renders different UI based on the current state:
 
 ---
 
-## CroutonFormExpandableSlideOver
-
-An advanced slideover component with expand/collapse functionality for transitioning between sidebar and fullscreen modes.
-
-### Props
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `open` | `boolean` | `false` | Slideover visibility (v-model) |
-| `expanded` | `boolean` | `false` | Expanded state (v-model) |
-| `title` | `string` | *required* | Slideover title |
-| `icon` | `string` | `undefined` | Title icon |
-| `badge` | `string` | `undefined` | Badge text |
-| `badgeColor` | `string` | `'primary'` | Badge color |
-| `badgeVariant` | `string` | `'soft'` | Badge variant |
-| `loading` | `boolean` | `false` | Loading state |
-| `error` | `object` | `undefined` | Error object |
-| `dismissible` | `boolean` | `true` | Allow closing |
-| `portal` | `boolean \| string \| HTMLElement` | `true` | Portal target |
-| `transition` | `boolean` | `true` | Enable transitions |
-| `closeOnExpand` | `boolean` | `false` | Close when expanding |
-| `contentClass` | `string` | `''` | Content wrapper class |
-| `footerClass` | `string` | `''` | Footer wrapper class |
-| `maxWidth` | `string` | `'xl'` | Max width when collapsed |
-
-### Features
-
-- **Dual-Mode Display**: Switches between sidebar and fullscreen
-- **Smooth Transitions**: 500ms ease-in-out animations with hardware acceleration
-- **Loading State**: Built-in skeleton loading UI
-- **Error Handling**: Error display with retry functionality
-- **Action Buttons**: Expand/collapse and close buttons
-- **Customizable Content**: Slots for header actions, body, and footer
-- **Responsive Sizing**: Multiple max-width options
-
-### Usage
-
-#### Basic Usage
-
-```vue
-<template>
-  <UButton @click="isOpen = true">
-    Open Slideover
-  </UButton>
-
-  <CroutonFormExpandableSlideOver
-    v-model:open="isOpen"
-    v-model:expanded="isExpanded"
-    title="Edit Product"
-    icon="i-lucide-package"
-    badge="Draft"
-  >
-    <!-- Content here -->
-    <CroutonForm
-      collection="products"
-      :item-id="productId"
-      action="update"
-    />
-  </CroutonFormExpandableSlideOver>
-</template>
-
-<script setup lang="ts">
-const isOpen = ref(false)
-const isExpanded = ref(false)
-const productId = ref('prod-123')
-</script>
-```
-
-#### With Loading and Error States
-
-```vue
-<template>
-  <CroutonFormExpandableSlideOver
-    v-model:open="isOpen"
-    v-model:expanded="isExpanded"
-    title="Product Details"
-    :loading="isLoading"
-    :error="loadError"
-  >
-    <!-- Content only shown when not loading and no error -->
-    <ProductDetails :product="product" />
-  </CroutonFormExpandableSlideOver>
-</template>
-
-<script setup lang="ts">
-const isOpen = ref(false)
-const isExpanded = ref(false)
-const isLoading = ref(true)
-const loadError = ref(null)
-
-const { data: product } = await useFetch('/api/products/123', {
-  onResponse() { isLoading.value = false },
-  onError(err) {
-    loadError.value = {
-      title: 'Failed to Load',
-      description: err.message,
-      retry: () => refresh()
-    }
-  }
-})
-</script>
-```
-
-### Slots
-
-#### `actions` (Scoped)
-
-Custom action buttons in the header:
-
-```vue
-<template #actions="{ expanded }">
-  <UButton
-    icon="i-lucide-share"
-    variant="ghost"
-    size="sm"
-    @click="shareItem"
-  />
-  <UButton
-    icon="i-lucide-star"
-    variant="ghost"
-    size="sm"
-    :color="isFavorite ? 'primary' : 'neutral'"
-    @click="toggleFavorite"
-  />
-</template>
-```
-
-#### Default Slot (Scoped)
-
-Main content area:
-
-```vue
-<template #default="{ expanded, toggleExpand }">
-  <div :class="{ 'max-w-4xl mx-auto': expanded }">
-    <h3>Content adjusts based on expanded state</h3>
-    <UButton @click="toggleExpand">
-      {{ expanded ? 'Collapse' : 'Expand' }}
-    </UButton>
-  </div>
-</template>
-```
-
-#### `footer` (Scoped)
-
-Optional footer content:
-
-```vue
-<template #footer="{ expanded }">
-  <div class="flex justify-between items-center">
-    <UButton variant="outline" @click="cancel">
-      Cancel
-    </UButton>
-    <UButton color="primary" @click="save">
-      Save Changes
-    </UButton>
-  </div>
-</template>
-```
-
-### Events
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `update:open` | `boolean` | Emitted when open state changes |
-| `update:expanded` | `boolean` | Emitted when expanded state changes |
-| `expand` | - | Emitted when slideover expands |
-| `collapse` | - | Emitted when slideover collapses |
-| `toggle` | - | Emitted on any expand/collapse toggle |
-
-### Max Width Options
-
-Available `maxWidth` values when in sidebar mode:
-
-| Value | Width |
-|-------|-------|
-| `'sm'` | max-w-sm (24rem) |
-| `'md'` | max-w-md (28rem) |
-| `'lg'` | max-w-lg (32rem) |
-| `'xl'` | max-w-xl (36rem) |
-| `'2xl'` | max-w-2xl (42rem) |
-| `'4xl'` | max-w-4xl (56rem) |
-| `'7xl'` | max-w-7xl (80rem) |
-| `'full'` | w-full (100%) |
-
-When `expanded: true`, the slideover always uses full screen width.
-
-### Advanced Example: Immersive Mode
-
-```vue
-<template>
-  <CroutonFormExpandableSlideOver
-    v-model:open="isOpen"
-    v-model:expanded="isExpanded"
-    title="Detailed Editor"
-    :close-on-expand="true"
-    max-width="2xl"
-  >
-    <template #actions="{ expanded }">
-      <UBadge v-if="expanded" color="primary" variant="soft">
-        Fullscreen Mode
-      </UBadge>
-    </template>
-
-    <RichTextEditor
-      v-model="content"
-      :fullscreen="isExpanded"
-    />
-
-    <template #footer="{ expanded, toggleExpand }">
-      <div class="flex justify-between">
-        <UButton
-          v-if="!expanded"
-          variant="outline"
-          icon="i-lucide-maximize-2"
-          @click="toggleExpand"
-        >
-          Expand Editor
-        </UButton>
-        <UButton color="primary" @click="save">
-          Save
-        </UButton>
-      </div>
-    </template>
-  </CroutonFormExpandableSlideOver>
-</template>
-```
-
-::callout{icon="i-lucide-info" color="blue"}
-**Immersive Mode**: Set `closeOnExpand: true` to automatically close the overlay when expanding, creating a seamless transition to fullscreen.
-::
-
----
-
-
----
-
 ## CroutonCalendar
 
 A flexible calendar component that supports both single date and date range selection with native Date/timestamp support.
@@ -4040,207 +3804,6 @@ defineEmits<{ 'update:modelValue': [value: any] }>()
 
 
 ---
-
-## CroutonUsersAvatarUpload
-
-Specialized avatar upload component with file selection and removal.
-
-### Props
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `avatarSize` | `'xs' \| 'sm' \| 'md' \| 'lg' \| 'xl' \| '2xl' \| '3xl'` | `'3xl'` | Avatar display size |
-
-### Model
-
-```typescript
-v-model: string | undefined  // Avatar URL (object URL or uploaded URL)
-```
-
-### Events
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `file-selected` | `File \| null` | Emitted when file is selected or removed |
-
-### Features
-
-- **File Dialog**: Uses VueUse `useFileDialog` for native file picker
-- **Image Preview**: Shows selected image immediately
-- **Object URLs**: Creates object URLs for local preview
-- **Upload Icon**: Shows upload icon when no image
-- **Change/Remove**: Buttons to change or remove avatar
-- **Ring Border**: Styled with ring border
-- **File Validation**: Accepts `image/*` only
-
-### Usage
-
-#### Basic Usage
-
-```vue
-<template>
-  <UFormGroup label="Profile Picture">
-    <CroutonUsersAvatarUpload
-      v-model="avatarUrl"
-      @file-selected="handleFileSelected"
-    />
-  </UFormGroup>
-</template>
-
-<script setup lang="ts">
-const avatarUrl = ref<string | undefined>(undefined)
-
-const handleFileSelected = (file: File | null) => {
-  if (file) {
-    console.log('Selected file:', file.name, file.size)
-    // Upload file to server
-    uploadAvatar(file)
-  } else {
-    console.log('Avatar removed')
-  }
-}
-</script>
-```
-
-#### Different Sizes
-
-```vue
-<template>
-  <div class="space-y-4">
-    <CroutonUsersAvatarUpload v-model="small" avatar-size="sm" />
-    <CroutonUsersAvatarUpload v-model="medium" avatar-size="md" />
-    <CroutonUsersAvatarUpload v-model="large" avatar-size="xl" />
-    <CroutonUsersAvatarUpload v-model="huge" avatar-size="3xl" />
-  </div>
-</template>
-
-<script setup lang="ts">
-const small = ref<string>()
-const medium = ref<string>()
-const large = ref<string>()
-const huge = ref<string>()
-</script>
-```
-
-#### With Upload to Server
-
-```vue
-<template>
-  <CroutonUsersAvatarUpload
-    v-model="avatarUrl"
-    @file-selected="uploadToServer"
-  />
-  <p v-if="uploading">Uploading...</p>
-</template>
-
-<script setup lang="ts">
-const avatarUrl = ref<string>()
-const uploading = ref(false)
-
-const uploadToServer = async (file: File | null) => {
-  if (!file) {
-    // Handle removal
-    await deleteAvatar()
-    avatarUrl.value = undefined
-    return
-  }
-
-  uploading.value = true
-  
-  const formData = new FormData()
-  formData.append('avatar', file)
-  
-  const response = await $fetch('/api/upload/avatar', {
-    method: 'POST',
-    body: formData
-  })
-  
-  avatarUrl.value = response.url
-  uploading.value = false
-}
-</script>
-```
-
-#### In User Profile Form
-
-```vue
-<template>
-  <UForm :state="userForm" @submit="saveProfile">
-    <CroutonUsersAvatarUpload
-      v-model="userForm.avatarUrl"
-      avatar-size="2xl"
-      @file-selected="handleAvatarChange"
-    />
-    
-    <UFormGroup label="Name">
-      <UInput v-model="userForm.name" />
-    </UFormGroup>
-    
-    <UFormGroup label="Email">
-      <UInput v-model="userForm.email" type="email" />
-    </UFormGroup>
-    
-    <UButton type="submit" color="primary">
-      Save Profile
-    </UButton>
-  </UForm>
-</template>
-
-<script setup lang="ts">
-const userForm = ref({
-  name: '',
-  email: '',
-  avatarUrl: undefined,
-  avatarFile: null
-})
-
-const handleAvatarChange = (file: File | null) => {
-  userForm.value.avatarFile = file
-}
-
-const saveProfile = async () => {
-  // Upload avatar first if file selected
-  if (userForm.value.avatarFile) {
-    const uploadedUrl = await uploadAvatar(userForm.value.avatarFile)
-    userForm.value.avatarUrl = uploadedUrl
-  }
-  
-  // Save user profile
-  await $fetch('/api/users/profile', {
-    method: 'PUT',
-    body: userForm.value
-  })
-}
-</script>
-```
-
-### Button States
-
-| State | Buttons Shown |
-|-------|---------------|
-| No image | "Upload" button only |
-| Image selected | "Change" and "Remove" buttons |
-
-### Avatar Styling
-
-- Icon: `i-lucide-upload` (when no image)
-- Icon size: `text-lg`
-- Ring: `ring-1 ring-neutral-200 dark:ring-neutral-800`
-
-### File Acceptance
-
-Only image files are accepted:
-```typescript
-accept: 'image/*'
-// Accepts: .jpg, .jpeg, .png, .gif, .webp, etc.
-```
-
-::callout{icon="i-lucide-triangle-alert" color="amber"}
-**Object URLs**: The component creates blob URLs for preview. Remember to upload the actual File object to your server, not the object URL.
-::
-
----
-
 
 ## Related Resources
 

@@ -1,0 +1,8 @@
+{
+  "table": "sales_locations",
+  "key": "title",
+  "rows": [
+    { "eventId": "seed:sales:events:mosselconcert", "title": "Bar", "requiresHandover": false },
+    { "eventId": "seed:sales:events:mosselconcert", "title": "Keuken", "requiresHandover": true }
+  ]
+}

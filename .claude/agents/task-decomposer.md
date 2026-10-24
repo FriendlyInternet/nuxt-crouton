@@ -36,7 +36,7 @@ Run `echo "$PIPELINE_MODE"` (Bash) **once at the start**. It selects how you han
 - **Unset / anything but `event-driven` → IN-PROCESS mode (default, the claude harness).**
   You hand off by **spawning** a child decomposer or a worker via the `Agent` tool and waiting
   for it (Steps 3–4 as written). This is the proven flow; nothing below changes it.
-- **`event-driven` → LABEL mode (the pi harness, #1685 WS3).** pi-claude-cli can't drive an
+- **`event-driven` → LABEL mode (the pi harness, #1685 WS3).** the pi harness (claude-bridge provider) can't drive an
   in-process `Agent` tree, so instead of spawning you **write the WS2 context block onto each
   child and apply a trigger label via the Harness App token**, then **STOP** — a fresh single-use
   workflow run picks each child up. See **“Event-driven mode”** below; it overrides Steps 3–4.
@@ -52,6 +52,15 @@ open children (`get_sub_issues`), you've run before: re-spawn decomposers for th
 children that aren't yet worked, and stop (idempotent).
 
 ## Step 2 — Apply the LEAF TEST (all must be true)
+
+> **First, a hard precondition — an issue that already has OPEN sub-issues is never a
+> leaf (#2048).** Its children *are* the decomposition; the job is to resume the tree
+> (dispatch the open, unblocked children), not to re-plan it. This is a **lookup, not a
+> judgement**, and it is easy to miss because `gh issue view` does **not** list
+> sub-issues — so the four criteria below get applied to a well-written epic's *prose*
+> and it reads as "one coherent change". That is exactly how epic #515, with three open
+> ready children, was classified a leaf and handed to the single-leaf worker, which spent
+> eleven minutes on it and produced nothing. Check `/sub_issues` before judging.
 
 An issue is **leaf-sized** when:
 
@@ -127,8 +136,17 @@ bodies breaks on shell quoting (`$(cat <<EOF)`, #1001) and then fabricates succe
   heredoc), as JSON:
   - leaf → `{ "leaf": true }`
   - split → `{ "leaf": false, "children": [ { "title", "body" (markdown, no pipeline block / no
-    Dedup line — the apply step adds them), "labels": ["type:*","<component>"], "needsSplit": <bool> } … ] }`
+    Dedup line — the apply step adds them), "labels": ["type:*","<component>"], "needsSplit": <bool>,
+    "blockedBy": [<sibling indices>] } … ] }`
     — 2–6 children, `needsSplit:true` for a child that itself needs further decomposition.
+- **Express ORDERING with `blockedBy` (#1750).** It lists the **sibling indices** (0-based positions
+  in this same `children` array — *not* issue numbers, which don't exist yet) that a child must wait
+  for. Only children with no blockers are dispatched on the first pass; the rest are created, linked,
+  stamped `Blocked-by: #N`, and released by the **existing wave scheduler** (`schedule-waves.yml`)
+  when their last blocker closes. Use it whenever a child needs another's code/schema/API to exist
+  first — a flat list is only correct when the children are genuinely independent. Be honest **both
+  ways**: an invented dependency needlessly serialises work that could run in parallel. Self-refs,
+  out-of-range indices and cycles are hard plan errors (a cycle would stall the tree in silence).
 - Then **STOP**. Writing a correct `decompose-plan.json` is the entire deliverable.
 
 The deterministic **apply step** (`scripts/apply-decompose-plan.mjs`) turns the plan into real

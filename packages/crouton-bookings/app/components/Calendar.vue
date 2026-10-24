@@ -500,6 +500,7 @@ const monthCellHeight = computed(() => {
             v-for="indicator in getIndicatorsForDate(jsDate)"
             :key="indicator.locationId"
             mode="hover"
+            :content="{ side: 'top', sideOffset: 8 }"
             :open-delay="300"
             :close-delay="100"
           >
@@ -618,6 +619,7 @@ const monthCellHeight = computed(() => {
                 v-for="indicator in getIndicatorsForDate(day.toDate(getLocalTimeZone()))"
                 :key="indicator.locationId"
                 mode="hover"
+                :content="{ side: 'top', sideOffset: 8 }"
                 :open-delay="300"
                 :close-delay="100"
               >

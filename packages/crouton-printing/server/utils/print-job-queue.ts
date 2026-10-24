@@ -14,6 +14,8 @@
  * everywhere (including the edge).
  */
 import { nanoid } from 'nanoid'
+import { getTableColumns } from 'drizzle-orm'
+import { chunkRowsForTable } from '@fyit/crouton-core/shared/utils/d1'
 
 /**
  * Print-job status codes. Text to match the on-site spooler contract
@@ -116,7 +118,18 @@ export async function enqueuePrintJobs(db: any, inputs: EnqueuePrintJobInput[]):
   if (inputs.length === 0) return []
   const { printJobs } = await import('../database/schema')
   const rows = inputs.map(buildRow)
-  await db.insert(printJobs).values(rows)
+
+  // D1 caps a query at 100 bound parameters and a multi-row INSERT binds one per column per
+  // row — a print job costs 18 (16 from buildRow, plus createdAt/updatedAt that drizzle fills
+  // from their defaults), so one statement stopped working at 6 tickets: an order spanning
+  // enough stations enqueued NOTHING and simply never printed (#1710).
+  //
+  // The #1539 single-insert property is preserved wherever it still fits (≤5 tickets, the
+  // overwhelming majority) — `chunkRowsForTable` only splits when D1 leaves no choice.
+  for (const batch of chunkRowsForTable(rows, getTableColumns(printJobs))) {
+    await db.insert(printJobs).values(batch)
+  }
+
   await emitCreated(db, rows)
   return rows.map(r => r.id)
 }

@@ -1,12 +1,15 @@
 {
   "onboarding": {
     "createTeamTitle": "Create Your First Team",
-    "createTeamDescription": "Get started by creating a workspace for your projects."
+    "createTeamDescription": "Get started by creating a workspace for your projects.",
+    "settingUpWorkspace": "Setting up your workspace",
+    "justAMoment": "Just a moment…"
   },
   "auth": {
     "resetLinkSentDescription": "We sent a password reset link to your email. Click the link to reset your password.",
     "magicLinkSentDescription": "We sent a magic link to your email. Click the link to sign in.",
     "tryAnotherEmail": "Try another email",
+    "enterEmailAndPassword": "Enter your email and password.",
     "continueWith": "Continue with {provider}",
     "placeholders": {
       "email": "you{'@'}example.com",
@@ -15,7 +18,8 @@
       "currentPassword": "Enter current password",
       "newPassword": "Enter new password",
       "name": "John Doe",
-      "atLeastChars": "At least {min} characters"
+      "atLeastChars": "At least {min} characters",
+      "confirmNewPassword": "Confirm your new password"
     },
     "twoFactor": {
       "authenticationCode": "Authentication code",
@@ -63,7 +67,29 @@
       "verificationFailed": "Magic link verification failed",
       "tryAgain": "Try again",
       "expiredHint": "The magic link may have expired. Request a new one from the login page."
-    }
+    },
+    "resetRequestFailed": "Could not send the reset link",
+    "credentialsRequired": "Enter your email and password",
+    "signInWithPasskey": "Sign in with passkey",
+    "oauthLoginFailed": "Sign-in with this provider failed",
+    "passkeyLoginFailed": "Passkey sign-in failed",
+    "loginFailed": "Sign-in failed",
+    "magicLinkFailed": "Could not send the magic link",
+    "registrationFailed": "Registration failed",
+    "accountCreated": "Account created",
+    "accountCreatedDescription": "Welcome! Your account has been created.",
+    "resetLinkIfAccountExists": "If an account exists with this email, you will receive a reset link.",
+    "goHome": "Go home",
+    "or": "or",
+    "magicLinkSentTo": "We sent a magic link to",
+    "resetLinkSentTo": "We sent a password reset link to",
+    "passwordResetSuccessDescription": "Your password has been reset successfully.",
+    "passwordResetFailed": "Password reset failed",
+    "signedOut": "Signed out",
+    "signedOutDescription": "You have been signed out successfully.",
+    "failedToSignOut": "Failed to sign out",
+    "signInToAccess": "Please sign in to access this content",
+    "emailSent": "Email sent"
   },
   "teams": {
     "slugValidation": "Slug must contain only lowercase letters, numbers, and hyphens",
@@ -92,7 +118,47 @@
     "permissionDeniedDescription": "Only team owners and admins can update settings.",
     "settingsSaved": "Settings saved",
     "settingsSavedDescription": "Team settings have been updated.",
-    "failedToSaveSettings": "Failed to save settings"
+    "failedToSaveSettings": "Failed to save settings",
+    "invitationPage": {
+      "joinedTeam": "You have joined {team}.",
+      "loading": "Loading invitation...",
+      "notFound": "Invitation not found",
+      "notFoundDescription": "This invitation link is invalid or has been removed.",
+      "goToHomepage": "Go to homepage",
+      "expired": "Invitation expired",
+      "alreadyUsed": "Invitation already used",
+      "expiredDescription": "This invitation has expired.",
+      "alreadyUsedDescription": "This invitation has already been used.",
+      "askForNew": "Please ask the team admin to send a new invitation.",
+      "youreInvited": "You're invited!",
+      "invitedYouToJoin": "invited you to join",
+      "joining": "Joining {team}...",
+      "youreIn": "You're in!",
+      "welcomeRedirecting": "Welcome to {team}. Redirecting...",
+      "couldNotAccept": "Could not accept invitation",
+      "createAccount": "Create an account",
+      "haveAccount": "I already have an account",
+      "acceptInvitation": "Accept invitation"
+    },
+    "failedToAcceptInvitation": "Failed to accept invitation",
+    "failedToDeclineInvitation": "Failed to decline invitation",
+    "failedToResendInvitation": "Failed to resend invitation",
+    "failedToCancelInvitation": "Failed to cancel invitation",
+    "failedToDeleteTeam": "Failed to delete team",
+    "emailTemplates": "Email templates",
+    "unknownMember": "Unknown",
+    "slugPlaceholder": "my-team",
+    "inviteForm": {
+      "memberRoleDescription": "Can view and use team resources",
+      "adminRoleDescription": "Can manage members and settings",
+      "ownerRoleDescription": "Full control over the team",
+      "noPermission": "You do not have permission to invite members.",
+      "sent": "Invitation sent",
+      "sentDescription": "Invitation has been sent to {email}.",
+      "failedToSend": "Failed to send invitation",
+      "description": "Send an invitation to join your team.",
+      "roleHint": "The role determines what the member can do."
+    }
   },
   "account": {
     "profileDescription": "Update your personal information.",
@@ -115,7 +181,9 @@
       "passkeyRemovedDescription": "The passkey has been deleted.",
       "failedToLoadPasskeys": "Failed to load passkeys",
       "failedToAddPasskey": "Failed to add passkey",
-      "failedToDeletePasskey": "Failed to delete passkey"
+      "failedToDeletePasskey": "Failed to delete passkey",
+      "unnamed": "Passkey",
+      "failedToUpdatePasskey": "Failed to update passkey"
     },
     "sessions": {
       "title": "Active Sessions",
@@ -130,8 +198,40 @@
       "failedToRevokeOthers": "Failed to revoke other sessions",
       "lastActive": "Last active",
       "loading": "Loading sessions...",
-      "noSessions": "No active sessions found"
-    }
+      "noSessions": "No active sessions found",
+      "unknown": "Unknown",
+      "browserOnOs": "{browser} on {os}"
+    },
+    "twoFactor": {
+      "failedToLoadSetup": "Could not load the 2FA setup code",
+      "verifyFailed": "Verification failed",
+      "failedToLoadStatus": "Could not load 2FA status",
+      "failedToEnable": "Failed to enable 2FA",
+      "invalidCode": "Invalid code",
+      "enabled": "2FA enabled",
+      "enabledDescription": "Two-factor authentication is now active.",
+      "disabled": "2FA disabled",
+      "disabledDescription": "Two-factor authentication has been turned off.",
+      "failedToDisable": "Failed to disable 2FA",
+      "failedToGenerateCodes": "Failed to generate backup codes",
+      "copied": "Copied",
+      "codesCopied": "Backup codes copied to clipboard"
+    },
+    "linked": {
+      "failedToLoad": "Failed to load accounts",
+      "failedToLink": "Failed to link account",
+      "failedToUnlink": "Failed to unlink account",
+      "unlinked": "Account unlinked",
+      "unlinkedDescription": "Your {provider} account has been disconnected."
+    },
+    "accountDeleted": "Account deleted",
+    "accountDeletedDescription": "Your account has been permanently deleted.",
+    "failedToDeleteAccount": "Failed to delete account",
+    "darkMode": "Dark mode",
+    "theme": "Theme",
+    "user": "User",
+    "emailChangeFailed": "Email change failed",
+    "yourName": "Your name"
   },
   "admin": {
     "passwordResetSent": "Password reset sent",

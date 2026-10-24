@@ -3,7 +3,7 @@ import type { GeocodeResult } from '../composables/useGeocode'
 import type { CurrentLocationOptions } from '../composables/useCurrentLocation'
 
 interface Props {
-  /** Button label text (default: "Use my location"). */
+  /** Button label text (default: translated "Use my location"). */
   label?: string
   /** Lucide/Heroicons icon name (default: i-lucide-map-pin). */
   icon?: string
@@ -20,7 +20,6 @@ interface Props {
 }
 
 const props = withDefaults(defineProps<Props>(), {
-  label: 'Use my location',
   icon: 'i-lucide-map-pin',
   color: 'neutral',
   variant: 'outline',
@@ -37,6 +36,7 @@ const emit = defineEmits<{
 
 const { getCurrentLocation, loading, error } = useCurrentLocation()
 const toast = useToast()
+const { t } = useT()
 
 async function handleClick() {
   const result = await getCurrentLocation(props.options)
@@ -44,11 +44,11 @@ async function handleClick() {
     emit('located', result)
     return
   }
-  const message = error.value ?? 'Could not get your location'
+  const message = error.value ?? t('maps.location.couldNotGet')
   emit('failed', message)
   if (props.notifyOnError) {
     toast.add({
-      title: 'Location unavailable',
+      title: t('maps.location.unavailable'),
       description: message,
       color: 'warning',
       icon: 'i-lucide-map-pin-off'
@@ -67,6 +67,6 @@ async function handleClick() {
     type="button"
     @click="handleClick"
   >
-    {{ label }}
+    {{ label ?? t('maps.location.useMyLocation') }}
   </UButton>
 </template>

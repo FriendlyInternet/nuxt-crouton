@@ -125,6 +125,33 @@ by porting the board into the old zoom shell):
 
 ## Signed-off design decisions (current truth)
 
+### Outline / DOM-tree editor — composition + responsiveness on one surface (#983, signed off 2026-08-05)
+
+**The direction for editing a page is an OUTLINE of its layout tree, not a free-floating card canvas.**
+A page is document flow, not a whiteboard — the saved page was always a `LayoutTree` (split/leaf/nested),
+so the free 2D card scatter implied absolute positioning it never had. The outline *shows* that tree and
+edits it directly (`pocs/crouton-builder`, route `/builder/outline/[pageId]`; the canvas board still
+coexists for now).
+
+- **Add from a list** (tap to insert) — drag is reserved for *rearranging*, never composing.
+- **Columns come from GROUPING**, per-group — select rows → "Group as Columns / Stack" wraps them into a
+  child layout, shown as **indentation**; each group carries a ⬌/⬍ toggle. There is **no page-global
+  Stack/Columns switch** — columns-vs-stack is layout-dependent (the correction that killed that toggle).
+- **Child layouts = nesting** — groups inside groups (nested `split`s), a `nested` node = a first-class
+  child layout. The outline is the recursive tree; the drop indicator is a **1D insertion line**, never
+  the ambiguous 2D edge/pane cue.
+- **Responsiveness is combined on the same surface** — the app's *real* slider breakpoint editor
+  (`CroutonLayoutBreakpointAuthor`) is embedded inline, bound to the same page, so its width slider /
+  device presets / scaled preview / variants / collapse motion are right there and a structure edit
+  updates the preview live. **Not** a separate mode, and **not** a reinvented device bar (that was tried
+  and rejected — it duplicated the real tool, worse).
+
+Supersedes the free-canvas *drag-to-compose* for composition (the `snap-dwell-arm` / `pane-drop-beside` /
+`ghost-ease-apart` board gestures below remain real, but are the reframed-away approach). **Deferred**
+(not blocking the sign-off): horizontal drag-to-nest (grouping-via-action already makes child layouts),
+cross-group reorder, and retiring the canvas so the outline is the sole editor. Spec: `outline-tree-editor`
+in `spec.json` (settled).
+
 ### Page model — one node is *the* page (#942)
 
 The board is a sandbox of layout candidates + loose draft blocks; **exactly one node is "the page"**
@@ -228,6 +255,37 @@ expressiveness boundary: a variant is an **enum an agent could equally pick**, n
   (`LAYOUT_VARIANTS_KEY`) only at render-merge time; the *leaf-serialised* variant + the in-view picker
   are POC-side. On graduation, fold the picker into the package author and keep variant declaration on
   the typed block definition.
+
+### Page-context render + the card IS the preview (graduation direction, #983)
+
+Two decisions that surfaced *during* graduation (not proven POC-side — captured here as the settled
+direction for the build; `new` entries in `spec.json`). They resolve the render-model tension that a
+separate Preview overlay kept exposing: **admin fills-and-scrolls; a page flows.**
+
+- **A collection block renders differently on a PAGE than in the ADMIN.** In the admin a list *fills
+  its pane and scrolls internally* (a working dashboard surface) — correct there. On a **page** that
+  makes no sense: a list is a **content-sized block** showing a *set number of items* (default **10**,
+  settable per block), then **more via a bounded viewer option** — **load-more** (default), **paginate**
+  (numbered), or **search/filter** — plus the existing **display variant** (rows/cards/table). Empty →
+  a **small block**, not a full-height void. This is NOT new machinery: the block already slices to a
+  page + has the pager/search/variants (the #970 "collection viewer options"); page-context render just
+  reuses them **at content height, no internal scrollbar**. It stays inside the expressiveness boundary
+  — you pick from *bounded, enumerated* viewer options, never hand-tune per-instance flex (the rejected
+  control). **Not** "force everything to flow": the LIST has a page render; the page scrolls as one.
+
+- **The board card IS the live page preview — there is no separate Preview.** Two renders of the same
+  page (a board thumbnail + a Preview overlay) is two sources of truth, free to diverge — the root of
+  the Preview whack-a-mole (it was removed, #983). Instead the **card on the Vue Flow canvas renders the
+  real page**, live, at its own width: reflows responsively (the `@container` CSS grid), shows the
+  page-context render above, and **scrolls inside itself** when content exceeds the card (a screen).
+  Resize the card = resize the screen. WYSIWYG, one render, zero board/preview drift. **Feasible only
+  because #1178** replaced the reka-Splitter ResizeObserver (which OOM-crashed inside a zoomed VF node —
+  the reason the card was frozen to a static thumbnail) with an **observer-free CSS-grid render**. Two
+  real unknowns to verify on device before trusting it: (a) **scroll-inside-a-card vs pan-the-canvas**
+  under zoom (the crash is gone, but nested-scroll-in-a-transform is where it got hairy); (b) whether
+  **all cards render live** or only the focused one (perf — many data-bound renders). Build order: the
+  page-context list render first; "card = live preview" then falls out of pointing the card at that
+  render instead of `BuilderNodePreview`.
 
 ### Board gestures (direct manipulation)
 

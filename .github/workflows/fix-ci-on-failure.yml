@@ -6,7 +6,8 @@ name: Fix CI on failure
 # forever; the existing resume-on-comment.yml restarts it on a human reply.
 #
 # Guard rails (the whole point — provably no runaway):
-#   - Scope: only head branches `claude/issue-*` (pipeline PRs). Human PRs are never touched.
+#   - Scope: only pipeline head branches `claude/issue-*` (claude lane) + `work-*` (pi worker,
+#     #2157). Human PRs are never touched.
 #   - Attempt cap: a `ci-fix-attempts:N` label on the PR, capped at MAX (3). On exhaustion →
 #     stop, @mention the owner, block the linked issue.
 #   - Shared-code stop: the agent must NOT touch packages/ (the HARD GATE) — if a fix needs
@@ -18,17 +19,37 @@ name: Fix CI on failure
 
 on:
   workflow_run:
-    workflows: ["CI", "E2E"]
+    # `Deploy Apps (Cloudflare Workers)` added in #2089. The reflex is that a deploy failure is
+    # infrastructure, not code, so an agent shouldn't edit in response — but the evidence says
+    # otherwise: every deploy failure on 2026-08-06 was a genuine code bug (#2078 the migrate
+    # config, #2085 the missing database_id, #2087 the two-dot diff), and each sat red until a
+    # human read the log. A deploy that fails IS a failing check on the PR, and leaving one
+    # class of red out of the loop is how it stops being a loop.
+    #
+    # What bounds the risk is already here and unchanged: the `ci-fix-attempts:3` cap, the
+    # packages/ stop, and the pipeline-branch guard — so a genuinely transient Cloudflare blip
+    # costs at most three attempts and then hands over with `status:needs-input` rather than
+    # looping. The name must match the workflow's `name:` LITERALLY or this silently never
+    # fires, which is the exact bug #2089 is about.
+    workflows: ["CI", "E2E", "Deploy Apps (Cloudflare Workers)"]
     types: [completed]
 
 permissions: {}
 
 jobs:
   fixbot:
+    # Pipeline branches only — human PRs are never auto-edited. BOTH prefixes: `claude/issue-*`
+    # is the claude lane, `work-*` is the pi worker. This listed only the former, and since
+    # AGENT_HARNESS=pi made pi the live lane the condition could not be true for any PR: 1718
+    # runs, 100 of the last 100 `skipped`, zero that ever acted (#2089). A false job `if`
+    # reports `skipped`, which is indistinguishable from "nothing to do", so it was never red
+    # and nobody noticed. `pipeline-pr-status.yml` learned the same lesson in #1815; this
+    # sibling didn't — the definition now lives once, in scripts/lib/pipeline-branch.mjs.
     if: >
       github.event.workflow_run.conclusion == 'failure' &&
-      startsWith(github.event.workflow_run.head_branch, 'claude/issue-')
-    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+      (startsWith(github.event.workflow_run.head_branch, 'claude/issue-') ||
+       startsWith(github.event.workflow_run.head_branch, 'work-'))
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level — GitHub job-level `permissions` fully
     # OVERRIDES a workflow-level block, so id-token: write has to be here or
@@ -41,7 +62,7 @@ jobs:
     steps:
       # ── Gate: resolve the PR, enforce the attempt cap, bump the counter ──────────
       - id: gate
-        uses: actions/github-script@v7
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const MAX = 3
@@ -60,7 +81,15 @@ jobs:
             if (!pr) { core.info('No open PR for branch — nothing to fix.'); core.setOutput('proceed', 'false'); return }
 
             const full = (await github.rest.pulls.get({ owner, repo, pull_number: pr.number })).data
-            if (full.state !== 'open' || !full.head.ref.startsWith('claude/issue-')) {
+            // #2157: the job `if` above was widened to both lanes (#2089), but THIS inner
+            // re-check still only accepted `claude/issue-*` — so every `work-*` PR (the pi
+            // worker, which AGENT_HARNESS=pi makes the LIVE lane) bailed here and the fix-bot
+            // never acted on a real PR. Same #2089 bug, one spot the fix missed. The two-prefix
+            // predicate lives once in scripts/lib/pipeline-branch.mjs; inline it here to match
+            // the job `if` (a github-script gate can't import without a checkout, and this runs
+            // pre-checkout). Keep these three in lockstep: the helper, the job `if`, this line.
+            const isPipelineRef = r => /^(claude\/issue-|work-)/.test(String(r || ''))
+            if (full.state !== 'open' || !isPipelineRef(full.head.ref)) {
               core.info('Not an open pipeline PR — skipping.'); core.setOutput('proceed', 'false'); return
             }
             const labels = (full.labels || []).map(l => l.name)
@@ -74,7 +103,8 @@ jobs:
             const attempts = attemptLabel ? Number(attemptLabel.split(':')[1]) : 0
 
             // The linked issue (from the branch name) is the resume surface for resume-on-comment.
-            const m = /^claude\/issue-(\d+)-/.exec(full.head.ref)
+            // Both lanes (#2157): `claude/issue-<n>-<slug>` and the pi worker's `work-<n>`.
+            const m = /^(?:claude\/issue-|work-)(\d+)/.exec(full.head.ref)
             const issueNumber = m ? Number(m[1]) : null
 
             if (attempts >= MAX) {
@@ -97,12 +127,31 @@ jobs:
             const next = attempts + 1
             await github.rest.issues.addLabels({ owner, repo, issue_number: pr.number, labels: [`ci-fix-attempts:${next}`] })
 
+            // #2163 (the #2157 packages/ follow-up): normally the fix-bot's prompt STOPS at a
+            // packages/ change (the shared-code HARD GATE). But when the linked issue is a `pkg:*`
+            // issue, the owner already approved shared-code work by dispatching it — so the bot MAY
+            // fix packages/ (the PR still holds for a human merge behind the packages guard, #339).
+            // Resolve the package name(s) from the ISSUE's labels so the prompt can unlock exactly
+            // those and no others.
+            let packagesAllowed = 'false', pkgNames = ''
+            if (issueNumber) {
+              try {
+                const iss = (await github.rest.issues.get({ owner, repo, issue_number: issueNumber })).data
+                const pkgs = (iss.labels || [])
+                  .map(l => (typeof l === 'string' ? l : l.name))
+                  .filter(n => /^pkg:/.test(n)).map(n => n.slice(4))
+                if (pkgs.length) { packagesAllowed = 'true'; pkgNames = pkgs.join(' ') }
+              } catch (e) { core.warning(`pkg-label check #${issueNumber}: ${e.message}`) }
+            }
+
             core.setOutput('proceed', 'true')
             core.setOutput('pr_number', String(pr.number))
             core.setOutput('issue_number', issueNumber ? String(issueNumber) : '')
             core.setOutput('head_branch', full.head.ref)
             core.setOutput('attempt', String(next))
-            core.info(`Fix attempt ${next}/${MAX} for PR #${pr.number} (issue #${issueNumber}).`)
+            core.setOutput('packages_allowed', packagesAllowed)
+            core.setOutput('packages_names', pkgNames)
+            core.info(`Fix attempt ${next}/${MAX} for PR #${pr.number} (issue #${issueNumber}); packages_allowed=${packagesAllowed} (${pkgNames || 'none'}).`)
 
       # Mint a Harness App token so the fix PUSH is App-authored. CRUCIAL: a push made with
       # the default GITHUB_TOKEN does NOT re-trigger workflows (GitHub's loop guard), so a
@@ -111,7 +160,7 @@ jobs:
       # synchronize` → CI re-runs → workflow_run gives the fix-bot its next attempt (bounded
       # by the ci-fix-attempts cap). Same reason automerge/resume/schedule-waves use it (#626).
       - if: steps.gate.outputs.proceed == 'true'
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         id: app-token
         with:
           app-id: ${{ secrets.HARNESS_APP_ID }}
@@ -119,22 +168,38 @@ jobs:
           owner: FriendlyInternet
 
       - if: steps.gate.outputs.proceed == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.gate.outputs.head_branch }}
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
+
+      # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
+      # No fallback literal on purpose: a broken config fails this step loudly instead of
+      # silently running a stale model.
+      - name: Resolve model
+        if: steps.gate.outputs.proceed == 'true'
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "model: $MODEL (from .claude/pipeline-models.json)"
 
       # ── The fix attempt ─────────────────────────────────────────────────────────
       # AUTH: headless/unattended → MUST use an API key (never a subscription OAuth token;
       # Anthropic terms). Pinned to the same SHA as claude.yml — keep in sync when bumping.
       # github_token is the App token so the agent's git push re-triggers CI (above).
       - if: steps.gate.outputs.proceed == 'true'
-        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e
+        uses: anthropics/claude-code-action@6c0083bb7289c31716797a039b6367b3079cc46e # v1.0.162
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ steps.app-token.outputs.token }}
-          claude_args: "--model claude-sonnet-5 --max-turns 30"
+          # bypassPermissions REQUIRED (#834/#2165): headless CI denies un-allowlisted tools, so
+          # WITHOUT this the fix-bot's every pnpm/git/gh command is permission-denied — it burns all
+          # its turns on denials and crashes with max_turns, never reaching the fix (the first real
+          # live-lane run, 31589320044, did exactly this). Same reason red-team-daily.yml sets it.
+          # max-turns 40 (was 30): a full pnpm install + typecheck + fix + verify cycle is turn-hungry.
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions"
           show_full_output: true
           prompt: |
             CI failed on this pipeline PR — you are the fix-bot. This is auto-fix attempt
@@ -149,10 +214,19 @@ jobs:
                `pnpm lint`, or the failing test/e2e) to see the actual error. Read the failing job's logs if you need to.
             2. Diagnose the root cause and make the MINIMAL fix on this branch. Keep it tightly
                scoped to the failure — do not refactor, do not touch unrelated files.
-            3. HARD GATE — shared code: do NOT modify anything under `packages/`. If the only correct
-               fix would require a `packages/` change, STOP: do not commit. Instead comment on issue
-               #${{ steps.gate.outputs.issue_number }} explaining why, @mention @pmcp, apply the
-               `status:blocked` label to that issue, and end your run.
+            3. SHARED CODE (`packages/`) — read this carefully, it depends on the issue:
+               - packages_allowed for this run: ${{ steps.gate.outputs.packages_allowed }} (packages: ${{ steps.gate.outputs.packages_names }}).
+               - If packages_allowed is `false`: do NOT modify anything under `packages/`. If the only
+                 correct fix would require one, STOP: do not commit. Instead comment on issue
+                 #${{ steps.gate.outputs.issue_number }} explaining why, @mention @pmcp, apply the
+                 `status:blocked` label to that issue, and end your run.
+               - If packages_allowed is `true`: this is a `pkg:*` issue — the owner already approved
+                 shared-code work by dispatching it, so you MAY edit ONLY the listed package(s). Before
+                 your first edit under `packages/`, unlock the gate for exactly those packages, one per
+                 line: `for p in ${{ steps.gate.outputs.packages_names }}; do echo "$p" >> .claude/.package-edit-approved; done`.
+                 Keep the change minimal and scoped to the failure; do NOT touch any other package. The
+                 PR still holds for a human to merge (the shared-code merge guard), so you are producing
+                 the fix, not landing it. Do NOT commit `.claude/.package-edit-approved` (it is gitignored).
             4. Verify green: re-run the command from step 1 and confirm it passes.
             5. Commit with the /commit skill (reference the issue) and push to this branch. CI re-runs
                automatically; if it still fails, the fix-bot will get another attempt (up to the cap).

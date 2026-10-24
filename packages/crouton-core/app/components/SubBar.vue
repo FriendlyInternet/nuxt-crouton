@@ -116,17 +116,17 @@ onBeforeUnmount(() => cleanup())
 <template>
   <div
     ref="root"
-    class="flex items-center gap-2 py-1.5 bg-default overflow-x-auto transition-transform duration-200 ease-out"
+    class="min-h-8 flex items-center bg-default  transition-transform duration-200 ease-out"
     :class="[
       bordered ? 'border-b border-default' : '',
       // auto-hide: sticky ONLY while pinned (a scroll-up reveal); otherwise the
       // bar lives in flow. A plain `sticky` bar (no auto-hide) always pins.
       autoHide ? (pinned ? 'sticky top-0 z-10' : '') : (sticky ? 'sticky top-0 z-10' : ''),
       (autoHide && pinned && !shown) ? '-translate-y-full' : 'translate-y-0',
-      // Full-bleed inside a `p-4` pane: cancel the host's horizontal padding,
-      // re-inset the content by the same amount so it lines up with the padded
-      // siblings below. Plain `px-2` otherwise.
-      flush ? '-mx-4 px-4' : 'px-2',
+      // // Full-bleed inside a `p-4` pane: cancel the host's horizontal padding,
+      // // re-inset the content by the same amount so it lines up with the padded
+      // // siblings below. Plain `px-2` otherwise.
+      // flush ? '-mx-4 px-4' : 'px-2',
     ]"
     @transitionend="onSlideEnd"
   >

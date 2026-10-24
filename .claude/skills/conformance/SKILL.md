@@ -45,6 +45,13 @@ The #988 class — a hand-assembled scaffold silently omits standard files and 5
       never a bare `nuxt prepare` (a bare one aborts the whole monorepo install — root `CLAUDE.md`).
 - [ ] `wrangler.jsonc` follows the Workers pattern (no `pages_build_output_dir`; `nodejs_compat`;
       id-less bindings + an `env.staging` block) — copy `apps/velo`, don't invent.
+- [ ] **Team-scoped routes** — team-data pages live under a `[team]` param (`app/pages/**/[team]/…`,
+      e.g. `/dashboard/[team]/…`), so `getTeamId()` resolves **synchronously from the route** via
+      `team-context.global`. A **root** route with no `[team]` (a POC crutch) makes team context resolve
+      **async from the session** — the list query silently skips and a mutation *rejects* until the
+      session bootstrap sets an active org, so a control "does nothing" on an early tap (the
+      crouton-builder `/builder` New-page bug). Prefer the `[team]` route; if a root route is deliberate,
+      the app must gate team-dependent actions on readiness, not fire them blind.
 
 ```bash
 test -f <app>/server/db/schema.ts && echo "✅ schema.ts" || echo "❌ MISSING server/db/schema.ts (the #988 500)"

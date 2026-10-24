@@ -1,329 +1,380 @@
 <script setup lang="ts">
 /**
- * Board (#988) — `/builder/[pageId]`. Deep-linkable; browser back returns to the Site
- * flow. Composes one page's `LayoutTree` through the graduated package:
- *  - `CroutonLayoutEditableRenderer` owns the pane handles (reorder / detach, #985).
- *  - `applyPaneDrop` (#985) places a palette block beside the hovered pane.
- *  - `CroutonLayoutRenderer` (read-only) previews it hug-aware (#986).
- *  - `serializeLayoutDocument` + the #974 endpoint round-trip it onto a ticket.
- * Reproduces the five `data-handoff` hooks verbatim (page-badge · region-pill · floor
- * -readout · snap-guide · ghost-pane), so one exploratory agent runs identically on the
- * POC and this app. A matching `view-transition-name` morphs the Site card into the board.
+ * /builder/[pageId] — the PAGE BOARD, rebuilt phone-first (#2375).
+ *
+ * The page's LayoutTree fills the screen as a plain splitter tree (BoardTree):
+ * drag a pane edge to resize, drag a block chip from the strip at the bottom
+ * onto any pane edge to add it there, drag a pane's grip onto another pane to
+ * move it. Tap a pane to select it; the bottom sheet shows its options.
+ *
+ * What's deliberately gone vs the Vue Flow board: the free-floating candidate
+ * cards, the custom pointer-capture drag, the dwell timer and the ghost leaf
+ * spliced into the tree. Drops are native browser drag events; the tree only
+ * changes on drop, through the package's layout-edit helpers.
+ *
+ * Persistence is unchanged: explicit Save → `board.layout` on the builderPages
+ * row via the canonical `layout-serialize` (specs `board-persistence`,
+ * `layouttree-serialise`).
  */
-import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
-import { applyPaneDrop, type PaneDropEdge, type NodePath } from '@fyit/crouton-layout/app/utils/layout-edit'
-import { deriveSizing } from '@fyit/crouton-layout/app/utils/layout-viability'
+import type { LayoutNode, LayoutTree, LayoutBreakpoint, LayoutLeaf } from '@fyit/crouton-core/app/types/layout'
+import { serializeLayoutTree, parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize'
+import {
+  getNode, makeLeaf, dropBlock, dropNode, applyPaneDrop, detachNode, findNodePath,
+  nestInside, applySizes, setConfig, removeNode,
+  type NodePath, type DropEdge,
+} from '@fyit/crouton-layout/app/utils/layout-edit'
+import { useBoardDrag, type BoardDragPayload } from '~/utils/board-drag'
+import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
+
+definePageMeta({ middleware: ['auth'] })
 
 const route = useRoute()
-const router = useRouter()
 const pageId = computed(() => String(route.params.pageId))
 
-const { getPage, setPageTree, serialize } = useBuilderDocument()
-const { blocks } = useCroutonLayoutBlocks()
+const { items: pages } = await useCollectionQuery('builderPages')
+const page = computed(() => (pages.value as BuilderPage[]).find(p => p.id === pageId.value) ?? null)
+useHead({ title: () => `Builder · ${page.value?.title ?? 'Page'}` })
 
-const page = computed(() => getPage(pageId.value))
-const root = computed<LayoutNode | null>(() => page.value?.tree.root ?? null)
+const { blocks, blocksList } = useCroutonLayoutBlocks()
+const { payload: dragPayload, point: dragPoint, arm, onDrop: registerDrop, consumeClick } = useBoardDrag()
 
-useHead(() => ({ title: page.value ? `Builder · ${page.value.name}` : 'Builder · not found' }))
+// ── The tree ───────────────────────────────────────────────────────────────────
+const root = shallowRef<LayoutNode | null>(null)
+const breakpoints = ref<LayoutBreakpoint[] | undefined>()
+const dirty = ref(false)
+const selected = ref<NodePath | null>(null)
 
-// --- editable tree (reorder / detach via the package renderer) -------------------
-function onUpdateNode(node: LayoutNode) {
-  setPageTree(pageId.value, node)
-}
-function onDetach(payload: { path: NodePath, node: LayoutNode }) {
-  // MVP: a detached pane is removed from the board (the host's placement decision —
-  // a fuller app would float it as a free draft card, the POC's board behaviour).
-  if (root.value && root.value.type === 'split') {
-    const remaining = root.value.children.filter((_, i) => i !== payload.path[0])
-    const next: LayoutNode = remaining.length === 1
-      ? remaining[0]!
-      : { ...root.value, children: remaining }
-    setPageTree(pageId.value, next)
+function starterRoot(): LayoutNode {
+  return {
+    type: 'split',
+    direction: 'horizontal',
+    children: [
+      { type: 'leaf', blockId: 'artists-list', config: { collection: 'builderArtists', heading: 'Artists', layout: 'list' } },
+      { type: 'leaf', blockId: 'artists-form', config: { collection: 'builderArtists', heading: 'New artist' } },
+    ],
   }
 }
 
-// --- floor readout (deriveSizing, #986 contract) ---------------------------------
-const floor = computed(() => (root.value ? deriveSizing(root.value, blocks.value) : null))
+// ── Variants (#942): a page holds named layout variants; one is live. ─────────
+interface BoardVariant { id: string, name: string, tree: LayoutTree }
+const variants = ref<BoardVariant[]>([])
+const liveId = ref<string>('a')
+const currentId = ref<string>('a')
+const current = computed(() => variants.value.find(v => v.id === currentId.value) ?? null)
+const liveVariant = computed(() => variants.value.find(v => v.id === liveId.value) ?? null)
 
-// --- regions (a hug bar at an edge = a pinned region) ----------------------------
-const regions = computed(() => {
-  const r = root.value
-  if (!r || r.type !== 'split' || r.direction !== 'vertical') return [] as { region: 'top' | 'bottom', label: string }[]
-  const out: { region: 'top' | 'bottom', label: string }[] = []
-  const first = r.children[0]
-  const last = r.children[r.children.length - 1]
-  if (first?.type === 'leaf' && first.blockId === 'top-bar') out.push({ region: 'top', label: 'Top bar' })
-  if (last?.type === 'leaf' && last.blockId === 'bottom-nav') out.push({ region: 'bottom', label: 'Bottom nav' })
-  return out
-})
+const nextName = () => String.fromCharCode(65 + (variants.value.length % 26))
+const newId = () => Math.random().toString(36).slice(2, 8)
 
-// --- palette + place-a-block (applyPaneDrop, #985) -------------------------------
-const palette = computed(() =>
-  ['overview', 'artists-list', 'artists-form', 'bookings-chart', 'top-bar', 'bottom-nav']
-    .map(id => blocks.value[id])
-    .filter((b): b is NonNullable<typeof b> => Boolean(b)),
-)
-const defaultConfig: Record<string, Record<string, unknown>> = {
-  'overview': { label: 'Overview', kind: 'panel', icon: 'i-lucide-layout-dashboard' },
-  'artists-list': { label: 'List', kind: 'panel', variant: 'rows', icon: 'i-lucide-list' },
-  'artists-form': { label: 'Form', kind: 'panel', icon: 'i-lucide-square-pen' },
-  'bookings-chart': { label: 'Chart', kind: 'panel', icon: 'i-lucide-bar-chart-3' },
-  'top-bar': { label: 'Top bar', kind: 'bar', icon: 'i-lucide-panel-top' },
-  'bottom-nav': { label: 'Nav', kind: 'nav', icon: 'i-lucide-panel-bottom' },
-}
-
-const placing = ref<string | null>(null) // the blockId being placed
-const boardRef = ref<HTMLElement | null>(null)
-const arm = ref<{ index: number, edge: PaneDropEdge, rect: { left: number, top: number, width: number, height: number } } | null>(null)
-
-function startPlacing(blockId: string) {
-  placing.value = placing.value === blockId ? null : blockId
-  arm.value = null
-}
-
-function onBoardMove(e: PointerEvent) {
-  if (!placing.value || !boardRef.value) return
-  const board = boardRef.value.getBoundingClientRect()
-  const panes = Array.from(boardRef.value.querySelectorAll<HTMLElement>('[data-pane-id]'))
-    .filter(el => el.dataset.paneId !== 'root')
-  for (let i = 0; i < panes.length; i++) {
-    const r = panes[i]!.getBoundingClientRect()
-    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) continue
-    // quadrant → nearest edge
-    const relX = (e.clientX - (r.left + r.width / 2)) / r.width
-    const relY = (e.clientY - (r.top + r.height / 2)) / r.height
-    const edge: PaneDropEdge = Math.abs(relX) >= Math.abs(relY) ? (relX >= 0 ? 'right' : 'left') : (relY >= 0 ? 'bottom' : 'top')
-    arm.value = {
-      index: i,
-      edge,
-      rect: { left: r.left - board.left, top: r.top - board.top, width: r.width, height: r.height },
-    }
-    return
+// Seed ONCE per page — never on a refetch, so a save can't re-seed the board.
+// A board stored as `{ layout }` (pre-#942) wraps as variant "A"; `{ live, variants }` loads as is.
+const loadedFor = ref<string | null>(null)
+watch([page, pageId] as const, ([p, id]) => {
+  if (!p || loadedFor.value === id) return
+  const board = (p.board as Record<string, unknown> | null) ?? {}
+  const storedVariants = Array.isArray(board.variants) ? board.variants as { id: string, name: string, layout: string }[] : null
+  if (storedVariants?.length) {
+    variants.value = storedVariants.map(v => ({ id: v.id, name: v.name, tree: parseLayoutTree(v.layout) ?? { renderer: 'panes', root: starterRoot() } }))
+    liveId.value = typeof board.live === 'string' && variants.value.some(v => v.id === board.live) ? board.live : variants.value[0]!.id
   }
-  arm.value = null
+  else {
+    const parsed = typeof board.layout === 'string' ? parseLayoutTree(board.layout) : null
+    variants.value = [{ id: 'a', name: 'A', tree: parsed ?? { renderer: 'panes', root: starterRoot() } }]
+    liveId.value = 'a'
+  }
+  showVariant(liveId.value)
+  loadedFor.value = id
+  dirty.value = false
+}, { immediate: true })
+
+// The board edits `root` in place; the current variant's tree is written back on
+// every commit, so switching variants never loses an unsaved edit.
+function showVariant(id: string) {
+  const v = variants.value.find(x => x.id === id)
+  if (!v) return
+  currentId.value = id
+  root.value = v.tree.root
+  breakpoints.value = v.tree.breakpoints
+  selected.value = null
+}
+function syncCurrent() {
+  const v = current.value
+  if (v) v.tree = { renderer: 'panes', root: root.value ?? starterRoot(), breakpoints: breakpoints.value }
 }
 
-function commitPlace() {
-  const a = arm.value
-  const blockId = placing.value
-  if (!a || !blockId || !root.value) return
+function duplicateVariant() {
+  const v = current.value
+  if (!v) return
+  syncCurrent()
+  const copy: BoardVariant = { id: newId(), name: nextName(), tree: parseLayoutTree(serializeLayoutTree(v.tree)) ?? v.tree }
+  variants.value = [...variants.value, copy]
+  showVariant(copy.id)
+  dirty.value = true
+}
+function setLive() {
+  liveId.value = currentId.value
+  dirty.value = true
+}
+function deleteVariant() {
+  if (variants.value.length <= 1) return
+  const id = currentId.value
+  variants.value = variants.value.filter(v => v.id !== id)
+  if (liveId.value === id) liveId.value = variants.value[0]!.id
+  showVariant(liveId.value)
+  dirty.value = true
+}
+const renaming = ref(false)
+const renameDraft = ref('')
+function startRename() {
+  renameDraft.value = current.value?.name ?? ''
+  renaming.value = true
+}
+function finishRename() {
+  const v = current.value
+  const name = renameDraft.value.trim()
+  if (v && name && name !== v.name) { v.name = name; dirty.value = true }
+  renaming.value = false
+}
+
+const variantMenu = computed(() => [
+  variants.value.map(v => ({
+    label: v.name,
+    icon: v.id === liveId.value ? 'i-lucide-star' : (v.id === currentId.value ? 'i-lucide-check' : 'i-lucide-circle-dashed'),
+    onSelect: () => showVariant(v.id),
+  })),
+  [
+    { label: 'Duplicate', icon: 'i-lucide-copy', onSelect: duplicateVariant },
+    { label: 'Rename', icon: 'i-lucide-pencil', onSelect: startRename },
+    { label: 'Set as live', icon: 'i-lucide-star', disabled: currentId.value === liveId.value, onSelect: setLive },
+    { label: 'Delete', icon: 'i-lucide-trash-2', color: 'error' as const, disabled: variants.value.length <= 1, onSelect: deleteVariant },
+  ],
+])
+
+function commit(next: LayoutNode | null) {
+  root.value = next
+  dirty.value = true
+  syncCurrent()
+}
+
+// ── Drops ──────────────────────────────────────────────────────────────────────
+function newLeaf(blockId: string): LayoutLeaf {
   const def = blocks.value[blockId]
-  const child: LayoutNode = {
-    type: 'leaf',
-    blockId,
-    config: defaultConfig[blockId] ?? {},
-    ...(def?.defaultSize !== undefined ? { defaultSize: def.defaultSize } : {}),
-  }
-  setPageTree(pageId.value, applyPaneDrop(root.value, { path: [a.index], edge: a.edge }, child))
-  placing.value = null
-  arm.value = null
+  const leaf = makeLeaf(blockId, def)
+  return def?.defaultConfig ? { ...leaf, config: { ...def.defaultConfig } } : leaf
 }
 
-function cancelPlace() {
-  placing.value = null
-  arm.value = null
+function onDrop(at: NodePath, edge: DropEdge, payload: BoardDragPayload) {
+  if (!import.meta.client) return
+  const r = root.value
+  if (payload.kind === 'block') {
+    if (!r) return commit(newLeaf(payload.blockId))
+    // Centre on a leaf swaps the block; an edge lands beside (flattening into a
+    // parallel split, wrapping otherwise).
+    if (edge === 'center') return commit(dropBlock(r, at, payload.blockId, 'center', blocks.value[payload.blockId]))
+    return commit(applyPaneDrop(r, { path: at, edge }, newLeaf(payload.blockId)))
+  }
+  // Moving a pane: remember the target by reference, lift the source out, find
+  // the target again in the shrunk tree, then land beside or inside it.
+  if (!r) return
+  const target = getNode(r, at)
+  if (!target) return
+  const { root: lifted, detached } = detachNode(r, payload.path)
+  if (!detached) return
+  if (!lifted) return commit(detached)
+  const targetPath = findNodePath(lifted, target)
+  if (!targetPath) return
+  if (edge === 'center') return commit(nestInside(lifted, targetPath, detached))
+  commit(applyPaneDrop(lifted, { path: targetPath, edge }, detached))
 }
 
-onMounted(() => {
-  const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') cancelPlace() }
-  window.addEventListener('keydown', onKey)
-  onUnmounted(() => window.removeEventListener('keydown', onKey))
-})
+function onResize(at: NodePath, sizes: number[]) {
+  if (!root.value) return
+  root.value = applySizes(root.value, at, sizes)
+  dirty.value = true
+  syncCurrent()
+}
 
-// snap-guide band styling for the armed edge
-const guideStyle = computed(() => {
-  const a = arm.value
-  if (!a) return {}
-  const thick = 4
-  const base = { position: 'absolute' as const, background: 'var(--ui-primary)', borderRadius: '3px', zIndex: 20 }
-  if (a.edge === 'left' || a.edge === 'right') {
-    return { ...base, top: `${a.rect.top + 6}px`, height: `${a.rect.height - 12}px`, width: `${thick}px`, left: `${a.rect.left + (a.edge === 'right' ? a.rect.width - thick : 0)}px` }
-  }
-  return { ...base, left: `${a.rect.left + 6}px`, width: `${a.rect.width - 12}px`, height: `${thick}px`, top: `${a.rect.top + (a.edge === 'bottom' ? a.rect.height - thick : 0)}px` }
-})
-const ghostStyle = computed(() => {
-  const a = arm.value
-  if (!a) return {}
-  const half = 0.42
-  const horiz = a.edge === 'left' || a.edge === 'right'
-  const w = horiz ? a.rect.width * half : a.rect.width
-  const h = horiz ? a.rect.height : a.rect.height * half
-  const left = a.edge === 'right' ? a.rect.left + a.rect.width - w : a.rect.left
-  const top = a.edge === 'bottom' ? a.rect.top + a.rect.height - h : a.rect.top
-  return { position: 'absolute' as const, left: `${left}px`, top: `${top}px`, width: `${w}px`, height: `${h}px`, zIndex: 19 }
-})
+// ── Selection + the bottom sheet ──────────────────────────────────────────────
+const sheetOpen = ref(false)
+const selectedNode = computed(() => (selected.value && root.value ? getNode(root.value, selected.value) : null))
+const selectedLeaf = computed(() => (selectedNode.value?.type === 'leaf' ? selectedNode.value : null))
+const selectedDef = computed(() => (selectedLeaf.value ? blocks.value[selectedLeaf.value.blockId] : null))
+const selectFields = computed(() => (selectedDef.value?.configSchema ?? []).filter(f => f.type === 'select' && f.options?.length))
 
-// --- preview + round-trip --------------------------------------------------------
-const showPreview = ref(false)
+function onSelect(at: NodePath) {
+  selected.value = at
+  sheetOpen.value = true
+}
+function setField(name: string, value: unknown) {
+  if (!root.value || !selected.value || !selectedLeaf.value) return
+  commit(setConfig(root.value, selected.value, { ...(selectedLeaf.value.config ?? {}), [name]: value }))
+}
+function removeSelected() {
+  if (!root.value || !selected.value) return
+  commit(removeNode(root.value, selected.value))
+  selected.value = null
+  sheetOpen.value = false
+}
 
-const issueNumber = ref<number | null>(null)
-const posting = ref(false)
-const postResult = ref<{ ok: boolean, message: string, url?: string } | null>(null)
+// The drag resolves its target itself; the page only supplies what a drop does.
+registerDrop(onDrop)
 
-async function postToTicket() {
-  posting.value = true
-  postResult.value = null
+// ── Palette strip: hold a chip, then drag it onto a pane edge ─────────────────
+function onChipDown(e: PointerEvent, blockId: string) {
+  arm(e, { kind: 'block', blockId, label: blocks.value[blockId]?.name ?? blockId }, { holdMs: 250 })
+}
+// A tap (pointer never activated a drag) still adds beside the selection.
+function onChipClick(blockId: string) {
+  if (consumeClick()) return
+  tapAdd(blockId)
+}
+// Tap-to-add for one-handed use: lands beside the selected pane (or the root) —
+// to the right on a wide screen, below on a phone, so columns don't get squeezed.
+function tapAdd(blockId: string) {
+  const r = root.value
+  if (!r) return commit(newLeaf(blockId))
+  const at = selected.value ?? []
+  const edge: DropEdge = import.meta.client && window.innerWidth < 640 ? 'bottom' : 'right'
+  commit(applyPaneDrop(r, { path: at, edge }, newLeaf(blockId)))
+}
+
+// ── Save ───────────────────────────────────────────────────────────────────────
+const { update } = useCollectionMutation('builderPages')
+const saveState = ref<'idle' | 'saving' | 'saved'>('idle')
+async function saveBoard() {
+  if (!root.value) return
+  syncCurrent()
+  saveState.value = 'saving'
   try {
-    const res = await $fetch<{ ok: boolean, posted: boolean, url?: string, body?: string, message: string }>('/api/builder/post-layout', {
-      method: 'POST',
-      body: { document: serialize(), issue: issueNumber.value },
+    await update(pageId.value, {
+      board: {
+        live: liveId.value,
+        variants: variants.value.map(v => ({ id: v.id, name: v.name, layout: serializeLayoutTree(v.tree) })),
+        // Kept for anything still reading the single-layout shape: the LIVE variant.
+        layout: serializeLayoutTree(liveVariant.value?.tree ?? { renderer: 'panes', root: root.value }),
+      },
     })
-    postResult.value = { ok: res.ok, message: res.message, url: res.url }
+    dirty.value = false
+    saveState.value = 'saved'
   }
-  catch (err) {
-    postResult.value = { ok: false, message: err instanceof Error ? err.message : 'Failed to post' }
-  }
-  finally {
-    posting.value = false
+  catch {
+    saveState.value = 'idle'
   }
 }
 </script>
 
 <template>
-  <div v-if="!page" class="mx-auto max-w-xl p-10 text-center">
-    <UIcon name="i-lucide-file-question" class="mx-auto size-10 text-muted" />
-    <h1 class="mt-3 text-lg font-semibold">Page not found</h1>
-    <UButton class="mt-4" to="/builder" icon="i-lucide-arrow-left" variant="soft">Back to Site flow</UButton>
-  </div>
-
-  <div v-else class="flex h-dvh flex-col" :style="{ viewTransitionName: `page-${page.id}` }">
+  <div class="flex h-dvh flex-col bg-default">
     <!-- Header -->
-    <header class="flex flex-wrap items-center gap-2 border-b border-default px-4 py-2">
-      <UButton icon="i-lucide-arrow-left" variant="ghost" color="neutral" size="sm" @click="router.back()" />
-      <h1 class="text-base font-bold">{{ page.name }}</h1>
-      <UBadge
-        v-if="page.isHome"
-        data-handoff="page-badge"
-        color="primary"
-        variant="solid"
+    <header class="flex items-center gap-2 border-b border-default px-2 py-1.5">
+      <UButton icon="i-lucide-arrow-left" color="neutral" variant="ghost" size="sm" to="/builder" aria-label="Back to site" />
+      <span class="min-w-0 truncate text-sm font-medium" data-handoff="page-badge">{{ page?.title ?? 'Page' }}</span>
+      <UInput
+        v-if="renaming"
+        v-model="renameDraft"
         size="xs"
-      >
-        <UIcon name="i-lucide-star" class="size-3" /> Home
-      </UBadge>
-
-      <!-- region pills (a hug bar pinned at an edge) -->
-      <UBadge
-        v-for="r in regions"
-        :key="r.region"
-        data-handoff="region-pill"
-        :data-region="r.region"
-        color="info"
-        variant="subtle"
-        size="xs"
-      >
-        <UIcon :name="r.region === 'top' ? 'i-lucide-arrow-up' : 'i-lucide-arrow-down'" class="size-3" />
-        {{ r.label }}
-      </UBadge>
-
-      <div class="ml-auto flex items-center gap-2">
-        <!-- floor readout (deriveSizing) -->
-        <span
-          v-if="floor"
-          data-handoff="floor-readout"
-          :data-hard-floor="floor.hardMinWidth"
-          :data-soft-floor="floor.softMinWidth"
-          class="rounded-md border border-default bg-elevated/60 px-2 py-1 font-mono text-[11px] text-muted"
-        >
-          stacks &lt;{{ floor.softMinWidth }}px · floor {{ floor.hardMinWidth }}px
-        </span>
+        autofocus
+        class="w-28"
+        data-handoff="variant-rename"
+        @keyup.enter="finishRename"
+        @blur="finishRename"
+      />
+      <UDropdownMenu v-else :items="variantMenu" :content="{ align: 'start' }">
         <UButton
-          :icon="showPreview ? 'i-lucide-pencil' : 'i-lucide-eye'"
-          size="sm"
-          variant="soft"
           color="neutral"
-          @click="showPreview = !showPreview"
-        >
-          {{ showPreview ? 'Edit' : 'Preview' }}
-        </UButton>
-      </div>
+          variant="soft"
+          size="xs"
+          :icon="currentId === liveId ? 'i-lucide-star' : 'i-lucide-circle-dashed'"
+          :label="current?.name ?? 'A'"
+          trailing-icon="i-lucide-chevron-down"
+          data-handoff="variant-switch"
+        />
+      </UDropdownMenu>
+      <span class="flex-1" />
+      <span v-if="saveState === 'saved' && !dirty" class="text-xs text-muted">Saved</span>
+      <UButton
+        icon="i-lucide-save"
+        size="sm"
+        :label="dirty ? 'Save' : 'Saved'"
+        :loading="saveState === 'saving'"
+        :disabled="!dirty && saveState !== 'saving'"
+        data-handoff="board-save"
+        @click="saveBoard"
+      />
     </header>
 
-    <div class="flex min-h-0 flex-1">
-      <!-- Palette -->
-      <aside v-if="!showPreview" class="w-44 shrink-0 overflow-y-auto border-r border-default p-2">
-        <p class="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted">Blocks</p>
-        <button
-          v-for="b in palette"
-          :key="b.id"
-          type="button"
-          class="mb-1 flex w-full items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition"
-          :class="placing === b.id ? 'border-primary bg-primary/10 text-primary' : 'border-default hover:border-primary/60'"
-          @click="startPlacing(b.id)"
-        >
-          <UIcon :name="b.icon" class="size-4" />
-          <span class="truncate">{{ b.name }}</span>
-        </button>
-        <p v-if="placing" class="mt-2 px-1 text-[11px] text-primary">
-          Click a pane edge to place · Esc to cancel
-        </p>
-      </aside>
+    <!-- Palette strip: drag a chip onto a pane edge, or tap to add beside the selection. -->
+    <nav class="flex gap-2 overflow-x-auto border-b border-default px-2 py-2" data-handoff="palette">
+      <button
+        v-for="b in blocksList"
+        :key="b.id"
+        type="button"
+        class="board-chip flex shrink-0 items-center gap-1.5 rounded-full border border-default bg-elevated px-3 py-1.5 text-xs cursor-grab active:cursor-grabbing select-none"
+        :data-block="b.id"
+        @pointerdown="onChipDown($event, b.id)"
+        @click="onChipClick(b.id)"
+      >
+        <UIcon :name="b.icon ?? 'i-lucide-box'" class="size-3.5" />
+        {{ b.name }}
+      </button>
+    </nav>
 
-      <!-- Board -->
-      <main class="relative min-w-0 flex-1 overflow-auto p-4">
-        <div
-          v-if="root"
-          ref="boardRef"
-          class="relative h-full min-h-[420px] w-full rounded-xl border border-default bg-default/20 p-2"
-          :class="placing ? 'cursor-copy' : ''"
-          @pointermove="onBoardMove"
-          @click="placing && commitPlace()"
-        >
-          <!-- Edit: the package's editable renderer OWNS its pane handles (#985) -->
-          <CroutonLayoutEditableRenderer
-            v-if="!showPreview"
-            :node="root"
-            :editable="!placing"
-            @update:node="onUpdateNode"
-            @detach="onDetach"
-          />
-          <!-- Preview: read-only, hug-aware (#986) -->
-          <CroutonLayoutRenderer
-            v-else
-            :node="root"
-            :interactive="false"
-          />
+    <!-- Board: the page, full-bleed at the real device width. -->
+    <main class="relative min-h-0 flex-1" data-handoff="board">
+      <BoardTree
+        v-if="root"
+        :node="root"
+        :selected="selected"
+        @resize="onResize"
+        @select="onSelect"
+      />
+      <div
+        v-else
+        class="flex h-full items-center justify-center p-6 text-center text-sm text-muted"
+        data-handoff="board-pane"
+        data-path=""
+      >
+        Empty page — drag a block here, or tap one below.
+      </div>
+    </main>
 
-          <!-- place preview: snap-guide on the armed edge + ghost-pane slot -->
-          <div
-            v-if="arm"
-            data-handoff="snap-guide"
-            :data-armed="placing ? 'true' : 'false'"
-            :style="guideStyle"
-          />
-          <div
-            v-if="arm"
-            data-handoff="ghost-pane"
-            class="flex items-center justify-center rounded-lg border-2 border-dashed border-primary bg-primary/10 text-[11px] font-semibold text-primary"
-            :style="ghostStyle"
-          >
-            drops here
-          </div>
-        </div>
-      </main>
+
+    <!-- What you're carrying, following the finger. Not part of the tree. -->
+    <div
+      v-if="dragPayload && dragPoint"
+      class="pointer-events-none fixed z-50 -translate-x-1/2 -translate-y-full rounded-full bg-primary px-3 py-1 text-xs font-medium text-inverted shadow-lg"
+      :style="{ left: dragPoint.x + 'px', top: (dragPoint.y - 12) + 'px' }"
+      data-handoff="drag-label"
+    >
+      {{ dragPayload.label }}
     </div>
 
-    <!-- Round-trip footer (#974) -->
-    <footer class="flex flex-wrap items-center gap-2 border-t border-default px-4 py-2">
-      <UIcon name="i-lucide-git-pull-request-arrow" class="size-4 text-muted" />
-      <span class="text-xs text-muted">Round-trip this layout onto a GitHub issue:</span>
-      <UInput
-        v-model.number="issueNumber"
-        type="number"
-        size="xs"
-        placeholder="issue #"
-        class="w-24"
-      />
-      <UButton size="xs" :loading="posting" icon="i-lucide-send" @click="postToTicket">
-        Post layout
-      </UButton>
-      <span
-        v-if="postResult"
-        class="text-xs"
-        :class="postResult.ok ? 'text-success' : 'text-error'"
-      >
-        {{ postResult.message }}
-        <NuxtLink v-if="postResult.url" :to="postResult.url" target="_blank" class="underline">view</NuxtLink>
-      </span>
-    </footer>
+    <!-- Bottom sheet: the selected pane's options. -->
+    <UDrawer v-model:open="sheetOpen" :overlay="false" :modal="false" :handle="true">
+      <template #content>
+        <div class="space-y-4 p-4 pb-8">
+          <div class="flex items-center gap-2">
+            <UIcon :name="selectedDef?.icon ?? 'i-lucide-box'" class="size-4" />
+            <span class="font-medium">{{ selectedDef?.name ?? selectedLeaf?.blockId ?? 'Pane' }}</span>
+            <span v-if="selected" class="ml-auto text-xs text-muted">pane {{ selected.join('.') || 'root' }}</span>
+          </div>
+          <UFormField v-for="f in selectFields" :key="f.name" :label="f.label ?? f.name">
+            <USelect
+              :model-value="(selectedLeaf?.config?.[f.name] as string) ?? f.default"
+              :items="f.options"
+              class="w-full"
+              @update:model-value="v => setField(f.name, v)"
+            />
+          </UFormField>
+          <p v-if="selectedLeaf && !selectFields.length" class="text-sm text-muted">No options for this block.</p>
+          <UButton v-if="selected" color="error" variant="soft" icon="i-lucide-trash-2" label="Remove from page" @click="removeSelected" />
+        </div>
+      </template>
+    </UDrawer>
   </div>
 </template>
+
+<style scoped>
+/* Chips scroll horizontally on a swipe; a held chip becomes a drag (pointer events). */
+.board-chip { touch-action: pan-x; -webkit-touch-callout: none; }
+</style>

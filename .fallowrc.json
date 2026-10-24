@@ -19,6 +19,10 @@
     // graph reads them as unused. Same generated-code category as the two entries above
     // (28 such findings across 8 apps before this entry) — #1455.
     "**/layers/**/collections/**/types.ts",
+    // The same generated collection code, shipped by the package that owns it (#2278)
+    "packages/*/collections/**/app/components/**/*.vue",
+    "packages/*/collections/**/app/composables/**/*.ts",
+    "packages/*/collections/**/types.ts",
     // Loaded by crouton-core's nuxt.config at build time (join(process.cwd(), ...))
     "**/crouton.config.js",
     // Referenced from nuxt.config `css:` arrays, not imports
@@ -89,13 +93,21 @@
     "**/playground/**",
     "**/e2e-templates/**",
     "packages/*/examples/**",
+    // The canary rig's crash-test dummy (#1878). Unreferenced ON PURPOSE — its README
+    // forbids importing it — so "unused file" is a true observation with a wrong
+    // conclusion. Ignoring it also keeps canary RUNS honest: a worker editing this folder
+    // must not collect a red fallow check for a reason unrelated to what the canary tests
+    // (the same trap as the acceptance gate going NEUTRAL on an unprepared poc).
+    "pocs/canary/**",
     // Internal notes/prototypes, not part of any code graph
     "writeups/**"
   ],
   // Generated per-POC/app type aggregator: re-exports layer collection types resolved via Nuxt's
   // .nuxt/tsconfig path aliases, which aren't built at audit time (fallback "resolver-less") — #1252
   "ignoreUnresolvedImports": [
-    "**/collections/**/types"
+    "**/collections/**/types",
+    // NuxtHub v0.10 virtual modules (hub:db / hub:kv / hub:blob), generated at build time
+    "hub:*"
   ],
   // Deps that ARE used, via mechanisms invisible to import analysis (verified #1144)
   "ignoreDependencies": [
@@ -121,6 +133,33 @@
     "maxCrap": 30,
     "thresholdOverrides": [
       {
+        // CRAP is UNDEFINED for a Vue template, not merely strict (#1794).
+        // Two of its premises fail at once: (1) a template's cyclomatic count
+        // counts DISPLAY variations (v-if/v-for), not independent logic paths,
+        // so it is not the quantity the formula was calibrated on; and (2) the
+        // coverage term is a proxy for "has anyone checked this", but templates
+        // in packages/* are verified by the e2e fixture harness, which emits no
+        // Istanbul coverage — so cov=0 is a measurement artifact, not a finding.
+        // Squaring an ill-fitting complexity by a false coverage amplifies the
+        // error, not the risk: a 6-branch template scores 42 while SubBar.vue
+        // sits in the baseline at 12 (CRAP 156).
+        //
+        // Scoped to CRAP ONLY. cyclomatic / cognitive / unit-size still gate
+        // these files, because "is this template doing too much" is a real
+        // question that does not depend on a coverage signal.
+        //
+        // Same principle already accepted twice in this file: the zero-coverage
+        // override below, and health.ignore's `**/layers/**/app/components/**`
+        // ("the CRAP is in the template"). This is the unenumerated third case.
+        //
+        // The RIGHT long-term fix is a real coverage signal for components
+        // (component/e2e tests), which would make CRAP valid here again rather
+        // than exempt — tracked separately.
+        "files": ["packages/**/app/components/**/*.vue"],
+        "maxCrap": 420,
+        "reason": "Vue templates carry no unit coverage by design (verified via the e2e fixture harness), so CRAP degenerates to cyc²+cyc and flags every new cyc≥5 component; cyclomatic/cognitive/unit-size gates still apply (#1794)"
+      },
+      {
         "files": [
           "apps/**",
           "pocs/**",
@@ -142,7 +181,10 @@
       "**/scripts/sync-wrangler-ids.mjs",
       "**/scripts/inject-wrangler-env.mjs",
       "**/layers/**/app/components/**/*.vue",
-      "**/layers/**/collections/**/server/**"
+      "**/layers/**/collections/**/server/**",
+      // …and the same generated code shipped by the package that owns it (#2278)
+      "packages/*/collections/**/app/components/**/*.vue",
+      "packages/*/collections/**/server/**"
     ]
   },
   "duplicates": {
@@ -157,6 +199,7 @@
       // Generated collection code (CRUD API routes, List/_Form, queries) — every collection is the
       // same crouton template, so cross-collection duplication is by design, not copy-paste (#1252)
       "**/layers/**/collections/**",
+      "packages/*/collections/**", // generated collections a package owns (#2278)
       // Generated per-app scaffold files — byte-identical across every crouton app/POC (#1252)
       "**/server/db/translations-ui.ts",
       "**/server/utils/_cf-stubs/**"
@@ -169,8 +212,27 @@
   // dead-code + duplication stay strict. Regenerate the ratchet as we burn legacy down:
   //   npx fallow health --save-baseline .fallow-health-baseline.json
   // (kept at repo root, not .fallow/, because fallow self-ignores its .fallow/ cache dir.)
+  // ALL THREE baselines, not just health (#1714). Health alone left dead-code and duplication
+  // with no baseline at all, so those two relied entirely on the base-snapshot attribution pass
+  // — and that pass is position-based, so a PR that merely DELETES or MOVES lines in a
+  // debt-carrying file gets the file's pre-existing findings attributed to it. PR #1708 went red
+  // with 12 complexity findings, 3 unused exports and 1 clone group that are byte-identical on
+  // `main`. The pressure that creates is backwards: the cheapest path to green was deleting
+  // exported symbols from a shared package on a zero-imports signal — exactly what #1149 forbids.
+  //
+  // These live in CONFIG rather than as CI flags so a local `npx fallow audit` (which CLAUDE.md
+  // tells you to run before pushing) judges the diff the same way CI does. A CI-only flag would
+  // make the two disagree, which is how you get a green local run and a red PR.
+  //
+  // REFRESH after genuinely paying debt down — never to silence a finding you just introduced:
+  //   npx fallow health    --save-baseline .fallow-health-baseline.json
+  //   npx fallow dead-code --save-baseline .fallow-dead-code-baseline.json
+  //   npx fallow dupes     --save-baseline .fallow-dupes-baseline.json
+  // (kept at repo root, not .fallow/, because fallow self-ignores its .fallow/ cache dir.)
   "audit": {
-    "healthBaseline": ".fallow-health-baseline.json"
+    "healthBaseline": ".fallow-health-baseline.json",
+    "deadCodeBaseline": ".fallow-dead-code-baseline.json",
+    "dupesBaseline": ".fallow-dupes-baseline.json"
   },
   "rules": {
     "unused-dependencies": "warn",

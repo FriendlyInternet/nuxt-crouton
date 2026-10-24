@@ -1,0 +1,90 @@
+{
+  "poc": "crouton-builder",
+  "specSource": "../crouton-builder-demo/spec.json",
+  "epic": 983,
+  "pr": 1124,
+  "title": "Crouton Builder — Graduation Plan",
+  "subtitle": "POC (crouton-builder-demo) → crouton-layout package + builder app",
+  "intro": "Each card leads with what changed and how to check it on this preview. Tap any behaviour listed under a card for the technical detail (what to expect · the DOM hook · the test). It's derived from the frozen 26-behaviour spec, so the plan can't drift from what we actually agreed.",
+  "statusLegend": {
+    "done": "landed + verified",
+    "active": "being built now",
+    "next": "queued, unblocked",
+    "later": "deferred (post-graduation)",
+    "blocked": "waiting on an earlier phase"
+  },
+  "phases": [
+    {
+      "id": "A",
+      "name": "Contract",
+      "status": "done",
+      "summary": "What changed: the list of behaviours the app must have is locked. From here on, \"done\" means \"matches this list\" — not \"the build is green\".",
+      "worksNow": "How to check: there's nothing to click — this IS the reference. Read the 26 behaviours in the cards below (tap one to see its test), or open the 🥽 menu → Plan to see this same list in-app.",
+      "steps": [
+        { "name": "A0 · Freeze spec ledger", "status": "done", "test": "spec.json has 26 entries; every `settled` entry carries a recorded `signedOff`." },
+        { "name": "A1 · Resolve contradictions", "status": "done", "test": "No entry contradicts another; superseded entries pruned." },
+        { "name": "A2 · Replace-table (POC fakes → real crouton)", "status": "done", "test": "Each `stopgap` entry names the real crouton thing that replaces it at graduation." }
+      ]
+    },
+    {
+      "id": "B",
+      "name": "Rebuild the app to satisfy the spec",
+      "status": "active",
+      "summary": "What changed: the builder is being rebuilt on real crouton pieces so it does everything the locked list says — keeping what the prototype proved, swapping its fakes for the real thing, and adding what it left open.",
+      "increments": [
+        {
+          "id": "B1",
+          "name": "Spine",
+          "status": "done",
+          "flow": "sequential",
+          "note": "What changed: the skeleton everything hangs off — built on the crouton-layout package, not copied from the prototype.",
+          "worksNow": "How to check: 1. Open /builder → you get a flow of page cards (the Site). 2. Tap a card → its board opens over REAL Artists / Bookings data. 3. Edit the board and hit Save, then reload → your layout is still there (it persisted to the collection).",
+          "specs": ["site-page-two-level", "real-collections", "page-site-routing", "board-persistence", "layouttree-serialise", "intrinsic-block-sizing", "composite-derive-sizing"]
+        },
+        {
+          "id": "B2",
+          "name": "Canvas & gestures",
+          "status": "active",
+          "flow": "staggered",
+          "note": "What changed: the board is the prototype's canvas, and the heavy gestures land on it one at a time — so you can check each the moment it ships instead of all at the end.",
+          "worksNow": "How to check (live now — focus editing): 1. Open a page board. 2. Double-click a card → a full-screen editor opens (device ruler, width slider, live panes over real data). 3. Drag a splitter or pick a variant → the change sticks. 4. Esc or ✕ to leave. Still coming on this card: snap-to-merge, drag-to-detach, pinch-zoom, per-card resize, region pinning.",
+          "specs": ["page-model-one-node", "focus-edit-view", "per-element-resize", "snap-dwell-arm", "pane-drop-beside", "ghost-ease-apart", "detach-reorder", "enter-page-fit", "add-block-land", "pinch-zoom", "drag-glow", "spacer-block", "page-site-transition"]
+        },
+        {
+          "id": "B3",
+          "name": "Additions (the app's superset)",
+          "status": "next",
+          "flow": "parallel",
+          "note": "What changed: nothing yet — these are new abilities the prototype only gestured at. Each ships behind its own review (schema / UI / test), not the side-by-side.",
+          "worksNow": "How to check: not built yet. Coming: pin a card to the top/bottom of the page, switch a list between rows / cards / table, detach panes nested deep, and save a layout back onto its GitHub ticket.",
+          "specs": ["page-regions-pin", "display-variants", "detach-reorder-nested", "round-trip-ticket"]
+        },
+        {
+          "id": "B4",
+          "name": "Deferred — the agent⇄human seat",
+          "status": "later",
+          "flow": "parallel",
+          "note": "What changed: nothing — the AI-arrange + multiplayer seat (#974). It's WHY the clean contract matters, but it's not needed for graduation.",
+          "worksNow": "How to check: not started. Deferred until after graduation.",
+          "specs": ["magic-ai-arrange", "multiplayer-collab"]
+        }
+      ]
+    },
+    {
+      "id": "C1",
+      "name": "Prove it — experience side-by-side",
+      "status": "blocked",
+      "summary": "What changed: nothing yet — this is the first sign-off. It checks every KEPT behaviour looks and works the same on the prototype and the new app, side by side.",
+      "worksNow": "How to check: walk each behaviour on both, and reply `lgtm <behaviour-id>` when it matches. It starts per-behaviour as each B2 gesture lands, so you're never waiting for a big-bang at the end.",
+      "gate": "C1 signed off — a recorded lgtm per kept behaviour (done comes from the sign-off, never from a green build)."
+    },
+    {
+      "id": "C2",
+      "name": "Prove it — crouton-conformance",
+      "status": "blocked",
+      "summary": "What changed: nothing yet — this is the second sign-off. It checks the app is a REAL crouton app under the hood: properly scaffolded, real collections, reusing crouton-layout instead of reinventing it.",
+      "worksNow": "How to check: a conformance checklist on the PR (frontend + accessibility + e2e + typecheck + structure). Approve it when it's green.",
+      "gate": "C2 checklist signed off. Graduation promotes ONLY when both C1 and C2 are signed off."
+    }
+  ]
+}

@@ -41,7 +41,7 @@ pnpm --filter velo dev                              # or: cd apps/velo && pnpm d
 
 | App | Port | | POC | Port |
 |---|---|---|---|---|
-| apps/triage | 3005 | | pocs/alexdeforce | 3001 |
+| — | | | pocs/alexdeforce | 3001 |
 | apps/velo | 3006 | | pocs/sintlukas | 3003 |
 | apps/kassa | 3007 | | pocs/crouton-builder-demo | 3010 |
 | e2e fixtures | 3000 | | pocs/crouton-builder **and** pocs/kvr | **3011 — collision**; run one with `--port` |
@@ -57,16 +57,39 @@ Pocs that set no port (`blog`, `thinkgraph*`, `three-demo`, `booking-demo` at th
 
 Do NOT verify with `nuxt preview`: crouton collection pages currently 500 under production-preset SSR — an internal data-fetch loses the auth cookie (`e2e/CLAUDE.md`, open problem). Operate against `nuxt dev`.
 
+## 1.5 Reproduce a runtime bug locally — MOBILE-FIRST (never push a fix blind)
+
+The method rule is in `AGENTS.md` (*Bug work → reproduce against the running system*): for a runtime bug (reload loop, 500, broken interaction), reproduce + verify the fix locally *before* pushing. Here's the crouton how-to. **This stack is phone-first (#722, `atelier-plan`) — drive at a phone viewport (390×844) by default**; only check desktop when a surface is explicitly wide.
+
+Write a throwaway driver **inside the repo tree** (playwright resolves from repo `node_modules`; a `/tmp` script can't import it) — `repro.local.mjs` at the repo root; don't commit it.
+
+```js
+import { chromium } from 'playwright'
+const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome' // glob newest if the build bumped
+const browser = await chromium.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] })
+const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 }) // MOBILE
+const page = await ctx.newPage()
+page.on('console', m => console.log('console', m.type(), m.text()))
+page.on('load', () => console.log('PAGE LOAD', page.url()))         // count loads → reload vs re-render
+page.on('framenavigated', f => f === page.mainFrame() && console.log('nav', f.url()))
+page.on('pageerror', e => console.log('PAGEERROR', e.message))
+```
+
+**Auth/team bootstrap** for a team-scoped page (better-auth's org calls need an **`origin` header**, else `MISSING_OR_NULL_ORIGIN`). Do it via `ctx.request` so cookies are shared:
+`POST /api/auth/sign-up/email {email,password,name}` → `POST /api/auth/organization/create {name,slug}` (headers `{origin, referer}`) → `POST /api/auth/organization/set-active {organizationId}` → seed rows via the collection API `POST /api/teams/<orgId>/<collection>` → `page.goto('/…')`.
+
+**Instrument, then observe — don't theorise.** A full-page reload in Nuxt is often chunk-error auto-reload; counting `load` events tells a reload from a re-render. (#988 board reload: three blind pushes vs one local repro that found it — autosave→refetch→reload — in minutes.)
+
 ## 2. Seeding
 
 **Package demo data** — every app has `db:seed` scripts (verified in the apps' `package.json`):
 
 ```bash
-pnpm --filter velo db:seed          # = crouton-seed --db velo-db --with-staff (local)
-pnpm --filter velo db:seed:staging  # = crouton-seed --db velo-staging-db --remote --with-staff
+pnpm --filter velo db:seed          # = crouton-seed --db velo-db (local)
+pnpm --filter velo db:seed:staging  # = crouton-seed --db velo-staging-db --remote
 ```
 
-`crouton-seed` (bin: `packages/crouton-cli/bin/crouton-seed.mjs`) discovers `SeedProvider`s from every extended `@fyit/crouton-*` package, emits idempotent upsert SQL, and executes it via `npx wrangler d1 execute <db> --local|--remote`. Flags (verified): `--db` (required) `--remote` `--dir` `--team` (default `test1`) `--locale` (default `nl`) `--with-staff` `--dry-run`. It also seeds the app's default layout: `crouton.layout.json` → a `layout_configs` row with id `default` (#709; `lib/seed-app.ts`).
+`crouton-seed` (bin: `packages/crouton-cli/bin/crouton-seed.mjs`) discovers `SeedProvider`s from every extended `@fyit/crouton-*` package, emits idempotent upsert SQL, and executes it via `npx wrangler d1 execute <db> --local|--remote`. Flags (verified): `--db` (required) `--remote` `--dir` `--team` (default `test1`) `--locale` (default `nl`) `--dry-run`. It also seeds the app's default layout: `crouton.layout.json` → a `layout_configs` row with id `default` (#709; `lib/seed-app.ts`).
 
 **⚠️ THE seed-visibility trap (code-derived, not reproduced end-to-end):** a local `crouton-seed` writes via `wrangler d1 execute --local` into `<app>/.wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite` (miniflare = wrangler's local Cloudflare simulator), but `nuxt dev` with `hub: { db: 'sqlite' }` reads `<app>/.data/db/sqlite.db`. `seed-app.ts` has **no copy step** into `.data/` (verified: it only shells out to `wrangler d1 execute` — re-check with the seed grep in the re-verify block). So locally-seeded data may never appear in the dev app. `crouton db-pull` handles the split explicitly — `lib/db-pull.ts` copies the imported DB to `.data/db/sqlite.db` and marks `_hub_migrations` applied. If seeded data "doesn't show up", this split is why; workaround is copying the sqlite file into `.data/db/sqlite.db` by hand (stop dev first).
 
@@ -107,7 +130,8 @@ Deploy/migrate mechanics live in the `deploy` skill — this is the *watching* s
 |---|---|---|
 | Live Worker logs | `pnpm --filter triage logs` / `--filter fanfare logs` (= `npx wrangler tail triage\|fanfare`) | Only some apps have a `logs` script (grep for it — re-verify block), and those tail the **production** worker. No staging tail script exists anywhere (verified at the snapshot); hand-run `npx wrangler tail <app>-staging` (unverified against a live worker — needs CF creds). No log persistence: an error nobody was tailing is gone. |
 | Prove a deployed preview works | `node scripts/smoke-deployed.mjs --url https://<app>.pmcp.dev --email <e> --password <pw> [--app <n>] [--manifest <app>/deploy.config.json]` | Login proof via `/api/auth/get-session` → optional CRUD round-trip (from `deploy.config.json` `smoke.crud`) → screenshot `screenshots/<app>-smoke.png`. CI runs it per deploy, report-only unless `smoke.required: true`. |
-| Seed a loginable review account on a deploy | `node scripts/seed-review-login.mjs --url <deployedUrl> --email <e> --password <pw>` | Uses the app's own HTTP auth routes (real password hashing); best-effort. |
+| Seed a loginable review account on a deploy | `node scripts/seed-review-login.mjs --url <deployedUrl> --email <e> --password <pw>` | Uses the app's own HTTP auth routes (real password hashing); best-effort. `--seed-team <slug>` attaches it to the seeded demo org — with `--db <d1>` (remote, the deploy path) **or** `--sqlite <path>` (the local `.data/db/sqlite.db`, #1777). |
+| **Look at a change locally, in one command** | `pnpm preview <app>` | Boot + seed + disposable review login + a **prefilled** one-click URL (`scripts/app-preview.mjs`, #1777). Use this instead of hand-rolling boot→seed→login; it's the only preview a **packages-only** change gets, since PR deploy previews match only `apps/<app>/**` by design. `--no-seed` / `--no-login` for faster re-runs; landing page comes from `reviewLogin.landing` in the app's `deploy.config.json`. |
 | What's in the staging DB | `node scripts/db-counts.mjs --app <app> --env staging` | §3. |
 
 At last verification, no runtime analytics was wired in any deployed app: `packages/crouton-analytics` exists but no app/poc/fixture depends on it (unverified beyond a grep of `package.json`s — re-run that grep before relying on it; from the #1073 discovery sweep, adapters were in-flight, #947).
@@ -115,11 +139,11 @@ At last verification, no runtime analytics was wired in any deployed app: `packa
 ## 6. Screenshots
 
 ```bash
-node scripts/app-shots.mjs <baseUrl> <path[:name]> [more paths...] [--out <dir>]
-# e.g. node scripts/app-shots.mjs http://localhost:3006 /:home /auth/login:login
+node scripts/app-shots.mjs <baseUrl> <path[:name]> [more paths...] [--out <dir>] [--desktop|--viewport WxH]
+# e.g. node scripts/app-shots.mjs http://localhost:3006 /:home /auth/login:login   # MOBILE (default)
 ```
 
-(Also `pnpm app:shots`.) Writes `screenshots/<name>.png`; exits 1 on any failure. It auto-resolves the **pre-installed** chromium under `/opt/pw-browsers/` (globs the newest build; override with `PLAYWRIGHT_CHROMIUM_PATH`) — a failing `npx playwright install` does NOT mean "no browser"; doctrine: `crouton-harness-observability` §5. All screenshots go in `screenshots/` at repo root (HARD GATE, root CLAUDE.md).
+**Shots are MOBILE (390×844) by default** — this stack is phone-first (#722); verify the phone layout first and only add `--desktop` (1280×900) for surfaces that are explicitly wide. (Also `pnpm app:shots`.) Writes `screenshots/<name>.png`; exits 1 on any failure. It auto-resolves the **pre-installed** chromium under `/opt/pw-browsers/` (globs the newest build; override with `PLAYWRIGHT_CHROMIUM_PATH`) — a failing `npx playwright install` does NOT mean "no browser"; doctrine: `crouton-harness-observability` §5. All screenshots go in `screenshots/` at repo root (HARD GATE, root CLAUDE.md).
 
 ## 7. Where artifacts land
 

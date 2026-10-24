@@ -13,6 +13,36 @@ Clarity over ceremony. Start simple; add complexity only when proven necessary (
 building — check the ecosystem first. Wrap async work in error handling, return `{ data, error }`.
 Write general-purpose solutions, not ones fitted to the example. Match the surrounding code's idiom.
 
+**Remove what you orphan.** A change that removes the *last* caller of a symbol, i18n key, or route
+removes the callee too — or states on the issue/PR why it stays. Deleting a button that was the only
+user of a translation, or the only link to a page, leaves that translation and that page dead; the
+now-unused leftover is part of your diff, not a later cleanup. The two orphan shapes a JS import
+graph can't see — a dead i18n key and a stranded Nuxt page — are surfaced (report-only, never
+blocking) by `scripts/lean-check.mjs`; run it, remove the leftover, or record why it stays.
+
+## Plain language (write for the owner, not the machine)
+
+Every message to the human — a chat reply, a GitHub comment, a handoff — is read fast, on a phone,
+by someone who did **not** build the mechanism you're describing. Write for that reader. This is the
+*word-choice* layer beneath the *structure* layer (the typed brief, below): pick the type and collapse
+the depth, then say the visible part **plainly**.
+
+- **No insider shorthand.** A word that only means something inside this repo — *re-dispatch,
+  artifact-gate, the filter converges, the sweep, needs-input* — is noise to the reader. Replace it
+  with plain words, or explain it in ≤3 words the first time. If you can't say it without the jargon,
+  you don't yet understand it well enough to say it at all.
+- **Lead with what they do or get, never the machinery.** "Your list will only show things that
+  need you" — not "the filter converges to the genuinely-yours set." Cut any sentence that only
+  describes how the plumbing works; the human doesn't operate the plumbing.
+- **One decision, ending in a plain choice.** Close an ask with `yes/no` or `A/B` on its own line —
+  never a compound, self-referential run-on question. If they have to re-read a sentence, it failed.
+- **Numbers are references, not the subject.** Say what changed; *link* the issue/PR number. "#2095
+  keeps it that way" tells the reader nothing.
+
+The test: read it aloud as if to someone who has never seen this repo. Any phrase that would make
+them ask "what does that mean?" gets rewritten. (This is judgment, like the quality pass — not a
+grep for banned words; the same term can be fine in a commit body and wrong to the owner.)
+
 ## The loop
 
 `issue-first → decompose → stage-gated work → sign-off gates → commit → observe → retro`
@@ -42,6 +72,18 @@ the stage, not the name):
 Edit-guarded stages need explicit, scoped approval before a change (granted once per initiative,
 never committed).
 
+**Flow through the stages in order — a capability matures `incubator → launched → shared`, and code
+lives at the stage it has *earned*.** The spike proves the idea and produces the spec/handoff; the
+**app** is the clean reference built to satisfy it; the **package** is *extracted from the proven
+app* as a deliberate third move — not written first and not produced simultaneously with the app.
+The trap is inverting it: growing a shared package with a spike's exploratory code, so unproven work
+lands in the tier every app inherits. So the rule is **consume vs grow**: a spike (or app) may freely
+*consume* an existing shared package, but must not *grow* one — no new shared surface until an app
+has proven it and you extract it on purpose. When a spike genuinely needs new capability, build it
+**in the app** (`launched`), prove it, then extract to `shared`. (Extraction is real package work —
+issue-first, the edit gate, cross-app typecheck — precisely because it's the promotion to the tier
+everyone inherits.)
+
 ## Sign-off gates
 
 A probabilistic runtime needs gates where a human should decide. A gate proposes the right thing and
@@ -64,6 +106,37 @@ no `lgtm`, not done. Where the work has an enumerable contract (a behaviour spec
 "done" is *per entry* — each one checked and signed, not the set waved through at once. And the verdict
 comes from **comparison against the expected result**, not from re-reading the list: a list can't
 reveal its own gaps; running the real thing next to the contract can.
+
+## Authoring a gate
+
+The gates above judge other people's work, so a wrong gate is worse than no gate — it refuses correct
+code, or waves the broken case through. Two checks, before a gate (or any rule, check or flow step)
+merges. Both are **advisory**: apply them where they mean something, not as ceremony.
+
+**Run the rule over the corpus, not just its tests.** Tests prove the rule matches its author's
+*imagination*; only the corpus proves it matches the repo. A validator for cross-collection references
+passed eight green unit tests and would have refused four shipping schemas, because it compared the
+reference against the *configured* name while the reference legitimately names the *generated* one
+(#1957). That same scan showed the fall-through branch it was "fixing" was load-bearing for the normal
+case — deleting it would have broken every cross-collection reference in the repo. Tests could not have
+shown that. The inverse shape is the same lesson: sign-off images were silently gitignored, so every
+hold posted a dead link, found by checking the artifact paths against the *real* ignore file (#1933).
+So: before merging, run the proposed rule over every file it would judge and report the hit count. Each
+refusal of existing code is then a claim to defend file by file. Skip it when there is no meaningful
+corpus (a rule over one generated file) — an empty corpus run proves nothing either way.
+
+**Ask of every step: can this path exit 0 having done nothing?** The most common defect here is not a
+crash but a **silent no-op** — an operation that succeeds, does nothing, and reports nothing. Three in
+one session: adding a file on an ignored path (exits 0, adds nothing — every sign-off dropped its
+image, #1933); adding a label an issue already carries (fires no event, so the listener never woke,
+#1750); filtering a list by the very field being reported on (records missing it vanished, and the
+report cheerfully said "none", #1953). Each exits 0, each produces a plausible-looking result, and
+**none is visible in the run's own output** — you find it later by noticing an absence, which is the
+expensive way. So pair the question with a second one: *what in the output would prove it acted?* And
+where an operation can no-op, **assert the effect** rather than assume it — check the artifact is
+committable rather than trusting the write; remove-then-add rather than hoping the event fires.
+(No detector is proposed: a shell exit code, an API semantic and an array filter share no syntax. The
+value is in the question being asked.)
 
 ## Deciding vs asking
 
@@ -125,6 +198,22 @@ confirmation. Human-action tasks are discrete **assigned** issues closed by a co
 (`> 🤖 **<tool>** · … · posted from <account> (not <human>) · _<context>_`); under a *bot* account,
 just name the source. **Link issues/PRs** as full URLs in chat (bare `#NN` isn't clickable).
 
+**An agent comment is a NOTIFICATION — lead with a typed brief, collapse the depth.** The
+reader is holding many threads on a phone, so the depth arriving *as* the ping makes every one
+cost a full read. One line saying which of **🔴 issue · 💡 proposal · ✅ done · 🔀 choice ·
+🛠 action · 👀 review** this is, one line saying what they must do, one link — then everything
+else inside `<details>`. **The depth is never cut, only moved**: if collapsing weren't a real
+escape hatch, agents would delete content instead, which is worse than the wall. A comment with
+no next action isn't ready to post — work out what you're asking for first.
+
+**And the inverse: a type that needs nothing back must not @mention.** A mention is a request
+for action; spending one on an FYI teaches the reader to ignore mentions, which costs more than
+the notification. Beware the silent leak here — a mention notifies from inside a blockquote and
+from inside `<details>` too; only code spans and fenced blocks are exempt. So a mandatory
+provenance disclaimer naming the account pings on *every* comment unless the handle is
+backticked, which is invisible in the rendered text and easily the largest source of false
+notifications.
+
 ## Commits
 
 `<type>(<scope>): <subject>` — `feat|fix|refactor|docs|test|chore|perf|style`; scopes are the stack
@@ -135,6 +224,13 @@ unrelated changes; never stage indiscriminately — stage per intent. Run doc-sy
 (`blame`→why; `bisect`→small diff). Merge/rebase preserving commits; **don't squash** by default —
 only when a PR's own history is noisy (`wip`/`oops`). Every commit on trunk: atomic, green,
 single-concern, real "why". One PR = one coherent change set.
+
+**Merging a stack: retarget before `--delete-branch`.** GitHub **auto-closes** (doesn't retarget) a
+PR whose base branch gets deleted. Before merging a stacked PR's base with `--delete-branch`,
+retarget each dependent PR onto the surviving integration branch first — or merge deepest-first so
+each merge carries the stack forward. (Incident: epic #1303, 2026-07-10 — merging #1330 with
+`--delete-branch` auto-closed #1344 and #1353, which were based on its branch; both survived only
+because stacked branches carry their ancestors' commits.)
 
 ## Decomposition pipeline (agents)
 
@@ -151,6 +247,23 @@ The moment a bug/regression/broken build is reported, step 0 is to find **how & 
 introduced** (`git log -S`/`-G`, `blame`, `bisect`) — or rule it a non-code cause (stale install,
 env, data) — and **record that** on the issue *before* fixing. A symptom-first fix can "repair" code
 that was never broken.
+
+**Reproduce against the running system — don't push a runtime fix blind.** For a *runtime* bug (a
+reload loop, a 500, a broken interaction), boot the thing locally and reproduce it — then verify the
+fix locally — *before* shipping. But verification has a **fidelity ladder** — `typecheck/unit →
+local dev → the deployed environment (real build, real data) → the end-user's actual device` — and
+each rung catches a class the ones below cannot: a local run can't see deploy-only state (a remote DB,
+a seed that never ran) or a production-build regression, and no headless engine substitutes for the
+user's real browser (a WebKit/iOS crash a local Chromium won't reproduce). So **"works" must name its
+rung** — a claim is only as strong as the highest rung you actually exercised, and "green locally" is
+necessary, not sufficient, for "works deployed." "I can't test this here" is a **hypothesis to probe**,
+not a fact: a claimed limitation (no browser, no local run, no CLI, no network to the deploy) is almost
+always narrower than it sounds — and when that limitation is exactly what blocks you from the rung that
+matters, the move is to **fix the limitation** (it is often a single setting) rather than design around
+it with a lossy workaround. The anti-pattern is pushing an unverified guess and waiting on a slow deploy
+to learn it was wrong — every blind push burns a deploy cycle and erodes trust; one reproduction at the
+right rung usually finds it in minutes. Instrument, then observe — the mechanism, not a theory.
+(Stack-specific how-to lives in the stack adapter's run-and-operate runbook.)
 
 ## Observe the harness
 

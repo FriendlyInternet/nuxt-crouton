@@ -6,7 +6,6 @@ import { readFileSync } from 'node:fs'
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import consola from 'consola'
 import { loadModules } from './module-registry.ts'
-import { getFrameworkPackages } from './utils/framework-packages.ts'
 
 // crouton-cli version, stamped into each scaffolded app's .crouton.json (provenance, #1233).
 const CROUTON_CLI_VERSION = (() => {
@@ -66,7 +65,6 @@ function resolveFeatures(featureNames: string[], modules: Record<string, any>): 
  */
 function buildDependencies(features: string[], modules: Record<string, any>): Record<string, string> {
   const deps: Record<string, string> = {
-    '@fyit/crouton': 'workspace:*',
     '@fyit/crouton-core': 'workspace:*',
     '@fyit/crouton-i18n': 'workspace:*',
     '@libsql/client': '^0.17.0',
@@ -84,21 +82,6 @@ function buildDependencies(features: string[], modules: Record<string, any>): Re
   }
 
   return deps
-}
-
-/**
- * Build the features object for crouton.config.js
- * Only include non-bundled features that were explicitly requested.
- */
-function buildFeaturesConfig(features: string[], modules: Record<string, any>): Record<string, boolean> {
-  const config: Record<string, boolean> = {}
-  for (const name of features) {
-    const mod = modules[name]
-    if (mod && !mod.bundled) {
-      config[name] = true
-    }
-  }
-  return config
 }
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -141,6 +124,10 @@ function tmplPackageJson(vars: ScaffoldVars): string {
     dev: 'nuxt dev',
     generate: 'nuxt generate',
     preview: 'nuxt preview',
+    // A scaffolded app is verifiable out of the box — the worker acceptance gate (#1849/#1866)
+    // runs `pnpm --filter <app> typecheck`, and `nuxt typecheck` runs `nuxt prepare` first so
+    // auto-imports resolve (a raw `npx nuxt typecheck` without prepare false-fails on them).
+    typecheck: 'nuxt typecheck',
     // Runs the per-collection schema-smoke tests the generator emits (#785).
     test: 'vitest run',
     // Guarded: a whole-monorepo `pnpm install` (e.g. on Cloudflare) runs every
@@ -221,7 +208,7 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 
   return `${cfImports}// https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton', '@fyit/crouton-devtools'],
+  modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -248,15 +235,9 @@ ${nitroBlock}
 }
 
 function tmplCroutonConfig(vars: ScaffoldVars): string {
-  const featuresConfig = buildFeaturesConfig(vars.features, vars.modules)
-  const featuresStr = Object.entries(featuresConfig)
-    .map(([k, v]) => `    ${k}: ${v}`)
-    .join(',\n')
-
   return `export default {
-  // Feature flags - which crouton packages to enable
-  features: {
-${featuresStr ? featuresStr + '\n' : ''}  },
+  // Which crouton packages this app uses is decided by \`extends\` in nuxt.config.ts
+  // (#2286). A package's prompted configuration lands under \`features.<alias>\`.
 
   // Collections to generate (add your collections here)
   // Example:
@@ -456,6 +437,22 @@ logs
 `
 }
 
+// The root tsconfig every Nuxt app needs: it EXTENDS the `.nuxt/tsconfig.json` that
+// `nuxt prepare` generates, which is what wires in the auto-import type declarations
+// (ref/defineEventHandler/useCrouton/…). Without this file `nuxt typecheck` runs
+// `vue-tsc` with default options, never sees `.nuxt`'s types, and reports every
+// auto-import as `TS2304: Cannot find name` — ~thousands of false errors on clean
+// generated code (#1872). #1866 gave the scaffold a `typecheck` SCRIPT but not the
+// tsconfig that makes it meaningful; this is that missing half. Byte-identical to the
+// root tsconfig in every working app (apps/velo, apps/triage, fixtures/*).
+export function tmplTsconfig(): string {
+  return `{
+  // https://nuxt.com/docs/guide/concepts/typescript
+  "extends": "./.nuxt/tsconfig.json"
+}
+`
+}
+
 function tmplAppConfig(): string {
   return `import { translationsUiConfig } from '@fyit/crouton-i18n/app/composables/useTranslationsUi'
 
@@ -613,9 +610,13 @@ async function resolveScaffoldContext(
   }
   const modules = await loadModules()
   const features = resolveFeatures(featureNames, modules)
-  const featuresConfig: Record<string, boolean> = {}
-  for (const f of features) featuresConfig[f] = true
-  const frameworkPackages = getFrameworkPackages(featuresConfig)
+  // Core always; every other resolved feature by its manifest's package name, unless
+  // core already bundles it (#2286 — the manifest is the package's self-description).
+  const frameworkPackages = ['@fyit/crouton-core']
+  for (const f of features) {
+    const mod = modules[f]
+    if (mod && !mod.bundled && mod.package && !frameworkPackages.includes(mod.package)) frameworkPackages.push(mod.package)
+  }
   if (theme) frameworkPackages.push(`@fyit/crouton-themes/${theme}`)
   // i18n is bundled but listed explicitly (it's always needed for translations-ui) — insert after core.
   if (!frameworkPackages.includes('@fyit/crouton-i18n')) {
@@ -626,7 +627,7 @@ async function resolveScaffoldContext(
 }
 
 // The full file list: core + (optionally) Cloudflare + the .crouton.json identifier (#1233).
-async function buildScaffoldFiles(ctx: ScaffoldContext, outDir: string | undefined, cf: boolean): Promise<ScaffoldFile[]> {
+export async function buildScaffoldFiles(ctx: ScaffoldContext, outDir: string | undefined, cf: boolean): Promise<ScaffoldFile[]> {
   const { vars, authSecret } = ctx
   const identifier = JSON.stringify({
     crouton: true, name: vars.name,
@@ -635,6 +636,7 @@ async function buildScaffoldFiles(ctx: ScaffoldContext, outDir: string | undefin
   }, null, 2) + '\n'
   const files: ScaffoldFile[] = [
     { path: 'package.json', content: tmplPackageJson(vars) },
+    { path: 'tsconfig.json', content: tmplTsconfig() },
     { path: 'nuxt.config.ts', content: tmplNuxtConfig(vars) },
     { path: 'crouton.config.js', content: tmplCroutonConfig(vars) },
     { path: '.crouton.json', content: identifier },

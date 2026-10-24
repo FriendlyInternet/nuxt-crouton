@@ -7,7 +7,7 @@
  * queue via a correlated EXISTS), so the query lives in the package rather than
  * in per-app generated code where it silently went missing (the "filters do
  * nothing" bug). Mirrors the bookings `admin-bookings` pattern: the package
- * owns the query, the app owns the tables (imported via `~~/layers/...`).
+ * owns the query and, since #2278, the tables too (`collections/*`).
  *
  * Request-shaping is the pure, unit-tested `order-filters` util; this handler
  * stays a thin fetch → build-where → delegate, matching `my-orders`. Returns
@@ -15,9 +15,11 @@
  * items and the row LEDs come from the `printqueues/status` poll, so the heavy
  * joins the generated collection GET does aren't needed here.
  */
-import { and, desc, eq, exists, inArray, sql } from 'drizzle-orm'
+import { and, desc, eq, exists, inArray, ne, sql } from 'drizzle-orm'
 import { printJobs } from '@fyit/crouton-printing/server/database/schema'
 import { requireTeamEvent } from '../../../../../../utils/team-event'
+import { planOutstandingCount, outstandingOrdersCondition } from '../../../../../../utils/pass-tickets'
+import { locationBlocksDeliverySql } from '../../../../../../utils/location-handover'
 import {
   parseLocationRemarks,
   parseOrderFilters,
@@ -49,30 +51,95 @@ function jobFilterConditions(db: any, salesOrders: any, f: OrderFilters) {
   ].filter(Boolean)
 }
 
+// Backlog-only (#1846, re-fixed #1875). The predicate itself is
+// `outstandingOrdersCondition` in `server/utils/pass-tickets.ts`, beside
+// OUTSTANDING_DEFINITION — it takes its tables as PARAMETERS, which is what lets
+// a package unit test reach it (`test/outstanding-list-filter.test.ts`). This
+// wrapper only resolves the app-layer tables the alias can't give a test.
+async function outstandingCondition(db: any, salesOrders: any) {
+  const { salesOrderitems } = await import('../../../../../../../collections/orderitems/server/database/schema')
+  const { salesProducts } = await import('../../../../../../../collections/products/server/database/schema')
+  const { salesLocations } = await import('../../../../../../../collections/locations/server/database/schema')
+  const { salesKdsbumps } = await import('../../../../../../../collections/kdsbumps/server/database/schema')
+
+  return outstandingOrdersCondition(db, {
+    orders: salesOrders,
+    orderitems: salesOrderitems,
+    products: salesProducts,
+    locations: salesLocations,
+    kdsbumps: salesKdsbumps
+  })
+}
+
 // Shared WHERE for both the list and the count so a filtered page and its total
 // stay in sync. Column-equality filters here; print-job EXISTS filters above.
 // owner stores the helper displayName (stable across logins) — what the
 // OrdersTab helper filter sends. Undefined filters drop out via .filter().
-function buildWhere(db: any, salesOrders: any, teamId: string, eventId: string, f: OrderFilters) {
+async function buildWhere(db: any, salesOrders: any, teamId: string, eventId: string, f: OrderFilters) {
   return and(
     eq(salesOrders.teamId, teamId),
     eq(salesOrders.eventId, eventId),
     ...[
       f.owner ? eq(salesOrders.owner, f.owner) : undefined,
-      f.clientId ? eq(salesOrders.clientId, f.clientId) : undefined
+      f.clientId ? eq(salesOrders.clientId, f.clientId) : undefined,
+      f.outstanding ? await outstandingCondition(db, salesOrders) : undefined
     ].filter(Boolean),
     ...jobFilterConditions(db, salesOrders, f)
   )
 }
 
+/**
+ * "Still waiting" — orders not cancelled and not yet handed to a customer (#1763).
+ *
+ * NOTE the separate scope: this deliberately does NOT reuse `buildWhere`. That
+ * one is filter-aware so a page and its total agree; a backlog figure that
+ * shrank when you picked a helper from the dropdown would be
+ * authoritative-looking and wrong. `planOutstandingCount` cannot receive a
+ * filter, which is what keeps the two apart.
+ */
+async function countOutstanding(db: any, salesOrders: any, teamId: string, eventId: string) {
+  const plan = planOutstandingCount({ teamId, eventId })
+  const { salesOrderitems } = await import('../../../../../../../collections/orderitems/server/database/schema')
+  const { salesProducts } = await import('../../../../../../../collections/products/server/database/schema')
+  const { salesLocations } = await import('../../../../../../../collections/locations/server/database/schema')
+  const { salesKdsbumps } = await import('../../../../../../../collections/kdsbumps/server/database/schema')
+
+  // Still to deliver = at least one location that REQUIRES confirmation has no
+  // bump (#1851). The rule is NOT spelled out here: it is the shared
+  // `locationBlocksDeliverySql`, which the per-product view (#1867) also uses.
+  // This query used to carry its own copy of the condition, so the pane counter
+  // and anything else asking the same question could drift apart silently.
+  const [row] = await db
+    .select({ count: sql<number>`count(distinct ${salesOrders.id})` })
+    .from(salesOrders)
+    .innerJoin(salesOrderitems, eq(salesOrderitems.orderId, salesOrders.id))
+    .innerJoin(salesProducts, eq(salesProducts.id, salesOrderitems.productId))
+    .innerJoin(salesLocations, eq(salesLocations.id, salesProducts.locationId))
+    .leftJoin(salesKdsbumps, and(
+      eq(salesKdsbumps.orderId, salesOrders.id),
+      eq(salesKdsbumps.locationId, salesProducts.locationId)
+    ))
+    .where(and(
+      eq(salesOrders.teamId, plan.teamId),
+      eq(salesOrders.eventId, plan.eventId),
+      ne(salesOrders.status, 'cancelled'),
+      locationBlocksDeliverySql({
+        bumpId: salesKdsbumps.id,
+        requiresHandover: salesLocations.requiresHandover
+      })
+    ))
+
+  return Number(row?.count ?? 0)
+}
+
 export default defineEventHandler(async (event) => {
   const { team, db, eventId } = await requireTeamEvent(event)
-  const { salesOrders } = await import('~~/layers/sales/collections/orders/server/database/schema')
+  const { salesOrders } = await import('../../../../../../../collections/orders/server/database/schema')
 
   const query = getQuery(event)
   const filters = parseOrderFilters(query)
   const { page, pageSize, offset } = parsePageParams(query)
-  const whereExpr = buildWhere(db, salesOrders, team.id, eventId, filters)
+  const whereExpr = await buildWhere(db, salesOrders, team.id, eventId, filters)
 
   const rows = await (db as any)
     .select({
@@ -98,5 +165,11 @@ export default defineEventHandler(async (event) => {
     .from(salesOrders)
     .where(whereExpr)
 
-  return { items: parseLocationRemarks(rows), total: Number(countRow?.count ?? 0), page, pageSize }
+  return {
+    items: parseLocationRemarks(rows),
+    total: Number(countRow?.count ?? 0),
+    outstanding: await countOutstanding(db, salesOrders, team.id, eventId),
+    page,
+    pageSize
+  }
 })

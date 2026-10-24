@@ -74,7 +74,7 @@ When a **deployed staging Worker** needs to talk to GitHub *by itself* (no human
 | Feature (component) | Worker secret name | Action | Minimal scope |
 |---|---|---|---|
 | **ticket-editor** (`workers/ticket-editor`) — commits an edited Excalidraw diagram back | `GITHUB_TOKEN` | commit files via Contents API | fine-grained PAT, repo-only · **Contents: R/W** |
-| **review-bridge** (`@fyit/crouton-devtools` → `POST /api/_review`) — posts a `🎯 Preview feedback` PR comment | `NUXT_CROUTON_REVIEW_GITHUB_TOKEN` | comment on a PR | fine-grained PAT, repo-only · **Pull requests: write** · **staging only** |
+| **review-bridge** (`@fyit/crouton-devtools` → `POST /api/_feedback`) — posts a `🎯 Preview feedback` PR comment | `NUXT_CROUTON_REVIEW_GITHUB_TOKEN` | comment on a PR | fine-grained PAT, repo-only · **Pull requests: write** · **staging only** |
 
 Rules for **every** Tier-2 token:
 - **Cloudflare Worker secret only** — `wrangler secret put <NAME> --env staging`. Never bake into the bundle, never expose to the client, **never on a production Worker**.
@@ -82,7 +82,7 @@ Rules for **every** Tier-2 token:
 - Prefer a **dedicated bot/machine account** over a person's PAT (attributable; doesn't impersonate a human's full access).
 - **Interim by design** — provision as disposable; do not adopt as "the credential."
 
-> ⚠️ Security note (review-bridge): `/api/_review` is currently **unauthenticated** — anyone who reaches the staging URL can trigger a comment. Keep staging behind login, treat the token as low-trust, and rotate aggressively until the App/OAuth model lands.
+> ⚠️ Security note (review-bridge): `/api/_feedback` is currently **unauthenticated** — anyone who reaches the staging URL can trigger a comment. Keep staging behind login, treat the token as low-trust, and rotate aggressively until the App/OAuth model lands.
 
 ---
 
@@ -156,7 +156,7 @@ Swapping two PATs is the least of it. The App is a GitHub-native **identity + we
 
 **Fixes things we currently do wrong**
 - **Posts as `nuxt-harness[bot]`, not @pmcp** — the *real* fix for the provenance problem we band-aided with the `require-comment-provenance` hook. Bot comments become unmistakable at the source.
-- **Retires the scattered per-feature PATs** and the **unauthenticated `/api/_review`** (actions tie to a real installation, not an open URL + shared low-trust token).
+- **Retires the scattered per-feature PATs** and the **unauthenticated `/api/_feedback`** (actions tie to a real installation, not an open URL + shared low-trust token).
 - **Exact permissions** — no more "the bot token lacks `workflows`/`actions`" walls; grant only what's chosen.
 
 **New capabilities**

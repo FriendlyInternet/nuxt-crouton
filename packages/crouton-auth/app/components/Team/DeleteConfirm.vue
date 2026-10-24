@@ -63,7 +63,7 @@ async function handleDelete() {
   try {
     await deleteTeam()
 
-    notify.success('Team deleted', { description: 'The team has been permanently deleted.' })
+    notify.success(t('teams.teamDeleted'), { description: t('teams.teamDeletedDescription') })
 
     confirmText.value = ''
     emit('update:open', false)
@@ -77,8 +77,8 @@ async function handleDelete() {
       await navigateTo('/')
     }
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Failed to delete team'
-    notify.error('Error', { description: message })
+    const message = e instanceof Error ? e.message : t('teams.failedToDeleteTeam')
+    notify.error(t('common.error'), { description: message })
   } finally {
     internalLoading.value = false
   }
@@ -138,17 +138,17 @@ watch(
           </template>
         </UAlert>
 
-        <div>
-          <label class="block text-sm font-medium mb-2">
+        <UFormField name="confirmText">
+          <template #label>
             {{ t('teams.typeToConfirmPrefix') }} <strong class="font-mono">{{ currentTeam?.name }}</strong> {{ t('teams.typeToConfirmSuffix') }}
-          </label>
+          </template>
           <UInput
             v-model="confirmText"
             :placeholder="currentTeam?.name"
             :disabled="isLoading"
-            class="font-mono"
+            class="font-mono w-full"
           />
-        </div>
+        </UFormField>
 
         <div class="flex justify-end gap-3">
           <UButton

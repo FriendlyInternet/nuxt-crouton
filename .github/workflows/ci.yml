@@ -37,10 +37,14 @@ jobs:
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       code: ${{ steps.filter.outputs.code }}
+      # CI files themselves (#2335): a workflow-only PR must still be shellchecked — it is
+      # exactly the PR where shell mistakes happen, and it used to skip the lint entirely.
+      workflows: ${{ steps.filter.outputs.workflows }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - id: filter
@@ -62,6 +66,11 @@ jobs:
             echo "code=false  (no code paths touched — heavy jobs will skip)" >&2
             echo "code=false" >> "$GITHUB_OUTPUT"
           fi
+          if echo "$files" | grep -qE '^\.github/(workflows|actions)/'; then
+            echo "workflows=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "workflows=false" >> "$GITHUB_OUTPUT"
+          fi
 
   # Was `lint-and-typecheck` — renamed under #1097: the job never ran eslint and
   # only typechecks the MCP server, so the old name overclaimed. App typecheck
@@ -71,16 +80,15 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -105,16 +113,15 @@ jobs:
     # layers must exist before `nuxt prepare` can resolve them.
     name: Type Check Apps
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -122,7 +129,7 @@ jobs:
 
       - name: Cache app workspace-dependency builds
         id: app-dep-cache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: packages/*/dist
           key: app-dep-builds-${{ hashFiles('packages/**/*.ts', 'packages/**/*.vue', 'pnpm-lock.yaml') }}
@@ -156,20 +163,19 @@ jobs:
     # gone: kassa typechecks green and is gated by typecheck-apps, #1097.)
     name: Build kassa (${{ matrix.preset }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         preset: [cloudflare-pages, node-server]
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -199,48 +205,118 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Check package documentation
         run: node scripts/check-docs.mjs
+
+  # An app's schemas/*.json is a COPY of its package's and forks silently from install
+  # onwards. kassa's products.json lost `required: true` that way, which is how order
+  # items ended up routing to no kitchen screen (#1766/#1769). Only UNDECLARED
+  # behavioural drift fails — intentional divergence lives in
+  # scripts/schema-drift.baseline.json with a reason. The unit tests for the checker
+  # itself are picked up by the `scripts-tests` job's scripts/*.test.mjs glob.
+  schema-drift-check:
+    name: Schema Drift Check
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: Check app↔package schema drift
+        run: node scripts/check-schema-drift.mjs
+
+  # Does every CHANGED .vue actually compile? (#2182) The pi worker self-heals its OWN broken
+  # SFCs in-run (work-issue-pidev.yml), but a hand-written or other-lane PR has no such guard —
+  # and an uncompilable `.vue` (an unbalanced/unclosed tag) reaches CI only INDIRECTLY (a build
+  # or E2E dev-server 500), never as a clear "this file doesn't parse". This is the direct gate:
+  # a deterministic `@vue/compiler-sfc` parse of the diff's `.vue`, ~ms, no app boot — the same
+  # scripts/verify-touched-compiles.mjs the worker uses, so the two can't drift.
+  compile-check:
+    name: Compile changed .vue
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      # --ignore-scripts skips postinstall (nuxt prepare); we only need @vue/compiler-sfc on disk.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Compile every changed .vue
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
+            BASE="$(git merge-base "origin/$BASE_REF" HEAD)"
+          else
+            BASE="$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)"
+          fi
+          node scripts/verify-touched-compiles.mjs --base "$BASE"
 
   sync-validation:
     name: Sync Validation
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Validate field types sync
         run: node scripts/validate-field-types-sync.mjs
+
+      # #1845: an async function inside the ARRAY form of definePageMeta({ middleware })
+      # never gets unctx's await-restore shim, so the Nuxt context is lost across the
+      # await and navigateTo() throws during SSR (#1839). Invisible to typecheck, to the
+      # build, and to eslint (which this workflow doesn't run) — hence a dedicated check.
+      - name: Check page middleware async context
+        run: node scripts/check-page-middleware.mjs
 
   mcp-server-tests:
     name: MCP Server Tests
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -257,37 +333,37 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies (skip postinstall scripts)
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Cache layer builds
-        id: layer-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            packages/crouton-auth/dist
-            packages/crouton-core/dist
-            packages/crouton/dist
-          key: layer-builds-${{ hashFiles('packages/crouton-auth/**/*.ts', 'packages/crouton-core/**/*.ts', 'packages/crouton/**/*.ts') }}
+      # --ignore-scripts above also skips better-sqlite3's native build, so any test
+      # that opens a real SQLite DB dies on "Could not locate the bindings file" and
+      # has to be skipped in CI — which is how the #1612 seed contract went dark.
+      # Same fix already live in deploy-app/docs/pocs (#154). No `|| true` here: in
+      # the test job a missing binding must fail loudly, not silently re-skip. (#1880)
+      - name: Build better-sqlite3's native binding
+        run: pnpm rebuild better-sqlite3
 
-      - name: Build layer packages
-        if: steps.layer-cache.outputs.cache-hit != 'true'
-        run: |
-          pnpm --filter '@fyit/crouton-auth' build
-          pnpm --filter '@fyit/crouton-core' build
-          pnpm --filter '@fyit/crouton' build
+      # Build ALL @fyit packages, not a hand-listed three (#2073). This step used to name
+      # crouton-auth / crouton-core / crouton explicitly, which silently assumed no app ever
+      # consumes another dist-built package. Adding `@fyit/crouton-devtools` to the apps broke
+      # `nuxt prepare` below with "Could not load `@fyit/crouton-devtools`. Is it installed?" —
+      # the exact failure `warm-packages` was written for ("a subset can miss a package the app
+      # transitively extends", #1222). Using the shared action means the next dist-consumed
+      # package needs no edit here, and it shares the content-addressed cache with the deploy
+      # jobs instead of maintaining a second, narrower one.
+      - uses: ./.github/actions/warm-packages
 
       - name: Prepare apps
         run: |
@@ -304,7 +380,7 @@ jobs:
         run: pnpm test:coverage
 
       - name: Upload coverage for the fallow audit
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: vitest-coverage
           path: coverage/coverage-final.json
@@ -315,8 +391,9 @@ jobs:
     needs: changes
     if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
@@ -346,29 +423,28 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Build crouton package
-        run: pnpm --filter '@fyit/crouton' build
+      # publint runs on crouton-core since the @fyit/crouton meta package was deleted
+      # (#2290). attw went with it: the meta module was the only package whose
+      # declaration files resolved cleanly, so the check validated nothing else.
+      - name: Build crouton-core
+        run: pnpm --filter '@fyit/crouton-core' build
 
       - name: Check package exports (publint)
         run: pnpm check:publint
-
-      - name: Check TypeScript types (attw)
-        run: pnpm check:attw
 
   # The pure `scripts/*.mjs` helpers (deploy-detect, packages-guard, harness-stages,
   # pipeline-context, pipeline-loop-guard, …) carry `node --test` contracts next to them. This
@@ -380,13 +456,130 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
       - name: Run scripts/*.test.mjs
         run: node --test scripts/*.test.mjs
+
+  # Lint the bash embedded in our workflows (#1904). ~700 lines of shell live inside YAML with no
+  # local execution path, and every defect found in the pi worker's finish step so far lived
+  # there, so any feedback at all is an improvement on none.
+  #
+  # WHAT IT DOES NOT COVER — stated up front, because an earlier version of this comment claimed
+  # otherwise. shellcheck does NOT catch the #1876 shape (`X="$(grep …)"` aborting the step under
+  # `set -e` when grep finds nothing). Verified, not assumed: that snippet is clean at
+  # `-S warning`, and still clean with `-o all`. SC2311/SC2312 are about a return value being
+  # MASKED (`export X="$(…)"`), which is the opposite failure. The guard against #1876 is
+  # pi-finish.mjs plus its unit tests — this job is a broad shell-hygiene net, not that guard.
+  # Its first run earned its keep anyway: 3 of our `# shellcheck disable=` directives were
+  # malformed and had been silently not applying.
+  #
+  # BLOCKING as of #1904. It shipped warn-only for one commit on the theory that a corpus
+  # predating the check would have a backlog worth draining first. Measured instead of assumed:
+  # 203 run-blocks produced 14 findings, and 11 of those were manufactured by this job's own
+  # extractor — substituting an Actions expression with a literal turned `[ "$X" = "y" ]` into a
+  # constant comparison (SC2050/SC2194/SC2157). Substituting a VARIABLE instead removes all 11
+  # without weakening a single rule. The real residue was 3 malformed `# shellcheck disable=`
+  # directives (SC1125 — our `— prose` suffix is invalid syntax, so those disables were being
+  # dropped) and 2 deliberate `find | xargs -I{}` uses, all fixed at the source. Backlog: zero,
+  # so there is nothing left for warn-only to protect.
+  shellcheck-workflows:
+    name: Shellcheck workflow shell
+    needs: changes
+    # Runs on code changes AND on CI-file changes (#2335) — a PR that edits only a workflow
+    # or a composite action is the one that most needs this and used to skip it.
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Extract each `run:` block and lint it
+        run: |
+          set -uo pipefail
+          # js-yaml is installed into a SCRATCH dir and reached via NODE_PATH. Two earlier shapes
+          # both failed on a runner while passing locally, so the reasoning is recorded here:
+          #   • `npm i -g` — a global prefix is NOT on `node -e`'s resolution path from the repo
+          #     root ⇒ MODULE_NOT_FOUND.
+          #   • `npm i` in the repo root — dies with EUNSUPPORTEDPROTOCOL on the root
+          #     package.json's `catalog:` deps, which npm cannot parse (pnpm-only protocol).
+          # A scratch dir has no package.json to inherit, so neither applies. Locally this all
+          # "worked" only because js-yaml is already in this repo's node_modules as a transitive
+          # dep — and this job deliberately runs no `pnpm install`.
+          # Errors are NOT redirected to /dev/null: hiding npm's stderr is what made the second
+          # failure a silent 2-second exit with nothing to read.
+          DEPS=/tmp/wf-deps
+          mkdir -p "$DEPS"
+          ( cd "$DEPS" && npm init -y >/dev/null && npm i --no-audit --no-fund js-yaml@4 >/dev/null ) \
+            || { echo "::error::could not install js-yaml into $DEPS"; exit 1; }
+          export NODE_PATH="$DEPS/node_modules"
+          node -e 'require("js-yaml")' || { echo "::error::js-yaml unavailable — cannot parse workflows"; exit 1; }
+          mkdir -p /tmp/wf-shell
+          node -e '
+            const yaml = require("js-yaml"), fs = require("fs"), path = require("path");
+            let n = 0;
+            // Workflows AND composite actions (.github/actions/*/action.yml, #2335): the steps
+            // under an action `runs:` carry `run:` blocks exactly like job steps, so lint them too.
+            // (No apostrophes in these comments: this whole program sits inside a single-quoted
+            // shell string, and one apostrophe ends it — the local extractor caught exactly that.)
+            const sources = fs.readdirSync(".github/workflows").filter(f => /\.ya?ml$/.test(f))
+              .map(f => ({ label: f, file: path.join(".github/workflows", f), jobsOf: d => d?.jobs || {} }));
+            if (fs.existsSync(".github/actions")) {
+              for (const dir of fs.readdirSync(".github/actions")) {
+                const file = path.join(".github/actions", dir, "action.yml");
+                if (fs.existsSync(file)) sources.push({ label: `action-${dir}`, file, jobsOf: d => ({ runs: { steps: d?.runs?.steps || [] } }) });
+              }
+            }
+            for (const { label: f, file, jobsOf } of sources) {
+              let doc; try { doc = yaml.load(fs.readFileSync(file, "utf8")) } catch { continue }
+              for (const [jobId, job] of Object.entries(jobsOf(doc))) {
+                for (const [i, step] of (job.steps || []).entries()) {
+                  if (typeof step.run !== "string") continue;
+                  // Actions expressions are not shell, so they have to be substituted with
+                  // SOMETHING before shellcheck can parse the structure around them. Substitute a
+                  // VARIABLE, not a literal: a literal turns `[ "$X" = "y" ]` into a constant
+                  // comparison and shellcheck dutifully reports SC2050/SC2194/SC2157 on code that
+                  // is fine — 11 of the first run`s 14 findings were this, i.e. the check
+                  // inventing its own backlog. The preamble assigns it so SC2154 stays quiet.
+                  // (NB: never write a literal expression delimiter inside a `run:` block —
+                  // Actions evaluates it at COMPILE time, and an empty one fails the whole
+                  // workflow with zero jobs, which is exactly how this job first shipped red.)
+                  const body = step.run.replace(/\$\{\{[^}]*\}\}/g, "$GHA_EXPR");
+                  const shell = step.shell || job.defaults?.run?.shell || doc.defaults?.run?.shell || "bash";
+                  if (!/^bash|^sh/.test(shell)) continue;
+                  // `export` + quotes so the preamble is itself clean (a bare assignment trips
+                  // SC2034 unused + SC2209 "did you mean $(…)" in every one of the 203 files).
+                  const preamble = "#!/bin/bash\nexport GHA_EXPR=\"gha-expr\"\n";
+                  fs.writeFileSync(`/tmp/wf-shell/${f}__${jobId}__${i}.sh`, preamble + body);
+                  n++;
+                }
+              }
+            }
+            console.log(`extracted ${n} run-block(s)`);
+          '
+          # PINNED. `apt-get install shellcheck` gives whatever the runner image ships (0.9.0 at
+          # the time of writing) — for a BLOCKING gate that means a base-image bump can introduce
+          # new rules and turn the check red with no code change. The pinned tarball is also the
+          # version this job was validated against.
+          #
+          # No `|| true`: a blocking gate that silently degrades to "shellcheck: command not
+          # found" would be the #1751 shape — a check reporting on something it never ran.
+          SC_VERSION=v0.10.0
+          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${SC_VERSION}/shellcheck-${SC_VERSION}.linux.x86_64.tar.xz" \
+            | tar -xJ -C /tmp
+          SHELLCHECK="/tmp/shellcheck-${SC_VERSION}/shellcheck"
+          "$SHELLCHECK" --version
+          # Excluded, all three because the EXTRACTION makes them meaningless rather than because
+          # we tolerate them: SC2086 (word-splitting on a substituted expression), SC2016 (single
+          # quotes around a substituted expression), SC1091 (a sourced file that does not exist in
+          # /tmp). Everything else at -S warning is on and blocking.
+          "$SHELLCHECK" -S warning -e SC2086,SC2016,SC1091 /tmp/wf-shell/*.sh
 
   fallow-audit:
     if: needs.changes.outputs.code == 'true'
@@ -396,32 +589,53 @@ jobs:
     # existing baseline never walls a PR red; it stops NEW dead code,
     # duplication, and dependency drift at the door. Signal quality was
     # proven by the #1143 triage (712 → 7 unused-file false positives).
+    #
+    # BASELINES (#1714) — three committed artifacts at the repo root, wired in
+    # `.fallowrc.json` under `audit` (NOT as flags here, so a local
+    # `npx fallow audit` judges a diff exactly as CI does):
+    #   .fallow-health-baseline.json · .fallow-dead-code-baseline.json ·
+    #   .fallow-dupes-baseline.json
+    # Before #1714 only `health` had one, so dead-code and duplication relied
+    # solely on the base-snapshot attribution pass — which is position-based and
+    # therefore blamed a PR for a debt-carrying file's PRE-EXISTING findings the
+    # moment it deleted or moved lines there (reproducer: PR #1708 went red with
+    # 12 findings byte-identical on `main`). Regenerate them only when debt is
+    # genuinely paid down — see the refresh commands in `.fallowrc.json`.
+    #
+    # KNOWN, DELIBERATE: this job installs with `--ignore-scripts`, so the audit
+    # logs "Nuxt project missing .nuxt/tsconfig.json". Do NOT "fix" that by
+    # adding `nuxt prepare` here. fallow extracts the BASE snapshot to its own
+    # temp dir and exposes no hook to prepare it, so preparing only the head
+    # would make head resolve BETTER than base — widening the very asymmetry
+    # that mis-attributes findings. Both sides are currently degraded equally,
+    # which is symmetric and therefore safe. (It would also cost a full package
+    # build, since `nuxt prepare` needs the workspace packages built first.)
     name: Fallow Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     # Waits on the test job for its coverage artifact (#1256): real per-function
     # coverage makes the restored maxCrap 30 measure untested-complex code.
     # `changes` added for #1698 — the per-job path gate.
     needs: [changes, test]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history: audit diffs against the merge-base with main
           fetch-depth: 0
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Download vitest coverage
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: vitest-coverage
           path: coverage
@@ -439,9 +653,11 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [changes, typecheck-mcp, typecheck-apps, build-kassa, docs-check, sync-validation,
-            mcp-server-tests, test, changeset-check, package-check, scripts-tests, fallow-audit]
+    needs: [changes, typecheck-mcp, typecheck-apps, build-kassa, docs-check, schema-drift-check,
+            compile-check, sync-validation, mcp-server-tests, test, changeset-check, package-check,
+            scripts-tests, fallow-audit, shellcheck-workflows]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Every needed job succeeded or was legitimately skipped
         run: |

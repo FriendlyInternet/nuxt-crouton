@@ -122,10 +122,14 @@
           "title": "Écran cuisine",
           "live": "en direct",
           "active": "{count} actives",
-          "allCaughtUp": "Tout est à jour — aucune commande en cours.",
-          "bump": "Validé",
+          "allCaughtUp": "Rien à remettre — tout est parti.",
+          "bump": "Remis",
+          "tapToConfirm": "Touchez pour confirmer",
           "staff": "personnel",
-          "eventNotFound": "Événement introuvable"
+          "eventNotFound": "Événement introuvable",
+          "stale": "Non actualisé",
+          "staleHint": "Cet écran a perdu le contact avec le serveur — les commandes affichées peuvent être obsolètes. Vérifiez la connexion.",
+          "connecting": "connexion"
         }
       },
       "salesOrders": {
@@ -202,7 +206,16 @@
       "orders": "Commandes",
       "avgOrder": "Commande moy.",
       "topProducts": "Meilleurs produits",
-      "noSalesYet": "Pas encore de ventes"
+      "noSalesYet": "Pas encore de ventes",
+      "outstanding": "En attente",
+      "perProduct": {
+        "title": "Par produit",
+        "sold": "Vendu",
+        "outstanding": "À livrer",
+        "allLocations": "Tout",
+        "stillOut": "{count} à livrer",
+        "directHandover": "Cet emplacement sert directement — rien ne peut rester en attente ici"
+      }
     },
     "common": {
       "save": "Enregistrer",
@@ -246,6 +259,9 @@
       "noHelperPinTitle": "Aucun code PIN bénévole défini pour cet événement",
       "noHelperPinDescription": "Sur une page protégée, ce bloc se déverrouille avec le code PIN bénévole de l’événement — sans code, les bénévoles ne peuvent pas se connecter. Définissez le code PIN dans les paramètres de l’événement.",
       "product": "Produit",
+      "category": "Catégorie",
+      "price": "Prix",
+      "noCategory": "Sans catégorie",
       "total": "Total",
       "kitchenDisplay": "Écran cuisine",
       "orders": "Commandes",
@@ -274,7 +290,8 @@
       "locationRemarkPlaceholder": "Ajouter une remarque pour ce lieu…",
       "remark": "Remarque",
       "remarkPlaceholder": "Saisissez la remarque…",
-      "staffOrder": "Commande du personnel"
+      "staffOrder": "Commande du personnel",
+      "staffOrderShort": "Personnel"
     },
     "products": {
       "title": "Produits",
@@ -282,8 +299,7 @@
       "noProducts": "Aucun produit disponible",
       "outOfStock": "Rupture de stock",
       "options": "Options",
-      "addToCart": "Ajouter au panier",
-      "inCart": "Commandé"
+      "addToCart": "Ajouter au panier"
     },
     "categories": {
       "all": "Tout",
@@ -342,7 +358,10 @@
       "clientHelp": "Sélectionnez un client existant ou créez-en un nouveau",
       "clientRequired": "Client requis",
       "clientRequiredDescription": "Cet événement nécessite un client. Veuillez en sélectionner ou en créer un.",
-      "deleteError": "Impossible de supprimer la commande"
+      "deleteError": "Impossible de supprimer la commande",
+      "cancel": "Annuler",
+      "cancelConfirm": "Sûr ?",
+      "cancelError": "Impossible d'annuler la commande"
     },
     "events": {
       "title": "Événements",
@@ -359,7 +378,6 @@
       "eventNotFound": "Événement introuvable",
       "selectEvent": "Sélectionner un événement...",
       "duplicate": "Dupliquer",
-      "openPos": "Ouvrir la caisse",
       "settings": "Paramètres"
     },
     "form": {
@@ -490,6 +508,8 @@
       "filters": "Filtres",
       "resetFilters": "Réinitialiser les filtres",
       "allClients": "Tous les clients",
+      "allProducts": "Tous les produits",
+      "allCategories": "Toutes les catégories",
       "allPrintStatuses": "Tous les statuts",
       "printBusy": "En cours",
       "addPrinter": "Ajouter une imprimante",
@@ -531,7 +551,7 @@
       "noLocations": "Aucun emplacement",
       "noHelpers": "Aucun bénévole connecté actuellement.",
       "expires": "Expire",
-      "addProduct": "Ajouter un produit",
+      "addProduct": "Produit",
       "loadingProducts": "Chargement des produits...",
       "noProducts": "Aucun produit",
       "inThisCategory": " dans cette catégorie",
@@ -553,7 +573,7 @@
       "currency": "Devise",
       "currencyEur": "Euro (€)",
       "currencyUsd": "Dollar ($)",
-      "showInactive": "Produits inactifs",
+      "showInactive": "Inactifs",
       "editCatalog": "Modifier",
       "doneEditing": "Terminé",
       "clientsPanel": {
@@ -586,7 +606,12 @@
         "dataStat": "chiffre d'affaires",
         "settingsDesc": "Détails de l'événement, imprimantes, texte des tickets et aides",
         "settingsStat": "imprimantes"
-      }
+      },
+      "outstanding": "{count} en préparation",
+      "outstandingActive": "{count} en préparation (filtré)",
+      "outstandingNone": "Rien en préparation",
+      "outstandingFilter": "Afficher seulement celles-ci",
+      "outstandingFilterClear": "Afficher toutes les commandes"
     },
     "helpers": {
       "title": "Bénévoles actifs",
