@@ -34,7 +34,7 @@ export async function doctor(appDir: string): Promise<DoctorResult> {
   const pkg = await loadJson(join(appDir, 'package.json'))
 
   // 1. Missing dependencies vs the packages nuxt.config.ts extends (#2286)
-  checks.push(...await checkFeatureDeps(config, pkg))
+  checks.push(...await checkFeatureDeps(appDir, config, pkg))
 
   // 2. Stale wrangler.toml placeholder IDs
   checks.push(...await checkWranglerIds(appDir))
@@ -90,7 +90,7 @@ async function loadConfig(appDir: string): Promise<Record<string, any> | null> {
 
 // ─── Check 1: Feature dependencies ───────────────────────────────
 
-async function checkFeatureDeps(config: Record<string, any> | null, pkg: Record<string, any> | null): Promise<DoctorCheck[]> {
+async function checkFeatureDeps(appDir: string, config: Record<string, any> | null, pkg: Record<string, any> | null): Promise<DoctorCheck[]> {
   const results: DoctorCheck[] = []
 
   if (!config) {
@@ -106,7 +106,7 @@ async function checkFeatureDeps(config: Record<string, any> | null, pkg: Record<
   const allDeps = { ...pkg.dependencies, ...pkg.devDependencies }
 
   // The packages the app extends are the ones that must be installed (#2286).
-  for (const id of resolveExtendedPackages(process.cwd())) {
+  for (const id of resolveExtendedPackages(appDir)) {
     const mod = MODULES[packageAlias(id)]
     if (!mod) continue
     if (mod.bundled) continue // bundled in @fyit/crouton-core
