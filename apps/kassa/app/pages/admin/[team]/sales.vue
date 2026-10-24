@@ -17,7 +17,9 @@ const { t } = useT()
 </script>
 
 <template>
-  <UDashboardPanel>
+  <!-- Body carries no padding: pages own their p-4 sm:p-6 gutter so content lines up
+       with the top bar, matching CroutonTabsPanel (#2419). -->
+  <UDashboardPanel :ui="{ body: 'p-0 sm:p-0 gap-0 sm:gap-0' }">
     <template #header>
       <UDashboardNavbar :title="t('sales.admin.sectionTitle')">
         <template #leading>
@@ -27,7 +29,7 @@ const { t } = useT()
     </template>
 
     <template #body>
-      <div class="max-w-[96rem] mx-auto w-full">
+      <div class="max-w-[96rem] w-full">
         <NuxtPage />
       </div>
     </template>
