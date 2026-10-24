@@ -98,10 +98,8 @@
     "nav": {
       "menu": "Menu",
       "theme": "Thème",
-      "signOut": "Déconnexion",
       "openMenu": "Ouvrir le menu de navigation",
-      "adminMenu": "Menu d’administration",
-      "user": "Utilisateur"
+      "manageSite": "Gérer le site"
     },
     "collection": {
       "itemUnavailable": "Élément indisponible",

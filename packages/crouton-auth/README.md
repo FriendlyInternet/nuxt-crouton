@@ -666,7 +666,6 @@ async function handleUpgrade(planId: string) {
 |-----------|-------------|
 | `SidebarAuthSidebar` | Complete auth sidebar |
 | `SidebarTeamSection` | Team section with switcher |
-| `SidebarUserMenu` | User menu with profile/logout |
 
 ---
 

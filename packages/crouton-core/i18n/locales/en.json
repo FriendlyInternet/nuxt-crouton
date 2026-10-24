@@ -158,8 +158,6 @@
     "errorCount": "{count} error | {count} errors"
   },
   "statusBar": {
-    "ready": "Ready",
-    "justNow": "just now",
     "secondsAgo": "{count}s ago",
     "minutesAgo": "{count}m ago",
     "hoursAgo": "{count}h ago",

@@ -235,9 +235,11 @@ jobs:
                 continue
               }
 
-              // Shared-code pause (#339): hold any PR that touches packages/ for a human.
+              // Shared-code pause (#339): hold any PR that touches packages/ for a human — and
+              // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
+              // workflows, but a workflow change never self-merges.
               const files = await github.paginate(github.rest.pulls.listFiles, { owner, repo, pull_number })
-              const sharedCode = files.filter(f => f.filename.startsWith('packages/'))
+              const sharedCode = files.filter(f => f.filename.startsWith('packages/') || f.filename.startsWith('.github/workflows/'))
               if (sharedCode.length) {
                 // #2150: announce this hold ONCE. The hourly sweep re-evaluates every open sub-PR
                 // on an epic branch, and without this guard it re-posted the identical "held for a
