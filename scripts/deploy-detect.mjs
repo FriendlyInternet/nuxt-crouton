@@ -185,25 +185,62 @@ function realGit() {
   }
 }
 
+/**
+ * Derive an app's watchPaths from what it actually depends on (#2397). The hand-written
+ * `watchPaths` in deploy.config.json was authored once at setup and never re-derived, so a
+ * package added to the app later (velo → crouton-maps, crouton-devtools) silently never
+ * triggered a staging redeploy. The app's package.json already names every `@fyit/<pkg>` it
+ * consumes, so the watch list is: the app itself, the lockfile, one `packages/<pkg>/**` per
+ * `@fyit/*` dependency (deps + devDeps), plus anything still listed explicitly. PURE.
+ */
+export function deriveWatchPaths({ app, pkg = {}, explicit = [], readPkg = () => null }) {
+  // Walk @fyit/* deps transitively: velo never lists crouton-auth itself, it comes in through
+  // crouton-core, yet an auth change must still redeploy velo. `readPkg(name)` returns the
+  // package.json of a workspace package (null if unknown); injected so the walk stays pure.
+  const seen = new Set()
+  const visit = (p) => {
+    const deps = { ...(p?.dependencies || {}), ...(p?.devDependencies || {}) }
+    for (const n of Object.keys(deps)) {
+      if (!n.startsWith('@fyit/') || seen.has(n)) continue
+      seen.add(n)
+      visit(readPkg(n))
+    }
+  }
+  visit(pkg)
+  const fromDeps = [...seen].map(n => `packages/${n.slice('@fyit/'.length)}/**`)
+  const all = [`apps/${app}/**`, 'pnpm-lock.yaml', ...fromDeps, ...explicit.filter(Boolean)]
+  return [...new Set(all)]
+}
+
+function readJson(path) {
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
 function loadApps(root = 'apps') {
   if (!existsSync(root)) return []
   const out = []
   for (const name of readdirSync(root)) {
     const cfgPath = `${root}/${name}/deploy.config.json`
     if (!existsSync(cfgPath)) continue // not opted in
-    let cfg = {}
-    try {
-      cfg = JSON.parse(readFileSync(cfgPath, 'utf8'))
-    } catch {
-      continue
-    }
+    const cfg = readJson(cfgPath)
+    if (!cfg) continue
+    const pkg = readJson(`${root}/${name}/package.json`) || {}
     out.push({
       app: name,
       stagingUrl: cfg.stagingUrl || '',
       productionUrl: cfg.productionUrl || '',
       layerPackages: cfg.layerPackages || '',
       requireWorkerSecrets: cfg.secrets?.required ?? false,
-      watchPaths: Array.isArray(cfg.watchPaths) ? cfg.watchPaths : []
+      watchPaths: deriveWatchPaths({
+        app: name,
+        pkg,
+        explicit: Array.isArray(cfg.watchPaths) ? cfg.watchPaths : [],
+        readPkg: n => readJson(`packages/${n.slice('@fyit/'.length)}/package.json`)
+      })
     })
   }
   return out
