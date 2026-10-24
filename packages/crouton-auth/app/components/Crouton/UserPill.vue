@@ -162,8 +162,9 @@ function retry() {
 </script>
 
 <template>
-  <div
-    v-if="visible"
+  <!-- One pill, seven display states; the branches are display variations, not independent logic -->
+  <!-- fallow-ignore-next-line complexity -->
+  <div v-if="visible"
     :class="placement === 'fixed'
       ? 'fixed z-50 right-3 top-[max(0.75rem,env(safe-area-inset-top))]'
       : 'relative shrink-0'"

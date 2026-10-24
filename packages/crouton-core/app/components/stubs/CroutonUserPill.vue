@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// fallow-ignore-file unused-component-props
 /**
  * CroutonUserPill Stub
  *
