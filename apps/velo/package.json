@@ -18,9 +18,9 @@
     "db:migrate:prod": "npx wrangler d1 migrations apply velo-db --remote",
     "db:migrate:staging": "npx wrangler d1 migrations apply velo-staging-db --env staging --remote",
     "db:seed": "pnpm db:seed:local",
-    "db:seed:local": "crouton-seed --db velo-db --with-staff",
+    "db:seed:local": "crouton-seed --db velo-db",
     "db:seed:remote": "crouton-seed --db velo-db --remote",
-    "db:seed:staging": "crouton-seed --db velo-staging-db --remote --with-staff"
+    "db:seed:staging": "crouton-seed --db velo-staging-db --remote"
   },
   "dependencies": {
     "@fyit/crouton-assets": "workspace:*",

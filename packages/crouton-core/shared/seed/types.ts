@@ -68,8 +68,6 @@ export interface SeedContext {
   teamSlug: string
   /** Locale demo content is authored in (e.g. `nl`). */
   locale: string
-  /** Whether to seed optional staff/login accounts (opt-in). */
-  withStaff: boolean
   /** A SQL expression for the current time in unix seconds (`unixepoch()`). */
   now: SqlRaw
   /** Queue an idempotent upsert (see {@link UpsertFn}). */
