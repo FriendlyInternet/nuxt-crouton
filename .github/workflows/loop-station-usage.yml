@@ -1,6 +1,9 @@
 name: loop-station-usage
 
 # Cross-run usage rollup (Loop Station WS-A, #1064). Weekly: download the week's
+# claude-code-action traces AND the pi worker/decomposer telemetry (pi-telemetry-*,
+# trace-shaped pi-trace.jsonl; its ledger-rows.jsonl has no kind/name and is ignored
+# by the aggregate) — before #2388 the pipeline's own runs never reached this rollup.
 # loop-station-trace-* artifacts (shipped by ./.github/actions/loop-station-trace
 # from every LLM workflow), aggregate them into per-skill/agent invocation counts,
 # and commit ONE record to writeups/loop-station/usage.jsonl. Deterministic, no
@@ -55,7 +58,7 @@ jobs:
         run: |
           CUTOFF=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
           gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/artifacts?per_page=100" \
-            --jq ".artifacts[] | select(.name | startswith(\"loop-station-trace-\")) | select(.expired == false) | select(.created_at >= \"${CUTOFF}\") | \"\(.id) \(.name)\"" \
+            --jq ".artifacts[] | select((.name | startswith(\"loop-station-trace-\")) or (.name | startswith(\"pi-telemetry-\"))) | select(.expired == false) | select(.created_at >= \"${CUTOFF}\") | \"\(.id) \(.name)\"" \
             > artifacts.txt
           echo "$(wc -l < artifacts.txt) artifact(s) in window (cutoff ${CUTOFF})"
 
