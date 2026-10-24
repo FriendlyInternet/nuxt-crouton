@@ -5,8 +5,8 @@
   "_tiers": "Each tier maps to a concrete model per harness. out_per_mtok is the Claude baseline output price ($/Mtok) — the cost lever. pi_local = the local (~$0) option on the Mac mini (informational; the generator reads `pi`).",
   "tiers": {
     "small":  { "claude": "haiku",  "pi": "claude-haiku-4-5", "pi_local": "ollama:qwen2.5-coder:7b", "out_per_mtok": 5,  "note": "reports / triage / decompose — no code written. (pi ran GLM per #1409's eval; reverted to Claude sub #1669)" },
-    "medium": { "claude": "sonnet", "pi": "claude-sonnet-5", "out_per_mtok": 15, "note": "most work. (pi ran GLM per #1421's eval; reverted to Claude sub #1669)" },
-    "large":  { "claude": "opus",   "pi": "claude-opus-4-8", "out_per_mtok": 75, "note": "hard build / synthesis — quality-sensitive" }
+    "medium": { "claude": "sonnet", "pi": "claude-sonnet-5-5", "out_per_mtok": 15, "note": "most work. (pi ran GLM per #1421's eval; reverted to Claude sub #1669)" },
+    "large":  { "claude": "opus",   "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "hard build / synthesis — quality-sensitive" }
   },
 
   "default": "medium",

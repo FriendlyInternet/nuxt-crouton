@@ -72,9 +72,9 @@ on:
         type: choice
         options: ["off", "pi"]
       model:
-        description: "Model for pi. Default claude-sonnet-5 on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
+        description: "Model for pi. Default claude-sonnet-5-5 on the Claude SUBSCRIPTION (provider=claude-bridge). glm-5.2 available via provider=zai if you want the GLM plan."
         required: false
-        default: "claude-sonnet-5"
+        default: "claude-sonnet-5-5"
         type: string
       provider:
         description: "pi provider. Default claude-bridge = Claude SUBSCRIPTION via Claude Code + CLAUDE_CODE_OAUTH_TOKEN (installed on the runner by setup-pi, #2275; replaced the silent pi-claude-cli; #1669 — everything on the subscription). zai = GLM Coding Plan; anthropic = metered PI_PROVIDER_KEY."
@@ -296,8 +296,8 @@ jobs:
       # missing/broken, so PI_MODEL is never empty.
       - id: model
         run: |
-          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default 2>/dev/null || echo claude-sonnet-5)"
-          HARD="$(node scripts/resolve-pipeline-model.mjs hard 2>/dev/null || echo claude-opus-4-8)"
+          DEFAULT="$(node scripts/resolve-pipeline-model.mjs default 2>/dev/null || echo claude-sonnet-5-5)"
+          HARD="$(node scripts/resolve-pipeline-model.mjs hard 2>/dev/null || echo claude-opus-5-5)"
           echo "default=$DEFAULT" >> "$GITHUB_OUTPUT"
           echo "hard=$HARD" >> "$GITHUB_OUTPUT"
           echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"

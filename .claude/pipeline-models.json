@@ -1,6 +1,6 @@
 {
   "_about": "The LIVE model knob for the pi pipeline (the worker + decomposer on GitHub-hosted runners, running on the Claude subscription via the claude-bridge pi extension → Claude Code + CLAUDE_CODE_OAUTH_TOKEN — #1669/#2275). Edit these values to switch what the pipeline runs on; the workflows read this file at dispatch time via scripts/resolve-pipeline-model.mjs, so no workflow edit is needed to change a model (#2161). This is the PRESCRIPTIVE 'what runs now' list; .claude/routing.json is the DESCRIPTIVE per-agent tier registry + eval history (its `pi` column records the retired GLM-Coding-Plan era, superseded by #1669 — everything is Claude subscription on pi for now).",
   "provider": "claude-bridge",
-  "default": "claude-sonnet-5",
-  "hard": "claude-opus-4-8"
+  "default": "claude-sonnet-5-5",
+  "hard": "claude-opus-5-5"
 }
