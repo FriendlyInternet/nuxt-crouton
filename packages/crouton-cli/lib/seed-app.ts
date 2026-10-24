@@ -16,6 +16,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join, resolve, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
+import { resolveExtendedPackages } from './utils/extended-packages.ts'
 
 export interface SeedAppOptions {
   /** App directory (defaults to cwd). */
@@ -237,12 +238,19 @@ function collectCollectionFixtureSql(appDir: string, core: any, teamId: string):
  *
  * NB: `layout_configs.id` is a global primary key, so this seeds the one default
  * layout for the POC's single seeded team; multi-team seeding is out of scope here.
+ *
+ * Only for an app that extends `@fyit/crouton-layout`: the generator writes the file
+ * for every app, but `layout_configs` exists only where that layer is migrated (#2249).
  */
 // Pre-existing complexity (unchanged by #2232); flagged only because the file changed.
 // fallow-ignore-next-line complexity
-function collectDefaultLayoutSql(appDir: string, core: any, teamId: string): string {
+export function collectDefaultLayoutSql(appDir: string, core: any, teamId: string): string {
   const layoutPath = join(appDir, 'crouton.layout.json')
   if (!existsSync(layoutPath)) return ''
+  if (!resolveExtendedPackages(appDir).includes('crouton-layout')) {
+    consola.info('Skipping crouton.layout.json — the app does not extend @fyit/crouton-layout, so there is no layout_configs table')
+    return ''
+  }
 
   let parsed: any
   try {

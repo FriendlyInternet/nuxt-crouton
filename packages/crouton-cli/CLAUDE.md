@@ -721,6 +721,9 @@ side-by-side split falls back to a vertical stack.
 (row id `default`), so a freshly seeded POC boots with a real, data-bound layout
 instead of a blank canvas — editable in `CroutonLayout` (the layout is **data**,
 not generated `.vue`). The LLM `/layout` pass (#711) is gated and out of scope.
+The seed only does this for an app that **extends `@fyit/crouton-layout`** — the generator
+writes `crouton.layout.json` for every app, but the table exists only where that layer is
+migrated, so for any other app the file is skipped with a log line (#2249).
 
 ## Output Location
 
