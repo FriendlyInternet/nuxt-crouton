@@ -29,23 +29,12 @@ function tryUseSession() {
   }
 }
 
-function tryUseUserMenuItems() {
-  try {
-    return useUserMenuItems({ useModal: true })
-  } catch {
-    return null
-  }
-}
-
 const teamComposable = tryUseTeam()
 const sessionComposable = tryUseSession()
-const userMenu = tryUseUserMenuItems()
 
 const teams = computed(() => teamComposable?.teams?.value ?? [])
 const canCreateTeam = computed(() => teamComposable?.canCreateTeam?.value ?? false)
 const isPending = computed(() => sessionComposable?.isPending?.value ?? false)
-const userInitials = computed(() => userMenu?.userInitials?.value ?? '?')
-const userDropdownItems = computed(() => userMenu?.dropdownItems?.value ?? [])
 
 const showCreateTeamModal = ref(false)
 
@@ -66,29 +55,7 @@ function handleTeamCreated(team: { slug: string }) {
     <!-- Top-right utility pill (matches public layout nav) -->
     <div class="fixed top-4 right-4 sm:top-6 sm:right-6 z-50 flex items-center gap-1 bg-(--ui-bg-muted)/80 backdrop-blur-sm rounded-full border border-(--ui-border) shadow-lg px-2 py-1">
       <ClientOnly>
-        <!-- Authenticated: Avatar dropdown -->
-        <UDropdownMenu
-          v-if="loggedIn"
-          :items="userDropdownItems"
-          :content="{ align: 'end', side: 'bottom' }"
-          :ui="{ content: 'w-56' }"
-        >
-          <UButton
-            variant="ghost"
-            color="neutral"
-            size="sm"
-            class="rounded-full"
-          >
-            <template #leading>
-              <UAvatar
-                :src="user?.image ?? undefined"
-                :alt="user?.name ?? 'User'"
-                :text="userInitials"
-                size="2xs"
-              />
-            </template>
-          </UButton>
-        </UDropdownMenu>
+        <CroutonUserPill v-if="loggedIn" placement="inline" use-modal :show-status="false" />
 
         <USeparator
           v-if="loggedIn"
