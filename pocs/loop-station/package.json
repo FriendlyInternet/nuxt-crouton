@@ -11,7 +11,8 @@
     "postinstall": "nuxt prepare 2>/dev/null || true",
     "typecheck": "nuxt typecheck",
     "cf:staging": "NUXT_PUBLIC_CROUTON_REVIEW=true NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler deploy --config .output/server/wrangler.json --env staging",
-    "cf:version": "NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler versions upload --config .output/server/wrangler.json --env staging"
+    "cf:version": "NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs && npx wrangler versions upload --config .output/server/wrangler.json --env staging",
+    "test": "vitest run"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.4",
@@ -25,6 +26,7 @@
     "vue-router": "catalog:"
   },
   "devDependencies": {
+    "vitest": "catalog:",
     "wrangler": "catalog:"
   }
 }
