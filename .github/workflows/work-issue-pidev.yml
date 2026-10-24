@@ -731,10 +731,13 @@ jobs:
             if [ "$UI_TOUCHED" = "1" ]; then
               gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
             fi
+            # #2433: carry the issue's `<!-- review-surface: <app> <path> -->` markers onto the PR,
+            # so the deploy screenshots the page that shows the change, not the app's start page.
+            SURFACES="$(grep -oE '<!--[[:space:]]*review-surface:[^>]*-->' "$RUNNER_TEMP/issue-body.txt" 2>/dev/null | sed 's/^/\n/' | tr -d '\r' || true)"
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$TITLE" \
-                --body "$(printf 'Closes #%s%s\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
