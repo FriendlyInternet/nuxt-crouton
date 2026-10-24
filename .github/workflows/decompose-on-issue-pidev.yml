@@ -503,7 +503,7 @@ jobs:
               `⏸️ **Not picked up — ${reason}.**\n\n`
               + `Nothing is broken and nothing was lost: the run stopped before starting so two runs `
               + `can't build the same issue. Resolve the blocker above, then dispatch again.\n\n`
-              + `<sub>🤖 pi.dev harness (CI · mac-mini) · claim guard #1890 · <a href="${runUrl}">run log</a></sub>` })
+              + `<sub>🤖 pi.dev harness (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · claim guard #1890 · <a href="${runUrl}">run log</a></sub>` })
 
       - name: Artifact-gate — fail if the agent produced nothing
         # Also skipped on a resumed tree (#2048): that path reports its own
@@ -614,7 +614,7 @@ jobs:
                     : 'produced a deliverable — see the run')
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
+                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\n${what}`,
                 })
               }
               return
@@ -657,7 +657,7 @@ jobs:
               if (process.env.TRIGGER === 'issues') {
                 await github.rest.issues.createComment({
                   ...context.repo, issue_number,
-                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · mac-mini) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
+                  body: `> 🤖 **pi.dev harness** · agent pipeline (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · _via the \`${context.payload.label?.name || 'delegate'}\` label_\n\nresumed the existing tree → ${childDeliverable}`,
                 })
               }
               return
@@ -742,7 +742,7 @@ jobs:
             // Readable-on-mobile (epic #1336, .github/CI-MESSAGE-STYLE.md): lead with the problem
             // + the one fix; the gate name / #461 / run link live in the footer; depth collapses.
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            const foot = `\n\n<sub>🤖 pi.dev harness (CI · mac-mini) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
+            const foot = `\n\n<sub>🤖 pi.dev harness (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · artifact-gate #461 fails a no-op run so it isn't mistaken for done · <a href="${runUrl}">run log</a></sub>`
             const det = detail ? `\n\n<details><summary>log tail</summary>\n\n\`\`\`\n${detail}\n\`\`\`\n</details>` : ''
             const body = why
               ? `🔴 **@pmcp — this run produced nothing: ${why}.**\n\n**Fix:** ${action}.${det}${foot}`
