@@ -19,7 +19,8 @@ const { t } = useT()
     <CroutonAdminSidebar context="super" />
     <div class="flex flex-col flex-1 min-w-0 min-h-0">
       <ImpersonationBanner />
-      <div class="flex flex-1 min-h-0 overflow-hidden [&>div]:min-h-0">
+      <!-- Phone: keep the fixed user pill clear of page navbars (right slot gets end padding) -->
+      <div class="flex flex-1 min-h-0 overflow-hidden [&>div]:min-h-0 max-sm:[&_[data-slot=right]]:pe-14">
         <UDashboardPanel>
           <UDashboardNavbar :title="t('home.superAdmin')">
             <template #leading>
