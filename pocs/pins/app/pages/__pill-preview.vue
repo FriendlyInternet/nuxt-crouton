@@ -20,7 +20,7 @@ function setIdentity(next: Identity) {
     : null
   scopedSession.value = next === 'visitor' ? { displayName: 'Lotte' } : null
 }
-setIdentity('member')
+onMounted(() => setIdentity('member'))
 
 const identities: { key: Identity, label: string }[] = [
   { key: 'member', label: 'Member' },
@@ -46,7 +46,7 @@ const states = [
 </script>
 
 <template>
-  <UApp>
+  <ClientOnly>
     <div class="min-h-screen bg-default">
       <header class="flex h-16 items-center justify-between gap-3 border-b border-default px-4">
         <span class="truncate font-semibold">Fake header</span>
@@ -83,5 +83,8 @@ const states = [
         </section>
       </main>
     </div>
-  </UApp>
+    <template #fallback>
+      <div class="p-4 text-sm text-muted">Loading preview…</div>
+    </template>
+  </ClientOnly>
 </template>
