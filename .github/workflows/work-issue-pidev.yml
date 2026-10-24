@@ -521,7 +521,10 @@ jobs:
           CONTENT="$RUNNER_TEMP/commit-content"; rm -rf "$CONTENT"; mkdir -p "$CONTENT"
           cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | while IFS= read -r p; do
             [ -z "$p" ] && continue
-            [ -f "$p" ] && { mkdir -p "$CONTENT/$(dirname "$p")"; cp "$p" "$CONTENT/$p"; }
+            # if/fi, not `[ -f ] && {…}`: a DELETED path fails the test, and as the loop's last
+            # command that 1 became the pipeline's status → pipefail + errexit killed the step
+            # (#2446 — the first revise run, whose only change was a deletion, died right here).
+            if [ -f "$p" ]; then mkdir -p "$CONTENT/$(dirname "$p")"; cp "$p" "$CONTENT/$p"; fi
           done
 
           # Paths pi DELETED (git rm / rm) — they have no content to copy, so record them now and
