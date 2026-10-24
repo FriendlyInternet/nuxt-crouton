@@ -308,7 +308,6 @@ jobs:
             node "$GITHUB_WORKSPACE/scripts/pr-preview-db-id.mjs" .output/server/wrangler.json
             npx wrangler d1 migrations apply "$PREVIEW_DB" \
               --config .output/server/wrangler.json --remote
-            (pnpm db:seed:staging || echo "::warning title=Staging seed failed::${{ inputs.app }} preview seed failed — logins and demo data may be missing (#2361)")
           else
             pnpm run cf:staging | tee deploy.log
           fi
@@ -568,7 +567,8 @@ jobs:
       # preview isn't an empty shell (#1370): the generated seed.json rows (#298) + the demo
       # team `test1` (seed:org:test1) the review login below attaches to. Runs BEFORE the
       # review-login step for exactly that reason — the login lands in a populated team, not a
-      # phantom one. Idempotent (crouton-seed upserts by stable id → a redeploy re-seed is a
+      # phantom one. The ONLY place staging seeds — apps don't seed in their own cf:staging (#2366).
+      # Idempotent (crouton-seed upserts by stable id → a redeploy re-seed is a
       # no-op); best-effort — warns, never reds the deploy. Skipped cleanly when the app doesn't
       # depend on @fyit/crouton-cli (crouton-seed unresolvable via pnpm exec). Staging only.
       - name: Seed collection + demo data (staging only, #1370)
@@ -577,11 +577,18 @@ jobs:
         run: |
           # Per-PR preview seeds its OWN DB (#2169); non-preview staging falls back to the
           # shared staging DB exactly as before (preview_db is empty off the preview path).
+          # Opt out with `"seed": false` in deploy.config.json (#2366). NB `.seed == false`, not
+          # `.seed // true` — jq's `//` treats false as missing, so that would never opt out.
+          if [ "$(jq -r '.seed == false' deploy.config.json 2>/dev/null)" = "true" ]; then
+            echo "${{ inputs.app }} opts out of the demo seed (deploy.config.json \"seed\": false)."
+            exit 0
+          fi
           DB="${{ steps.deploy.outputs.preview_db }}"; [ -n "$DB" ] || DB="${{ inputs.app }}-staging-db"
           if pnpm exec crouton-seed --db "$DB" --remote; then
             echo "✓ seeded $DB (collection fixtures + demo team)"
           else
-            echo "::warning::content seed skipped/failed for ${{ inputs.app }} — crouton-seed unresolvable or errored; the preview may be empty (#1370)."
+            echo "::warning title=Staging seed failed::content seed skipped/failed for ${{ inputs.app }} — crouton-seed unresolvable or errored; the preview may be empty (#1370)."
+            echo "### ⚠️ Demo seed failed (${{ inputs.app }}) — the review login's team may be missing; see this step's log." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       # Seed a throwaway, loginable test account on the (isolated, staging-only)

@@ -128,9 +128,12 @@ NITRO_PRESET=cloudflare_module nuxt build && npx wrangler --cwd .output deploy \
 NITRO_PRESET=cloudflare_module nuxt build && node scripts/inject-wrangler-env.mjs \
   && npx wrangler deploy --config .output/server/wrangler.json --env staging \
   && node scripts/sync-wrangler-ids.mjs && node scripts/inject-wrangler-env.mjs \
-  && npx wrangler d1 migrations apply velo-staging-db --env staging --remote \
-  && (pnpm db:seed:staging || true)
+  && npx wrangler d1 migrations apply velo-staging-db --env staging --remote
 ```
+
+The demo seed is **not** in the app script: `deploy-app.yml`'s *Seed collection + demo data* (#1370) step runs
+`crouton-seed` for every app after the deploy (staging + PR previews; opt out with
+`"seed": false` in `deploy.config.json`; production never seeds) — #2366.
 
 ### Migrations in CI + the #138 rule
 

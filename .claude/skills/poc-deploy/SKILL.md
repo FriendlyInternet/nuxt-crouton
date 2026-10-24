@@ -50,7 +50,7 @@ PR touches pocs/<name>/** (POC has a deploy.config.json)  →  deploy-pocs.yml (
 
 ## Auth on a fresh preview (so it's testable)
 
-A freshly deployed Worker has no users. To make the preview testable *with auth*, the POC's **`seed` script provisions a known admin** against the remote D1 (run it post-deploy, or have CI do it), and the admin creds are handed back alongside the URL. (Self-registration on the preview also works if the POC enables it.) See the per-app `seed`/`shots` scripts.
+A freshly deployed Worker has no users and no data. CI handles both for every POC: the shared deploy seeds the demo data (#2366 — the POC only needs `@fyit/crouton-cli`; `"seed": false` in `deploy.config.json` opts out) and then creates the per-app review login, whose sign-in link is emailed to the owner (#2358). Don't add a seed line or a known admin to the POC's own scripts.
 
 ## Requirements / gotchas
 

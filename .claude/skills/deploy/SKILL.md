@@ -144,6 +144,13 @@ Two ways:
 - **Local:** `pnpm cf:staging` from the app dir.
 - **Production is never routine** — ship it deliberately via the **`/deploy-production`** skill.
 
+### Demo data on staging (#2366)
+Every **staging** and PR-preview deploy runs `crouton-seed` itself, once (the *Seed collection + demo data* (#1370)
+step in `deploy-app.yml`), so the app gets its packages' demo data and the `test1` team the
+review login joins — **no seed line in the app's `cf:staging` script**. The app only needs
+`@fyit/crouton-cli` as a dependency. Opt out with `"seed": false` in `deploy.config.json`.
+A failed seed warns on the run; it never fails the deploy. Production never seeds.
+
 ### Auto-seeded review login on staging previews (#608)
 Every **staging** deploy auto-seeds a throwaway, loginable test account on the
 preview's isolated D1 so a reviewer can open the URL and be **inside the app in one
