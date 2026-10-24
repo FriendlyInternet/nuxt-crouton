@@ -1135,14 +1135,22 @@ jobs:
           if [ -z "$TELE_DIR" ]; then
             TELE_DIR="$(find "$SESS_ROOT" -type d -name subagent-artifacts -newermt "$SINCE" -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)"
           fi
-          if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then
-            echo "pi telemetry dir: $TELE_DIR"
-            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR"          > pi-telemetry-out/pi-trace.jsonl  2>/dev/null
+          # Skill loads come from THIS run's session JSONL (#2403): pi has no skill tool — the
+          # model `read`s `.claude/skills/<name>/SKILL.md` — so the adapter traces those reads as
+          # `kind:'skill'` events. A single-use worker spawns no subagents, so before #2403 it
+          # produced NO trace at all (the 2026-10-24 canary uploaded nothing); now it always does.
+          SESSION_DIR="$RUNNER_TEMP/pi-session"
+          if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then echo "pi telemetry dir: $TELE_DIR"; else TELE_DIR="/nonexistent"; fi
+          if node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --session "$SESSION_DIR" > pi-telemetry-out/pi-trace.jsonl 2>/dev/null; then
+            echo "pi trace: $(wc -l < pi-telemetry-out/pi-trace.jsonl) lines ($(grep -c '"kind":"skill"' pi-telemetry-out/pi-trace.jsonl || true) skill loads)"
+          else
+            rm -f pi-telemetry-out/pi-trace.jsonl
+            echo "no pi telemetry found (no subagents, no skill loads in $SESSION_DIR). Skipping trace."
+          fi
+          if [ -d "$TELE_DIR" ]; then
             node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
             echo "── #883 ledger-row slice from THIS pi run (model · cost · turns · wall) ──"
             cat pi-telemetry-out/ledger-rows.jsonl || true
-          else
-            echo "no pi subagent telemetry found — a decompose-only run (sub-issues, no worker) writes none. Skipping."
           fi
 
       - name: Upload pi telemetry artifact
