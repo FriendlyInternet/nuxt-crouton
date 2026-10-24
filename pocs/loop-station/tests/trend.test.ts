@@ -43,6 +43,10 @@ describe('latestDelta', () => {
     const h = [rec('2026-07-01T00:00:00Z', 'anthropic', 100), rec('2026-07-02T00:00:00Z', 'heuristic', 130), rec('2026-07-03T00:00:00Z', 'anthropic', 110)]
     expect(latestDelta(h)).toEqual({ tokens: 110, tokenizer: 'anthropic', delta: 10 })
   })
+  it('skips points recorded under another schema (a measurement change is not growth)', () => {
+    const h = [{ ...rec('2026-10-23T00:00:00Z', 'anthropic', 19860), schema: 2 }, { ...rec('2026-10-24T00:00:00Z', 'anthropic', 25057), schema: 3 }]
+    expect(latestDelta(h)).toEqual({ tokens: 25057, tokenizer: 'anthropic', delta: null })
+  })
   it('has no delta when the tokenizer has no earlier point', () => {
     const h = [rec('2026-07-01T00:00:00Z', 'heuristic', 130), rec('2026-07-03T00:00:00Z', 'anthropic', 110)]
     expect(latestDelta(h)).toEqual({ tokens: 110, tokenizer: 'anthropic', delta: null })
@@ -60,7 +64,9 @@ describe('on the committed history', () => {
     expect(idle.every((r) => r.anthropic === undefined && r.heuristic === undefined)).toBe(true)
     const d = latestDelta(history)!
     expect(d.tokenizer).toBe('anthropic')
-    expect(Math.abs(d.delta ?? 0)).toBeLessThan(1500) // no fake ±4k tokenizer step
+    // the latest point is compared only to one measured the same way (tokenizer + schema),
+    // so neither the tokenizer switches nor the schema-3 import step (#2387) show as a jump
+    expect(d.delta == null || Math.abs(d.delta) < 1500).toBe(true)
   })
 })
 

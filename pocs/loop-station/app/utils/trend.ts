@@ -55,15 +55,17 @@ export function weeklyRows(history: HistoryRecord[]): WeeklyRow[] {
 }
 
 /**
- * The newest record and its delta against the previous record with the SAME
- * tokenizer (null when there is none) — never across tokenizers.
+ * The newest record and its delta against the previous record measured the SAME
+ * way — same tokenizer AND same record schema (schema 3 started counting
+ * CLAUDE.md's @imports, #2387) — null when there is none. Never across rulers.
  */
 export function latestDelta(history: HistoryRecord[]): { tokens: number; tokenizer: string; delta: number | null } | null {
   const recs = history.filter((r) => r?.generatedAt && Number.isFinite(r.totals?.alwaysOnTokens))
   const latest = recs[recs.length - 1]
   if (!latest) return null
   const tokenizer = latest.tokenizer || 'unknown'
-  const prev = recs.slice(0, -1).reverse().find((r) => (r.tokenizer || 'unknown') === tokenizer)
+  const schema = latest.schema ?? 2
+  const prev = recs.slice(0, -1).reverse().find((r) => (r.tokenizer || 'unknown') === tokenizer && (r.schema ?? 2) === schema)
   return { tokens: latest.totals.alwaysOnTokens, tokenizer, delta: prev ? latest.totals.alwaysOnTokens - prev.totals.alwaysOnTokens : null }
 }
 
