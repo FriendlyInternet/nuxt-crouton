@@ -236,6 +236,22 @@ jobs:
           EPIC_BRANCH="$(node scripts/pipeline-context.mjs read epic_branch < "$RUNNER_TEMP/issue-body.txt")"
           echo "epic_branch=${EPIC_BRANCH}" >> "$GITHUB_OUTPUT"
           echo "pipeline context: epic_branch='${EPIC_BRANCH:-<none → main>}'"
+          echo "epic=$(node scripts/pipeline-context.mjs read epic < "$RUNNER_TEMP/issue-body.txt")" >> "$GITHUB_OUTPUT"
+
+      # ── EPIC BRANCH SYNC (#2475) — in-flight epics must run CURRENT pipeline code ──────
+      # A sub-PR's `pull_request` run uses the workflows/scripts of its merge commit (head merged
+      # into the EPIC branch), and the decomposer cuts that branch from main once. So a pipeline
+      # fix merged to main never reached work already in flight: epic #2413's branch was 57
+      # commits behind and #2470 ran the old screenshot code hours after the fix landed. Merge
+      # main into the epic branch here, before pi checks it out — every sub-PR (new or revised)
+      # passes through this step. A merge, never a rebase (shared branch). On conflict the script
+      # posts one 🔀 on the epic and exits 0, so a sync problem never stalls the wave.
+      - name: Sync epic branch with main
+        if: ${{ steps.ctx.outputs.epic_branch != '' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: scripts/sync-epic-branch.sh "${{ steps.ctx.outputs.epic_branch }}" "${{ steps.ctx.outputs.epic || inputs.issue || github.event.issue.number }}"
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
