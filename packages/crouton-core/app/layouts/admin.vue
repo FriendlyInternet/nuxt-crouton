@@ -18,8 +18,7 @@
     <CroutonAdminSidebar context="team" />
     <div class="flex flex-col flex-1 min-w-0 min-h-0">
       <ImpersonationBanner />
-      <!-- Phone: keep the fixed user pill clear of page navbars (navbar roots get end padding — scoped via :has so cards/tables are untouched) -->
-      <div class="flex flex-1 min-h-0 overflow-hidden [&>div]:min-h-0 max-sm:[&_[data-slot=root]:has(>[data-slot=right])]:pe-14">
+      <div class="flex flex-1 min-h-0 overflow-hidden [&>div]:min-h-0">
         <slot />
       </div>
     </div>
