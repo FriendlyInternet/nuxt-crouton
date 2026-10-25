@@ -181,6 +181,12 @@ export function planToActions(plan, ctx) {
     actions.push({ type: 'add-label', issue: target, label: WORKER_TRIGGER })
     return actions
   }
+  // The target is being SPLIT, so it IS an epic — say so on the label (#2501). Every child got its
+  // labels here; the parent never did, so `/close-epic` (gated on `epic`, #856), the ready-to-close
+  // labeller (#763) and the digests all skipped pipeline-built epics. #2413: two `/close-epic`
+  // comments did nothing until the label was added by hand. `ensure-label`, not `add-label`:
+  // this must not force a fresh `labeled` event (that remove-then-add is for trigger labels).
+  actions.push({ type: 'ensure-label', issue: target, label: 'epic' })
   // ORDERING (#1750). Two passes, and the split matters: a `Blocked-by: #N` line can only be
   // written once N exists, so EVERY child must be created before ANY dependency is recorded or
   // any worker dispatched. The old interleaved create→link→label loop dispatched child 0's worker
@@ -366,6 +372,12 @@ const ACTION_HANDLERS = {
     exec('gh', ['issue', 'comment', String(a.issue), '--repo', repo, '--body-file', f])
     try { exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--add-label', 'status:blocked']) } catch (e) { state.log(`addLabel status:blocked: ${e.message}`) }
     state.held.push({ issue: a.issue, questions: a.signoff.questions.length, images: art.images.length })
+  },
+  // Plain, idempotent add — for a label that describes the issue (`epic`, #2501), where adding
+  // one already present is the desired no-op and no `labeled` event is wanted.
+  'ensure-label'(a, { repo, exec, labelled }) {
+    exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--add-label', a.label])
+    labelled.push({ issue: a.issue, label: a.label })
   },
   'add-label'(a, { repo, exec, labelled }) {
     // Force a FRESH labeled event (#1764): the leaf target may already carry work-this from a
