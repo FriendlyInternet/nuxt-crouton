@@ -83,7 +83,7 @@ export interface SurfaceSpec {
 export interface I18nSpec {
   /** Page that renders the switcher + a translated string. `{team}` is substituted. */
   path: string
-  /** Switcher option to pick — the uppercase locale code label, e.g. "NL". */
+  /** Locale to pick — its code, e.g. "NL"; matched against the Language submenu item (native name or code). */
   switchTo: string
   /** A known translated string visible in the *default* locale (before switching). */
   before: string
