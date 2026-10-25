@@ -30,6 +30,9 @@ export default defineNuxtConfig({
     // secret; from/brand are configured below.
     '@fyit/crouton-email',
     '@fyit/crouton-i18n',
+    // Layout engine (#2532): the events dashboard renders from a stored, editable
+    // layout; kassa registers its own blocks in app.config `croutonLayoutBlocks`.
+    '@fyit/crouton-layout',
     '@fyit/crouton-charts',
     '@fyit/crouton-pages',
     '@fyit/crouton-printing',

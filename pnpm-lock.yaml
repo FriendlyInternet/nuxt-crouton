@@ -140,6 +140,9 @@ importers:
       '@fyit/crouton-i18n':
         specifier: workspace:*
         version: link:../../packages/crouton-i18n
+      '@fyit/crouton-layout':
+        specifier: workspace:*
+        version: link:../../packages/crouton-layout
       '@fyit/crouton-pages':
         specifier: workspace:*
         version: link:../../packages/crouton-pages
@@ -1798,12 +1801,12 @@ importers:
         specifier: 'catalog:'
         version: 5.1.0(@vue/compiler-sfc@3.5.44)(esbuild@0.28.2)(rolldown@1.2.14)(rollup@4.62.0)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1))(vue@3.5.44(typescript@5.9.3))(webpack@5.107.2(esbuild@0.28.2)(lightningcss@1.33.0))
     devDependencies:
-      wrangler:
-        specifier: 'catalog:'
-        version: 4.151.0(@cloudflare/workers-types@4.20260702.1)(@types/node@26.6.5)
       vitest:
         specifier: 'catalog:'
         version: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.14.6)(jsdom@27.4.0)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1))
+      wrangler:
+        specifier: 'catalog:'
+        version: 4.151.0(@cloudflare/workers-types@4.20260702.1)(@types/node@26.6.5)
 
   pocs/notes:
     dependencies:
