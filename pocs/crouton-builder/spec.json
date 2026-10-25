@@ -1,0 +1,43 @@
+[
+  {
+    "id": "served-page-by-slug",
+    "behaviour": "The page you designed opens as itself at /site/<slug>",
+    "when": "tap ↗ (View page) in the builder header, or open /site/<slug> signed in",
+    "expect": "the live variant renders at the device's real width with no editing chrome; pending edits are saved first so the served page always equals the board",
+    "hook": "[data-handoff=\"served-page\"]",
+    "howToTest": "1. arrange the board (add a block, don't press Save)  2. tap ↗  3. the served page shows the arrangement you just made; back in the builder the button reads Saved",
+    "status": "settled",
+    "signedOff": "owner, 2026-10-25 15:04 on PR #2492 (\"ok this works\")",
+    "consideredRejected": [
+      "anonymous public page → ❌ collection blocks are team-scoped, an anonymous render is an empty frame; needs a public data path first (follow-up)",
+      "↗ as a plain link → ❌ opened the previous save and looked nothing like the board"
+    ]
+  },
+  {
+    "id": "per-pane-hiding",
+    "behaviour": "Hiding one pane hides only that pane, even when two panes show the same block",
+    "when": "two panes of one block are on the page; hide one of them at a width",
+    "expect": "only that pane leaves the layout (its own id is in the breakpoint's hidden list); the other stays; the choice survives save and reload",
+    "hook": "[data-handoff=\"hidden-toggle\"], [data-handoff=\"hidden-count\"]",
+    "howToTest": "1. tap the Form chip twice → two Form panes  2. tap the second, Hide at this width → one Form pane left, eye-off count 1  3. Save, reload → still one",
+    "status": "settled",
+    "signedOff": "owner, 2026-10-25 on PR #2492 (walked on staging)",
+    "consideredRejected": [
+      "hidden list keyed by block id only → ❌ hid every pane of that block"
+    ]
+  },
+  {
+    "id": "served-page-renders-on-safari",
+    "behaviour": "A served page lays out the same on Safari as on Chrome",
+    "when": "a page holds a form (or any content-sized block) next to a hug-height block such as the nav bar, opened on an iPhone",
+    "expect": "every pane gets its content height; nothing collapses to zero (the page render never uses the builder's fill-the-frame layouts)",
+    "hook": "/site/<slug>?debug=1 → dom.panes",
+    "howToTest": "1. page = form + nav bar stacked, stats below  2. open /site/<slug> on an iPhone  3. form at the top, nav strip under it, stats below; ?debug=1 lists the form pane at its content height, not 0",
+    "status": "settled",
+    "signedOff": "owner, 2026-10-25 15:04 on PR #2492 (\"ok this works\"); WebKitGTK 2.52 reproduction before/after in the fix commit",
+    "consideredRejected": [
+      "plain `auto` rows / no clipping in the page grid → ❌ reverted: the page grid was never the branch rendering that stack",
+      "content-sized form block alone → ❌ necessary (same #983 convention as the list) but not the cause"
+    ]
+  }
+]
