@@ -52,7 +52,29 @@ const navItems = computed(() => hiddenItems.value.filter(i => collapsePlacement(
 const hiddenLayer = ref<{ open: (id: string) => void } | null>(null)
 // ?debug=1 — what this device actually resolved (width, breakpoint, visible tree, hidden).
 const debug = computed(() => route.query.debug !== undefined)
+// What the DOM did (measured after paint): pane boxes, form presence, JS errors.
+const dom = ref<{ panes: string[], forms: number, errors: string[] } | null>(null)
+const errors: string[] = []
+onMounted(() => {
+  if (!debug.value) return
+  window.addEventListener('error', e => errors.push(String(e.message)))
+  window.addEventListener('unhandledrejection', e => errors.push(String(e.reason)))
+  const measure = () => {
+    dom.value = {
+      panes: Array.from(document.querySelectorAll('[data-handoff="served-page"] .croutonpane')).map((el) => {
+        const r = el.getBoundingClientRect()
+        return `${Math.round(r.width)}x${Math.round(r.height)}@${Math.round(r.top)} "${(el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 18)}"`
+      }),
+      forms: document.querySelectorAll('[data-handoff="served-page"] form').length,
+      errors: [...errors],
+    }
+  }
+  setTimeout(measure, 3000)
+  setTimeout(measure, 10000)
+})
 const debugText = computed(() => JSON.stringify({
+  ua: typeof navigator === 'undefined' ? '' : navigator.userAgent.slice(0, 80),
+  dom: dom.value,
   width: width.value,
   activeBreakpoint: resolved.value?.activeBreakpoint ?? null,
   collapsed: resolved.value?.collapsed ?? [],
