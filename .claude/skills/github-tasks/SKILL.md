@@ -153,6 +153,10 @@ Don't stop at the issue you were asked about; closing the leaf without checking 
 
 If the design lives in a canvas the pipeline can't open, don't re-describe it in prose. Export one PNG per board/state and run `node scripts/design-handoff.mjs <epic> <png…> --post` — it copies them to `writeups/design/<epic>/` (with a `README.md` naming each file) and upserts a "🎨 Design" section with inline images into the epic body. Commit and push those files (until they reach the branch in `--branch`, the images don't load). Pipeline workers are told to `read` them before building; `ui-proposal` shows them next to the preview.
 
+## Naming the screen to shoot (`Surface:` line)
+
+A ticket that changes something you LOOK at ends with one line: `Surface: <app> <path>[, <path>]`, e.g. `Surface: kassa /admin/{team}/crouton/salesCategories` (`{team}` becomes the seeded `test1`). The pi worker's finish step boots that app locally, signs in, and commits 390px + 1280px PNGs to `writeups/ui-proposals/` (`scripts/pi-local-capture.mjs`, #2513). Without the line it derives the route from changed `app/pages/*.vue` files; if that fails too, the PR body says "no surface named" — the home page is never shot as stand-in evidence. (The deployed preview uses the separate `<!-- review-surface: … -->` marker, #2433.)
+
 ## Structure
 
 - **Epic** — one tracking issue per initiative. Body: goals, a checklist of workstreams, links to design docs. Labels: `epic` + the primary `pkg:`/`app:` it spans.
