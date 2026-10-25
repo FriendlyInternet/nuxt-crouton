@@ -1,5 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { inflateSync } from 'node:zlib'
 import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces } from './capture-review-surfaces.mjs'
 
 test('slug: safe stable filename fragment', () => {
@@ -102,4 +104,49 @@ test('resolveSurfaces: an ordinary app PR keeps the manifest surfaces', () => {
   const manifest = { reviewLogin: { landing: '/admin/test1/sales' } }
   assert.deepEqual(resolveSurfaces({ manifest, prBody: 'Closes #5', app: 'kassa' }).surfaces,
     [{ name: 'preview', path: '/admin/test1/sales', do: [] }])
+})
+
+// Minimal decoder for the 8-bit non-interlaced RGB(A) fixture — the scripts CI job has no
+// `pnpm install`, so `sharp` is not resolvable there.
+function idatPayload(buf) {
+  const idat = []
+  for (let o = 8; o < buf.length;) {
+    const len = buf.readUInt32BE(o)
+    if (buf.toString('latin1', o + 4, o + 8) === 'IDAT') idat.push(buf.subarray(o + 8, o + 8 + len))
+    o += 12 + len
+  }
+  return Buffer.concat(idat)
+}
+
+function paethPredictor(a, b, c) {
+  const pa = Math.abs(b - c), pb = Math.abs(a - c), pc = Math.abs(a + b - 2 * c)
+  if (pa <= pb && pa <= pc) return a
+  return pb <= pc ? b : c
+}
+
+function unfilterRow(raw, data, y, stride, channels) {
+  const filter = raw[y * (stride + 1)]
+  for (let x = 0; x < stride; x++) {
+    const v = raw[y * (stride + 1) + 1 + x]
+    const a = x >= channels ? data[y * stride + x - channels] : 0
+    const b = y > 0 ? data[(y - 1) * stride + x] : 0
+    const c = x >= channels && y > 0 ? data[(y - 1) * stride + x - channels] : 0
+    data[y * stride + x] = (v + [0, a, b, (a + b) >> 1, paethPredictor(a, b, c)][filter]) & 255
+  }
+}
+
+function decodePng(buf) {
+  const width = buf.readUInt32BE(16)
+  const height = buf.readUInt32BE(20)
+  const channels = buf[25] === 6 ? 4 : 3
+  const raw = inflateSync(idatPayload(buf))
+  const stride = width * channels
+  const data = Buffer.alloc(stride * height)
+  for (let y = 0; y < height; y++) unfilterRow(raw, data, y, stride, channels)
+  return { data, width, height, channels }
+}
+
+test('isFlatFrame: rejects the committed all-white 390px capture (#2526)', () => {
+  const frame = decodePng(readFileSync(new URL('./lib/__fixtures__/blank-white-390.png', import.meta.url)))
+  assert.equal(isFlatFrame(frame), true)
 })

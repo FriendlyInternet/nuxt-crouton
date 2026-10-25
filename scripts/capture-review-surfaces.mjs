@@ -34,7 +34,7 @@ import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { parseArgs } from './lib/cli-args.mjs'
 import { signIn, jarToContextCookies } from './lib/review-login.mjs'
 import { launchChromium } from './lib/chromium-launch.mjs'
-import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen } from './lib/capture-validate.mjs'
+import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness } from './lib/capture-validate.mjs'
 
 // ── pure helpers (unit-tested; no I/O) ───────────────────────────────────────
 
@@ -176,6 +176,7 @@ async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
   try {
     const context = await browser.newContext({ viewport, deviceScaleFactor: 2 })
     if (loggedIn && jar.size) await context.addCookies(jarToContextCookies(jar, origin))
+    if (surfaces.length) await warmUp(context, origin, surfaces[0])
     for (const surface of surfaces) {
       const file = await captureSurface(context, origin, surface, `${outDir}/${outName(args.pr, surface.name, app)}`)
       if (file) kept.push(file)
@@ -198,9 +199,8 @@ async function captureSurface(context, origin, surface, file) {
     const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 })
     let status = resp ? resp.status() : 0
     // The dev server serves Nuxt's loading template until its first build finishes (#2526):
-    // reload until the real app renders, up to ~120 s.
-    const waitUntil = Date.now() + 120_000
-    while (await isLoading(page) && Date.now() < waitUntil) {
+    // reload until real app content renders. The budget is per run (warmedUp), not per width.
+    while (await isLoading(page) && Date.now() < warmDeadline) {
       await page.waitForTimeout(3000)
       const again = await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null)
       if (again) status = again.status()
@@ -224,9 +224,10 @@ async function captureSurface(context, origin, surface, file) {
       log(`✗ ${surface.name}: looks like an error page (status ${status}, "${title}") — discarding`)
       return null
     }
-    const raw = await loadPng(file)
-    if (raw && isFlatFrame(raw)) {
-      log(`✗ ${surface.name}: blank/flat capture — discarding`)
+    // Fail closed: if the frame can't be decoded to check it, it is NOT evidence (#2526).
+    const flat = await frameIsFlat(file, context.browser())
+    if (flat !== false) {
+      log(flat === true ? `✗ ${surface.name}: blank/flat capture — discarding` : `✗ ${surface.name}: could not verify the frame is not blank — discarding`)
       return null
     }
     log(`✓ ${surface.name} → ${file}`)
@@ -239,11 +240,30 @@ async function captureSurface(context, origin, surface, file) {
   }
 }
 
-/** True while the page is Nuxt's dev loading template or the app has not mounted yet. */
+/** True while the page is Nuxt's dev loading template or no app content is visible yet. */
 async function isLoading(page) {
   const html = await page.content().catch(() => '')
-  const mounted = await page.evaluate(() => !!document.querySelector('#__nuxt > *')).catch(() => false)
-  return looksLikeLoadingScreen({ html }) || !mounted
+  const textLen = await page.evaluate(() => (document.body?.innerText || '').trim().length).catch(() => 0)
+  return looksLikeLoadingScreen({ html }) || textLen <= 50
+}
+
+// One shared warm-up deadline (≤5 min, inside the 8-min step timeout): the first surface pays
+// for the dev server's first build; later surfaces/widths reuse the warmed server.
+let warmDeadline = 0
+
+/** Request the first surface until the server answers with the app, not the loader. */
+async function warmUp(context, origin, surface) {
+  warmDeadline = Date.now() + 300_000
+  const page = await context.newPage()
+  try {
+    await page.goto(origin + (surface.path.startsWith('/') ? surface.path : `/${surface.path}`), { waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => {})
+    while (await isLoading(page) && Date.now() < warmDeadline) {
+      await page.waitForTimeout(3000)
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => {})
+    }
+  } finally {
+    await page.close().catch(() => {})
+  }
 }
 
 /** Run a surface's `do` steps (click a selector to open a behind-a-tap screen, or wait). */
@@ -268,6 +288,15 @@ function loadManifest(path) {
   } catch {
     return {}
   }
+}
+
+/** true = flat/blank, false = real content, null = could not decode (treated as NOT evidence). */
+async function frameIsFlat(file, browser) {
+  const raw = await loadPng(file)
+  if (raw) return isFlatFrame(raw)
+  try {
+    return colorsAreFlat(await sampleFlatness(readFileSync(resolve(file)), browser))
+  } catch { return null }
 }
 
 async function loadPng(file) {
