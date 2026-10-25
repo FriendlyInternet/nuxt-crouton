@@ -19,7 +19,10 @@
 //
 //   node scripts/epic-scaffold.mjs [--dry-run] plan.json [--repo O/R]
 //
-// Then label the epic `delegate-pi` to start the decomposer/scheduler (deliberately NOT done here).
+// Running this already starts the work: every child with no `Blocked-by` gets `work-this` immediately,
+// and the wave scheduler releases the rest as their blockers close. Do NOT label the epic `delegate-pi`
+// afterwards — that runs the decomposer on an epic that already has children and dispatches the
+// unblocked ones a second time. Use `--dry-run` to look before anything starts.
 
 import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'

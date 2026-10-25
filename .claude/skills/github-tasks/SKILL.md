@@ -178,7 +178,7 @@ node scripts/epic-scaffold.mjs --dry-run plan.json   # print the tree, create no
 node scripts/epic-scaffold.mjs plan.json             # epic + branch + children + sub-issue links
 ```
 
-The epic body must carry a `Dedup-checked:` line (the script refuses otherwise). Afterwards label the epic `delegate-pi` to start the decomposer. It reuses `apply-decompose-plan.mjs`; tests: `scripts/epic-scaffold.test.mjs`.
+The epic body must carry a `Dedup-checked:` line (the script refuses otherwise). Running the script already starts the work: every child with no `Blocked-by` gets `work-this` immediately, and the wave scheduler releases the rest as their blockers close. Do NOT label the epic `delegate-pi` afterwards — that runs the decomposer on an epic that already has children and dispatches the unblocked ones a second time. Use `--dry-run` to look before anything starts. It reuses `apply-decompose-plan.mjs`; tests: `scripts/epic-scaffold.test.mjs`.
 
 ## Labels-as-code
 

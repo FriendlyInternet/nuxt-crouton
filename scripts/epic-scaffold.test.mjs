@@ -72,3 +72,11 @@ test('renderTree shows branch, blocks and ordering', () => {
   assert.match(out, /Blocked-by: child0/)
   assert.match(out, /<!-- pipeline: epic=N/)
 })
+
+test('scaffoldActions ends with exactly one trigger-label per unblocked child', () => {
+  const acts = scaffoldActions(parseScaffoldPlan(PLAN()), { epic: 2421, knownLabels: ['type:feat'] })
+  const firstTrigger = acts.findIndex(a => a.type === 'trigger-label')
+  const tail = acts.slice(firstTrigger)
+  assert.equal(tail.length, 1)
+  assert.deepEqual(tail.map(a => [a.type, a.ref]), [['trigger-label', 'child0']])
+})
