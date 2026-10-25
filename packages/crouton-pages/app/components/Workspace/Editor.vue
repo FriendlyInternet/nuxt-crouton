@@ -503,6 +503,7 @@ defineExpose({ state })
           size="sm"
           class="shrink-0 rounded-none border-b-2"
           :class="activeTab === tab.id ? 'border-primary' : 'border-transparent'"
+          :data-review="`editor-tab-${tab.id}`"
           @click="activeTab = tab.id"
         >
           {{ tab.label }}
