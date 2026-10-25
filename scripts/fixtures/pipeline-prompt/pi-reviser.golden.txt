@@ -1,0 +1,10 @@
+REVISE the open PR #77 for issue #1932. You are already on its branch work-1932 — the PR as it stands is checked out. The owner reviewed it and commented the text between the markers below. Do EXACTLY what it asks and nothing more: no unrelated cleanups, no rewrites of the rest of the PR. To delete a file, run git rm on it. If the comment is a QUESTION rather than a change request, answer it in ONE comment on PR #77 (gh pr comment 77 --body ...) and make no file changes. Do NOT run git commit and do NOT open a pull request — the workflow commits your changes onto this PR. Making no file change and posting no answer is a FAILED run.
+
+----- owner comment -----
+Please rename `foo` to %s and keep {{issue}} literal.
+Second line.
+
+
+----- end owner comment -----
+VISUAL EVIDENCE — if your change touches a .vue file, app/components|layouts|pages, CSS or a theme: capture the changed surface with the pre-installed headless chromium (node scripts/app-shots.mjs <baseUrl> <path:name>, booting the app first) and SAVE the PNGs to writeups/ui-proposals/1932-<surface>.png. Author them with the write tool so they are committed. Then post ONE comment on the issue embedding each as ![surface](https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/work-1932/writeups/ui-proposals/1932-<surface>.png), and say in one line what changed visually. A visual PR opens as a DRAFT and waits for the owner to reply lgtm — so a screenshot is not optional politeness, it is the only thing that lets them answer. If the app cannot be booted, say so explicitly in that comment rather than opening a visual PR with no evidence.
+COMPILE CHECK — after editing, run `node scripts/verify-touched-compiles.mjs` and read its output. If it reports errors, the .vue file(s) you changed DO NOT COMPILE (usually an unbalanced/unclosed tag — every tag you open needs its matching close). Fixing that is MANDATORY before you finish: a non-compiling file is broken, not a typecheck nitpick.
