@@ -143,11 +143,11 @@ jobs:
       require-worker-secrets: ${{ matrix.requireWorkerSecrets || false }}
     secrets: inherit
 
-  # "Cancelled ≠ failed" (#1150): deploy-app.yml's per-app concurrency group
-  # (deploy-<app>-<env>, cancel-in-progress: false) allows ONE waiting run per
-  # app, so a sibling PR's (or main's) newer run replaces — cancels — an older
-  # queued preview deploy. The resulting ✕ is queue mechanics, not a failure,
-  # but it reads as one (the #1127 diagnosis round). Say so on the PR.
+  # "Cancelled ≠ failed" (#1150): a cancelled preview deploy is queue mechanics, not a
+  # failure, but it reads as one (the #1127 diagnosis round). Say so on the PR. Since #2474
+  # each PR preview has its own deploy slot (deploy-<app>-staging-pr<N>), so a sibling PR
+  # or a merge to main can no longer bump it; what remains is the caller-level
+  # cancel-in-progress above — a newer push to the SAME PR superseding the older run.
   report-bumped-preview:
     needs: [detect, deploy]
     if: always() && github.event_name == 'pull_request' && needs.deploy.result == 'cancelled'
@@ -164,7 +164,7 @@ jobs:
               '<!-- deploy-bumped -->',
               '⏳ **Preview deploy bumped, not broken — nothing about this PR failed.**',
               '',
-              'A newer run took the shared per-app staging queue slot (a sibling PR, or a merge to `main` deploying the same app), so this preview was cancelled.',
+              'A newer run for this PR superseded it (a fresh push, or a re-run), so this preview deploy was cancelled before it finished.',
               '',
               '**To get the preview:** re-run the failed jobs of the **Deploy Apps** run, or push any commit.',
               '',
