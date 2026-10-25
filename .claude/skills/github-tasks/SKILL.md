@@ -169,6 +169,17 @@ Issues, sub-issues, and labels are managed through the GitHub MCP tools:
 
 **Projects v2 boards can't be created or managed via these tools** (UI-only). Tell the user to create the board in the web/iOS app; if they enable the project's "Auto-add" workflow, issues you create land on the board automatically.
 
+## Pipeline-ready epic (one command)
+
+An epic the agent pipeline can run needs: the hidden `<!-- pipeline: epic=N depth=1 epic_branch=… -->` block on each child, `Blocked-by: #NN` ordering, a `pkg:*` label (or a `Packages-approved:` line) so `packages-guard` accepts the worker's PR, and the `epic/<N>-<slug>` branch created before the first worker. Don't hand-build these — write a JSON plan `{ title, body, labels, packagesApproved?, children: [{ title, body, labels, blockedBy: [siblingIdx] }] }` and run:
+
+```
+node scripts/epic-scaffold.mjs --dry-run plan.json   # print the tree, create nothing
+node scripts/epic-scaffold.mjs plan.json             # epic + branch + children + sub-issue links
+```
+
+The epic body must carry a `Dedup-checked:` line (the script refuses otherwise). Running the script already starts the work: every child with no `Blocked-by` gets `work-this` immediately, and the wave scheduler releases the rest as their blockers close. Do NOT label the epic `delegate-pi` afterwards — that runs the decomposer on an epic that already has children and dispatches the unblocked ones a second time. Use `--dry-run` to look before anything starts. It reuses `apply-decompose-plan.mjs`; tests: `scripts/epic-scaffold.test.mjs`.
+
 ## Labels-as-code
 
 The label taxonomy lives in **`.github/labels.yml`** and mirrors the workspace: `pkg:*` for every `packages/*`, `app:*` for every `apps/*`, `worker:*` for `workers/*`, plus `type:*` and meta labels. It's synced **non-destructively** by `.github/workflows/labels.yml` (`skip_delete`) on changes to `main` or via `workflow_dispatch`.
