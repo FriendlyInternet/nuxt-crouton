@@ -496,6 +496,8 @@ jobs:
         if: ${{ inputs.environment == 'staging' && inputs['review-pr'] != '' }}
         env:
           URL: ${{ steps.deploy.outputs.url || inputs['staging-url'] }}
+          WORKSPACE: ${{ inputs.workspace }}
+          APP: ${{ inputs.app }}
         run: |
           set -o pipefail
           [ -z "$URL" ] && { echo "::error::review deploy has no URL to probe"; exit 1; }
@@ -519,8 +521,11 @@ jobs:
           # correct build ("This preview cannot be reviewed") for every such app. The flag lives
           # in the public runtime config of the real page a reviewer actually lands on, so follow
           # the redirect and grep THAT. Strictly safer: a non-redirecting `/` (200) is unaffected.
-          if curl -sL --max-time 30 "$URL/" | grep -q 'croutonReview'; then
-            echo "✓ review flag present in the served HTML"
+          # A POC may have no start page (pins: only `__pill-preview`), so `/` alone tests the
+          # wrong page (#2456). scripts/review-flag-check.mjs also tries the app's review
+          # landing + surfaces and, on failure, annotates what each URL returned.
+          if node scripts/review-flag-check.mjs "$URL" "$WORKSPACE/$APP/deploy.config.json"; then
+            :
           else
             echo "::error::The review flag did not reach the build at $URL."
             echo "::error::NUXT_PUBLIC_CROUTON_REVIEW must be 'true' at BUILD time (#2070)."
