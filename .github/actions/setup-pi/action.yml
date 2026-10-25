@@ -55,6 +55,29 @@ runs:
           *) echo "$OUT" | tail -n 20; echo "::error::Claude answered, but not as expected — check the output above before trusting a pi run on it."; exit 1 ;;
         esac
 
+    # The repo's MCP servers (crouton-mcp, fallow-mcp) are PROJECT servers; pi-mcp-adapter blocks
+    # those until approved interactively, which never happens on an ephemeral runner (#2445).
+    # The policy key is `settings.projectServers` in the USER-GLOBAL MCP config
+    # (~/.pi/agent/mcp.json) — verified in pi-mcp-adapter config.ts; it is ignored in a project
+    # config, and it is NOT a key of pi's own settings.json. Runner-local, repo is ours: allow.
+    - name: Allow the repo's project MCP servers (user-global, runner-local)
+      shell: bash
+      run: |
+        set -euo pipefail
+        F="$HOME/.pi/agent/mcp.json"
+        mkdir -p "$(dirname "$F")"
+        node -e '
+          const fs = require("fs"); const f = process.argv[1];
+          let c = {}; try { c = JSON.parse(fs.readFileSync(f, "utf8")); } catch {}
+          c.settings = { ...(c.settings || {}), projectServers: "allow" };
+          fs.writeFileSync(f, JSON.stringify(c, null, 2) + "\n");
+        ' "$F"
+        cat "$F"
+        if [ "$(node -p 'JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).settings?.projectServers' "$F")" != "allow" ]; then
+          echo "::error::settings.projectServers is not \"allow\" in $F — pi will block crouton-mcp/fallow-mcp."
+          exit 1
+        fi
+
     # `--approve` trusts .pi/settings.json, which makes pi install the listed extensions into
     # <repo>/.pi/npm (pi writes its own .gitignore there) and register claude-bridge. Every pi
     # invocation in the workflows passes --approve too; this step is the assertion that the
