@@ -117,7 +117,9 @@ const monthPlaceholder = ref<DateValue>(new CalendarDate(
 ))
 const monthSwipeEl = ref<HTMLElement | null>(null)
 // Grid follows the finger, slides out, swaps month, slides in (#2515)
-const { style: monthSwipeStyle } = useSlideSwipe(monthSwipeEl, {
+// Only the day grid moves (via --slide-x); month label, arrows and weekday row stay put.
+const { vars: monthSwipeVars } = useSlideSwipe(monthSwipeEl, {
+  settleFrames: 3,
   onNext: () => { monthPlaceholder.value = monthPlaceholder.value.add({ months: 1 }) },
   onPrev: () => { monthPlaceholder.value = monthPlaceholder.value.subtract({ months: 1 }) },
 })
@@ -573,7 +575,7 @@ const monthCellHeight = computed(() => {
 
     <!-- Month View -->
     <div v-else class="w-full overflow-hidden touch-pan-y">
-    <div ref="monthSwipeEl" class="w-full" :style="monthSwipeStyle">
+    <div ref="monthSwipeEl" class="w-full" :style="monthSwipeVars">
       <UCalendar
         :placeholder="(monthPlaceholder as any)"
         @update:placeholder="(v: any) => { monthPlaceholder = v }"
@@ -585,7 +587,7 @@ const monthCellHeight = computed(() => {
           root: 'w-full',
           header: 'flex items-center justify-center gap-1',
           heading: 'text-center font-medium truncate mx-0',
-          body: 'p-1',
+          body: 'p-1 translate-x-[var(--slide-x)] [transition:var(--slide-transition)]',
           grid: 'w-full',
           headCell: 'text-center text-xs',
           cell: 'w-full text-center p-0.5',
