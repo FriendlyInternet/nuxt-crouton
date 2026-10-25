@@ -43,7 +43,8 @@ const collectionTitle = computed(() => {
     <template #header>
       <UDashboardNavbar :title="collectionTitle">
         <template #leading>
-          <UDashboardSidebarCollapse />
+          <UDashboardSidebarToggle class="lg:hidden" />
+          <UDashboardSidebarCollapse class="hidden lg:flex" />
         </template>
       </UDashboardNavbar>
     </template>

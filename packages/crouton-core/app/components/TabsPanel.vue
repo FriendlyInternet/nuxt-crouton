@@ -52,7 +52,8 @@ withDefaults(defineProps<{
         :ui="{ left: 'flex-1 self-stretch', title: 'max-sm:sr-only shrink-0 sm:me-2' }"
       >
         <template #leading>
-          <UDashboardSidebarCollapse />
+          <UDashboardSidebarToggle class="lg:hidden" />
+          <UDashboardSidebarCollapse class="hidden lg:flex" />
         </template>
 
         <template #trailing>
