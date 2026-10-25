@@ -29,6 +29,9 @@ on:
 
 permissions:
   contents: read
+  # The App token does the writing; these are for the sub-PR approval gather (#2494).
+  pull-requests: read
+  issues: read
 
 concurrency:
   # One evaluation per epic at a time (two children closing at once must not double-open the PR).
@@ -58,7 +61,7 @@ jobs:
             const OWNER = process.env.OWNER_LOGIN || 'pmcp'
             const ws = process.env.GITHUB_WORKSPACE
             const { parsePipelineBlock } = await import(`${ws}/scripts/pipeline-context.mjs`)
-            const { parseEpicNumber, decideOpen, resolveEpicTarget } = await import(`${ws}/scripts/epic-ready.mjs`)
+            const { parseEpicNumber, decideOpen, resolveEpicTarget, packagesApprovalCarry, closesNumbers } = await import(`${ws}/scripts/epic-ready.mjs`)
 
             // Resolve (epicNumber, epicBranch) from either the closed child's pipeline block
             // or a manual dispatch's branch input. When no block/epic is recorded, default
@@ -130,6 +133,46 @@ jobs:
             core.info(`epic #${epicNumber} (${epicBranch}): ${open ? 'OPEN' : 'skip'} — ${reason}`)
             if (!open) return
 
+            // ── Shared-code sign-off carry (#2494) ─────────────────────────────────────────
+            // #2481 failed "Packages edit declared" although the owner had approved all four
+            // sub-PRs, and the attestation line had to be added by hand. Gather every merged
+            // sub-PR into this epic branch; for the ones that touched packages/**, look for the
+            // owner's approval on the PR (comment or APPROVED review) or on its `Closes #NN`
+            // issue. The decision is the pure, unit-tested packagesApprovalCarry(); only the
+            // fetching lives here. Any lookup failure degrades to "not approved" (the guard then
+            // asks, as before) — never to a false declaration.
+            const carryInput = []
+            try {
+              const merged = (await github.paginate(github.rest.pulls.list,
+                { owner, repo, state: 'closed', base: epicBranch, per_page: 100 })).filter(p => p.merged_at)
+              for (const p of merged) {
+                const files = (await github.paginate(github.rest.pulls.listFiles,
+                  { owner, repo, pull_number: p.number, per_page: 100 })).map(f => f.filename)
+                const comments = []
+                const pick = c => comments.push({ login: c.user?.login, body: c.body })
+                ;(await github.paginate(github.rest.issues.listComments,
+                  { owner, repo, issue_number: p.number, per_page: 100 })).forEach(pick)
+                for (const n of closesNumbers(p.body)) {
+                  try {
+                    ;(await github.paginate(github.rest.issues.listComments,
+                      { owner, repo, issue_number: n, per_page: 100 })).forEach(pick)
+                  } catch (e) { core.warning(`comments on #${n} (closed by #${p.number}): ${e.message}`) }
+                }
+                const reviews = (await github.paginate(github.rest.pulls.listReviews,
+                  { owner, repo, pull_number: p.number, per_page: 100 })).map(r => ({ login: r.user?.login, state: r.state }))
+                carryInput.push({ number: p.number, files, comments, reviews })
+              }
+            } catch (e) { core.warning(`sub-PR approval gather for ${epicBranch}: ${e.message} — the shared-code check will ask`) }
+            const carry = packagesApprovalCarry({ subPrs: carryInput, owner: OWNER })
+            core.info(`packages sign-off carry: touched=${JSON.stringify(carry.packagesPrs)} approved=${JSON.stringify(carry.approved)} unapproved=${JSON.stringify(carry.unapproved)}`)
+            const carrySection = carry.packagesPrs.length === 0 ? '' :
+              carry.line
+                ? `\n\n${carry.line}\n`
+                : `\n\n## 🔒 Shared code not yet signed off\n` +
+                  `These sub-PRs changed \`packages/**\` without an approval from @${OWNER} on the PR or its issue: ` +
+                  `${carry.unapproved.map(n => `#${n}`).join(', ')}. The "Packages edit declared" check stays red until you ` +
+                  `add the \`packages:approved\` label here or a \`Packages-approved:\` line. (#2494)\n`
+
             // Reference the epic WITHOUT closing it (postmortem gate, #856).
             const epic = (await github.rest.issues.get({ owner, repo, issue_number: epicNumber })).data
             const childList = subIssues.map(s => `- #${s.number} ${s.title}`).join('\n')
@@ -142,7 +185,7 @@ jobs:
               `not on this merge.\n\n` +
               `## 👤 For humans\n${cleanTitle}\n\n**Children (${subIssues.length}):**\n${childList}\n\n` +
               `## 🧪 How to test\nReview the assembled \`${epicBranch}\` → \`main\` diff; CI runs on this PR. ` +
-              `Merge when green — you are the review gate.\n\n` +
+              `Merge when green — you are the review gate.` + carrySection + `\n\n` +
               `<sub>🤖 agent pipeline (CI) · epic→main assembler (#1815) · review requested from @${OWNER}</sub>`
 
             let pr

@@ -58,3 +58,56 @@ export function decideOpen({ subIssues = [], existingEpicMainPrs = [], aheadCoun
   if (aheadCount <= 0) return { open: false, reason: 'epic branch has no commits ahead of main' }
   return { open: true, reason: `all ${subIssues.length} children closed + branch ${aheadCount} ahead of main` }
 }
+
+// ── Shared-code sign-off carry (#2494) ─────────────────────────────────────────────
+import { packagesTouched, ATTESTATION_RE } from './packages-guard.mjs'
+import { isApproval } from './approval.mjs'
+
+/** `Closes #NN` in prose only — never inside code (the #1021 rule, same as schedule-waves). */
+export function closesNumbers(body = '') {
+  const prose = String(body || '').replace(/```[\s\S]*?```/g, '').replace(/`[^`\n]*`/g, '')
+  return [...prose.matchAll(/\bCloses\s+#(\d+)/gi)].map(m => Number(m[1]))
+}
+
+/**
+ * Did the OWNER sign off this sub-PR? PURE (#2494).
+ *   comments: [{ login, body }]   — comments on the PR and on its `Closes #NN` issue, merged
+ *   reviews:  [{ login, state }]  — the PR's reviews
+ * An owner comment that `isApproval` (approval.mjs — the one definition, #2051) or an owner
+ * review in state APPROVED. Anyone else's approval does not count: the guard exists so the
+ * OWNER declares shared-code edits, and a bot can type `lgtm` too.
+ */
+export function ownerApproved({ comments = [], reviews = [], owner } = {}) {
+  const mine = x => x && typeof x.login === 'string' && x.login.toLowerCase() === String(owner || '').toLowerCase()
+  if (reviews.some(r => mine(r.user ?? r) && String(r.state || '').toUpperCase() === 'APPROVED')) return true
+  return comments.some(c => mine(c.user ?? c) && isApproval(c.body))
+}
+
+/**
+ * Carry the owner's sub-PR approvals onto the epic→main PR so packages-guard passes on its own
+ * (#2494). PURE — the caller fetches each merged sub-PR's files + comments + reviews.
+ *   subPrs: [{ number, files: string[], comments: [{login, body}], reviews: [{login, state}] }]
+ * Returns { packagesPrs, approved, unapproved, line }:
+ *   - `line` is the `Packages-approved:` body line when EVERY packages-touching sub-PR was
+ *     owner-approved — it satisfies packages-guard's ATTESTATION_RE (pinned by a test).
+ *   - `line` is null when none touched packages (nothing to declare) or when any was NOT
+ *     approved, so the guard still asks; `unapproved` names those PRs for the body.
+ */
+export function packagesApprovalCarry({ subPrs = [], owner } = {}) {
+  const packagesPrs = subPrs.filter(p => packagesTouched(p.files || []).length > 0).map(p => p.number)
+  const approved = [], unapproved = []
+  for (const p of subPrs) {
+    if (!packagesPrs.includes(p.number)) continue
+    ;(ownerApproved({ comments: p.comments, reviews: p.reviews, owner }) ? approved : unapproved).push(p.number)
+  }
+  const line = packagesPrs.length > 0 && unapproved.length === 0
+    ? `Packages-approved: owner approved ${approved.map(n => `#${n}`).join(', ')} (sub-PR sign-off carried by epic-ready-pr, #2494)`
+    : null
+  return { packagesPrs, approved, unapproved, line }
+}
+
+// The guard and the carry must agree on the attestation shape — asserted at import time too,
+// so a future edit to either regex or the line can't silently un-declare every epic PR.
+if (!ATTESTATION_RE.test(packagesApprovalCarry({ subPrs: [{ number: 1, files: ['packages/x/a.ts'], comments: [{ login: 'o', body: 'lgtm' }] }], owner: 'o' }).line)) {
+  throw new Error('epic-ready.mjs: the Packages-approved line no longer matches packages-guard ATTESTATION_RE')
+}
