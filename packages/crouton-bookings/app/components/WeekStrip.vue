@@ -41,20 +41,23 @@ const { locale } = useI18n()
 // Current week's reference date (for navigation)
 const referenceDate = ref(today(getLocalTimeZone()))
 
-// Compute the start of the week
-const weekStart = computed(() => {
-  const dayOfWeek = referenceDate.value.toDate(getLocalTimeZone()).getDay()
+// Compute the start of the week, `offset` weeks away from the reference date
+function weekStartFor(offset: number) {
+  const base = referenceDate.value.add({ weeks: offset })
+  const dayOfWeek = base.toDate(getLocalTimeZone()).getDay()
   const diff = props.weekStartsOn === 1
     ? (dayOfWeek === 0 ? -6 : 1 - dayOfWeek) // Monday start
     : -dayOfWeek // Sunday start
-  return referenceDate.value.add({ days: diff })
-})
+  return base.add({ days: diff })
+}
 
-// Generate array of 7 days
-const weekDays = computed(() => {
+const weekStart = computed(() => weekStartFor(0))
+
+// Generate array of 7 days for the week `offset` weeks away
+function daysFor(offset: number) {
   const days = []
   for (let i = 0; i < 7; i++) {
-    const date = weekStart.value.add({ days: i })
+    const date = weekStartFor(offset).add({ days: i })
     days.push({
       date,
       day: date.day,
@@ -64,7 +67,10 @@ const weekDays = computed(() => {
     })
   }
   return days
-})
+}
+
+// prev · current · next — the neighbours peek in while dragging (#2515)
+const panels = computed(() => [-1, 0, 1].map(offset => ({ offset, days: daysFor(offset) })))
 
 // Format week label for header (like "December 2025")
 const weekLabel = computed(() => {
@@ -94,17 +100,14 @@ function nextWeek() {
   referenceDate.value = referenceDate.value.add({ weeks: 1 })
 }
 
-// Horizontal swipe on the strip changes week; vertical drags pass through
-// to the page (touch-action: pan-y, no preventDefault) (#2485)
+// Horizontal swipe on the strip: the panels follow the finger, then slide to
+// the next/previous week or spring back. Vertical drags pass through to the
+// page (touch-action: pan-y) (#2485, #2515)
 const swipeEl = ref<HTMLElement | null>(null)
-const { lengthX, lengthY } = useSwipe(swipeEl, {
-  passive: true,
-  threshold: 0,
-  onSwipeEnd() {
-    const dir = swipeDirection(-lengthX.value, -lengthY.value)
-    if (dir === 'next') nextWeek()
-    else if (dir === 'prev') prevWeek()
-  },
+const { slide, style: trackStyle } = useSlideSwipe(swipeEl, {
+  peek: true,
+  onNext: nextWeek,
+  onPrev: prevWeek,
 })
 
 function goToToday() {
@@ -199,7 +202,7 @@ const sizeClasses = computed(() => {
 </script>
 
 <template>
-  <div ref="swipeEl" class="flex flex-col touch-pan-y">
+  <div class="flex flex-col touch-pan-y">
     <!-- Header: Nav + Month Label (calendar style) -->
     <div class="flex items-center justify-center gap-1">
       <UButton
@@ -208,7 +211,7 @@ const sizeClasses = computed(() => {
         color="neutral"
         size="sm"
         :aria-label="t('bookings.weekStrip.previousWeek')"
-        @click="prevWeek"
+        @click="slide('prev')"
       />
       <UButton
         variant="ghost"
@@ -224,17 +227,25 @@ const sizeClasses = computed(() => {
         color="neutral"
         size="sm"
         :aria-label="t('bookings.weekStrip.nextWeek')"
-        @click="nextWeek"
+        @click="slide('next')"
       />
     </div>
 
     <!-- Days Grid -->
-    <div class="grid grid-cols-7 gap-2">
+    <div ref="swipeEl" class="overflow-hidden touch-pan-y pb-5 -mb-5">
+    <div class="flex" :style="trackStyle">
+    <div
+      v-for="panel in panels"
+      :key="panel.offset"
+      class="grid grid-cols-7 gap-2 min-w-full shrink-0"
+      :inert="panel.offset !== 0 || undefined"
+      :aria-hidden="panel.offset !== 0 || undefined"
+    >
       <!-- Wrapper keeps the add-booking tab a SIBLING of the clickable day
            cell — a role="button" cell containing a real <button> is a nested
            interactive control (axe serious). -->
       <div
-        v-for="day in weekDays"
+        v-for="day in panel.days"
         :key="day.date.toString()"
         class="group relative"
       >
@@ -302,6 +313,8 @@ const sizeClasses = computed(() => {
           />
         </button>
       </div>
+    </div>
+    </div>
     </div>
   </div>
 </template>
