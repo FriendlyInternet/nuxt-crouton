@@ -34,7 +34,7 @@ import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { parseArgs } from './lib/cli-args.mjs'
 import { signIn, jarToContextCookies } from './lib/review-login.mjs'
 import { launchChromium } from './lib/chromium-launch.mjs'
-import { colorsAreFlat, looksLikeErrorPage } from './lib/capture-validate.mjs'
+import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen } from './lib/capture-validate.mjs'
 
 // ── pure helpers (unit-tested; no I/O) ───────────────────────────────────────
 
@@ -196,13 +196,30 @@ async function captureSurface(context, origin, surface, file) {
     page = await context.newPage()
     const url = origin + (surface.path.startsWith('/') ? surface.path : `/${surface.path}`)
     const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 90000 })
-    const status = resp ? resp.status() : 0
+    let status = resp ? resp.status() : 0
+    // The dev server serves Nuxt's loading template until its first build finishes (#2526):
+    // reload until the real app renders, up to ~120 s.
+    const waitUntil = Date.now() + 120_000
+    while (await isLoading(page) && Date.now() < waitUntil) {
+      await page.waitForTimeout(3000)
+      const again = await page.reload({ waitUntil: 'domcontentloaded', timeout: 90000 }).catch(() => null)
+      if (again) status = again.status()
+    }
+    if (await isLoading(page)) {
+      log(`✗ ${surface.name}: capture timed out on Nuxt's loading screen — discarding`)
+      return null
+    }
+    await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
     await page.waitForTimeout(1200)
     await runInteractions(page, surface, log)
     await page.waitForTimeout(600)
     const title = await page.title().catch(() => '')
     const bodyText = await page.evaluate(() => document.body?.textContent?.slice(0, 400) || '').catch(() => '')
     await page.screenshot({ path: resolve(file), fullPage: true })
+    if (looksLikeLoadingScreen({ text: bodyText, title })) {
+      log(`✗ ${surface.name}: capture timed out on Nuxt's loading screen — discarding`)
+      return null
+    }
     if (looksLikeErrorPage({ status, text: bodyText, title })) {
       log(`✗ ${surface.name}: looks like an error page (status ${status}, "${title}") — discarding`)
       return null
@@ -220,6 +237,13 @@ async function captureSurface(context, origin, surface, file) {
   } finally {
     await page?.close().catch(() => {})
   }
+}
+
+/** True while the page is Nuxt's dev loading template or the app has not mounted yet. */
+async function isLoading(page) {
+  const html = await page.content().catch(() => '')
+  const mounted = await page.evaluate(() => !!document.querySelector('#__nuxt > *')).catch(() => false)
+  return looksLikeLoadingScreen({ html }) || !mounted
 }
 
 /** Run a surface's `do` steps (click a selector to open a behind-a-tap screen, or wait). */

@@ -52,7 +52,7 @@ function shootViewport({ app, url, vp, issue, surfaces, out, deadline }) {
     '--email', DEFAULT_EMAIL, '--password', DEFAULT_PASSWORD, '--out', tmp, ...vp.flags
   ], { env: { ...process.env, PR_BODY: toMarkers(surfaces) }, encoding: 'utf8', stdio: ['ignore', 'inherit', 'inherit'], timeout: Math.max(30_000, deadline - Date.now()) })
   const pngs = readdirSync(tmp).filter(f => f.endsWith('.png'))
-  const problem = res.status !== 0 || !pngs.length ? `${app} @${vp.tag}px: no valid capture (blank, error page, or the route did not open)` : null
+  const problem = res.status !== 0 || !pngs.length ? `${app} @${vp.tag}px: no valid capture (blank, error page, Nuxt loading screen — capture timed out on Nuxt's loading screen — or the route did not open)` : null
   mkdirSync(out, { recursive: true })
   const files = pngs.map((f) => {
     const dest = `${out}/${f.replace(/\.png$/, `-${vp.tag}.png`)}`
