@@ -192,6 +192,14 @@ async function saveBoard() {
     saveState.value = 'idle'
   }
 }
+// ↗ shows the SAVED page, so pending edits are saved first — otherwise the served
+// page is the last save and looks nothing like the board (owner-reported, #2490).
+async function viewPage() {
+  if (!page.value?.slug) return
+  if (dirty.value) await saveBoard()
+  if (dirty.value) return
+  await navigateTo(`/site/${page.value.slug}`)
+}
 </script>
 
 <template>
@@ -211,7 +219,7 @@ async function saveBoard() {
       <span class="flex-1" />
       <span v-if="saveState === 'saved' && !dirty" class="text-xs text-muted">Saved</span>
       <UButton icon="i-lucide-save" size="sm" :label="dirty ? 'Save' : 'Saved'" :loading="saveState === 'saving'" :disabled="!dirty && saveState !== 'saving'" data-handoff="board-save" @click="saveBoard" />
-      <UButton icon="i-lucide-external-link" color="neutral" variant="ghost" size="sm" aria-label="View page" :to="page?.slug ? `/site/${page.slug}` : undefined" :disabled="!page?.slug" data-handoff="view-page" />
+      <UButton icon="i-lucide-external-link" color="neutral" variant="ghost" size="sm" aria-label="View page" :disabled="!page?.slug || saveState === 'saving'" data-handoff="view-page" @click="viewPage" />
     </header>
 
     <!-- Palette strip: drag a chip onto a pane edge, or tap to add beside the selection. -->
