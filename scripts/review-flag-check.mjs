@@ -12,7 +12,12 @@
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
-/** Paths to try, in order, de-duplicated: `/`, reviewLogin.landing, reviewSurfaces[].path. */
+/**
+ * Paths to try, in order, de-duplicated: `/`, reviewLogin.landing, reviewSurfaces[].path, then
+ * `/auth/login`. The login page is the last resort because every crouton app serves it
+ * (crouton-auth) as a normal server-rendered page, so it carries the public runtime config even
+ * when the app has no start page and declares no review pages (pins).
+ */
 export function candidatePaths(config) {
   const paths = ['/']
   const add = (p) => {
@@ -20,6 +25,7 @@ export function candidatePaths(config) {
   }
   add(config?.reviewLogin?.landing)
   if (Array.isArray(config?.reviewSurfaces)) for (const s of config.reviewSurfaces) add(s?.path)
+  add('/auth/login')
   return paths
 }
 

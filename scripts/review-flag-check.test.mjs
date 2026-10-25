@@ -7,13 +7,15 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { candidatePaths, snippet, checkFlag } from './review-flag-check.mjs'
 
-test('candidatePaths: / first, then landing, then surfaces, de-duplicated', () => {
-  assert.deepEqual(candidatePaths({}), ['/'])
-  assert.deepEqual(candidatePaths(undefined), ['/'])
+test('candidatePaths: / first, then landing, then surfaces, then the login page, de-duplicated', () => {
+  assert.deepEqual(candidatePaths({}), ['/', '/auth/login'])
+  assert.deepEqual(candidatePaths(undefined), ['/', '/auth/login'])
   assert.deepEqual(
     candidatePaths({ reviewLogin: { landing: '/a' }, reviewSurfaces: [{ path: '/a' }, { path: '/b' }, {}, { path: 'x' }] }),
-    ['/', '/a', '/b'],
+    ['/', '/a', '/b', '/auth/login'],
   )
+  // a landing that IS the login page isn't tried twice
+  assert.deepEqual(candidatePaths({ reviewLogin: { landing: '/auth/login' } }), ['/', '/auth/login'])
 })
 
 test('snippet strips newlines and caps at 200', () => {
