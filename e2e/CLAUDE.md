@@ -196,13 +196,13 @@ When you add a fixture, set its `packages` (step 3) **and** add it to `ALL` in t
   "a11y": false,
   // Optional: a locale-switch check (crouton-i18n). A `surface` can only assert a
   // static element renders; this one *interacts* — flips locale via the
-  // package-owned LanguageSwitcher and asserts a known UI string changes
+  // user pill's Language submenu and asserts a known UI string changes
   // language, so an i18n regression goes red. Needs ≥2 configured locales
   // (set `locales`/`defaultLocale` in the fixture's crouton.config.js). Omit for
   // single-locale fixtures (i18n.smoke.spec.ts then registers no test).
   "i18n": {
     "path": "/",            // page rendering the switcher + a translated string; {team} substituted
-    "switchTo": "NL",        // switcher option to pick (uppercase locale-code label)
+    "switchTo": "NL",        // locale to pick (code; matched against the menu item's native name or code)
     "before": "Your teams",  // a known translated string in the default locale
     "after": "Jouw teams"    // the same string in the target locale
   },
@@ -231,7 +231,7 @@ When you add a fixture, set its `packages` (step 3) **and** add it to `ALL` in t
 > Nuxt UI renders the panel DOM id as `<storageKey>-panel-pages-sidebar`, hence
 > the ends-with match), so the assertion fails if that package's UI regresses.
 > The `i18n` check works the same way: the switcher is crouton-i18n's
-> `LanguageSwitcher` (a Nuxt UI `USelect` → the page's locale combobox) and the
+> user pill's Language submenu (bottom-left `CroutonUserPill` → "Language" → the locale item) and the
 > asserted string is crouton's own `home.*` label, so a broken switcher or stuck
 > locale fails it.
 

@@ -37,7 +37,7 @@ const props = withDefaults(defineProps<Props>(), {
 
 const { t } = useT()
 const route = useRoute()
-const { user, userInitials, dropdownItems } = useUserMenuItems({ useModal: props.useModal })
+const { user, userInitials, dropdownItems, preferenceItems } = useUserMenuItems({ useModal: props.useModal })
 const { currentTeam, currentRole } = useTeam()
 const { current, recent, unread, markAllSeen, dismiss } = useCroutonStatus()
 
@@ -98,8 +98,10 @@ const dotClass = computed(() => {
 const showControls = computed(() => !pageChrome.value.hideAuthControls)
 const isMember = computed(() => !!user.value)
 const isVisitor = computed(() => !isMember.value && !!scopedSession.value)
-const showSignIn = computed(() => !isMember.value && !isVisitor.value && showControls.value)
-const visible = computed(() => (isMember.value && showControls.value) || isVisitor.value || showSignIn.value)
+// Signed-out visitors (and members on pages that hide auth controls) get a small
+// round settings button: language + dark mode (+ theme), plus Sign in when allowed.
+const showGuest = computed(() => !isVisitor.value && (!isMember.value || !showControls.value))
+const visible = computed(() => (isMember.value && showControls.value) || isVisitor.value || showGuest.value)
 
 const displayName = computed(() => (isVisitor.value ? scopedSession.value!.displayName : user.value?.name ?? ''))
 const firstName = computed(() => displayName.value.split(' ')[0])
@@ -107,10 +109,18 @@ const initial = computed(() => (isVisitor.value ? (displayName.value[0] ?? '?').
 const showName = computed(() => props.compact === 'never' ? true : props.compact === 'auto')
 const nameClass = computed(() => (props.compact === 'auto' ? 'hidden sm:inline' : ''))
 
+const guestMenuItems = computed<DropdownMenuItem[][]>(() => [
+  preferenceItems.value,
+  ...(!isMember.value && showControls.value
+    ? [[{ label: t('userPill.signIn'), icon: 'i-lucide-log-in', to: loginUrl.value }]]
+    : [])
+])
+
 const menuItems = computed<DropdownMenuItem[][]>(() => {
   if (isVisitor.value) {
     return [
       [{ label: `${displayName.value} · ${t('userPill.helper')}`, avatar: { text: initial.value, alt: displayName.value }, type: 'label' }],
+      preferenceItems.value,
       [{ label: t('userPill.signOutHelper'), icon: 'i-lucide-log-out', color: 'error', onSelect: logoutScopedSession }]
     ]
   }
@@ -164,14 +174,20 @@ function retry() {
       ? 'fixed z-50 left-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
       : 'relative shrink-0'"
   >
-    <UButton
-      v-if="showSignIn"
-      :to="loginUrl"
-      color="primary"
-      icon="i-lucide-log-in"
-      class="h-11 rounded-full"
-      :label="t('userPill.signIn')"
-    />
+    <UDropdownMenu
+      v-if="showGuest"
+      :items="guestMenuItems"
+      :content="placement === 'fixed' ? { align: 'start', side: 'top' } : { align: 'end', side: 'bottom' }"
+      :ui="{ content: 'w-64' }"
+    >
+      <UButton
+        color="neutral"
+        variant="outline"
+        icon="i-lucide-circle-user-round"
+        class="size-11 justify-center rounded-full bg-muted"
+        :aria-label="t('userPill.accountAndStatus')"
+      />
+    </UDropdownMenu>
 
     <div
       v-else

@@ -75,32 +75,33 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
     }
   }
 
-  const dropdownItems = computed<DropdownMenuItem[][]>(() => {
-    const preferenceGroup: DropdownMenuItem[] = [
-      // Language submenu — only when the app has more than one locale
-      ...(locales.value.length > 1
-        ? [{
-            label: t('forms.language'),
-            icon: 'i-lucide-globe',
-            children: languageItems.value
-          }]
-        : []),
-      {
-        label: t('account.darkMode'),
-        icon: isDark.value ? 'i-lucide-moon' : 'i-lucide-sun',
-        type: 'checkbox',
-        checked: isDark.value,
-        onUpdateChecked: (checked: boolean) => {
-          isDark.value = checked
-        },
-        onSelect: (e: Event) => {
-          e.preventDefault()
-        }
+  // Language / dark mode / theme — shared with the signed-out pill menu
+  const preferenceItems = computed<DropdownMenuItem[]>(() => [
+    // Language submenu — only when the app has more than one locale
+    ...(locales.value.length > 1
+      ? [{
+          label: t('forms.language'),
+          icon: 'i-lucide-globe',
+          children: languageItems.value
+        }]
+      : []),
+    {
+      label: t('account.darkMode'),
+      icon: isDark.value ? 'i-lucide-moon' : 'i-lucide-sun',
+      type: 'checkbox',
+      checked: isDark.value,
+      onUpdateChecked: (checked: boolean) => {
+        isDark.value = checked
       },
-      // Theme switcher — only when themes layer is active and user is allowed
-      ...(canSwitchTheme.value ? themePreferenceItems.value : [])
-    ]
+      onSelect: (e: Event) => {
+        e.preventDefault()
+      }
+    },
+    // Theme switcher — only when themes layer is active and user is allowed
+    ...(canSwitchTheme.value ? themePreferenceItems.value : [])
+  ] as DropdownMenuItem[])
 
+  const dropdownItems = computed<DropdownMenuItem[][]>(() => {
     return [
       [
         {
@@ -127,7 +128,7 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
           )
         }
       ],
-      preferenceGroup,
+      preferenceItems.value,
       [
         {
           label: t('auth.signOut'),
@@ -143,6 +144,7 @@ export function useUserMenuItems(options?: UserMenuItemsOptions) {
     user,
     loading,
     userInitials,
-    dropdownItems
+    dropdownItems,
+    preferenceItems
   }
 }
