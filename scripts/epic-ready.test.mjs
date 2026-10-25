@@ -75,3 +75,59 @@ test('a genuine epic with no block at all (defaults to self) but real sub-issues
   const r = resolveEpicTarget({ closedIssueNumber: 100, blockEpicNumber: null, subIssueCount: 3 })
   assert.deepEqual(r, { epicNumber: 100, isSolo: false })
 })
+
+// ── packages approval carry (#2494) ───────────────────────────────────────────
+import { packagesApprovalCarry, ownerApproved, closesNumbers } from './epic-ready.mjs'
+import { ATTESTATION_RE, evaluatePackagesGuard } from './packages-guard.mjs'
+
+const PKG = ['packages/crouton-core/app/components/CroutonBlockFrame.vue']
+const APP = ['apps/kassa/app/pages/index.vue']
+const OK = { login: 'pmcp', body: 'lgtm' }
+
+test('closesNumbers reads Closes #NN from prose, never from code', () => {
+  assert.deepEqual(closesNumbers('Closes #12\n`Closes #99`\n```\nCloses #98\n```'), [12])
+  assert.deepEqual(closesNumbers(''), [])
+})
+
+test('ownerApproved: owner lgtm comment or APPROVED review; others never', () => {
+  assert.equal(ownerApproved({ comments: [OK], owner: 'pmcp' }), true)
+  assert.equal(ownerApproved({ comments: [{ login: 'PMCP', body: '✅' }], owner: 'pmcp' }), true)
+  assert.equal(ownerApproved({ reviews: [{ login: 'pmcp', state: 'APPROVED' }], owner: 'pmcp' }), true)
+  assert.equal(ownerApproved({ reviews: [{ login: 'pmcp', state: 'CHANGES_REQUESTED' }], owner: 'pmcp' }), false)
+  assert.equal(ownerApproved({ comments: [{ login: 'nuxt-harness[bot]', body: 'lgtm' }], owner: 'pmcp' }), false)
+  assert.equal(ownerApproved({ comments: [{ login: 'pmcp', body: '> lgtm' }], owner: 'pmcp' }), false)
+})
+
+test('all packages-touching sub-PRs approved → one attestation line naming them', () => {
+  const r = packagesApprovalCarry({ owner: 'pmcp', subPrs: [
+    { number: 2470, files: PKG, comments: [OK] },
+    { number: 2471, files: APP, comments: [] },
+    { number: 2472, files: PKG, reviews: [{ login: 'pmcp', state: 'APPROVED' }] },
+  ] })
+  assert.deepEqual(r.packagesPrs, [2470, 2472])
+  assert.deepEqual(r.approved, [2470, 2472])
+  assert.deepEqual(r.unapproved, [])
+  assert.match(r.line, /^Packages-approved: owner approved #2470, #2472/)
+})
+
+test('one unapproved packages sub-PR → no line, it is named', () => {
+  const r = packagesApprovalCarry({ owner: 'pmcp', subPrs: [
+    { number: 1, files: PKG, comments: [OK] },
+    { number: 2, files: PKG, comments: [{ login: 'pmcp', body: 'change the padding first' }] },
+  ] })
+  assert.equal(r.line, null)
+  assert.deepEqual(r.unapproved, [2])
+})
+
+test('no sub-PR touched packages → nothing to declare', () => {
+  const r = packagesApprovalCarry({ owner: 'pmcp', subPrs: [{ number: 1, files: APP, comments: [OK] }] })
+  assert.deepEqual(r, { packagesPrs: [], approved: [], unapproved: [], line: null })
+})
+
+test('the carried line satisfies packages-guard — the two agree (#2494 acceptance)', () => {
+  const { line } = packagesApprovalCarry({ owner: 'pmcp', subPrs: [{ number: 7, files: PKG, comments: [OK] }] })
+  assert.ok(ATTESTATION_RE.test(line))
+  const g = evaluatePackagesGuard({ changedFiles: PKG, body: `Assembles epic\n\n${line}\n` })
+  assert.equal(g.declared, true)
+  assert.equal(g.signal, 'attestation')
+})
