@@ -69,21 +69,18 @@ export function writeBuckets(plan, dir) {
 // Did a known generator run in this session? bash `crouton config|generate|init`,
 // `generate_collection` (bash or MCP tool name), or `node scripts/gen-*.mjs`.
 const GENERATOR_CMD = /crouton\s+(config|generate|init)\b|generate_collection|node\s+scripts\/gen-[\w-]+\.mjs/;
+function toolCallsOf(line) {
+  let rec;
+  try { rec = JSON.parse(line); } catch { return []; }
+  const content = rec?.message?.content;
+  return Array.isArray(content) ? content.filter(c => c?.type === 'toolCall') : [];
+}
+
+const isGeneratorCall = c =>
+  /generate_collection/.test(String(c.name)) || GENERATOR_CMD.test(String(c.arguments?.command ?? ''));
+
 export function generatorRanInSession(sessionPath) {
-  for (const line of fs.readFileSync(sessionPath, 'utf8').split('\n')) {
-    if (!line.trim()) continue;
-    let rec;
-    try { rec = JSON.parse(line); } catch { continue; }
-    const content = rec?.message?.content;
-    if (!Array.isArray(content)) continue;
-    for (const c of content) {
-      if (c?.type !== 'toolCall') continue;
-      if (/generate_collection/.test(String(c.name))) return true;
-      const cmd = c.arguments?.command;
-      if (typeof cmd === 'string' && GENERATOR_CMD.test(cmd)) return true;
-    }
-  }
-  return false;
+  return fs.readFileSync(sessionPath, 'utf8').split('\n').some(line => toolCallsOf(line).some(isGeneratorCall));
 }
 
 // I/O wrapper: read the ledger from the session and the changed list from a file.
