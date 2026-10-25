@@ -36,8 +36,8 @@ import { buildLoginUrl } from './seed-review-login.mjs'
 const APP_DIRS = ['apps', 'pocs']
 // Deterministic + obviously disposable. Local-only: this account exists in a
 // gitignored sqlite file on one laptop, so a fixed password is not a secret.
-const DEFAULT_EMAIL = 'review+local@example.com'
-const DEFAULT_PASSWORD = 'ReviewLocal2026' // gitleaks:allow — local throwaway login, never deployed (#2376)
+export const DEFAULT_EMAIL = 'review+local@example.com'
+export const DEFAULT_PASSWORD = 'ReviewLocal2026' // gitleaks:allow — local throwaway login, never deployed (#2376)
 const SEED_TEAM = 'test1'
 const BOOT_TIMEOUT_MS = 180_000
 // Nuxt prints its URL before the first route is compiled, so the port can refuse
