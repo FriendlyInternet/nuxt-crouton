@@ -10,16 +10,31 @@
  * Container-responsive (#710) and tolerant of a missing `collection` (a freshly
  * dropped, unconfigured block) — shows a hint instead of erroring. The loader is
  * synchronous (no fetch), so no `<Suspense>` is needed.
+ *
+ * Renders by context (#983, same split as `CroutonLayoutCollection`): `admin`
+ * fills its pane and scrolls internally; `page` (a served page) is content-sized
+ * — a `h-full` + `overflow-auto` block inside a content-sized grid row collapses
+ * to nothing on WebKit (owner-reported on iOS, #2490), so the page render never
+ * depends on a percentage height.
  */
+import { computed, inject, ref, type Ref } from 'vue'
+import { LAYOUT_RENDER_CONTEXT_KEY, type LayoutRenderContext } from '../composables/useCroutonLayoutRenderContext'
+
 withDefaults(defineProps<{
   collection?: string
   /** Optional heading (the composer passes the collection label). */
   heading?: string
 }>(), {})
+
+const renderContext = inject<Ref<LayoutRenderContext>>(
+  LAYOUT_RENDER_CONTEXT_KEY,
+  ref<LayoutRenderContext>('admin'),
+)
+const isPage = computed(() => renderContext.value === 'page')
 </script>
 
 <template>
-  <div class="@container h-full overflow-auto">
+  <div class="@container" :class="isPage ? '' : 'h-full overflow-auto'">
     <div class="px-4 py-2 border-b border-default text-sm font-semibold">
       {{ heading || 'New' }}
     </div>
