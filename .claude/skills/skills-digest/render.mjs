@@ -11,6 +11,7 @@
  *   <out-dir>/skills-digest-<YYYYMMDD>.subject.txt  the email subject (read verbatim by CI)
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { stripEmoji } from '../../../scripts/no-emoji.mjs'
 import { resolve, join } from 'node:path'
 import { BRAND_NAME, BRAND_URL, PRIMARY_COLOR } from '../../../packages/crouton-email/brand/email-brand.mjs'
 // The trigger→skill flow lanes — same declarative source as skills-and-triggers.html (#843),
@@ -323,9 +324,9 @@ mkdirSync(resolve(outDir), { recursive: true })
 const htmlPath = join(outDir, `skills-digest-${stamp}.html`)
 const txtPath = join(outDir, `skills-digest-${stamp}.txt`)
 const subjectPath = join(outDir, `skills-digest-${stamp}.subject.txt`)
-writeFileSync(resolve(htmlPath), html)
-writeFileSync(resolve(txtPath), txt)
-writeFileSync(resolve(subjectPath), subject + '\n')
+writeFileSync(resolve(htmlPath), stripEmoji(html))
+writeFileSync(resolve(txtPath), stripEmoji(txt))
+writeFileSync(resolve(subjectPath), stripEmoji(subject).trim() + '\n')
 console.log(`✓ HTML    → ${htmlPath}`)
 console.log(`✓ Text    → ${txtPath}`)
 console.log(`✓ Subject → ${subject}`)

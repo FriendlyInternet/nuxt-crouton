@@ -123,7 +123,8 @@ test('a fence INSIDE details is not double-counted into oblivion', () => {
 test('the block message names the fix, not only the violation', () => {
   const msg = explain(checkOwnerBrief('> 🤖 x\n\nlook at this'))
   assert.match(msg, /<details>/, 'must show the collapse escape hatch')
-  assert.match(msg, /🔴/, 'must show the vocabulary')
+  assert.match(msg, /Issue:/, 'must show the vocabulary')
+  assert.doesNotMatch(msg, /\p{Extended_Pictographic}/u, 'the gate message itself is emoji-free')
   assert.match(msg, /Collapse it, don't cut it/, 'must say the depth is kept')
 })
 
@@ -192,4 +193,44 @@ test('the ping-without-ask message offers both fixes', () => {
   const msg = explain(checkOwnerBrief('✅ **done**\n> 🤖 x\n@pmcp'))
   assert.match(msg, /drop the mention/)
   assert.match(msg, /backtick/)
+})
+
+/* ── #2534: plain words are what we write; emoji is still read ── */
+
+const plain = [
+  'Issue: **The preview deploy failed**',
+  "> Agent (interactive, posted from `@pmcp`'s account) · _deploy_",
+  '',
+  '**You:** nothing yet.',
+].join('\n')
+
+test('the plain-word form passes and is recognised as an agent comment', () => {
+  assert.equal(isAgentComment(plain), true)
+  assert.equal(checkOwnerBrief(plain).ok, true)
+  assert.equal(briefType(plain).name, 'Issue')
+})
+
+test('every type works as a plain word, bold or heading', () => {
+  for (const t of BRIEF_TYPES) {
+    for (const lead of [`${t.name}:`, `**${t.name}:**`, `## ${t.name}:`]) {
+      const v = checkOwnerBrief(`${lead} thing\n> Agent (CI) · x\n**You:** nothing`)
+      assert.equal(v.ok, true, lead)
+      assert.equal(briefType(`${lead} thing`).name, t.name)
+    }
+  }
+})
+
+test('a plain agent comment with no type is still refused (hook still blocks)', () => {
+  const v = checkOwnerBrief('> Agent (CI) · x\n\nCould you look at this?')
+  assert.equal(v.ok, false)
+  assert.equal(v.reason, 'no-type')
+})
+
+test('Done: plus a mention is still refused in plain form', () => {
+  const v = checkOwnerBrief('Done: **landed**\n> Agent (CI) · x\n\n@pmcp all on main.')
+  assert.equal(v.reason, 'ping-without-ask')
+})
+
+test('a type word mid-sentence is not a marker', () => {
+  assert.equal(checkOwnerBrief('> Agent (CI) · x\n\nThis is Done: really').ok, false)
 })
