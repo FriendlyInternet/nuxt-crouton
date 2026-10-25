@@ -41,6 +41,8 @@ const OVERRIDES = {
 // Files under .claude/agents that are documentation, not agents.
 // pi-operating-contract.md is a prompt fragment injected verbatim into the pi
 // workflows (#1022) — pure prose, no frontmatter by design — not an agent definition.
+// A leading `_` marks the same kind of fragment, appended to a pi persona by
+// scripts/pipeline-prompt.mjs (#2431): `_pipeline-rules.md`, `_worker-checks.md`.
 const AGENT_SKIP = new Set(['CLAUDE.md', 'pi-operating-contract.md'])
 
 function parseFrontmatter(text) {
@@ -79,7 +81,7 @@ function discoverSkills() {
 function discoverAgents() {
   const out = []
   for (const entry of readdirSync(AGENTS_DIR)) {
-    if (!entry.endsWith('.md') || AGENT_SKIP.has(entry)) continue
+    if (!entry.endsWith('.md') || AGENT_SKIP.has(entry) || entry.startsWith('_')) continue
     const p = join(AGENTS_DIR, entry)
     const fm = parseFrontmatter(readFileSync(p, 'utf8'))
     const name = nameFor(fm, entry.replace(/\.md$/, ''))
