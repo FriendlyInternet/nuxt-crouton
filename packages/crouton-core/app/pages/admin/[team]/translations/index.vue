@@ -19,7 +19,6 @@ const { t } = useT()
     <template #header>
       <UDashboardNavbar :title="t('navigation.translations') || 'Translations'">
         <template #leading>
-          <UDashboardSidebarToggle class="lg:hidden" />
           <UDashboardSidebarCollapse class="hidden lg:flex" />
         </template>
       </UDashboardNavbar>
