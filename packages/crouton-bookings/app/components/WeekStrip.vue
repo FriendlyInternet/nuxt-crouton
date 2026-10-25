@@ -43,12 +43,12 @@ const referenceDate = ref(today(getLocalTimeZone()))
 
 // Compute the start of the week, `offset` weeks away from the reference date
 function weekStartFor(offset: number) {
-  const ref = referenceDate.value.add({ weeks: offset })
-  const dayOfWeek = ref.toDate(getLocalTimeZone()).getDay()
+  const base = referenceDate.value.add({ weeks: offset })
+  const dayOfWeek = base.toDate(getLocalTimeZone()).getDay()
   const diff = props.weekStartsOn === 1
     ? (dayOfWeek === 0 ? -6 : 1 - dayOfWeek) // Monday start
     : -dayOfWeek // Sunday start
-  return ref.add({ days: diff })
+  return base.add({ days: diff })
 }
 
 const weekStart = computed(() => weekStartFor(0))
