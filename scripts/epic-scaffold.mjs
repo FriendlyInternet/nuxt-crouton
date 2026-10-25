@@ -33,13 +33,24 @@ export function slugify(s) {
   return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '') || 'epic'
 }
 
-/** Validate the scaffold plan → { title, body, labels, slug, children } (children via parsePlan). */
-export function parseScaffoldPlan(raw) {
-  let p
+function parseJsonObject(raw) {
+  let p = raw
   if (typeof raw === 'string') {
     try { p = JSON.parse(raw) } catch (e) { throw new PlanError(`plan is not valid JSON: ${e.message}`) }
-  } else { p = raw }
+  }
   if (!p || typeof p !== 'object') throw new PlanError('plan must be an object')
+  return p
+}
+
+/** Append `Packages-approved: <why>` to a child body unless it already carries one. */
+function withPackagesApproved(child, approved) {
+  if (!approved || typeof child?.body !== 'string' || /^\s*Packages-approved:/im.test(child.body)) return child?.body
+  return `${child.body.trimEnd()}\n\nPackages-approved: ${approved}\n`
+}
+
+/** Validate the scaffold plan → { title, body, labels, slug, children } (children via parsePlan). */
+export function parseScaffoldPlan(raw) {
+  const p = parseJsonObject(raw)
   if (typeof p.title !== 'string' || !p.title.trim()) throw new PlanError('plan.title must be a non-empty string')
   if (typeof p.body !== 'string' || !p.body.trim()) throw new PlanError('plan.body must be a non-empty string')
   if (!DEDUP_RE.test(p.body)) {
@@ -48,12 +59,7 @@ export function parseScaffoldPlan(raw) {
   const approved = typeof p.packagesApproved === 'string' && p.packagesApproved.trim() ? p.packagesApproved.trim() : null
   const children = parsePlan({
     leaf: false,
-    children: (p.children || []).map(c => ({
-      ...c,
-      body: approved && typeof c?.body === 'string' && !/^\s*Packages-approved:/im.test(c.body)
-        ? `${c.body.trimEnd()}\n\nPackages-approved: ${approved}\n`
-        : c?.body,
-    })),
+    children: (p.children || []).map(c => ({ ...c, body: withPackagesApproved(c, approved) })),
   }).children
   const labels = Array.isArray(p.labels) ? p.labels.filter(l => typeof l === 'string' && l) : []
   if (!labels.includes('epic')) labels.unshift('epic')
