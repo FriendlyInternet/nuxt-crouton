@@ -196,22 +196,10 @@ const viewTracks = computed(() => {
         const size = c.defaultSize ?? (100 / n)
         return `minmax(${floor}px, ${size}fr)`
       }
-      // A plain `auto` row when there's no floor: WebKit sized a `minmax(0px, auto)`
-      // row to ZERO for a 641px-tall form (iOS 18, #2490) while its sibling `auto`
-      // row was fine — Chromium treats both as size-to-content.
-      const floor = Math.round(childSizings.value[i]!.minHeight)
-      return floor > 0 ? `minmax(${floor}px, auto)` : 'auto'
+      return `minmax(${Math.round(childSizings.value[i]!.minHeight)}px, auto)`
     })
     .join(' ')
 })
-// Only a HORIZONTAL split's columns shrink below content (`fr` tracks) and need to
-// clip; a vertical split's rows flow to content, so its items must not be clipped —
-// a zero-sized row + `overflow:hidden` is exactly how the form vanished on iOS (#2490).
-const viewPaneClass = computed(() =>
-  props.node.type === 'split' && props.node.direction === 'horizontal'
-    ? 'croutonpane min-h-0 min-w-0 overflow-hidden'
-    : 'croutonpane min-w-0',
-)
 const viewGridStyle = computed(() => {
   // `minHeight:100%` (not a fixed `height`) so a short page still fills its frame
   // but a tall one grows past it and the frame (the served page / the board card)
@@ -420,7 +408,7 @@ watch(
         v-for="(child, i) in node.children"
         :key="i"
         data-crouton-pane
-        :class="viewPaneClass"
+        class="croutonpane min-h-0 min-w-0 overflow-hidden"
       >
         <CroutonLayoutRenderer
           :node="child"
