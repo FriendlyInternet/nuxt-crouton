@@ -9,6 +9,10 @@
  * attribute, so they persist into the page's `content` JSON on save and reload
  * into the same arrangement (the deferred half of #716).
  *
+ * Not on `CroutonBlockFrame` (#2415): this view has no property panel to open and no
+ * edit button — its chrome is a header over an embedded composer, not a labelled
+ * preview — so the shared frame's edit/dblclick behaviour does not apply.
+ *
  * The composer is wrapped in a non-editable shell (`contenteditable=false`) so
  * TipTap doesn't fight CroutonLayout's own drag/resize handling.
  */

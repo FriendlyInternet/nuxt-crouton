@@ -13,6 +13,7 @@
  */
 import { computed, ref, resolveComponent } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
+import { useBlockEditRequest } from '@fyit/crouton-core/app/composables/useBlockEditRequest'
 import type { CroutonBlockDefinition } from '@fyit/crouton-core/app/types/block-definition'
 
 const props = defineProps<{
@@ -43,95 +44,56 @@ const editorViewComponent = computed(() => {
 const { t } = useT()
 const { blockName, blockDescription } = useBlockI18n()
 const innerRef = ref<HTMLElement | null>(null)
+const { openPanel } = useBlockEditRequest(innerRef)
 
-function findEditorId(): string | undefined {
-  let el: HTMLElement | null = innerRef.value
-  while (el) {
-    if (el.classList?.contains('crouton-editor-blocks') && el.dataset?.editorId) {
-      return el.dataset.editorId
-    }
-    el = el.parentElement
-  }
-  return undefined
-}
-
+// The addon's own editor view has no shared frame, so double-click opens the panel here
 function handleOpenPanel() {
-  const editorId = findEditorId()
-  const event = new CustomEvent('block-edit-request', {
-    bubbles: true,
-    detail: { node: props.node, pos: props.getPos(), editorId }
-  })
-  document.dispatchEvent(event)
+  openPanel(props.node, props.getPos())
 }
+
+
 </script>
 
 <template>
-  <NodeViewWrapper
-    class="block-wrapper my-1 cursor-pointer"
-    :class="{ 'border-l-2 border-l-primary/50': selected }"
-    :data-type="node.type.name"
-    @dblclick="handleOpenPanel"
-  >
-    <div ref="innerRef">
+  <NodeViewWrapper :data-type="node.type.name">
+    <div
+      v-if="editorViewComponent && typeof editorViewComponent !== 'string'"
+      ref="innerRef"
+      class="block-wrapper my-1 cursor-pointer"
+      :class="{ 'border-l-2 border-l-primary/50': selected }"
+      @dblclick="handleOpenPanel"
+    >
       <!-- Render the addon package's editor view component if available -->
       <component
         :is="editorViewComponent"
-        v-if="editorViewComponent && typeof editorViewComponent !== 'string'"
         :node="node"
         :selected="selected"
         :update-attributes="updateAttributes"
         :delete-node="deleteNode"
         :get-pos="getPos"
       />
+    </div>
 
-      <!-- Fallback: block definition found but component not resolved -->
-      <div
-        v-else-if="blockDef"
-        class="relative group rounded border border-transparent hover:border-gray-200/50 dark:hover:border-gray-700/50 transition-colors"
-      >
-        <div class="p-3">
-          <div class="flex items-center justify-between mb-2">
-            <span class="inline-flex items-center gap-1 text-[10px] font-medium text-gray-400 uppercase tracking-wider">
-              {{ blockName(blockDef) }}
-            </span>
-            <div class="opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100 transition-opacity flex items-center gap-0.5">
-              <UButton
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                square
-                icon="i-lucide-pencil"
-                class="text-dimmed hover:text-primary"
-                :aria-label="t('pages.blocks.editBlock')"
-                :title="t('pages.blocks.editBlock')"
-                @click.stop="handleOpenPanel"
-              />
-              <UButton
-                color="neutral"
-                variant="ghost"
-                size="xs"
-                square
-                icon="i-lucide-trash-2"
-                class="text-dimmed hover:text-error"
-                :aria-label="t('pages.blocks.deleteBlock')"
-                :title="t('pages.blocks.deleteBlock')"
-                @click.stop="deleteNode"
-              />
-            </div>
-          </div>
-          <div class="bg-gray-50/50 dark:bg-gray-800/30 rounded-lg p-4 border border-gray-100 dark:border-gray-700/50">
-            <p class="text-sm text-muted">{{ blockDescription(blockDef) }}</p>
-          </div>
-        </div>
+    <!-- Fallback: block definition found but component not resolved -->
+    <CroutonBlockFrame
+      v-else-if="blockDef"
+      :node="node"
+      :get-pos="getPos"
+      :selected="selected"
+      :label="blockName(blockDef)"
+      @delete="deleteNode"
+    >
+      <div class="bg-gray-50/50 dark:bg-gray-800/30 rounded-lg p-4 border border-gray-100 dark:border-gray-700/50">
+        <p class="text-sm text-muted">{{ blockDescription(blockDef) }}</p>
       </div>
+    </CroutonBlockFrame>
 
-      <!-- Unknown block type -->
-      <div
-        v-else
-        class="p-3 rounded bg-warning/10 border border-warning/20"
-      >
-        <p class="text-sm text-warning">{{ t('pages.blockViews.unknownAddon', { name: node.type.name }) }}</p>
-      </div>
+    <!-- Unknown block type -->
+    <div
+      v-else
+      class="my-1 p-3 rounded bg-warning/10 border border-warning/20"
+    >
+      <p class="text-sm text-warning">{{ t('pages.blockViews.unknownAddon', { name: node.type.name }) }}</p>
     </div>
   </NodeViewWrapper>
 </template>

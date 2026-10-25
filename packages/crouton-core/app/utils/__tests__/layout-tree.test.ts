@@ -87,6 +87,14 @@ describe('sanitizeLayoutTree — rejects / strips malformed input', () => {
       .toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'stats' } })
   })
 
+  it('keeps a valid placement + reveal on the recipe, drops unknown values (#2418)', () => {
+    expect(sanitizeLayoutTree({ type: 'leaf', blockId: 'form', collapse: { edge: 'bottom', affordance: 'button', placement: 'nav', reveal: 'sheet' } }))
+      .toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'form', collapse: { edge: 'bottom', affordance: 'button', placement: 'nav', reveal: 'sheet' } } })
+    // unknown placement / reveal → those two fields dropped, the recipe itself kept
+    expect(sanitizeLayoutTree({ type: 'leaf', blockId: 'form', collapse: { edge: 'left', affordance: 'tab', placement: 'floating', reveal: 'popover' } }))
+      .toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'form', collapse: { edge: 'left', affordance: 'tab' } } })
+  })
+
   it('rejects a tree nested past the depth cap', () => {
     let node: Record<string, unknown> = { type: 'leaf', blockId: 'deep' }
     for (let i = 0; i < 20; i++) {

@@ -1,0 +1,87 @@
+import { describe, it, expect } from 'vitest'
+import {
+  currentStatus,
+  recentStatuses,
+  unreadStatusCount,
+  markAllStatusSeen,
+  mutationStatus,
+  type StatusMessage,
+} from '../status-feed'
+
+const msg = (over: Partial<StatusMessage> = {}): StatusMessage => ({
+  id: 'a',
+  text: 'x',
+  type: 'success',
+  timestamp: 1000,
+  seen: false,
+  ...over,
+})
+
+// minimal translator mirroring the en.json strings
+const t = (key: string, p: Record<string, unknown> = {}) => {
+  const map: Record<string, string> = {
+    'statusBar.createdNamed': `${p.user} created ${p.label} "${p.name}"`,
+    'statusBar.created': `${p.user} created a ${p.label}`,
+    'statusBar.savedNamed': `${p.user} saved "${p.name}"`,
+    'statusBar.saved': `${p.user} saved the ${p.label}`,
+    'statusBar.deleted': `${p.user} deleted a ${p.label}`,
+    'statusBar.deletedMultiple': `${p.user} deleted ${p.count} ${p.label}s`,
+    'statusBar.defaultUser': 'You',
+  }
+  return map[key] ?? key
+}
+
+describe('currentStatus', () => {
+  it('shows a success until 4s have passed, not before', () => {
+    const m = msg({ timestamp: 1000 })
+    expect(currentStatus([m], 4999)).toBe(m)
+    expect(currentStatus([m], 5000)).toBeUndefined()
+  })
+
+  it('keeps an error until dismissed (never expires)', () => {
+    const m = msg({ type: 'error' })
+    expect(currentStatus([m], 1000 + 10 * 60_000)).toBe(m)
+  })
+
+  it('a newer message replaces current', () => {
+    const older = msg({ id: 'old' })
+    const newer = msg({ id: 'new', timestamp: 2000 })
+    expect(currentStatus([newer, older], 2500)?.id).toBe('new')
+  })
+})
+
+describe('recentStatuses', () => {
+  it('caps at 5, newest first', () => {
+    const list = Array.from({ length: 8 }, (_, i) => msg({ id: String(8 - i) }))
+    const recent = recentStatuses(list)
+    expect(recent).toHaveLength(5)
+    expect(recent[0]!.id).toBe('8')
+  })
+})
+
+describe('unreadStatusCount', () => {
+  it('counts only unseen warnings/errors until markAllSeen', () => {
+    const list = [
+      msg({ id: '1', type: 'success' }),
+      msg({ id: '2', type: 'info' }),
+      msg({ id: '3', type: 'warning' }),
+      msg({ id: '4', type: 'error' }),
+    ]
+    expect(unreadStatusCount(list)).toBe(2)
+    expect(unreadStatusCount(markAllStatusSeen(list))).toBe(0)
+  })
+})
+
+describe('mutationStatus', () => {
+  it('maps update to "<name> saved X"', () => {
+    expect(mutationStatus({ operation: 'update', collection: 'shopProducts', itemName: 'Mug', userName: 'Maarten' }, t).text)
+      .toBe('Maarten saved "Mug"')
+  })
+
+  it('maps create and delete to matching verbs', () => {
+    expect(mutationStatus({ operation: 'create', collection: 'shopProducts', userName: 'Maarten' }, t).text)
+      .toBe('Maarten created a product')
+    expect(mutationStatus({ operation: 'delete', collection: 'shopProducts', itemIds: ['1', '2'] }, t).text)
+      .toBe('You deleted 2 products')
+  })
+})

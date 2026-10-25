@@ -19,7 +19,7 @@
  * app extending crouton-layout (#1618). crouton-layout re-consumes it from here.
  */
 import type { LayoutBreakpoint, LayoutNode, LayoutTree } from '../types/layout'
-import { isLayoutCollapseStyle, isLayoutCollapseEdge, isLayoutCollapseAffordance } from '../types/layout'
+import { isLayoutCollapseStyle, isLayoutCollapseEdge, isLayoutCollapseAffordance, isLayoutCollapsePlacement, isLayoutCollapseReveal } from '../types/layout'
 
 /** Hard recursion cap — a hostile/looping tree can't blow the stack. */
 const MAX_DEPTH = 12
@@ -48,8 +48,14 @@ function sanitizeNode(input: unknown, depth: number): LayoutNode | null {
     // Preserve a valid per-pane collapse recipe (#852); keep it only when BOTH fields
     // are known values, so a stray/partial object is dropped rather than half-trusted.
     const c = isRecord(input.collapse) ? input.collapse : undefined
+    // `placement` / `reveal` (#2418) are optional: kept when known, dropped when not.
     const collapse = c && isLayoutCollapseEdge(c.edge) && isLayoutCollapseAffordance(c.affordance)
-      ? { edge: c.edge, affordance: c.affordance }
+      ? {
+          edge: c.edge,
+          affordance: c.affordance,
+          ...(isLayoutCollapsePlacement(c.placement) ? { placement: c.placement } : {}),
+          ...(isLayoutCollapseReveal(c.reveal) ? { reveal: c.reveal } : {}),
+        }
       : undefined
     return { type: 'leaf', blockId: input.blockId, ...(config ? { config } : {}), ...(collapse ? { collapse } : {}), ...base }
   }

@@ -109,9 +109,43 @@ export type LayoutCollapseEdge = (typeof LAYOUT_COLLAPSE_EDGES)[number]
 export const LAYOUT_COLLAPSE_AFFORDANCES = ['tab', 'button', 'dot'] as const
 export type LayoutCollapseAffordance = (typeof LAYOUT_COLLAPSE_AFFORDANCES)[number]
 
+/**
+ * Where a hidden pane's trigger lives (#2418): on its `edge` (the tab/button/dot
+ * affordance above) or `nav` — collected as an item by the page's nav/toolbar
+ * blocks, so the blocks that don't fit a width become that width's navigation.
+ */
+export const LAYOUT_COLLAPSE_PLACEMENTS = ['edge', 'nav'] as const
+export type LayoutCollapsePlacement = (typeof LAYOUT_COLLAPSE_PLACEMENTS)[number]
+
+/** How a hidden pane opens from its trigger (#2418). */
+export const LAYOUT_COLLAPSE_REVEALS = ['slideover', 'sheet', 'modal', 'page'] as const
+export type LayoutCollapseReveal = (typeof LAYOUT_COLLAPSE_REVEALS)[number]
+
 export interface LayoutCollapseRecipe {
   edge: LayoutCollapseEdge
   affordance: LayoutCollapseAffordance
+  /** Absent ⇒ `edge`. */
+  placement?: LayoutCollapsePlacement
+  /** Absent ⇒ `slideover` (from `edge`). */
+  reveal?: LayoutCollapseReveal
+}
+
+export const DEFAULT_COLLAPSE_PLACEMENT: LayoutCollapsePlacement = 'edge'
+export const DEFAULT_COLLAPSE_REVEAL: LayoutCollapseReveal = 'slideover'
+
+/** The effective placement / reveal of a recipe (absent ⇒ the defaults). */
+export function collapsePlacement(recipe?: Partial<LayoutCollapseRecipe> | null): LayoutCollapsePlacement {
+  return isLayoutCollapsePlacement(recipe?.placement) ? recipe.placement : DEFAULT_COLLAPSE_PLACEMENT
+}
+export function collapseReveal(recipe?: Partial<LayoutCollapseRecipe> | null): LayoutCollapseReveal {
+  return isLayoutCollapseReveal(recipe?.reveal) ? recipe.reveal : DEFAULT_COLLAPSE_REVEAL
+}
+
+export function isLayoutCollapsePlacement(value: unknown): value is LayoutCollapsePlacement {
+  return typeof value === 'string' && (LAYOUT_COLLAPSE_PLACEMENTS as readonly string[]).includes(value)
+}
+export function isLayoutCollapseReveal(value: unknown): value is LayoutCollapseReveal {
+  return typeof value === 'string' && (LAYOUT_COLLAPSE_REVEALS as readonly string[]).includes(value)
 }
 
 /** The shipped default tuck — a right-edge tab (the original gutter-tabs placement). */
@@ -130,6 +164,10 @@ export function normalizeCollapseRecipe(value: unknown): LayoutCollapseRecipe {
   return {
     edge: isLayoutCollapseEdge(v.edge) ? v.edge : DEFAULT_COLLAPSE_RECIPE.edge,
     affordance: isLayoutCollapseAffordance(v.affordance) ? v.affordance : DEFAULT_COLLAPSE_RECIPE.affordance,
+    // Optional fields pass through only when valid; readers take the defaults via
+    // `collapsePlacement` / `collapseReveal`, so a recipe without them is unchanged.
+    ...(isLayoutCollapsePlacement(v.placement) ? { placement: v.placement } : {}),
+    ...(isLayoutCollapseReveal(v.reveal) ? { reveal: v.reveal } : {}),
   }
 }
 

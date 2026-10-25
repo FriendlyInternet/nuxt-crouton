@@ -10,8 +10,8 @@
  * the views import it explicitly (the same reason they import `computed` and
  * `useI18n` by hand).
  *
- * The older block views still carry their own copies. Converting them is a
- * mechanical follow-up; this exists so new ones stop adding to the pile.
+ * Lives in crouton-core (#2414) and backs `<CroutonBlockFrame>`; blocks that
+ * use the frame never call it directly.
  */
 import type { Ref } from 'vue'
 
