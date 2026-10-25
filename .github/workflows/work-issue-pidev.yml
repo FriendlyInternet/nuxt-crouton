@@ -88,6 +88,11 @@ on:
         default: "claude-bridge"
         type: choice
         options: ["claude-bridge", "zai", "anthropic"]
+      feedback:
+        description: "REVISE mode (#2446): id of an owner comment asking for changes to this issue's open work-<issue> PR. The worker starts from that PR's branch, treats the comment as its instruction, and stacks a commit on the PR. Blank = a normal fresh run."
+        required: false
+        default: ""
+        type: string
   # Single-use trigger (#1685/#1686): a human OR the decomposer (via the Harness App token, so
   # it's nuxt-harness[bot]-actored and passes the bot-actor guard + cascades) applies `work-this`
   # to a LEAF issue → this one-shot worker implements it and opens a PR. We fire on EVERY labeled
@@ -292,6 +297,28 @@ jobs:
           echo "hard=$HARD" >> "$GITHUB_OUTPUT"
           echo "pipeline models — default=$DEFAULT hard=$HARD (from .claude/pipeline-models.json)"
 
+      # ── REVISE mode (#2446) — start from the PR, not from scratch ─────────────────
+      # A change request on a pi-built PR (revise-on-pr-comment.yml, or an issue reply via
+      # resume-on-comment.yml) dispatches this with `feedback=<comment id>`. pi must edit the PR
+      # as it stands, so check out `work-<issue>` here — AFTER the baseline step stashed the
+      # finish scripts from main — and hand the comment text to the prompt. REV_START is the
+      # PR head: the finish step stacks on it and compares against it to tell "changed nothing".
+      - id: revise
+        if: ${{ inputs.feedback != '' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ inputs.issue }}
+          FEEDBACK_ID: ${{ inputs.feedback }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
+          FROM="$(gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .html_url)"
+          git fetch origin "work-${ISSUE}" --quiet
+          git checkout -f -B "work-${ISSUE}" "origin/work-${ISSUE}" 2>&1 | tail -1
+          echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "from=${FROM}" >> "$GITHUB_OUTPUT"
+          echo "revise mode: work-${ISSUE} @ $(git rev-parse --short HEAD), feedback ${FROM}"
+
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
       # GH_TOKEN = the App token → pi's `gh`/git operations (sub-issues, epic branch,
       # the worker PR) act as the Harness App and cascade.
@@ -312,6 +339,7 @@ jobs:
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           # WS2 (#1695): the integration branch parsed off the issue's pipeline block (empty → main).
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+          REVISE: ${{ inputs.feedback != '' && '1' || '' }}
         run: |
           set -uo pipefail
           # The Harness App identity for any commits pi makes (so they're attributable
@@ -327,31 +355,22 @@ jobs:
           # pidev.yml, so the two flows can't drift (they were byte-identical hand-maintained
           # copies before). That file is PURE PROSE by contract: no frontmatter/headers — raw-injected.
           PROMPT_FILE="decompose-pidev-prompt-${{ github.run_id }}.txt"
-          cat .claude/agents/pi-operating-contract.md > "$PROMPT_FILE"
-          # SINGLE-USE WORKER (#1686): implement this ONE leaf — no decompose, no sub-issues,
-          # no subagents. printf (single-quoted format, %s for ISSUE) — never backticks (they'd
-          # command-substitute inside the shell).
-          # The integration branch is parsed OFF the issue's WS2 pipeline block by the `ctx` step
-          # (#1695) and passed in as EPIC_BRANCH — the worker no longer greps the body itself. When
-          # empty, branch off main. printf uses %s for every value (single-quoted format) — never
-          # backticks (they'd command-substitute in the shell).
+          # The persona lives in .claude/agents/ (#2431): pi-worker.md (implement) or pi-reviser.md
+          # (revise an open PR from an owner comment, #2446), each + the shared operating contract +
+          # _worker-checks.md (visual evidence #1748, compile self-check #2182). Rendered by
+          # scripts/pipeline-prompt.mjs; its golden test pins the output byte-for-byte.
+          # The integration branch comes OFF the issue's pipeline block via the `ctx` step (#1695).
           BRANCH_INSTR="branch off main and target the PR at main"
           if [ -n "${EPIC_BRANCH:-}" ]; then
             BRANCH_INSTR="branch off the integration branch '${EPIC_BRANCH}' and target the PR THERE (not main)"
           fi
-          printf 'IMPLEMENT this ONE leaf issue end-to-end. Do NOT decompose it, do NOT create sub-issues, do NOT spawn subagents — it is already a leaf. Read issue #%s (gh issue view %s), then %s. For a scaffold/generate task, RUN the crouton generator (e.g. crouton config / generate_collection) — its output IS committed for you, so do NOT hand-write generated files. Author only the inputs (schema, config) with the edit/write tools (never shell redirects or heredocs) so they are captured. Run the touched app typecheck ONCE to sanity-check (pnpm --filter <app> typecheck), but do NOT loop trying to make typecheck fully green — a harness acceptance gate typechecks the result and reports failures, so stop after your change plus one check instead of grinding on it. Do NOT run git commit and do NOT open a pull request — the workflow commits your inputs AND the generator output and opens the PR, so you never need to. If you are genuinely blocked, do NOT guess: post a top-level comment on the issue explaining the blocker and add the status:blocked label, then stop. Making no file changes and no hold is a FAILED run.\n' "$ISSUE" "$ISSUE" "$BRANCH_INSTR" >> "$PROMPT_FILE"
-          # VISUAL EVIDENCE (#1748) — the owner reviews from a phone and cannot judge a layout
-          # change from a diff. A .vue/CSS/theme change must therefore ARRIVE with something to
-          # look at. `writeups/ui-proposals/` is un-ignored in .gitignore precisely so a PNG can be
-          # committed and then render inline via raw.githubusercontent (the #483 ticket-diagram
-          # pattern) — GitHub's API cannot upload an image to a comment, so committing is the only
-          # way to get a picture in front of a phone.
-          printf 'VISUAL EVIDENCE — if your change touches a .vue file, app/components|layouts|pages, CSS or a theme: capture the changed surface with the pre-installed headless chromium (node scripts/app-shots.mjs <baseUrl> <path:name>, booting the app first) and SAVE the PNGs to writeups/ui-proposals/%s-<surface>.png. Author them with the write tool so they are committed. Then post ONE comment on the issue embedding each as ![surface](https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/work-%s/writeups/ui-proposals/%s-<surface>.png), and say in one line what changed visually. A visual PR opens as a DRAFT and waits for the owner to reply lgtm — so a screenshot is not optional politeness, it is the only thing that lets them answer. If the app cannot be booted, say so explicitly in that comment rather than opening a visual PR with no evidence.\n' "$ISSUE" "$ISSUE" "$ISSUE" >> "$PROMPT_FILE"
-          # COMPILE SELF-CHECK (#2182) — the finish gate only typechecks the touched APP, so a
-          # packages/-only .vue that does not even parse (an unclosed tag, the #2179 incident)
-          # slipped through as "acceptance: not verified". Have pi verify its OWN edits compile;
-          # a deterministic re-drive after the run (below) enforces it even if pi forgets.
-          printf 'COMPILE CHECK — after editing, run `node scripts/verify-touched-compiles.mjs` and read its output. If it reports errors, the .vue file(s) you changed DO NOT COMPILE (usually an unbalanced/unclosed tag — every tag you open needs its matching close). Fixing that is MANDATORY before you finish: a non-compiling file is broken, not a typecheck nitpick.\n' >> "$PROMPT_FILE"
+          if [ -n "${REVISE:-}" ]; then
+            PRN="$(gh pr list --head "work-${ISSUE}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+            node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" \
+              --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
+          else
+            node scripts/pipeline-prompt.mjs pi-worker --var "issue=$ISSUE" --var "branch_instr=$BRANCH_INSTR" > "$PROMPT_FILE"
+          fi
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
           # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
           # So the instant `pi | tee` fails (pipefail), -e aborts the script BEFORE
@@ -432,6 +451,9 @@ jobs:
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
           SINCE: ${{ steps.t0.outputs.ts }}
+          # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
+          REV_START: ${{ steps.revise.outputs.rev_start }}
+          FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
           PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
@@ -481,18 +503,47 @@ jobs:
           CONTENT="$RUNNER_TEMP/commit-content"; rm -rf "$CONTENT"; mkdir -p "$CONTENT"
           cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | while IFS= read -r p; do
             [ -z "$p" ] && continue
-            [ -f "$p" ] && { mkdir -p "$CONTENT/$(dirname "$p")"; cp "$p" "$CONTENT/$p"; }
+            # if/fi, not `[ -f ] && {…}`: a DELETED path fails the test, and as the loop's last
+            # command that 1 became the pipeline's status → pipefail + errexit killed the step
+            # (#2446 — the first revise run, whose only change was a deletion, died right here).
+            if [ -f "$p" ]; then mkdir -p "$CONTENT/$(dirname "$p")"; cp "$p" "$CONTENT/$p"; fi
           done
 
-          git fetch origin "$BASE" --quiet 2>/dev/null || true
-          git checkout -f -B "work-${ISSUE}" "origin/${BASE}" 2>&1 | tail -1
-          BR="work-${ISSUE}"
-          # The branch point, captured BEFORE the two commits below, so "what did this run change"
-          # is a real diff rather than a guess at HEAD~n (the run may make one commit or two).
-          BASE_SHA="$(git rev-parse HEAD)"
-          TITLE="$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null)"; [ -z "$TITLE" ] && TITLE="chore: implement #${ISSUE}"
+          # Paths pi DELETED (git rm / rm) — they have no content to copy, so record them now and
+          # replay the deletion after the checkout below (#2446; the copy loop alone dropped them).
+          git status --porcelain -uall 2>/dev/null | grep -E '^( D|D )' | sed 's/^...//' > "$RUNNER_TEMP/deleted.txt" || true
 
-          stage_bucket() { while IFS= read -r p; do [ -z "$p" ] && continue; [ -f "$CONTENT/$p" ] && { mkdir -p "$(dirname "$p")"; cp "$CONTENT/$p" "$p"; git add -- "$p"; }; done < "$1"; }
+          git fetch origin "$BASE" --quiet 2>/dev/null || true
+          BR="work-${ISSUE}"
+          if [ -n "${REV_START:-}" ]; then
+            # REVISE: stack on the PR as it stands — never reset it to the base (that would wipe it).
+            git checkout -f -B "$BR" "$REV_START" 2>&1 | tail -1
+            # Whole-PR diff base, so the visual-change + evidence checks still see the PR's .vue
+            # changes and a held UI PR STAYS held after a non-visual revision. The checkout is
+            # depth-1, so origin/<base> has no parents: when the base moved on since the PR branched
+            # (the normal case for `main`), merge-base finds nothing, exits 1 and errexit killed the
+            # step in ~1s (#2467). Unshallow the base first (~1s — the PR fetch already brought most
+            # of the history); if it still fails, fall back to the PR head rather than crash.
+            git fetch -q --unshallow origin "$BASE" 2>/dev/null || git fetch -q origin "$BASE" 2>/dev/null || true
+            BASE_SHA="$(git merge-base "origin/${BASE}" HEAD 2>/dev/null || true)"
+            if [ -z "$BASE_SHA" ]; then
+              echo "::warning::no merge-base with ${BASE} — the visual check sees only this revision (#2446)"
+              BASE_SHA="$REV_START"
+            fi
+          else
+            git checkout -f -B "$BR" "origin/${BASE}" 2>&1 | tail -1
+            # The branch point, captured BEFORE the two commits below, so "what did this run change"
+            # is a real diff rather than a guess at HEAD~n (the run may make one commit or two).
+            BASE_SHA="$(git rev-parse HEAD)"
+          fi
+          RUN_START="$(git rev-parse HEAD)"
+          TITLE="$(gh issue view "$ISSUE" --json title -q .title 2>/dev/null)"; [ -z "$TITLE" ] && TITLE="chore: implement #${ISSUE}"
+          [ -n "${REV_START:-}" ] && TITLE="${TITLE} (review feedback)"
+
+          stage_bucket() { while IFS= read -r p; do [ -z "$p" ] && continue
+            if [ -f "$CONTENT/$p" ]; then mkdir -p "$(dirname "$p")"; cp "$CONTENT/$p" "$p"; git add -- "$p"
+            elif grep -qxF -- "$p" "$RUNNER_TEMP/deleted.txt" 2>/dev/null; then git rm -q --ignore-unmatch -- "$p"; fi
+          done < "$1"; }
 
           # 4a) Commit 1 — the inputs pi authored (the "why": schema/config). Blame-able, small.
           stage_bucket "$RUNNER_TEMP/inputs.txt"
@@ -507,7 +558,7 @@ jobs:
             # A run with no inputs commit is ONE commit: give it the issue title, not "generate: …".
             # The splitter files every change the session ledger doesn't list as authored under
             # "generated", so a hand-written run lands here entirely (#2427).
-            if [ "$(git rev-parse HEAD)" = "$BASE_SHA" ]; then GEN_SUBJECT="$TITLE"; else GEN_SUBJECT="generate: derived output for #${ISSUE}"; fi
+            if [ "$(git rev-parse HEAD)" = "$RUN_START" ]; then GEN_SUBJECT="$TITLE"; else GEN_SUBJECT="generate: derived output for #${ISSUE}"; fi
             git commit -q -m "$GEN_SUBJECT" -m "🤖 pi worker — generator/CLI output (e.g. crouton generate), committed separately from the inputs (#1849). Refs #${ISSUE}"
             echo "commit 2: $NGEN generated file(s)"
           fi
@@ -517,10 +568,51 @@ jobs:
           # 5) Push the branch. The PR opens in step 7 — AFTER the acceptance verdict is posted, so
           #    automerge sees it the instant it evaluates (no race).
           HAVE_COMMITS=0
-          if [ "$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]; then
+          if [ -n "${REV_START:-}" ]; then
+            # REVISE (#2446): push only if this run added a commit, and only on top of the head we
+            # started from (lease) — a concurrent push is refused, never overwritten.
+            if [ "$(git rev-parse HEAD)" != "$REV_START" ]; then
+              # The lease refuses to overwrite a push someone made to the PR while this ran. That is
+              # the right call — but say so, don't crash (a bare `git push | tail` + pipefail killed
+              # the step with "workflow bug" and no explanation).
+              if PUSH_OUT="$(git push -u --force-with-lease="${BR}:${REV_START}" origin "HEAD:${BR}" 2>&1)"; then
+                echo "$PUSH_OUT" | tail -2; HAVE_COMMITS=1
+              else
+                echo "$PUSH_OUT" | tail -4
+                echo "::error::revise push refused — ${BR} changed while this run worked (#2446)"
+                echo "revise_conflict=1" >> "$GITHUB_OUTPUT"
+                CPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+                [ -n "$CPR" ] && gh pr comment "$CPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **Not pushed — this PR changed while I was working on [your comment](%s).** Nothing was overwritten. If the newer commit already covers it, ignore this; otherwise comment again and I will redo it on top.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+              fi
+            else
+              echo "revise: no new commit on ${BR}"
+            fi
+          elif [ "$(git rev-list --count "origin/${BASE}..HEAD" 2>/dev/null || echo 0)" -gt 0 ]; then
             git push -u --force origin "HEAD:${BR}" 2>&1 | tail -2; HAVE_COMMITS=1
           else
             echo "no commits ahead of ${BASE} — no PR to open"
+          fi
+
+          # 5b) REVISE verdict (#2446) — say on the PR what the comment produced. The previous
+          #     route (#2414) answered "✅ resumed" having changed nothing; the owner must never
+          #     have to diff the PR to learn that.
+          if [ -n "${REV_START:-}" ]; then
+            RPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+            if [ "$HAVE_COMMITS" = "1" ]; then
+              echo "revised=1" >> "$GITHUB_OUTPUT"
+              FILES="$(git diff --name-status "$REV_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
+              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES")" 2>&1 | tail -1 || true
+            elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
+              REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
+              if [ "${REPLIED:-0}" -gt 0 ]; then
+                echo "revise: answered on the PR without a code change"
+                echo "revised=1" >> "$GITHUB_OUTPUT"
+              else
+                echo "::error::revise produced no commit and no reply (#2446)"
+                echo "revise_noop=1" >> "$GITHUB_OUTPUT"
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n⚠️ **[Your comment](%s) produced no change and no answer.** Nothing was pushed. Rephrase it as a concrete change (which file, what to do) and comment again.' "$FEEDBACK_FROM")" 2>&1 | tail -1 || true
+              fi
+            fi
           fi
 
           # 6) ACCEPTANCE GATE (#1849) — VERIFY the result, don't assert it. Typecheck the touched app,
@@ -539,6 +631,12 @@ jobs:
           # executable here.
           COMMITTED="$RUNNER_TEMP/committed-all.txt"
           cat "$RUNNER_TEMP/inputs.txt" "$RUNNER_TEMP/generated.txt" 2>/dev/null | grep . | sort -u > "$COMMITTED" || true
+          # Deleted paths are committed too, but they are not code that lands: drop them so a
+          # deletion is never "logic with no test" and never picks the app to typecheck (#2446).
+          if [ -s "$RUNNER_TEMP/deleted.txt" ]; then
+            grep -vxF -f "$RUNNER_TEMP/deleted.txt" "$COMMITTED" > "$COMMITTED.tmp" || true
+            mv "$COMMITTED.tmp" "$COMMITTED"
+          fi
           # ⚠️ NO `|| true` HERE (#2012). It used to swallow the exit code, and on 2026-08-05 that
           # cost four undiagnosable runs: `pi-finish.mjs` died with MODULE_NOT_FOUND (it imports a
           # sibling relatively, and the sibling has to be stashed alongside it — see the stash step),
@@ -731,14 +829,18 @@ jobs:
             if [ "$UI_TOUCHED" = "1" ]; then
               gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
             fi
+            # #2433: carry the issue's `<!-- review-surface: <app> <path> -->` markers onto the PR,
+            # so the deploy screenshots the page that shows the change, not the app's start page.
+            SURFACES="$(grep -oE '<!--[[:space:]]*review-surface:[^>]*-->' "$RUNNER_TEMP/issue-body.txt" 2>/dev/null | sed 's/^/\n/' | tr -d '\r' || true)"
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$TITLE" \
-                --body "$(printf 'Closes #%s%s\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
-              else gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
+              # A revision never RELEASES a PR — releasing is the owner's `lgtm` (#2446).
+              elif [ -z "${REV_START:-}" ]; then gh pr ready "$EXISTING" 2>&1 | tail -1 || true; fi
               # NB a re-dispatch that still touches UI keeps the hold — DRAFT_FLAG is set above.
               echo "PR #${EXISTING} already open for ${BR} (draft=$([ "$ACCEPT" = fail ] && echo yes || echo no))"
             fi
@@ -823,6 +925,13 @@ jobs:
               + `can't build the same issue. Resolve the blocker above, then dispatch again.\n\n`
               + `<sub>🤖 pi.dev harness (CI · ${{ vars.AGENT_RUNNER || 'github-hosted' }}) · claim guard #1890 · <a href="${runUrl}">run log</a></sub>` })
 
+      # REVISE no-op (#2446): the finish step already told the owner on the PR; make the run red too.
+      - name: Revise produced nothing
+        if: ${{ always() && steps.finish.outputs.revise_noop == '1' }}
+        run: |
+          echo "::error::the revision from comment ${{ inputs.feedback }} changed nothing and answered nothing (#2446)"
+          exit 1
+
       - name: Artifact-gate — fail if the agent produced nothing
         if: ${{ always() && steps.claim.outcome != 'failure' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -837,9 +946,17 @@ jobs:
           FINISH_OUTCOME: ${{ steps.finish.outcome }}
           ISSUE_NUMBER: ${{ inputs.issue || github.event.issue.number }}
           TRIGGER: ${{ github.event_name }}
+          # #2446: a revision stacks on the EXISTING PR, so there is no fresh PR for the checks below
+          # to find — they read it as "produced nothing" and paged the owner on a successful run.
+          # The finish step already proved the outcome (a pushed commit or a reply) and said so on
+          # the PR; a revise that produced neither is failed by its own step above.
+          REVISED: ${{ steps.finish.outputs.revised }}
+          REVISE_CONFLICT: ${{ steps.finish.outputs.revise_conflict }}
         with:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
+            if (process.env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
+            if (process.env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
             const since = '${{ steps.t0.outputs.ts }}'
             const sinceMs = new Date(since).getTime()
 

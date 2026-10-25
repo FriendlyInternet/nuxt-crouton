@@ -710,6 +710,9 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPO: ${{ github.repository }}
           GH_TOKEN_PUSH: ${{ steps.capture-token.outputs.token }}
+          # Read for `<!-- review-surface: <app> <path> -->` markers: the page that shows the
+          # change, copied from the issue by the worker (#2433). Env, never interpolated into bash.
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -o pipefail
           [ -n "$DEPLOY_URL" ] || { echo "no deploy url — skipping capture"; exit 0; }
@@ -724,7 +727,7 @@ jobs:
           OUT="$RUNNER_TEMP/uip"; rm -rf "$OUT"; mkdir -p "$OUT"
           node scripts/capture-review-surfaces.mjs \
             --url "$DEPLOY_URL" --email "$EMAIL" --password "$PASSWORD" \
-            --manifest "$WORKSPACE/$APP/deploy.config.json" --pr "$PR_NUMBER" --out "$OUT" || true
+            --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --pr "$PR_NUMBER" --out "$OUT" || true
           shopt -s nullglob; PNGS=("$OUT"/*.png)
           if [ ${#PNGS[@]} -eq 0 ]; then
             echo "no valid captures — the sign-off gate will withhold (nothing to show)"; exit 0

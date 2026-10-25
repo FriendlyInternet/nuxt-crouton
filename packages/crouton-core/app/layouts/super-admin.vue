@@ -15,6 +15,7 @@ const { t } = useT()
 
 <template>
   <UDashboardGroup>
+    <CroutonUserPill placement="fixed" />
     <CroutonAdminSidebar context="super" />
     <div class="flex flex-col flex-1 min-w-0 min-h-0">
       <ImpersonationBanner />
@@ -22,7 +23,8 @@ const { t } = useT()
         <UDashboardPanel>
           <UDashboardNavbar :title="t('home.superAdmin')">
             <template #leading>
-              <UDashboardSidebarCollapse />
+              <UDashboardSidebarToggle class="lg:hidden" />
+              <UDashboardSidebarCollapse class="hidden lg:flex" />
             </template>
           </UDashboardNavbar>
           <div class="flex-1 overflow-y-auto">
@@ -30,7 +32,6 @@ const { t } = useT()
           </div>
         </UDashboardPanel>
       </div>
-      <CroutonAdminStatusBar />
     </div>
   </UDashboardGroup>
 </template>

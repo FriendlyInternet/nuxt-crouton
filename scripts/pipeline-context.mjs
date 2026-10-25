@@ -44,6 +44,31 @@ const LEGACY_RE = /^[ \t]*pipeline:\s*(.+?)\s*$/im
 const INT_KEYS = new Set(['epic', 'depth'])
 const STR_KEYS = new Set(['epic_branch', 'dispatch'])
 
+// A value that can actually be a git branch / label name. Anything else (`…`, `<slug>`, `N`) is
+// a placeholder copied from documentation, and a placeholder must read as ABSENT — #2444: an
+// issue that QUOTED the block as an example handed the worker `epic_branch=…`, and the finish
+// step died on `git checkout -B work-N origin/…` (exit 128) after pi had done the work.
+const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/
+
+// Code spans and fences, where a block is being SHOWN, not set (#2444). Fences first so an
+// inline backtick inside a fence doesn't split it.
+const CODE_RE = /```[\s\S]*?(?:```|$)|`[^`\n]*`/g
+
+/** The first match of `re` that is not inside a code span or fence, or null. */
+function matchOutsideCode(body, re) {
+  const code = [...body.matchAll(CODE_RE)].map((m) => [m.index, m.index + m[0].length])
+  const g = new RegExp(re.source, re.flags.includes('g') ? re.flags : `${re.flags}g`)
+  for (const m of body.matchAll(g)) {
+    if (!code.some(([a, b]) => m.index >= a && m.index < b)) return m
+  }
+  return null
+}
+
+/** Replace one regex match (from matchOutsideCode) with `text`. */
+function spliceMatch(body, m, text) {
+  return body.slice(0, m.index) + text + body.slice(m.index + m[0].length)
+}
+
 /** Parse the `k=v k=v` token string into a typed object. Unknown keys are dropped. */
 function parseTokens(tokenStr) {
   const out = { epic: null, depth: null, epic_branch: null, dispatch: null }
@@ -57,7 +82,7 @@ function parseTokens(tokenStr) {
       const n = Number.parseInt(raw, 10)
       out[key] = Number.isFinite(n) ? n : null
     } else if (STR_KEYS.has(key)) {
-      out[key] = raw || null
+      out[key] = NAME_RE.test(raw) ? raw : null
     }
   }
   return out
@@ -70,9 +95,9 @@ function parseTokens(tokenStr) {
  */
 export function parsePipelineBlock(body) {
   if (!body || typeof body !== 'string') return { epic: null, depth: null, epic_branch: null, dispatch: null }
-  const wrapped = body.match(BLOCK_RE)
+  const wrapped = matchOutsideCode(body, BLOCK_RE)
   if (wrapped) return parseTokens(wrapped[1])
-  const legacy = body.match(LEGACY_RE)
+  const legacy = matchOutsideCode(body, LEGACY_RE)
   if (legacy) return parseTokens(legacy[1])
   return { epic: null, depth: null, epic_branch: null, dispatch: null }
 }
@@ -107,17 +132,15 @@ export function writePipelineBlock(body, context = {}) {
   const merged = { ...parsePipelineBlock(base), ...stripEmpty(context) }
   const block = formatPipelineBlock(merged)
 
-  const hasWrapped = BLOCK_RE.test(base)
-  const hasLegacy = !hasWrapped && LEGACY_RE.test(base)
+  // Only a block OUTSIDE code is the real one; a quoted example stays untouched (#2444).
+  const existing = matchOutsideCode(base, BLOCK_RE) || matchOutsideCode(base, LEGACY_RE)
 
   if (block === null) {
     // Nothing to write — drop any existing block so the body doesn't keep a stale one.
-    if (hasWrapped) return base.replace(BLOCK_RE, '').replace(/\n{3,}/g, '\n\n').trimEnd()
-    if (hasLegacy) return base.replace(LEGACY_RE, '').replace(/\n{3,}/g, '\n\n').trimEnd()
+    if (existing) return spliceMatch(base, existing, '').replace(/\n{3,}/g, '\n\n').trimEnd()
     return base
   }
-  if (hasWrapped) return base.replace(BLOCK_RE, block)
-  if (hasLegacy) return base.replace(LEGACY_RE, block)
+  if (existing) return spliceMatch(base, existing, block)
   const sep = base.trim() === '' ? '' : `${base.replace(/\s+$/, '')}\n\n`
   return `${sep}${block}`
 }
