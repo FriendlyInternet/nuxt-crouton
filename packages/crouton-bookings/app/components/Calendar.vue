@@ -119,6 +119,7 @@ const monthSwipeEl = ref<HTMLElement | null>(null)
 // Grid follows the finger, slides out, swaps month, slides in (#2515)
 // Only the day grid moves (via --slide-x); month label, arrows and weekday row stay put.
 const { vars: monthSwipeVars } = useSlideSwipe(monthSwipeEl, {
+  fade: true, // short slide + crossfade: never an empty panel (#2528)
   settleFrames: 3,
   onNext: () => { monthPlaceholder.value = monthPlaceholder.value.add({ months: 1 }) },
   onPrev: () => { monthPlaceholder.value = monthPlaceholder.value.subtract({ months: 1 }) },
@@ -587,7 +588,7 @@ const monthCellHeight = computed(() => {
           root: 'w-full',
           header: 'flex items-center justify-center gap-1',
           heading: 'text-center font-medium truncate mx-0',
-          body: 'p-1 translate-x-[var(--slide-x)] [transition:var(--slide-transition)]',
+          body: 'p-1 translate-x-[var(--slide-x)] opacity-[var(--slide-opacity)] [transition:var(--slide-transition)]',
           grid: 'w-full',
           headCell: 'text-center text-xs',
           cell: 'w-full text-center p-0.5',
