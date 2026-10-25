@@ -6,7 +6,7 @@ import type { NavigationMenuItem, DropdownMenuItem } from '@nuxt/ui'
  *
  * Two-pill floating nav:
  * - Left pill: Page navigation links (hidden when only 1 page)
- * - Right pill: user/status pill, language switcher, dark mode toggle
+ * - User pill (bottom-left): account, language, dark mode, theme
  *
  * Responsive behavior:
  * - Desktop (md+): Full horizontal pills
@@ -21,7 +21,6 @@ const { currentTeam, isAdmin } = useTeam()
 const { teamSlug: teamSlugRef, teamId: teamIdRef } = useTeamContext()
 const { appsList, getAppAllRoutes } = useCroutonApps()
 const { adminCollections } = useCroutonCollectionsNav()
-const colorMode = useColorMode()
 const { t } = useT()
 
 // Mobile drawer state
@@ -60,31 +59,12 @@ const teamLogo = computed<string | null>(() => siteSettings.value?.teamLogo || n
 const homePath = computed(() => (menuItems.value[0]?.to as string | undefined) ?? '/')
 
 // Per-page chrome flags (set by the public page route from page.config —
-// e.g. a volunteer-facing kassa page hides the member login). Language
-// switcher and color-mode toggle are deliberately not hideable.
+// e.g. a volunteer-facing kassa page hides the member login). The
+// pill's language/dark-mode menu stays reachable even then.
 const pageChrome = useState<{ hideNav: boolean, hideAuthControls: boolean }>('pageChrome', () => ({ hideNav: false, hideAuthControls: false }))
 
 // Show left pill only when more than 1 page and the page doesn't hide it
 const showPageNav = computed(() => menuItems.value.length > 1 && !pageChrome.value.hideNav)
-
-const toggleColorMode = () => {
-  colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark'
-}
-
-// Theme quick-select for the pill — a standalone palette dropdown wired to the
-// SAME source as the CV-menu Theme submenu: the shared state key the
-// crouton-themes base layer fills (empty when that layer isn't extended, so
-// this renders nothing without a hard dependency on the themes package). The
-// plugin stores a single "Theme ▸" submenu item; its children are the themes,
-// which we surface directly as the dropdown's items. Gated on the same
-// permission the CV menu uses (admins always; others when allowUserThemes).
-const themePreferenceItems = useState<DropdownMenuItem[]>('crouton:themePreferenceItems', () => [])
-const allowUserThemes = useState<boolean>('crouton:allowUserThemes', () => true)
-const canSwitchTheme = computed(() => allowUserThemes.value || isAdmin.value)
-const themeQuickItems = computed<DropdownMenuItem[][]>(() => {
-  const children = (themePreferenceItems.value[0] as { children?: DropdownMenuItem[] } | undefined)?.children
-  return canSwitchTheme.value && children?.length ? [children] : []
-})
 
 // Pill action slot — other layers push icon buttons here (e.g. pages' own
 // "edit this page" pencil); rendered in the pill next to the appearance
@@ -207,11 +187,6 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
           <USkeleton class="h-6 w-16 rounded-full" />
           <USkeleton class="h-6 w-16 rounded-full" />
         </div>
-        <div :class="[pillClass, 'px-2 py-1 absolute right-0']">
-          <USkeleton class="h-8 w-8 rounded-full" />
-          <USkeleton class="h-6 w-12 rounded-full" />
-          <USkeleton class="h-8 w-8 rounded-full" />
-        </div>
       </div>
     </template>
 
@@ -268,37 +243,23 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
                 <UIcon v-if="item.icon" :name="item.icon" class="size-4 text-muted shrink-0" />
                 {{ item.label }}
               </NuxtLink>
-
-              <USeparator class="my-1" />
-
-              <!-- Footer: language + dark mode -->
-              <div class="flex items-center justify-between px-2 py-1">
-                <CroutonI18nLanguageSwitcher class="w-auto" />
-                <ClientOnly>
-                  <UButton
-                    :icon="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'"
-                    color="neutral"
-                    variant="ghost"
-                    size="sm"
-                    @click="toggleColorMode"
-                  />
-                </ClientOnly>
-              </div>
             </div>
           </template>
         </UPopover>
       </div>
 
-      <!-- Right pill: auth controls (unless the page hides them) + language + dark mode (pinned right) -->
-      <div :class="[pillClass, 'px-2 py-1', showPageNav && !dockBottom && 'absolute right-0']">
-        <ClientOnly>
+      <!-- User pill: bottom-left (fixed), or the left end of the dock on full-screen pages -->
+      <ClientOnly>
+        <div v-if="dockBottom" class="pointer-events-auto order-first">
           <CroutonUserPill placement="inline" use-modal :extra-items="manageSiteItems" />
-          <USeparator orientation="vertical" class="h-5 md:mx-1" />
-        </ClientOnly>
+        </div>
+        <CroutonUserPill v-else class="pointer-events-auto" placement="fixed" use-modal :extra-items="manageSiteItems" />
+      </ClientOnly>
 
-        <!-- Package-contributed pill actions (e.g. the edit-page pencil).
-             Client-only: actions are registered on mount. -->
-        <ClientOnly>
+      <!-- Package-contributed pill actions (e.g. the edit-page pencil).
+           Client-only: actions are registered on mount. -->
+      <ClientOnly>
+        <div v-if="navPillActions.length" :class="[pillClass, 'px-2 py-1', showPageNav && !dockBottom && 'absolute right-0']">
           <UButton
             v-for="action in navPillActions"
             :key="action.id"
@@ -309,36 +270,8 @@ const dockBottom = computed(() => pageLayout.value === 'full-screen')
             :aria-label="action.label"
             @click="action.onSelect"
           />
-        </ClientOnly>
-
-        <!-- Language Switcher -->
-        <CroutonI18nLanguageSwitcher class="w-auto" />
-
-        <!-- Theme quick-select — only when the themes package populates the
-             shared items (client-only, so no SSR hydration mismatch). -->
-        <ClientOnly>
-          <UDropdownMenu v-if="themeQuickItems.length" :items="themeQuickItems">
-            <UButton
-              icon="i-lucide-palette"
-              color="neutral"
-              variant="ghost"
-              size="sm"
-              :aria-label="t('pages.nav.theme')"
-            />
-          </UDropdownMenu>
-        </ClientOnly>
-
-        <!-- Dark/Light Mode Toggle -->
-        <ClientOnly>
-          <UButton
-            :icon="colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon'"
-            color="neutral"
-            variant="ghost"
-            size="sm"
-            @click="toggleColorMode"
-          />
-        </ClientOnly>
-      </div>
+        </div>
+      </ClientOnly>
     </div>
 
     <!-- Account Settings Modal -->
