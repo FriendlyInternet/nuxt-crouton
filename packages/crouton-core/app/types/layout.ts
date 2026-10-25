@@ -22,6 +22,12 @@ export interface LayoutLeaf extends LayoutNodeBase {
   type: 'leaf'
   /** Registry id; resolved to a component via the allowlisted blocks map. */
   blockId: string
+  /**
+   * This pane's own id (#2490), so two panes of the same block can be addressed
+   * apart — a breakpoint's `collapsed` list may name a pane id or a block id.
+   * Absent on older trees, where the block id is the only handle.
+   */
+  id?: string
   /** User-editable props passed to the block (validated against its config schema in Sprint 1). */
   config?: Record<string, unknown>
   /**

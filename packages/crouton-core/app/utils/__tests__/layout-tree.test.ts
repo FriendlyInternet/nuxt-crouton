@@ -95,6 +95,15 @@ describe('sanitizeLayoutTree — rejects / strips malformed input', () => {
       .toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'form', collapse: { edge: 'left', affordance: 'tab' } } })
   })
 
+  it('keeps a leaf\'s own id, drops an empty or non-string one (#2490)', () => {
+    expect(sanitizeLayoutTree({ type: 'leaf', blockId: 'form', id: 'p1' }))
+      .toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'form', id: 'p1' } })
+    expect(sanitizeLayoutTree({ type: 'leaf', blockId: 'form', id: '' }))
+      .toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'form' } })
+    expect(sanitizeLayoutTree({ type: 'leaf', blockId: 'form', id: 42 }))
+      .toEqual({ renderer: 'panes', root: { type: 'leaf', blockId: 'form' } })
+  })
+
   it('rejects a tree nested past the depth cap', () => {
     let node: Record<string, unknown> = { type: 'leaf', blockId: 'deep' }
     for (let i = 0; i < 20; i++) {

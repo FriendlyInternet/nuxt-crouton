@@ -57,7 +57,8 @@ function sanitizeNode(input: unknown, depth: number): LayoutNode | null {
           ...(isLayoutCollapseReveal(c.reveal) ? { reveal: c.reveal } : {}),
         }
       : undefined
-    return { type: 'leaf', blockId: input.blockId, ...(config ? { config } : {}), ...(collapse ? { collapse } : {}), ...base }
+    const id = typeof input.id === 'string' && input.id ? input.id : undefined
+    return { type: 'leaf', blockId: input.blockId, ...(id ? { id } : {}), ...(config ? { config } : {}), ...(collapse ? { collapse } : {}), ...base }
   }
 
   if (input.type === 'split') {
