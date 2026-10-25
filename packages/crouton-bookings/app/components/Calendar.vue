@@ -578,7 +578,8 @@ const monthCellHeight = computed(() => {
     <!-- Month View -->
     <div v-else ref="monthSwipeEl" class="w-full touch-pan-y">
       <UCalendar
-        v-model:placeholder="(monthPlaceholder as any)"
+        :placeholder="(monthPlaceholder as any)"
+        @update:placeholder="(v: any) => { monthPlaceholder = v }"
         :model-value="(monthFocusDate as any)"
         @update:model-value="onMonthDayActivate"
         size="sm"
