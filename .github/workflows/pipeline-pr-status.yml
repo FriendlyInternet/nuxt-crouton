@@ -95,14 +95,18 @@ jobs:
 
             // Aggregate every check-run + commit-status for a SHA into one verdict.
             async function ciState(ref) {
-              let success = 0, pending = 0, failure = 0
+              let success = 0, pending = 0, failure = 0, cancelled = 0
               const failing = [] // #1909 — the ping must say WHICH checks, not just how many
               const runs = await github.paginate(github.rest.checks.listForRef,
                 { owner, repo, ref, per_page: 100 })
               for (const r of runs) {
                 if (r.status !== 'completed') { pending++; continue }
                 if (['success', 'neutral', 'skipped'].includes(r.conclusion)) success++
-                else { failure++; failing.push({ name: r.name, id: r.id }) } // failure, cancelled, timed_out, action_required, stale
+                // Cancelled ≠ failed (#1150/#2474): a preview deploy bumped off its queue slot
+                // — or a run superseded by a newer push — proved nothing about the code, so it
+                // must not drive the 🔴 ping. It is still not green: counted apart, shown apart.
+                else if (r.conclusion === 'cancelled') cancelled++
+                else { failure++; failing.push({ name: r.name, id: r.id }) } // failure, timed_out, action_required, stale
               }
               try {
                 const combined = (await github.rest.repos.getCombinedStatusForRef({ owner, repo, ref })).data
@@ -112,13 +116,14 @@ jobs:
                   else { failure++; failing.push({ name: s.context }) } // error, failure — a commit status carries no annotations
                 }
               } catch (e) { core.warning(`combined status for ${ref}: ${e.message}`) }
-              const total = success + pending + failure
+              const total = success + pending + failure + cancelled
               let icon = '⏳', word = 'pending'
               if (total === 0) { icon = '⏳'; word = 'queued' }
               else if (failure > 0) { icon = '❌'; word = 'failing' }
               else if (pending > 0) { icon = '⏳'; word = 'running' }
+              else if (cancelled > 0) { icon = '⏹️'; word = 'incomplete' } // bumped, not broken — no ping
               else { icon = '✅'; word = 'passing' }
-              return { icon, word, success, pending, failure, total, failing }
+              return { icon, word, success, pending, failure, cancelled, total, failing }
             }
 
             // One sticky status note on the pipeline PR.
@@ -129,6 +134,7 @@ jobs:
               const parts = [`${st.success}/${st.total} checks passed`]
               if (st.pending) parts.push(`${st.pending} running`)
               if (st.failure) parts.push(`${st.failure} failing`)
+              if (st.cancelled) parts.push(`${st.cancelled} cancelled (bumped, not failed — re-run or push to refresh)`)
               const body =
                 `${PR_STICKY}\n` +
                 `### ${st.icon} CI ${st.word}\n` +

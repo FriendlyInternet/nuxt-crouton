@@ -117,8 +117,16 @@ jobs:
       pull-requests: write   # for the staging-URL PR comment
     # Serialize (don't cancel — a cancel mid-migration is unsafe) deploys to the
     # same app+env so concurrent runs can't race on auto-provisioning / sync / D1.
+    #
+    # PR previews get their OWN slot (#2474): a per-PR preview is a separate Worker with
+    # its own D1 (`<app>-pr<N>`, #2020), so two of them cannot race — but they all shared
+    # `deploy-<app>-staging`. GitHub keeps ONE waiting run per group, so a wave of sibling
+    # sub-PRs bumped each other ("Canceling since a higher priority waiting request for
+    # deploy-kassa-staging exists" on #2471) and the owner got a red ping for a bump.
+    # Only shared staging and production keep the per-app slot. The PR number comes from
+    # the caller's event (same source the deploy step uses to pick the preview path).
     concurrency:
-      group: deploy-${{ inputs.app }}-${{ inputs.environment }}
+      group: deploy-${{ inputs.app }}-${{ inputs.environment }}${{ github.event.pull_request.number && format('-pr{0}', github.event.pull_request.number) || '' }}
       cancel-in-progress: false
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -133,14 +141,15 @@ jobs:
         if: runner.os == 'macOS'
         run: command -v jq >/dev/null 2>&1 || brew install jq
 
-      # dest is keyed per app+env: on the self-hosted mini several app deploys run
-      # in parallel and the default shared ~/setup-pnpm races (ENOTEMPTY rmdir,
-      # #1254/#1255). The deploy-<app>-<env> concurrency group above guarantees one
-      # writer per dest; the dest set is bounded (apps × envs), so no disk creep. (#1258)
+      # dest is keyed exactly like the concurrency group above (app+env, plus the PR number
+      # for a preview, #2474): on the self-hosted mini several app deploys run in parallel
+      # and the default shared ~/setup-pnpm races (ENOTEMPTY rmdir, #1254/#1255). The group
+      # guarantees one writer per dest; the dest set is bounded (apps × envs, plus open
+      # PRs; each dest is just a pnpm binary, a few MB), so no disk creep. (#1258)
       - name: Setup pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
         with:
-          dest: ~/setup-pnpm-${{ inputs.app }}-${{ inputs.environment }}
+          dest: ~/setup-pnpm-${{ inputs.app }}-${{ inputs.environment }}${{ github.event.pull_request.number && format('-pr{0}', github.event.pull_request.number) || '' }}
 
       - name: Setup Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
