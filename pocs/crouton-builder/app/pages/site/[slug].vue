@@ -14,15 +14,16 @@ import { parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize
 import { resolveLayoutAtWidth, partitionCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { useWindowSize } from '@vueuse/core'
 import { BOARD_HIDDEN_KEY, collectHidden, collapsePlacement, type HiddenItem } from '~/utils/board-hidden'
-import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
+// Addressed by slug (#2490): the page is read through /api/site/:slug, which
+// returns only its title and live layout — no team id in the URL. The visitor
+// still signs in: the collection blocks (list, form) are team-scoped, so an
+// anonymous render would be an empty frame. A truly public page needs a public
+// data path for its blocks — a follow-up, not this ticket.
 definePageMeta({ middleware: ['auth'] })
-
 const route = useRoute()
 const slug = computed(() => String(route.params.slug))
-
-const { items: pages } = await useCollectionQuery('builderPages')
-const page = computed(() => (pages.value as BuilderPage[]).find(p => p.slug === slug.value) ?? null)
+const { data: page } = await useFetch<{ title: string, board: Record<string, unknown> }>(() => `/api/site/${encodeURIComponent(slug.value)}`)
 useHead({ title: () => page.value?.title ?? 'Page' })
 
 const { blocks } = useCroutonLayoutBlocks()
@@ -49,6 +50,39 @@ const hiddenItems = computed<HiddenItem[]>(() => collectHidden(resolved.value?.r
 })))
 const navItems = computed(() => hiddenItems.value.filter(i => collapsePlacement(i.recipe) === 'nav'))
 const hiddenLayer = ref<{ open: (id: string) => void } | null>(null)
+// ?debug=1 — what this device actually resolved (width, breakpoint, visible tree, hidden).
+const debug = computed(() => route.query.debug !== undefined)
+// What the DOM did (measured after paint): pane boxes, form presence, JS errors.
+const dom = ref<{ panes: string[], forms: number, errors: string[] } | null>(null)
+const errors: string[] = []
+onMounted(() => {
+  if (!debug.value) return
+  window.addEventListener('error', e => errors.push(String(e.message)))
+  window.addEventListener('unhandledrejection', e => errors.push(String(e.reason)))
+  const measure = () => {
+    dom.value = {
+      panes: Array.from(document.querySelectorAll('[data-handoff="served-page"] .croutonpane')).map((el) => {
+        const r = el.getBoundingClientRect()
+        return `${Math.round(r.width)}x${Math.round(r.height)}@${Math.round(r.top)} "${(el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 18)}"`
+      }),
+      forms: document.querySelectorAll('[data-handoff="served-page"] form').length,
+      errors: [...errors],
+    }
+  }
+  setTimeout(measure, 3000)
+  setTimeout(measure, 10000)
+})
+const debugText = computed(() => JSON.stringify({
+  ua: typeof navigator === 'undefined' ? '' : navigator.userAgent.slice(0, 80),
+  dom: dom.value,
+  width: width.value,
+  activeBreakpoint: resolved.value?.activeBreakpoint ?? null,
+  collapsed: resolved.value?.collapsed ?? [],
+  hidden: hiddenItems.value.map(i => ({ key: i.key, placement: collapsePlacement(i.recipe) })),
+  visible: visibleRoot.value,
+  variants: (page.value?.board as { variants?: unknown[] } | null)?.variants?.length ?? 0,
+  live: (page.value?.board as { live?: string } | null)?.live ?? null,
+}, null, 1))
 provide(BOARD_HIDDEN_KEY, { navItems, items: hiddenItems, open: id => hiddenLayer.value?.open(id) })
 </script>
 
@@ -66,6 +100,7 @@ provide(BOARD_HIDDEN_KEY, { navItems, items: hiddenItems, open: id => hiddenLaye
           Nothing to show at this width.
         </div>
         <BoardHiddenBlocks ref="hiddenLayer" :items="hiddenItems" />
+        <pre v-if="debug" class="whitespace-pre-wrap break-all border-t border-default p-3 text-[11px] text-muted" data-handoff="served-debug">{{ debugText }}</pre>
       </ClientOnly>
     </template>
   </div>

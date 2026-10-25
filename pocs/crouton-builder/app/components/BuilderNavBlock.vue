@@ -10,10 +10,10 @@ import { BOARD_HIDDEN_KEY } from '~/utils/board-hidden'
 // without any, the demo items show what the bar looks like.
 const hidden = inject(BOARD_HIDDEN_KEY, null)
 const demo = [
-  { icon: 'i-lucide-home', label: 'Home', blockId: '' },
-  { icon: 'i-lucide-search', label: 'Search', blockId: '' },
-  { icon: 'i-lucide-plus', label: 'Add', blockId: '' },
-  { icon: 'i-lucide-user', label: 'You', blockId: '' },
+  { icon: 'i-lucide-home', label: 'Home', key: '' },
+  { icon: 'i-lucide-search', label: 'Search', key: '' },
+  { icon: 'i-lucide-plus', label: 'Add', key: '' },
+  { icon: 'i-lucide-user', label: 'You', key: '' },
 ]
 const items = computed(() => (hidden?.navItems.value.length ? hidden.navItems.value : demo))
 </script>
@@ -25,9 +25,9 @@ const items = computed(() => (hidden?.navItems.value.length ? hidden.navItems.va
       :key="item.label"
       type="button"
       class="flex flex-col items-center gap-0.5 text-muted"
-      :class="item.blockId ? 'text-default' : ''"
-      :data-nav-item="item.blockId || undefined"
-      @click.stop="item.blockId && hidden?.open(item.blockId)"
+      :class="item.key ? 'text-default' : ''"
+      :data-nav-item="item.key || undefined"
+      @click.stop="item.key && hidden?.open(item.key)"
     >
       <UIcon :name="item.icon" class="size-5" />
       <span class="text-[10px]">{{ item.label }}</span>

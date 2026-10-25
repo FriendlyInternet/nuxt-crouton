@@ -14,7 +14,7 @@
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode } from '@fyit/crouton-core/app/types/layout'
 import type { NodePath } from '@fyit/crouton-layout/app/utils/layout-edit'
-import { isSubtreeCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
+import { isSubtreeCollapsed, isLeafCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
 
 defineOptions({ name: 'BoardTree' })
 
@@ -22,7 +22,7 @@ const props = withDefaults(defineProps<{
   node: LayoutNode
   path?: NodePath
   selected?: NodePath | null
-  /** blockIds hidden at the current width: those panes aren't laid out. */
+  /** pane ids / block ids hidden at the current width: those panes aren't laid out. */
   hidden?: Set<string>
 }>(), { path: () => [], selected: null, hidden: () => new Set<string>() })
 
@@ -31,7 +31,7 @@ const emit = defineEmits<{
   select: [at: NodePath]
 }>()
 
-const isHidden = computed(() => props.node.type === 'leaf' && props.hidden.has(props.node.blockId))
+const isHidden = computed(() => props.node.type === 'leaf' && isLeafCollapsed(props.node, props.hidden))
 // Original indices are kept so paths (drops, selection) stay valid.
 const visibleChildren = computed(() =>
   props.node.type === 'split'

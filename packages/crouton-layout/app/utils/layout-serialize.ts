@@ -54,6 +54,7 @@ function canonicalNode(node: LayoutNode): Record<string, unknown> {
   if (node.type === 'leaf') {
     out.type = 'leaf'
     out.blockId = node.blockId
+    put(out, 'id', node.id)
     put(out, 'config', sortedRecord(node.config))
     if (node.collapse) put(out, 'collapse', { edge: node.collapse.edge, affordance: node.collapse.affordance, placement: node.collapse.placement, reveal: node.collapse.reveal })
   } else if (node.type === 'split') {

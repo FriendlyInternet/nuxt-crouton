@@ -228,6 +228,29 @@ describe('collapse styles (WS6 #875)', () => {
   })
 })
 
+describe('pane ids in collapsed lists (#2490)', () => {
+  const two: LayoutNode = {
+    type: 'split',
+    direction: 'horizontal',
+    children: [
+      { type: 'leaf', blockId: 'form', id: 'p1' },
+      { type: 'leaf', blockId: 'form', id: 'p2' },
+    ],
+  }
+  it('a pane id hides only that pane; its twin (same block) stays', () => {
+    const { visible, collapsed } = partitionCollapsed(two, ['p1'])
+    expect(collapsed.map(c => c.blockId)).toEqual(['form'])
+    expect(visible).toEqual({ type: 'leaf', blockId: 'form', id: 'p2' })
+    expect(isSubtreeCollapsed(two, new Set(['p1']))).toBe(false)
+    expect(isSubtreeCollapsed(two, new Set(['p1', 'p2']))).toBe(true)
+  })
+  it('a block id still hides every pane of that block (older trees)', () => {
+    const { visible } = partitionCollapsed(two, ['form'])
+    expect(visible).toBeNull()
+    expect(isSubtreeCollapsed(two, new Set(['form']))).toBe(true)
+  })
+})
+
 describe('partitionCollapsed', () => {
   it('splits visible panes from collapsed leaves (gutter rail)', () => {
     const root = masterDetail()

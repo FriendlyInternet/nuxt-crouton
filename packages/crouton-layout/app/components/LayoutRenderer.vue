@@ -337,6 +337,45 @@ watch(
     />
   </div>
 
+  <!-- Ordered FIRST among the split branches: a page render must never fall into the
+       admin STACKED / HUG flex layouts below — those fill a frame (`h-full`, `flex:1 1 0`),
+       and on a frameless page WebKit sizes a `flex:1 1 0` column item to its basis, ZERO
+       (a form vanished on iOS, #2490), where Chromium sizes it to content. -->
+  <!-- Split, VIEW mode (#1178) — a read-only render (`interactive=false`: a served page /
+       Preview) has nothing to drag, so it renders as pure CSS Grid built from the declared
+       sizing contract, with ZERO ResizeObserver: each child track is `minmax(<floor>px,
+       <size>fr)` (proportion + min-width in one) or `auto` for a hug pane, and the row→column
+       stack is a container query at the split's derived soft-floor (a per-split `@container`
+       rule, since queries can't read `var()`). No reka SplitterGroup (its internal observer
+       flooded the console) and no `useElementSize` (the JS stack-measurement that drifted from
+       the POC's CSS fallback, #983). The wrapper is the query container; the grid child carries
+       `data-cq` so the emitted rule targets it. Excludes in-place-collapse (still reka). -->
+  <div
+    v-else-if="node.type === 'split' && !interactive && !inPlace"
+    :style="{ containerType: 'inline-size', containerName: viewCqName, height: '100%', width: '100%' }"
+  >
+    <div
+      ref="viewGridRef"
+      class="croutonviewgrid"
+      :data-cq="viewCqName"
+      :style="viewGridStyle"
+    >
+      <div
+        v-for="(child, i) in node.children"
+        :key="i"
+        data-crouton-pane
+        class="croutonpane min-h-0 min-w-0 overflow-hidden"
+      >
+        <CroutonLayoutRenderer
+          :node="child"
+          :interactive="false"
+          @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
+        />
+      </div>
+    </div>
+    <component :is="'style'" v-if="viewStackCss">{{ viewStackCss }}</component>
+  </div>
+
   <!-- Split, STACKED — too narrow to fit side-by-side, so the columns reflow to a
        full-width vertical stack (responsive reflow, #852 follow-up). `groupRef` stays on
        it so the live width keeps measuring: widen past the fit threshold and it flips
@@ -383,41 +422,6 @@ watch(
         @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
       />
     </div>
-  </div>
-
-  <!-- Split, VIEW mode (#1178) — a read-only render (`interactive=false`: a served page /
-       Preview) has nothing to drag, so it renders as pure CSS Grid built from the declared
-       sizing contract, with ZERO ResizeObserver: each child track is `minmax(<floor>px,
-       <size>fr)` (proportion + min-width in one) or `auto` for a hug pane, and the row→column
-       stack is a container query at the split's derived soft-floor (a per-split `@container`
-       rule, since queries can't read `var()`). No reka SplitterGroup (its internal observer
-       flooded the console) and no `useElementSize` (the JS stack-measurement that drifted from
-       the POC's CSS fallback, #983). The wrapper is the query container; the grid child carries
-       `data-cq` so the emitted rule targets it. Excludes in-place-collapse (still reka). -->
-  <div
-    v-else-if="node.type === 'split' && !interactive && !inPlace"
-    :style="{ containerType: 'inline-size', containerName: viewCqName, height: '100%', width: '100%' }"
-  >
-    <div
-      ref="viewGridRef"
-      class="croutonviewgrid"
-      :data-cq="viewCqName"
-      :style="viewGridStyle"
-    >
-      <div
-        v-for="(child, i) in node.children"
-        :key="i"
-        data-crouton-pane
-        class="croutonpane min-h-0 min-w-0 overflow-hidden"
-      >
-        <CroutonLayoutRenderer
-          :node="child"
-          :interactive="false"
-          @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
-        />
-      </div>
-    </div>
-    <component :is="'style'" v-if="viewStackCss">{{ viewStackCss }}</component>
   </div>
 
   <!-- Split -->

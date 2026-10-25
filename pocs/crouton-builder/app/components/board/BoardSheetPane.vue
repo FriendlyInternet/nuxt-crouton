@@ -6,7 +6,7 @@
 import type { LayoutLeaf, LayoutCollapseRecipe } from '@fyit/crouton-core/app/types/layout'
 import type { CroutonLayoutBlockDefinition } from '@fyit/crouton-core/app/types/layout-block'
 import { normalizeCollapseRecipe, LAYOUT_COLLAPSE_EDGES } from '@fyit/crouton-core/app/types/layout'
-import { collapsePlacement, collapseReveal } from '~/utils/board-hidden'
+import { collapsePlacement, collapseReveal, paneKey } from '~/utils/board-hidden'
 
 const props = defineProps<{
   leaf: LayoutLeaf
@@ -15,7 +15,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   setField: [name: string, value: unknown]
-  toggleHidden: [blockId: string]
+  toggleHidden: [key: string]
   setRecipe: [leaf: LayoutLeaf, patch: Partial<LayoutCollapseRecipe>]
 }>()
 
@@ -47,7 +47,7 @@ const patch = (p: Partial<LayoutCollapseRecipe>) => emit('setRecipe', props.leaf
     <USeparator />
     <div class="flex items-center justify-between">
       <span class="text-sm">Hidden at this width</span>
-      <USwitch :model-value="hidden" data-handoff="hidden-toggle" @update:model-value="emit('toggleHidden', leaf.blockId)" />
+      <USwitch :model-value="hidden" data-handoff="hidden-toggle" @update:model-value="emit('toggleHidden', paneKey(leaf))" />
     </div>
     <template v-if="hidden">
       <UFormField label="Trigger">
