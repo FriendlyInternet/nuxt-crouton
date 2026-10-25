@@ -240,7 +240,8 @@ defineExpose({
   >
     <UDashboardNavbar :title="title">
       <template #leading>
-        <UDashboardSidebarCollapse />
+        <UDashboardSidebarToggle class="lg:hidden" />
+        <UDashboardSidebarCollapse class="hidden lg:flex" />
       </template>
 
       <template #right>

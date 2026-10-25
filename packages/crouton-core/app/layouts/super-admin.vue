@@ -24,7 +24,8 @@ const { t } = useT()
         <UDashboardPanel>
           <UDashboardNavbar :title="t('home.superAdmin')">
             <template #leading>
-              <UDashboardSidebarCollapse />
+              <UDashboardSidebarToggle class="lg:hidden" />
+              <UDashboardSidebarCollapse class="hidden lg:flex" />
             </template>
           </UDashboardNavbar>
           <div class="flex-1 overflow-y-auto">
