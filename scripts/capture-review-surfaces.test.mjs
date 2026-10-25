@@ -103,3 +103,10 @@ test('resolveSurfaces: an ordinary app PR keeps the manifest surfaces', () => {
   assert.deepEqual(resolveSurfaces({ manifest, prBody: 'Closes #5', app: 'kassa' }).surfaces,
     [{ name: 'preview', path: '/admin/test1/sales', do: [] }])
 })
+
+test('isFlatFrame: rejects the committed all-white 390px capture (#2526)', async () => {
+  const { default: sharp } = await import('sharp')
+  const file = new URL('./lib/__fixtures__/blank-white-390.png', import.meta.url)
+  const { data, info } = await sharp(file.pathname).ensureAlpha().raw().toBuffer({ resolveWithObject: true })
+  assert.equal(isFlatFrame({ data, width: info.width, height: info.height, channels: info.channels }), true)
+})

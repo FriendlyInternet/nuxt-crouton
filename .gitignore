@@ -103,6 +103,8 @@ apps/*/.wrangler/deploy/
 *.mp4
 # …except committed ticket-diagram renders (the ticket-diagram skill embeds these in epic/PR bodies)
 !writeups/diagrams/*.png
+# …and test fixtures for the capture validators (#2526)
+!scripts/lib/__fixtures__/*.png
 # …and committed ui-proposal --static mockup renders (embedded inline in the draft-PR sticky; #613)
 !writeups/ui-proposals/*.png
 # …and the design sign-off hold's renders (#1933). #1821 added these two paths and the matching
