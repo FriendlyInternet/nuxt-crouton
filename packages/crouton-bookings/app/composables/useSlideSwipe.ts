@@ -26,35 +26,38 @@ export function useSlideSwipe(
   const width = () => el.value?.offsetWidth || 300
   const wait = (ms: number) => new Promise<void>(r => setTimeout(r, ms))
 
+  const SIGN = { next: -1, prev: 1 } as const
+
+  async function animateSlide(fire: () => void, w: number) {
+    animating.value = true
+    dragX.value = w
+    await wait(SLIDE_MS)
+    animating.value = false
+    fire()
+    if (opts.peek) {
+      // neighbour panel is already in view: data swapped, snap back to centre
+      dragX.value = 0
+      return
+    }
+    dragX.value = -w
+    await nextTick()
+    await new Promise(r => requestAnimationFrame(r))
+    animating.value = true
+    dragX.value = 0
+    await wait(SLIDE_MS)
+    animating.value = false
+  }
+
   async function slide(dir: 'next' | 'prev') {
     if (busy) return
-    const fire = dir === 'next' ? opts.onNext : opts.onPrev
+    const fire = { next: opts.onNext, prev: opts.onPrev }[dir]
     if (reducedMotion()) {
       dragX.value = 0
       fire()
       return
     }
     busy = true
-    const w = width() * (dir === 'next' ? -1 : 1)
-    animating.value = true
-    dragX.value = w
-    await wait(SLIDE_MS)
-    animating.value = false
-    if (opts.peek) {
-      // neighbour panel is already in view: swap data and snap back to centre
-      fire()
-      dragX.value = 0
-    }
-    else {
-      fire()
-      dragX.value = -w
-      await nextTick()
-      await new Promise(r => requestAnimationFrame(r))
-      animating.value = true
-      dragX.value = 0
-      await wait(SLIDE_MS)
-      animating.value = false
-    }
+    await animateSlide(fire, width() * SIGN[dir])
     busy = false
   }
 
