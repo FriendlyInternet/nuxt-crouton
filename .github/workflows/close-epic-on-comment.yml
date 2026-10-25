@@ -22,13 +22,16 @@ jobs:
   close-epic:
     # Cheap webhook-snapshot pre-filter; the script re-checks server-side (labels/state
     # can drift between the event and the run). Fire only on: a human comment (not a Bot —
-    # avoids loops), on an ISSUE (not a PR), invoking /close-epic, on an epic already
-    # marked status:ready-to-close.
+    # avoids loops), on an ISSUE (not a PR), invoking /close-epic.
+    #
+    # The `epic` + `status:ready-to-close` checks are deliberately NOT here (#2501): an `if:`
+    # miss is a `skipped` run that tells the owner nothing. On #2413 — a pipeline-split epic the
+    # decomposer had never labelled `epic` — two `/close-epic` comments vanished without a word.
+    # The script checks the labels and REPLIES when it can't close, so the command never
+    # exits 0 having done nothing visible (AGENTS.md → Authoring a gate).
     if: |
       !github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
-      contains(github.event.issue.labels.*.name, 'epic') &&
-      contains(github.event.issue.labels.*.name, 'status:ready-to-close') &&
       contains(github.event.comment.body, '/close-epic')
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 10
@@ -64,11 +67,6 @@ jobs:
             // Re-check server-side: state + the two gating labels.
             const issue = (await github.rest.issues.get({ ...context.repo, issue_number })).data
             if (issue.state === 'closed') { core.info('Epic already closed — nothing to do.'); return }
-            const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
-            if (!labels.includes('epic') || !labels.includes('status:ready-to-close')) {
-              core.info('Issue is not an epic marked status:ready-to-close — ignoring (run /postmortem first).'); return
-            }
-
             // Only a maintainer (push access) may close. getCollaboratorPermissionLevel
             // collapses to admin/write/read/none.
             let perm = 'none'
@@ -78,6 +76,23 @@ jobs:
             } catch (e) { core.info(`Permission check failed for @${actor}: ${e.message}`); return }
             if (!['admin', 'write'].includes(perm)) {
               core.info(`@${actor} lacks push access (perm=${perm}) — ignoring.`); return
+            }
+
+            const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+            const missing = ['epic', 'status:ready-to-close'].filter(l => !labels.includes(l))
+            if (missing.length) {
+              // Say why, on the issue (#2501). Plain-language owner brief: what to do, then the depth.
+              const fixes = []
+              if (missing.includes('epic')) fixes.push('add the `epic` label (the pipeline now adds it when it splits an issue, #2501)')
+              if (missing.includes('status:ready-to-close')) fixes.push('run the postmortem first — it stamps `status:ready-to-close` (#856)')
+              await github.rest.issues.createComment({
+                ...context.repo, issue_number,
+                body: `> 🤖 **Claude Code** · agent pipeline (CI) · _close-epic on comment (#856)_\n\n`
+                  + `🔴 **Not closed — this issue is missing ${missing.map(l => `\`${l}\``).join(' and ')}.**\n\n`
+                  + `**You:** ${fixes.join('; then ')}, and comment \`/close-epic\` again.\n`
+                  + `**Depth:** ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+              })
+              core.info(`Not closing #${issue_number}: missing ${missing.join(', ')} — replied.`); return
             }
 
             // Close as completed + strip the managed status labels directly (idempotent;

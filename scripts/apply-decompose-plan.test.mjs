@@ -136,6 +136,18 @@ test('a split plan → create+link+trigger-label per child, block at depth+1', (
   assert.deepEqual(triggers, ['work-this', 'delegate-pi'])
 })
 
+test('a split labels the TARGET `epic` first, with a plain add (no forced event) — #2501', () => {
+  const acts = planToActions({ leaf: false, children: [CHILD()] }, CTX)
+  assert.deepEqual(acts[0], { type: 'ensure-label', issue: CTX.target, label: 'epic' })
+  assert.equal(acts.filter(a => a.type === 'ensure-label').length, 1)
+})
+
+test('a leaf plan and a signoff hold do NOT label the target `epic`', () => {
+  for (const plan of [{ leaf: true, children: [] }, parsePlan({ signoff: { summary: 's', questions: ['q'] } })]) {
+    assert.equal(planToActions(plan, CTX).some(a => a.type === 'ensure-label'), false)
+  }
+})
+
 test('depth cap forces work-this even for a needsSplit child at MAX_DEPTH', () => {
   const acts = planToActions({ leaf: false, children: [CHILD({ needsSplit: true })] }, { ...CTX, depth: MAX_DEPTH - 1 })
   // childDepth = MAX_DEPTH → labelForChild forces work-this
@@ -168,6 +180,9 @@ test('runActions creates, links, and labels each child in order (mock exec)', ()
   assert.ok(kinds.includes('issue create'))
   assert.ok(kinds.some(k => k.startsWith('api --method')))       // the link POST
   assert.ok(kinds.includes('issue edit'))                        // the trigger label
+  // #2501: the very first gh call stamps the TARGET `epic` — a plain add, no remove first.
+  assert.deepEqual(calls[0], ['gh', 'issue', 'edit', '1706', '--repo', 'o/r', '--add-label', 'epic'])
+  assert.ok(!calls.some(c => c.includes('--remove-label') && c.includes('epic')))
   // NO call ever goes through a shell — args are arrays. Assert no arg contains a heredoc/`$(`.
   assert.ok(!calls.flat().some(a => typeof a === 'string' && a.includes('$(')))
 })
