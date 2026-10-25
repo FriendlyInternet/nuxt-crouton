@@ -11,7 +11,7 @@ import { swipeDirection, lockAxis } from '../utils/swipe'
  */
 export function useSlideSwipe(
   el: Ref<HTMLElement | null>,
-  opts: { onNext: () => void, onPrev: () => void, peek?: boolean },
+  opts: { onNext: () => void, onPrev: () => void, peek?: boolean, settleFrames?: number },
 ) {
   const SLIDE_MS = 250
   const dragX = ref(0)
@@ -40,8 +40,10 @@ export function useSlideSwipe(
       return
     }
     dragX.value = -w
+    // wait until the new period has actually rendered before sliding it in
     await nextTick()
-    await new Promise(r => requestAnimationFrame(r))
+    for (let i = 0; i < (opts.settleFrames ?? 1); i++)
+      await new Promise(r => requestAnimationFrame(r))
     animating.value = true
     dragX.value = 0
     await wait(SLIDE_MS)
@@ -57,8 +59,15 @@ export function useSlideSwipe(
       return
     }
     busy = true
-    await animateSlide(fire, width() * SIGN[dir])
-    busy = false
+    try {
+      await animateSlide(fire, width() * SIGN[dir])
+    }
+    finally {
+      // never leave the content stuck off-screen
+      animating.value = false
+      dragX.value = 0
+      busy = false
+    }
   }
 
   async function springBack() {
@@ -106,5 +115,12 @@ export function useSlideSwipe(
     transition: animating.value ? `transform ${SLIDE_MS}ms ease-out` : 'none',
   }))
 
-  return { slide, style, dragging }
+  // CSS variables for when only part of the element (e.g. a calendar grid, not
+  // its header) should move.
+  const vars = computed(() => ({
+    '--slide-x': `${dragX.value}px`,
+    '--slide-transition': animating.value ? `translate ${SLIDE_MS}ms ease-out` : 'none',
+  }))
+
+  return { slide, style, vars, dragging }
 }
