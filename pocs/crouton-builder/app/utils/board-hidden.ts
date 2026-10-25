@@ -12,6 +12,8 @@ import type { LayoutLeaf, LayoutCollapseRecipe, LayoutNode } from '@fyit/crouton
 import { normalizeCollapseRecipe, collapsePlacement, collapseReveal } from '@fyit/crouton-core/app/types/layout'
 
 export interface HiddenItem {
+  /** The pane's key: its own id when it has one (#2490), else its block id. */
+  key: string
   blockId: string
   label: string
   icon: string
@@ -24,12 +26,21 @@ export interface HiddenBlocksApi {
   navItems: Ref<HiddenItem[]>
   /** All hidden blocks at this width (edge-placed ones draw their own trigger). */
   items: Ref<HiddenItem[]>
-  open: (blockId: string) => void
+  open: (key: string) => void
+}
+
+/** The handle a hidden list refers to: the pane's own id, or the block id on older trees. */
+export function paneKey(leaf: LayoutLeaf): string {
+  return leaf.id ?? leaf.blockId
+}
+/** Hidden when the list names this pane or its block (same rule as the package resolver). */
+export function isPaneHidden(leaf: LayoutLeaf, hidden: Set<string>): boolean {
+  return (!!leaf.id && hidden.has(leaf.id)) || hidden.has(leaf.blockId)
 }
 
 export const BOARD_HIDDEN_KEY: InjectionKey<HiddenBlocksApi> = Symbol('board-hidden')
 
-/** Walk a resolved root and list the leaves whose blockId is in `hidden`. */
+/** Walk a resolved root and list every hidden pane (one item per pane). */
 export function collectHidden(
   root: LayoutNode | null,
   hidden: Set<string>,
@@ -39,10 +50,11 @@ export function collectHidden(
   const seen = new Set<string>()
   function walk(node: LayoutNode) {
     if (node.type === 'leaf') {
-      if (hidden.has(node.blockId) && !seen.has(node.blockId)) {
-        seen.add(node.blockId)
+      const key = paneKey(node)
+      if (isPaneHidden(node, hidden) && !seen.has(key)) {
+        seen.add(key)
         const { label, icon } = describe(node.blockId)
-        out.push({ blockId: node.blockId, label, icon, leaf: node, recipe: normalizeCollapseRecipe(node.collapse) })
+        out.push({ key, blockId: node.blockId, label, icon, leaf: node, recipe: normalizeCollapseRecipe(node.collapse) })
       }
       return
     }

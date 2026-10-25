@@ -22,8 +22,8 @@ const revealSide = computed(() => {
   return e === 'left' || e === 'right' ? e : 'bottom'
 })
 
-function open(blockId: string) {
-  revealing.value = props.items.find(i => i.blockId === blockId) ?? null
+function open(key: string) {
+  revealing.value = props.items.find(i => i.key === key) ?? null
 }
 function close() {
   revealing.value = null
@@ -35,7 +35,7 @@ defineExpose({ open })
   <!-- Edge triggers -->
   <div
     v-for="item in edgeItems"
-    :key="item.blockId"
+    :key="item.key"
     class="edge-trigger pointer-events-auto fixed z-30"
     :data-edge="item.recipe.edge"
   >
@@ -45,8 +45,8 @@ defineExpose({ open })
       size="xs"
       color="neutral"
       variant="solid"
-      :data-edge-trigger="item.blockId"
-      @click="open(item.blockId)"
+      :data-edge-trigger="item.key"
+      @click="open(item.key)"
     />
   </div>
 

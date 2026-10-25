@@ -8,8 +8,8 @@ import type { LayoutNode, LayoutTree, LayoutLeaf, LayoutCollapseRecipe } from '@
 import { normalizeCollapseRecipe } from '@fyit/crouton-core/app/types/layout'
 import type { CroutonLayoutBlockRegistry } from '@fyit/crouton-core/app/types/layout-block'
 import { resolveLayoutAtWidth, patchBreakpoint, isSubtreeCollapsed, type ResolvedLayout } from '@fyit/crouton-layout/app/utils/layout-responsive'
-import { setCollapseRecipe } from '@fyit/crouton-layout/app/utils/layout-edit'
-import { collectHidden, collapsePlacement, type HiddenItem } from '~/utils/board-hidden'
+import { findNodePath, type NodePath } from '@fyit/crouton-layout/app/utils/layout-edit'
+import { collectHidden, collapsePlacement, paneKey, type HiddenItem } from '~/utils/board-hidden'
 
 export function useBoardHidden(opts: {
   tree: Ref<LayoutTree | null>
@@ -38,7 +38,7 @@ export function useBoardHidden(opts: {
    * and pins higher breakpoints that never stated their own list, so hiding a block
    * on the phone can't leak into a desktop layout you already authored.
    */
-  function toggleHidden(blockId: string) {
+  function toggleHidden(key: string) {
     const tree = opts.tree.value
     if (!tree) return
     const w = opts.writeTarget.value ?? opts.effWidth.value
@@ -49,17 +49,30 @@ export function useBoardHidden(opts: {
         next = patchBreakpoint(next, b.minWidth, { collapsed: resolveLayoutAtWidth(tree, b.minWidth).collapsed })
     }
     const shown = new Set(hiddenSet.value)
-    if (shown.has(blockId)) shown.delete(blockId)
-    else shown.add(blockId)
+    if (shown.has(key)) shown.delete(key)
+    else shown.add(key)
     opts.setTree(patchBreakpoint(next, w, { collapsed: [...shown] }))
   }
 
-  /** Change where a block's trigger lives / how it opens. */
+  /** Change where THIS pane's trigger lives / how it opens (by pane, not by block type). */
   function setRecipe(leaf: LayoutLeaf, patch: Partial<LayoutCollapseRecipe>) {
-    if (!opts.root.value) return
+    const root = opts.root.value
+    if (!root) return
+    const path = findNodePath(root, leaf)
+    if (!path) return
     const next = normalizeCollapseRecipe({ ...normalizeCollapseRecipe(leaf.collapse), ...patch })
-    opts.writeRoot(setCollapseRecipe(opts.root.value, leaf.blockId, next))
+    opts.writeRoot(replaceLeafAt(root, path, { ...leaf, collapse: next }))
   }
 
-  return { hiddenSet, hiddenItems, navItems, allHidden, toggleHidden, setRecipe }
+  return { hiddenSet, hiddenItems, navItems, allHidden, toggleHidden, setRecipe, paneKey }
 }
+
+/** Immutable replace of the node at `path`. */
+function replaceLeafAt(root: LayoutNode, path: NodePath, next: LayoutNode): LayoutNode {
+  if (path.length === 0) return next
+  const [head, ...rest] = path
+  if (root.type === 'split') return { ...root, children: root.children.map((c, i) => (i === head ? replaceLeafAt(c, rest, next) : c)) }
+  if (root.type === 'nested') return { ...root, layout: { ...root.layout, root: replaceLeafAt(root.layout.root, path, next) } }
+  return root
+}
+

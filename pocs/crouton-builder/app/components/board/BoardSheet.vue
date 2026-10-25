@@ -19,7 +19,7 @@ defineProps<{
 const open = defineModel<boolean>('open', { default: false })
 const emit = defineEmits<{
   setField: [name: string, value: unknown]
-  toggleHidden: [blockId: string]
+  toggleHidden: [key: string]
   setRecipe: [leaf: LayoutLeaf, patch: Partial<LayoutCollapseRecipe>]
   remove: []
   selectHidden: [item: HiddenItem]

@@ -14,15 +14,16 @@ import { parseLayoutTree } from '@fyit/crouton-layout/app/utils/layout-serialize
 import { resolveLayoutAtWidth, partitionCollapsed } from '@fyit/crouton-layout/app/utils/layout-responsive'
 import { useWindowSize } from '@vueuse/core'
 import { BOARD_HIDDEN_KEY, collectHidden, collapsePlacement, type HiddenItem } from '~/utils/board-hidden'
-import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 
+// Addressed by slug (#2490): the page is read through /api/site/:slug, which
+// returns only its title and live layout — no team id in the URL. The visitor
+// still signs in: the collection blocks (list, form) are team-scoped, so an
+// anonymous render would be an empty frame. A truly public page needs a public
+// data path for its blocks — a follow-up, not this ticket.
 definePageMeta({ middleware: ['auth'] })
-
 const route = useRoute()
 const slug = computed(() => String(route.params.slug))
-
-const { items: pages } = await useCollectionQuery('builderPages')
-const page = computed(() => (pages.value as BuilderPage[]).find(p => p.slug === slug.value) ?? null)
+const { data: page } = await useFetch<{ title: string, board: Record<string, unknown> }>(() => `/api/site/${encodeURIComponent(slug.value)}`)
 useHead({ title: () => page.value?.title ?? 'Page' })
 
 const { blocks } = useCroutonLayoutBlocks()

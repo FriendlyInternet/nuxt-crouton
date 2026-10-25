@@ -20,14 +20,14 @@ const hidden = inject(BOARD_HIDDEN_KEY, null)
     <div class="ml-auto flex items-center gap-2 text-muted">
       <UButton
         v-for="item in hidden?.navItems.value ?? []"
-        :key="item.blockId"
+        :key="item.key"
         :icon="item.icon"
         :label="item.label"
         size="xs"
         color="neutral"
         variant="soft"
-        :data-nav-item="item.blockId"
-        @click.stop="hidden?.open(item.blockId)"
+        :data-nav-item="item.key"
+        @click.stop="hidden?.open(item.key)"
       />
       <UIcon name="i-lucide-search" class="size-4" />
       <UIcon name="i-lucide-bell" class="size-4" />
