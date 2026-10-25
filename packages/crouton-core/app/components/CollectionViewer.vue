@@ -2,7 +2,14 @@
   <div class="flex flex-col h-full min-h-0">
     <!-- Header with title and layout switcher - fixed height -->
     <div class="px-4 py-3 sm:px-6 sm:py-4 flex items-center justify-between gap-2 shrink-0">
-      <h2 class="text-lg sm:text-xl font-semibold truncate min-w-0">
+      <!-- Below sm only: TableHeader's navbar supplies its own toggle from sm up -->
+      <div
+        v-if="$slots.leading"
+        class="sm:hidden shrink-0"
+      >
+        <slot name="leading" />
+      </div>
+      <h2 class="text-lg sm:text-xl font-semibold truncate min-w-0 flex-1 sm:flex-none">
         {{ camelToTitleCase(collectionName) }}
       </h2>
       <!-- Layout Switcher: inline icon group on desktop -->
