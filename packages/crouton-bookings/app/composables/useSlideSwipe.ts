@@ -34,6 +34,13 @@ export function useSlideSwipe(
 
   const SIGN = { next: -1, prev: 1 } as const
 
+  // wait until the new period has actually rendered before sliding it in
+  async function settle() {
+    await nextTick()
+    for (let i = 0; i < (opts.settleFrames ?? 1); i++)
+      await new Promise(r => requestAnimationFrame(r))
+  }
+
   async function animateFade(fire: () => void, w: number) {
     const travel = w * FADE_TRAVEL
     animating.value = true
@@ -43,9 +50,7 @@ export function useSlideSwipe(
     animating.value = false
     fire()
     dragX.value = -travel
-    await nextTick()
-    for (let i = 0; i < (opts.settleFrames ?? 1); i++)
-      await new Promise(r => requestAnimationFrame(r))
+    await settle()
     animating.value = true
     dragX.value = 0
     forcedOpacity.value = 1
@@ -66,10 +71,7 @@ export function useSlideSwipe(
       return
     }
     dragX.value = -w
-    // wait until the new period has actually rendered before sliding it in
-    await nextTick()
-    for (let i = 0; i < (opts.settleFrames ?? 1); i++)
-      await new Promise(r => requestAnimationFrame(r))
+    await settle()
     animating.value = true
     dragX.value = 0
     await wait(SLIDE_MS)
