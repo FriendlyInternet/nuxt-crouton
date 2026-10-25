@@ -116,14 +116,10 @@ const monthPlaceholder = ref<DateValue>(new CalendarDate(
   1,
 ))
 const monthSwipeEl = ref<HTMLElement | null>(null)
-const { lengthX: monthLenX, lengthY: monthLenY } = useSwipe(monthSwipeEl, {
-  passive: true,
-  threshold: 0,
-  onSwipeEnd() {
-    const dir = swipeDirection(-monthLenX.value, -monthLenY.value)
-    if (dir === 'next') monthPlaceholder.value = monthPlaceholder.value.add({ months: 1 })
-    else if (dir === 'prev') monthPlaceholder.value = monthPlaceholder.value.subtract({ months: 1 })
-  },
+// Grid follows the finger, slides out, swaps month, slides in (#2515)
+const { style: monthSwipeStyle } = useSlideSwipe(monthSwipeEl, {
+  onNext: () => { monthPlaceholder.value = monthPlaceholder.value.add({ months: 1 }) },
+  onPrev: () => { monthPlaceholder.value = monthPlaceholder.value.subtract({ months: 1 }) },
 })
 
 function onMonthDayActivate(value: any) {
@@ -576,7 +572,8 @@ const monthCellHeight = computed(() => {
     </CroutonBookingsWeekStrip>
 
     <!-- Month View -->
-    <div v-else ref="monthSwipeEl" class="w-full touch-pan-y">
+    <div v-else class="w-full overflow-hidden touch-pan-y">
+    <div ref="monthSwipeEl" class="w-full" :style="monthSwipeStyle">
       <UCalendar
         :placeholder="(monthPlaceholder as any)"
         @update:placeholder="(v: any) => { monthPlaceholder = v }"
@@ -718,6 +715,7 @@ const monthCellHeight = computed(() => {
           </div>
         </template>
       </UCalendar>
+    </div>
     </div>
   </div>
 </template>
