@@ -31,8 +31,11 @@ import { stripNonCommandRegions } from './comment-command.mjs'
  */
 const CHECK_ONLY_LINE = /^[ \t]*(?:[✅✔☑]️?[ \t]*)+$/mu
 
-/** The word form. Kept because it is written into issue bodies and skills across the repo. */
-const APPROVAL_WORD = /^[ \t]*(?:lgtm|approved?)\b|(?<![\w-])(?:lgtm|approved?)(?![\w-])/im
+/**
+ * The word form. Kept because it is written into issue bodies and skills across the repo.
+ * Must OPEN a line (like the ✅ rule): mid-sentence "I wouldn't lgtm this yet" is not approval (#2509).
+ */
+const APPROVAL_WORD = /^[ \t]*(?:lgtm|approved?)(?![\w-])/im
 
 /**
  * Is `body` an approval?

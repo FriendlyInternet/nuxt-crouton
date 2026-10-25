@@ -80,9 +80,15 @@ test('ordinary review prose does not approve', () => {
 })
 
 test('"I would not lgtm this yet" is the sentence that must never approve', () => {
-  // The one that would be caught by the old bare /\blgtm\b/i and merge unreviewed code.
-  // It is a plain sentence — no code span to strip — so the word form DOES match it.
-  // Recorded as a KNOWN LIMIT rather than pretended away: the check gesture is the safe
-  // signal, and this is the argument for preferring it.
-  assert.equal(isApproval('I would not lgtm this yet'), true)
+  // The word form must open a line; mid-sentence mentions are discussion (#2509).
+  assert.equal(isApproval('I would not lgtm this yet'), false)
+  assert.equal(isApproval("I wouldn't approve this yet"), false)
+  assert.equal(isApproval('Looks fine, but not approved'), false)
+})
+
+test('the word form still approves when it opens a line', () => {
+  assert.equal(isApproval('LGTM, ship it'), true)
+  assert.equal(isApproval('lgtm 👍'), true)
+  assert.equal(isApproval('approved, go'), true)
+  assert.equal(isApproval('Thanks for the screenshots.\n\nlgtm'), true)
 })
