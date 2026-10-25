@@ -50,6 +50,17 @@ const hiddenItems = computed<HiddenItem[]>(() => collectHidden(resolved.value?.r
 })))
 const navItems = computed(() => hiddenItems.value.filter(i => collapsePlacement(i.recipe) === 'nav'))
 const hiddenLayer = ref<{ open: (id: string) => void } | null>(null)
+// ?debug=1 — what this device actually resolved (width, breakpoint, visible tree, hidden).
+const debug = computed(() => route.query.debug !== undefined)
+const debugText = computed(() => JSON.stringify({
+  width: width.value,
+  activeBreakpoint: resolved.value?.activeBreakpoint ?? null,
+  collapsed: resolved.value?.collapsed ?? [],
+  hidden: hiddenItems.value.map(i => ({ key: i.key, placement: collapsePlacement(i.recipe) })),
+  visible: visibleRoot.value,
+  variants: (page.value?.board as { variants?: unknown[] } | null)?.variants?.length ?? 0,
+  live: (page.value?.board as { live?: string } | null)?.live ?? null,
+}, null, 1))
 provide(BOARD_HIDDEN_KEY, { navItems, items: hiddenItems, open: id => hiddenLayer.value?.open(id) })
 </script>
 
@@ -67,6 +78,7 @@ provide(BOARD_HIDDEN_KEY, { navItems, items: hiddenItems, open: id => hiddenLaye
           Nothing to show at this width.
         </div>
         <BoardHiddenBlocks ref="hiddenLayer" :items="hiddenItems" />
+        <pre v-if="debug" class="whitespace-pre-wrap break-all border-t border-default p-3 text-[11px] text-muted" data-handoff="served-debug">{{ debugText }}</pre>
       </ClientOnly>
     </template>
   </div>
