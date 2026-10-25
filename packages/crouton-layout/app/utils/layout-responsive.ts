@@ -25,7 +25,7 @@
  *
  * Pure (no Vue, no DOM) so the precedence is unit-testable without a browser.
  */
-import type { LayoutBreakpoint, LayoutCollapseRecipe, LayoutCollapseStyle, LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
+import type { LayoutBreakpoint, LayoutCollapseRecipe, LayoutCollapseStyle, LayoutLeaf, LayoutNode, LayoutTree } from '@fyit/crouton-core/app/types/layout'
 import { DEFAULT_COLLAPSE_STYLE, isLayoutCollapseStyle, normalizeCollapseRecipe } from '@fyit/crouton-core/app/types/layout'
 
 /** The effective layout view at one container width — what the renderer draws. */
@@ -66,9 +66,14 @@ export function normalizeCollapseStyle(value: string | undefined): LayoutCollaps
  * a `split` only collapses when *all* its children are collapsed, so a half-collapsed
  * split keeps its slot. Recurses through nested sub-layouts. Empty set ⇒ false.
  */
+/** A leaf is hidden when the list names its own pane id or its block id (#2490). */
+export function isLeafCollapsed(leaf: LayoutLeaf, collapsedIds: Set<string>): boolean {
+  return (!!leaf.id && collapsedIds.has(leaf.id)) || collapsedIds.has(leaf.blockId)
+}
+
 export function isSubtreeCollapsed(node: LayoutNode, collapsedIds: Set<string>): boolean {
   if (collapsedIds.size === 0) return false
-  if (node.type === 'leaf') return collapsedIds.has(node.blockId)
+  if (node.type === 'leaf') return isLeafCollapsed(node, collapsedIds)
   if (node.type === 'nested') return isSubtreeCollapsed(node.layout.root, collapsedIds)
   return node.children.every(c => isSubtreeCollapsed(c, collapsedIds))
 }
@@ -146,7 +151,7 @@ export function partitionCollapsed(
 
   function walk(node: LayoutNode, contextLabel?: string): LayoutNode | null {
     if (node.type === 'leaf') {
-      if (set.has(node.blockId)) {
+      if (isLeafCollapsed(node, set)) {
         collapsed.push({ blockId: node.blockId, ...(contextLabel ? { label: contextLabel } : {}), recipe: normalizeCollapseRecipe(node.collapse) })
         return null
       }

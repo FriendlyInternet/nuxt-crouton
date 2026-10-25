@@ -78,6 +78,11 @@ describe('#987 serializeLayoutTree / parseLayoutTree — canonical, diffable tre
     expect(resolveLayoutAtWidth(back, 1280).collapsed).toEqual([])
   })
 
+  it('1d. round-trips a leaf id (#2490)', () => {
+    const t: LayoutTree = { renderer: 'panes', root: { type: 'leaf', blockId: 'form', id: 'p1' } }
+    expect(parseLayoutTree(serializeLayoutTree(t))).toEqual(t)
+  })
+
   it('2. is canonical: key order in the INPUT does not change the OUTPUT', () => {
     const a: LayoutTree = { renderer: 'panes', root: { type: 'leaf', blockId: 'x', config: { variant: 'rows' } } }
     const b = { root: { config: { variant: 'rows' }, blockId: 'x', type: 'leaf' }, renderer: 'panes' } as unknown as LayoutTree
