@@ -19,7 +19,7 @@ interface Props {
   showStatus?: boolean
   /** auto = avatar-only under `sm` */
   compact?: 'auto' | 'always' | 'never'
-  /** fixed = top-right overlay; inline = sits in the parent's flex row */
+  /** fixed = bottom-left overlay; inline = sits in the parent's flex row */
   placement?: 'fixed' | 'inline'
   /** Extra menu items (e.g. "Manage site"), rendered above sign out */
   extraItems?: DropdownMenuItem[]
@@ -161,7 +161,7 @@ function retry() {
   <!-- fallow-ignore-next-line complexity -->
   <div v-if="visible"
     :class="placement === 'fixed'
-      ? 'fixed z-50 right-3 top-[max(0.75rem,env(safe-area-inset-top))]'
+      ? 'fixed z-50 left-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
       : 'relative shrink-0'"
   >
     <UButton
@@ -178,30 +178,9 @@ function retry() {
       class="flex h-11 items-center rounded-full border transition-colors duration-300"
       :class="surface"
     >
-      <!-- Status message: widens via max-width; the feed owns the lifetime -->
-      <div
-        class="overflow-hidden transition-[max-width,opacity] duration-300 ease-out"
-        :class="status ? 'max-w-[min(260px,calc(100vw-8rem))] opacity-100' : 'max-w-0 opacity-0'"
-        aria-live="polite"
-      >
-        <span v-if="status" class="flex items-center gap-2 whitespace-nowrap pl-3 pr-1 text-sm">
-          <UIcon :name="status.icon || 'i-lucide-check'" class="size-4 shrink-0" />
-          <span class="truncate">{{ status.text }}</span>
-        </span>
-      </div>
-
-      <UButton
-        v-if="status?.type === 'error' && status.retry"
-        color="error"
-        variant="link"
-        size="sm"
-        :label="t('userPill.retry')"
-        @click="retry"
-      />
-
       <UDropdownMenu
         :items="menuItems"
-        :content="{ align: 'end', side: 'bottom' }"
+        :content="{ align: 'start', side: 'top' }"
         :ui="{ content: 'w-72 sm:w-80' }"
         @update:open="onOpenChange"
       >
@@ -252,6 +231,27 @@ function retry() {
           />
         </button>
       </UDropdownMenu>
+
+      <!-- Status message: widens via max-width; the feed owns the lifetime -->
+      <div
+        class="overflow-hidden transition-[max-width,opacity] duration-300 ease-out"
+        :class="status ? 'max-w-[min(260px,calc(100vw-8rem))] opacity-100' : 'max-w-0 opacity-0'"
+        aria-live="polite"
+      >
+        <span v-if="status" class="flex items-center gap-2 whitespace-nowrap pl-1 pr-3 text-sm">
+          <UIcon :name="status.icon || 'i-lucide-check'" class="size-4 shrink-0" />
+          <span class="truncate">{{ status.text }}</span>
+        </span>
+      </div>
+
+      <UButton
+        v-if="status?.type === 'error' && status.retry"
+        color="error"
+        variant="link"
+        size="sm"
+        :label="t('userPill.retry')"
+        @click="retry"
+      />
     </div>
   </div>
 </template>
