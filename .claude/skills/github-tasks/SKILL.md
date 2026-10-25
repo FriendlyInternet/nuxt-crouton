@@ -151,7 +151,7 @@ Don't stop at the issue you were asked about; closing the leaf without checking 
 
 ## Design handoff (epics that change a visual surface)
 
-If the design lives in a canvas the pipeline can't open, don't re-describe it in prose. Export one PNG per board/state and run `node scripts/design-handoff.mjs <epic> <png…> --post` — it commits them under `writeups/design/<epic>/` (with a `README.md` naming each file) and upserts a "🎨 Design" section with inline images into the epic body. Workers should `read` those PNGs before building; `ui-proposal` shows them next to the preview.
+If the design lives in a canvas the pipeline can't open, don't re-describe it in prose. Export one PNG per board/state and run `node scripts/design-handoff.mjs <epic> <png…> --post` — it copies them to `writeups/design/<epic>/` (with a `README.md` naming each file) and upserts a "🎨 Design" section with inline images into the epic body. Commit and push those files (until they reach the branch in `--branch`, the images don't load). Pipeline workers are told to `read` them before building; `ui-proposal` shows them next to the preview.
 
 ## Structure
 

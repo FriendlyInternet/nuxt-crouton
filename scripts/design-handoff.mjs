@@ -8,7 +8,8 @@
 // Usage:
 //   node scripts/design-handoff.mjs <epic> <png…> [--post] [--branch <name>] [--repo owner/name]
 //
-// Copies each PNG to writeups/design/<epic>/, writes README.md naming them, and prints
+// Copies each PNG to writeups/design/<epic>/, writes README.md naming them, refuses if git
+// would ignore them, and prints
 // the "Design" section (inline images). With --post it also upserts that section into
 // the epic body (between <!-- design-handoff --> markers) via `gh`. Images link to the
 // raw URL on --branch (default main) — pass the PR branch until the files are merged.
@@ -53,6 +54,16 @@ export function upsertSection(issueBody, section) {
   return `${body.replace(/\s+$/, '')}\n\n${section}\n`
 }
 
+/** True when git would ignore `path` (so `git add` silently adds nothing). */
+function isIgnored(path) {
+  try {
+    execFileSync('git', ['check-ignore', '-q', path])
+    return true
+  } catch {
+    return false
+  }
+}
+
 function main(argv) {
   const args = argv.slice(2)
   const flags = { post: false, branch: 'main', repo: process.env.GITHUB_REPOSITORY || 'FriendlyInternet/nuxt-crouton' }
@@ -79,6 +90,13 @@ function main(argv) {
   const names = pngs.map(p => basename(p))
   pngs.forEach((p, i) => copyFileSync(p, join(dir, names[i])))
   writeFileSync(join(dir, 'README.md'), readmeFor(epic, names))
+  // The copy "succeeds" even when git ignores the folder, and then nothing gets committed and
+  // every image link is dead (the #1933 shape). Prove the boards are committable instead.
+  const ignored = names.map(n => join('writeups/design', epic, n)).filter(isIgnored)
+  if (ignored.length) {
+    console.error(`git ignores ${ignored.join(', ')} — add an exception to .gitignore, or nothing will be committed`)
+    process.exit(1)
+  }
   const section = sectionFor(epic, names, flags)
   console.log(`copied ${names.length} board(s) to writeups/design/${epic}/ + README.md`)
   if (!flags.post) {
