@@ -94,6 +94,19 @@ function nextWeek() {
   referenceDate.value = referenceDate.value.add({ weeks: 1 })
 }
 
+// Horizontal swipe on the strip changes week; vertical drags pass through
+// to the page (touch-action: pan-y, no preventDefault) (#2485)
+const swipeEl = ref<HTMLElement | null>(null)
+const { lengthX, lengthY } = useSwipe(swipeEl, {
+  passive: true,
+  threshold: 0,
+  onSwipeEnd() {
+    const dir = swipeDirection(-lengthX.value, -lengthY.value)
+    if (dir === 'next') nextWeek()
+    else if (dir === 'prev') prevWeek()
+  },
+})
+
 function goToToday() {
   referenceDate.value = today(getLocalTimeZone())
 }
@@ -186,7 +199,7 @@ const sizeClasses = computed(() => {
 </script>
 
 <template>
-  <div class="flex flex-col">
+  <div ref="swipeEl" class="flex flex-col touch-pan-y">
     <!-- Header: Nav + Month Label (calendar style) -->
     <div class="flex items-center justify-center gap-1">
       <UButton

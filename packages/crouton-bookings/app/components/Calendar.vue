@@ -109,6 +109,23 @@ const monthFocusDate = ref<DateValue | undefined>(new CalendarDate(
 // content, which would need its own widget role and nest interactive controls.
 // Param typed to UCalendar's emit union (single | range | multiple | null);
 // this calendar is single-date, so anything else resolves to undefined.
+// Swipe on the month grid → previous/next month (#2485)
+const monthPlaceholder = ref<DateValue>(new CalendarDate(
+  new Date().getFullYear(),
+  new Date().getMonth() + 1,
+  1,
+))
+const monthSwipeEl = ref<HTMLElement | null>(null)
+const { lengthX: monthLenX, lengthY: monthLenY } = useSwipe(monthSwipeEl, {
+  passive: true,
+  threshold: 0,
+  onSwipeEnd() {
+    const dir = swipeDirection(-monthLenX.value, -monthLenY.value)
+    if (dir === 'next') monthPlaceholder.value = monthPlaceholder.value.add({ months: 1 })
+    else if (dir === 'prev') monthPlaceholder.value = monthPlaceholder.value.subtract({ months: 1 })
+  },
+})
+
 function onMonthDayActivate(value: any) {
   const single: DateValue | undefined
     = value && !Array.isArray(value) && typeof value.toDate === 'function' ? value : undefined
@@ -559,8 +576,9 @@ const monthCellHeight = computed(() => {
     </CroutonBookingsWeekStrip>
 
     <!-- Month View -->
-    <div v-else class="w-full">
+    <div v-else ref="monthSwipeEl" class="w-full touch-pan-y">
       <UCalendar
+        v-model:placeholder="(monthPlaceholder as any)"
         :model-value="(monthFocusDate as any)"
         @update:model-value="onMonthDayActivate"
         size="sm"
