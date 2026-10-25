@@ -1,15 +1,17 @@
 <script setup lang="ts">
 /**
- * Fanfare Events Dashboard
+ * Fanfare Events Dashboard — composed from layout blocks (#2532).
  *
- * Grid of event cards. Clicking a card opens the ONE event-workspace
- * experience (the adaptive block: kassa + orders / clients / data / settings).
- * No separate "Kassa openen" vs "Werkruimte" split anymore — the card is the
- * single entry, and the block's own "Open kassa" reaches the POS (#2186).
+ * The page body is a stored, editable layout (`layout_configs` id `default`,
+ * team-scoped) rendered by the layout engine. With nothing stored it is the one
+ * block it always was: the event card grid (`sales-events-grid`, kassa's own
+ * block — one card = one entry into the event workspace, #2186). "Arrange" opens
+ * the Layout page, where the grid can sit next to a list, stack on a phone, or
+ * hide at a width — and this page follows.
  *
  * @route /admin/[team]/sales/events
  */
-import type { SalesEvent } from '@fyit/crouton-sales/collections/events/types'
+import type { LayoutTree } from '@fyit/crouton-core/app/types/layout'
 
 definePageMeta({ middleware: ['auth'] })
 
@@ -17,18 +19,15 @@ const { t } = useT()
 const { teamSlug } = useTeamContext()
 const crouton = useCrouton()
 
-const { items: events, pending } = await useCollectionQuery('salesEvents') as { items: Ref<SalesEvent[]>, pending: Ref<boolean> }
+const LAYOUT_ID = 'default'
+const defaultTree: LayoutTree = { renderer: 'panes', root: { type: 'leaf', blockId: 'sales-events-grid' } }
 
-const statusColor = (status?: string) => {
-  switch (status) {
-    case 'active': return 'success' as const
-    case 'upcoming': return 'info' as const
-    default: return 'neutral' as const
-  }
-}
-
-const workspacePath = (event: SalesEvent) =>
-  `/admin/${teamSlug.value}/sales/events/${event.slug}`
+const { load } = useCroutonLayoutStore()
+const tree = ref<LayoutTree>(defaultTree)
+onMounted(async () => {
+  const stored = await load(LAYOUT_ID)
+  if (stored?.root) tree.value = stored
+})
 </script>
 
 <template>
@@ -39,6 +38,14 @@ const workspacePath = (event: SalesEvent) =>
         <p class="text-muted text-sm mt-1">{{ t('sales.events.description') }}</p>
       </div>
       <div class="flex items-center gap-2">
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-layout-dashboard"
+          :label="t('sales.events.arrange', 'Arrange')"
+          :to="`/admin/${teamSlug}/layout`"
+          data-handoff="events-arrange"
+        />
         <CroutonImportButton collection="salesEvents" />
         <UButton
           color="primary"
@@ -49,45 +56,10 @@ const workspacePath = (event: SalesEvent) =>
       </div>
     </div>
 
-    <div v-if="pending" class="flex justify-center p-12">
-      <UIcon name="i-lucide-loader-2" class="w-6 h-6 animate-spin text-muted" />
-    </div>
-
-    <div
-      v-else-if="events?.length"
-      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-    >
-      <!-- A real link, so the card is keyboard- and screen-reader-reachable (#2419). -->
-      <NuxtLink
-        v-for="event in events"
-        :key="event.id"
-        :to="workspacePath(event)"
-        class="group block rounded-xl border border-default bg-default p-5
-               transition-all duration-150 hover:border-primary/50 hover:shadow-md
-               focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <h3 class="font-semibold text-lg leading-tight truncate group-hover:text-primary transition-colors">
-            {{ event.title }}
-          </h3>
-          <UBadge :color="statusColor(event.status)" variant="subtle" size="sm">
-            {{ t(`sales.events.${event.status}`, event.status) }}
-          </UBadge>
-        </div>
-
-        <!-- One entry: the card click opens the unified workspace (#2186).
-             The block's own "Open kassa" reaches the POS from there — no
-             separate "Kassa openen" shortcut, no "Werkruimte" duplicate. -->
-        <p class="text-muted text-sm mt-4 inline-flex items-center gap-1.5 group-hover:text-primary transition-colors">
-          <UIcon name="i-lucide-arrow-right" class="size-4" aria-hidden="true" />
-          {{ t('sales.events.workspace') }}
-        </p>
-      </NuxtLink>
-    </div>
-
-    <div v-else class="text-center text-muted p-12 border border-dashed border-default rounded-xl">
-      <UIcon name="i-lucide-calendar-off" class="w-8 h-8 mx-auto mb-2" aria-hidden="true" />
-      <p class="font-medium">{{ t('sales.events.noEvents') }}</p>
-    </div>
+    <!-- Page render (`interactive=false`): blocks flow to their content and the page
+         scrolls as one; breakpoints resolve at this element's real width. -->
+    <ClientOnly>
+      <CroutonLayoutResponsiveRenderer :tree="tree" :interactive="false" data-handoff="events-layout" />
+    </ClientOnly>
   </div>
 </template>
