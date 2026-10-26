@@ -76,7 +76,10 @@ on:
 # concurrency sits on the caller; the reusable deploy-app.yml inherits it, so groups are
 # per-app/PR here (not on the leaf) — no cross-app cancellation.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  # Keyed on the PR when there is one (#2608): a manual dispatch with review_pr deploys the SAME
+  # preview as the PR's own run, but has no head_ref, so keying on head_ref || ref put the two in
+  # different groups and they raced (#2571).
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.review_pr || github.head_ref || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
