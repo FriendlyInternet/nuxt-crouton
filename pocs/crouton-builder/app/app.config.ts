@@ -59,10 +59,10 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
     minWidth: 320,
     defaultSize: 50,
     sizing: { width: 'fill', height: 'fill' },
-    defaultConfig: { collection: 'builderArtists', heading: 'New artist' },
+    defaultConfig: { collection: 'builderArtists', heading: 'Artist' },
     configSchema: [
       { name: 'collection', type: 'text', label: 'Collection', default: 'builderArtists' },
-      { name: 'heading', type: 'text', label: 'Heading', default: 'New artist' },
+      { name: 'heading', type: 'text', label: 'Heading', default: 'Artist' },
     ],
   },
   // Bookings · List — real rows of builderBookings (content for the chart-style block).
