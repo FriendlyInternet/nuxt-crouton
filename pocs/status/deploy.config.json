@@ -1,0 +1,4 @@
+{
+  "stagingUrl": "https://status.pmcp.dev",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-email"
+}
