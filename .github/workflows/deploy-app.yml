@@ -97,6 +97,9 @@ on:
       # seeded (warning), and the pre-prod gate refuses to run blind.
       REVIEW_SEED_SECRET:
         required: false
+      # Repo-level token the status app uses to read issues (#2553); pushed to the status Worker only.
+      STATUS_GITHUB_TOKEN:
+        required: false
 
 jobs:
   deploy:
@@ -416,6 +419,37 @@ jobs:
             npx wrangler secret bulk "$RUNNER_TEMP/worker-secrets.json" --env staging
           fi
           rm -f "$RUNNER_TEMP/worker-secrets.json"
+
+      # The status app (pocs/status) derives every app's review-login password to offer one-tap
+      # sign-in links (#2556), and reads the repo's issues (#2553). Neither secret can be read back
+      # from GitHub, so push them to THAT Worker only — no other app ever receives them.
+      # On a PR the Worker is the PR-scoped preview (`status-pr<N>`, via the built config);
+      # `--env staging` there would write to shared staging instead. Values are never echoed.
+      - name: Push status-app secrets
+        if: ${{ inputs.app == 'status' }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          STATUS_GITHUB_TOKEN: ${{ secrets.STATUS_GITHUB_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+        run: |
+          if [ "$DEPLOY_ENV" = "production" ]; then
+            TARGET=""
+          elif [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then
+            TARGET="--config .output/server/wrangler.json"
+          else
+            TARGET="--env staging"
+          fi
+          push() {
+            if [ -z "$2" ]; then
+              echo "::notice::$3 is not set — skipping $1."
+              return 0
+            fi
+            printf '%s' "$2" | npx wrangler secret put "$1" $TARGET
+          }
+          push NUXT_REVIEW_SEED_SECRET "$REVIEW_SEED_SECRET" REVIEW_SEED_SECRET
+          push GITHUB_TOKEN "$STATUS_GITHUB_TOKEN" STATUS_GITHUB_TOKEN
 
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)

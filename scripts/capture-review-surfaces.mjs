@@ -147,6 +147,9 @@ export function resultLine(name, status, reason = '') {
   return `surface=${name} status=${status} reason=${String(reason).replace(/\s+/g, ' ').trim()}`
 }
 const report = (name, status, reason) => console.log(resultLine(name, status, reason))
+// One shared warm-up deadline (≤5 min, inside the 8-min step timeout): the first surface pays
+// for the dev server's first build; later surfaces/widths reuse the warmed server.
+let warmDeadline = 0
 if (import.meta.url === `file://${process.argv[1]}`) await main()
 
 async function main() {
@@ -259,10 +262,6 @@ async function isLoading(page) {
   const textLen = await page.evaluate(() => (document.body?.innerText || '').trim().length).catch(() => 0)
   return looksLikeLoadingScreen({ html }) || textLen <= 50
 }
-
-// One shared warm-up deadline (≤5 min, inside the 8-min step timeout): the first surface pays
-// for the dev server's first build; later surfaces/widths reuse the warmed server.
-let warmDeadline = 0
 
 /** Request the first surface until the server answers with the app, not the loader. */
 async function warmUp(context, origin, surface) {
