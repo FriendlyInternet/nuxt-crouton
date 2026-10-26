@@ -475,6 +475,39 @@ jobs:
           push NUXT_EMAIL_FROM "$RESEND_FROM" RESEND_FROM
           push NUXT_STATUS_OWNER_EMAIL "$OWNER_EMAIL" REVIEW_LOGIN_EMAIL
 
+      # Magic-link mail swallows every error (crouton-auth `.catch(() => {})`, crouton-email's
+      # try/catch), so a preview can look fine while nothing is sent (#2557). Prove it from CI:
+      # tail the Worker, request a link for the owner, and print the `[crouton-email]` lines
+      # (owner address and URLs masked), then request again so the log shows a repeat attempt.
+      - name: Probe status magic-link send (PR preview)
+        if: ${{ inputs.app == 'status' && github.event.pull_request.number != '' && inputs.environment != 'production' }}
+        continue-on-error: true
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          if [ -z "$OWNER_EMAIL" ] || [ -z "$DEPLOY_URL" ] || [ ! -f .output/server/wrangler.json ]; then
+            echo "::notice::magic-link probe skipped (owner email, URL or built config missing)."
+            exit 0
+          fi
+          npx wrangler tail --config .output/server/wrangler.json --format pretty > "$RUNNER_TEMP/tail.log" 2>&1 &
+          TAIL_PID=$!
+          sleep 15
+          for i in 1 2; do
+            BODY=$(jq -n --arg e "$OWNER_EMAIL" '{email:$e, callbackURL:"/"}')
+            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
+              -H 'Content-Type: application/json' -d "$BODY" || true)
+            echo "request $i → HTTP $CODE"
+            sleep 10
+          done
+          kill "$TAIL_PID" 2>/dev/null || true
+          echo "--- [crouton-email] lines from the Worker tail ---"
+          sed -E 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/tail.log" \
+            | grep -F -e '[crouton-email]' -e 'Error' -e 'POST' \
+            | sed -e "s|$OWNER_EMAIL|<owner>|Ig" -E -e 's|https?://[^ "]*token=[^ "]*|<link>|g' \
+            | head -40 || echo "(no matching lines)"
+
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)
       # but the bridge (`POST /api/_feedback`, installed by @fyit/crouton-devtools via
