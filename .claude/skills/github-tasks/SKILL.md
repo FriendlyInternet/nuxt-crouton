@@ -157,6 +157,8 @@ If the design lives in a canvas the pipeline can't open, don't re-describe it in
 
 A ticket that changes something you LOOK at ends with one marker: `<!-- review-surface: <app> <path> [name:<x>] [wait:<ms>] [click:<selector>] -->`, e.g. `<!-- review-surface: kassa /admin/{team}/crouton/salesCategories -->` (`{team}` becomes the seeded `test1`). The PR body inherits it (#2433) and, once the PR's preview Worker deploys, `deploy-app.yml` screenshots that page and commits `pr<N>-<app>-<name>.png` (`scripts/capture-review-surfaces.mjs`, #2173). Without a marker the preview shoots the app's start page — name the page that shows the change.
 
+A PR opened by hand that touches only `packages/**` gets no preview Worker unless its body also carries `<!-- deploy-preview: full-watch -->` (the pipeline adds it automatically to held UI PRs; `scripts/deploy-detect.mjs`, #2140) — without a preview there is nothing to screenshot. Adding it to an open PR's body needs a new `pull_request` event (push, or close + reopen) before a preview builds.
+
 ## Structure
 
 - **Epic** — one tracking issue per initiative. Body: goals, a checklist of workstreams, links to design docs. Labels: `epic` + the primary `pkg:`/`app:` it spans.
