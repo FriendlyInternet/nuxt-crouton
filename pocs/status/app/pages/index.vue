@@ -12,6 +12,12 @@ interface ToTestItem {
   stagingUrl: string | null
   mergedAt?: string | null
 }
+interface AppRow {
+  app: string
+  stagingUrl: string | null
+  hasSignIn: boolean
+  previews: Array<{ pr: number, title: string, updatedAt: string, url: string }>
+}
 interface Decision { date: string, epic: number, decision: string, why: string, rejected: string }
 interface OpenQuestion { number: number, title: string, url: string }
 interface ChangelogRow { date: string, number: number, title: string, area: string, url: string }
@@ -19,6 +25,7 @@ interface ChangelogRow { date: string, number: number, title: string, area: stri
 const REPO_URL = 'https://github.com/FriendlyInternet/nuxt-crouton'
 
 const tabs = [
+  { label: 'Apps', slot: 'apps', icon: 'i-lucide-layout-grid' },
   { label: 'To test', slot: 'to-test', icon: 'i-lucide-flask-conical' },
   { label: 'Decisions', slot: 'decisions', icon: 'i-lucide-scale' },
   { label: 'Changelog', slot: 'changelog', icon: 'i-lucide-list' }
@@ -27,6 +34,15 @@ const tabs = [
 const { data: totest, status: totestStatus } = await useFetch<{ data: ToTestItem[] | null, error: string | null }>('/api/status/totest', { lazy: true })
 const { data: decisionsRes, status: decisionsStatus } = await useFetch<{ data: { decisions: Decision[], openQuestions: OpenQuestion[] } | null, error: string | null }>('/api/status/decisions', { lazy: true })
 const { data: changelogRes, status: changelogStatus } = await useFetch<{ data: ChangelogRow[] | null, error: string | null }>('/api/status/changelog', { lazy: true })
+
+// --- Apps ---
+const { data: appsRes, status: appsStatus } = await useFetch<{ data: AppRow[] | null, error: string | null }>('/api/status/apps', { lazy: true })
+const appCards = computed(() => {
+  const todo = (app: string) => items.value.filter(i => i.app === app)
+  return (appsRes.value?.data ?? [])
+    .map(a => ({ ...a, toTest: todo(a.app) }))
+    .sort((a, b) => b.toTest.length - a.toTest.length || a.app.localeCompare(b.app))
+})
 
 // --- To test ---
 const appFilter = ref<string | null>(null)
@@ -67,6 +83,61 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
 <template>
   <UContainer class="py-4 sm:py-6">
     <UTabs :items="tabs" class="w-full">
+      <!-- Apps -->
+      <template #apps>
+        <div class="space-y-4 py-4">
+          <UAlert v-if="appsRes?.error" color="warning" variant="subtle" icon="i-lucide-triangle-alert" :title="appsRes.error" />
+          <p v-if="appsStatus === 'pending'" class="text-muted">Loading…</p>
+          <p v-else-if="!appCards.length" class="text-muted">No apps found.</p>
+
+          <UCard v-for="a in appCards" :key="a.app">
+            <template #header>
+              <div class="flex items-center gap-2">
+                <h2 class="text-lg font-semibold">{{ a.app }}</h2>
+                <UBadge v-if="a.toTest.length" color="warning" variant="subtle">{{ a.toTest.length }} to test</UBadge>
+              </div>
+            </template>
+            <div class="space-y-4">
+              <div v-if="a.toTest.length" class="space-y-3">
+                <p class="text-xs font-semibold uppercase text-muted">To test</p>
+                <div v-for="i in a.toTest" :key="`${i.kind}-${i.number}`" class="space-y-2 rounded-lg border border-default p-3">
+                  <div class="flex items-start gap-2">
+                    <h3 class="flex-1 text-sm font-medium">{{ i.title }}</h3>
+                    <a :href="i.url" target="_blank" rel="noopener" class="text-sm text-primary">#{{ i.number }}</a>
+                  </div>
+                  <p v-if="i.what" class="text-sm">{{ i.what }}</p>
+                  <ol v-if="i.steps.length" class="list-decimal space-y-1 pl-5 text-sm">
+                    <li v-for="(s, n) in i.steps" :key="n">{{ s }}</li>
+                  </ol>
+                  <UButton block icon="i-lucide-log-in" label="Open and sign in" :href="`/api/status/login/${a.app}`" target="_blank" />
+                </div>
+              </div>
+
+              <div class="space-y-2">
+                <p class="text-xs font-semibold uppercase text-muted">Staging</p>
+                <p v-if="!a.stagingUrl" class="text-sm text-muted">No staging URL configured.</p>
+                <template v-else>
+                  <a :href="a.stagingUrl" target="_blank" rel="noopener" class="block break-all text-sm text-primary">{{ a.stagingUrl }}</a>
+                  <UButton block icon="i-lucide-log-in" label="Open and sign in" :href="`/api/status/login/${a.app}?key=main`" target="_blank" />
+                </template>
+              </div>
+
+              <div v-if="a.previews.length" class="space-y-2">
+                <p class="text-xs font-semibold uppercase text-muted">Open PR previews</p>
+                <div v-for="p in a.previews" :key="p.pr" class="space-y-2 rounded-lg border border-default p-3">
+                  <div class="flex items-start gap-2">
+                    <span class="flex-1 text-sm">{{ p.title }}</span>
+                    <a :href="`${REPO_URL}/pull/${p.pr}`" target="_blank" rel="noopener" class="text-sm text-primary">#{{ p.pr }}</a>
+                  </div>
+                  <p class="text-xs text-muted">Updated {{ day(p.updatedAt) }}</p>
+                  <UButton block variant="outline" icon="i-lucide-log-in" label="Open and sign in" :href="`/api/status/login/${a.app}?key=pr${p.pr}`" target="_blank" />
+                </div>
+              </div>
+            </div>
+          </UCard>
+        </div>
+      </template>
+
       <!-- To test -->
       <template #to-test>
         <div class="space-y-5 py-4">
