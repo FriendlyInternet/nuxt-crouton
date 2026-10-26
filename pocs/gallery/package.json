@@ -22,6 +22,7 @@
   "dependencies": {
     "@fyit/crouton-ai": "workspace:*",
     "@fyit/crouton-assets": "workspace:*",
+    "@fyit/crouton-audio": "workspace:*",
     "@fyit/crouton-bookings": "workspace:*",
     "@fyit/crouton-charts": "workspace:*",
     "@fyit/crouton-collab": "workspace:*",

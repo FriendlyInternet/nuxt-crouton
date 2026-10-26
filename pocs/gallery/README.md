@@ -5,6 +5,9 @@ themes.pmcp.dev, for every part (#2462). Staging: https://gallery-staging.pmcp.d
 
 - **`/__review`** — the list, grouped by package, with search.
 - **`/__review/<ComponentName>`** — one piece. Loads only that piece's code.
+- **`/__review?file=packages/<pkg>/app/components/X.vue`** — the same page, found by file. A PR that
+  changes a piece gets the gallery deployed and one such link per changed piece in its preview
+  comment (`scripts/gallery-links.mjs`).
 
 ## What a piece is shown with (later wins)
 

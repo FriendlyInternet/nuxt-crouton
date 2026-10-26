@@ -10,6 +10,12 @@ if (!allowed) throw createError({ status: 404, statusText: 'Not found', fatal: t
 
 useHead({ title: 'Gallery' })
 
+// `/__review?file=packages/<pkg>/app/components/X.vue` → that piece's page. A PR knows which
+// files it changed, not their component names, so its gallery links use this (#2462).
+const route = useRoute()
+const fromFile = typeof route.query.file === 'string' ? pieces.find(p => p.src === route.query.file) : undefined
+if (fromFile) await navigateTo(`/__review/${fromFile.name}`, { replace: true })
+
 const query = ref('')
 
 const groups = computed(() => {

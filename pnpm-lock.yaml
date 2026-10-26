@@ -1748,6 +1748,9 @@ importers:
       '@fyit/crouton-assets':
         specifier: workspace:*
         version: link:../../packages/crouton-assets
+      '@fyit/crouton-audio':
+        specifier: workspace:*
+        version: link:../../packages/crouton-audio
       '@fyit/crouton-bookings':
         specifier: workspace:*
         version: link:../../packages/crouton-bookings

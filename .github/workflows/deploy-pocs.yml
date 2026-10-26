@@ -17,6 +17,8 @@ on:
   pull_request:
     paths:
       - 'pocs/**'
+      # A shared UI piece changed → deploy the gallery so the PR gets a review link (#2462).
+      - 'packages/*/app/components/**'
       - '.github/workflows/deploy-pocs.yml'
       - '.github/workflows/deploy-app.yml'
   workflow_dispatch:
@@ -91,6 +93,12 @@ jobs:
                 pocs/*/*) names+=("$(printf '%s' "$f" | cut -d/ -f2)");;
               esac
             done <<< "$changed"
+            # #2462: a changed shared UI piece (packages/*/app/components/**.vue) has no app of
+            # its own to preview — the gallery shows every piece, so it deploys for this PR and
+            # deploy-app.yml comments a direct link per changed piece.
+            if [ "$(printf '%s\n' "$changed" | node scripts/gallery-links.mjs --touches)" = "true" ]; then
+              names+=("gallery")
+            fi
           fi
 
           include='[]'
