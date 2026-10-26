@@ -55,6 +55,9 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
+    "better-sqlite3": "^12.4.1",
+    "drizzle-kit": "catalog:",
+    "drizzle-orm": "catalog:",
     "happy-dom": "catalog:",
     "vitest": "catalog:"
   }
