@@ -805,33 +805,9 @@ jobs:
           # the same way UI_TOUCHED and TESTS_MISSING already are, rather than trusting pi's
           # own narration that it captured something (the #1849 reasoning, again).
           #
-          # The capture itself is a deterministic step HERE (#2513), not a prompt ask: boot the
-          # touched app locally, sign in, shoot the ticket's `Surface: <app> <path>` line at 390px
-          # and 1280px (scripts/pi-local-capture.mjs; blank/error pages are rejected, #2055/#2061),
-          # and commit the PNGs ourselves. Five pi UI PRs shipped in one day with no screenshot and
-          # the owner caught a doubled ☰ on a phone. Failure is recorded as a REASON in the PR body.
-          # The check below stays as the backstop — it should now almost never fire.
-          CAPTURE_NOTE=""
-          if [ "$HAVE_COMMITS" = "1" ] && [ "$UI_TOUCHED" = "1" ]; then
-            git diff --name-only "$BASE_SHA"..HEAD > "$RUNNER_TEMP/ui-changed.txt" 2>/dev/null || true
-            npx playwright install chromium >/dev/null 2>&1 || true
-            : > "$RUNNER_TEMP/local-capture.log"
-            timeout 480 node scripts/pi-local-capture.mjs --issue "$ISSUE" --issue-body "$RUNNER_TEMP/issue-body.txt" \
-              --changed "$RUNNER_TEMP/ui-changed.txt" --status "$RUNNER_TEMP/local-capture.json" --budget 360 \
-              2>&1 | tee "$RUNNER_TEMP/local-capture.log" | tail -25 || true
-            CAP_STATUS="$(node -p "try{require('$RUNNER_TEMP/local-capture.json').status}catch{'failed'}" 2>/dev/null || echo failed)"
-            CAP_REASON="$(node -p "try{require('$RUNNER_TEMP/local-capture.json').reason}catch{'the capture step crashed before reporting'}" 2>/dev/null || echo 'capture step crashed')"
-            if [ "$CAP_STATUS" = "captured" ] && ls writeups/ui-proposals/*.png >/dev/null 2>&1; then
-              git add writeups/ui-proposals/*.png
-              if git commit -q -m "chore(review): capture local 390px/1280px screenshots (#2513)" -m "🤖 pi worker finish step — deterministic capture of the ticket's named surface. Refs #${ISSUE}"; then
-                git push origin "HEAD:${BR}" 2>&1 | tail -2 || true
-                CAPTURE_NOTE="$(printf '\n\n📸 **Local capture:** %s. Screenshots are committed under `writeups/ui-proposals/`.' "$CAP_REASON")"
-              fi
-            else
-              echo "::warning::local capture (#2513): $CAP_STATUS — $CAP_REASON"
-              CAPTURE_NOTE="$(printf '\n\n📸 **Local capture: none (%s).** %s' "$CAP_STATUS" "$CAP_REASON")"
-            fi
-          fi
+          # Screenshots come from the deployed preview only (#2546): the PR body carries the issue's
+          # `<!-- review-surface: … -->` marker (copied below) and deploy-app.yml's capture step
+          # commits the PNG. No local boot here — it never produced a usable image (#2524/#2529/#2533).
           EVIDENCE_ATTACHED=0
           if [ "$UI_TOUCHED" = "1" ] && git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '^writeups/ui-proposals/'; then
             EVIDENCE_ATTACHED=1
@@ -879,7 +855,7 @@ jobs:
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$TITLE" \
-                --body "$(printf 'Closes #%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE" "$CAPTURE_NOTE" "$SURFACES")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
