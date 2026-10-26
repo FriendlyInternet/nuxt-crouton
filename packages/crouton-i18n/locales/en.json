@@ -214,7 +214,6 @@
     "dontHaveAccount": "Don't have an account?",
     "createAccount": "Create Account",
     "username": "Username",
-    "verifyEmail": "Verify your email",
     "currentPassword": "Current password",
     "newPassword": "New password",
     "getStarted": "Get Started",
@@ -466,6 +465,15 @@
       "description": "Description",
       "descriptionPlaceholder": "Optional description"
     }
+  },
+  "collectionNames": {
+    "bookingsBookings": "Bookings",
+    "bookingsLocations": "Locations",
+    "bookingsSettings": "Booking settings",
+    "bookingsEmailtemplates": "Email templates",
+    "bookingsEmaillogs": "Email logs",
+    "pagesPages": "Pages",
+    "croutonAssets": "Assets"
   },
   "navigation": {
     "dashboard": "Dashboard",

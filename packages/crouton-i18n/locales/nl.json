@@ -214,7 +214,6 @@
     "dontHaveAccount": "Heb je nog geen account?",
     "createAccount": "Account aanmaken",
     "username": "Gebruikersnaam",
-    "verifyEmail": "Verifieer je e-mail",
     "currentPassword": "Huidig wachtwoord",
     "newPassword": "Nieuw wachtwoord",
     "getStarted": "Aan de slag",
@@ -466,6 +465,15 @@
       "description": "Beschrijving",
       "descriptionPlaceholder": "Optionele beschrijving"
     }
+  },
+  "collectionNames": {
+    "bookingsBookings": "Reserveringen",
+    "bookingsLocations": "Locaties",
+    "bookingsSettings": "Reserveringsinstellingen",
+    "bookingsEmailtemplates": "E-mailsjablonen",
+    "bookingsEmaillogs": "E-maillogboek",
+    "pagesPages": "Pagina's",
+    "croutonAssets": "Media"
   },
   "navigation": {
     "dashboard": "Dashboard",

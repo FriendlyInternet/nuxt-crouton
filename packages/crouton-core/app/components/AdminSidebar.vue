@@ -58,6 +58,13 @@ function tLabel(label: string): string {
   return translated
 }
 
+// Collection names: translated via collectionNames.<name>, else the configured label (which may itself be a key)
+function tCollection(name: string, label: string): string {
+  const translated = t(`collectionNames.${name}`)
+  if (translated.startsWith('[') && translated.endsWith(']')) return tLabel(label)
+  return translated
+}
+
 // Get team context (for team admin)
 const { teamSlug: teamSlugRef, teamId: teamIdRef, hasTeamContext } = useTeamContext()
 const route = useRoute()
@@ -250,7 +257,7 @@ const collectionGroups = computed<NavigationMenuItem[]>(() => {
     icon: group.icon,
     defaultOpen: group.kind === 'content',
     children: group.items.map(col => ({
-      label: col.label,
+      label: tCollection(col.name, col.label),
       icon: col.icon,
       to: `${basePath}/${col.name}`,
       active: route.path.includes(`${basePath}/${col.name}`)
