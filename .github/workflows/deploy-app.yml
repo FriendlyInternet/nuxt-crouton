@@ -97,11 +97,6 @@ on:
       # seeded (warning), and the pre-prod gate refuses to run blind.
       REVIEW_SEED_SECRET:
         required: false
-      # Read-only fine-grained GitHub PAT for the status app (#2591). Pushed to the
-      # status Worker as GITHUB_TOKEN. Optional: absent → the status routes report
-      # "GITHUB_TOKEN is not configured" instead of failing the deploy.
-      STATUS_GITHUB_TOKEN:
-        required: false
 
 jobs:
   deploy:
@@ -421,23 +416,6 @@ jobs:
             npx wrangler secret bulk "$RUNNER_TEMP/worker-secrets.json" --env staging
           fi
           rm -f "$RUNNER_TEMP/worker-secrets.json"
-
-      - name: Push STATUS_GITHUB_TOKEN to the status Worker as GITHUB_TOKEN (#2591)
-        if: ${{ inputs.app == 'status' }}
-        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
-        env:
-          STATUS_GITHUB_TOKEN: ${{ secrets.STATUS_GITHUB_TOKEN }}
-          ENVIRONMENT: ${{ inputs.environment }}
-        run: |
-          if [ -z "$STATUS_GITHUB_TOKEN" ]; then
-            echo "::notice::STATUS_GITHUB_TOKEN not set — status GitHub reads stay off."
-            exit 0
-          fi
-          if [ "$ENVIRONMENT" = "production" ]; then
-            printf '%s' "$STATUS_GITHUB_TOKEN" | npx wrangler secret put GITHUB_TOKEN
-          else
-            printf '%s' "$STATUS_GITHUB_TOKEN" | npx wrangler secret put GITHUB_TOKEN --env staging
-          fi
 
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)
