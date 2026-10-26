@@ -295,6 +295,11 @@ jobs:
             PREVIEW_OUT="$(node "$GITHUB_WORKSPACE/scripts/pr-preview-wrangler.mjs" \
               .output/server/wrangler.json "${{ inputs.app }}" "$PR_NUM")"
             PREVIEW_DB="$(printf '%s\n' "$PREVIEW_OUT" | sed -n 's/^db=//p')"
+            # Reuse storage this preview already has (#2608). A deploy that died after creating
+            # its D1/KV but before the Worker existed leaves them bound to nothing; wrangler then
+            # tries to create them again on every deploy and Cloudflare refuses ("already exists"),
+            # so the preview stays broken for good (#2571). Pin what exists; create only the rest.
+            node "$GITHUB_WORKSPACE/scripts/pr-preview-reuse.mjs" .output/server/wrangler.json
             npx wrangler deploy --config .output/server/wrangler.json | tee deploy.log
             # Fresh DB every time, so migrations are the whole schema — not incremental.
             # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
