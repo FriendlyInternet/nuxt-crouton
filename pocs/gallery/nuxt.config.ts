@@ -13,6 +13,7 @@ export default defineNuxtConfig({
     '@fyit/crouton-i18n',
     '@fyit/crouton-ai',
     '@fyit/crouton-assets',
+    '@fyit/crouton-audio',
     '@fyit/crouton-bookings',
     '@fyit/crouton-charts',
     '@fyit/crouton-collab',
