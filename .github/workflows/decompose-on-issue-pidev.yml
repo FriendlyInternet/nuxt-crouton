@@ -105,6 +105,14 @@ jobs:
       (vars.AGENT_HARNESS == 'pi' && github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate'))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
+    # One decompose at a time per issue (#2645). An issue created WITH `delegate` fires both
+    # `opened` and `labeled`, so two runs start in the same second and both applied a plan
+    # (#2629: 8 sub-issues instead of 4). Queue, don't cancel: the second run then reaches
+    # "Resume an already-decomposed tree" (#2048), sees the first run's children and
+    # dispatches them instead of planning again.
+    concurrency:
+      group: decompose-${{ inputs.issue || github.event.issue.number }}
+      cancel-in-progress: false
     # WS3 (#1696): this whole workflow IS the event-driven pi decompose flow, so the mode is a
     # JOB-level constant — the pi step reads $PIPELINE_MODE (plan-only prompt) and the apply step
     # gates on env.PIPELINE_MODE. (The claude flow lives in decompose-on-issue.yml and never sets it.)

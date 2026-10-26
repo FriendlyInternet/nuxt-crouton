@@ -28,6 +28,14 @@ jobs:
        (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'delegate')))
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
+    # One decompose at a time per issue (#2645). An issue created WITH `delegate` fires both
+    # `opened` and `labeled`, so two runs start in the same second and both applied a plan
+    # (#2629: 8 sub-issues instead of 4). Queue, don't cancel: the second run then reaches
+    # "Resume an already-decomposed tree" (#2048), sees the first run's children and
+    # dispatches them instead of planning again.
+    concurrency:
+      group: decompose-${{ github.event.issue.number }}
+      cancel-in-progress: false
     # NOTE: permissions MUST live at the job level. GitHub job-level `permissions` fully
     # OVERRIDES (does not merge with) any workflow-level block, so `id-token: write` has to
     # be here or the claude-code-action OIDC token request fails
