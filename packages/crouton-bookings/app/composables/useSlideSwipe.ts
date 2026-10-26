@@ -8,13 +8,19 @@ import { swipeDirection, lockAxis } from '../utils/swipe'
  * `peek: true` — a 3-panel track (prev · current · next) is rendered, so the
  * neighbour is visible while dragging. `peek: false` — single panel that slides
  * out, swaps, and slides in from the opposite side.
+ * `fade: true` (single panel only) — short slide + crossfade (#2528): the panel
+ * travels only ~22% of the width while fading out, swaps, and fades in from the
+ * opposite side, so the viewport is never empty. Exposed as `--slide-opacity`.
  */
 export function useSlideSwipe(
   el: Ref<HTMLElement | null>,
-  opts: { onNext: () => void, onPrev: () => void, peek?: boolean },
+  opts: { onNext: () => void, onPrev: () => void, peek?: boolean, fade?: boolean, settleFrames?: number },
 ) {
   const SLIDE_MS = 250
   const dragX = ref(0)
+  // fade mode: forced opacity during the programmatic out/in phases (null = derive from drag)
+  const forcedOpacity = ref<number | null>(null)
+  const FADE_TRAVEL = 0.22
   const animating = ref(false)
   const dragging = ref(false)
   let lock: 'x' | 'y' | null = null
@@ -31,10 +37,29 @@ export function useSlideSwipe(
   // wait until the new period has actually rendered before sliding it in
   async function settle() {
     await nextTick()
-    await new Promise(r => requestAnimationFrame(r))
+    for (let i = 0; i < (opts.settleFrames ?? 1); i++)
+      await new Promise(r => requestAnimationFrame(r))
+  }
+
+  async function animateFade(fire: () => void, w: number) {
+    const travel = w * FADE_TRAVEL
+    animating.value = true
+    dragX.value = travel
+    forcedOpacity.value = 0
+    await wait(SLIDE_MS)
+    animating.value = false
+    fire()
+    dragX.value = -travel
+    await settle()
+    animating.value = true
+    dragX.value = 0
+    forcedOpacity.value = 1
+    await wait(SLIDE_MS)
+    animating.value = false
   }
 
   async function animateSlide(fire: () => void, w: number) {
+    if (opts.fade && !opts.peek) return animateFade(fire, w)
     animating.value = true
     dragX.value = w
     await wait(SLIDE_MS)
@@ -69,6 +94,7 @@ export function useSlideSwipe(
       // never leave the content stuck off-screen
       animating.value = false
       dragX.value = 0
+      forcedOpacity.value = null
       busy = false
     }
   }
@@ -118,5 +144,20 @@ export function useSlideSwipe(
     transition: animating.value ? `transform ${SLIDE_MS}ms ease-out` : 'none',
   }))
 
-  return { slide, style, dragging }
+  // CSS variables for when only part of the element (e.g. a calendar grid, not
+  // its header) should move.
+  const vars = computed(() => {
+    const opacity = !opts.fade
+      ? 1
+      : forcedOpacity.value ?? Math.max(0, 1 - Math.abs(dragX.value) / (width() * 0.5))
+    return {
+      '--slide-x': `${dragX.value}px`,
+      '--slide-opacity': `${opacity}`,
+      '--slide-transition': animating.value
+        ? `translate ${SLIDE_MS}ms ease-out, opacity ${SLIDE_MS}ms ease-out`
+        : 'none',
+    }
+  })
+
+  return { slide, style, vars, dragging }
 }
