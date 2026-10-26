@@ -37,3 +37,13 @@ test('buildCard has marker, account, checks, reply line, no password', () => {
   assert.match(t, /not ok: <what is wrong>/)
   assert.doesNotMatch(t, /password:/i)
 })
+
+test('buildTestMail: app first, numbered steps, sign-in link, no emoji', async () => {
+  const { buildTestMail, extractSummary } = await import('./test-card.mjs')
+  const m = buildTestMail({ epicNumber: 1, title: 'bookings calendar swipe', app: 'Velo', summary: 'You can swipe.', checks: ['Go to Bookings.'], loginUrl: 'https://x/auth/login?a=b', epicUrl: 'https://gh/1' })
+  assert.equal(m.subject, '[Velo] Test: bookings calendar swipe')
+  assert.match(m.text, /^App: Velo \(staging\)\n/)
+  assert.match(m.text, /1\. Open the link below and sign in\.\n2\. Go to Bookings\./)
+  assert.match(m.text, /Open and sign in: https:\/\/x\/auth\/login/)
+  assert.equal(extractSummary('Part of #1.\n\n## Problem\n\nFirst para\nwraps.\n\nSecond'), 'First para wraps.')
+})
