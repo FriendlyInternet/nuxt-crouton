@@ -417,6 +417,25 @@ jobs:
           fi
           rm -f "$RUNNER_TEMP/worker-secrets.json"
 
+      # The status app (pocs/status) derives every app's review-login password to offer one-tap
+      # sign-in links (#2556). REVIEW_SEED_SECRET can't be read back from GitHub, so push it to
+      # THAT Worker only — no other app ever receives it.
+      - name: Push review-seed secret to the status Worker
+        if: ${{ inputs.app == 'status' }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+        run: |
+          if [ -z "$REVIEW_SEED_SECRET" ]; then
+            echo "::warning::REVIEW_SEED_SECRET is not set — status sign-in links will 404."
+            exit 0
+          fi
+          if [ "${{ inputs.environment }}" = "production" ]; then
+            printf '%s' "$REVIEW_SEED_SECRET" | npx wrangler secret put NUXT_REVIEW_SEED_SECRET
+          else
+            printf '%s' "$REVIEW_SEED_SECRET" | npx wrangler secret put NUXT_REVIEW_SEED_SECRET --env staging
+          fi
+
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)
       # but the bridge (`POST /api/_feedback`, installed by @fyit/crouton-devtools via

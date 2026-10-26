@@ -36,7 +36,10 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // The one email allowed to sign in. Set ONLY as the Worker var NUXT_STATUS_OWNER_EMAIL
     // (never committed; public repo). Empty = nobody can sign in.
-    statusOwnerEmail: ''
+    statusOwnerEmail: '',
+    // Seed the review-login passwords derive from. Pushed to the Worker by the staging deploy
+    // (deploy-app.yml, status app only) as NUXT_REVIEW_SEED_SECRET; never committed.
+    reviewSeedSecret: ''
   },
 
   // Cloudflare Workers deployment — stub passkey/webauthn packages (tsyringe is
