@@ -160,9 +160,9 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
 }
 
 // Sidebar label = the title key this package already ships for the collection
-const withNavLabel = <T extends { adminNav?: object }>(config: T, labelKey: string) => ({
+const withNavLabel = <T extends object>(config: T, labelKey: string) => ({
   ...config,
-  adminNav: { ...config.adminNav, label: labelKey }
+  adminNav: { label: labelKey }
 })
 
 export default defineAppConfig({
