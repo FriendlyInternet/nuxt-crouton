@@ -30,6 +30,8 @@ The hypothesis has **4 parts**:
 
 A good epic body therefore *opens* with a `## Hypothesis` block, then the 👤/🤖 sections expand it, then the check closes it. See epic #359 and #357 / issues #358, #360, #361 for worked examples.
 
+An epic body **must** carry a `## 🧪 How to test` section of 2–3 phone steps — it becomes the owner's test card (#2519). `scripts/epic-scaffold.mjs` and the `require-issue-dedup` hook refuse an epic without one.
+
 ## Writing for two audiences (REQUIRED — applies to issues, PRs, and commits)
 
 Everything that lands in GitHub is written for **two readers**, in this order:
@@ -148,6 +150,10 @@ Don't stop at the issue you were asked about; closing the leaf without checking 
    - Package work that also lands a schema/config change in an app gets **both** (e.g. `pkg:crouton-sales` + `app:fanfare`).
 4. Use meta labels where they apply: `epic`, `spike`, `needs-triage`.
 5. **Link issues & PRs when talking to the user.** Any time you mention an issue/PR in a chat reply, render it as a clickable link to the full URL (`[#303](https://github.com/FriendlyInternet/nuxt-crouton/issues/303)`, `[#376](https://github.com/FriendlyInternet/nuxt-crouton/pull/376)`) so the owner can open it in one click. This is a **chat-reply** convention only — commit messages keep bare `(#NN)`, and PR bodies use `Closes #NN` (not a URL) so GitHub auto-closes the issue on merge.
+
+## Pipeline fixes close on evidence, not on merge (`workflow` issues, #2657)
+
+A fix to the pipeline itself can merge green and still not work. So its PR uses **`Refs #NN`** (never `Closes #NN`), and the issue body carries one line: **`Evidence-needed: <text a real run will annotate>`** (e.g. `Evidence-needed: pi mcp: not blocked`). `verify-fix-evidence.yml` runs after each worker run, looks for that text in the run's annotations (`scripts/fix-evidence.mjs`), and on a match comments the run link and closes the issue. No match → silent; the issue stays open. Only runs created after the PR merged count. Add a `Verified-by-run:` line by hand if you close one manually.
 
 ## Design handoff (epics that change a visual surface)
 

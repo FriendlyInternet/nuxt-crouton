@@ -1,0 +1,42 @@
+name: Verify pipeline-fix evidence
+
+# A `workflow` fix issue stays open after its PR merges (the PR uses `Refs #NN`) and carries
+# one line `Evidence-needed: <text a real run will annotate>`. After each worker run this
+# checks that run's annotations and closes the issue with the run link on a match; no match
+# does nothing (no comment spam). See scripts/fix-evidence.mjs (#2657).
+on:
+  workflow_run:
+    workflows: ["Work issue (pi.dev · single-use worker)"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Worker run id to read annotations from (default for dispatch: none)
+        required: false
+
+jobs:
+  verify:
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # App token (NOT GITHUB_TOKEN) so the close cascades to strip-status-on-close etc.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - name: Check the run for fix evidence
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id || inputs.run_id }}
+        run: node scripts/fix-evidence.mjs
