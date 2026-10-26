@@ -462,8 +462,9 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
-      - name: Run scripts/*.test.mjs
-        run: node --test scripts/*.test.mjs
+      - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
+        # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
+        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs
 
   # Lint the bash embedded in our workflows (#1904). ~700 lines of shell live inside YAML with no
   # local execution path, and every defect found in the pi worker's finish step so far lived
