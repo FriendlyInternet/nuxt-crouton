@@ -36,45 +36,51 @@ const gh = (path, extra = []) =>
   JSON.parse(execFileSync('gh', ['api', '--paginate', '--slurp', path, ...extra], { encoding: 'utf8' })).flat()
 const ghSend = args => execFileSync('gh', args, { encoding: 'utf8' })
 
+function runAnnotations(repo, runId) {
+  const jobs = gh(`/repos/${repo}/actions/runs/${runId}/jobs`).flatMap(r => r.jobs ?? [r])
+  return jobs.flatMap(job => gh(`/repos/${repo}/check-runs/${job.id}/annotations`))
+}
+
+function closeWithEvidence(repo, issue, run, hit) {
+  const body = [
+    '> 🤖 **pi.dev harness** · agent pipeline (CI) · _fix-evidence check_',
+    '',
+    '## ✅ Seen working',
+    `**Needs:** nothing — closing.`,
+    '',
+    `Seen working in run ${run.html_url}: \`${hit.title ?? ''}: ${hit.message ?? ''}\``,
+  ].join('\n')
+  ghSend(['issue', 'comment', String(issue.number), '--repo', repo, '--body', body])
+  ghSend(['issue', 'close', String(issue.number), '--repo', repo, '--reason', 'completed'])
+}
+
+function checkIssue(repo, issue, run, annotations) {
+  const needle = evidenceNeeded(issue.body)
+  if (!needle) return
+  const merged = mergedAt(gh(`/repos/${repo}/issues/${issue.number}/timeline`))
+  if (!merged || new Date(run.created_at) <= new Date(merged)) {
+    console.log(`#${issue.number}: ${merged ? 'run predates the merge' : 'fix PR not merged yet'} — skip`)
+    return
+  }
+  const hit = findEvidence(needle, annotations)
+  if (!hit) { console.log(`#${issue.number}: «${needle}» not seen in this run`); return }
+  closeWithEvidence(repo, issue, run, hit)
+  console.log(`#${issue.number}: evidence found — closed`)
+}
+
 export async function main(runIdArg) {
   const repo = process.env.GITHUB_REPOSITORY
   if (!repo) throw new Error('GITHUB_REPOSITORY is not set')
   const runId = runIdArg || process.env.RUN_ID
-  const run = runId
-    ? JSON.parse(ghSend(['api', `/repos/${repo}/actions/runs/${runId}`]))
-    : null
-  if (!run) { console.log('no run id given — nothing to check'); return }
+  if (!runId) { console.log('no run id given — nothing to check'); return }
+  const run = JSON.parse(ghSend(['api', `/repos/${repo}/actions/runs/${runId}`]))
 
-  const annotations = []
-  for (const job of gh(`/repos/${repo}/actions/runs/${run.id}/jobs`).flatMap(r => r.jobs ?? [r])) {
-    for (const a of gh(`/repos/${repo}/check-runs/${job.id}/annotations`)) annotations.push(a)
-  }
+  const annotations = runAnnotations(repo, run.id)
   console.log(`run ${run.id}: ${annotations.length} annotation(s)`)
 
   const issues = gh(`/repos/${repo}/issues?state=open&labels=workflow&per_page=100`)
     .filter(i => !i.pull_request)
-  for (const issue of issues) {
-    const needle = evidenceNeeded(issue.body)
-    if (!needle) continue
-    const merged = mergedAt(gh(`/repos/${repo}/issues/${issue.number}/timeline`))
-    if (!merged || new Date(run.created_at) <= new Date(merged)) {
-      console.log(`#${issue.number}: ${merged ? 'run predates the merge' : 'fix PR not merged yet'} — skip`)
-      continue
-    }
-    const hit = findEvidence(needle, annotations)
-    if (!hit) { console.log(`#${issue.number}: «${needle}» not seen in this run`); continue }
-    const body = [
-      '> 🤖 **pi.dev harness** · agent pipeline (CI) · _fix-evidence check_',
-      '',
-      '## ✅ Seen working',
-      `**Needs:** nothing — closing.`,
-      '',
-      `Seen working in run ${run.html_url}: \`${hit.title ?? ''}: ${hit.message ?? ''}\``,
-    ].join('\n')
-    ghSend(['issue', 'comment', String(issue.number), '--repo', repo, '--body', body])
-    ghSend(['issue', 'close', String(issue.number), '--repo', repo, '--reason', 'completed'])
-    console.log(`#${issue.number}: evidence found — closed`)
-  }
+  for (const issue of issues) checkIssue(repo, issue, run, annotations)
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
