@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+/**
+ * Post the epic test card + set `status:to-test` once an epic is finished AND live on staging
+ * (#2541, epic #2519). Run after a successful staging deploy of main.
+ *
+ *   GITHUB_TOKEN=... DEPLOYED_SHA=<sha> node scripts/post-test-card.mjs            # dry-run
+ *   GITHUB_TOKEN=... DEPLOYED_SHA=<sha> APPLY=true node scripts/post-test-card.mjs # write
+ *
+ * For each open `epic`: all sub-issues closed AND the epic's merged epic/N-* → main PR is
+ * contained in DEPLOYED_SHA (compare API) → one card comment (marker-guarded, never twice) +
+ * `status:to-test`. The decision itself is the pure decideTestCard() in test-card.mjs.
+ *
+ * Env: GITHUB_TOKEN (required) · DEPLOYED_SHA (required) · DIGEST_REPO · APPLY
+ */
+import { readFileSync } from 'node:fs'
+import { decideTestCard, buildCard, extractChecks } from './test-card.mjs'
+
+const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
+const [OWNER, NAME] = REPO.split('/')
+const APPLY = process.env.APPLY === 'true'
+const SHA = process.env.DEPLOYED_SHA
+const token = process.env.GITHUB_TOKEN
+if (!token || !SHA) {
+  console.error('post-test-card.mjs: GITHUB_TOKEN and DEPLOYED_SHA are required')
+  process.exit(1)
+}
+
+async function gh(path, init) {
+  const res = await fetch('https://api.github.com' + path, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'post-test-card',
+      ...(init?.body ? { 'Content-Type': 'application/json' } : {})
+    }
+  })
+  if (!res.ok) throw new Error(`GitHub ${res.status} on ${path}: ${await res.text()}`)
+  return res.status === 204 ? null : res.json()
+}
+const labelNames = it => (it.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+
+// Is the epic's merged epic→main PR contained in the deployed commit?
+async function isDeployed(epicNumber) {
+  const prs = await gh(`/repos/${OWNER}/${NAME}/pulls?state=closed&base=main&per_page=100`)
+  const pr = prs.find(p => p.merged_at && new RegExp(`^epic/${epicNumber}-`).test(p.head.ref))
+  if (!pr?.merge_commit_sha) return false
+  const cmp = await gh(`/repos/${OWNER}/${NAME}/compare/${pr.merge_commit_sha}...${SHA}`)
+  return cmp.status === 'ahead' || cmp.status === 'identical'
+}
+
+function appInfo(labels) {
+  const app = labels.find(n => n.startsWith('app:'))?.slice(4) || ''
+  let stagingUrl = ''
+  if (app) {
+    try {
+      stagingUrl = JSON.parse(readFileSync(`apps/${app}/deploy.config.json`, 'utf8')).stagingUrl || ''
+    } catch { /* app without deploy config — card says so */ }
+  }
+  return { app, stagingUrl, reviewAccount: app ? `review+${app}-main@example.com` : '' }
+}
+
+const epics = (await gh(`/repos/${OWNER}/${NAME}/issues?state=open&labels=epic&per_page=100`))
+  .filter(i => !i.pull_request)
+let posted = 0
+for (const e of epics) {
+  const labels = labelNames(e)
+  const subIssues = await gh(`/repos/${OWNER}/${NAME}/issues/${e.number}/sub_issues?per_page=100`).catch(() => [])
+  const comments = await gh(`/repos/${OWNER}/${NAME}/issues/${e.number}/comments?per_page=100`).catch(() => [])
+  // Only pay for the PR/compare lookups once the cheap checks pass.
+  const cheap = decideTestCard({ subIssues, labels, comments, deployed: true })
+  if (!cheap.post) { console.log(`  #${e.number} skip — ${cheap.reason}`); continue }
+  const deployed = await isDeployed(e.number)
+  const d = decideTestCard({ subIssues, labels, comments, deployed })
+  if (!d.post) { console.log(`  #${e.number} skip — ${d.reason}`); continue }
+  const body = buildCard({ epicNumber: e.number, title: e.title, ...appInfo(labels), checks: extractChecks(e.body || '') })
+  console.log(`  #${e.number} ${APPLY ? 'POST' : 'would post'} test card — ${d.reason}`)
+  if (APPLY) {
+    await gh(`/repos/${OWNER}/${NAME}/issues/${e.number}/comments`, { method: 'POST', body: JSON.stringify({ body }) })
+    await gh(`/repos/${OWNER}/${NAME}/issues/${e.number}/labels`, { method: 'POST', body: JSON.stringify({ labels: ['status:to-test'] }) })
+  }
+  posted++
+}
+console.log(`post-test-card: ${APPLY ? 'APPLIED' : 'DRY-RUN'} · ${epics.length} open epics · ${posted} card(s)`)
