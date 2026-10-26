@@ -40,9 +40,8 @@ export function shouldRevise({ body, authorAssociation, userType } = {}) {
   // An INTERACTIVE agent posts from the owner's account on the owner's behalf (#2453): its
   // status/FYI comments must not re-trigger a worker, but a change request it addresses to
   // the worker explicitly — a line starting `**Worker:**` — is the owner's feedback and revises.
-  // #2534: plain `> Agent (CI)` / `> Agent (interactive…` is the written form; 🤖 still read.
-  if (/^>\s*(?:🤖|Agent \((?:CI|interactive))/u.test(text)) {
-    const interactive = /^>\s*(?:🤖[^\n]*interactive agent|Agent \(interactive)/iu.test(text)
+  if (/^>\s*🤖/u.test(text)) {
+    const interactive = /^>\s*🤖[^\n]*interactive agent/iu.test(text)
     const addressesWorker = /^\s*\*\*Worker:\*\*/mu.test(text)
     if (!interactive) return { revise: false, reason: 'a pipeline comment (🤖 header)' }
     if (!addressesWorker) return { revise: false, reason: 'an interactive-agent comment without a **Worker:** line' }
