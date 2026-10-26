@@ -8,25 +8,28 @@
  *
  * @param {string} text raw job log
  * @param {{ maxLines?: number, maxBytes?: number }} [opts]
- * @returns {string} the tail, or '' for empty input
+ * @returns {{ text: string, truncated: boolean }} the tail (text '' for empty input); `truncated` is true
+ *   when the caps dropped lines from the top of the anchored window
  */
 export function logTail(text, { maxLines = 80, maxBytes = 4096 } = {}) {
-  if (!text) return ''
+  if (!text) return { text: '', truncated: false }
   const lines = String(text)
     .split(/\r?\n/)
     .map(l => l.replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s?/, ''))
     .filter(l => !/^##\[(group|endgroup)\]/.test(l))
   while (lines.length && !lines[lines.length - 1].trim()) lines.pop()
-  if (!lines.length) return ''
+  if (!lines.length) return { text: '', truncated: false }
 
   let end = lines.length
   for (let i = lines.length - 1; i >= 0; i--) {
     if (lines[i].startsWith('##[error]')) { end = i + 1; break }
   }
-  let out = lines.slice(Math.max(0, end - maxLines), end)
+  const start = Math.max(0, end - maxLines)
+  const out = lines.slice(start, end)
+  let truncated = start > 0
 
-  while (out.length > 1 && Buffer.byteLength(out.join('\n')) > maxBytes) out.shift()
+  while (out.length > 1 && Buffer.byteLength(out.join('\n')) > maxBytes) { out.shift(); truncated = true }
   let result = out.join('\n')
-  if (Buffer.byteLength(result) > maxBytes) result = result.slice(-maxBytes)
-  return result
+  if (Buffer.byteLength(result) > maxBytes) { result = result.slice(-maxBytes); truncated = true }
+  return { text: result, truncated }
 }
