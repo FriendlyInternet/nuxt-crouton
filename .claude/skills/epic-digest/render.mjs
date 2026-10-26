@@ -15,7 +15,6 @@
  * sub-issue breakdown (collapsed by default — "at a glance, drill in if needed").
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
-import { stripEmoji } from '../../../scripts/no-emoji.mjs'
 import { resolve, join, dirname } from 'node:path'
 // Brand identity SSOT — shared with crouton-email's transactional templates.
 // Plain ESM relative import: resolves under the full actions/checkout, no install.
@@ -736,16 +735,16 @@ mkdirSync(resolve(outDir), { recursive: true })
 const format = flag('format', 'all')
 if (format === 'md') {
   const mdPath = join(outDir, `epic-digest-${stamp}.md`)
-  writeFileSync(resolve(mdPath), stripEmoji(md))
+  writeFileSync(resolve(mdPath), md)
   console.log(`✓ Markdown → ${mdPath}`)
   console.log(`  ${epics.length} epic(s), ${actionables.length} actionable(s), ${loose.length} loose ticket(s), ${(activity.closed || []).length} closed / ${(activity.mergedPRs || []).length} PRs merged in last ${windowHours}h`)
 } else {
   const htmlPath = join(outDir, `epic-digest-${stamp}.html`)
   const txtPath = join(outDir, `epic-digest-${stamp}.txt`)
   const subjectPath = join(outDir, `epic-digest-${stamp}.subject.txt`)
-  writeFileSync(resolve(htmlPath), stripEmoji(html))
-  writeFileSync(resolve(txtPath), stripEmoji(txt))
-  writeFileSync(resolve(subjectPath), stripEmoji(subject).trim() + '\n')
+  writeFileSync(resolve(htmlPath), html)
+  writeFileSync(resolve(txtPath), txt)
+  writeFileSync(resolve(subjectPath), subject + '\n')
   console.log(`✓ HTML    → ${htmlPath}`)
   console.log(`✓ Text    → ${txtPath}`)
   console.log(`✓ Subject → ${subject}`)
