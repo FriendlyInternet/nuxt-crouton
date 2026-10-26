@@ -116,36 +116,14 @@ const monthPlaceholder = ref<DateValue>(new CalendarDate(
   1,
 ))
 const monthSwipeEl = ref<HTMLElement | null>(null)
-// prev · current · next months side by side: the neighbour is under the finger
-// while dragging, so the grid is never empty (#2531). Header and weekday row
-// are rendered once above the track and stay put.
-const { slide: slideMonth, style: monthTrackStyle } = useSlideSwipe(monthSwipeEl, {
-  peek: true,
+// Grid follows the finger, slides out, swaps month, slides in (#2515)
+// Only the day grid moves (via --slide-x); month label, arrows and weekday row stay put.
+const { vars: monthSwipeVars } = useSlideSwipe(monthSwipeEl, {
+  fade: true, // short slide + crossfade: never an empty panel (#2528)
+  settleFrames: 3,
   onNext: () => { monthPlaceholder.value = monthPlaceholder.value.add({ months: 1 }) },
   onPrev: () => { monthPlaceholder.value = monthPlaceholder.value.subtract({ months: 1 }) },
 })
-
-const monthPanels = computed(() => [-1, 0, 1].map(offset => ({
-  offset,
-  placeholder: monthPlaceholder.value.add({ months: offset }),
-})))
-
-const monthLabel = computed(() =>
-  new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' })
-    .format(monthPlaceholder.value.toDate(getLocalTimeZone())),
-)
-
-// Monday-first narrow weekday labels (week-starts-on is 1)
-const monthWeekdays = computed(() => {
-  const fmt = new Intl.DateTimeFormat(locale.value, { weekday: 'short' })
-  // 2024-01-01 is a Monday
-  return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2024, 0, 1 + i)))
-})
-
-function monthGoToToday() {
-  const d = today(getLocalTimeZone())
-  monthPlaceholder.value = new CalendarDate(d.year, d.month, 1)
-}
 
 function onMonthDayActivate(value: any) {
   const single: DateValue | undefined
@@ -597,91 +575,31 @@ const monthCellHeight = computed(() => {
     </CroutonBookingsWeekStrip>
 
     <!-- Month View -->
-    <div v-else class="flex flex-col w-full touch-pan-y">
-    <div class="flex items-center justify-center gap-1">
-      <UButton
-        icon="i-lucide-chevrons-left"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('bookings.weekStrip.previousMonth')"
-        @click="slideMonth('prev')"
-      />
-      <UButton
-        variant="ghost"
-        color="neutral"
-        class="font-medium"
-        @click="monthGoToToday"
-      >
-        {{ monthLabel }}
-      </UButton>
-      <UButton
-        icon="i-lucide-chevrons-right"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('bookings.weekStrip.nextMonth')"
-        @click="slideMonth('next')"
-      />
-    </div>
-    <div class="grid grid-cols-7 px-1 pt-1" aria-hidden="true">
-      <span v-for="wd in monthWeekdays" :key="wd" class="text-center text-xs text-muted">{{ wd }}</span>
-    </div>
-    <div ref="monthSwipeEl" class="w-full overflow-hidden touch-pan-y">
-    <div class="flex" :style="monthTrackStyle">
-    <div
-      v-for="panel in monthPanels"
-      :key="panel.offset"
-      class="min-w-full shrink-0"
-      :inert="panel.offset !== 0 || undefined"
-      :aria-hidden="panel.offset !== 0 || undefined"
-    >
+    <div v-else class="w-full overflow-hidden touch-pan-y">
+    <div ref="monthSwipeEl" class="w-full" :style="monthSwipeVars">
       <UCalendar
-        :placeholder="(panel.placeholder as any)"
+        :placeholder="(monthPlaceholder as any)"
+        @update:placeholder="(v: any) => { monthPlaceholder = v }"
         :model-value="(monthFocusDate as any)"
         @update:model-value="onMonthDayActivate"
         size="sm"
         :week-starts-on="1"
         :ui="{
           root: 'w-full',
-          header: 'hidden',
-          body: 'p-1 pt-0',
+          header: 'flex items-center justify-center gap-1',
+          heading: 'text-center font-medium truncate mx-0',
+          body: 'p-1 translate-x-[var(--slide-x)] opacity-[var(--slide-opacity)] [transition:var(--slide-transition)]',
           grid: 'w-full',
-          gridWeekDaysRow: 'hidden',
+          headCell: 'text-center text-xs',
           cell: 'w-full text-center p-0.5',
           cellTrigger: 'w-full h-full p-0 rounded-md data-[selected]:bg-transparent data-[selected]:text-inherit hover:bg-transparent focus:bg-transparent',
         }"
         class="[&_table]:w-full [&_table]:table-fixed"
       >
         <template #day="{ day }">
-          <!-- Neighbour months: day number + dots only, so 3x stays cheap -->
-          <div
-            v-if="panel.offset !== 0"
-            class="w-full flex flex-col items-center justify-start pt-1 pb-1"
-            :style="{ minHeight: `${monthCellHeight}px` }"
-          >
-            <span class="text-xs font-medium" :class="hasBookings(day.toDate(getLocalTimeZone())) ? 'text-default' : 'text-muted'">
-              {{ day.day }}
-            </span>
-            <div class="flex flex-col gap-1 mt-0.5 w-fit mx-auto">
-              <CroutonBookingsSlotIndicator
-                v-for="indicator in getIndicatorsForDate(day.toDate(getLocalTimeZone()))"
-                :key="indicator.locationId"
-                :slots="indicator.slots"
-                :booked-slot-ids="indicator.bookedSlotIds"
-                :partial-slot-ids="indicator.partialSlotIds"
-                :cancelled-slot-ids="indicator.cancelledSlotIds"
-                :bookings="indicator.bookings"
-                :color="indicator.color"
-                size="xs"
-                :variant="indicator.slots.length >= maxSlotCount ? 'dots' : 'bars'"
-              />
-            </div>
-          </div>
           <!-- Presentation only — day activation (mouse + keyboard) arrives via
                UCalendar's cellTrigger button → onMonthDayActivate. -->
           <div
-            v-else
             class="group relative w-full flex flex-col items-center justify-start pt-1 pb-1 rounded-md transition-all duration-200"
             :style="{ minHeight: `${monthCellHeight}px` }"
             :class="[
@@ -800,8 +718,6 @@ const monthCellHeight = computed(() => {
           </div>
         </template>
       </UCalendar>
-    </div>
-    </div>
     </div>
     </div>
   </div>
