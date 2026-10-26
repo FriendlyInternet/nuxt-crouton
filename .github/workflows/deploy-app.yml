@@ -938,7 +938,16 @@ jobs:
               ? `\n\n🔑 Review login \`${email}\` — the sign-in link comes by email when the epic is ready to test.`
               : ''
             const pr = context.issue.number
-            const body = `${marker}\n🚀 **${app}** preview for this PR: ${url}${login}\n\n<sub>🤖 \`${app}-pr${pr}\` — a Worker of its own, with its own auto-provisioned D1 + KV. Not shared staging; nothing else deploys over it, and it is deleted when this PR closes (#2020).</sub>`
+            // #2462: the gallery deploys for a PR that changes a shared UI piece — link each
+            // changed piece's own review page, not just the gallery's front door.
+            let pieces = ''
+            if (app === 'gallery') {
+              const { galleryLinks } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/gallery-links.mjs`)
+              const files = await github.paginate(github.rest.pulls.listFiles, { ...context.repo, pull_number: pr, per_page: 100 })
+              const links = galleryLinks(url, files)
+              if (links.length) pieces = `\n\n👀 **Changed pieces:**\n${links.map(l => `- [${l.file.split('/').pop().replace(/\.vue$/, '')}](${l.url}) · \`${l.file.split('/')[1]}\``).join('\n')}`
+            }
+            const body = `${marker}\n🚀 **${app}** preview for this PR: ${url}${pieces}${login}\n\n<sub>🤖 \`${app}-pr${pr}\` — a Worker of its own, with its own auto-provisioned D1 + KV. Not shared staging; nothing else deploys over it, and it is deleted when this PR closes (#2020).</sub>`
             const { owner, repo } = context.repo
             const issue_number = context.issue.number
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number })
