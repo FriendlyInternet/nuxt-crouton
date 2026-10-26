@@ -30,7 +30,9 @@ const swipeEl = ref<HTMLElement | null>(null)
 const isSameMonth = (a: { year: number, month: number }, b: { year: number, month: number }) =>
   a.year === b.year && a.month === b.month
 
-const { slide, style: trackStyle } = useSlideSwipe(swipeEl, {
+const trackEl = ref<HTMLElement | null>(null)
+const { slide } = useSlideSwipe(swipeEl, {
+  track: trackEl,
   peek: true,
   onNext: () => { placeholder.value = placeholder.value.add({ months: 1 }) },
   onPrev: () => { placeholder.value = placeholder.value.subtract({ months: 1 }) },
@@ -118,7 +120,7 @@ defineExpose({ goToDate, goToToday })
       <span v-for="wd in weekdays" :key="wd" class="text-center text-xs text-muted">{{ wd }}</span>
     </div>
     <div ref="swipeEl" class="w-full overflow-hidden touch-pan-y">
-      <div class="flex" :style="trackStyle">
+      <div class="flex" ref="trackEl" style="transform: translateX(-100%)">
         <div
           v-for="panel in panels"
           :key="panel.offset"

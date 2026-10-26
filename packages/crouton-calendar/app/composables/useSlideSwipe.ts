@@ -11,12 +11,23 @@ import { swipeDirection, lockAxis } from '../utils/swipe'
  */
 export function useSlideSwipe(
   el: Ref<HTMLElement | null>,
-  opts: { onNext: () => void, onPrev: () => void, peek?: boolean },
+  opts: { onNext: () => void, onPrev: () => void, peek?: boolean, track: Ref<HTMLElement | null> },
 ) {
   const SLIDE_MS = 250
-  const dragX = ref(0)
-  const animating = ref(false)
+  // Plain variables, not refs: the track's transform is written straight to the
+  // DOM so a drag frame never re-renders the panels (and the consumer's slots).
+  let dragX = 0
+  let animating = false
   const dragging = ref(false)
+
+  function render() {
+    const t = opts.track.value
+    if (!t) return
+    t.style.transform = opts.peek
+      ? `translateX(calc(-100% + ${dragX}px))`
+      : `translateX(${dragX}px)`
+    t.style.transition = animating ? `transform ${SLIDE_MS}ms ease-out` : 'none'
+  }
   let lock: 'x' | 'y' | null = null
   let busy = false
 
@@ -35,29 +46,38 @@ export function useSlideSwipe(
   }
 
   async function animateSlide(fire: () => void, w: number) {
-    animating.value = true
-    dragX.value = w
+    animating = true
+    render()
+    dragX = w
+    render()
     await wait(SLIDE_MS)
-    animating.value = false
+    animating = false
+    render()
     fire()
     if (opts.peek) {
       // neighbour panel is already in view: data swapped, snap back to centre
-      dragX.value = 0
+      dragX = 0
+      render()
       return
     }
-    dragX.value = -w
+    dragX = -w
+    render()
     await settle()
-    animating.value = true
-    dragX.value = 0
+    animating = true
+    render()
+    dragX = 0
+    render()
     await wait(SLIDE_MS)
-    animating.value = false
+    animating = false
+    render()
   }
 
   async function slide(dir: 'next' | 'prev') {
     if (busy) return
     const fire = { next: opts.onNext, prev: opts.onPrev }[dir]
     if (reducedMotion()) {
-      dragX.value = 0
+      dragX = 0
+      render()
       fire()
       return
     }
@@ -67,21 +87,27 @@ export function useSlideSwipe(
     }
     finally {
       // never leave the content stuck off-screen
-      animating.value = false
-      dragX.value = 0
+      animating = false
+      render()
+      dragX = 0
+      render()
       busy = false
     }
   }
 
   async function springBack() {
     if (reducedMotion()) {
-      dragX.value = 0
+      dragX = 0
+      render()
       return
     }
-    animating.value = true
-    dragX.value = 0
+    animating = true
+    render()
+    dragX = 0
+    render()
     await wait(SLIDE_MS)
-    animating.value = false
+    animating = false
+    render()
   }
 
   const { lengthX, lengthY } = useSwipe(el, {
@@ -95,8 +121,10 @@ export function useSlideSwipe(
       lock ??= lockAxis(-lengthX.value, -lengthY.value)
       if (lock !== 'x') return
       dragging.value = true
-      animating.value = false
-      dragX.value = -lengthX.value
+      animating = false
+      render()
+      dragX = -lengthX.value
+      render()
     },
     onSwipeEnd() {
       const wasX = lock === 'x'
@@ -109,14 +137,5 @@ export function useSlideSwipe(
     },
   })
 
-  // Applied to the moving element. For `peek` the 3-panel track sits one
-  // viewport to the left so the middle panel is the visible one.
-  const style = computed(() => ({
-    transform: opts.peek
-      ? `translateX(calc(-100% + ${dragX.value}px))`
-      : `translateX(${dragX.value}px)`,
-    transition: animating.value ? `transform ${SLIDE_MS}ms ease-out` : 'none',
-  }))
-
-  return { slide, style, dragging }
+  return { slide, dragging }
 }
