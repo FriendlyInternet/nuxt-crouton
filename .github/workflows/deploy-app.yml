@@ -508,6 +508,28 @@ jobs:
             | sed -e "s|$OWNER_EMAIL|<owner>|Ig" -E -e 's|https?://[^ "]*token=[^ "]*|<link>|g' \
             | head -40 || echo "(no matching lines)"
 
+      # Send the owner a sign-in link by mail on every status deploy, so they never have to type
+      # an email on a phone. Owner address is never printed.
+      - name: Email owner a status sign-in link
+        if: ${{ inputs.app == 'status' && steps.deploy.outputs.url != '' }}
+        continue-on-error: true
+        env:
+          OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          if [ -z "$OWNER_EMAIL" ]; then
+            echo "::notice::sign-in mail skipped (REVIEW_LOGIN_EMAIL / DIGEST_REPORT_EMAIL not set)."
+            exit 0
+          fi
+          BODY=$(jq -n --arg e "$OWNER_EMAIL" '{email:$e, callbackURL:"/"}')
+          CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
+            -H 'Content-Type: application/json' -d "$BODY" || echo 000)
+          if [ "$CODE" != "200" ]; then
+            echo "::warning::status sign-in mail request returned HTTP $CODE (expected 200)."
+          else
+            echo "Sign-in link requested (HTTP 200)."
+          fi
+
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)
       # but the bridge (`POST /api/_feedback`, installed by @fyit/crouton-devtools via
