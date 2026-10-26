@@ -172,7 +172,12 @@ async function handlePasskey() {
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 
-const showMagicLink = ref(false)
+const magicLinkToggled = ref(false)
+// Link-only apps (password off, magic link on) open straight in link mode
+const showMagicLink = computed({
+  get: () => isMagicLinkMode({ hasPassword: hasPassword.value, hasMagicLink: hasMagicLink.value, toggled: magicLinkToggled.value }),
+  set: (v: boolean) => { magicLinkToggled.value = v }
+})
 const magicLinkSent = ref(false)
 const magicLinkEmail = ref('')
 
