@@ -76,8 +76,10 @@ script and they're handled automatically.
 
 ## Fallback path — static mockup (`--static`)
 
-Use when a live deploy is not available (e.g. packages-only change with no runnable app, or
-the deploy pipeline is broken and speed matters more than fidelity). Pass `--static` when
+Use when a live deploy is not available (e.g. a packages change that isn't a component, or
+the deploy pipeline is broken and speed matters more than fidelity). A changed shared
+**component** (`packages/*/app/components/**.vue`) is NOT this case: its PR gets a live gallery
+link per changed piece automatically (`pocs/gallery`, #2462) — no mockup, no preview page. Pass `--static` when
 invoking this skill, or when the `task-worker` agent determines staging isn't reachable.
 
 ### What it produces
