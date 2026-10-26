@@ -70,6 +70,8 @@ interface Props {
   pageId?: string | null
   /** Public URL for the open-in-public button */
   publicUrl?: string | null
+  /** Locales the page can be edited in; the language menu shows only when there are 2+ */
+  localeOptions?: Array<{ value: string, label: string }>
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -77,8 +79,12 @@ const props = withDefaults(defineProps<Props>(), {
   showBack: false,
   pageId: null,
   publicUrl: null,
-  hasAi: false
+  hasAi: false,
+  localeOptions: () => []
 })
+
+/** The locale all translatable fields follow (v-model:editing-locale) */
+const editingLocale = defineModel<string>('editingLocale', { default: '' })
 
 const emit = defineEmits<{
   'update:status': [value: string]
@@ -152,13 +158,23 @@ const deleteGroup = computed(() => [{
   }]
 }])
 
-// Secondary actions (preview / open / AI). Status, visibility and settings are
+// Language menu: short code on the trigger, full name as the aria-label.
+const showLanguage = computed(() => props.localeOptions.length > 1)
+const currentLocale = computed(() => props.localeOptions.find(o => o.value === editingLocale.value))
+const languageItems = computed(() => [
+  props.localeOptions.map(o => ({
+    label: o.label,
+    type: 'checkbox' as const,
+    checked: o.value === editingLocale.value,
+    onSelect: () => { editingLocale.value = o.value }
+  }))
+])
+
+// Secondary actions (open / AI). Status, visibility and settings are
 // NOT here anymore: status + visibility are their own always-visible icon
 // dropdowns in the bar, and settings is a tab in the editor body.
 const overflowItems = computed(() => {
-  const main: any[] = [
-    { label: t('pages.editor.preview'), icon: 'i-lucide-eye', onSelect: () => emit('show-preview') }
-  ]
+  const main: any[] = []
   if (props.publicUrl) {
     main.push({ label: t('pages.editor.open'), icon: 'i-lucide-external-link', disabled: props.status !== 'published', onSelect: openPublic })
   }
@@ -170,7 +186,7 @@ const overflowItems = computed(() => {
 </script>
 
 <template>
-  <!-- One consolidated bar: back · status · visibility · tabs · ⋯ · save -->
+  <!-- One consolidated bar: back · status · visibility · tabs · language · preview · ⋯ · save -->
   <div class="@container flex flex-wrap @2xl:flex-nowrap items-center gap-1 min-h-11 px-2 py-1.5 border-b border-default bg-elevated/30">
     <!-- Back (mobile workspace slideover only — desktop keeps the sidebar visible) -->
     <UButton
@@ -270,6 +286,35 @@ const overflowItems = computed(() => {
     <div class="order-last basis-full min-w-0 @2xl:order-none @2xl:basis-0 @2xl:flex-1 overflow-x-auto">
       <slot />
     </div>
+
+    <!-- Spacer: pushes language · preview · ⋯ · save to the right edge on a phone
+         (from @2xl the tabs slot is the flex-1 spacer). -->
+    <div class="flex-1 @2xl:hidden" aria-hidden="true" />
+
+    <!-- Language — icon + short code; multi-locale apps only -->
+    <UDropdownMenu v-if="showLanguage" :items="languageItems" :content="{ align: 'end' }">
+      <UButton
+        class="shrink-0 px-1.5"
+        variant="ghost"
+        color="neutral"
+        size="xs"
+        icon="i-lucide-languages"
+        :aria-label="currentLocale?.label"
+      >
+        <span class="uppercase">{{ editingLocale }}</span>
+      </UButton>
+    </UDropdownMenu>
+
+    <!-- Preview -->
+    <UButton
+      class="shrink-0"
+      variant="ghost"
+      color="neutral"
+      size="xs"
+      icon="i-lucide-eye"
+      :aria-label="t('pages.editor.preview')"
+      @click="emit('show-preview')"
+    />
 
     <!-- Trailing actions: ⋯ overflow · cancel(create) · save · close -->
     <!-- Overflow (preview / open / AI / delete) — one clean icon menu -->
