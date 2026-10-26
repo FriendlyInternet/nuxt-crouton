@@ -867,9 +867,9 @@ jobs:
         run: |
           W="${{ inputs.app }}-staging"
           (timeout 40 npx wrangler tail "$W" --format json > tail.json 2> tail.err &) ; sleep 12
-          for p in / /api/_auth/session; do curl -s -o /dev/null -w "$p → %{http_code}\n" -m 20 "${{ inputs['staging-url'] }}$p"; done | tee codes.txt
+          for p in / /api/_auth/session; do echo "== $p"; curl -s -m 20 -H 'accept: application/json' -w "\n→ %{http_code}\n" "${{ inputs['staging-url'] }}$p" | tail -c 700; done | tee codes.txt
           sleep 15
-          { cat codes.txt; jq -r '[.outcome, (.exceptions[]? | "EXC " + .name + ": " + .message), (.logs[]? | select(.level=="error" or .level=="warn") | "LOG " + (.message|tostring))] | map(select(. != null)) | .[]' tail.json 2>/dev/null | head -40; echo "stderr: $(head -c 400 tail.err)"; } \
+          { cat codes.txt; jq -r '[.outcome, (.exceptions[]? | "EXC " + .name + ": " + .message), (.logs[]? | "LOG[" + .level + "] " + (.message|tostring))] | map(select(. != null)) | .[]' tail.json 2>/dev/null | head -60; echo "stderr: $(head -c 400 tail.err)"; } \
             | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-400 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}' > live.txt
           echo "::error title=live worker errors::$(cat live.txt)"
 
