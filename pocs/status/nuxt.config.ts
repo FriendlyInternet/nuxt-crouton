@@ -29,11 +29,22 @@ export default defineNuxtConfig({
     methods: {
       password: false,
       passkeys: false,
-      magicLink: true
+      // Link stays valid 60 minutes (default is 5)
+      magicLink: { expiresIn: 3600 }
     }
   },
 
   runtimeConfig: {
+    email: {
+      fromName: 'Crouton Status'
+    },
+    public: {
+      crouton: {
+        email: {
+          brand: { name: 'Crouton Status' }
+        }
+      } as any
+    },
     // The one email allowed to sign in. Set ONLY as the Worker var NUXT_STATUS_OWNER_EMAIL
     // (never committed; public repo). Empty = nobody can sign in.
     statusOwnerEmail: '',
