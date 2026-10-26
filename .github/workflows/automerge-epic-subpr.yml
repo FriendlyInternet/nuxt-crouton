@@ -257,15 +257,12 @@ jobs:
                 // (#2039/#2041/#2044), and this guard's own "held for a human" comment landed
                 // under a label implying an open question.
                 try { await github.rest.issues.addLabels({ owner, repo, issue_number: pull_number, labels: ['status:needs-merge'] }) } catch (e) { core.warning(`addLabel #${pull_number}: ${e.message}`) }
-                // #2150: request review so the PR surfaces in the owner's native "Review
-                // requested" list — a plain comment produces neither a push notification nor a
-                // native GitHub surface pointing at the owner (confirmed absent from both, live,
-                // on PR #2148 — it showed up under neither "Created by me" nor "Review requested").
-                try { await github.rest.pulls.requestReviewers({ owner, repo, pull_number, reviewers: [OWNER] }) } catch (e) { core.warning(`requestReviewers #${pull_number}: ${e.message}`) }
+                // #2520: no review request or @mention here — sub-PRs never notify the owner;
+                // only the epic→main PR and real blocking questions do.
                 const list = sharedCode.slice(0, 10).map(f => `- \`${f.filename}\``).join('\n')
                 const more = sharedCode.length > 10 ? `\n…and ${sharedCode.length - 10} more.` : ''
                 await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
-                  body: `⏸️ **Held for a human — this build PR changes shared code under \`packages/\`.** @${OWNER}\n\n`
+                  body: `⏸️ **Held for a human — this build PR changes shared code under \`packages/\`.**\n\n`
                     + '**Fix:** a change here ripples across every consuming app (the `packages/` HARD GATE, #350), so it is not auto-merged — review it, confirm `pnpm typecheck` across apps, then merge.\n\n'
                     + `<details><summary>shared-code files (${sharedCode.length})</summary>\n\n${list}${more}\n</details>\n\n`
                     + '<sub>🤖 agent pipeline (CI) · auto-merge shared-code guard (#339)</sub>' })
