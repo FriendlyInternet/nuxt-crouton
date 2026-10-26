@@ -39,7 +39,9 @@ const { t } = useT()
 const route = useRoute()
 const { user, userInitials, dropdownItems, preferenceItems } = useUserMenuItems({ useModal: props.useModal })
 const { currentTeam, currentRole } = useTeam()
-const { current, recent, unread, markAllSeen, dismiss } = useCroutonStatus()
+const { current, recent, unread, markAllSeen, dismiss, refreshTeamEvents } = useCroutonStatus()
+const { hasApp } = useCroutonApps()
+const { teamSlug } = useTeamContext()
 
 const pageChrome = useState<{ hideNav?: boolean, hideAuthControls?: boolean }>('pageChrome', () => ({}))
 const scopedSession = useState<{ displayName: string } | null>('crouton:scoped-session', () => null)
@@ -142,7 +144,10 @@ const menuItems = computed<DropdownMenuItem[][]>(() => {
           description: m.description ? `${m.description} · ${timeAgo(m.timestamp)}` : timeAgo(m.timestamp),
           class: TYPE_ICON_COLOR[m.type],
           onSelect: (e: Event) => e.preventDefault()
-        } as DropdownMenuItem))
+        } as DropdownMenuItem)),
+        ...(hasApp('events') && teamSlug.value
+          ? [{ label: t('userPill.seeAll'), icon: 'i-lucide-history', to: `/admin/${teamSlug.value}/activity` } as DropdownMenuItem]
+          : [])
       ]
     : []
 
@@ -154,6 +159,7 @@ const menuItems = computed<DropdownMenuItem[][]>(() => {
 
 function onOpenChange(open: boolean) {
   if (!open) return
+  refreshTeamEvents(true)
   markAllSeen()
   if (current.value?.type === 'error') dismiss(current.value.id)
 }
