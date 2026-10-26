@@ -34,9 +34,9 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    // The one email allowed to sign in. Set STATUS_OWNER_EMAIL at build, or
-    // NUXT_STATUS_OWNER_EMAIL as a Worker var. Empty = nobody can sign in.
-    statusOwnerEmail: process.env.STATUS_OWNER_EMAIL || ''
+    // The one email allowed to sign in. Set ONLY as the Worker var NUXT_STATUS_OWNER_EMAIL
+    // (never committed; public repo). Empty = nobody can sign in.
+    statusOwnerEmail: ''
   },
 
   // Cloudflare Workers deployment — stub passkey/webauthn packages (tsyringe is

@@ -1,4 +1,4 @@
-// Owner-only access: sign-up is closed and only STATUS_OWNER_EMAIL may ask for a
+// Owner-only access: sign-up is closed and only NUXT_STATUS_OWNER_EMAIL may ask for a
 // sign-in link. Everyone else gets a 403. Fails closed when the owner email is unset.
 const SIGN_UP = /^\/api\/auth\/sign-up(\/|$)/
 const SIGN_IN = /^\/api\/auth\/sign-in(\/|$)/
