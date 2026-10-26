@@ -160,19 +160,19 @@ const bookingBlockDefinition: CroutonBlockDefinition = {
 }
 
 // Sidebar label = the title key this package already ships for the collection
-const withNavLabel = <T extends object>(config: T, name: string) => ({
+const withNavLabel = <T extends { adminNav?: object }>(config: T, labelKey: string) => ({
   ...config,
-  adminNav: { label: `bookings.collections.${name.replace('bookings', '').toLowerCase()}.title` }
+  adminNav: { ...config.adminNav, label: labelKey }
 })
 
 export default defineAppConfig({
   croutonCollections: {
-    bookingsBookings: withNavLabel(bookingsBookingsConfig, 'bookingsBookings'),
+    bookingsBookings: withNavLabel(bookingsBookingsConfig, 'bookings.collections.bookings.title'),
     // Package-provided form for locations (overrides the generated _Form.vue)
-    bookingsLocations: { ...withNavLabel(bookingsLocationsConfig, 'bookingsLocations'), packageForm: 'CroutonBookingsLocationForm' },
-    bookingsSettings: withNavLabel(bookingsSettingsConfig, 'bookingsSettings'),
-    bookingsEmailtemplates: withNavLabel(bookingsEmailtemplatesConfig, 'bookingsEmailtemplates'),
-    bookingsEmaillogs: withNavLabel(bookingsEmaillogsConfig, 'bookingsEmaillogs')
+    bookingsLocations: { ...withNavLabel(bookingsLocationsConfig, 'bookings.collections.locations.title'), packageForm: 'CroutonBookingsLocationForm' },
+    bookingsSettings: withNavLabel(bookingsSettingsConfig, 'bookings.collections.settings.title'),
+    bookingsEmailtemplates: withNavLabel(bookingsEmailtemplatesConfig, 'bookings.collections.emailtemplates.title'),
+    bookingsEmaillogs: withNavLabel(bookingsEmaillogsConfig, 'bookings.collections.emaillogs.title')
   },
   // App auto-discovery registration for crouton-bookings
   croutonApps: {
