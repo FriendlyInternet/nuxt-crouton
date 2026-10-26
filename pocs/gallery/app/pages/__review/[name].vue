@@ -114,8 +114,16 @@ const identities: { key: Identity, label: string }[] = [
   { key: 'signedOut', label: 'Signed out' },
 ]
 
-const { push } = useCroutonStatus()
+const { push, messages, dismiss, markAllSeen } = useCroutonStatus()
 const statuses = [
+  {
+    label: 'Nothing',
+    color: 'neutral' as const,
+    run: () => {
+      for (const m of [...messages.value]) dismiss(m.id)
+      markAllSeen()
+    },
+  },
   { label: 'Success', color: 'success' as const, run: () => push({ type: 'success', text: 'You saved “Kayak Rental”' }) },
   { label: 'Info', color: 'info' as const, run: () => push({ type: 'info', text: 'Invitation sent', icon: 'i-lucide-info' }) },
   { label: 'Warning', color: 'warning' as const, run: () => push({ type: 'warning', text: 'Check the highlighted fields', icon: 'i-lucide-triangle-alert' }) },
