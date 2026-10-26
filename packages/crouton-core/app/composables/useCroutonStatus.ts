@@ -1,5 +1,10 @@
 // Module-scoped flag — not useState, which leaks SSR→client and skips client registration
 let hookRegistered = false
+let lastEventsFetch = 0
+
+const EVENTS_REFRESH_MIN_MS = 60_000
+const EVENTS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+const EVENTS_LIMIT = 20
 
 /**
  * Extract an item's display name from mutation data using display config or common field heuristics.
@@ -84,6 +89,30 @@ export function useCroutonStatus() {
     history.value = markAllStatusSeen(history.value)
   }
 
+  /**
+   * Merge recent team changes from crouton-events into the feed. No-op without the
+   * events app; throttled to once per minute unless `force`. Call on mount / pill open.
+   */
+  const refreshTeamEvents = async (force = false) => {
+    if (!useCroutonApps().hasApp('events')) return
+    const teamId = useTeamContext().getTeamId()
+    const now = Date.now()
+    if (!teamId || (!force && now - lastEventsFetch < EVENTS_REFRESH_MIN_MS)) return
+    lastEventsFetch = now
+    try {
+      const rows = await $fetch<TeamEventRow[]>(`/api/teams/${teamId}/crouton-events`, {
+        query: { pageSize: EVENTS_LIMIT, dateFrom: new Date(now - EVENTS_WINDOW_MS).toISOString() },
+      })
+      history.value = mergeTeamEvents(history.value, rows, t)
+    } catch {
+      // Feed falls back to own changes
+    }
+  }
+
+  if (import.meta.client && getCurrentInstance()) {
+    onMounted(() => { refreshTeamEvents() })
+  }
+
   // Register listener once per JS runtime (SSR and client each get their own)
   if (!hookRegistered) {
     hookRegistered = true
@@ -102,5 +131,5 @@ export function useCroutonStatus() {
     })
   }
 
-  return { messages, current, recent, unread, lastMessage, push, dismiss, markAllSeen }
+  return { messages, current, recent, unread, lastMessage, push, dismiss, markAllSeen, refreshTeamEvents }
 }

@@ -34,6 +34,46 @@ export function recentStatuses(history: StatusMessage[]): StatusMessage[] {
   return history.slice(0, STATUS_RECENT_MAX)
 }
 
+/** A row from GET /api/teams/[teamId]/crouton-events (timestamp arrives as ISO string or epoch). */
+export interface TeamEventRow {
+  id: string
+  timestamp: string | number
+  operation: string
+  collectionName: string
+  userName?: string
+}
+
+/** Remote events this close to a local entry for the same collection+operation are the same change. */
+const OWN_EVENT_WINDOW_MS = 10_000
+
+/**
+ * Merge team events into the local history: dedupe (by id, and against our own
+ * just-pushed changes), newest first, capped at STATUS_RECENT_MAX.
+ */
+export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[], t: Translate): StatusMessage[] {
+  const known = new Set(history.map(m => m.id))
+  const fromEvents: StatusMessage[] = []
+  for (const ev of events) {
+    const id = `event-${ev.id}`
+    const timestamp = new Date(ev.timestamp).getTime()
+    if (known.has(id) || Number.isNaN(timestamp)) continue
+    const isOwn = history.some(m =>
+      !m.id.startsWith('event-')
+      && m.collection === ev.collectionName
+      && m.operation === ev.operation
+      && Math.abs(m.timestamp - timestamp) <= OWN_EVENT_WINDOW_MS,
+    )
+    if (isOwn) continue
+    known.add(id)
+    const userName = ev.userName?.split(' ')[0]
+    const { text, icon } = mutationStatus({ operation: ev.operation, collection: ev.collectionName, userName }, t)
+    fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, seen: true })
+  }
+  return [...history, ...fromEvents]
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, STATUS_RECENT_MAX)
+}
+
 /** Warnings/errors the user has not yet seen. */
 export function unreadStatusCount(history: StatusMessage[]): number {
   return history.filter(m => !m.seen && (m.type === 'warning' || m.type === 'error')).length

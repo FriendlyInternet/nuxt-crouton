@@ -5,6 +5,8 @@ import {
   unreadStatusCount,
   markAllStatusSeen,
   mutationStatus,
+  mergeTeamEvents,
+  STATUS_RECENT_MAX,
   type StatusMessage,
 } from '../status-feed'
 
@@ -83,5 +85,39 @@ describe('mutationStatus', () => {
       .toBe('Maarten created a product')
     expect(mutationStatus({ operation: 'delete', collection: 'shopProducts', itemIds: ['1', '2'] }, t).text)
       .toBe('You deleted 2 products')
+  })
+})
+
+describe('mergeTeamEvents', () => {
+  const ev = (id: string, ts: number, over: Record<string, unknown> = {}) => ({
+    id, timestamp: new Date(ts).toISOString(), operation: 'update', collectionName: 'shopProducts', userName: 'Bo Lee', ...over,
+  })
+
+  it('returns local history unchanged when there are no events', () => {
+    const h = [msg({ id: 'a', timestamp: 3000 }), msg({ id: 'b', timestamp: 2000 })]
+    expect(mergeTeamEvents(h, [], t).map(m => m.id)).toEqual(['a', 'b'])
+  })
+
+  it('merges newest first and attributes to the event user', () => {
+    const out = mergeTeamEvents([msg({ id: 'a', timestamp: 1000 })], [ev('e1', 100000)], t)
+    expect(out.map(m => m.id)).toEqual(['event-e1', 'a'])
+    expect(out[0]!.text).toContain('Bo')
+  })
+
+  it('dedupes by id on repeated merges', () => {
+    const once = mergeTeamEvents([], [ev('e1', 100000)], t)
+    expect(mergeTeamEvents(once, [ev('e1', 100000)], t)).toHaveLength(1)
+  })
+
+  it('drops events that echo our own recent change', () => {
+    const own = msg({ id: 'a', timestamp: 100000, collection: 'shopProducts', operation: 'update' })
+    expect(mergeTeamEvents([own], [ev('e1', 103000)], t).map(m => m.id)).toEqual(['a'])
+  })
+
+  it('caps at STATUS_RECENT_MAX', () => {
+    const events = Array.from({ length: 12 }, (_, i) => ev(`e${i}`, 100000 + i * 60000))
+    const out = mergeTeamEvents([], events, t)
+    expect(out).toHaveLength(STATUS_RECENT_MAX)
+    expect(out[0]!.id).toBe('event-e11')
   })
 })
