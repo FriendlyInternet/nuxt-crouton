@@ -1,0 +1,9 @@
+{
+  "calendar": {
+    "week": {
+      "previousWeek": "Vorige week",
+      "nextWeek": "Volgende week",
+      "today": "Ga naar vandaag"
+    }
+  }
+}
