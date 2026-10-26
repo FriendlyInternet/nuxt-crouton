@@ -27,6 +27,15 @@ import {
 } from './booking-emails'
 
 /**
+ * The consuming app's generated schema. Each app generates its own tables at build time,
+ * so the package can't type the exports; a collection the app doesn't have is just absent.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
+async function loadAppSchema(): Promise<Record<string, any>> {
+  return await import('~~/server/db/schema')
+}
+
+/**
  * Email template record shape (from generated bookingsEmailtemplates table)
  */
 interface BookingEmailTemplateRecord {
@@ -99,9 +108,7 @@ export async function getActiveTemplatesForTrigger(
 
   try {
     // Import from the centralized schema index (always exists, Vite resolves ~~ alias)
-    // Tables are generated at build time — schema typed as Record since exports vary per app
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
-    const schema: Record<string, any> = await import('~~/server/db/schema')
+    const schema = await loadAppSchema()
     const bookingsEmailtemplates = schema.bookingsEmailtemplates
     if (!bookingsEmailtemplates) return []
 
@@ -195,8 +202,7 @@ export async function logEmailSend(options: {
   const db = useDB()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
-    const schema: Record<string, any> = await import('~~/server/db/schema')
+    const schema = await loadAppSchema()
     const bookingsEmaillogs = schema.bookingsEmaillogs
     if (!bookingsEmaillogs) return null
 
@@ -241,8 +247,7 @@ export async function updateEmailLogStatus(
   const db = useDB()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
-    const schema: Record<string, any> = await import('~~/server/db/schema')
+    const schema = await loadAppSchema()
     const bookingsEmaillogs = schema.bookingsEmaillogs
     if (!bookingsEmaillogs) return
 
@@ -675,8 +680,7 @@ export async function getBatchBookingEmailStats(
   const db = useDB()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
-    const schema: Record<string, any> = await import('~~/server/db/schema')
+    const schema = await loadAppSchema()
     const bookingsEmaillogs = schema.bookingsEmaillogs
     if (!bookingsEmaillogs) return new Map()
 
@@ -741,8 +745,7 @@ export async function getBatchBookingEmailDetails(
   const bookingIds = bookings.map(b => b.id)
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
-    const schema: Record<string, any> = await import('~~/server/db/schema')
+    const schema = await loadAppSchema()
     const bookingsEmaillogs = schema.bookingsEmaillogs
     const bookingsEmailtemplates = schema.bookingsEmailtemplates
     if (!bookingsEmaillogs || !bookingsEmailtemplates) return new Map()
@@ -931,8 +934,7 @@ export async function getBookingEmailStats(
   const db = useDB()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
-    const schema: Record<string, any> = await import('~~/server/db/schema')
+    const schema = await loadAppSchema()
     const bookingsEmaillogs = schema.bookingsEmaillogs
     if (!bookingsEmaillogs) return { total: 0, sent: 0, pending: 0, failed: 0 }
 
@@ -995,8 +997,7 @@ export async function getBookingEmailDetails(
   const db = useDB()
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- schema exports are generated per consuming app at build time; unknowable in the package
-    const schema: Record<string, any> = await import('~~/server/db/schema')
+    const schema = await loadAppSchema()
     const bookingsEmaillogs = schema.bookingsEmaillogs
     const bookingsEmailtemplates = schema.bookingsEmailtemplates
     if (!bookingsEmaillogs || !bookingsEmailtemplates) return results
