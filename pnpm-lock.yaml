@@ -762,6 +762,9 @@ importers:
 
   packages/crouton-bookings:
     dependencies:
+      '@fyit/crouton-calendar':
+        specifier: workspace:*
+        version: link:../crouton-calendar
       '@fyit/crouton-core':
         specifier: workspace:*
         version: link:../crouton-core
@@ -790,6 +793,18 @@ importers:
       unbuild:
         specifier: ^3.6.1
         version: 3.6.1(typescript@5.9.3)(vue-tsc@3.2.2(typescript@5.9.3))(vue@3.5.44(typescript@5.9.3))
+
+  packages/crouton-calendar:
+    dependencies:
+      '@fyit/crouton-core':
+        specifier: workspace:*
+        version: link:../crouton-core
+      '@nuxt/ui':
+        specifier: ^4.11.3
+        version: 4.11.3(7066f41bd59236741c4a6f50fb741b13)
+      nuxt:
+        specifier: ^4.6.1
+        version: 4.6.1(9699dc5d3b82b54a33829bab4385cec1)
 
   packages/crouton-charts:
     dependencies:
