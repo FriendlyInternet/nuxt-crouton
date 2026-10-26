@@ -632,7 +632,7 @@ const monthCellHeight = computed(() => {
     <div
       v-for="panel in monthPanels"
       :key="panel.offset"
-      class="min-w-full shrink-0"
+      class="w-full shrink-0"
       :inert="panel.offset !== 0 || undefined"
       :aria-hidden="panel.offset !== 0 || undefined"
     >
