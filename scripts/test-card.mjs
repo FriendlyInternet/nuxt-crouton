@@ -32,7 +32,7 @@ export function decideTestCard({ subIssues = [], labels = [], comments = [], dep
 const NO_APP_LINE = 'Nothing to open: this changes how GitHub and the pipeline behave. Check it on the epic itself.'
 const METADATA_LINE = /^(?:Blocked-by:|Dedup-checked:|Packages-approved:|Workflow-change:|Parent:|Refs\s+#|Closes\s+#|<!--)/i
 
-function sectionChecks(body, heading) {
+export function sectionChecks(body, heading) {
   const re = new RegExp(`^#{2,4}\\s*${heading}\\s*$([\\s\\S]*?)(?=^#{1,4}\\s|\\n---|$(?![\\s\\S]))`, 'im')
   const m = re.exec(body)
   return (m ? m[1] : '')
@@ -41,6 +41,11 @@ function sectionChecks(body, heading) {
     .filter(l => l && !METADATA_LINE.test(l))
     .map(l => l.replace(/\*\*/g, '').trim())
     .filter(Boolean)
+}
+
+/** True when the body has at least one step under a `How to test` heading (not the `Done when` fallback). */
+export function hasTestSteps(body = '') {
+  return sectionChecks(body, '(?:🧪\\s*)?How to test').length > 0
 }
 
 /**

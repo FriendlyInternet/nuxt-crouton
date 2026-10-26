@@ -27,8 +27,10 @@
 import { readFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
+import { hasTestSteps } from './test-card.mjs'
 import { parsePlan, planToActions, runActions, PlanError } from './apply-decompose-plan.mjs'
 
+export const NO_TEST_STEPS_MSG = 'epic body has no "## 🧪 How to test" section with steps — write 2–3 steps the owner can do on a phone'
 export const DEDUP_RE = /Dedup-checked:/i
 
 /** kebab-case a title into a branch-safe slug (max 40 chars). */
@@ -59,6 +61,7 @@ export function parseScaffoldPlan(raw) {
   if (!DEDUP_RE.test(p.body)) {
     throw new PlanError('epic body has no `Dedup-checked:` line — run the issue-dedup search first and attest it (the scaffold must not bypass the dedup gate)')
   }
+  if (!hasTestSteps(p.body)) throw new PlanError(NO_TEST_STEPS_MSG)
   const approved = typeof p.packagesApproved === 'string' && p.packagesApproved.trim() ? p.packagesApproved.trim() : null
   const children = parsePlan({
     leaf: false,

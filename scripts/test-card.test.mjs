@@ -2,7 +2,7 @@
 //   node --test scripts/test-card.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideTestCard, buildCard, buildTestMail, extractChecks, CARD_MARKER } from './test-card.mjs'
+import { decideTestCard, buildCard, buildTestMail, extractChecks, hasTestSteps, CARD_MARKER } from './test-card.mjs'
 
 const C = { state: 'closed' }
 const base = { subIssues: [C, C], labels: ['epic'], comments: [], deployed: true }
@@ -71,4 +71,11 @@ test('bold markers inside a step are dropped; no-app mail subject has no placeho
   const body = '## How to test\n1. **Expect** the list\n'
   assert.deepEqual(extractChecks(body), ['Expect the list'])
   assert.equal(buildTestMail({ epicNumber: 5, title: 'Flow' }).subject, 'Test: Flow')
+})
+
+test('hasTestSteps: only a How to test section counts, not Done when', () => {
+  assert.equal(hasTestSteps('## 🧪 How to test\n1. Open it\n2. Click'), true)
+  assert.equal(hasTestSteps('## Done when\n- it works'), false)
+  assert.equal(hasTestSteps('## 🧪 How to test\n\nDedup-checked: x'), false)
+  assert.equal(hasTestSteps('no section'), false)
 })
