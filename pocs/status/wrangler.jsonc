@@ -28,6 +28,7 @@
   // via scripts/inject-wrangler-env.mjs before deploying.
   "env": {
     "staging": {
+      "routes": [{ "pattern": "status.pmcp.dev", "custom_domain": true }],
       "d1_databases": [
         {
           "binding": "DB",
