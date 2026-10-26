@@ -762,6 +762,9 @@ importers:
 
   packages/crouton-bookings:
     dependencies:
+      '@fyit/crouton-calendar':
+        specifier: workspace:*
+        version: link:../crouton-calendar
       '@fyit/crouton-core':
         specifier: workspace:*
         version: link:../crouton-core
