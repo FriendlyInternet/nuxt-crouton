@@ -42,6 +42,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DIGEST_REPO: ${{ github.repository }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: ${{ vars.RESEND_FROM }}
+          REVIEW_LOGIN_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL }}
+          DIGEST_REPORT_EMAIL: ${{ vars.DIGEST_REPORT_EMAIL }}
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           DEPLOYED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
           APPLY: ${{ github.event_name == 'workflow_run' && 'true' || (inputs.apply && 'true' || 'false') }}
         run: node scripts/post-test-card.mjs

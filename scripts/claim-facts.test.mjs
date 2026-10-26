@@ -137,3 +137,13 @@ test('status:in-progress contributes its timestamp only when the label is presen
   })
   assert.equal(withLabel.inProgressSince, '2026-08-06T00:00:00Z')
 })
+
+test('two PRs on our own branch (one closed, one open) are both self — must not refuse', async () => {
+  const github = fakeGithub({ prs: [
+    { number: 1500, state: 'closed', body: 'Closes #1491', headRef: 'work-1491', baseRef: 'epic/1491-x' },
+    { number: 1501, state: 'open', body: 'Closes #1491', headRef: 'work-1491', baseRef: 'epic/1491-x' },
+  ] })
+  const facts = await gatherClaimFacts({ github, context, issueNumber: 1491 })
+  assert.deepEqual(facts.self.prs, [1500, 1501])
+  assert.equal(decideClaim(facts).action, 'proceed')
+})

@@ -110,6 +110,11 @@ jobs:
       (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this')
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    # One worker at a time per issue (#2645). `work-this` applied at creation fired two runs
+    # (#2629) and #1491 got two PRs on `work-1491`. Queue, don't cancel.
+    concurrency:
+      group: work-${{ inputs.issue || github.event.issue.number }}
+      cancel-in-progress: false
     timeout-minutes: 45
     # No `id-token` — pi uses a provider key, not OIDC. The write scopes are for the
     # Harness App token minted below, which pi uses to push/PR/comment.
@@ -331,6 +336,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue }}
           FEEDBACK_ID: ${{ inputs.feedback }}
+          EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
         run: |
           set -euo pipefail
           gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
@@ -339,6 +345,30 @@ jobs:
           git checkout -f -B "work-${ISSUE}" "origin/work-${ISSUE}" 2>&1 | tail -1
           echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "from=${FROM}" >> "$GITHUB_OUTPUT"
+          # Merge the current base in BEFORE pi edits (#2658). The PR may be days behind its base
+          # (#2439 would have undone #2433/#2446); pi must work on — and the finish step stack on —
+          # an up-to-date tree. rev_start stays the ORIGINAL head so the push lease still guards
+          # against a concurrent push. A conflict is never auto-resolved: abort and hand to a person.
+          BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
+          git config user.name  "nuxt-harness[bot]"
+          git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+          git fetch -q --unshallow origin "work-${ISSUE}" "$BASE" 2>/dev/null || git fetch -q origin "work-${ISSUE}" "$BASE"
+          BASE_TIP="$(git rev-parse --short "origin/${BASE}")"
+          if git merge-base --is-ancestor "origin/${BASE}" HEAD; then
+            echo "base merged: already up to date with ${BASE}"
+            echo "base_merged=" >> "$GITHUB_OUTPUT"
+          elif git merge --no-edit "origin/${BASE}" 2>&1 | tail -3 && [ ! -f .git/MERGE_HEAD ]; then
+            echo "base merged: ${BASE_TIP}"
+            echo "base_merged=${BASE_TIP}" >> "$GITHUB_OUTPUT"
+          else
+            CONFLICTS="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
+            git merge --abort || true
+            RPR="$(gh pr list --head "work-${ISSUE}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+            [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2658)_\n\nThis PR is behind `%s` and conflicts in:\n\n%s\n\nA person needs to resolve these; I made no change.' "$BASE" "$CONFLICTS")" 2>&1 | tail -1 || true
+            echo "::error::PR is behind ${BASE} and conflicts — not auto-resolved (#2658)"
+            exit 1
+          fi
+          echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "revise mode: work-${ISSUE} @ $(git rev-parse --short HEAD), feedback ${FROM}"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
@@ -475,6 +505,9 @@ jobs:
           SINCE: ${{ steps.t0.outputs.ts }}
           # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
           REV_START: ${{ steps.revise.outputs.rev_start }}
+          # #2658: REV_START + the current base merged in (equals REV_START when already current).
+          REV_BASE: ${{ steps.revise.outputs.rev_base }}
+          BASE_MERGED: ${{ steps.revise.outputs.base_merged }}
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
@@ -543,7 +576,7 @@ jobs:
           BR="work-${ISSUE}"
           if [ -n "${REV_START:-}" ]; then
             # REVISE: stack on the PR as it stands — never reset it to the base (that would wipe it).
-            git checkout -f -B "$BR" "$REV_START" 2>&1 | tail -1
+            git checkout -f -B "$BR" "${REV_BASE:-$REV_START}" 2>&1 | tail -1
             # Whole-PR diff base, so the visual-change + evidence checks still see the PR's .vue
             # changes and a held UI PR STAYS held after a non-visual revision. The checkout is
             # depth-1, so origin/<base> has no parents: when the base moved on since the PR branched
@@ -626,8 +659,12 @@ jobs:
             RPR="$(gh pr list --head "$BR" --state open --json number -q '.[0].number' 2>/dev/null || true)"
             if [ "$HAVE_COMMITS" = "1" ]; then
               echo "revised=1" >> "$GITHUB_OUTPUT"
-              FILES="$(git diff --name-status "$REV_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
-              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES")" 2>&1 | tail -1 || true
+              if [ "$(git rev-parse HEAD)" = "$RUN_START" ]; then
+                [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2658)_\n\nBrought up to date with `%s`; no other change. base merged: `%s`' "$BASE" "$BASE_MERGED")" 2>&1 | tail -1 || true
+              else
+              FILES="$(git diff --name-status "$RUN_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
+              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.%s' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES" "${BASE_MERGED:+$(printf '\n\nbase merged: `%s`' "$BASE_MERGED")}")" 2>&1 | tail -1 || true
+              fi
             elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
               REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
               if [ "${REPLIED:-0}" -gt 0 ]; then

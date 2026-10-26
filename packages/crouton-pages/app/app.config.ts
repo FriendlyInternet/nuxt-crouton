@@ -4,7 +4,7 @@ import { pagesPagesConfig } from '../collections/pages/app/composables/usePagesP
 
 export default defineAppConfig({
   croutonCollections: {
-    pagesPages: pagesPagesConfig
+    pagesPages: { ...pagesPagesConfig, adminNav: { label: 'pages.collections.pages.title' } }
   },
   // App auto-discovery registration for crouton-pages
   croutonApps: {

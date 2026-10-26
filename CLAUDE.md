@@ -364,8 +364,8 @@ pnpm --filter <app> dev   # There is NO root `dev` script — always filter to a
 pnpm build / pnpm build:packages
 pnpm preview <app>    # LOOK AT a change: boots the app, seeds it, mints a disposable
                       # review login and prints a PREFILLED one-click URL (#1777).
-                      # The answer to "a packages change has no preview" — a
-                      # packages-only PR gets no deploy preview by design.
+                      # For a changed shared component (packages/*/app/components)
+                      # the PR gets a live gallery link automatically (#2462).
 pnpm typecheck        # Runs per-app typecheck (NEVER npx nuxt typecheck from root)
 npx nuxt db generate  # Database migrations
 pnpm test / pnpm test:unit / pnpm test:e2e
@@ -506,8 +506,14 @@ pins comments on elements they want changed; each pin arrives as a `🎯 Preview
 comment naming the source file. The agent fixes the named file, redeploys, and iterates. Capture
 machinery lives in `@fyit/crouton-devtools` (wired by epic #590 WS1+WS2).
 
-**Fallback — static mockup (`--static`):** when a live deploy isn't available (packages-only
-change with no runnable app, or deploy pipeline is down), pass `--static` to the `ui-proposal`
+**Shared components — the gallery (#2462):** a PR that changes a `.vue` under
+`packages/*/app/components` needs no hand-written preview page. The gallery (`pocs/gallery`)
+deploys for that PR and its preview comment links each changed piece (`/__review?file=…`). If a
+piece needs input to show, add one line in `pocs/gallery/app/review-samples.ts`. A new package
+with components must be added to the gallery — `scripts/gallery-coverage.test.mjs` fails CI otherwise.
+
+**Fallback — static mockup (`--static`):** when a live deploy isn't available (a packages
+change that isn't a component — e.g. a theme — or the deploy pipeline is down), pass `--static` to the `ui-proposal`
 skill. It produces an offline HTML/CSS mockup + PNG. Commit the `<slug>.html` + `<slug>.md`
 "what changes" list; post the PNG as a sticky comment on the draft PR. Steer feedback to **inline
 comments on the committed `.md`** in the diff (the PNG is a glance, not the feedback surface).

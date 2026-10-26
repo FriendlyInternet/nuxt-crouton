@@ -13,7 +13,8 @@
  * Env: GITHUB_TOKEN (required) · DEPLOYED_SHA (required) · DIGEST_REPO · APPLY
  */
 import { readFileSync } from 'node:fs'
-import { decideTestCard, buildCard, extractChecks } from './test-card.mjs'
+import { createHash } from 'node:crypto'
+import { decideTestCard, buildCard, buildTestMail, extractChecks, extractSummary } from './test-card.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
@@ -61,7 +62,30 @@ function appInfo(labels) {
     } catch { /* app without deploy config — card says so */ }
   }
   const app = id.charAt(0).toUpperCase() + id.slice(1)
-  return { app, stagingUrl, reviewAccount: id ? `review+${id}-main@example.com` : '' }
+  return { app, id, stagingUrl, reviewAccount: id ? `review+${id}-main@example.com` : '' }
+}
+
+// One-click sign-in link for the staging review account — same derivation as deploy-app.yml's
+// "Seed review login" step (key = `main`). Goes ONLY into the email, never a comment (#2358).
+function loginLink({ id, stagingUrl, reviewAccount }) {
+  const secret = process.env.REVIEW_SEED_SECRET
+  if (!secret || !id || !stagingUrl) return ''
+  const password = createHash('sha256').update(`${secret}:${id}:main`).digest('hex').slice(0, 24)
+  const q = new URLSearchParams({ email: reviewAccount, password })
+  return `${stagingUrl}/auth/login?${q}`
+}
+
+// The single per-epic mail (#2518). Never fails the card: no key/vars → a warning, no mail.
+async function sendMail({ subject, text }) {
+  const { RESEND_API_KEY: key, RESEND_FROM: from } = process.env
+  const to = process.env.REVIEW_LOGIN_EMAIL || process.env.DIGEST_REPORT_EMAIL
+  if (!key || !from || !to) { console.warn('::warning::RESEND_API_KEY / RESEND_FROM / REVIEW_LOGIN_EMAIL not set — test mail not sent.'); return }
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to: [to], subject, text })
+  })
+  console.log(`  test mail: Resend HTTP ${res.status}`)
 }
 
 const epics = (await gh(`/repos/${OWNER}/${NAME}/issues?state=open&labels=epic&per_page=100`))
@@ -77,11 +101,17 @@ for (const e of epics) {
   const deployed = await isDeployed(e.number)
   const d = decideTestCard({ subIssues, labels, comments, deployed })
   if (!d.post) { console.log(`  #${e.number} skip — ${d.reason}`); continue }
-  const body = buildCard({ epicNumber: e.number, title: e.title, ...appInfo(labels), checks: extractChecks(e.body || '') })
+  const info = appInfo(labels)
+  const checks = extractChecks(e.body || '')
+  const body = buildCard({ epicNumber: e.number, title: e.title, ...info, checks })
   console.log(`  #${e.number} ${APPLY ? 'POST' : 'would post'} test card — ${d.reason}`)
   if (APPLY) {
     await gh(`/repos/${OWNER}/${NAME}/issues/${e.number}/comments`, { method: 'POST', body: JSON.stringify({ body }) })
     await gh(`/repos/${OWNER}/${NAME}/issues/${e.number}/labels`, { method: 'POST', body: JSON.stringify({ labels: ['status:to-test'] }) })
+    await sendMail(buildTestMail({
+      epicNumber: e.number, title: e.title, app: info.app, summary: extractSummary(e.body || ''),
+      checks, loginUrl: loginLink(info), epicUrl: e.html_url
+    })).catch(err => console.warn(`::warning::test mail failed: ${err.message}`))
   }
   posted++
 }

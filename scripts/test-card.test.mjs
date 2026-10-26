@@ -2,7 +2,7 @@
 //   node --test scripts/test-card.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideTestCard, buildCard, extractChecks, CARD_MARKER } from './test-card.mjs'
+import { decideTestCard, buildCard, buildTestMail, extractChecks, hasTestSteps, CARD_MARKER } from './test-card.mjs'
 
 const C = { state: 'closed' }
 const base = { subIssues: [C, C], labels: ['epic'], comments: [], deployed: true }
@@ -36,4 +36,46 @@ test('buildCard has marker, account, checks, reply line, no password', () => {
   assert.equal((t.match(/- Check:/g) || []).length, 2)
   assert.match(t, /not ok: <what is wrong>/)
   assert.doesNotMatch(t, /password:/i)
+})
+
+test('buildTestMail: app first, numbered steps, sign-in link, no emoji', async () => {
+  const { buildTestMail, extractSummary } = await import('./test-card.mjs')
+  const m = buildTestMail({ epicNumber: 1, title: 'bookings calendar swipe', app: 'Velo', summary: 'You can swipe.', checks: ['Go to Bookings.'], loginUrl: 'https://x/auth/login?a=b', epicUrl: 'https://gh/1' })
+  assert.equal(m.subject, '[Velo] Test: bookings calendar swipe')
+  assert.match(m.text, /^App: Velo \(staging\)\n/)
+  assert.match(m.text, /1\. Open the link below and sign in\.\n2\. Go to Bookings\./)
+  assert.match(m.text, /Open and sign in: https:\/\/x\/auth\/login/)
+  assert.equal(extractSummary('Part of #1.\n\n## Problem\n\nFirst para\nwraps.\n\nSecond'), 'First para wraps.')
+})
+
+test('extractChecks: How to test wins over Done when, metadata dropped, bold stripped', () => {
+  const body = '## Done when\n- worker a\n\n## 🧪 How to test\n1. **Open the list**\n2. Blocked-by: #2509\n3. Closes #5\n<!-- c -->\n- See the badge\n\nDedup-checked: x'
+  assert.deepEqual(extractChecks(body), ['Open the list', 'See the badge'])
+  assert.deepEqual(extractChecks('### How to test\n- one'), ['one'])
+  assert.deepEqual(extractChecks('## Done when\n- Blocked-by: #1\n- real'), ['real'])
+})
+test('no-app card and mail print no placeholder text', async () => {
+  const { buildTestMail } = await import('./test-card.mjs')
+  const c = buildCard({ epicNumber: 1, title: 'T', checks: ['a'] })
+  assert.match(c, /Nothing to open: this changes how GitHub and the pipeline behave\. Check it on the epic itself\./)
+  assert.doesNotMatch(c, /see epic|staging URL not configured|Log in as/)
+  const m = buildTestMail({ epicNumber: 1, title: 'T', checks: ['a'] })
+  assert.match(m.text, /Nothing to open/)
+  assert.doesNotMatch(m.text, /see epic|sign in/i)
+})
+test('app without staging url says so', () => {
+  assert.match(buildCard({ epicNumber: 1, title: 'T', app: 'velo' }), /App:\*\* velo — no staging link yet/)
+})
+
+test('bold markers inside a step are dropped; no-app mail subject has no placeholder', () => {
+  const body = '## How to test\n1. **Expect** the list\n'
+  assert.deepEqual(extractChecks(body), ['Expect the list'])
+  assert.equal(buildTestMail({ epicNumber: 5, title: 'Flow' }).subject, 'Test: Flow')
+})
+
+test('hasTestSteps: only a How to test section counts, not Done when', () => {
+  assert.equal(hasTestSteps('## 🧪 How to test\n1. Open it\n2. Click'), true)
+  assert.equal(hasTestSteps('## Done when\n- it works'), false)
+  assert.equal(hasTestSteps('## 🧪 How to test\n\nDedup-checked: x'), false)
+  assert.equal(hasTestSteps('no section'), false)
 })

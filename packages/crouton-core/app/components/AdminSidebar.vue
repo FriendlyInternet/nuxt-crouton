@@ -249,12 +249,15 @@ const collectionGroups = computed<NavigationMenuItem[]>(() => {
     label: t(`navigation.${group.kind}`) || group.label,
     icon: group.icon,
     defaultOpen: group.kind === 'content',
-    children: group.items.map(col => ({
-      label: col.label,
-      icon: col.icon,
-      to: `${basePath}/${col.name}`,
-      active: route.path.includes(`${basePath}/${col.name}`)
-    }))
+    children: group.items
+      .map(col => ({ col, label: tLabel(col.label) }))
+      .sort((a, b) => (a.col.order - b.col.order) || a.label.localeCompare(b.label))
+      .map(({ col, label }) => ({
+        label,
+        icon: col.icon,
+        to: `${basePath}/${col.name}`,
+        active: route.path.includes(`${basePath}/${col.name}`)
+      }))
   }))
 })
 
