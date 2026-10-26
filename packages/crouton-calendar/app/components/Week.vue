@@ -9,12 +9,10 @@ interface Props {
   variant?: 'default' | 'beams' | 'bars'
   /** Dates to highlight (selected dates from click multi-select) */
   selectedDates?: Date[]
-  /** Date currently being used for booking creation */
-  creatingAtDate?: Date | null
+  /** Date shown as the active one (e.g. being created/edited) */
+  activeDate?: Date | null
   /** Function to check if a date is disabled by schedule rules */
   isDateDisabled?: ((date: Date) => boolean) | null
-  /** Function to check if a date is fully booked (all slots taken) */
-  isDayFullyBooked?: ((date: Date) => boolean) | null
 }
 
 const { t } = useT()
@@ -25,15 +23,12 @@ const props = withDefaults(defineProps<Props>(), {
   size: 'md',
   variant: 'default',
   selectedDates: () => [],
-  creatingAtDate: null,
+  activeDate: null,
   isDateDisabled: null,
-  isDayFullyBooked: null,
 })
 
 const emit = defineEmits<{
-  'update:modelValue': [value: Date | null]
   'select': [value: Date | null]
-  'dayClick': [value: Date]
 }>()
 
 const { locale } = useI18n()
@@ -141,16 +136,13 @@ function isHighlighted(day: { jsDate: Date }): boolean {
   )
 }
 
-// Check if we're in create mode
-const isCreating = computed(() => props.creatingAtDate !== null)
-
 // Check if a date is the creating date
-function isCreatingDate(day: { jsDate: Date }): boolean {
-  if (!props.creatingAtDate) return false
+function isActiveDate(day: { jsDate: Date }): boolean {
+  if (!props.activeDate) return false
   return (
-    day.jsDate.getFullYear() === props.creatingAtDate.getFullYear()
-    && day.jsDate.getMonth() === props.creatingAtDate.getMonth()
-    && day.jsDate.getDate() === props.creatingAtDate.getDate()
+    day.jsDate.getFullYear() === props.activeDate.getFullYear()
+    && day.jsDate.getMonth() === props.activeDate.getMonth()
+    && day.jsDate.getDate() === props.activeDate.getDate()
   )
 }
 
@@ -158,18 +150,9 @@ function isDayDisabled(day: { jsDate: Date }): boolean {
   return props.isDateDisabled?.(day.jsDate) ?? false
 }
 
-function isFullyBooked(day: { jsDate: Date }): boolean {
-  return props.isDayFullyBooked?.(day.jsDate) ?? false
-}
-
 function onDayClick(day: { date: DateValue, jsDate: Date }) {
   // Click toggles date selection
   emit('select', day.jsDate)
-}
-
-function onAddClick(event: Event, day: { date: DateValue, jsDate: Date }) {
-  event.stopPropagation() // Don't trigger day click
-  emit('dayClick', day.jsDate)
 }
 
 // Size classes
@@ -210,13 +193,14 @@ const sizeClasses = computed(() => {
         variant="ghost"
         color="neutral"
         size="sm"
-        :aria-label="t('bookings.weekStrip.previousWeek')"
+        :aria-label="t('calendar.week.previousWeek')"
         @click="slide('prev')"
       />
       <UButton
         variant="ghost"
         color="neutral"
         :class="['font-medium', sizeClasses.header]"
+        :title="t('calendar.week.today')"
         @click="goToToday"
       >
         {{ weekLabel }}
@@ -226,7 +210,7 @@ const sizeClasses = computed(() => {
         variant="ghost"
         color="neutral"
         size="sm"
-        :aria-label="t('bookings.weekStrip.nextWeek')"
+        :aria-label="t('calendar.week.nextWeek')"
         @click="slide('next')"
       />
     </div>
@@ -241,7 +225,7 @@ const sizeClasses = computed(() => {
       :inert="panel.offset !== 0 || undefined"
       :aria-hidden="panel.offset !== 0 || undefined"
     >
-      <!-- Wrapper keeps the add-booking tab a SIBLING of the clickable day
+      <!-- Wrapper keeps the day-action slot a SIBLING of the clickable day
            cell — a role="button" cell containing a real <button> is a nested
            interactive control (axe serious). -->
       <div
@@ -256,7 +240,7 @@ const sizeClasses = computed(() => {
           isDayDisabled(day)
             ? 'opacity-40'
             : 'hover:bg-elevated',
-          isCreatingDate(day)
+          isActiveDate(day)
             ? 'bg-elevated shadow-md'
             : isHighlighted(day) && 'bg-elevated shadow-sm',
         ]"
@@ -290,28 +274,9 @@ const sizeClasses = computed(() => {
         </slot>
       </div>
 
-        <!-- Add booking tab (slides down from under the date block on hover) -->
-        <!-- Deliberately a raw button (#1410): a calendar hover cell whose
-             geometry (absolute slide-down tab under the date block) and
-             booked-state colors are the widget itself — no Nuxt UI equivalent.
-             Colors use semantic tokens where possible. -->
-        <button
-          v-if="!isCreatingDate(day)"
-          type="button"
-          :disabled="isFullyBooked(day)"
-          :aria-label="t(isFullyBooked(day) ? 'bookings.weekStrip.fullyBookedDay' : 'bookings.weekStrip.addBookingDay', { day: `${day.weekdayShort} ${day.day}` })"
-          class="absolute bottom-0 left-0 right-0 translate-y-0 flex items-center justify-center h-6 rounded-b-lg opacity-0 transition-all duration-200 ease-out group-hover:translate-y-4 group-hover:opacity-100 z-10"
-          :class="isFullyBooked(day)
-            ? 'bg-neutral-700 cursor-default'
-            : 'bg-primary cursor-pointer hover:bg-primary/80 active:scale-[0.98]'"
-          @click="!isFullyBooked(day) && onAddClick($event, day)"
-        >
-          <UIcon
-            :name="isFullyBooked(day) ? 'i-lucide-check' : 'i-lucide-plus'"
-            class="size-3.5"
-            :class="isFullyBooked(day) ? 'text-neutral-500' : 'text-neutral-300'"
-          />
-        </button>
+        <!-- Per-day action (e.g. hover add tab); sibling of the clickable cell so no
+             interactive control nests inside the role="button" cell -->
+        <slot name="day-action" :day="day.date" :js-date="day.jsDate" :weekday="day.weekdayShort" :day-number="day.day" />
       </div>
     </div>
     </div>

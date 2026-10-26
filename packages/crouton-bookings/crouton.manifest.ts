@@ -118,8 +118,7 @@ export default defineCroutonManifest({
     components: [
       { name: 'CroutonBookingPanel', description: 'Main booking sidebar container', props: ['locationId', 'teamId'] },
       { name: 'CroutonBookingCalendar', description: 'Calendar date picker for booking', props: ['modelValue', 'availableDates'] },
-      { name: 'CroutonBookingWeekStrip', description: 'Week date navigation strip', props: ['modelValue', 'startDate'] },
-      { name: 'CroutonBookingList', description: 'Bookings list with filters', props: ['teamId', 'filters'] },
+            { name: 'CroutonBookingList', description: 'Bookings list with filters', props: ['teamId', 'filters'] },
       { name: 'CroutonBookingCard', description: 'Individual booking display card', props: ['booking'] },
       { name: 'CroutonBookingSlotIndicator', description: 'Visual slot availability indicator', props: ['slots', 'bookings'] },
       { name: 'CroutonBookingDateBadge', description: 'Date display badge', props: ['date', 'format'] }

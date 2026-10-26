@@ -73,7 +73,6 @@ npx nuxt db:migrate
 All components are prefixed with `CroutonBooking`:
 
 ### Customer-Facing
-- `CroutonBookingWeekStrip` - Week date navigation
 - `CroutonBookingDateBadge` - Date display badge
 - `CroutonBookingBookingSidebarPanel` - Main booking sidebar
 - `CroutonBookingBookingSidebarForm` - Booking form

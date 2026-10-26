@@ -62,7 +62,7 @@ function getLocationTitle(location: LocationData): string {
     || t('bookings.untitled')
 }
 
-// Ref for WeekStrip control
+// Ref for week control
 const weekStripRef = ref<{ goToDate: (date: Date) => void, goToToday: () => void } | null>(null)
 
 // Navigate to a specific date (works for both week and month view)
@@ -521,17 +521,40 @@ const monthCellHeight = computed(() => {
 <template>
   <div class="flex flex-col gap-3">
     <!-- Week View -->
-    <CroutonBookingsWeekStrip
+    <CroutonCalendarWeek
       v-if="currentView === 'week'"
       ref="weekStripRef"
       size="md"
       :selected-dates="selectedDates"
-      :creating-at-date="creatingAtDate"
+      :active-date="creatingAtDate"
       :is-date-disabled="isDateUnavailable ? isDayUnavailable : undefined"
-      :is-day-fully-booked="isDayFullyBooked"
       @select="onWeekSelect"
-      @day-click="onWeekDayClick"
     >
+      <!-- Add booking tab (slides down from under the date block on hover) -->
+      <!-- Deliberately a raw button (#1410): a calendar hover cell whose
+           geometry (absolute slide-down tab under the date block) and
+           booked-state colors are the widget itself — no Nuxt UI equivalent.
+           Colors use semantic tokens where possible. -->
+      <template #day-action="{ jsDate, weekday, dayNumber }">
+        <button
+          v-if="!isCreatingDate(jsDate)"
+          type="button"
+          :disabled="isDayFullyBooked(jsDate)"
+          :aria-label="t(isDayFullyBooked(jsDate) ? 'bookings.weekStrip.fullyBookedDay' : 'bookings.weekStrip.addBookingDay', { day: `${weekday} ${dayNumber}` })"
+          class="absolute bottom-0 left-0 right-0 translate-y-0 flex items-center justify-center h-6 rounded-b-lg opacity-0 transition-all duration-200 ease-out group-hover:translate-y-4 group-hover:opacity-100 z-10"
+          :class="isDayFullyBooked(jsDate)
+            ? 'bg-neutral-700 cursor-default'
+            : 'bg-primary cursor-pointer hover:bg-primary/80 active:scale-[0.98]'"
+          @click="!isDayFullyBooked(jsDate) && onWeekDayClick(jsDate)"
+        >
+          <UIcon
+            :name="isDayFullyBooked(jsDate) ? 'i-lucide-check' : 'i-lucide-plus'"
+            class="size-3.5"
+            :class="isDayFullyBooked(jsDate) ? 'text-neutral-500' : 'text-neutral-300'"
+          />
+        </button>
+      </template>
+
       <template #day="{ jsDate }">
         <div class="flex flex-col gap-1 mt-1 min-h-[12px] w-fit mx-auto">
           <UPopover
@@ -594,7 +617,7 @@ const monthCellHeight = computed(() => {
           </UPopover>
         </div>
       </template>
-    </CroutonBookingsWeekStrip>
+    </CroutonCalendarWeek>
 
     <!-- Month View -->
     <div v-else class="flex flex-col w-full touch-pan-y">
