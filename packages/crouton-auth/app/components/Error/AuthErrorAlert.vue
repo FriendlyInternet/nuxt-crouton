@@ -13,7 +13,7 @@
   />
 -->
 <script setup lang="ts">
-import { getErrorMessage, getErrorCode, AUTH_ERROR_CODES } from '../../utils/errors'
+import { localizeError, getErrorCode, AUTH_ERROR_CODES } from '../../utils/errors'
 
 const { t } = useT()
 
@@ -39,7 +39,7 @@ const emit = defineEmits<{
 
 const visible = ref(true)
 
-const errorMessage = computed(() => getErrorMessage(props.error))
+const errorMessage = computed(() => localizeError(props.error, t))
 const errorCode = computed(() => getErrorCode(props.error))
 
 const colorMap = {

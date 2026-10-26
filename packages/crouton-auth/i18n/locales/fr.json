@@ -309,5 +309,61 @@
     "signOutHelper": "Quitter la session d'assistant",
     "retry": "Réessayer",
     "justNow": "à l'instant"
+  },
+  "errors": {
+    "auth": {
+      "invalid_credentials": "E-mail ou mot de passe invalide",
+      "user_not_found": "Utilisateur introuvable",
+      "email_not_verified": "Veuillez vérifier votre adresse e-mail",
+      "session_expired": "Votre session a expiré. Veuillez vous reconnecter.",
+      "unauthorized": "Vous devez être connecté pour accéder à cette ressource",
+      "forbidden": "Vous n'avez pas l'autorisation d'accéder à cette ressource",
+      "rate_limited": "Trop de tentatives. Veuillez réessayer plus tard.",
+      "email_already_exists": "Un compte existe déjà avec cet e-mail",
+      "invalid_email": "Veuillez saisir une adresse e-mail valide",
+      "weak_password": "Le mot de passe doit contenir au moins 8 caractères",
+      "passwords_mismatch": "Les mots de passe ne correspondent pas",
+      "incorrect_password": "Le mot de passe actuel est incorrect",
+      "reset_token_expired": "Le lien de réinitialisation du mot de passe a expiré",
+      "reset_token_invalid": "Lien de réinitialisation du mot de passe invalide",
+      "invalid_2fa_code": "Code de vérification invalide",
+      "2fa_already_enabled": "L'authentification à deux facteurs est déjà activée",
+      "2fa_not_enabled": "L'authentification à deux facteurs n'est pas activée",
+      "backup_code_already_used": "Ce code de secours a déjà été utilisé",
+      "passkey_not_supported": "Les passkeys ne sont pas prises en charge sur cet appareil",
+      "passkey_registration_failed": "Échec de l'enregistrement de la passkey. Veuillez réessayer.",
+      "passkey_authentication_failed": "Échec de l'authentification avec la passkey",
+      "oauth_cancelled": "La connexion a été annulée",
+      "oauth_failed": "Échec de la connexion avec le fournisseur. Veuillez réessayer.",
+      "oauth_account_exists": "Un compte existe déjà avec cet e-mail. Essayez de vous connecter avec une autre méthode."
+    },
+    "team": {
+      "not_found": "Équipe introuvable",
+      "access_denied": "Vous n'avez pas accès à cette équipe",
+      "limit_reached": "Vous avez atteint le nombre maximum d'équipes",
+      "member_limit_reached": "Cette équipe a atteint sa limite de membres",
+      "already_member": "L'utilisateur est déjà membre de cette équipe",
+      "not_member": "Vous n'êtes pas membre de cette équipe",
+      "owner_required": "Seul le propriétaire de l'équipe peut effectuer cette action",
+      "admin_required": "Vous avez besoin des droits d'administrateur pour effectuer cette action",
+      "cannot_remove_owner": "Le propriétaire de l'équipe ne peut pas être retiré",
+      "cannot_leave_as_owner": "En tant que propriétaire, vous devez transférer la propriété avant de partir",
+      "slug_already_exists": "Une équipe avec cette URL existe déjà",
+      "invitation_not_found": "Invitation introuvable",
+      "invitation_expired": "Cette invitation a expiré",
+      "invitation_already_accepted": "Cette invitation a déjà été acceptée"
+    },
+    "billing": {
+      "not_enabled": "La facturation n'est pas activée",
+      "subscription_not_found": "Aucun abonnement actif trouvé",
+      "payment_failed": "Échec du paiement. Veuillez mettre à jour votre moyen de paiement.",
+      "plan_not_found": "Formule introuvable"
+    },
+    "error": {
+      "network": "Erreur réseau. Vérifiez votre connexion.",
+      "timeout": "Délai de la requête dépassé. Veuillez réessayer.",
+      "server": "Erreur serveur. Veuillez réessayer plus tard.",
+      "unknown": "Une erreur inattendue s'est produite"
+    }
   }
 }

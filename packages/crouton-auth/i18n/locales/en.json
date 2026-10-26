@@ -309,5 +309,61 @@
     "signOutHelper": "Sign out of helper session",
     "retry": "Retry",
     "justNow": "just now"
+  },
+  "errors": {
+    "auth": {
+      "invalid_credentials": "Invalid email or password",
+      "user_not_found": "User not found",
+      "email_not_verified": "Please verify your email address",
+      "session_expired": "Your session has expired. Please sign in again.",
+      "unauthorized": "You must be signed in to access this resource",
+      "forbidden": "You do not have permission to access this resource",
+      "rate_limited": "Too many attempts. Please try again later.",
+      "email_already_exists": "An account with this email already exists",
+      "invalid_email": "Please enter a valid email address",
+      "weak_password": "Password must be at least 8 characters",
+      "passwords_mismatch": "Passwords do not match",
+      "incorrect_password": "Current password is incorrect",
+      "reset_token_expired": "Password reset link has expired",
+      "reset_token_invalid": "Invalid password reset link",
+      "invalid_2fa_code": "Invalid verification code",
+      "2fa_already_enabled": "Two-factor authentication is already enabled",
+      "2fa_not_enabled": "Two-factor authentication is not enabled",
+      "backup_code_already_used": "This backup code has already been used",
+      "passkey_not_supported": "Passkeys are not supported on this device",
+      "passkey_registration_failed": "Failed to register passkey. Please try again.",
+      "passkey_authentication_failed": "Failed to authenticate with passkey",
+      "oauth_cancelled": "Sign in was cancelled",
+      "oauth_failed": "Sign in with provider failed. Please try again.",
+      "oauth_account_exists": "An account with this email already exists. Try signing in with a different method."
+    },
+    "team": {
+      "not_found": "Team not found",
+      "access_denied": "You do not have access to this team",
+      "limit_reached": "You have reached the maximum number of teams",
+      "member_limit_reached": "This team has reached its member limit",
+      "already_member": "User is already a member of this team",
+      "not_member": "You are not a member of this team",
+      "owner_required": "Only the team owner can perform this action",
+      "admin_required": "You need admin privileges to perform this action",
+      "cannot_remove_owner": "The team owner cannot be removed",
+      "cannot_leave_as_owner": "As the owner, you must transfer ownership before leaving",
+      "slug_already_exists": "A team with this URL already exists",
+      "invitation_not_found": "Invitation not found",
+      "invitation_expired": "This invitation has expired",
+      "invitation_already_accepted": "This invitation has already been accepted"
+    },
+    "billing": {
+      "not_enabled": "Billing is not enabled",
+      "subscription_not_found": "No active subscription found",
+      "payment_failed": "Payment failed. Please update your payment method.",
+      "plan_not_found": "Plan not found"
+    },
+    "error": {
+      "network": "Network error. Please check your connection.",
+      "timeout": "Request timed out. Please try again.",
+      "server": "Server error. Please try again later.",
+      "unknown": "An unexpected error occurred"
+    }
   }
 }

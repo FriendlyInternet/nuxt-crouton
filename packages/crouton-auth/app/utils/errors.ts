@@ -152,6 +152,39 @@ export const DEFAULT_ERROR_MESSAGES: Record<AuthErrorCode, string> = {
 }
 
 // ============================================================================
+// i18n mapping (code -> locale key)
+// ============================================================================
+
+/**
+ * Locale key for an error code. Codes are already dotted (`auth.invalid_credentials`),
+ * so the key is simply `errors.<code>`. Pure — callers (which may run outside a
+ * component) pass their own `t`, we never call `useT()` at module level.
+ */
+export function errorMessageKey(code: AuthErrorCode): string {
+  return `errors.${code}`
+}
+
+/**
+ * Translate an error code, falling back to the English default when the
+ * locale has no entry (`t` returns the key unchanged for a missing key).
+ */
+export function translateErrorCode(code: AuthErrorCode, t: (key: string) => string): string {
+  const key = errorMessageKey(code)
+  const msg = t(key)
+  return msg && msg !== key ? msg : DEFAULT_ERROR_MESSAGES[code]
+}
+
+/**
+ * User-facing text for an error: translated when the message is just the
+ * default for its code, untouched when it carries custom/server text.
+ */
+export function localizeError(error: unknown, t: (key: string) => string): string {
+  const code = getErrorCode(error)
+  const message = isAuthError(error) ? error.message : getErrorMessage(error)
+  return message === DEFAULT_ERROR_MESSAGES[code] ? translateErrorCode(code, t) : message
+}
+
+// ============================================================================
 // Auth Error Class
 // ============================================================================
 
