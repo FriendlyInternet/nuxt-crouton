@@ -30,9 +30,8 @@ jobs:
     timeout-minutes: 30
     # One decompose at a time per issue (#2645). An issue created WITH `delegate` fires both
     # `opened` and `labeled`, so two runs start in the same second and both applied a plan
-    # (#2629: 8 sub-issues instead of 4). Queue, don't cancel: the second run then reaches
-    # "Resume an already-decomposed tree" (#2048), sees the first run's children and
-    # dispatches them instead of planning again.
+    # (#2629: 8 sub-issues instead of 4). Queue, don't cancel: the second run simply waits
+    # for the first to finish.
     concurrency:
       group: decompose-${{ github.event.issue.number }}
       cancel-in-progress: false

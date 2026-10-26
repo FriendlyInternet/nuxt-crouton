@@ -50,6 +50,7 @@ export async function gatherClaimFacts({ github, context, issueNumber, core }) {
   // are load-bearing (see the header), and the candidate list is small — at most 20, usually 1.
   const linkedPRs = []
   let selfPr = null
+  const selfPrs = []
   for (const it of found.items || []) {
     if (!referencesIssue(it.body, issueNumber)) continue
     let headRef = null
@@ -65,7 +66,10 @@ export async function gatherClaimFacts({ github, context, issueNumber, core }) {
       // pre-#2027 default, so an unreachable API cannot silently UNLOCK an issue.
       warn(`claim facts: could not fetch PR #${it.number} (${e.message})`)
     }
-    if (headRef === `work-${issueNumber}`) selfPr = it.number
+    if (headRef === `work-${issueNumber}`) {
+      selfPr = it.number
+      selfPrs.push(it.number)
+    }
     linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef })
   }
 
@@ -85,6 +89,6 @@ export async function gatherClaimFacts({ github, context, issueNumber, core }) {
     inProgressSince,
     now: new Date().toISOString(),
     defaultBranch: context.payload?.repository?.default_branch || 'main',
-    self: { pr: selfPr },
+    self: { pr: selfPr, prs: selfPrs },
   }
 }
