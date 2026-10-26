@@ -310,7 +310,7 @@
   "unused_component_emits": [
     "packages/crouton-bookings/app/components/BookingCard.vue:delete",
     "packages/crouton-bookings/app/components/Calendar.vue:update:view",
-    "packages/crouton-bookings/app/components/WeekStrip.vue:update:modelValue",
+    "packages/crouton-calendar/app/components/Week.vue:update:modelValue",
     "packages/crouton-editor/app/components/Simple.vue:update",
     "packages/crouton-email/app/components/Email/VerificationFlow.vue:error"
   ],
