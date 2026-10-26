@@ -57,14 +57,16 @@ runs:
 
     # The repo's MCP servers (crouton-mcp, fallow-mcp) are PROJECT servers; pi-mcp-adapter blocks
     # those until approved interactively, which never happens on an ephemeral runner (#2445).
-    # The policy key is `settings.projectServers` in the USER-GLOBAL MCP config
-    # (~/.pi/agent/mcp.json) — verified in pi-mcp-adapter config.ts; it is ignored in a project
-    # config, and it is NOT a key of pi's own settings.json. Runner-local, repo is ours: allow.
+    # The policy key is `settings.projectServers` in the ADAPTER's user-global config,
+    # ~/.pi/agent/mcp-adapter.json (pi-mcp-adapter 5.3.2 config.ts: getPiGlobalConfigPath →
+    # ADAPTER_CONFIG_NAME). NOT ~/.pi/agent/mcp.json: that is Pi's own server list, whose reader
+    # ignores `settings` ("…does not read settings in this file; move them into mcp-adapter.json")
+    # — #2507 wrote there and every run stayed blocked (#2445). Runner-local, repo is ours: allow.
     - name: Allow the repo's project MCP servers (user-global, runner-local)
       shell: bash
       run: |
         set -euo pipefail
-        F="$HOME/.pi/agent/mcp.json"
+        F="$HOME/.pi/agent/mcp-adapter.json"
         mkdir -p "$(dirname "$F")"
         node -e '
           const fs = require("fs"); const f = process.argv[1];
