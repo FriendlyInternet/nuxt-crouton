@@ -2,9 +2,6 @@
   "unused_files": [],
   "unused_exports": [
     "packages/crouton-ai/app/editor/extensions/translation-ai.ts:default",
-    "packages/crouton-auth/server/lib/auth.ts:getMethodConfig",
-    "packages/crouton-auth/server/lib/auth.ts:isMethodEnabled",
-    "packages/crouton-auth/server/lib/auth.ts:isConditionalUIAvailable",
     "packages/crouton-core/app/composables/__tests__/test-utils.ts:createNuxtMocks",
     "packages/crouton-pages/app/editor/extensions/block-commands.ts:getBlockCommandItems",
     "packages/crouton-pages/app/editor/extensions/block-commands.ts:getBlockCommandsByCategory",
