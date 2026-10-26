@@ -5,6 +5,5 @@
 // Add a line when a piece needs something to look like itself — one line per piece, plain data.
 // A `?props={...}` query on the review link still wins over what's here.
 export const reviewSamples: Record<string, Record<string, unknown>> = {
-  CroutonUserPill: { placement: 'inline' },
   TeamColorSwatchPicker: { colors: ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6'], modelValue: '#3b82f6' },
 }
