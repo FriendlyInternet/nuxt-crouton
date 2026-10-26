@@ -114,6 +114,9 @@
   description: "App: apps/velo"
 
 # ── POCs (pocs/*) — experimental incubator apps (safe-to-break; staging-only) ──
+- name: "poc:gallery"
+  color: "fef2c0"
+  description: "POC: pocs/gallery"
 - name: "poc:booking-demo"
   color: "fef2c0"
   description: "POC: pocs/booking-demo"

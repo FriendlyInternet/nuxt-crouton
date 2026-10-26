@@ -11,8 +11,7 @@
  *   <out-dir>/epic-digest-<YYYYMMDD>.txt    plain-text mirror
  *
  * The HTML is built for forwarding: inline styles, a light theme with emerald
- * accents, progress bars as nested elements, and a <details> per epic for the
- * sub-issue breakdown (collapsed by default — "at a glance, drill in if needed").
+ * accents and progress bars as nested elements. Epics only — no sub-issue rows (#2520).
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { resolve, join, dirname } from 'node:path'
@@ -330,24 +329,6 @@ function epicCard(e) {
   // highlighter colour (and so does the status word) when something is blocked.
   const barColor = isBlocked ? FLUO.orange[0] : C.ink
   const barCls = isBlocked ? 'bar-blocked' : 'bar'
-  const children = e.children || []
-  const childRows = children
-    .map((c) => {
-      const closed = c.state === 'closed'
-      const glyph = closed ? '✓' : '○'
-      const titleStyle = closed ? `color:${C.faint};text-decoration:line-through` : `color:${C.sub}`
-      const titleCls = closed ? 'mut' : 'sub'
-      const cs = c.status && STATUS[c.status]
-      const tag = cs && !closed ? ` ${statusChip(cs.label, STATUS_FLUO[cs.cls])}` : ''
-      return (
-        `<div style="font-size:15px;line-height:1.95;padding:2px 0">` +
-        `<span class="mut" style="color:${C.faint}">${glyph}</span> ` +
-        `<a href="${esc(c.url)}" ${linkS}>#${esc(c.number)}</a> ` +
-        `<span class="${titleCls}" style="${titleStyle}">${esc(c.title)}</span>${tag}</div>`
-      )
-    })
-    .join('')
-
   return `
   <tr><td class="rule" style="padding:24px 0;border-top:1px solid ${C.border}">
     <div style="margin:0 0 7px">${badge(s)}</div>
@@ -368,14 +349,6 @@ function epicCard(e) {
     ${labeledLine("We'll know by", e.weWillKnowBy)}
     ${labeledLine('Where we are', e.whereWeAre || e.recentActivity)}
 
-    ${
-      children.length
-        ? `<details style="margin-top:22px">
-             <summary class="mut" style="cursor:pointer;font-variant:small-caps;letter-spacing:.05em;color:${C.mut};font-size:13px;outline:none">sub-issues (${children.length})</summary>
-             <div class="rule" style="margin-top:14px;padding-top:14px;border-top:1px solid ${C.border}">${childRows}</div>
-           </details>`
-        : ''
-    }
   </td></tr>`
 }
 
@@ -577,17 +550,13 @@ const txt =
     ? epics
         .map((e) => {
           const head = `#${e.number}  ${e.title}  [${statusOf(e).label}]`
-          const kids = (e.children || [])
-            .map((c) => `      ${c.state === 'closed' ? '[x]' : '[ ]'} #${c.number} ${c.title}`)
-            .join('\n')
           const theHypothesis = e.theHypothesis || e.theBet || e.whatItIs
           const whereWeAre = e.whereWeAre || e.recentActivity
           return (
             `${head}\n  ${bar(e)}\n` +
             (theHypothesis ? `  Hypothesis:    ${theHypothesis}\n` : '') +
             (e.weWillKnowBy ? `  We'll know by: ${e.weWillKnowBy}\n` : '') +
-            (whereWeAre ? `  Where we are:  ${whereWeAre}\n` : '') +
-            (kids ? `${kids}\n` : '')
+            (whereWeAre ? `  Where we are:  ${whereWeAre}\n` : '')
           )
         })
         .join('\n')
@@ -616,19 +585,11 @@ const mdList = (items, empty, cap = 8) => {
 const mdEpic = (e) => {
   const theHypothesis = e.theHypothesis || e.theBet || e.whatItIs
   const whereWeAre = e.whereWeAre || e.recentActivity
-  const kids = (e.children || [])
-    .map((c) => {
-      const cs = c.status && c.state !== 'closed' && STATUS[c.status]
-      const tag = cs ? ` — _${cs.label}_` : ''
-      return `- ${c.state === 'closed' ? '✅' : '⬜'} [#${c.number}](${c.url}) ${c.title}${tag}`
-    })
-    .join('\n')
   return (
     `#### [#${e.number}](${e.url}) · ${e.title} — \`${e.done}/${e.total} · ${pct(e)}%\` · ${statusOf(e).label}\n` +
     (theHypothesis ? `- **Hypothesis:** ${theHypothesis}\n` : '') +
     (e.weWillKnowBy ? `- **We'll know by:** ${e.weWillKnowBy}\n` : '') +
-    (whereWeAre ? `- **Where we are:** ${whereWeAre}\n` : '') +
-    (kids ? `<details><summary>Sub-issues (${e.children.length})</summary>\n\n${kids}\n</details>\n` : '')
+    (whereWeAre ? `- **Where we are:** ${whereWeAre}\n` : '')
   )
 }
 const mdActionables = (items) => {

@@ -1,0 +1,5 @@
+{
+  "stagingUrl": "https://gallery-staging.pmcp.dev",
+  "productionUrl": "https://gallery.pmcp.dev",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-layout @fyit/crouton-i18n @fyit/crouton-ai @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-charts @fyit/crouton-collab @fyit/crouton-editor @fyit/crouton-email @fyit/crouton-events @fyit/crouton-flow @fyit/crouton-maps @fyit/crouton-pages @fyit/crouton-printing @fyit/crouton-sales @fyit/crouton-three @fyit/crouton-devtools"
+}
