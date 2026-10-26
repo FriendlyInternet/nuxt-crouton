@@ -1,27 +1,19 @@
-import kassa from '../../../../apps/kassa/deploy.config.json'
-import velo from '../../../../apps/velo/deploy.config.json'
-import bookingDemo from '../../../booking-demo/deploy.config.json'
-import crate from '../../../crate/deploy.config.json'
-import croutonBuilderDemo from '../../../crouton-builder-demo/deploy.config.json'
-import croutonBuilder from '../../../crouton-builder/deploy.config.json'
-import pins from '../../../pins/deploy.config.json'
-import status from '../../deploy.config.json'
+import generated from './app-urls.generated.json'
 
-// Staging URL per app, read from each app's deploy.config.json at build time.
-// Apps without sign-in or without a stagingUrl are simply absent from the lookup.
-const configs: Record<string, { stagingUrl?: string, reviewLogin?: unknown }> = {
-  'kassa': kassa,
-  'velo': velo,
-  'booking-demo': bookingDemo,
-  'crate': crate,
-  'crouton-builder-demo': croutonBuilderDemo,
-  'crouton-builder': croutonBuilder,
-  'pins': pins,
-  'status': status
+// Staging URL per app, discovered from every apps/*|pocs/* deploy.config.json by
+// scripts/gen-app-urls.mjs (run before each build). Don't hand-edit the JSON.
+const configs = generated as Record<string, { stagingUrl?: string, reviewLogin?: boolean }>
+
+export interface AppTarget { stagingUrl: string | null, hasSignIn: boolean }
+
+// null = unknown app. hasSignIn is false when the app opted out (reviewLogin: false).
+export function appTargetFor(app: string): AppTarget | null {
+  const cfg = Object.hasOwn(configs, app) ? configs[app] : undefined
+  if (!cfg) return null
+  return { stagingUrl: cfg.stagingUrl ?? null, hasSignIn: cfg.reviewLogin !== false }
 }
 
 export function stagingUrlFor(app: string): string | null {
-  const cfg = Object.hasOwn(configs, app) ? configs[app] : undefined
-  if (!cfg || cfg.reviewLogin === false || !cfg.stagingUrl) return null
-  return cfg.stagingUrl
+  const t = appTargetFor(app)
+  return t?.hasSignIn ? t.stagingUrl : null
 }
