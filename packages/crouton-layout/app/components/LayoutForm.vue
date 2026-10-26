@@ -17,7 +17,7 @@
  * to nothing on WebKit (owner-reported on iOS, #2490), so the page render never
  * depends on a percentage height.
  */
-import { computed, inject, ref, watchEffect, type Ref } from 'vue'
+import { computed, inject, ref, watch, watchEffect, type Ref } from 'vue'
 import { LAYOUT_RENDER_CONTEXT_KEY, type LayoutRenderContext } from '../composables/useCroutonLayoutRenderContext'
 
 const props = withDefaults(defineProps<{
@@ -39,10 +39,17 @@ watchEffect((onCleanup) => {
 })
 // Nothing selected (or a cancelled new record) → a fresh create form.
 const editingId = computed(() => selection.value?.mode.value === 'edit' ? selection.value.itemId.value : null)
+
+// When a row opens here, bring the form into view — on a phone the board stacks
+// it below the list, so without this the tap changes something off-screen.
+const root = ref<HTMLElement | null>(null)
+watch(() => selection.value?.sessionKey.value, (now, before) => {
+  if (before !== undefined && now !== before) root.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+})
 </script>
 
 <template>
-  <div class="@container" :class="isPage ? '' : 'h-full overflow-auto'">
+  <div ref="root" class="@container" :class="isPage ? '' : 'h-full overflow-auto'">
     <div v-if="heading" class="px-4 py-2 border-b border-default text-sm font-semibold">
       {{ heading }}
     </div>
