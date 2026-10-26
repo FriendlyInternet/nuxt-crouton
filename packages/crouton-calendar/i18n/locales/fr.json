@@ -2,6 +2,11 @@
   "calendar": {
     "previousMonth": "Mois précédent",
     "nextMonth": "Mois suivant",
-    "today": "Aller à aujourd'hui"
+    "today": "Aller à aujourd'hui",
+    "week": {
+      "previousWeek": "Semaine précédente",
+      "nextWeek": "Semaine suivante",
+      "today": "Aller à aujourd'hui"
+    }
   }
 }

@@ -44,7 +44,6 @@ CroutonBooking
 ├── List.vue            - Bookings list
 ├── BookingCard.vue     - Individual booking card
 ├── BookingCreateCard.vue - Booking creation form
-├── WeekStrip.vue       - Week date navigation
 ├── DateBadge.vue       - Date display badge
 ├── PanelFilters.vue    - Filter controls
 └── PanelMap.vue        - Map display

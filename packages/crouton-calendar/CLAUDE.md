@@ -2,7 +2,7 @@
 
 ## Package Purpose
 
-Opt-in addon layer for swipeable week/month calendar views (epic #2574). Currently a scaffold: the package and a stub component only; implementations are moved in by later steps.
+Opt-in addon layer for swipeable week/month calendar views (epic #2574). Month view is still to come.
 
 This is NOT crouton-core's `CroutonCalendar` date picker — do not touch that.
 
@@ -12,7 +12,9 @@ This is NOT crouton-core's `CroutonCalendar` date picker — do not touch that.
 |------|---------|
 | `nuxt.config.ts` | Layer config; components registered with prefix `CroutonCalendar` at `priority: -1` (stubs, overridable) |
 | `app/app.config.ts` | Registers `calendar` in `croutonApps` |
-| `app/components/WeekView.vue` | Stub `CroutonCalendarWeekView` |
+| `app/components/Week.vue` | `CroutonCalendarWeek` — swipeable week strip; slots `#day` (indicators) and `#day-action` (per-day hover action); emits `select` |
+| `app/composables/useSlideSwipe.ts` | Swipe/slide behaviour |
+| `i18n/locales/*.json` | `calendar.week.*` keys (en/fr/nl) |
 
 ## Usage
 

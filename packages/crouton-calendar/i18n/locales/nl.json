@@ -2,6 +2,11 @@
   "calendar": {
     "previousMonth": "Vorige maand",
     "nextMonth": "Volgende maand",
-    "today": "Ga naar vandaag"
+    "today": "Ga naar vandaag",
+    "week": {
+      "previousWeek": "Vorige week",
+      "nextWeek": "Volgende week",
+      "today": "Ga naar vandaag"
+    }
   }
 }

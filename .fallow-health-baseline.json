@@ -1027,7 +1027,7 @@
         "count": 2
       }
     },
-    "packages/crouton-bookings/app/components/WeekStrip.vue": {
+    "packages/crouton-calendar/app/components/Week.vue": {
       "complexity_critical": {
         "count": 1
       },

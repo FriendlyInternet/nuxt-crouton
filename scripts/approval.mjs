@@ -60,6 +60,33 @@ export function approvalKind(body) {
   return null
 }
 
+/**
+ * Test-card replies (#2540). A card in `status:to-test` is answered with `ok` or
+ * `not ok[: note]`. Both must OPEN a line, so "it's ok I guess" or "not ok" quoted
+ * mid-sentence never counts. Kept apart from isApproval: a bare `ok` must not release
+ * merges on ordinary cards — it only means something on a test card.
+ */
+const TEST_NOT_OK = /^[ \t]*not[ \t]+ok(?![\w-])[ \t]*[:\-—]?[ \t]*(.*)$/im
+const TEST_OK = /^[ \t]*ok(?![\w-])/im
+
+/**
+ * Parse a reply to a test card.
+ * @param {string} body Raw Markdown of the comment.
+ * @returns {{ result: 'ok' | 'not-ok' | null, note: string }}
+ */
+export function parseTestReply(body) {
+  const text = stripNonCommandRegions(String(body || ''))
+  const bad = TEST_NOT_OK.exec(text)
+  if (bad) return { result: 'not-ok', note: bad[1].trim() }
+  if (TEST_OK.test(text)) return { result: 'ok', note: '' }
+  return { result: null, note: '' }
+}
+
+/** Does this reply pass a test card? `not ok` never does. */
+export function isTestOk(body) {
+  return parseTestReply(body).result === 'ok'
+}
+
 // ── CLI ─────────────────────────────────────────────────────────────────────────
 //   node scripts/approval.mjs "<comment body>"   → exit 0 if approval, 1 if not
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {

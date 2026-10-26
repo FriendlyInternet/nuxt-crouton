@@ -140,6 +140,11 @@ export function isFlatFrame({ data, width, height, channels }) {
 }
 
 // ── runtime (skipped when imported, e.g. by the test) ────────────────────────
+// One shared warm-up deadline (≤5 min, inside the 8-min step timeout): the first surface pays
+// for the dev server's first build; later surfaces/widths reuse the warmed server.
+// Declared before `await main()` below — a later `let` would be in its TDZ when main runs.
+let warmDeadline = 0
+
 const log = m => console.log(`[capture] ${m}`)
 
 /** One machine-readable line per surface (#2572) — the deploy step quotes these on the PR. `reason` runs to end of line. */
@@ -253,6 +258,9 @@ async function captureRejection({ status, text, title, file, browser }) {
   return flat === false ? null : 'could not verify the frame is not blank'
 }
 
+// A function declaration, not a const: main() runs at module top level before the
+// declarations below it, so a const here threw "Cannot access 'okReason' before
+// initialization" and turned every successful capture into an error (PR #2601).
 function okReason(file, surface) {
   return file.split('/').pop() + (surface.clickFailed ? ` (click selector not found: ${surface.clickFailed} — captured as-is)` : '')
 }

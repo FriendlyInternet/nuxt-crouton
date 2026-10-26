@@ -16,7 +16,9 @@ interface TrackEventOptions {
 }
 
 export function useCroutonEventTracker() {
-  const { user } = useUserSession()
+  // crouton-auth's session (better-auth). This was `useUserSession()` — the nuxt-auth-utils API,
+  // which crouton doesn't install — so every app extending this package 500'd on SSR (#2602).
+  const { user } = useSession()
   const config = useRuntimeConfig()
   // Get team context at setup time to avoid calling composables in async callbacks
   const { getTeamId } = useTeamContext()
