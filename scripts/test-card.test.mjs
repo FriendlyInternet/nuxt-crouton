@@ -2,7 +2,7 @@
 //   node --test scripts/test-card.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideTestCard, buildCard, extractChecks, CARD_MARKER } from './test-card.mjs'
+import { decideTestCard, buildCard, buildTestMail, extractChecks, CARD_MARKER } from './test-card.mjs'
 
 const C = { state: 'closed' }
 const base = { subIssues: [C, C], labels: ['epic'], comments: [], deployed: true }
@@ -65,4 +65,10 @@ test('no-app card and mail print no placeholder text', async () => {
 })
 test('app without staging url says so', () => {
   assert.match(buildCard({ epicNumber: 1, title: 'T', app: 'velo' }), /App:\*\* velo — no staging link yet/)
+})
+
+test('bold markers inside a step are dropped; no-app mail subject has no placeholder', () => {
+  const body = '## How to test\n1. **Expect** the list\n'
+  assert.deepEqual(extractChecks(body), ['Expect the list'])
+  assert.equal(buildTestMail({ epicNumber: 5, title: 'Flow' }).subject, 'Test: Flow')
 })

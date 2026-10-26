@@ -39,7 +39,7 @@ function sectionChecks(body, heading) {
     .split('\n')
     .map(l => l.replace(/^\s*(?:[-*]|\d+\.)\s+/, '').trim())
     .filter(l => l && !METADATA_LINE.test(l))
-    .map(l => l.replace(/^\*\*(.+)\*\*$/, '$1').trim())
+    .map(l => l.replace(/\*\*/g, '').trim())
     .filter(Boolean)
 }
 
@@ -89,7 +89,7 @@ export function extractSummary(body = '', max = 400) {
 export function buildTestMail({ epicNumber, title = '', app = '', staging = true, summary = '', checks = [], loginUrl = '', epicUrl = '' } = {}) {
   const fallback = app ? `Try what "${title}" changed.` : `Check "${title}" on the epic.`
   const steps = [...(app ? ['Open the link below and sign in.'] : []), ...(checks.length ? checks : [fallback])]
-  const subject = `[${app || 'App'}] Test: ${title || `epic #${epicNumber}`}`
+  const subject = `${app ? `[${app}] ` : ''}Test: ${title || `epic #${epicNumber}`}`
   const text = [
     app ? `App: ${app}${staging ? ' (staging)' : ' — no staging link yet'}` : NO_APP_LINE,
     '',
