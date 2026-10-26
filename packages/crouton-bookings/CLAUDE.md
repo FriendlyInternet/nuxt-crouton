@@ -190,7 +190,7 @@ const { variables, getPreviewValues, demoData } = useBookingEmailVariables()
 
 ## Dependencies
 
-- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`)
+- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`), `@fyit/crouton-calendar` (extended by this layer; owns the swipeable week/month views and swipe logic — `Calendar.vue` only supplies the `#day` content, #2574)
 - **Optional**: `@fyit/crouton-email` (for email features)
 - **Peer**: `@nuxtjs/i18n` (auto-included)
 

@@ -1,11 +1,13 @@
 {
   "calendar": {
-    "previousMonth": "Previous month",
-    "nextMonth": "Next month",
-    "today": "Go to today",
     "week": {
       "previousWeek": "Previous week",
       "nextWeek": "Next week",
+      "today": "Go to today"
+    },
+    "month": {
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month",
       "today": "Go to today"
     }
   }

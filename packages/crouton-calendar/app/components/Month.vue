@@ -81,14 +81,14 @@ defineExpose({ goToDate, goToToday })
         variant="ghost"
         color="neutral"
         size="sm"
-        :aria-label="t('calendar.previousMonth')"
+        :aria-label="t('calendar.month.previousMonth')"
         @click="slide('prev')"
       />
       <UButton
         variant="ghost"
         color="neutral"
         class="font-medium"
-        :aria-label="t('calendar.today')"
+        :aria-label="t('calendar.month.today')"
         @click="goToToday"
       >
         {{ monthLabel }}
@@ -98,7 +98,7 @@ defineExpose({ goToDate, goToToday })
         variant="ghost"
         color="neutral"
         size="sm"
-        :aria-label="t('calendar.nextMonth')"
+        :aria-label="t('calendar.month.nextMonth')"
         @click="slide('next')"
       />
     </div>
