@@ -140,6 +140,11 @@ export function isFlatFrame({ data, width, height, channels }) {
 }
 
 // ── runtime (skipped when imported, e.g. by the test) ────────────────────────
+// One shared warm-up deadline (≤5 min, inside the 8-min step timeout): the first surface pays
+// for the dev server's first build; later surfaces/widths reuse the warmed server.
+// Declared before `await main()` below — a later `let` would be in its TDZ when main runs.
+let warmDeadline = 0
+
 const log = m => console.log(`[capture] ${m}`)
 
 /** One machine-readable line per surface (#2572) — the deploy step quotes these on the PR. `reason` runs to end of line. */
@@ -259,10 +264,6 @@ async function isLoading(page) {
   const textLen = await page.evaluate(() => (document.body?.innerText || '').trim().length).catch(() => 0)
   return looksLikeLoadingScreen({ html }) || textLen <= 50
 }
-
-// One shared warm-up deadline (≤5 min, inside the 8-min step timeout): the first surface pays
-// for the dev server's first build; later surfaces/widths reuse the warmed server.
-let warmDeadline = 0
 
 /** Request the first surface until the server answers with the app, not the loader. */
 async function warmUp(context, origin, surface) {
