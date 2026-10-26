@@ -27,6 +27,9 @@ const selected = ref<DateValue | undefined>(new CalendarDate(now.year, now.month
 const placeholder = ref<DateValue>(new CalendarDate(now.year, now.month, 1))
 const swipeEl = ref<HTMLElement | null>(null)
 
+const isSameMonth = (a: { year: number, month: number }, b: { year: number, month: number }) =>
+  a.year === b.year && a.month === b.month
+
 const { slide, style: trackStyle } = useSlideSwipe(swipeEl, {
   peek: true,
   onNext: () => { placeholder.value = placeholder.value.add({ months: 1 }) },
@@ -36,6 +39,11 @@ const { slide, style: trackStyle } = useSlideSwipe(swipeEl, {
 const panels = computed(() => [-1, 0, 1].map(offset => ({
   offset,
   placeholder: placeholder.value.add({ months: offset }),
+  // Reka moves a calendar's own month to its model-value's month, so only the
+  // panel that actually shows the selected month may receive it (#2651).
+  modelValue: selected.value && isSameMonth(selected.value, placeholder.value.add({ months: offset }))
+    ? selected.value
+    : undefined,
 })))
 
 const monthLabel = computed(() =>
@@ -67,6 +75,10 @@ function onActivate(value: any) {
   const single: DateValue | undefined
     = value && !Array.isArray(value) && typeof value.toDate === 'function' ? value : undefined
   selected.value = single
+  // Tapping a greyed neighbour-month day selects it and slides to that month.
+  if (single && !isSameMonth(single, placeholder.value)) {
+    placeholder.value = new CalendarDate(single.year, single.month, 1)
+  }
   if (single) emit('select', single.toDate(getLocalTimeZone()))
 }
 
@@ -116,7 +128,7 @@ defineExpose({ goToDate, goToToday })
         >
           <UCalendar
             :placeholder="(panel.placeholder as any)"
-            :model-value="(selected as any)"
+            :model-value="(panel.modelValue as any)"
             size="sm"
             :week-starts-on="1"
             :ui="{

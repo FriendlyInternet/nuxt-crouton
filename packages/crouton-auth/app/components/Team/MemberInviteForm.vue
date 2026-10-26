@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localizeError } from '../../utils/errors'
 /**
  * Team Member Invite Form Component
  *
@@ -113,7 +114,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
     state.email = ''
     state.role = 'member'
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('teams.inviteForm.failedToSend')
+    const message = e instanceof Error ? localizeError(e, t) : t('teams.inviteForm.failedToSend')
     notify.error(t('common.error'), { description: message })
   } finally {
     internalLoading.value = false

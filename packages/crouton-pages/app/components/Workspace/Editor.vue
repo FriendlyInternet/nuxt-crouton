@@ -313,8 +313,7 @@ watch(editorTabs, (tabs) => {
   if (!tabs.some(tab => tab.id === activeTab.value)) activeTab.value = 'content'
 })
 
-// Shared editing locale (#307) — ONE language selector in the editor's language
-// bar drives every translatable field across all tabs (title/slug, content,
+// Shared editing locale (#307) — ONE language menu in the editor's top bar drives every translatable field across all tabs (title/slug, content,
 // SEO). Seeded from the app locale.
 const editingLocale = ref<string>(locale.value || 'en')
 const localeOptions = computed(() =>
@@ -452,6 +451,8 @@ defineExpose({ state })
         :show-back="showBack"
         :page-id="state.id"
         :public-url="publicUrl"
+        v-model:editing-locale="editingLocale"
+        :locale-options="showLanguageBar ? localeOptions : []"
         @show-ai-generator="showAiGenerator = true"
         @show-preview="showPreview = true"
         @cancel="emit('cancel')"
@@ -477,31 +478,6 @@ defineExpose({ state })
           </UButton>
         </nav>
       </CroutonPagesEditorToolbar>
-
-      <!-- Language bar — one selector drives the translatable fields on every
-           tab; Preview opens in the selected language. Multi-locale apps only. -->
-      <CroutonSubBar v-if="showLanguageBar">
-        <template #leading>
-          <USelect
-            v-model="editingLocale"
-            :items="localeOptions"
-            value-key="value"
-            icon="i-lucide-languages"
-            size="sm"
-            class="min-w-40"
-          />
-        </template>
-        <template #trailing>
-          <UButton
-            variant="ghost"
-            color="neutral"
-            icon="i-lucide-eye"
-            size="sm"
-            :label="t('pages.editor.preview')"
-            @click="showPreview = true"
-          />
-        </template>
-      </CroutonSubBar>
 
       <!-- Tab panels — all kept mounted (v-show) so the block editor / i18n
            input never loses state when switching tabs. -->
