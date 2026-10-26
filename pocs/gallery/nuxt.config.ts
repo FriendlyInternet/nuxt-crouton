@@ -6,11 +6,7 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@fyit/crouton-devtools'],
-  css: ['~/assets/css/main.css'],
-  compatibilityDate: '2025-07-15',
-  devtools: { enabled: true },
-
+  // The gallery's whole point: every shared layer, so every shared piece has a review link (#2462).
   extends: [
     '@fyit/crouton-core',
     '@fyit/crouton-layout',
@@ -30,6 +26,11 @@ export default defineNuxtConfig({
     '@fyit/crouton-sales',
     '@fyit/crouton-three'
   ],
+
+  modules: ['@fyit/crouton-devtools'],
+  css: ['~/assets/css/main.css'],
+  compatibilityDate: '2025-07-15',
+  devtools: { enabled: true },
 
   hub: {
     db: 'sqlite',

@@ -15,27 +15,38 @@ import { realpathSync } from 'node:fs'
 
 const PACKAGE_RE = /\/packages\/(crouton-[^/]+)\/app\/components\//
 
-export interface ReviewPiece {
+interface ReviewPiece {
   name: string
   pkg: string
   file: string
 }
 
-/** Pure: which components are reviewable pieces, as plain data. Exported for tests. */
-export function selectPieces(components: Pick<Component, 'pascalName' | 'filePath' | 'priority' | 'mode' | 'island'>[]): ReviewPiece[] {
+type Candidate = Pick<Component, 'pascalName' | 'filePath' | 'priority' | 'mode' | 'island'>
+
+function realPath(file: string): string {
+  try { return realpathSync(file).replace(/\\/g, '/') } catch { return file } // virtual or missing
+}
+
+/** The package a component belongs to, or null when it isn't a reviewable piece. */
+function packageOf(c: Candidate, real: string): string | null {
+  const pkg = PACKAGE_RE.exec(real)?.[1]
+  if (!pkg) return null
+  const isStub = (c.priority ?? 0) < 0 || real.includes('/stubs/')
+  const isServer = c.mode === 'server' || !!c.island
+  return isStub || isServer ? null : pkg
+}
+
+/** Which components are reviewable pieces, as plain data. */
+function selectPieces(components: Candidate[]): ReviewPiece[] {
   const seen = new Map<string, ReviewPiece & { priority: number }>()
   for (const c of components) {
-    let real = c.filePath
-    try { real = realpathSync(c.filePath) } catch { /* virtual or missing — keep as is */ }
-    const m = PACKAGE_RE.exec(real.replace(/\\/g, '/'))
-    if (!m) continue
-    if ((c.priority ?? 0) < 0 || real.includes('/stubs/')) continue
-    if (c.mode === 'server' || c.island) continue
-    const prev = seen.get(c.pascalName)
+    const file = realPath(c.filePath)
+    const pkg = packageOf(c, file)
+    if (!pkg) continue
+    const priority = c.priority ?? 0
     // Same name from two layers: keep the higher priority (the one the app would actually render).
-    if (!prev || (c.priority ?? 0) > prev.priority) {
-      seen.set(c.pascalName, { name: c.pascalName, pkg: m[1]!, file: real, priority: c.priority ?? 0 })
-    }
+    const prev = seen.get(c.pascalName)
+    if (!prev || priority > prev.priority) seen.set(c.pascalName, { name: c.pascalName, pkg, file, priority })
   }
   return [...seen.values()]
     .map(({ priority: _p, ...p }) => p)
