@@ -466,15 +466,6 @@
       "descriptionPlaceholder": "Optionele beschrijving"
     }
   },
-  "collectionNames": {
-    "bookingsBookings": "Reserveringen",
-    "bookingsLocations": "Locaties",
-    "bookingsSettings": "Reserveringsinstellingen",
-    "bookingsEmailtemplates": "E-mailsjablonen",
-    "bookingsEmaillogs": "E-maillogboek",
-    "pagesPages": "Pagina's",
-    "croutonAssets": "Media"
-  },
   "navigation": {
     "dashboard": "Dashboard",
     "home": "Home",

@@ -466,15 +466,6 @@
       "descriptionPlaceholder": "Optional description"
     }
   },
-  "collectionNames": {
-    "bookingsBookings": "Bookings",
-    "bookingsLocations": "Locations",
-    "bookingsSettings": "Booking settings",
-    "bookingsEmailtemplates": "Email templates",
-    "bookingsEmaillogs": "Email logs",
-    "pagesPages": "Pages",
-    "croutonAssets": "Assets"
-  },
   "navigation": {
     "dashboard": "Dashboard",
     "home": "Home",

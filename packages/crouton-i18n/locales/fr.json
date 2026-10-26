@@ -466,15 +466,6 @@
       "descriptionPlaceholder": "Description facultative"
     }
   },
-  "collectionNames": {
-    "bookingsBookings": "Réservations",
-    "bookingsLocations": "Lieux",
-    "bookingsSettings": "Paramètres de réservation",
-    "bookingsEmailtemplates": "Modèles d'e-mail",
-    "bookingsEmaillogs": "Journal des e-mails",
-    "pagesPages": "Pages",
-    "croutonAssets": "Médias"
-  },
   "navigation": {
     "dashboard": "Tableau de bord",
     "home": "Accueil",
