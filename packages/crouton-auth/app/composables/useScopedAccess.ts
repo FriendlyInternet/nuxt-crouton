@@ -1,4 +1,3 @@
-import { AuthError, AUTH_ERROR_CODES } from '../utils/errors'
 /**
  * Scoped Access Composable
  *
@@ -103,7 +102,7 @@ export function useScopedAccess(
   // State
   const session = useState<ScopedAccessSession | null>(`scoped-access-${resourceType}`, () => null)
   const isLoading = ref(false)
-  const error = ref<AuthError | null>(null)
+  const error = ref<string | null>(null)
   const errorStatus = ref<number | null>(null)
 
   // Computed properties
@@ -233,11 +232,7 @@ export function useScopedAccess(
     }
     catch (err: unknown) {
       const fetchError = err as { status?: number; statusCode?: number; data?: { message?: string; statusMessage?: string }; statusMessage?: string }
-      // No server message -> AuthError keeps its default text, which localizeError() translates at display time
-      error.value = new AuthError(
-        AUTH_ERROR_CODES.AUTH_LOGIN_FAILED,
-        fetchError.data?.message || fetchError.data?.statusMessage || fetchError.statusMessage || undefined
-      )
+      error.value = fetchError.data?.message || fetchError.data?.statusMessage || fetchError.statusMessage || 'Login failed'
       errorStatus.value = fetchError.status ?? fetchError.statusCode ?? null
       return false
     }
