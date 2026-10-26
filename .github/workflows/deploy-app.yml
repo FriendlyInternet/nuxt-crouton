@@ -97,6 +97,9 @@ on:
       # seeded (warning), and the pre-prod gate refuses to run blind.
       REVIEW_SEED_SECRET:
         required: false
+      # Repo-level token the status app uses to read issues (#2553); pushed to the status Worker only.
+      STATUS_GITHUB_TOKEN:
+        required: false
 
 jobs:
   deploy:
@@ -295,6 +298,11 @@ jobs:
             PREVIEW_OUT="$(node "$GITHUB_WORKSPACE/scripts/pr-preview-wrangler.mjs" \
               .output/server/wrangler.json "${{ inputs.app }}" "$PR_NUM")"
             PREVIEW_DB="$(printf '%s\n' "$PREVIEW_OUT" | sed -n 's/^db=//p')"
+            # Reuse storage this preview already has (#2608). A deploy that died after creating
+            # its D1/KV but before the Worker existed leaves them bound to nothing; wrangler then
+            # tries to create them again on every deploy and Cloudflare refuses ("already exists"),
+            # so the preview stays broken for good (#2571). Pin what exists; create only the rest.
+            node "$GITHUB_WORKSPACE/scripts/pr-preview-reuse.mjs" .output/server/wrangler.json
             npx wrangler deploy --config .output/server/wrangler.json | tee deploy.log
             # Fresh DB every time, so migrations are the whole schema — not incremental.
             # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
@@ -328,7 +336,7 @@ jobs:
                 --config .output/server/wrangler.json --remote
             fi
           else
-            pnpm run cf:staging 2>&1 | tee deploy.log
+            pnpm run cf:staging | tee deploy.log
           fi
           # Surface the deployed URL for the PR comment, seed-login + review steps.
           # Prefer the configured custom-domain URL (staging-url/production-url input):
@@ -392,17 +400,6 @@ jobs:
       # correctly. Apps that depend on the bundle set `secrets.required` in their
       # deploy.config.json → require-worker-secrets makes an empty resolution FAIL
       # loudly here instead of deploying a Worker with no secrets (#1094).
-      # TEMPORARY, gallery branch only (#2462): job logs live on a blob host the agent sandbox
-      # can't reach, so on failure put the last 60 lines of deploy.log into ONE annotation,
-      # which the checks API returns. Not for main.
-      - name: Surface deploy log tail (debug, #2462)
-        if: failure()
-        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
-        run: |
-          [ -f deploy.log ] || { echo "::error::no deploy.log"; exit 0; }
-          tail -60 deploy.log | sed 's/\x1b\[[0-9;]*m//g' | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}' > tail.txt
-          echo "::error title=deploy.log tail::$(cat tail.txt)"
-
       - name: Sync explicit Worker secrets (optional override)
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
@@ -427,6 +424,37 @@ jobs:
             npx wrangler secret bulk "$RUNNER_TEMP/worker-secrets.json" --env staging
           fi
           rm -f "$RUNNER_TEMP/worker-secrets.json"
+
+      # The status app (pocs/status) derives every app's review-login password to offer one-tap
+      # sign-in links (#2556), and reads the repo's issues (#2553). Neither secret can be read back
+      # from GitHub, so push them to THAT Worker only — no other app ever receives them.
+      # On a PR the Worker is the PR-scoped preview (`status-pr<N>`, via the built config);
+      # `--env staging` there would write to shared staging instead. Values are never echoed.
+      - name: Push status-app secrets
+        if: ${{ inputs.app == 'status' }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          STATUS_GITHUB_TOKEN: ${{ secrets.STATUS_GITHUB_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+        run: |
+          if [ "$DEPLOY_ENV" = "production" ]; then
+            TARGET=""
+          elif [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then
+            TARGET="--config .output/server/wrangler.json"
+          else
+            TARGET="--env staging"
+          fi
+          push() {
+            if [ -z "$2" ]; then
+              echo "::notice::$3 is not set — skipping $1."
+              return 0
+            fi
+            printf '%s' "$2" | npx wrangler secret put "$1" $TARGET
+          }
+          push NUXT_REVIEW_SEED_SECRET "$REVIEW_SEED_SECRET" REVIEW_SEED_SECRET
+          push GITHUB_TOKEN "$STATUS_GITHUB_TOKEN" STATUS_GITHUB_TOKEN
 
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)
@@ -888,21 +916,6 @@ jobs:
             exit 0
           fi
           echo "::warning::Deployed-preview smoke failed (report-only; set smoke.required=true in $APP/deploy.config.json to gate)."
-
-      # TEMPORARY, gallery branch only (#2462): the deployed home page returns 500 and the error
-      # is only visible in the Worker's live log. Tail it while requesting the page twice, and put
-      # the exceptions + console errors into ONE annotation (readable via the checks API).
-      - name: Capture live Worker errors (debug, #2462)
-        if: ${{ always() && inputs.environment == 'staging' && github.event.pull_request.number == null }}
-        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
-        run: |
-          W="${{ inputs.app }}-staging"
-          (timeout 40 npx wrangler tail "$W" --format json > tail.json 2> tail.err &) ; sleep 12
-          for p in / /api/_auth/session; do echo "== $p"; curl -s -m 20 -H 'accept: application/json' -w "\n→ %{http_code}\n" "${{ inputs['staging-url'] }}$p" | tail -c 700; done | tee codes.txt
-          sleep 15
-          { cat codes.txt; jq -r '[.outcome, (.exceptions[]? | "EXC " + .name + ": " + .message), (.logs[]? | "LOG[" + .level + "] " + (.message|tostring))] | map(select(. != null)) | .[]' tail.json 2>/dev/null | head -60; echo "stderr: $(head -c 400 tail.err)"; } \
-            | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-400 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}' > live.txt
-          echo "::error title=live worker errors::$(cat live.txt)"
 
       # The one-click review sign-in link carries the password, so it goes ONLY by email to
       # the owner — never into the PR comment, run summary or logs, which are public on
