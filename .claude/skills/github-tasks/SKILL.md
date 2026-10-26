@@ -149,6 +149,10 @@ Don't stop at the issue you were asked about; closing the leaf without checking 
 4. Use meta labels where they apply: `epic`, `spike`, `needs-triage`.
 5. **Link issues & PRs when talking to the user.** Any time you mention an issue/PR in a chat reply, render it as a clickable link to the full URL (`[#303](https://github.com/FriendlyInternet/nuxt-crouton/issues/303)`, `[#376](https://github.com/FriendlyInternet/nuxt-crouton/pull/376)`) so the owner can open it in one click. This is a **chat-reply** convention only — commit messages keep bare `(#NN)`, and PR bodies use `Closes #NN` (not a URL) so GitHub auto-closes the issue on merge.
 
+## Pipeline fixes close on evidence, not on merge (`workflow` issues, #2657)
+
+A fix to the pipeline itself can merge green and still not work. So its PR uses **`Refs #NN`** (never `Closes #NN`), and the issue body carries one line: **`Evidence-needed: <text a real run will annotate>`** (e.g. `Evidence-needed: pi mcp: not blocked`). `verify-fix-evidence.yml` runs after each worker run, looks for that text in the run's annotations (`scripts/fix-evidence.mjs`), and on a match comments the run link and closes the issue. No match → silent; the issue stays open. Only runs created after the PR merged count. Add a `Verified-by-run:` line by hand if you close one manually.
+
 ## Design handoff (epics that change a visual surface)
 
 If the design lives in a canvas the pipeline can't open, don't re-describe it in prose. Export one PNG per board/state and run `node scripts/design-handoff.mjs <epic> <png…> --post` — it copies them to `writeups/design/<epic>/` (with a `README.md` naming each file) and upserts a "🎨 Design" section with inline images into the epic body. Commit and push those files (until they reach the branch in `--branch`, the images don't load). Pipeline workers are told to `read` them before building; `ui-proposal` shows them next to the preview.
