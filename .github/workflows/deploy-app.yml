@@ -303,7 +303,19 @@ jobs:
             # tries to create them again on every deploy and Cloudflare refuses ("already exists"),
             # so the preview stays broken for good (#2571). Pin what exists; create only the rest.
             node "$GITHUB_WORKSPACE/scripts/pr-preview-reuse.mjs" .output/server/wrangler.json
-            npx wrangler deploy --config .output/server/wrangler.json | tee deploy.log
+            # Cloudflare's assets-upload-session sometimes answers "unknown error [code: 10013]"
+            # on a fresh PR Worker; the same deploy passes on retry. Retry, and say why on failure.
+            for attempt in 1 2 3; do
+              if npx wrangler deploy --config .output/server/wrangler.json 2>&1 | tee deploy.log; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "::error::wrangler deploy failed 3 times for the PR preview — last error: $(grep -m1 -E 'ERROR|code:' deploy.log | sed 's/\x1b\[[0-9;]*m//g')"
+                exit 1
+              fi
+              echo "::warning::wrangler deploy attempt $attempt failed; retrying in 15s"
+              sleep 15
+            done
             # Fresh DB every time, so migrations are the whole schema — not incremental.
             # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
             # rewritten built config; the committed wrangler.jsonc carries <app>-db /
@@ -436,6 +448,9 @@ jobs:
         env:
           REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           STATUS_GITHUB_TOKEN: ${{ secrets.STATUS_GITHUB_TOKEN }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: ${{ vars.RESEND_FROM }}
+          OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
           PR_NUM: ${{ github.event.pull_request.number }}
           DEPLOY_ENV: ${{ inputs.environment }}
         run: |
@@ -455,6 +470,65 @@ jobs:
           }
           push NUXT_REVIEW_SEED_SECRET "$REVIEW_SEED_SECRET" REVIEW_SEED_SECRET
           push GITHUB_TOKEN "$STATUS_GITHUB_TOKEN" STATUS_GITHUB_TOKEN
+          # Magic-link sign-in mail + the owner-only guard (previews have no other source of these).
+          push NUXT_EMAIL_RESEND_API_KEY "$RESEND_API_KEY" RESEND_API_KEY
+          push NUXT_EMAIL_FROM "$RESEND_FROM" RESEND_FROM
+          push NUXT_STATUS_OWNER_EMAIL "$OWNER_EMAIL" REVIEW_LOGIN_EMAIL
+
+      # Magic-link mail swallows every error (crouton-auth `.catch(() => {})`, crouton-email's
+      # try/catch), so a preview can look fine while nothing is sent (#2557). Prove it from CI:
+      # tail the Worker, request a link for the owner, and print the `[crouton-email]` lines
+      # (owner address and URLs masked), then request again so the log shows a repeat attempt.
+      - name: Probe status magic-link send (PR preview)
+        if: ${{ inputs.app == 'status' && github.event.pull_request.number != '' && inputs.environment != 'production' }}
+        continue-on-error: true
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          if [ -z "$OWNER_EMAIL" ] || [ -z "$DEPLOY_URL" ] || [ ! -f .output/server/wrangler.json ]; then
+            echo "::notice::magic-link probe skipped (owner email, URL or built config missing)."
+            exit 0
+          fi
+          npx wrangler tail --config .output/server/wrangler.json --format pretty > "$RUNNER_TEMP/tail.log" 2>&1 &
+          TAIL_PID=$!
+          sleep 15
+          for i in 1 2; do
+            BODY=$(jq -n --arg e "$OWNER_EMAIL" '{email:$e, callbackURL:"/"}')
+            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
+              -H 'Content-Type: application/json' -d "$BODY" || true)
+            echo "request $i → HTTP $CODE"
+            sleep 10
+          done
+          kill "$TAIL_PID" 2>/dev/null || true
+          echo "--- [crouton-email] lines from the Worker tail ---"
+          sed -E 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/tail.log" \
+            | grep -F -e '[crouton-email]' -e 'Error' -e 'POST' \
+            | sed -e "s|$OWNER_EMAIL|<owner>|Ig" -E -e 's|https?://[^ "]*token=[^ "]*|<link>|g' \
+            | head -40 || echo "(no matching lines)"
+
+      # Send the owner a sign-in link by mail on every status deploy, so they never have to type
+      # an email on a phone. Owner address is never printed.
+      - name: Email owner a status sign-in link
+        if: ${{ inputs.app == 'status' && steps.deploy.outputs.url != '' }}
+        continue-on-error: true
+        env:
+          OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
+          DEPLOY_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          if [ -z "$OWNER_EMAIL" ]; then
+            echo "::notice::sign-in mail skipped (REVIEW_LOGIN_EMAIL / DIGEST_REPORT_EMAIL not set)."
+            exit 0
+          fi
+          BODY=$(jq -n --arg e "$OWNER_EMAIL" '{email:$e, callbackURL:"/"}')
+          CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
+            -H 'Content-Type: application/json' -d "$BODY" || echo 000)
+          if [ "$CODE" != "200" ]; then
+            echo "::warning::status sign-in mail request returned HTTP $CODE (expected 200)."
+          else
+            echo "Sign-in link requested (HTTP 200)."
+          fi
 
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)
