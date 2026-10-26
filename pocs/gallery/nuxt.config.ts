@@ -13,6 +13,7 @@ export default defineNuxtConfig({
 
   extends: [
     '@fyit/crouton-core',
+    '@fyit/crouton-layout',
     '@fyit/crouton-i18n',
     '@fyit/crouton-ai',
     '@fyit/crouton-assets',
@@ -27,8 +28,7 @@ export default defineNuxtConfig({
     '@fyit/crouton-pages',
     '@fyit/crouton-printing',
     '@fyit/crouton-sales',
-    '@fyit/crouton-three',
-    '@fyit/crouton-devtools'
+    '@fyit/crouton-three'
   ],
 
   hub: {
