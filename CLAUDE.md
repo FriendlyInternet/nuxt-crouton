@@ -497,6 +497,8 @@ UI-touching if it adds/changes a `.vue` component, `app/components|layouts|pages
 (`crouton-themes`, a `ui:` block in `app.config.ts`), or app CSS/theme tokens. Pure
 `<script>`/composables/types, `server/**`, config, tests, and docs are **not** UI — skip this.
 
+**Look before you merge.** An interactive agent does not merge a UI-touching PR until it has *looked at* a usable preview screenshot of the named `review-surface` page. If there is none (missing, blank, loader), hand the owner the preview link and one yes/no instead of merging.
+
 **Default gate — live preview:** run the **`ui-proposal`** skill to deploy a rough build to
 staging with `NUXT_PUBLIC_CROUTON_REVIEW=true` (via `/poc-deploy` or `pnpm cf:staging`), post the
 preview URL on a draft PR, and hold on `status:blocked`. The reviewer opens the running page,
