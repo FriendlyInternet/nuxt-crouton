@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1793014663546,
+      "tag": "0000_smart_saracen",
+      "breakpoints": true
+    }
+  ]
+}

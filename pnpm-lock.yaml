@@ -2007,6 +2007,49 @@ importers:
         specifier: ^4.64.0
         version: 4.151.0(@cloudflare/workers-types@4.20260702.1)(@types/node@26.6.5)
 
+  pocs/status:
+    dependencies:
+      '@fyit/crouton-core':
+        specifier: workspace:*
+        version: link:../../packages/crouton-core
+      '@fyit/crouton-email':
+        specifier: workspace:*
+        version: link:../../packages/crouton-email
+      '@fyit/crouton-i18n':
+        specifier: workspace:*
+        version: link:../../packages/crouton-i18n
+      '@libsql/client':
+        specifier: ^0.17.0
+        version: 0.17.4
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@cloudflare/workers-types@4.20260702.1)(@libsql/client@0.17.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.2)(kysely@0.29.6)(pg@8.17.1)
+      nuxt:
+        specifier: ^4.6.1
+        version: 4.6.1(9699dc5d3b82b54a33829bab4385cec1)
+      vue:
+        specifier: ^3.5.44
+        version: 3.5.44(typescript@5.9.3)
+      vue-router:
+        specifier: ^4.6.4
+        version: 4.6.4(vue@3.5.44(typescript@5.9.3))
+    devDependencies:
+      '@fyit/crouton-cli':
+        specifier: workspace:*
+        version: link:../../packages/crouton-cli
+      '@fyit/crouton-devtools':
+        specifier: workspace:*
+        version: link:../../packages/crouton-devtools
+      drizzle-kit:
+        specifier: ^0.31.0
+        version: 0.31.11
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.12(@opentelemetry/api@1.9.0)(@types/node@26.6.5)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(happy-dom@20.14.6)(jsdom@27.4.0)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.21.0)(yaml@2.9.1))
+      wrangler:
+        specifier: ^4.64.0
+        version: 4.151.0(@cloudflare/workers-types@4.20260702.1)(@types/node@26.6.5)
+
   sandboxes/unstyled-spike:
     dependencies:
       '@nuxt/ui':

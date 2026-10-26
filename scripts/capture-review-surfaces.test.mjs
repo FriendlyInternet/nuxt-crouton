@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine } from './capture-review-surfaces.mjs'
 
 test('slug: safe stable filename fragment', () => {
   assert.equal(slug('Data Pane / Filter!'), 'data-pane-filter')
@@ -149,4 +149,13 @@ function decodePng(buf) {
 test('isFlatFrame: rejects the committed all-white 390px capture (#2526)', () => {
   const frame = decodePng(readFileSync(new URL('./lib/__fixtures__/blank-white-390.png', import.meta.url)))
   assert.equal(isFlatFrame(frame), true)
+})
+
+test('resultLine is one machine-readable line per surface (#2572)', () => {
+  assert.equal(resultLine('month', 'rejected', 'blank/flat\ncapture'), 'surface=month status=rejected reason=blank/flat capture')
+})
+
+test("parsePrSurfaces keeps a quoted has-text('Month') selector intact (#2572)", () => {
+  const body = "<!-- review-surface: velo /admin/test1/bookings name:month click:button:has-text('Month') wait:1500 -->"
+  assert.deepEqual(parsePrSurfaces(body, 'velo'), [{ name: 'month', path: '/admin/test1/bookings', do: ["click:button:has-text('Month')", 'wait:1500'] }])
 })
