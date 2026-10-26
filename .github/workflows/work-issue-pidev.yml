@@ -302,6 +302,10 @@ jobs:
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
           # Run-record helper (#2464) — same reason: the failure path must work on any branch.
           cp scripts/run-record.mjs "$RUNNER_TEMP/run-record.mjs"
+          # Telemetry (#2548) runs AFTER the finish step has checked out work-<issue>, whose tree
+          # can predate the current scripts (an epic branch cut earlier) — the first run printed an
+          # old error instead of the tool line. Run it from a copy taken now, like pi-finish.
+          rm -rf "$RUNNER_TEMP/loop-station" && cp -r .claude/skills/loop-station "$RUNNER_TEMP/loop-station"
 
       # Resolve the pipeline's models from the ONE setting (#2161): .claude/pipeline-models.json,
       # read via scripts/resolve-pipeline-model.mjs. Switch a model there — no workflow edit.
@@ -805,33 +809,9 @@ jobs:
           # the same way UI_TOUCHED and TESTS_MISSING already are, rather than trusting pi's
           # own narration that it captured something (the #1849 reasoning, again).
           #
-          # The capture itself is a deterministic step HERE (#2513), not a prompt ask: boot the
-          # touched app locally, sign in, shoot the ticket's `Surface: <app> <path>` line at 390px
-          # and 1280px (scripts/pi-local-capture.mjs; blank/error pages are rejected, #2055/#2061),
-          # and commit the PNGs ourselves. Five pi UI PRs shipped in one day with no screenshot and
-          # the owner caught a doubled ☰ on a phone. Failure is recorded as a REASON in the PR body.
-          # The check below stays as the backstop — it should now almost never fire.
-          CAPTURE_NOTE=""
-          if [ "$HAVE_COMMITS" = "1" ] && [ "$UI_TOUCHED" = "1" ]; then
-            git diff --name-only "$BASE_SHA"..HEAD > "$RUNNER_TEMP/ui-changed.txt" 2>/dev/null || true
-            npx playwright install chromium >/dev/null 2>&1 || true
-            : > "$RUNNER_TEMP/local-capture.log"
-            timeout 480 node scripts/pi-local-capture.mjs --issue "$ISSUE" --issue-body "$RUNNER_TEMP/issue-body.txt" \
-              --changed "$RUNNER_TEMP/ui-changed.txt" --status "$RUNNER_TEMP/local-capture.json" --budget 360 \
-              2>&1 | tee "$RUNNER_TEMP/local-capture.log" | tail -25 || true
-            CAP_STATUS="$(node -p "try{require('$RUNNER_TEMP/local-capture.json').status}catch{'failed'}" 2>/dev/null || echo failed)"
-            CAP_REASON="$(node -p "try{require('$RUNNER_TEMP/local-capture.json').reason}catch{'the capture step crashed before reporting'}" 2>/dev/null || echo 'capture step crashed')"
-            if [ "$CAP_STATUS" = "captured" ] && ls writeups/ui-proposals/*.png >/dev/null 2>&1; then
-              git add writeups/ui-proposals/*.png
-              if git commit -q -m "chore(review): capture local 390px/1280px screenshots (#2513)" -m "🤖 pi worker finish step — deterministic capture of the ticket's named surface. Refs #${ISSUE}"; then
-                git push origin "HEAD:${BR}" 2>&1 | tail -2 || true
-                CAPTURE_NOTE="$(printf '\n\n📸 **Local capture:** %s. Screenshots are committed under `writeups/ui-proposals/`.' "$CAP_REASON")"
-              fi
-            else
-              echo "::warning::local capture (#2513): $CAP_STATUS — $CAP_REASON"
-              CAPTURE_NOTE="$(printf '\n\n📸 **Local capture: none (%s).** %s' "$CAP_STATUS" "$CAP_REASON")"
-            fi
-          fi
+          # Screenshots come from the deployed preview only (#2546): the PR body carries the issue's
+          # `<!-- review-surface: … -->` marker (copied below) and deploy-app.yml's capture step
+          # commits the PNG. No local boot here — it never produced a usable image (#2524/#2529/#2533).
           EVIDENCE_ATTACHED=0
           if [ "$UI_TOUCHED" = "1" ] && git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '^writeups/ui-proposals/'; then
             EVIDENCE_ATTACHED=1
@@ -879,7 +859,7 @@ jobs:
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$TITLE" \
-                --body "$(printf 'Closes #%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE" "$CAPTURE_NOTE" "$SURFACES")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
@@ -1339,7 +1319,7 @@ jobs:
           # produced NO trace at all (the 2026-10-24 canary uploaded nothing); now it always does.
           SESSION_DIR="$RUNNER_TEMP/pi-session"
           if [ -n "$TELE_DIR" ] && [ -d "$TELE_DIR" ]; then echo "pi telemetry dir: $TELE_DIR"; else TELE_DIR="/nonexistent"; fi
-          if node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --session "$SESSION_DIR" > pi-telemetry-out/pi-trace.jsonl 2>/dev/null; then
+          if node "$RUNNER_TEMP/loop-station/pi-telemetry.mjs" "$TELE_DIR" --session "$SESSION_DIR" > pi-telemetry-out/pi-trace.jsonl 2>/dev/null; then
             # ::notice:: so the result is readable via the check-runs annotations API, not only the raw log (#2435)
             echo "::notice title=pi telemetry::trace $(wc -l < pi-telemetry-out/pi-trace.jsonl) lines, $(grep -c '"kind":"skill"' pi-telemetry-out/pi-trace.jsonl || true) skill loads, $(find "$SESSION_DIR" -maxdepth 1 -name "*.jsonl" 2>/dev/null | wc -l) session file(s)"
           else
@@ -1348,7 +1328,7 @@ jobs:
           fi
           # #2548: which tools did pi call, and were the repo MCP servers blocked? Tells "pi ignored
           # the skill guides" apart from "telemetry miscounts reads", and confirms #2445.
-          echo "::notice title=pi tools::$(node .claude/skills/loop-station/pi-telemetry.mjs --tool-stats "$SESSION_DIR" 2>&1 | tail -n1)"
+          echo "::notice title=pi tools::$(node "$RUNNER_TEMP/loop-station/pi-telemetry.mjs" --tool-stats "$SESSION_DIR" 2>&1 | tail -n1)"
           # No log = no evidence either way: say "unknown", never a false "not blocked".
           if [ -z "$PI_EXEC_LOG" ] || [ ! -f "$PI_EXEC_LOG" ]; then
             echo "::notice title=pi mcp::unknown — no pi log to check (${PI_EXEC_LOG:-path not set})"
@@ -1358,7 +1338,7 @@ jobs:
             echo "::notice title=pi mcp::not blocked ($(wc -l < "$PI_EXEC_LOG") log lines checked)"
           fi
           if [ -d "$TELE_DIR" ]; then
-            node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
+            node "$RUNNER_TEMP/loop-station/pi-telemetry.mjs" "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
             echo "── #883 ledger-row slice from THIS pi run (model · cost · turns · wall) ──"
             cat pi-telemetry-out/ledger-rows.jsonl || true
           fi

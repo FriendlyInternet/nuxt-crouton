@@ -401,6 +401,8 @@
     "weekStrip": {
       "previousWeek": "Previous week",
       "nextWeek": "Next week",
+      "previousMonth": "Previous month",
+      "nextMonth": "Next month",
       "fullyBookedDay": "Fully booked: {day}",
       "addBookingDay": "Add booking: {day}"
     },
