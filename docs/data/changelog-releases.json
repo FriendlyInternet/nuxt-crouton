@@ -1,6 +1,25 @@
 {
-  "lastSyncedAt": "2026-10-25T10:27:40.424Z",
+  "lastSyncedAt": "2026-10-26T11:57:04.385Z",
   "releases": [
+    {
+      "id": "better-auth/better-auth:423489676",
+      "packageName": "better-auth",
+      "packageRepo": "better-auth/better-auth",
+      "packagePriority": "critical",
+      "tagName": "v1.7.13",
+      "name": "v1.7.13",
+      "body": "## `better-auth`\n\n### Bug Fixes\n\n- Fixed type declarations so type-only exports are no longer listed as values, making a value import fail type checking instead of failing at runtime ([#11985](https://github.com/better-auth/better-auth/pull/11985))\n\nFor detailed changes, see [`CHANGELOG`](https://github.com/better-auth/better-auth/blob/e4666edd1da8775a9a1767442451165376036ccf/packages/better-auth/CHANGELOG.md)\n\n## `@better-auth/core`\n\n### Features\n\n- Added token endpoint authentication options to the Vercel social provider, including dynamic OIDC tokens and private key JWT client assertions, without replacing the built-in sign-in flow ([#11948](https://github.com/better-auth/better-auth/pull/11948))\n\n### Bug Fixes\n\n- Added `tokenEndpointAuth: { method }` to the Cloudflare provider and deprecated `tokenEndpointAuthMethod`, which remains supported ([#11997](https://github.com/better-auth/better-auth/pull/11997))\n\nFor detailed changes, see [`CHANGELOG`](https://github.com/better-auth/better-auth/blob/e4666edd1da8775a9a1767442451165376036ccf/packages/core/CHANGELOG.md)\n\n## `@better-auth/stripe`\n\n### Features\n\n- Added support for Stripe SDK v23 in the Stripe plugin ([#11954](https://github.com/better-auth/better-auth/pull/11954))\n\nFor detailed changes, see [`CHANGELOG`](https://github.com/better-auth/better-auth/blob/e4666edd1da8775a9a1767442451165376036ccf/packages/stripe/CHANGELOG.md)\n\n## Contributors\n\nThanks to everyone who contributed to this release:\n\n@allenzhou101, @bytaesu, @godwit-bo\n\n**Full changelog:** [`v1.7.12...v1.7.13`](https://github.com/better-auth/better-auth/compare/v1.7.12...v1.7.13)",
+      "htmlUrl": "https://github.com/better-auth/better-auth/releases/tag/v1.7.13",
+      "publishedAt": "2026-10-25T15:33:55Z",
+      "isPrerelease": false,
+      "summary": "AI summary unavailable. See full release notes.",
+      "breakingChanges": [],
+      "newFeatures": [],
+      "importance": "minor",
+      "relevanceScore": 50,
+      "processedAt": "2026-10-26T11:56:47.625Z",
+      "model": "claude-3-5-haiku-20241022"
+    },
     {
       "id": "vercel/ai:422894521",
       "packageName": "ai",
@@ -1880,25 +1899,6 @@
       "importance": "minor",
       "relevanceScore": 50,
       "processedAt": "2026-08-12T07:10:56.549Z",
-      "model": "claude-3-5-haiku-20241022"
-    },
-    {
-      "id": "vercel/ai:368340714",
-      "packageName": "ai",
-      "packageRepo": "vercel/ai",
-      "packagePriority": "high",
-      "tagName": "@ai-sdk/xai@3.0.117",
-      "name": "@ai-sdk/xai@3.0.117",
-      "body": "### Patch Changes\n\n- Updated dependencies [de18066]\n- Updated dependencies [2171d15]\n  - @ai-sdk/openai-compatible@2.0.66\n  - @ai-sdk/provider@3.0.15\n  - @ai-sdk/provider-utils@4.0.44",
-      "htmlUrl": "https://github.com/vercel/ai/releases/tag/%40ai-sdk/xai%403.0.117",
-      "publishedAt": "2026-08-11T05:00:45Z",
-      "isPrerelease": false,
-      "summary": "AI summary unavailable. See full release notes.",
-      "breakingChanges": [],
-      "newFeatures": [],
-      "importance": "minor",
-      "relevanceScore": 50,
-      "processedAt": "2026-08-11T06:52:15.635Z",
       "model": "claude-3-5-haiku-20241022"
     }
   ]
