@@ -9,6 +9,7 @@ name: Project status automation
 #   - Issue labeled status:in-progress          -> In progress
 #   - Issue labeled status:blocked              -> Blocked
 #   - Issue closed                              -> Done
+#   - Epic labeled status:to-test / verified / failed -> To test / Verified / Failed (#2521)
 # The label triggers are the reliable signal: the github-tasks flow (and
 # agents) mark "work started" by applying status:in-progress, not by
 # assigning — so without these an issue would skip In progress entirely and
@@ -79,6 +80,13 @@ jobs:
                 // appearing on the board with nothing in the log to say so. Same column —
                 // they are still parked awaiting a human — but a distinguishable label.
                 case 'status:needs-merge': return 'Blocked'
+                // #2521 — owner test-card states (epics only; see the epic guard below).
+                // The board's Status field needs matching "To test" / "Verified" / "Failed"
+                // options; the "Owner" view (epics only, grouped by Status) is a Project UI
+                // setting. A missing option warns below rather than silently no-op'ing.
+                case 'status:to-test':     return 'To test'
+                case 'status:verified':    return 'Verified'
+                case 'status:failed':      return 'Failed'
                 default:                   return null
               }
             }
@@ -105,6 +113,13 @@ jobs:
               else target = 'In progress'
             }
             if (!target) return
+
+            // Owner states only apply to epics: sub-issues stay inside the pipeline (#2517).
+            const ownerStates = ['To test', 'Verified', 'Failed']
+            if (ownerStates.includes(target)) {
+              const isEpic = (context.payload.issue?.labels || []).some(l => l.name === 'epic')
+              if (!isEpic) { core.info(`Skipping ${target}: not an epic`); return }
+            }
 
             const contentNodeId = context.payload.pull_request?.node_id
               ?? context.payload.issue?.node_id
