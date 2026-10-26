@@ -303,7 +303,19 @@ jobs:
             # tries to create them again on every deploy and Cloudflare refuses ("already exists"),
             # so the preview stays broken for good (#2571). Pin what exists; create only the rest.
             node "$GITHUB_WORKSPACE/scripts/pr-preview-reuse.mjs" .output/server/wrangler.json
-            npx wrangler deploy --config .output/server/wrangler.json | tee deploy.log
+            # Cloudflare's assets-upload-session sometimes answers "unknown error [code: 10013]"
+            # on a fresh PR Worker; the same deploy passes on retry. Retry, and say why on failure.
+            for attempt in 1 2 3; do
+              if npx wrangler deploy --config .output/server/wrangler.json 2>&1 | tee deploy.log; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "::error::wrangler deploy failed 3 times for the PR preview — last error: $(grep -m1 -E 'ERROR|code:' deploy.log | sed 's/\x1b\[[0-9;]*m//g')"
+                exit 1
+              fi
+              echo "::warning::wrangler deploy attempt $attempt failed; retrying in 15s"
+              sleep 15
+            done
             # Fresh DB every time, so migrations are the whole schema — not incremental.
             # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
             # rewritten built config; the committed wrangler.jsonc carries <app>-db /
