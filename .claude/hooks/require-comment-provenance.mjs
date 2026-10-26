@@ -26,12 +26,14 @@ process.stdin.on('end', () => {
   // The first THREE non-empty lines: enough for `<type> **headline**` + an optional blank +
   // the provenance line, and still tight enough that the header can't be buried mid-comment.
   const head = body.split('\n').map(l => l.trim()).filter(l => l.length > 0).slice(0, 3)
-  if (head.some(l => l.includes('🤖'))) process.exit(0) // has a provenance header → allow
+  // #2534: the plain `> Agent (CI)` / `> Agent (interactive…` form is what we write now; the legacy 🤖 is still accepted.
+  if (head.some(l => l.includes('🤖') || /^>?\s*Agent \((CI|interactive)/.test(l))) process.exit(0) // has a provenance header → allow
 
   process.stderr.write(
-    'Blocked: agent GitHub comments must LEAD with a 🤖 provenance header (they post under ' +
-    '@pmcp and must not be mistaken for the human). Prepend a first line, e.g.:\n\n' +
-    '> 🤖 **Claude Code** · interactive agent, posted from `@pmcp`’s account (not Maarten) · _<one-line context>_\n\n' +
+    'Blocked: agent GitHub comments must LEAD with a provenance header (they post under ' +
+    '@pmcp and must not be mistaken for the human). Prepend a line, e.g.:\n\n' +
+    '> Agent (interactive, posted from `@pmcp`’s account, not Maarten) · _<one-line context>_\n\n' +
+    '(from CI: `> Agent (CI) · _<one-line context>_`)\n\n' +
     'Then re-send the comment.\n'
   )
   process.exit(2)

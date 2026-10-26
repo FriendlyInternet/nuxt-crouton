@@ -1,7 +1,7 @@
 ---
 name: owner-brief
 layer: method
-description: Shape every agent comment as a short typed brief the owner can triage in seconds — 🔴 issue · 💡 proposal · ✅ done · 🔀 choice · 🛠 action · 👀 review — with all the depth collapsed behind it. Enforced by the require-owner-brief hook. Use before posting ANY GitHub comment as an agent, or when asked to "make this shorter", "brief me", "just tell me what I need to do".
+description: Shape every agent comment as a short typed brief the owner can triage in seconds — Issue · Proposal · Done · Choice · Action · Review (plain words, no emoji) — with all the depth collapsed behind it. Enforced by the require-owner-brief hook. Use before posting ANY GitHub comment as an agent, or when asked to "make this shorter", "brief me", "just tell me what I need to do".
 allowed-tools: Bash, Read, Grep
 ---
 
@@ -18,22 +18,25 @@ So: **lead with a typed brief, collapse the rest.** Same comment, same content, 
 Pick exactly one. The last three are `ask-human`'s existing shapes — this is one vocabulary,
 not a parallel system; reach for that skill's templates when the brief is a hold.
 
-| | type | means | typical follow-up | may @mention? |
-|---|---|---|---|---|
-| 🔴 | **Issue** | something is broken or wrong | you decide whether it's worth fixing now | yes |
-| 💡 | **Proposal** | a suggestion you can take or drop | yes / no / later | yes |
-| ✅ | **Done** | landed and verified | nothing | **no** |
-| 🔀 | **Choice** | a real fork, needs your pick | `A` / `B` | yes |
-| 🛠 | **Action** | you must do something the agent can't | do it, then comment | yes |
-| 👀 | **Review** | approve or reject a diff/preview | ✅ / `lgtm` / changes | yes |
+| type | means | typical follow-up | may @mention? |
+|---|---|---|---|
+| **Issue:** | something is broken or wrong | you decide whether it's worth fixing now | yes |
+| **Proposal:** | a suggestion you can take or drop | yes / no / later | yes |
+| **Done:** | landed and verified | nothing | **no** |
+| **Choice:** | a real fork, needs your pick | `A` / `B` | yes |
+| **Action:** | you must do something the agent can't | do it, then comment | yes |
+| **Review:** | approve or reject a diff/preview | `lgtm` / changes | yes |
+
+Write the plain word, never an emoji (#2534): the owner finds emoji hard to scan. The gate still
+*reads* the old emoji form so earlier comments keep classifying; it only *teaches* the plain form.
 
 If two apply, pick the one that describes **what you need back**, not what you did. A bug you
-already fixed is ✅, not 🔴.
+already fixed is Done, not Issue.
 
 ## The other half: don't spend a mention on nothing
 
 **An @mention is a request for action.** Spending one on an FYI teaches the owner to ignore
-mentions, which costs far more than the notification. The gate refuses a ✅ carrying a live
+mentions, which costs far more than the notification. The gate refuses a Done carrying a live
 mention.
 
 **Where the noise actually came from.** Over the last 100 comments, 29 would notify the owner
@@ -44,7 +47,7 @@ and GitHub notifies anyway. That was **59% of every ping**.
 So the disclaimer now writes the handle in a **code span**:
 
 ```
-> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`'s account (not Maarten)
+> Agent (interactive, posted from `@pmcp`'s account)
 ```
 
 It renders identically and does not notify. Backticking it across the templates removes those
@@ -59,8 +62,8 @@ make a mention silent — backtick it, or don't write it.
 Visible part **≤700 chars and ≤10 non-empty lines**:
 
 ```
-🔴 **<one line: what happened>**
-> 🤖 <provenance header — its own hook requires this>
+Issue: **<one line: what happened>**
+> Agent (CI) · <context>   (its own hook requires this header)
 
 **You:** <the single next action — or "nothing, FYI">
 **Depth:** <link to the full comment / PR / run / report>
@@ -99,7 +102,7 @@ Nothing inside `<details>`, a code fence, the provenance blockquote, an HTML com
 the generated-by footer. **Collapse it, don't cut it** — if the escape hatch weren't real,
 agents would delete content instead of moving it, which is worse than the wall.
 
-A comment with **no 🤖 header** (a human's) is untouched at any length.
+A comment with **no `Agent (…)` header** (a human's) is untouched at any length.
 
 ## Two failure modes
 
@@ -132,6 +135,6 @@ states rather than inventing a second number.
 
 `ask-human` covers the **blocking** subset (🔀 / 🛠 / 👀) in depth: the `Needs:` line, the
 recommendation-first rule, the medium-selection table, `status:blocked`, push-before-you-block.
-This skill is the wrapper that makes **every** comment — including the non-blocking 🔴 / 💡 / ✅
+This skill is the wrapper that makes **every** comment — including the non-blocking Issue / Proposal / Done
 — arrive in the same scannable shape. When the brief is a hold, use `ask-human`'s template
 inside it.

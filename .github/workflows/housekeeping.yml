@@ -86,7 +86,7 @@ jobs:
             echo "::warning::RESEND_API_KEY / DIGEST_EMAIL_FROM / recipients not set — skipping email (run stays green)."
             exit 0
           fi
-          SUBJECT="🧹 Housekeeping digest — $(date -u +%F)"
+          SUBJECT="Housekeeping digest — $(date -u +%F)"
           # Comma-separated recipients → a JSON array for Resend's `to`.
           jq -n \
             --arg from "$EMAIL_FROM" \

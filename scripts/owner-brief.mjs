@@ -55,13 +55,22 @@ export const BRIEF_TYPES = [
   { emoji: '👀', name: 'Review', means: 'approve or reject a diff/preview', notifies: true },
 ]
 
-/** Emoji may carry a variation selector (️) — match with or without it. */
-const TYPE_MARKER = new RegExp(`(?:${BRIEF_TYPES.map((t) => t.emoji).join('|')})️?`, 'u')
+/**
+ * #2534 — the owner finds emoji hard to scan, so the PLAIN form (`Issue:`) is what we write.
+ * The legacy emoji form is still ACCEPTED while reading, so old comments keep classifying.
+ * The plain marker must open a line (optionally `##`/`**`) so prose like "Done: ..." mid-sentence
+ * does not count.
+ */
+const EMOJI_MARKER = new RegExp(`(?:${BRIEF_TYPES.map((t) => t.emoji).join('|')})️?`, 'u')
+const WORD_MARKER = new RegExp(`^[ \\t]*(?:#{1,6}[ \\t]+)?\\**(${BRIEF_TYPES.map((t) => t.name).join('|')}):`, 'mu')
+const TYPE_MARKER = { test: (v) => WORD_MARKER.test(v) || EMOJI_MARKER.test(v) }
 
 /** Which type did this comment declare? Null when none is present. */
 export function briefType(body) {
   const visible = visiblePart(body)
-  const m = visible.match(TYPE_MARKER)
+  const w = visible.match(WORD_MARKER)
+  if (w) return BRIEF_TYPES.find((t) => t.name === w[1]) || null
+  const m = visible.match(EMOJI_MARKER)
   if (!m) return null
   const hit = m[0].replace('️', '')
   return BRIEF_TYPES.find((t) => t.emoji === hit) || null
@@ -108,9 +117,9 @@ export function visiblePart(body) {
     .trim()
 }
 
-/** Agent comments all carry the 🤖 provenance header (its own hook enforces that). */
+/** Agent comments all carry a provenance header (its own hook enforces that): `> Agent (CI)` / `> Agent (interactive…)`, or the legacy 🤖. */
 export function isAgentComment(body) {
-  return /🤖/u.test(String(body || ''))
+  return /🤖/u.test(String(body || '')) || /^[ \t]*>[ \t]*Agent \((?:CI|interactive)/mu.test(String(body || ''))
 }
 
 /**
@@ -134,15 +143,15 @@ export function checkOwnerBrief(body, { handle = '@pmcp' } = {}) {
   // than the individual notification.
   const type = briefType(body)
   if (type && !type.notifies && notifiesOwner(body, handle)) {
-    return { ok: false, reason: 'ping-without-ask', chars, lines, type: type.emoji }
+    return { ok: false, reason: 'ping-without-ask', chars, lines, type: type.name }
   }
-  return { ok: true, chars, lines, type: type?.emoji }
+  return { ok: true, chars, lines, type: type?.name }
 }
 
 /** Name the fix, not just the violation — a gate that only says "no" costs a round-trip. */
 export function explain(verdict, { handle = '@pmcp' } = {}) {
   const vocab = BRIEF_TYPES.map(
-    (t) => `  ${t.emoji}  ${t.name.padEnd(9)} ${t.means}${t.notifies ? '' : '  [must NOT mention]'}`,
+    (t) => `  ${(t.name + ':').padEnd(10)} ${t.means}${t.notifies ? '' : '  [must NOT mention]'}`,
   ).join('\n')
 
   if (verdict.reason === 'ping-without-ask') {
@@ -174,8 +183,8 @@ ${vocab}
 
 Shape — visible part <=${MAX_VISIBLE_CHARS} chars and <=${MAX_VISIBLE_LINES} lines:
 
-  🔴 **<one line: what happened>**
-  > 🤖 <provenance>
+  Issue: **<one line: what happened>**
+  > Agent (CI) · <context>      (interactive: "Agent (interactive, posted from \`@pmcp\`'s account)")
 
   **You:** <the single next action — or "nothing, FYI">
   **Depth:** <link to the full comment / PR / run>
