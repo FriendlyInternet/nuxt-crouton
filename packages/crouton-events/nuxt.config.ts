@@ -34,5 +34,15 @@ export default defineNuxtConfig({
       }
     }
   },
-  compatibilityDate: '2024-10-16'
+  compatibilityDate: '2024-10-16',
+
+  // i18n translations
+  i18n: {
+    locales: [
+      { code: 'en', name: 'English', file: 'en.json' },
+      { code: 'nl', name: 'Nederlands', file: 'nl.json' },
+      { code: 'fr', name: 'Français', file: 'fr.json' }
+    ],
+    langDir: '../i18n/locales'
+  }
 })
