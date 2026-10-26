@@ -50,8 +50,8 @@ const croutonLayoutBlocks: CroutonLayoutBlockRegistry = {
   // Artists · New — inline create form for builderArtists.
   'artists-form': {
     id: 'artists-form',
-    name: 'Artists · New',
-    description: 'Create form for the artists collection',
+    name: 'Artists · Form',
+    description: 'Edit the artist picked in a list, or add a new one',
     icon: 'i-lucide-square-pen',
     component: 'CroutonLayoutForm',
     kind: 'atomic',
