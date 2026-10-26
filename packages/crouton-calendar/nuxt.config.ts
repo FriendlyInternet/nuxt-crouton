@@ -24,9 +24,7 @@ export default defineNuxtConfig({
       {
         path: join(currentDir, 'app/components'),
         prefix: 'CroutonCalendar',
-        global: true,
-        // Stubs - low priority so real implementations can override
-        priority: -1
+        global: true
       }
     ]
   },
