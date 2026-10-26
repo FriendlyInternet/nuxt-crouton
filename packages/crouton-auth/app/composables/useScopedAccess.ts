@@ -1,3 +1,4 @@
+import { DEFAULT_ERROR_MESSAGES, AUTH_ERROR_CODES } from '../utils/errors'
 /**
  * Scoped Access Composable
  *
@@ -232,7 +233,7 @@ export function useScopedAccess(
     }
     catch (err: unknown) {
       const fetchError = err as { status?: number; statusCode?: number; data?: { message?: string; statusMessage?: string }; statusMessage?: string }
-      error.value = fetchError.data?.message || fetchError.data?.statusMessage || fetchError.statusMessage || 'Login failed'
+      error.value = fetchError.data?.message || fetchError.data?.statusMessage || fetchError.statusMessage || DEFAULT_ERROR_MESSAGES[AUTH_ERROR_CODES.AUTH_INVALID_CREDENTIALS]
       errorStatus.value = fetchError.status ?? fetchError.statusCode ?? null
       return false
     }

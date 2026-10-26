@@ -165,13 +165,11 @@ export function errorMessageKey(code: AuthErrorCode): string {
 }
 
 /**
- * Translate an error code, falling back to the English default when the
- * locale has no entry (`t` returns the key unchanged for a missing key).
+ * Translate an error code. Every code has an `errors.<code>` entry in each
+ * locale (enforced by tests/unit/errors.i18n.test.ts).
  */
 export function translateErrorCode(code: AuthErrorCode, t: (key: string) => string): string {
-  const key = errorMessageKey(code)
-  const msg = t(key)
-  return msg && msg !== key ? msg : DEFAULT_ERROR_MESSAGES[code]
+  return t(errorMessageKey(code))
 }
 
 /**

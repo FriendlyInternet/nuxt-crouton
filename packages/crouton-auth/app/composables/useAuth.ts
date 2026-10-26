@@ -22,6 +22,7 @@
  */
 import type { User } from '../../types'
 import { useAuthClient, requireAuthClient } from '../../types/auth-client'
+import { AuthError, AUTH_ERROR_CODES } from '../utils/errors'
 
 export interface LoginCredentials {
   email: string
@@ -181,7 +182,7 @@ export function useAuth() {
       }
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Login failed')
+        throw new AuthError(AUTH_ERROR_CODES.AUTH_INVALID_CREDENTIALS, result.error.message)
       }
 
       if (debug) {
@@ -222,7 +223,7 @@ export function useAuth() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'OAuth login failed')
+        throw new AuthError(AUTH_ERROR_CODES.OAUTH_FAILED, result.error.message)
       }
 
       // OAuth redirects, so we don't need to refresh session here
@@ -251,7 +252,7 @@ export function useAuth() {
       })
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Magic link failed')
+        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
       }
 
       // Magic link sends email, user clicks link to complete login
@@ -293,7 +294,7 @@ export function useAuth() {
       }
 
       if (result.error) {
-        throw new Error(result.error.message ?? 'Registration failed')
+        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
       }
 
       if (debug) {

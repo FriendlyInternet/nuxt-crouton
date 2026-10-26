@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localizeError } from '../../utils/errors'
 /**
  * Team Settings Component
  *
@@ -57,7 +58,7 @@ async function handleLogoSelected(file: File | null) {
     if (result?.pathname) state.logo = `/images/${result.pathname}`
   }
   catch (e: unknown) {
-    notify.error(t('common.error'), { description: e instanceof Error ? e.message : String(e) })
+    notify.error(t('common.error'), { description: e instanceof Error ? localizeError(e, t) : String(e) })
   }
   finally {
     isUploadingLogo.value = false
@@ -143,7 +144,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
 
     emit('saved', team)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('teams.failedToSaveSettings')
+    const message = e instanceof Error ? localizeError(e, t) : t('teams.failedToSaveSettings')
     notify.error(t('common.error'), { description: message })
   } finally {
     internalLoading.value = false

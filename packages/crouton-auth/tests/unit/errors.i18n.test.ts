@@ -40,10 +40,6 @@ describe('error code -> locale key mapping', () => {
     expect(translateErrorCode(AUTH_ERROR_CODES.TEAM_NOT_FOUND, t)).toBe('Équipe introuvable')
   })
 
-  it('falls back to English when the key is missing', () => {
-    expect(translateErrorCode(AUTH_ERROR_CODES.TEAM_NOT_FOUND, k => k)).toBe('Team not found')
-  })
-
   it('keeps custom (server) messages, translates default ones', () => {
     const t = (k: string) => lookup(nl, k) ?? k
     expect(localizeError(new AuthError(AUTH_ERROR_CODES.AUTH_RATE_LIMITED), t)).toBe('Te veel pogingen. Probeer het later opnieuw.')

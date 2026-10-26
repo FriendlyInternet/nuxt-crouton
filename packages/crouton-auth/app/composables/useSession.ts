@@ -21,6 +21,7 @@
 import type { Ref } from 'vue'
 import type { Session, User, Team } from '../../types'
 import { useAuthClientSafe } from '../../types/auth-client'
+import { AuthError, AUTH_ERROR_CODES } from '../utils/errors'
 
 export interface SessionData {
   session: Session
@@ -125,7 +126,7 @@ async function fetchSessionOnClient(ctx: SessionContext): Promise<void> {
     if (debug) {
       console.log('[@crouton/auth] useSession: fetch error', error)
     }
-    errorState.value = new Error(error.message ?? 'Session error')
+    errorState.value = new AuthError(AUTH_ERROR_CODES.SERVER_ERROR, error.message)
     sessionState.value = null
     userState.value = null
   } else {
