@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localizeError } from '../../../utils/errors'
 /**
  * Accept Invitation Page
  *
@@ -70,7 +71,7 @@ async function handleAccept() {
       router.push('/')
     }, 1500)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('teams.failedToAcceptInvitation')
+    const message = localizeError(e, t)
     acceptError.value = message
     notify.error(t('common.error'), { description: message })
   } finally {
@@ -84,7 +85,7 @@ async function handleReject() {
     notify.success(t('teams.invitationDeclined'))
     await router.push('/')
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('teams.failedToDeclineInvitation')
+    const message = localizeError(e, t)
     notify.error(t('common.error'), { description: message })
   }
 }

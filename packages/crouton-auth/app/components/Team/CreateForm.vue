@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localizeError } from '../../utils/errors'
 /**
  * Team Create Form Component
  *
@@ -118,7 +119,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
     state.slug = ''
     autoSlug.value = true
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('teams.failedToCreateTeam')
+    const message = localizeError(e, t)
     notify.error(t('errors.generic'), { description: message })
   } finally {
     internalLoading.value = false
