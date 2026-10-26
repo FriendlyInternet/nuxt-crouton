@@ -28,7 +28,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<{
-  'update:modelValue': [value: Date | null]
   'select': [value: Date | null]
 }>()
 
