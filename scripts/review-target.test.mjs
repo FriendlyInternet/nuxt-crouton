@@ -5,9 +5,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { reviewTargets, judgeTargets, checkReviewTargets, explainStale, ghLookup } from './review-target.mjs'
+import { BRIEF_TYPES } from './owner-brief.mjs'
 
-const HEAD = '> Agent (interactive, posted from `@pmcp`\'s account, not Maarten) · _ctx_\n\n'
-const brief = (type, you, rest = '') => `${HEAD}${type}: headline.\n\n**You:** ${you}\n**Depth:** link${rest}`
+const HEAD = '> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`\'s account (not Maarten) · _ctx_\n\n'
+// The brief marker is whatever owner-brief reads (emoji since #2539) — use its own table, so a
+// future format change moves these tests with it instead of silently matching nothing.
+const MARK = Object.fromEntries(BRIEF_TYPES.map(t => [t.name, t.emoji]))
+const brief = (type, you, rest = '') => `${HEAD}${MARK[type]} **headline.**\n\n**You:** ${you}\n**Depth:** link${rest}`
 
 test('targets come from the You: line of an asking brief — #N and /pull/N', () => {
   assert.deepEqual(reviewTargets(brief('Review', 'approve #2500 or open https://github.com/o/r/pull/2496')), [2500, 2496])
@@ -21,7 +25,7 @@ test('a Done brief asks nothing — no targets even if it names PRs', () => {
   assert.deepEqual(reviewTargets(brief('Done', 'nothing — #2495 merged')), [])
 })
 
-test('legacy emoji briefs still count', () => {
+test('a literal Review brief, written as an agent would post it', () => {
   assert.deepEqual(reviewTargets(`> 🤖 x\n\n👀 **Review this.**\n\n**You:** approve #12\n`), [12])
 })
 
