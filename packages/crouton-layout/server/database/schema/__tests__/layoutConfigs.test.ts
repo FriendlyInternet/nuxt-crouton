@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * layout_configs is TEAM-scoped: the same layout id (e.g. `default`) must be savable
  * by every team, each keeping its own row (#2543). The table is built from this
