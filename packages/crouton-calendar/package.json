@@ -1,0 +1,43 @@
+{
+  "name": "@fyit/crouton-calendar",
+  "version": "0.1.0",
+  "description": "Swipeable week/month calendar views for nuxt-crouton - opt-in addon layer",
+  "type": "module",
+  "main": "./nuxt.config.ts",
+  "exports": {
+    ".": "./nuxt.config.ts"
+  },
+  "files": [
+    "app",
+    "nuxt.config.ts",
+    "crouton.manifest.ts"
+  ],
+  "scripts": {
+    "typecheck": "npx nuxt typecheck"
+  },
+  "peerDependencies": {
+    "@fyit/crouton-core": "workspace:*",
+    "nuxt": "^3.0.0 || ^4.0.0",
+    "@nuxt/ui": "^3.0.0"
+  },
+  "keywords": [
+    "nuxt",
+    "nuxt-layer",
+    "calendar",
+    "crouton"
+  ],
+  "author": "FYIT",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FriendlyInternet/nuxt-crouton.git",
+    "directory": "packages/crouton-calendar"
+  },
+  "bugs": {
+    "url": "https://github.com/FriendlyInternet/nuxt-crouton/issues"
+  },
+  "homepage": "https://github.com/FriendlyInternet/nuxt-crouton#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}
