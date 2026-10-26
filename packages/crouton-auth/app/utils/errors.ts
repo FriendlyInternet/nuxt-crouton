@@ -70,6 +70,23 @@ export const AUTH_ERROR_CODES = {
   BILLING_PAYMENT_FAILED: 'billing.payment_failed',
   BILLING_PLAN_NOT_FOUND: 'billing.plan_not_found',
 
+  // Action failures (generic fallback when the server gives no message)
+  AUTH_LOGIN_FAILED: 'auth.login_failed',
+  AUTH_MAGIC_LINK_FAILED: 'auth.magic_link_failed',
+  AUTH_REGISTRATION_FAILED: 'auth.registration_failed',
+  AUTH_SESSION_ERROR: 'auth.session_error',
+  TEAM_SWITCH_FAILED: 'team.switch_failed',
+  TEAM_CREATE_FAILED: 'team.create_failed',
+  TEAM_UPDATE_FAILED: 'team.update_failed',
+  TEAM_DELETE_FAILED: 'team.delete_failed',
+  TEAM_INVITE_FAILED: 'team.invite_failed',
+  TEAM_REMOVE_MEMBER_FAILED: 'team.remove_member_failed',
+  TEAM_UPDATE_ROLE_FAILED: 'team.update_role_failed',
+  TEAM_LEAVE_FAILED: 'team.leave_failed',
+  INVITATION_CANCEL_FAILED: 'invitation.cancel_failed',
+  INVITATION_ACCEPT_FAILED: 'invitation.accept_failed',
+  INVITATION_REJECT_FAILED: 'invitation.reject_failed',
+
   // Network errors
   NETWORK_ERROR: 'error.network',
   NETWORK_TIMEOUT: 'error.timeout',
@@ -143,6 +160,23 @@ export const DEFAULT_ERROR_MESSAGES: Record<AuthErrorCode, string> = {
   [AUTH_ERROR_CODES.BILLING_SUBSCRIPTION_NOT_FOUND]: 'No active subscription found',
   [AUTH_ERROR_CODES.BILLING_PAYMENT_FAILED]: 'Payment failed. Please update your payment method.',
   [AUTH_ERROR_CODES.BILLING_PLAN_NOT_FOUND]: 'Plan not found',
+
+  // Action failures
+  [AUTH_ERROR_CODES.AUTH_LOGIN_FAILED]: 'Login failed',
+  [AUTH_ERROR_CODES.AUTH_MAGIC_LINK_FAILED]: 'Magic link failed',
+  [AUTH_ERROR_CODES.AUTH_REGISTRATION_FAILED]: 'Registration failed',
+  [AUTH_ERROR_CODES.AUTH_SESSION_ERROR]: 'Session error',
+  [AUTH_ERROR_CODES.TEAM_SWITCH_FAILED]: 'Failed to switch team',
+  [AUTH_ERROR_CODES.TEAM_CREATE_FAILED]: 'Failed to create team',
+  [AUTH_ERROR_CODES.TEAM_UPDATE_FAILED]: 'Failed to update team',
+  [AUTH_ERROR_CODES.TEAM_DELETE_FAILED]: 'Failed to delete team',
+  [AUTH_ERROR_CODES.TEAM_INVITE_FAILED]: 'Failed to invite member',
+  [AUTH_ERROR_CODES.TEAM_REMOVE_MEMBER_FAILED]: 'Failed to remove member',
+  [AUTH_ERROR_CODES.TEAM_UPDATE_ROLE_FAILED]: 'Failed to update role',
+  [AUTH_ERROR_CODES.TEAM_LEAVE_FAILED]: 'Failed to leave team',
+  [AUTH_ERROR_CODES.INVITATION_CANCEL_FAILED]: 'Failed to cancel invitation',
+  [AUTH_ERROR_CODES.INVITATION_ACCEPT_FAILED]: 'Failed to accept invitation',
+  [AUTH_ERROR_CODES.INVITATION_REJECT_FAILED]: 'Failed to reject invitation',
 
   // Network
   [AUTH_ERROR_CODES.NETWORK_ERROR]: 'Network error. Please check your connection.',

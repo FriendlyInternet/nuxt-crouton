@@ -97,15 +97,12 @@
     "maxTeamsReached": "Je hebt het maximale aantal teams bereikt.",
     "teamCreated": "Team aangemaakt",
     "teamCreatedDescription": "{name} is succesvol aangemaakt.",
-    "failedToCreateTeam": "Team aanmaken mislukt",
     "urlSlugHintPrefix": "Je team URL wordt:",
     "yourSlug": "jouw-slug",
     "roleUpdated": "Rol bijgewerkt",
     "roleUpdatedDescription": "De rol van het lid is bijgewerkt.",
-    "failedToUpdateRole": "Rol bijwerken mislukt",
     "memberRemoved": "Lid verwijderd",
     "memberRemovedDescription": "Het lid is uit het team verwijderd.",
-    "failedToRemoveMember": "Lid verwijderen mislukt",
     "name": "Naam",
     "email": "E-mail",
     "role": "Rol",
@@ -118,7 +115,6 @@
     "permissionDeniedDescription": "Alleen teameigenaren en beheerders kunnen instellingen wijzigen.",
     "settingsSaved": "Instellingen opgeslagen",
     "settingsSavedDescription": "Teaminstellingen zijn bijgewerkt.",
-    "failedToSaveSettings": "Instellingen opslaan mislukt",
     "invitationPage": {
       "joinedTeam": "Je bent lid geworden van {team}.",
       "loading": "Uitnodiging laden...",
@@ -140,11 +136,7 @@
       "haveAccount": "Ik heb al een account",
       "acceptInvitation": "Uitnodiging accepteren"
     },
-    "failedToAcceptInvitation": "Uitnodiging accepteren mislukt",
-    "failedToDeclineInvitation": "Uitnodiging weigeren mislukt",
     "failedToResendInvitation": "Uitnodiging opnieuw versturen mislukt",
-    "failedToCancelInvitation": "Uitnodiging annuleren mislukt",
-    "failedToDeleteTeam": "Team verwijderen mislukt",
     "emailTemplates": "E-mailsjablonen",
     "unknownMember": "Onbekend",
     "slugPlaceholder": "mijn-team",
@@ -335,7 +327,11 @@
       "passkey_authentication_failed": "Authenticeren met passkey mislukt",
       "oauth_cancelled": "Inloggen is geannuleerd",
       "oauth_failed": "Inloggen met provider mislukt. Probeer het opnieuw.",
-      "oauth_account_exists": "Er bestaat al een account met dit e-mailadres. Probeer in te loggen met een andere methode."
+      "oauth_account_exists": "Er bestaat al een account met dit e-mailadres. Probeer in te loggen met een andere methode.",
+      "login_failed": "Inloggen mislukt",
+      "magic_link_failed": "Magic link mislukt",
+      "registration_failed": "Registratie mislukt",
+      "session_error": "Sessiefout"
     },
     "team": {
       "not_found": "Team niet gevonden",
@@ -351,7 +347,15 @@
       "slug_already_exists": "Er bestaat al een team met deze URL",
       "invitation_not_found": "Uitnodiging niet gevonden",
       "invitation_expired": "Deze uitnodiging is verlopen",
-      "invitation_already_accepted": "Deze uitnodiging is al geaccepteerd"
+      "invitation_already_accepted": "Deze uitnodiging is al geaccepteerd",
+      "switch_failed": "Team wisselen mislukt",
+      "create_failed": "Team aanmaken mislukt",
+      "update_failed": "Team bijwerken mislukt",
+      "delete_failed": "Team verwijderen mislukt",
+      "invite_failed": "Lid uitnodigen mislukt",
+      "remove_member_failed": "Lid verwijderen mislukt",
+      "update_role_failed": "Rol bijwerken mislukt",
+      "leave_failed": "Team verlaten mislukt"
     },
     "billing": {
       "not_enabled": "Facturering is niet ingeschakeld",
@@ -364,6 +368,11 @@
       "timeout": "Time-out van het verzoek. Probeer het opnieuw.",
       "server": "Serverfout. Probeer het later opnieuw.",
       "unknown": "Er is een onverwachte fout opgetreden"
+    },
+    "invitation": {
+      "cancel_failed": "Uitnodiging annuleren mislukt",
+      "accept_failed": "Uitnodiging accepteren mislukt",
+      "reject_failed": "Uitnodiging weigeren mislukt"
     }
   }
 }

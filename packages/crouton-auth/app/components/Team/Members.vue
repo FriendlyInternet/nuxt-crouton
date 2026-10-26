@@ -127,7 +127,7 @@ async function handleRoleChange(memberId: string, role: MemberRole) {
       notify.success(t('teams.roleUpdated'), { description: t('teams.roleUpdatedDescription') })
     }
   } catch (e: unknown) {
-    const message = e instanceof Error ? localizeError(e, t) : t('teams.failedToUpdateRole')
+    const message = localizeError(e, t)
     notify.error(t('errors.generic'), { description: message })
   } finally {
     loadingMemberId.value = null
@@ -142,7 +142,7 @@ async function handleRemove(memberId: string) {
     selectedMemberIds.value.delete(memberId)
     notify.success(t('teams.memberRemoved'), { description: t('teams.memberRemovedDescription') })
   } catch (e: unknown) {
-    const message = e instanceof Error ? localizeError(e, t) : t('teams.failedToRemoveMember')
+    const message = localizeError(e, t)
     notify.error(t('errors.generic'), { description: message })
   } finally {
     loadingMemberId.value = null

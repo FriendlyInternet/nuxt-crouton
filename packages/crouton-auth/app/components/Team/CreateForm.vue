@@ -119,7 +119,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
     state.slug = ''
     autoSlug.value = true
   } catch (e: unknown) {
-    const message = e instanceof Error ? localizeError(e, t) : t('teams.failedToCreateTeam')
+    const message = localizeError(e, t)
     notify.error(t('errors.generic'), { description: message })
   } finally {
     internalLoading.value = false

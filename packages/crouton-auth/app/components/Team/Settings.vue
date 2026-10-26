@@ -144,7 +144,7 @@ async function onSubmit(event: FormSubmitEvent<typeof state>) {
 
     emit('saved', team)
   } catch (e: unknown) {
-    const message = e instanceof Error ? localizeError(e, t) : t('teams.failedToSaveSettings')
+    const message = localizeError(e, t)
     notify.error(t('common.error'), { description: message })
   } finally {
     internalLoading.value = false

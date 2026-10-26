@@ -261,7 +261,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.TEAM_ACCESS_DENIED, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_SWITCH_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to switch team')
@@ -284,7 +284,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.TEAM_ACCESS_DENIED, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_SWITCH_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to switch team')
@@ -314,7 +314,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_CREATE_FAILED, result.error.message)
       }
 
       if (!result.data) {
@@ -359,7 +359,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_UPDATE_FAILED, result.error.message)
       }
 
       if (!result.data) {
@@ -396,7 +396,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_DELETE_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to delete team')
@@ -460,7 +460,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_INVITE_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to invite member')
@@ -492,7 +492,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_REMOVE_MEMBER_FAILED, result.error.message)
       }
 
       // Refresh members list
@@ -528,7 +528,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_UPDATE_ROLE_FAILED, result.error.message)
       }
 
       // Refresh members list
@@ -569,7 +569,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.TEAM_LEAVE_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to leave team')
@@ -620,7 +620,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.INVITATION_CANCEL_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to cancel invitation')
@@ -643,7 +643,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.INVITATION_ACCEPT_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to accept invitation')
@@ -666,7 +666,7 @@ export function useTeam() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.INVITATION_REJECT_FAILED, result.error.message)
       }
     } catch (e: unknown) {
       const message = extractErrorMessage(e, 'Failed to reject invitation')

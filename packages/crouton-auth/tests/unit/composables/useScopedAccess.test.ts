@@ -246,7 +246,7 @@ describe('useScopedAccess', () => {
       })
 
       expect(result).toBe(false)
-      expect(error.value).toBe('Invalid PIN')
+      expect(error.value?.message).toBe('Invalid PIN')
       expect(isAuthenticated.value).toBe(false)
     })
 

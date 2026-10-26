@@ -97,15 +97,12 @@
     "maxTeamsReached": "You have reached the maximum number of teams.",
     "teamCreated": "Team created",
     "teamCreatedDescription": "{name} has been created successfully.",
-    "failedToCreateTeam": "Failed to create team",
     "urlSlugHintPrefix": "Your team URL will be:",
     "yourSlug": "your-slug",
     "roleUpdated": "Role updated",
     "roleUpdatedDescription": "Member role has been updated.",
-    "failedToUpdateRole": "Failed to update role",
     "memberRemoved": "Member removed",
     "memberRemovedDescription": "Member has been removed from the team.",
-    "failedToRemoveMember": "Failed to remove member",
     "name": "Name",
     "email": "Email",
     "role": "Role",
@@ -118,7 +115,6 @@
     "permissionDeniedDescription": "Only team owners and admins can update settings.",
     "settingsSaved": "Settings saved",
     "settingsSavedDescription": "Team settings have been updated.",
-    "failedToSaveSettings": "Failed to save settings",
     "invitationPage": {
       "joinedTeam": "You have joined {team}.",
       "loading": "Loading invitation...",
@@ -140,11 +136,7 @@
       "haveAccount": "I already have an account",
       "acceptInvitation": "Accept invitation"
     },
-    "failedToAcceptInvitation": "Failed to accept invitation",
-    "failedToDeclineInvitation": "Failed to decline invitation",
     "failedToResendInvitation": "Failed to resend invitation",
-    "failedToCancelInvitation": "Failed to cancel invitation",
-    "failedToDeleteTeam": "Failed to delete team",
     "emailTemplates": "Email templates",
     "unknownMember": "Unknown",
     "slugPlaceholder": "my-team",
@@ -335,7 +327,11 @@
       "passkey_authentication_failed": "Failed to authenticate with passkey",
       "oauth_cancelled": "Sign in was cancelled",
       "oauth_failed": "Sign in with provider failed. Please try again.",
-      "oauth_account_exists": "An account with this email already exists. Try signing in with a different method."
+      "oauth_account_exists": "An account with this email already exists. Try signing in with a different method.",
+      "login_failed": "Login failed",
+      "magic_link_failed": "Magic link failed",
+      "registration_failed": "Registration failed",
+      "session_error": "Session error"
     },
     "team": {
       "not_found": "Team not found",
@@ -351,7 +347,15 @@
       "slug_already_exists": "A team with this URL already exists",
       "invitation_not_found": "Invitation not found",
       "invitation_expired": "This invitation has expired",
-      "invitation_already_accepted": "This invitation has already been accepted"
+      "invitation_already_accepted": "This invitation has already been accepted",
+      "switch_failed": "Failed to switch team",
+      "create_failed": "Failed to create team",
+      "update_failed": "Failed to update team",
+      "delete_failed": "Failed to delete team",
+      "invite_failed": "Failed to invite member",
+      "remove_member_failed": "Failed to remove member",
+      "update_role_failed": "Failed to update role",
+      "leave_failed": "Failed to leave team"
     },
     "billing": {
       "not_enabled": "Billing is not enabled",
@@ -364,6 +368,11 @@
       "timeout": "Request timed out. Please try again.",
       "server": "Server error. Please try again later.",
       "unknown": "An unexpected error occurred"
+    },
+    "invitation": {
+      "cancel_failed": "Failed to cancel invitation",
+      "accept_failed": "Failed to accept invitation",
+      "reject_failed": "Failed to reject invitation"
     }
   }
 }

@@ -126,7 +126,7 @@ async function fetchSessionOnClient(ctx: SessionContext): Promise<void> {
     if (debug) {
       console.log('[@crouton/auth] useSession: fetch error', error)
     }
-    errorState.value = new AuthError(AUTH_ERROR_CODES.SERVER_ERROR, error.message)
+    errorState.value = new AuthError(AUTH_ERROR_CODES.AUTH_SESSION_ERROR, error.message)
     sessionState.value = null
     userState.value = null
   } else {

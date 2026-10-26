@@ -182,7 +182,7 @@ export function useAuth() {
       }
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.AUTH_INVALID_CREDENTIALS, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.AUTH_LOGIN_FAILED, result.error.message)
       }
 
       if (debug) {
@@ -252,7 +252,7 @@ export function useAuth() {
       })
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.AUTH_MAGIC_LINK_FAILED, result.error.message)
       }
 
       // Magic link sends email, user clicks link to complete login
@@ -294,7 +294,7 @@ export function useAuth() {
       }
 
       if (result.error) {
-        throw new AuthError(AUTH_ERROR_CODES.UNKNOWN_ERROR, result.error.message)
+        throw new AuthError(AUTH_ERROR_CODES.AUTH_REGISTRATION_FAILED, result.error.message)
       }
 
       if (debug) {

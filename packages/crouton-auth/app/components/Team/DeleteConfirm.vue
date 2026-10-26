@@ -78,7 +78,7 @@ async function handleDelete() {
       await navigateTo('/')
     }
   } catch (e: unknown) {
-    const message = e instanceof Error ? localizeError(e, t) : t('teams.failedToDeleteTeam')
+    const message = localizeError(e, t)
     notify.error(t('common.error'), { description: message })
   } finally {
     internalLoading.value = false
