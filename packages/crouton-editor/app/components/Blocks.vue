@@ -506,7 +506,8 @@ defineExpose({
       v-if="editorInstance && showToolbar"
       :editor="(editorInstance as any)"
       :items="toolbarItems"
-      class="border-b border-default px-2 py-1.5 flex-shrink-0"
+      class="border-b border-default px-2 py-1.5 flex-shrink-0 flex-nowrap overflow-x-auto overscroll-x-contain touch-pan-x"
+      :ui="{ group: 'shrink-0' }"
     />
 
     <!-- Editor with slash command suggestion menu -->
