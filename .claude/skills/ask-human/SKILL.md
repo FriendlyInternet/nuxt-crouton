@@ -133,6 +133,14 @@ Rules that make it work:
   without notifying. GitHub linkifies mentions inside blockquotes and `<details>` too; code
   spans and fenced blocks are the only places it doesn't. (#2081: 17 of the last 29
   notifications were that disclaimer line and nothing else.)
+- **Point at something live (#2111).** If the ask names a PR for the owner to look at, that PR
+  must still be open — never send them to a merged/closed one (the #2039 case). If it's gone,
+  name the open PR that replaced it, or say plainly that the target is gone. When the change has
+  a **per-PR preview** (`<app>-pr<N>`, its URL is in the PR's 🚀 preview comment, #2020), point
+  there, not at shared `<app>.pmcp.dev` staging — staging may not contain the change yet. The
+  `require-live-review-target` hook refuses a dead PR in the `**You:**` line on the MCP comment
+  path; when posting with `gh` (CI, shell), run `node scripts/review-target.mjs <body-file>`
+  first — it exits 1 with the reason.
 - **Push before you block.** If you've written anything, `git push -u origin <branch>` first
   and name that branch under *Status* — an unpushed worktree is lost on stop (#639).
 - Then apply `status:blocked` and **stop**.
