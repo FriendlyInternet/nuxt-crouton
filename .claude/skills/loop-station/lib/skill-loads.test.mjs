@@ -56,3 +56,23 @@ test('empty input → no events', () => {
   assert.deepEqual(skillLoadsFromSession(''), [])
   assert.deepEqual(skillLoadsFromSession(undefined), [])
 })
+
+import { toolStatsFromSession, formatToolStats } from './skill-loads.mjs'
+
+test('toolStats counts raw tool names, .claude reads (incl. capitalised Read) and bash skill touches', () => {
+  const text = [
+    rec([read('/w/repo/.claude/skills/commit/SKILL.md'), { type: 'toolCall', name: 'Read', arguments: { file_path: '/w/repo/.claude/skills/a11y/SKILL.md' } }]),
+    rec([{ type: 'toolCall', name: 'bash', arguments: { command: 'cat .claude/skills/x/SKILL.md' } }, { type: 'toolCall', name: 'bash', arguments: { command: 'ls' } }]),
+    rec([read('/w/packages/x/index.ts')]),
+    'not json',
+  ].join('\n')
+  const s = toolStatsFromSession(text)
+  assert.deepEqual(s.calls, { read: 2, Read: 1, bash: 2 })
+  assert.deepEqual(s.claudeReads, ['.claude/skills/commit/SKILL.md', '.claude/skills/a11y/SKILL.md'])
+  assert.equal(s.bashSkillTouches, 1)
+  assert.equal(formatToolStats(s), 'tools: read×2 bash×2 Read×1 · .claude reads: 2 · bash touching skills: 1')
+})
+
+test('toolStats on empty input is zeroed', () => {
+  assert.deepEqual(toolStatsFromSession(''), { calls: {}, claudeReads: [], bashSkillTouches: 0 })
+})
