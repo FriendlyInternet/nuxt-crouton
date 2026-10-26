@@ -328,7 +328,7 @@ jobs:
                 --config .output/server/wrangler.json --remote
             fi
           else
-            pnpm run cf:staging | tee deploy.log
+            pnpm run cf:staging 2>&1 | tee deploy.log
           fi
           # Surface the deployed URL for the PR comment, seed-login + review steps.
           # Prefer the configured custom-domain URL (staging-url/production-url input):
@@ -392,6 +392,17 @@ jobs:
       # correctly. Apps that depend on the bundle set `secrets.required` in their
       # deploy.config.json → require-worker-secrets makes an empty resolution FAIL
       # loudly here instead of deploying a Worker with no secrets (#1094).
+      # TEMPORARY, gallery branch only (#2462): job logs live on a blob host the agent sandbox
+      # can't reach, so on failure put the last 60 lines of deploy.log into ONE annotation,
+      # which the checks API returns. Not for main.
+      - name: Surface deploy log tail (debug, #2462)
+        if: failure()
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        run: |
+          [ -f deploy.log ] || { echo "::error::no deploy.log"; exit 0; }
+          tail -60 deploy.log | sed 's/\x1b\[[0-9;]*m//g' | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}' > tail.txt
+          echo "::error title=deploy.log tail::$(cat tail.txt)"
+
       - name: Sync explicit Worker secrets (optional override)
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
