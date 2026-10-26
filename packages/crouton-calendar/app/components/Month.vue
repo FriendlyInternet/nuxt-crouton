@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DateValue } from '@internationalized/date'
-import { CalendarDate, getLocalTimeZone, isSameMonth, today } from '@internationalized/date'
+import { CalendarDate, getLocalTimeZone, today } from '@internationalized/date'
 
 /**
  * CroutonCalendarMonth
@@ -26,6 +26,9 @@ const now = today(getLocalTimeZone())
 const selected = ref<DateValue | undefined>(new CalendarDate(now.year, now.month, 1))
 const placeholder = ref<DateValue>(new CalendarDate(now.year, now.month, 1))
 const swipeEl = ref<HTMLElement | null>(null)
+
+const isSameMonth = (a: { year: number, month: number }, b: { year: number, month: number }) =>
+  a.year === b.year && a.month === b.month
 
 const { slide, style: trackStyle } = useSlideSwipe(swipeEl, {
   peek: true,
