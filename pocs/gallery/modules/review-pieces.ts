@@ -34,7 +34,7 @@ export function selectPieces(components: Pick<Component, 'pascalName' | 'filePat
     const prev = seen.get(c.pascalName)
     // Same name from two layers: keep the higher priority (the one the app would actually render).
     if (!prev || (c.priority ?? 0) > prev.priority) {
-      seen.set(c.pascalName, { name: c.pascalName, pkg: m[1], file: real, priority: c.priority ?? 0 })
+      seen.set(c.pascalName, { name: c.pascalName, pkg: m[1]!, file: real, priority: c.priority ?? 0 })
     }
   }
   return [...seen.values()]
