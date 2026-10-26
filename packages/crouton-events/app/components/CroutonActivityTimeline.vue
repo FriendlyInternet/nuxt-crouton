@@ -46,7 +46,7 @@ const groupedEvents = computed<DateGroup[]>(() => {
     eventDate.setHours(0, 0, 0, 0)
 
     let label: string
-    const dateKey = eventDate.toISOString().split('T')[0]
+    const dateKey = eventDate.toISOString().split('T')[0]!
 
     if (eventDate.getTime() === today.getTime()) {
       label = 'Today'

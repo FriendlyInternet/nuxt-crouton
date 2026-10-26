@@ -10,12 +10,6 @@ if (process.env.NODE_ENV !== 'production' && !_dependencies.has('crouton-events'
 
 export default defineNuxtConfig({
 
-  hub: {
-    migrations: {
-      dir: './server/database/migrations'
-    }
-  },
-
   // Runtime config for event tracking
   runtimeConfig: {
     public: {
