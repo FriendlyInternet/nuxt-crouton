@@ -13,6 +13,8 @@
 // Pass: method !== 'create' (updates/etc. are untouched), OR the body contains "Dedup-checked:".
 // Block: exit 2 with a reminder (PreToolUse exit 2 cancels the call, stderr → the agent).
 
+import { hasTestSteps } from '../../scripts/test-card.mjs'
+
 let raw = ''
 process.stdin.on('data', c => { raw += c })
 process.stdin.on('end', () => {
@@ -23,7 +25,15 @@ process.stdin.on('end', () => {
   if (input.method && input.method !== 'create') process.exit(0)
 
   const body = input.body || ''
-  if (/Dedup-checked:/i.test(body)) process.exit(0) // attested → allow
+  if (/Dedup-checked:/i.test(body)) {
+    // An epic's body becomes the owner's test card (#2519) — refuse one with no phone steps.
+    const labels = Array.isArray(input.labels) ? input.labels : []
+    if (labels.includes('epic') && !hasTestSteps(body)) {
+      process.stderr.write('Blocked: epic body has no "## 🧪 How to test" section with steps — write 2–3 steps the owner can do on a phone\n')
+      process.exit(2)
+    }
+    process.exit(0) // attested → allow
+  }
 
   process.stderr.write(
     'Blocked: a new GitHub issue must be dedup-checked first (issue-first → duplicates are the ' +

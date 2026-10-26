@@ -12,7 +12,7 @@ import { PlanError } from './apply-decompose-plan.mjs'
 
 const PLAN = (over = {}) => ({
   title: 'Ship the thing',
-  body: 'Goal.\n\nDedup-checked: searched «thing» → none',
+  body: 'Goal.\n\n## 🧪 How to test\n1. Open the app\n2. Check the thing\n\nDedup-checked: searched «thing» → none',
   labels: ['pkg:crouton-core'],
   children: [
     { title: 'A', body: 'first', labels: ['type:feat', 'pkg:crouton-core'] },
@@ -23,6 +23,13 @@ const PLAN = (over = {}) => ({
 
 test('refuses an epic body without a Dedup-checked line', () => {
   assert.throws(() => parseScaffoldPlan(PLAN({ body: 'no receipt' })), PlanError)
+})
+
+test('refuses an epic body without a How to test section', () => {
+  assert.throws(
+    () => parseScaffoldPlan(PLAN({ body: 'Goal.\n\nDedup-checked: searched «x» → none' })),
+    e => e instanceof PlanError && /How to test/.test(e.message),
+  )
 })
 
 test('adds the epic label and derives the slug', () => {

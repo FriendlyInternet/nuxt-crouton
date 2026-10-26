@@ -30,6 +30,8 @@ The hypothesis has **4 parts**:
 
 A good epic body therefore *opens* with a `## Hypothesis` block, then the 👤/🤖 sections expand it, then the check closes it. See epic #359 and #357 / issues #358, #360, #361 for worked examples.
 
+An epic body **must** carry a `## 🧪 How to test` section of 2–3 phone steps — it becomes the owner's test card (#2519). `scripts/epic-scaffold.mjs` and the `require-issue-dedup` hook refuse an epic without one.
+
 ## Writing for two audiences (REQUIRED — applies to issues, PRs, and commits)
 
 Everything that lands in GitHub is written for **two readers**, in this order:
