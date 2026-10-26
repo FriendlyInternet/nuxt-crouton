@@ -166,62 +166,56 @@ const hasHug = computed(() =>
   props.node.type === 'split' && !inPlace.value && !shouldStack.value && hugAlongAxis.value.some(Boolean),
 )
 
-// --- VIEW-mode CSS grid (#1178) --------------------------------------------------
-// A read-only (`!interactive`) split renders as CSS Grid built entirely from the
-// declared sizing contract — proportions, floors, hug — so it needs NO ResizeObserver.
-// Each child track is `minmax(<floor>px, <size>fr)` (proportion + min-width in one), or
-// `auto` for a hug pane. The row→column STACK, which drifted to a JS `useElementSize`
-// measurement, becomes a pure container query at the split's own derived soft-floor
-// (the sum of child floors along the axis) — emitted as a per-split `@container` rule
-// with the literal threshold (queries can't read `var()`). Result: the live path — a
-// served page or the Preview — reflows with zero observers (the POC's CSS fallback).
-const viewCqName = `crtsplit-${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+// --- VIEW-mode layout (#1178, #2567) ----------------------------------------------
+// A read-only (`!interactive`) split is laid out from the declared sizing contract
+// alone — proportions, floors, hug — with no ResizeObserver and no generated CSS.
+//
+// HORIZONTAL: a wrapping flex row that switches to a stack at the split's own soft
+// floor (the sum of its children's floors). Each fill child's basis is
+// `(var(--stack-at) - 100%) * 999`: hugely negative above the threshold (→ 0, so the
+// children share the row by flex-grow = their proportions) and hugely positive below
+// it (each child takes a full row → all stack at once). The threshold is an inline
+// CSS variable, so the server and the browser render the same thing. (It replaced a
+// per-split `<style>` container query whose text the server HTML-escaped: a phone saw
+// the wrong arrangement until hydration, plus a mismatch on every load — #2567.)
+// `100%` is the split's own width, so a split inside a narrow pane stacks too.
+//
+// VERTICAL: a grid whose rows FLOW to content (`auto`, floored at min-height): a page
+// render scrolls as one document instead of carving the frame into `fr` slabs (#983).
 const childSizings = computed(() =>
   props.node.type === 'split' ? props.node.children.map(c => deriveSizing(c, blocks.value)) : [],
 )
-const viewTracks = computed(() => {
-  if (props.node.type !== 'split') return ''
-  const horizontal = props.node.direction === 'horizontal'
-  const n = props.node.children.length
-  return props.node.children
-    .map((c, i) => {
-      if (hugAlongAxis.value[i]) return 'auto'
-      // Horizontal split → COLUMN widths keep their proportion (`fr`), floored at
-      // the block's min-width. Vertical split → ROW heights FLOW to content
-      // (`auto`, floored at min-height): a page render sizes to its content and
-      // scrolls as one document, rather than carving the frame into equal `fr`
-      // slabs (the admin fill). (#983 page render — the view path is `!interactive`.)
-      if (horizontal) {
-        const floor = Math.round(childSizings.value[i]!.hardMinWidth)
-        const size = c.defaultSize ?? (100 / n)
-        return `minmax(${floor}px, ${size}fr)`
-      }
-      return `minmax(${Math.round(childSizings.value[i]!.minHeight)}px, auto)`
-    })
-    .join(' ')
-})
+const viewHorizontal = computed(() => props.node.type === 'split' && props.node.direction === 'horizontal')
+const viewStackThreshold = computed(() =>
+  viewHorizontal.value ? Math.round(deriveSizing(props.node, blocks.value).softMinWidth) : 0,
+)
 const viewGridStyle = computed(() => {
   // `minHeight:100%` (not a fixed `height`) so a short page still fills its frame
-  // but a tall one grows past it and the frame (the served page / the board card)
-  // scrolls as one — no nested scrollbars. (#983)
-  const base = { display: 'grid', gap: '1px', minHeight: '100%', width: '100%' } as Record<string, string>
-  if (props.node.type !== 'split') return base
-  return props.node.direction === 'horizontal'
-    ? { ...base, gridTemplateColumns: viewTracks.value, gridAutoFlow: 'column' }
-    : { ...base, gridTemplateRows: viewTracks.value, gridAutoFlow: 'row' }
+  // but a tall one grows past it and the frame scrolls as one — no nested scrollbars. (#983)
+  const base = { gap: '1px', minHeight: '100%', width: '100%' } as Record<string, string>
+  if (props.node.type !== 'split') return { ...base, display: 'grid' }
+  if (viewHorizontal.value) {
+    return { ...base, display: 'flex', flexWrap: 'wrap', '--stack-at': `${viewStackThreshold.value}px` }
+  }
+  const rows = props.node.children
+    .map((_, i) => (hugAlongAxis.value[i] ? 'auto' : `minmax(${Math.round(childSizings.value[i]!.minHeight)}px, auto)`))
+    .join(' ')
+  return { ...base, display: 'grid', gridTemplateRows: rows }
 })
-// Stack threshold: the split's own soft floor (only a HORIZONTAL split stacks — a
-// vertical one is already a column). Below it, collapse to a single column.
-const viewStackThreshold = computed(() =>
-  props.node.type === 'split' && props.node.direction === 'horizontal'
-    ? Math.round(deriveSizing(props.node, blocks.value).softMinWidth)
-    : 0,
-)
-const viewStackCss = computed(() =>
-  viewStackThreshold.value > 0
-    ? `@container ${viewCqName} (max-width:${viewStackThreshold.value}px){[data-cq="${viewCqName}"]{grid-template-columns:1fr!important;grid-template-rows:none!important;grid-auto-flow:row!important}}`
-    : '',
-)
+function viewChildStyle(i: number): Record<string, string> {
+  if (props.node.type !== 'split' || !viewHorizontal.value) return {}
+  // A hug pane keeps its content width (no block declares width-hug today).
+  if (hugAlongAxis.value[i]) return { flex: '0 0 auto' }
+  const child = props.node.children[i]!
+  const size = child.defaultSize ?? (100 / props.node.children.length)
+  const floor = Math.round(childSizings.value[i]!.hardMinWidth)
+  return {
+    flexGrow: String(size),
+    flexShrink: '1',
+    flexBasis: 'calc((var(--stack-at) - 100%) * 999)',
+    minWidth: `min(${floor}px, 100%)`,
+  }
+}
 
 // --- FLIP reflow on structural change (#943) ------------------------------------
 // When this split's children change (a pane detached, a block inserted), reka-ui rebuilds
@@ -341,39 +335,31 @@ watch(
        admin STACKED / HUG flex layouts below — those fill a frame (`h-full`, `flex:1 1 0`),
        and on a frameless page WebKit sizes a `flex:1 1 0` column item to its basis, ZERO
        (a form vanished on iOS, #2490), where Chromium sizes it to content. -->
-  <!-- Split, VIEW mode (#1178) — a read-only render (`interactive=false`: a served page /
-       Preview) has nothing to drag, so it renders as pure CSS Grid built from the declared
-       sizing contract, with ZERO ResizeObserver: each child track is `minmax(<floor>px,
-       <size>fr)` (proportion + min-width in one) or `auto` for a hug pane, and the row→column
-       stack is a container query at the split's derived soft-floor (a per-split `@container`
-       rule, since queries can't read `var()`). No reka SplitterGroup (its internal observer
-       flooded the console) and no `useElementSize` (the JS stack-measurement that drifted from
-       the POC's CSS fallback, #983). The wrapper is the query container; the grid child carries
-       `data-cq` so the emitted rule targets it. Excludes in-place-collapse (still reka). -->
+  <!-- Split, VIEW mode (#1178, #2567) — a read-only render (`interactive=false`: a served
+       page / Preview) has nothing to drag, so it is laid out from the declared sizing contract
+       with ZERO ResizeObserver and NO generated CSS (see `viewGridStyle` / `viewChildStyle`):
+       a horizontal split is a wrapping flex row that stacks at its soft floor via the inline
+       `--stack-at` variable; a vertical split is a content-flow grid. No reka SplitterGroup
+       (its observer flooded the console). Excludes in-place-collapse (still reka). -->
   <div
     v-else-if="node.type === 'split' && !interactive && !inPlace"
-    :style="{ containerType: 'inline-size', containerName: viewCqName, height: '100%', width: '100%' }"
+    ref="viewGridRef"
+    class="croutonviewgrid"
+    :style="viewGridStyle"
   >
     <div
-      ref="viewGridRef"
-      class="croutonviewgrid"
-      :data-cq="viewCqName"
-      :style="viewGridStyle"
+      v-for="(child, i) in node.children"
+      :key="i"
+      data-crouton-pane
+      class="croutonpane min-h-0 min-w-0 overflow-hidden"
+      :style="viewChildStyle(i)"
     >
-      <div
-        v-for="(child, i) in node.children"
-        :key="i"
-        data-crouton-pane
-        class="croutonpane min-h-0 min-w-0 overflow-hidden"
-      >
-        <CroutonLayoutRenderer
-          :node="child"
-          :interactive="false"
-          @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
-        />
-      </div>
+      <CroutonLayoutRenderer
+        :node="child"
+        :interactive="false"
+        @layout-change="(n: LayoutSplit, s: number[]) => emit('layoutChange', n, s)"
+      />
     </div>
-    <component :is="'style'" v-if="viewStackCss">{{ viewStackCss }}</component>
   </div>
 
   <!-- Split, STACKED — too narrow to fit side-by-side, so the columns reflow to a
