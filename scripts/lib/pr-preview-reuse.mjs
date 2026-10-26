@@ -25,6 +25,27 @@ export function previewKvTitle(worker, binding) {
   return `${worker}-${binding}`.toLowerCase()
 }
 
+/** The id of an existing D1 database with this name — wrangler has used both keys across versions. */
+function existingD1Id(d1List, name) {
+  const hit = (d1List || []).find(d => d.name === name)
+  return hit ? (hit.uuid || hit.id || null) : null
+}
+
+/**
+ * Pin the ids of storage that already exists; collect what's missing.
+ * @param {Array<object>} bindings  one binding section of the built config (mutated)
+ * @param {string} idField          `database_id` (D1) or `id` (KV)
+ * @param {(b: object) => string|null} lookup  the existing id for a binding, or null
+ */
+function pinExisting(bindings, idField, lookup, out) {
+  for (const b of bindings || []) {
+    if (b[idField]) continue
+    const id = lookup(b)
+    if (id) { b[idField] = id; out.reused.push(`${b.binding} → ${id}`) }
+    else out.fresh.push(b.binding)
+  }
+}
+
 /**
  * @param {object} config  parsed BUILT preview config (mutated in place)
  * @param {{ d1List?: Array<{name?:string, uuid?:string, id?:string}>, kvList?: Array<{title?:string, id?:string}> }} lists
@@ -32,26 +53,10 @@ export function previewKvTitle(worker, binding) {
  * @returns {{ reused: string[], fresh: string[] }}
  */
 export function reuseExisting(config, { d1List = [], kvList = [] } = {}) {
-  const reused = []
-  const fresh = []
-
-  for (const b of config?.d1_databases || []) {
-    if (b.database_id) continue
-    const hit = (d1List || []).find(d => d.name === b.database_name)
-    // wrangler has used both keys across versions (same as pr-preview-db-id).
-    const id = hit && (hit.uuid || hit.id)
-    if (id) { b.database_id = id; reused.push(`${b.binding} → ${id}`) }
-    else fresh.push(b.binding)
-  }
-
-  for (const b of config?.kv_namespaces || []) {
-    if (b.id) continue
-    const id = findKvId(kvList, previewKvTitle(config.name, b.binding))
-    if (id) { b.id = id; reused.push(`${b.binding} → ${id}`) }
-    else fresh.push(b.binding)
-  }
-
-  return { reused, fresh }
+  const out = { reused: [], fresh: [] }
+  pinExisting(config?.d1_databases, 'database_id', b => existingD1Id(d1List, b.database_name), out)
+  pinExisting(config?.kv_namespaces, 'id', b => findKvId(kvList, previewKvTitle(config.name, b.binding)), out)
+  return out
 }
 
 /** A KV namespace's id by its title, or null. Teardown deletes by id, never by title. */
