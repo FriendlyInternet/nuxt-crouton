@@ -1349,10 +1349,13 @@ jobs:
           # #2548: which tools did pi call, and were the repo MCP servers blocked? Tells "pi ignored
           # the skill guides" apart from "telemetry miscounts reads", and confirms #2445.
           echo "::notice title=pi tools::$(node .claude/skills/loop-station/pi-telemetry.mjs --tool-stats "$SESSION_DIR" 2>&1 | tail -n1)"
-          if [ -n "$PI_EXEC_LOG" ] && [ -f "$PI_EXEC_LOG" ] && grep -aq 'Project servers blocked' "$PI_EXEC_LOG"; then
+          # No log = no evidence either way: say "unknown", never a false "not blocked".
+          if [ -z "$PI_EXEC_LOG" ] || [ ! -f "$PI_EXEC_LOG" ]; then
+            echo "::notice title=pi mcp::unknown — no pi log to check (${PI_EXEC_LOG:-path not set})"
+          elif grep -aq 'Project servers blocked' "$PI_EXEC_LOG"; then
             echo "::notice title=pi mcp::blocked — $(grep -a 'Project servers blocked' "$PI_EXEC_LOG" | head -n1 | cut -c1-200)"
           else
-            echo "::notice title=pi mcp::not blocked (log: ${PI_EXEC_LOG:-none})"
+            echo "::notice title=pi mcp::not blocked ($(wc -l < "$PI_EXEC_LOG") log lines checked)"
           fi
           if [ -d "$TELE_DIR" ]; then
             node .claude/skills/loop-station/pi-telemetry.mjs "$TELE_DIR" --ledger > pi-telemetry-out/ledger-rows.jsonl 2>/dev/null
