@@ -28,6 +28,8 @@ import type { BuilderPage } from '~~/layers/builder/collections/pages/types'
 definePageMeta({ middleware: ['auth'] })
 
 const route = useRoute()
+// List + Form blocks of one collection share which record is open (#2598).
+provideCollectionSelections()
 const pageId = computed(() => String(route.params.pageId))
 const { items: pages } = await useCollectionQuery('builderPages')
 const page = computed(() => (pages.value as BuilderPage[]).find(p => p.id === pageId.value) ?? null)
