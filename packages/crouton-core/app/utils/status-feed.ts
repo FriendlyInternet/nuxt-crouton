@@ -10,6 +10,7 @@ export interface StatusMessage {
   timestamp: number
   collection?: string
   operation?: string
+  itemId?: string
   seen: boolean
   retry?: () => void
 }
@@ -40,38 +41,42 @@ export interface TeamEventRow {
   timestamp: string | number
   operation: string
   collectionName: string
+  userId?: string
+  itemId?: string
   userName?: string
 }
 
-/** Remote events this close to a local entry for the same collection+operation are the same change. */
-const OWN_EVENT_WINDOW_MS = 10_000
-
 /**
- * Merge team events into the local history: dedupe (by id, and against our own
- * just-pushed changes), newest first, capped at STATUS_RECENT_MAX.
+ * Merge team events into the local history: dedupe (by id, and our own events
+ * against in-memory entries for the same collection+item+operation), newest first, capped at STATUS_RECENT_MAX.
  */
-export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[], t: Translate): StatusMessage[] {
+export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[], t: Translate, currentUserId?: string): StatusMessage[] {
   const known = new Set(history.map(m => m.id))
   const fromEvents: StatusMessage[] = []
   for (const ev of events) {
     const id = `event-${ev.id}`
     const timestamp = new Date(ev.timestamp).getTime()
     if (known.has(id) || Number.isNaN(timestamp)) continue
-    const isOwn = history.some(m =>
+    const isOwn = !!currentUserId && ev.userId === currentUserId
+    if (isOwn && ev.itemId && history.some(m =>
       !m.id.startsWith('event-')
       && m.collection === ev.collectionName
-      && m.operation === ev.operation
-      && Math.abs(m.timestamp - timestamp) <= OWN_EVENT_WINDOW_MS,
-    )
-    if (isOwn) continue
+      && m.itemId === ev.itemId
+      && m.operation === ev.operation,
+    )) continue
     known.add(id)
-    const userName = ev.userName?.split(' ')[0]
+    const userName = isOwn ? undefined : ev.userName?.split(' ')[0]
     const { text, icon } = mutationStatus({ operation: ev.operation, collection: ev.collectionName, userName }, t)
-    fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, seen: true })
+    fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true })
   }
   return [...history, ...fromEvents]
     .sort((a, b) => b.timestamp - a.timestamp)
     .slice(0, STATUS_RECENT_MAX)
+}
+
+/** Drop entries that came from team events (used when the team changes). */
+export function dropTeamEvents(history: StatusMessage[]): StatusMessage[] {
+  return history.filter(m => !m.id.startsWith('event-'))
 }
 
 /** Warnings/errors the user has not yet seen. */

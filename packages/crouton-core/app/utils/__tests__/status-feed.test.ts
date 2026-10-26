@@ -6,6 +6,7 @@ import {
   markAllStatusSeen,
   mutationStatus,
   mergeTeamEvents,
+  dropTeamEvents,
   STATUS_RECENT_MAX,
   type StatusMessage,
 } from '../status-feed'
@@ -109,9 +110,31 @@ describe('mergeTeamEvents', () => {
     expect(mergeTeamEvents(once, [ev('e1', 100000)], t)).toHaveLength(1)
   })
 
-  it('drops events that echo our own recent change', () => {
-    const own = msg({ id: 'a', timestamp: 100000, collection: 'shopProducts', operation: 'update' })
-    expect(mergeTeamEvents([own], [ev('e1', 103000)], t).map(m => m.id)).toEqual(['a'])
+  it('shows own events (by userId) as "You", others by first name', () => {
+    const out = mergeTeamEvents([], [
+      ev('e1', 100000, { userId: 'u1', userName: 'Me Myself' }),
+      ev('e2', 90000, { userId: 'u2' }),
+    ], t, 'u1')
+    expect(out[0]!.text).toContain('You')
+    expect(out[0]!.text).not.toContain('Me')
+    expect(out[1]!.text).toContain('Bo')
+  })
+
+  it('drops own events already in memory (same collection+item+operation)', () => {
+    const own = msg({ id: 'a', timestamp: 100000, collection: 'shopProducts', operation: 'update', itemId: 'i1' })
+    const out = mergeTeamEvents([own], [ev('e1', 103000, { userId: 'u1', itemId: 'i1' })], t, 'u1')
+    expect(out.map(m => m.id)).toEqual(['a'])
+  })
+
+  it('keeps another user\'s event even if it matches a local entry', () => {
+    const own = msg({ id: 'a', timestamp: 100000, collection: 'shopProducts', operation: 'update', itemId: 'i1' })
+    const out = mergeTeamEvents([own], [ev('e1', 103000, { userId: 'u2', itemId: 'i1' })], t, 'u1')
+    expect(out.map(m => m.id)).toEqual(['event-e1', 'a'])
+  })
+
+  it('clears event entries on a team switch, keeping local ones', () => {
+    const h = mergeTeamEvents([msg({ id: 'a', timestamp: 1000 })], [ev('e1', 100000)], t)
+    expect(dropTeamEvents(h).map(m => m.id)).toEqual(['a'])
   })
 
   it('caps at STATUS_RECENT_MAX', () => {

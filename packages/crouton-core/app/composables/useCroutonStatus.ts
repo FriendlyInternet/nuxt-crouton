@@ -1,6 +1,7 @@
 // Module-scoped flag — not useState, which leaks SSR→client and skips client registration
 let hookRegistered = false
 let lastEventsFetch = 0
+let eventsTeamId: string | undefined
 
 const EVENTS_REFRESH_MIN_MS = 60_000
 const EVENTS_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
@@ -43,6 +44,15 @@ function getUserFirstName(): string | undefined {
     const fullName = user.value?.name
     if (!fullName) return undefined
     return fullName.split(' ')[0]
+  } catch {
+    return undefined
+  }
+}
+
+/** Current user's id, for recognising our own events. */
+function getUserId(): string | undefined {
+  try {
+    return useState<{ id?: string } | null>('crouton-auth-user').value?.id
   } catch {
     return undefined
   }
@@ -97,13 +107,18 @@ export function useCroutonStatus() {
     if (!useCroutonApps().hasApp('events')) return
     const teamId = useTeamContext().getTeamId()
     const now = Date.now()
+    if (teamId !== eventsTeamId) {
+      eventsTeamId = teamId
+      lastEventsFetch = 0
+      history.value = dropTeamEvents(history.value)
+    }
     if (!teamId || (!force && now - lastEventsFetch < EVENTS_REFRESH_MIN_MS)) return
     lastEventsFetch = now
     try {
       const rows = await $fetch<TeamEventRow[]>(`/api/teams/${teamId}/crouton-events`, {
         query: { pageSize: EVENTS_LIMIT, dateFrom: new Date(now - EVENTS_WINDOW_MS).toISOString() },
       })
-      history.value = mergeTeamEvents(history.value, rows, t)
+      history.value = mergeTeamEvents(history.value, rows, t, getUserId())
     } catch {
       // Feed falls back to own changes
     }
@@ -127,7 +142,7 @@ export function useCroutonStatus() {
         itemName: extractItemName(collection, data, result),
         userName: getUserFirstName(),
       }, t)
-      push({ text, icon, type: 'success', collection, operation })
+      push({ text, icon, type: 'success', collection, operation, itemId: itemIds?.[0] })
     })
   }
 
