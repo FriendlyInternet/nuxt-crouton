@@ -18,6 +18,7 @@ OSS). Drill into `packages/<dir>/CLAUDE.md` for detail once a candidate is spott
 | `@fyit/crouton-audio` | `packages/crouton-audio` | Audio player layer for Crouton with waveform visualization (wraps WaveSurfer.js) |
 | `@fyit/crouton-auth` | `packages/crouton-auth` | Authentication layer for Nuxt applications using Better Auth with teams, passkeys, and 2FA support |
 | `@fyit/crouton-bookings` | `packages/crouton-bookings` | Booking system layer for Nuxt Crouton - slot-based and inventory-based reservations |
+| `@fyit/crouton-calendar` | `packages/crouton-calendar` | Swipeable week/month calendar for nuxt-crouton - opt-in addon layer |
 | `@fyit/crouton-charts` | `packages/crouton-charts` | Chart visualizations for nuxt-crouton - collection-driven charts powered by nuxt-charts |
 | `@fyit/crouton-cli` | `packages/crouton-cli` | CLI for Nuxt Crouton - Generate complete CRUD collections with API, components, and database schema |
 | `@fyit/crouton-collab` | `packages/crouton-collab` | Real-time collaboration layer for Nuxt Crouton using Yjs CRDTs |
