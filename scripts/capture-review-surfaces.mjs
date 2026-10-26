@@ -255,8 +255,12 @@ async function captureRejection({ status, text, title, file, browser }) {
   return flat === false ? null : 'could not verify the frame is not blank'
 }
 
-const okReason = (file, surface) =>
-  file.split('/').pop() + (surface.clickFailed ? ` (click selector not found: ${surface.clickFailed} — captured as-is)` : '')
+// A function declaration, not a const: main() runs at module top level before the
+// declarations below it, so a const here threw "Cannot access 'okReason' before
+// initialization" and turned every successful capture into an error (PR #2601).
+function okReason(file, surface) {
+  return file.split('/').pop() + (surface.clickFailed ? ` (click selector not found: ${surface.clickFailed} — captured as-is)` : '')
+}
 
 /** True while the page is Nuxt's dev loading template or no app content is visible yet. */
 async function isLoading(page) {
