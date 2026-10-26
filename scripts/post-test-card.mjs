@@ -51,14 +51,17 @@ async function isDeployed(epicNumber) {
 }
 
 function appInfo(labels) {
-  const app = labels.find(n => n.startsWith('app:'))?.slice(4) || ''
+  const appId = labels.find(n => n.startsWith('app:'))?.slice(4) || ''
+  const pocId = appId ? '' : labels.find(n => n.startsWith('poc:'))?.slice(4) || ''
+  const id = appId || pocId
   let stagingUrl = ''
-  if (app) {
+  if (id) {
     try {
-      stagingUrl = JSON.parse(readFileSync(`apps/${app}/deploy.config.json`, 'utf8')).stagingUrl || ''
+      stagingUrl = JSON.parse(readFileSync(`${pocId ? 'pocs' : 'apps'}/${id}/deploy.config.json`, 'utf8')).stagingUrl || ''
     } catch { /* app without deploy config — card says so */ }
   }
-  return { app, stagingUrl, reviewAccount: app ? `review+${app}-main@example.com` : '' }
+  const app = id.charAt(0).toUpperCase() + id.slice(1)
+  return { app, stagingUrl, reviewAccount: id ? `review+${id}-main@example.com` : '' }
 }
 
 const epics = (await gh(`/repos/${OWNER}/${NAME}/issues?state=open&labels=epic&per_page=100`))
