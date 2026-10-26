@@ -223,25 +223,14 @@ async function captureSurface(context, origin, surface, file) {
     const title = await page.title().catch(() => '')
     const bodyText = await page.evaluate(() => document.body?.textContent?.slice(0, 400) || '').catch(() => '')
     await page.screenshot({ path: resolve(file), fullPage: true })
-    if (looksLikeLoadingScreen({ text: bodyText, title })) {
-      log(`✗ ${surface.name}: capture timed out on Nuxt's loading screen — discarding`)
-      report(surface.name, 'rejected', "stuck on Nuxt's loading screen")
-      return null
-    }
-    if (looksLikeErrorPage({ status, text: bodyText, title })) {
-      log(`✗ ${surface.name}: looks like an error page (status ${status}, "${title}") — discarding`)
-      report(surface.name, 'rejected', `error page (status ${status}, title "${title}")`)
-      return null
-    }
-    // Fail closed: if the frame can't be decoded to check it, it is NOT evidence (#2526).
-    const flat = await frameIsFlat(file, context.browser())
-    if (flat !== false) {
-      log(flat === true ? `✗ ${surface.name}: blank/flat capture — discarding` : `✗ ${surface.name}: could not verify the frame is not blank — discarding`)
-      report(surface.name, 'rejected', flat === true ? 'blank/flat capture' : 'could not verify the frame is not blank')
+    const rejection = await captureRejection({ status, text: bodyText, title, file, browser: context.browser() })
+    if (rejection) {
+      log(`✗ ${surface.name}: ${rejection} — discarding`)
+      report(surface.name, 'rejected', rejection)
       return null
     }
     log(`✓ ${surface.name} → ${file}`)
-    report(surface.name, 'ok', file.split('/').pop() + (surface.clickFailed ? ` (click selector not found: ${surface.clickFailed} — captured as-is)` : ''))
+    report(surface.name, 'ok', okReason(file, surface))
     return file
   } catch (e) {
     log(`⚠ ${surface.name}: capture failed (non-fatal): ${e.message.split('\n')[0]}`)
@@ -251,6 +240,18 @@ async function captureSurface(context, origin, surface, file) {
     await page?.close().catch(() => {})
   }
 }
+
+/** Why a screenshot is NOT evidence (loader, error page, blank frame), or null when it is. Fails closed: an undecodable frame is rejected (#2526). */
+async function captureRejection({ status, text, title, file, browser }) {
+  if (looksLikeLoadingScreen({ text, title })) return "stuck on Nuxt's loading screen"
+  if (looksLikeErrorPage({ status, text, title })) return `error page (status ${status}, title "${title}")`
+  const flat = await frameIsFlat(file, browser)
+  if (flat === true) return 'blank/flat capture'
+  return flat === false ? null : 'could not verify the frame is not blank'
+}
+
+const okReason = (file, surface) =>
+  file.split('/').pop() + (surface.clickFailed ? ` (click selector not found: ${surface.clickFailed} — captured as-is)` : '')
 
 /** True while the page is Nuxt's dev loading template or no app content is visible yet. */
 async function isLoading(page) {
