@@ -55,3 +55,33 @@ export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', r
     'Reply `ok`, or `not ok: <what is wrong>`.'
   ].join('\n')
 }
+
+/** First prose paragraph of an epic body (skips "Part of", headings, markers) — "what changed". */
+export function extractSummary(body = '', max = 400) {
+  const paras = body.split(/\n\s*\n/).map(p => p.trim()).filter(p => p && !/^(#|<!--|Part of|---|>|[-*]\s|\d+\.\s)/.test(p))
+  return (paras[0] || '').replace(/\s*\n\s*/g, ' ').slice(0, max)
+}
+
+/**
+ * The one mail per epic that is ready to test (#2518): app name first, what changed, numbered
+ * steps, the one-click sign-in link (email-only, #2358). Plain text, no emojis. PURE.
+ */
+export function buildTestMail({ epicNumber, title = '', app = '', staging = true, summary = '', checks = [], loginUrl = '', epicUrl = '' } = {}) {
+  const steps = ['Open the link below and sign in.', ...(checks.length ? checks : [`Try what "${title}" changed.`])]
+  const subject = `[${app || 'App'}] Test: ${title || `epic #${epicNumber}`}`
+  const text = [
+    `App: ${app || '(see epic)'}${staging ? ' (staging)' : ''}`,
+    '',
+    'What changed:',
+    summary || title,
+    '',
+    'What to test:',
+    ...steps.map((s, i) => `${i + 1}. ${s}`),
+    '',
+    `Open and sign in: ${loginUrl || '(no sign-in link available)'}`,
+    '',
+    'Reply on the epic: ok, or not ok: <what is wrong>',
+    epicUrl
+  ].join('\n')
+  return { subject, text }
+}
