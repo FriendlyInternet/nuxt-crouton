@@ -21,7 +21,7 @@
  * `panelMinSizePct`. Splitter primitives are SSR-safe (no <ClientOnly> needed);
  * the floor falls back to the authored `minSize` until the group has measured.
  */
-import { computed, inject, nextTick, provide, ref, useId, watch, type Ref } from 'vue'
+import { computed, inject, nextTick, provide, ref, watch, type CSSProperties, type Ref } from 'vue'
 import { useElementSize, unrefElement } from '@vueuse/core'
 import { SplitterGroup, SplitterPanel, SplitterResizeHandle } from 'reka-ui'
 import type { LayoutNode, LayoutSplit } from '@fyit/crouton-core/app/types/layout'
@@ -189,10 +189,10 @@ const viewHorizontal = computed(() => props.node.type === 'split' && props.node.
 const viewStackThreshold = computed(() =>
   viewHorizontal.value ? Math.round(deriveSizing(props.node, blocks.value).softMinWidth) : 0,
 )
-const viewGridStyle = computed(() => {
+const viewGridStyle = computed<CSSProperties>(() => {
   // `minHeight:100%` (not a fixed `height`) so a short page still fills its frame
   // but a tall one grows past it and the frame scrolls as one — no nested scrollbars. (#983)
-  const base = { gap: '1px', minHeight: '100%', width: '100%' } as Record<string, string>
+  const base: CSSProperties = { gap: '1px', minHeight: '100%', width: '100%' }
   if (props.node.type !== 'split') return { ...base, display: 'grid' }
   if (viewHorizontal.value) {
     return { ...base, display: 'flex', flexWrap: 'wrap', '--stack-at': `${viewStackThreshold.value}px` }
@@ -202,7 +202,7 @@ const viewGridStyle = computed(() => {
     .join(' ')
   return { ...base, display: 'grid', gridTemplateRows: rows }
 })
-function viewChildStyle(i: number): Record<string, string> {
+function viewChildStyle(i: number): CSSProperties {
   if (props.node.type !== 'split' || !viewHorizontal.value) return {}
   // A hug pane keeps its content width (no block declares width-hug today).
   if (hugAlongAxis.value[i]) return { flex: '0 0 auto' }
