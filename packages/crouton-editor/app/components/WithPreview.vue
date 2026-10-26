@@ -53,7 +53,8 @@
                 <UEditorToolbar
                   :editor="editor"
                   :items="toolbarItems"
-                  class="p-2 border-b border-default"
+                  class="p-2 border-b border-default flex-nowrap overflow-x-auto overscroll-x-contain touch-pan-x"
+                  :ui="{ group: 'shrink-0' }"
                 />
 
                 <slot :editor="editor" />
