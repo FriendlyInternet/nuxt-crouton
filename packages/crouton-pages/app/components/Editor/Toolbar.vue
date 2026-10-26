@@ -66,8 +66,6 @@ interface Props {
   showClose?: boolean
   /** Whether to show the leading back arrow (mobile workspace slideover) */
   showBack?: boolean
-  /** Page title shown for context in the bar (truncated) */
-  pageTitle?: string
   /** Current page ID (used for delete check) */
   pageId?: string | null
   /** Public URL for the open-in-public button */
@@ -77,7 +75,6 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
   showClose: false,
   showBack: false,
-  pageTitle: '',
   pageId: null,
   publicUrl: null,
   hasAi: false
@@ -173,8 +170,8 @@ const overflowItems = computed(() => {
 </script>
 
 <template>
-  <!-- One consolidated bar: back · status · visibility · name · ⋯ · save -->
-  <div class="@container flex items-center gap-1 min-h-11 px-2 py-1.5 border-b border-default bg-elevated/30">
+  <!-- One consolidated bar: back · status · visibility · tabs · ⋯ · save -->
+  <div class="@container flex flex-wrap @2xl:flex-nowrap items-center gap-1 min-h-11 px-2 py-1.5 border-b border-default bg-elevated/30">
     <!-- Back (mobile workspace slideover only — desktop keeps the sidebar visible) -->
     <UButton
       v-if="showBack"
@@ -268,10 +265,11 @@ const overflowItems = computed(() => {
       </template>
     </UDropdownMenu>
 
-    <!-- Page name — context, takes the remaining room and truncates -->
-    <span class="min-w-0 flex-1 truncate px-1 text-sm font-medium text-default">
-      {{ pageTitle || t('pages.editor.untitledShort', 'Untitled') }}
-    </span>
+    <!-- Tabs (#2114) — share the row with the controls from @2xl up; on a phone
+         the slot drops to its own full-width row below (order-last + basis-full). -->
+    <div class="order-last basis-full min-w-0 @2xl:order-none @2xl:basis-0 @2xl:flex-1 overflow-x-auto">
+      <slot />
+    </div>
 
     <!-- Trailing actions: ⋯ overflow · cancel(create) · save · close -->
     <!-- Overflow (preview / open / AI / delete) — one clean icon menu -->

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import type { DateValue } from '@internationalized/date'
-import { CalendarDate, getLocalTimeZone, today } from '@internationalized/date'
+import { getLocalTimeZone, today } from '@internationalized/date'
 import type { Booking, LocationData, SettingsData, SlotItem } from '../types/booking'
 
 interface FilterState {
@@ -62,20 +61,18 @@ function getLocationTitle(location: LocationData): string {
     || t('bookings.untitled')
 }
 
-// Ref for WeekStrip control
+// Ref for week control
 const weekStripRef = ref<{ goToDate: (date: Date) => void, goToToday: () => void } | null>(null)
+
+// Ref for the month grid (CroutonCalendarMonth)
+const monthRef = ref<{ goToDate: (date: Date) => void, goToToday: () => void } | null>(null)
 
 // Navigate to a specific date (works for both week and month view)
 function goToDate(date: Date) {
   if (currentView.value === 'week') {
     weekStripRef.value?.goToDate(date)
   } else {
-    // Update month view to show the month containing this date
-    monthFocusDate.value = new CalendarDate(
-      date.getFullYear(),
-      date.getMonth() + 1,
-      date.getDate(),
-    )
+    monthRef.value?.goToDate(date)
   }
 }
 
@@ -97,62 +94,8 @@ defineExpose({
 // View is controlled by parent via v-model:view
 const currentView = computed(() => props.view)
 
-// For month view: track focused month (no selection)
-const monthFocusDate = ref<DateValue | undefined>(new CalendarDate(
-  new Date().getFullYear(),
-  new Date().getMonth() + 1,
-  1
-))
-
-// Day activation comes through UCalendar's own cellTrigger (a real <button>,
-// so mouse AND keyboard land here) — never through handlers on the #day slot
-// content, which would need its own widget role and nest interactive controls.
-// Param typed to UCalendar's emit union (single | range | multiple | null);
-// this calendar is single-date, so anything else resolves to undefined.
-// Swipe on the month grid → previous/next month (#2485)
-const monthPlaceholder = ref<DateValue>(new CalendarDate(
-  new Date().getFullYear(),
-  new Date().getMonth() + 1,
-  1,
-))
-const monthSwipeEl = ref<HTMLElement | null>(null)
-// prev · current · next months side by side: the neighbour is under the finger
-// while dragging, so the grid is never empty (#2531). Header and weekday row
-// are rendered once above the track and stay put.
-const { slide: slideMonth, style: monthTrackStyle } = useSlideSwipe(monthSwipeEl, {
-  peek: true,
-  onNext: () => { monthPlaceholder.value = monthPlaceholder.value.add({ months: 1 }) },
-  onPrev: () => { monthPlaceholder.value = monthPlaceholder.value.subtract({ months: 1 }) },
-})
-
-const monthPanels = computed(() => [-1, 0, 1].map(offset => ({
-  offset,
-  placeholder: monthPlaceholder.value.add({ months: offset }),
-})))
-
-const monthLabel = computed(() =>
-  new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' })
-    .format(monthPlaceholder.value.toDate(getLocalTimeZone())),
-)
-
-// Monday-first narrow weekday labels (week-starts-on is 1)
-const monthWeekdays = computed(() => {
-  const fmt = new Intl.DateTimeFormat(locale.value, { weekday: 'short' })
-  // 2024-01-01 is a Monday
-  return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2024, 0, 1 + i)))
-})
-
-function monthGoToToday() {
-  const d = today(getLocalTimeZone())
-  monthPlaceholder.value = new CalendarDate(d.year, d.month, 1)
-}
-
-function onMonthDayActivate(value: any) {
-  const single: DateValue | undefined
-    = value && !Array.isArray(value) && typeof value.toDate === 'function' ? value : undefined
-  monthFocusDate.value = single
-  if (!single) return
-  const date = single.toDate(getLocalTimeZone())
+// Only days with bookings are selectable in the month grid
+function onMonthSelect(date: Date) {
   if (hasBookings(date)) emit('select', date)
 }
 
@@ -521,17 +464,40 @@ const monthCellHeight = computed(() => {
 <template>
   <div class="flex flex-col gap-3">
     <!-- Week View -->
-    <CroutonBookingsWeekStrip
+    <CroutonCalendarWeek
       v-if="currentView === 'week'"
       ref="weekStripRef"
       size="md"
       :selected-dates="selectedDates"
-      :creating-at-date="creatingAtDate"
+      :active-date="creatingAtDate"
       :is-date-disabled="isDateUnavailable ? isDayUnavailable : undefined"
-      :is-day-fully-booked="isDayFullyBooked"
       @select="onWeekSelect"
-      @day-click="onWeekDayClick"
     >
+      <!-- Add booking tab (slides down from under the date block on hover) -->
+      <!-- Deliberately a raw button (#1410): a calendar hover cell whose
+           geometry (absolute slide-down tab under the date block) and
+           booked-state colors are the widget itself — no Nuxt UI equivalent.
+           Colors use semantic tokens where possible. -->
+      <template #day-action="{ jsDate, weekday, dayNumber }">
+        <button
+          v-if="!isCreatingDate(jsDate)"
+          type="button"
+          :disabled="isDayFullyBooked(jsDate)"
+          :aria-label="t(isDayFullyBooked(jsDate) ? 'bookings.weekStrip.fullyBookedDay' : 'bookings.weekStrip.addBookingDay', { day: `${weekday} ${dayNumber}` })"
+          class="absolute bottom-0 left-0 right-0 translate-y-0 flex items-center justify-center h-6 rounded-b-lg opacity-0 transition-all duration-200 ease-out group-hover:translate-y-4 group-hover:opacity-100 z-10"
+          :class="isDayFullyBooked(jsDate)
+            ? 'bg-neutral-700 cursor-default'
+            : 'bg-primary cursor-pointer hover:bg-primary/80 active:scale-[0.98]'"
+          @click="!isDayFullyBooked(jsDate) && onWeekDayClick(jsDate)"
+        >
+          <UIcon
+            :name="isDayFullyBooked(jsDate) ? 'i-lucide-check' : 'i-lucide-plus'"
+            class="size-3.5"
+            :class="isDayFullyBooked(jsDate) ? 'text-neutral-500' : 'text-neutral-300'"
+          />
+        </button>
+      </template>
+
       <template #day="{ jsDate }">
         <div class="flex flex-col gap-1 mt-1 min-h-[12px] w-fit mx-auto">
           <UPopover
@@ -594,78 +560,23 @@ const monthCellHeight = computed(() => {
           </UPopover>
         </div>
       </template>
-    </CroutonBookingsWeekStrip>
+    </CroutonCalendarWeek>
 
     <!-- Month View -->
-    <div v-else class="flex flex-col w-full touch-pan-y">
-    <div class="flex items-center justify-center gap-1">
-      <UButton
-        icon="i-lucide-chevrons-left"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('bookings.weekStrip.previousMonth')"
-        @click="slideMonth('prev')"
-      />
-      <UButton
-        variant="ghost"
-        color="neutral"
-        class="font-medium"
-        @click="monthGoToToday"
-      >
-        {{ monthLabel }}
-      </UButton>
-      <UButton
-        icon="i-lucide-chevrons-right"
-        variant="ghost"
-        color="neutral"
-        size="sm"
-        :aria-label="t('bookings.weekStrip.nextMonth')"
-        @click="slideMonth('next')"
-      />
-    </div>
-    <div class="grid grid-cols-7 px-1 pt-1" aria-hidden="true">
-      <span v-for="wd in monthWeekdays" :key="wd" class="text-center text-xs text-muted">{{ wd }}</span>
-    </div>
-    <div ref="monthSwipeEl" class="w-full overflow-hidden touch-pan-y">
-    <div class="flex" :style="monthTrackStyle">
-    <div
-      v-for="panel in monthPanels"
-      :key="panel.offset"
-      class="w-full shrink-0"
-      :inert="panel.offset !== 0 || undefined"
-      :aria-hidden="panel.offset !== 0 || undefined"
-    >
-      <UCalendar
-        :placeholder="(panel.placeholder as any)"
-        :model-value="(monthFocusDate as any)"
-        @update:model-value="onMonthDayActivate"
-        size="sm"
-        :week-starts-on="1"
-        :ui="{
-          root: 'w-full',
-          header: 'hidden',
-          body: 'p-1 pt-0',
-          grid: 'w-full',
-          gridWeekDaysRow: 'hidden',
-          cell: 'w-full text-center p-0.5',
-          cellTrigger: 'w-full h-full p-0 rounded-md data-[selected]:bg-transparent data-[selected]:text-inherit hover:bg-transparent focus:bg-transparent',
-        }"
-        class="[&_table]:w-full [&_table]:table-fixed"
-      >
-        <template #day="{ day }">
+    <CroutonCalendarMonth v-else ref="monthRef" @select="onMonthSelect">
+      <template #day="{ day, jsDate, neighbour }">
           <!-- Neighbour months: day number + dots only, so 3x stays cheap -->
           <div
-            v-if="panel.offset !== 0"
+            v-if="neighbour"
             class="w-full flex flex-col items-center justify-start pt-1 pb-1"
             :style="{ minHeight: `${monthCellHeight}px` }"
           >
-            <span class="text-xs font-medium" :class="hasBookings(day.toDate(getLocalTimeZone())) ? 'text-default' : 'text-muted'">
+            <span class="text-xs font-medium" :class="hasBookings(jsDate) ? 'text-default' : 'text-muted'">
               {{ day.day }}
             </span>
             <div class="flex flex-col gap-1 mt-0.5 w-fit mx-auto">
               <CroutonBookingsSlotIndicator
-                v-for="indicator in getIndicatorsForDate(day.toDate(getLocalTimeZone()))"
+                v-for="indicator in getIndicatorsForDate(jsDate)"
                 :key="indicator.locationId"
                 :slots="indicator.slots"
                 :booked-slot-ids="indicator.bookedSlotIds"
@@ -679,34 +590,34 @@ const monthCellHeight = computed(() => {
             </div>
           </div>
           <!-- Presentation only — day activation (mouse + keyboard) arrives via
-               UCalendar's cellTrigger button → onMonthDayActivate. -->
+               CroutonCalendarMonth's cellTrigger button → onMonthSelect. -->
           <div
             v-else
             class="group relative w-full flex flex-col items-center justify-start pt-1 pb-1 rounded-md transition-all duration-200"
             :style="{ minHeight: `${monthCellHeight}px` }"
             :class="[
-              isDayUnavailable(day.toDate(getLocalTimeZone()))
+              isDayUnavailable(jsDate)
                 ? 'opacity-40 bg-muted/10'
-                : isCreatingDate(day.toDate(getLocalTimeZone()))
+                : isCreatingDate(jsDate)
                   ? 'bg-elevated shadow-md'
-                  : isDayHighlighted(day.toDate(getLocalTimeZone()))
+                  : isDayHighlighted(jsDate)
                     ? 'bg-elevated shadow-sm'
                     : 'hover:bg-elevated/80',
-              hasBookings(day.toDate(getLocalTimeZone())) && !isDayUnavailable(day.toDate(getLocalTimeZone()))
+              hasBookings(jsDate) && !isDayUnavailable(jsDate)
                 ? 'bg-muted/30 cursor-pointer'
                 : '',
             ]"
-            :title="getDayBlockedReason(day.toDate(getLocalTimeZone())) || undefined"
+            :title="getDayBlockedReason(jsDate) || undefined"
           >
             <!-- Day number -->
             <span
               class="text-xs font-medium transition-colors"
               :class="[
-                isDayUnavailable(day.toDate(getLocalTimeZone()))
+                isDayUnavailable(jsDate)
                   ? 'text-muted line-through'
-                  : isDayHighlighted(day.toDate(getLocalTimeZone()))
+                  : isDayHighlighted(jsDate)
                     ? 'text-primary'
-                    : hasBookings(day.toDate(getLocalTimeZone()))
+                    : hasBookings(jsDate)
                       ? 'text-default'
                       : 'text-muted',
               ]"
@@ -717,7 +628,7 @@ const monthCellHeight = computed(() => {
             <!-- Slot indicators (all locations) -->
             <div class="flex flex-col gap-1 mt-0.5 w-fit mx-auto">
               <UPopover
-                v-for="indicator in getIndicatorsForDate(day.toDate(getLocalTimeZone()))"
+                v-for="indicator in getIndicatorsForDate(jsDate)"
                 :key="indicator.locationId"
                 mode="hover"
                 :content="{ side: 'top', sideOffset: 8 }"
@@ -782,27 +693,23 @@ const monthCellHeight = computed(() => {
                  booked-state colors are the widget itself — no Nuxt UI equivalent.
                  Colors use semantic tokens where possible. -->
             <button
-              v-if="!isCreatingDate(day.toDate(getLocalTimeZone()))"
+              v-if="!isCreatingDate(jsDate)"
               type="button"
-              :disabled="isDayFullyBooked(day.toDate(getLocalTimeZone()))"
+              :disabled="isDayFullyBooked(jsDate)"
               class="absolute bottom-0 left-0 right-0 translate-y-0 flex items-center justify-center h-4 rounded-b-md opacity-0 transition-all duration-200 ease-out group-hover:translate-y-1 group-hover:opacity-100 z-10"
-              :class="isDayFullyBooked(day.toDate(getLocalTimeZone()))
+              :class="isDayFullyBooked(jsDate)
                 ? 'bg-neutral-700 cursor-default'
                 : 'bg-primary cursor-pointer hover:bg-primary/80 active:scale-[0.98]'"
-              @click.stop="!isDayFullyBooked(day.toDate(getLocalTimeZone())) && emit('dayClick', day.toDate(getLocalTimeZone()))"
+              @click.stop="!isDayFullyBooked(jsDate) && emit('dayClick', jsDate)"
             >
               <UIcon
-                :name="isDayFullyBooked(day.toDate(getLocalTimeZone())) ? 'i-lucide-check' : 'i-lucide-plus'"
+                :name="isDayFullyBooked(jsDate) ? 'i-lucide-check' : 'i-lucide-plus'"
                 class="size-2.5"
-                :class="isDayFullyBooked(day.toDate(getLocalTimeZone())) ? 'text-neutral-500' : 'text-neutral-300'"
+                :class="isDayFullyBooked(jsDate) ? 'text-neutral-500' : 'text-neutral-300'"
               />
             </button>
           </div>
-        </template>
-      </UCalendar>
-    </div>
-    </div>
-    </div>
-    </div>
+      </template>
+    </CroutonCalendarMonth>
   </div>
 </template>

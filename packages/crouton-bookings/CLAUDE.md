@@ -44,7 +44,6 @@ CroutonBooking
 ├── List.vue            - Bookings list
 ├── BookingCard.vue     - Individual booking card
 ├── BookingCreateCard.vue - Booking creation form
-├── WeekStrip.vue       - Week date navigation
 ├── DateBadge.vue       - Date display badge
 ├── PanelFilters.vue    - Filter controls
 └── PanelMap.vue        - Map display
@@ -191,7 +190,7 @@ const { variables, getPreviewValues, demoData } = useBookingEmailVariables()
 
 ## Dependencies
 
-- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`)
+- **Required**: `@fyit/crouton-core` (bundles `@fyit/crouton-auth`), `@fyit/crouton-calendar` (extended by this layer; owns the swipeable week/month views and swipe logic — `Calendar.vue` only supplies the `#day` content, #2574)
 - **Optional**: `@fyit/crouton-email` (for email features)
 - **Peer**: `@nuxtjs/i18n` (auto-included)
 
