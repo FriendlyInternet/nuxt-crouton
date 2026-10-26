@@ -92,3 +92,34 @@ test('the word form still approves when it opens a line', () => {
   assert.equal(isApproval('approved, go'), true)
   assert.equal(isApproval('Thanks for the screenshots.\n\nlgtm'), true)
 })
+
+// ── test-card replies (#2540) ─────────────────────────────────────────────────
+import { parseTestReply, isTestOk } from './approval.mjs'
+
+test('a line opening with ok passes a test card', () => {
+  assert.equal(isTestOk('ok'), true)
+  assert.equal(isTestOk('OK, works on my phone'), true)
+  assert.equal(parseTestReply('ok').result, 'ok')
+})
+
+test('not ok does not pass and is parsed', () => {
+  assert.equal(isTestOk('not ok'), false)
+  assert.deepEqual(parseTestReply('not ok'), { result: 'not-ok', note: '' })
+})
+
+test('not ok: note extracts the note', () => {
+  assert.deepEqual(parseTestReply('not ok: button is hidden on 390px'), { result: 'not-ok', note: 'button is hidden on 390px' })
+  assert.deepEqual(parseTestReply('Not OK - broken'), { result: 'not-ok', note: 'broken' })
+})
+
+test('ok mid-line, quoted or in code is not a pass', () => {
+  assert.equal(isTestOk("it's ok I guess"), false)
+  assert.equal(isTestOk('> ok'), false)
+  assert.equal(isTestOk('`ok`'), false)
+  assert.equal(isTestOk('okay then'), false)
+  assert.equal(parseTestReply('this is not ok').result, null)
+})
+
+test('a bare ok is not a general approval', () => {
+  assert.equal(isApproval('ok'), false)
+})
