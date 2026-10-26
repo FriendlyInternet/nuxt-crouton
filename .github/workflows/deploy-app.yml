@@ -97,6 +97,9 @@ on:
       # seeded (warning), and the pre-prod gate refuses to run blind.
       REVIEW_SEED_SECRET:
         required: false
+      # Repo-level token the status app uses to read issues (#2553); pushed to the status Worker only.
+      STATUS_GITHUB_TOKEN:
+        required: false
 
 jobs:
   deploy:
@@ -295,6 +298,11 @@ jobs:
             PREVIEW_OUT="$(node "$GITHUB_WORKSPACE/scripts/pr-preview-wrangler.mjs" \
               .output/server/wrangler.json "${{ inputs.app }}" "$PR_NUM")"
             PREVIEW_DB="$(printf '%s\n' "$PREVIEW_OUT" | sed -n 's/^db=//p')"
+            # Reuse storage this preview already has (#2608). A deploy that died after creating
+            # its D1/KV but before the Worker existed leaves them bound to nothing; wrangler then
+            # tries to create them again on every deploy and Cloudflare refuses ("already exists"),
+            # so the preview stays broken for good (#2571). Pin what exists; create only the rest.
+            node "$GITHUB_WORKSPACE/scripts/pr-preview-reuse.mjs" .output/server/wrangler.json
             npx wrangler deploy --config .output/server/wrangler.json | tee deploy.log
             # Fresh DB every time, so migrations are the whole schema — not incremental.
             # --config is REQUIRED here (#2078). The PR-scoped database name exists ONLY in the
@@ -416,6 +424,37 @@ jobs:
             npx wrangler secret bulk "$RUNNER_TEMP/worker-secrets.json" --env staging
           fi
           rm -f "$RUNNER_TEMP/worker-secrets.json"
+
+      # The status app (pocs/status) derives every app's review-login password to offer one-tap
+      # sign-in links (#2556), and reads the repo's issues (#2553). Neither secret can be read back
+      # from GitHub, so push them to THAT Worker only — no other app ever receives them.
+      # On a PR the Worker is the PR-scoped preview (`status-pr<N>`, via the built config);
+      # `--env staging` there would write to shared staging instead. Values are never echoed.
+      - name: Push status-app secrets
+        if: ${{ inputs.app == 'status' }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
+          STATUS_GITHUB_TOKEN: ${{ secrets.STATUS_GITHUB_TOKEN }}
+          PR_NUM: ${{ github.event.pull_request.number }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+        run: |
+          if [ "$DEPLOY_ENV" = "production" ]; then
+            TARGET=""
+          elif [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then
+            TARGET="--config .output/server/wrangler.json"
+          else
+            TARGET="--env staging"
+          fi
+          push() {
+            if [ -z "$2" ]; then
+              echo "::notice::$3 is not set — skipping $1."
+              return 0
+            fi
+            printf '%s' "$2" | npx wrangler secret put "$1" $TARGET
+          }
+          push NUXT_REVIEW_SEED_SECRET "$REVIEW_SEED_SECRET" REVIEW_SEED_SECRET
+          push GITHUB_TOKEN "$STATUS_GITHUB_TOKEN" STATUS_GITHUB_TOKEN
 
       # ── Preview-review bridge wiring (#607, part of #488) ───────────────────────
       # The live-preview comment loop turns the overlay ON at build (NUXT_PUBLIC_CROUTON_REVIEW)
@@ -679,12 +718,12 @@ jobs:
             echo "::add-mask::$LOGIN_URL"
             # The password and the one-click link (which carries it) are NOT written here:
             # Actions summaries are public on this repo (#2358). The link is emailed to
-            # the owner by the "Email the review sign-in link" step below.
+            # the owner in the per-epic test mail (post-test-card.yml, #2518).
             {
               echo "### 🔑 Review login ready (${APP})"
               echo "- **URL:** $DEPLOY_URL"
               echo "- **Email:** \`$EMAIL\`"
-              echo "- The one-click sign-in link is emailed to the owner (never posted here)."
+              echo "- The one-click sign-in link is emailed with the per-epic test mail (never posted here)."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             echo "::warning::Review-login seed FAILED for ${APP} at ${DEPLOY_URL} — not advertising a login that doesn't work (#1369)."
@@ -878,38 +917,9 @@ jobs:
           fi
           echo "::warning::Deployed-preview smoke failed (report-only; set smoke.required=true in $APP/deploy.config.json to gate)."
 
-      # The one-click review sign-in link carries the password, so it goes ONLY by email to
-      # the owner — never into the PR comment, run summary or logs, which are public on
-      # this repo (#2358). Same Resend rail as the digests. Unset key/vars → a warning and
-      # no email; the deploy stays green either way.
-      - name: Email the review sign-in link
-        id: email-login
-        if: ${{ inputs.environment != 'production' && steps.seed.outputs.login_url != '' }}
-        continue-on-error: true
-        env:
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          EMAIL_FROM: ${{ vars.RESEND_FROM }}
-          EMAIL_TO: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
-          APP: ${{ inputs.app }}
-          URL: ${{ steps.deploy.outputs.url }}
-          LOGIN_URL: ${{ steps.seed.outputs.login_url }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          if [ -z "$RESEND_API_KEY" ] || [ -z "$EMAIL_FROM" ] || [ -z "$EMAIL_TO" ]; then
-            echo "::warning::RESEND_API_KEY / RESEND_FROM / REVIEW_LOGIN_EMAIL (or DIGEST_REPORT_EMAIL) not set — review sign-in link not emailed."
-            exit 0
-          fi
-          WHAT="staging"; [ -n "$PR_NUMBER" ] && WHAT="PR #$PR_NUMBER preview"
-          SUBJECT="🔑 Sign in to ${APP} (${WHAT})"
-          jq -n --arg from "$EMAIL_FROM" --arg to "$EMAIL_TO" --arg subject "$SUBJECT" \
-                --arg app "$APP" --arg url "$URL" --arg login "$LOGIN_URL" --arg what "$WHAT" '
-            {from:$from, to:[$to], subject:$subject,
-             text: ("Sign in to " + $app + " (" + $what + "): " + $login + "\n\nThe form opens prefilled — tap Sign in.\nSite: " + $url),
-             html: ("<p><a href=\"" + $login + "\"><b>Sign in to " + $app + "</b></a> (" + $what + ")</p><p>The form opens prefilled — tap <b>Sign in</b>.</p><p style=\"color:#888\">" + $url + "</p>")}' \
-          | curl -sS -f -X POST https://api.resend.com/emails \
-              -H "Authorization: Bearer $RESEND_API_KEY" -H "Content-Type: application/json" \
-              -d @- -o /dev/null -w 'Resend HTTP %{http_code}\n' \
-          && echo "sent=true" >> "$GITHUB_OUTPUT"
+      # No per-deploy sign-in mail (#2518): the owner gets ONE mail per epic that is ready to
+      # test, sent by post-test-card.yml. The link carries the password, so it stays email-only
+      # (#2358) — never in a PR comment, run summary or log.
 
       # On PRs, post/update a sticky comment with the isolated staging URL.
       - name: Comment staging URL on PR
@@ -920,16 +930,24 @@ jobs:
             const url = '${{ steps.deploy.outputs.url }}'
             const app = '${{ inputs.app }}'
             const email = `${{ steps.seed.outputs.email }}`
-            const emailed = '${{ steps.email-login.outputs.sent }}' === 'true'
             const marker = `<!-- deploy-staging:${app} -->`
             // Review login (#608). The password and the one-click link that carries it are
             // NEVER posted here — PR comments are public on this repo (#2358). The link goes
             // to the owner by email (step above); this only says the login exists.
             const login = email
-              ? `\n\n🔑 Review login \`${email}\` — ${emailed ? 'the sign-in link was emailed to the owner.' : 'sign-in link **not** emailed (email isn\'t configured — see the run\'s warnings).'}`
+              ? `\n\n🔑 Review login \`${email}\` — the sign-in link comes by email when the epic is ready to test.`
               : ''
             const pr = context.issue.number
-            const body = `${marker}\n🚀 **${app}** preview for this PR: ${url}${login}\n\n<sub>🤖 \`${app}-pr${pr}\` — a Worker of its own, with its own auto-provisioned D1 + KV. Not shared staging; nothing else deploys over it, and it is deleted when this PR closes (#2020).</sub>`
+            // #2462: the gallery deploys for a PR that changes a shared UI piece — link each
+            // changed piece's own review page, not just the gallery's front door.
+            let pieces = ''
+            if (app === 'gallery') {
+              const { galleryLinks } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/gallery-links.mjs`)
+              const files = await github.paginate(github.rest.pulls.listFiles, { ...context.repo, pull_number: pr, per_page: 100 })
+              const links = galleryLinks(url, files)
+              if (links.length) pieces = `\n\n👀 **Changed pieces:**\n${links.map(l => `- [${l.file.split('/').pop().replace(/\.vue$/, '')}](${l.url}) · \`${l.file.split('/')[1]}\``).join('\n')}`
+            }
+            const body = `${marker}\n🚀 **${app}** preview for this PR: ${url}${pieces}${login}\n\n<sub>🤖 \`${app}-pr${pr}\` — a Worker of its own, with its own auto-provisioned D1 + KV. Not shared staging; nothing else deploys over it, and it is deleted when this PR closes (#2020).</sub>`
             const { owner, repo } = context.repo
             const issue_number = context.issue.number
             const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number })

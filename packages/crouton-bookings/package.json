@@ -64,6 +64,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@fyit/crouton-calendar": "workspace:*",
     "@fyit/crouton-editor": "workspace:*"
   },
   "peerDependencies": {

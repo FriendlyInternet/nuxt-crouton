@@ -12,8 +12,7 @@ Turns the GitHub issue tree (`FriendlyInternet/nuxt-crouton`) into a **skimmable
 badge, 👁 for visual changes, PR/preview link — with the How-to-test steps folded into a
 tap-to-expand `🧪 How to test (N)` dropdown so the band stays light on mobile), then a short
 "since yesterday" activity band, then one card
-per open **epic** with a progress bar and a one-line status — the sub-issue breakdown tucked
-into a collapsible section so the overview stays clean. Built to be **read at a glance, drilled
+per open **epic** with a progress bar and a one-line status. Epics only — no sub-issue rows (#2520). Built to be **read at a glance, drilled
 into if needed**.
 
 **Interactively this is render-only.** A by-hand run *makes* the digest (HTML +
@@ -210,7 +209,5 @@ node .claude/skills/epic-digest/render.mjs digest.data.json --out-dir .         
   the whole point ("focus on epics").
 - **Interactive = render-only.** A by-hand run just writes files and shows them; the
   *scheduled* job is what delivers (emails via Resend, see above).
-- **`<details>` in email:** the collapsible sub-issue section renders expanded in
-  mail clients that strip `<details>` — that's fine, it degrades gracefully.
 - The renderer sorts **blocked epics first**, then by % complete, so attention
   lands where it's needed.

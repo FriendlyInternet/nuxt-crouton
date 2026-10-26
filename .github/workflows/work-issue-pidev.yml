@@ -110,6 +110,11 @@ jobs:
       (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this')
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    # One worker at a time per issue (#2645). `work-this` applied at creation fired two runs
+    # (#2629) and #1491 got two PRs on `work-1491`. Queue, don't cancel.
+    concurrency:
+      group: work-${{ inputs.issue || github.event.issue.number }}
+      cancel-in-progress: false
     timeout-minutes: 45
     # No `id-token` — pi uses a provider key, not OIDC. The write scopes are for the
     # Harness App token minted below, which pi uses to push/PR/comment.

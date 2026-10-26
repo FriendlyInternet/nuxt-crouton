@@ -134,7 +134,9 @@ export function decideClaim({
   }
 
   // A PR of our own (a re-dispatch onto the same branch) is not a competing claim.
-  const others = (linkedPRs || []).filter((pr) => pr && pr.number !== self?.pr)
+  // `self.prs` holds EVERY PR on our branch (a re-run can leave a closed one beside an open one).
+  const mine = new Set([...(self?.prs || []), self?.pr].filter((n) => n != null))
+  const others = (linkedPRs || []).filter((pr) => pr && !mine.has(pr.number))
   const merged = others.find((pr) => pr.merged && (pr.baseRef == null || pr.baseRef === defaultBranch))
   if (merged) {
     return { action: 'refuse', claimedBy: merged.number, reason: `PR #${merged.number} already merged for this issue` }

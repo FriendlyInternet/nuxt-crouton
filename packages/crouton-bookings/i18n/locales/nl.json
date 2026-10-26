@@ -401,8 +401,6 @@
     "weekStrip": {
       "previousWeek": "Vorige week",
       "nextWeek": "Volgende week",
-      "previousMonth": "Vorige maand",
-      "nextMonth": "Volgende maand",
       "fullyBookedDay": "Volgeboekt: {day}",
       "addBookingDay": "Boeking toevoegen: {day}"
     },

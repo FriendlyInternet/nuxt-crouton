@@ -15,6 +15,7 @@ export default defineNuxtConfig({
   // this package owns end to end (#2278): schema, queries, routes, list, composable.
   extends: [
     '@fyit/crouton-editor',
+    '@fyit/crouton-calendar',
     join(currentDir, 'collections/bookings'),
     join(currentDir, 'collections/locations'),
     join(currentDir, 'collections/settings'),

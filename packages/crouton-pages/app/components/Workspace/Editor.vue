@@ -327,17 +327,11 @@ const localeOptions = computed(() =>
 // Multi-locale apps only: a single-locale app needs no selector.
 const showLanguageBar = computed(() => localeOptions.value.length > 1)
 
-// Title of the currently-edited locale — shown in the toolbar for context and
-// used as the SEO-title placeholder (empty SEO title ⇒ falls back to the title).
+// Title of the currently-edited locale — used as the SEO-title placeholder (empty SEO title ⇒ falls back to the title).
 const currentTitle = computed(() => {
   const tr = state.value.translations as Record<string, { title?: string }> | undefined
   return tr?.[editingLocale.value]?.title || ''
 })
-function findFirstAvailableTitle(): string {
-  const tr = state.value.translations as Record<string, { title?: string }> | undefined
-  return (tr ? Object.values(tr).find(d => d?.title)?.title : '') || ''
-}
-const toolbarTitle = computed(() => currentTitle.value || findFirstAvailableTitle())
 
 // SEO fields are translatable too — they follow the shared editing locale.
 
@@ -456,7 +450,6 @@ defineExpose({ state })
         :is-saving="isSaving"
         :show-close="showClose"
         :show-back="showBack"
-        :page-title="toolbarTitle"
         :page-id="state.id"
         :public-url="publicUrl"
         @show-ai-generator="showAiGenerator = true"
@@ -465,7 +458,25 @@ defineExpose({ state })
         @delete="handleDelete"
         @close="emit('close')"
         @back="emit('back')"
-      />
+      >
+        <!-- Horizontal tab nav — Content / SEO / Settings -->
+        <nav class="flex items-center gap-0.5 min-w-0">
+          <UButton
+            v-for="tab in editorTabs"
+            :key="tab.id"
+            :variant="activeTab === tab.id ? 'soft' : 'ghost'"
+            :color="activeTab === tab.id ? 'primary' : 'neutral'"
+            :icon="tab.icon"
+            size="sm"
+            class="shrink-0 rounded-none border-b-2"
+            :class="activeTab === tab.id ? 'border-primary' : 'border-transparent'"
+            :data-review="`editor-tab-${tab.id}`"
+            @click="activeTab = tab.id"
+          >
+            {{ tab.label }}
+          </UButton>
+        </nav>
+      </CroutonPagesEditorToolbar>
 
       <!-- Language bar — one selector drives the translatable fields on every
            tab; Preview opens in the selected language. Multi-locale apps only. -->
@@ -491,24 +502,6 @@ defineExpose({ state })
           />
         </template>
       </CroutonSubBar>
-
-      <!-- Horizontal tab nav — Content / SEO / Settings -->
-      <nav class="flex items-center gap-0.5 shrink-0 px-1 border-b border-default bg-elevated/20 overflow-x-auto">
-        <UButton
-          v-for="tab in editorTabs"
-          :key="tab.id"
-          :variant="activeTab === tab.id ? 'soft' : 'ghost'"
-          :color="activeTab === tab.id ? 'primary' : 'neutral'"
-          :icon="tab.icon"
-          size="sm"
-          class="shrink-0 rounded-none border-b-2"
-          :class="activeTab === tab.id ? 'border-primary' : 'border-transparent'"
-          :data-review="`editor-tab-${tab.id}`"
-          @click="activeTab = tab.id"
-        >
-          {{ tab.label }}
-        </UButton>
-      </nav>
 
       <!-- Tab panels — all kept mounted (v-show) so the block editor / i18n
            input never loses state when switching tabs. -->
