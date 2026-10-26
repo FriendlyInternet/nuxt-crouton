@@ -141,6 +141,12 @@ export function isFlatFrame({ data, width, height, channels }) {
 
 // ── runtime (skipped when imported, e.g. by the test) ────────────────────────
 const log = m => console.log(`[capture] ${m}`)
+
+/** One machine-readable line per surface (#2572) — the deploy step quotes these on the PR. `reason` runs to end of line. */
+export function resultLine(name, status, reason = '') {
+  return `surface=${name} status=${status} reason=${String(reason).replace(/\s+/g, ' ').trim()}`
+}
+const report = (name, status, reason) => console.log(resultLine(name, status, reason))
 if (import.meta.url === `file://${process.argv[1]}`) await main()
 
 async function main() {
@@ -155,7 +161,7 @@ async function main() {
   const app = args.app || ''
   const { surfaces, reason } = resolveSurfaces({ manifest: loadManifest(args.manifest), prBody: process.env.PR_BODY || '', app })
   log(`origin=${origin} app=${app || '-'} surfaces=${surfaces.length} (${reason}) viewport=${viewport.width}x${viewport.height}`)
-  if (!surfaces.length) return
+  if (!surfaces.length) { report('-', 'none', reason); return }
 
   const kept = await captureAll({ origin, args, viewport, surfaces, outDir, app })
 
@@ -169,7 +175,7 @@ async function main() {
 async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
   const { loggedIn, jar } = await signIn(origin, args.email, args.password, log)
   const browser = await launchChromium(log)
-  if (!browser) return [] // evidence is not a gate — no browser ⇒ the sign-off gate withholds
+  if (!browser) { for (const sf of surfaces) report(sf.name, 'error', 'no chromium browser available'); return [] } // evidence is not a gate — no browser ⇒ the sign-off gate withholds
 
   mkdirSync(resolve(outDir), { recursive: true })
   const kept = []
@@ -207,6 +213,7 @@ async function captureSurface(context, origin, surface, file) {
     }
     if (await isLoading(page)) {
       log(`✗ ${surface.name}: capture timed out on Nuxt's loading screen — discarding`)
+      report(surface.name, 'rejected', "stuck on Nuxt's loading screen")
       return null
     }
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
@@ -216,29 +223,35 @@ async function captureSurface(context, origin, surface, file) {
     const title = await page.title().catch(() => '')
     const bodyText = await page.evaluate(() => document.body?.textContent?.slice(0, 400) || '').catch(() => '')
     await page.screenshot({ path: resolve(file), fullPage: true })
-    if (looksLikeLoadingScreen({ text: bodyText, title })) {
-      log(`✗ ${surface.name}: capture timed out on Nuxt's loading screen — discarding`)
-      return null
-    }
-    if (looksLikeErrorPage({ status, text: bodyText, title })) {
-      log(`✗ ${surface.name}: looks like an error page (status ${status}, "${title}") — discarding`)
-      return null
-    }
-    // Fail closed: if the frame can't be decoded to check it, it is NOT evidence (#2526).
-    const flat = await frameIsFlat(file, context.browser())
-    if (flat !== false) {
-      log(flat === true ? `✗ ${surface.name}: blank/flat capture — discarding` : `✗ ${surface.name}: could not verify the frame is not blank — discarding`)
+    const rejection = await captureRejection({ status, text: bodyText, title, file, browser: context.browser() })
+    if (rejection) {
+      log(`✗ ${surface.name}: ${rejection} — discarding`)
+      report(surface.name, 'rejected', rejection)
       return null
     }
     log(`✓ ${surface.name} → ${file}`)
+    report(surface.name, 'ok', okReason(file, surface))
     return file
   } catch (e) {
     log(`⚠ ${surface.name}: capture failed (non-fatal): ${e.message.split('\n')[0]}`)
+    report(surface.name, 'error', `capture failed: ${e.message.split('\n')[0]}`)
     return null
   } finally {
     await page?.close().catch(() => {})
   }
 }
+
+/** Why a screenshot is NOT evidence (loader, error page, blank frame), or null when it is. Fails closed: an undecodable frame is rejected (#2526). */
+async function captureRejection({ status, text, title, file, browser }) {
+  if (looksLikeLoadingScreen({ text, title })) return "stuck on Nuxt's loading screen"
+  if (looksLikeErrorPage({ status, text, title })) return `error page (status ${status}, title "${title}")`
+  const flat = await frameIsFlat(file, browser)
+  if (flat === true) return 'blank/flat capture'
+  return flat === false ? null : 'could not verify the frame is not blank'
+}
+
+const okReason = (file, surface) =>
+  file.split('/').pop() + (surface.clickFailed ? ` (click selector not found: ${surface.clickFailed} — captured as-is)` : '')
 
 /** True while the page is Nuxt's dev loading template or no app content is visible yet. */
 async function isLoading(page) {
@@ -274,6 +287,7 @@ async function runInteractions(page, surface, logFn) {
         await page.click(step.selector, { timeout: 6000 })
       } catch (e) {
         logFn(`⚠ ${surface.name}: click '${step.selector}' failed (${e.message.split('\n')[0]}) — capturing as-is`)
+        surface.clickFailed = step.selector
       }
     } else if (step.verb === 'wait') {
       await page.waitForTimeout(step.ms)
