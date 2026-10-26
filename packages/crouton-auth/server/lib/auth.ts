@@ -36,9 +36,6 @@ import type {
   OAuthProviderConfig
 } from '../../types/config'
 
-// Re-export type helpers for use in this module
-export { isMethodEnabled, getMethodConfig } from '../../types/config'
-
 // Type declarations for browser APIs used in WebAuthn helper functions
 // These helpers are intended for client-side use only
 declare const window: Window | undefined
@@ -1503,32 +1500,6 @@ export function isWebAuthnSupported(): boolean {
     && typeof navigator !== 'undefined'
     && typeof navigator.credentials !== 'undefined'
   )
-}
-
-/**
- * Check if conditional UI (autofill) is available
- *
- * Conditional UI allows passkey authentication through browser autofill.
- * Not all browsers support this feature.
- *
- * @returns Promise resolving to true if conditional UI is available
- */
-export async function isConditionalUIAvailable(): Promise<boolean> {
-  if (!isWebAuthnSupported()) {
-    return false
-  }
-
-  // Check for conditional mediation support
-  // PublicKeyCredential is guaranteed to be defined after isWebAuthnSupported check
-  if (!PublicKeyCredential || typeof PublicKeyCredential.isConditionalMediationAvailable !== 'function') {
-    return false
-  }
-
-  try {
-    return await PublicKeyCredential.isConditionalMediationAvailable()
-  } catch {
-    return false
-  }
 }
 
 // ============================================================================
