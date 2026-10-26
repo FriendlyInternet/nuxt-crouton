@@ -1218,6 +1218,15 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.12(vitest@4.1.12)
+      better-sqlite3:
+        specifier: ^12.4.1
+        version: 12.6.2
+      drizzle-kit:
+        specifier: 'catalog:'
+        version: 0.31.11
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@cloudflare/workers-types@4.20260702.1)(@libsql/client@0.17.4)(@opentelemetry/api@1.9.0)(@prisma/client@5.22.0)(@types/better-sqlite3@7.6.13)(@types/pg@8.16.0)(better-sqlite3@12.6.2)(kysely@0.29.6)(pg@8.17.1)
       happy-dom:
         specifier: 'catalog:'
         version: 20.14.6
