@@ -99,7 +99,9 @@ function nextWeek() {
 // the next/previous week or spring back. Vertical drags pass through to the
 // page (touch-action: pan-y) (#2485, #2515)
 const swipeEl = ref<HTMLElement | null>(null)
-const { slide, style: trackStyle } = useSlideSwipe(swipeEl, {
+const trackEl = ref<HTMLElement | null>(null)
+const { slide } = useSlideSwipe(swipeEl, {
+  track: trackEl,
   peek: true,
   onNext: nextWeek,
   onPrev: prevWeek,
@@ -217,7 +219,7 @@ const sizeClasses = computed(() => {
 
     <!-- Days Grid -->
     <div ref="swipeEl" class="overflow-hidden touch-pan-y pb-5 -mb-5">
-    <div class="flex" :style="trackStyle">
+    <div class="flex" ref="trackEl" style="transform: translateX(-100%)">
     <div
       v-for="panel in panels"
       :key="panel.offset"

@@ -230,7 +230,28 @@ interface IndicatorData {
 }
 
 // Get indicators data for a specific date (all locations, capacity-aware)
+// Memoised per date: cells call this several times per render, and each call
+// scans bookings. The cache resets whenever its inputs change.
+const indicatorCache = computed(() => {
+  void bookingsByDate.value
+  void props.locations
+  void props.filters.locations
+  void t('bookings.allDay')
+  return new Map<string, IndicatorData[]>()
+})
+
 function getIndicatorsForDate(date: Date): IndicatorData[] {
+  const cache = indicatorCache.value
+  const key = formatDateKey(date)
+  let hit = cache.get(key)
+  if (!hit) {
+    hit = computeIndicatorsForDate(date)
+    cache.set(key, hit)
+  }
+  return hit
+}
+
+function computeIndicatorsForDate(date: Date): IndicatorData[] {
   const dayBookings = getBookingsForDate(date)
 
   // Group bookings by location
