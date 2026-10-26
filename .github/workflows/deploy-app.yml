@@ -858,6 +858,21 @@ jobs:
           fi
           echo "::warning::Deployed-preview smoke failed (report-only; set smoke.required=true in $APP/deploy.config.json to gate)."
 
+      # TEMPORARY, gallery branch only (#2462): the deployed home page returns 500 and the error
+      # is only visible in the Worker's live log. Tail it while requesting the page twice, and put
+      # the exceptions + console errors into ONE annotation (readable via the checks API).
+      - name: Capture live Worker errors (debug, #2462)
+        if: ${{ always() && inputs.environment == 'staging' && github.event.pull_request.number == null }}
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        run: |
+          W="${{ inputs.app }}-staging"
+          (timeout 40 npx wrangler tail "$W" --format json > tail.json 2> tail.err &) ; sleep 12
+          for p in / /api/_auth/session; do curl -s -o /dev/null -w "$p → %{http_code}\n" -m 20 "${{ inputs['staging-url'] }}$p"; done | tee codes.txt
+          sleep 15
+          { cat codes.txt; jq -r '[.outcome, (.exceptions[]? | "EXC " + .name + ": " + .message), (.logs[]? | select(.level=="error" or .level=="warn") | "LOG " + (.message|tostring))] | map(select(. != null)) | .[]' tail.json 2>/dev/null | head -40; echo "stderr: $(head -c 400 tail.err)"; } \
+            | sed 's/\x1b\[[0-9;]*m//g' | cut -c1-400 | awk 'BEGIN{ORS="%0A"}{gsub(/%/,"%25");print}' > live.txt
+          echo "::error title=live worker errors::$(cat live.txt)"
+
       # The one-click review sign-in link carries the password, so it goes ONLY by email to
       # the owner — never into the PR comment, run summary or logs, which are public on
       # this repo (#2358). Same Resend rail as the digests. Unset key/vars → a warning and
