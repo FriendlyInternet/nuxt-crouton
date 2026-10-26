@@ -71,7 +71,13 @@ jobs:
               RES="${WORKER}-${BINDING}"
               case "$BINDING" in
                 db) npx wrangler d1 delete "$RES" --skip-confirmation 2>&1 | tail -1 && echo "  ✓ d1 $RES" || true ;;
-                kv) npx wrangler kv namespace delete --namespace-id "$RES" 2>&1 | tail -1 || true ;;
+                # KV is deleted by ID — "$RES" is its title, which --namespace-id never matches, so
+                # this used to miss on every PR and leak the namespace (#2608).
+                kv)
+                  KV_ID="$(npx wrangler kv namespace list 2>/dev/null | jq -r --arg t "$RES" '.[] | select(.title == $t) | .id' | head -1 || true)"
+                  if [ -n "$KV_ID" ]; then
+                    npx wrangler kv namespace delete --namespace-id "$KV_ID" --skip-confirmation 2>&1 | tail -1 && echo "  ✓ kv $RES" || true
+                  fi ;;
               esac
             done
           done
