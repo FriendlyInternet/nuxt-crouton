@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localizeError } from '../../utils/errors'
 /**
  * Team Invitations Component
  *
@@ -88,7 +89,7 @@ async function handleResend(invitationId: string) {
     await resendInvitation(invitationId)
     notify.success(t('teams.invitationResent'), { description: t('teams.invitationResentDescription') })
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('teams.failedToResendInvitation')
+    const message = e instanceof Error ? localizeError(e, t) : t('teams.failedToResendInvitation')
     notify.error(t('common.error'), { description: message })
   } finally {
     loadingInvitationId.value = null
@@ -103,7 +104,7 @@ async function handleCancel(invitationId: string) {
     notify.success(t('teams.invitationCancelled'), { description: t('teams.invitationCancelledDescription') })
     invitations.value = invitations.value.filter(i => i.id !== invitationId)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('teams.failedToCancelInvitation')
+    const message = localizeError(e, t)
     notify.error(t('common.error'), { description: message })
   } finally {
     loadingInvitationId.value = null
@@ -118,7 +119,7 @@ async function handleAccept(invitationId: string) {
     notify.success(t('teams.invitationAccepted'), { description: t('teams.invitationAcceptedDescription') })
     invitations.value = invitations.value.filter(i => i.id !== invitationId)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('teams.failedToAcceptInvitation')
+    const message = localizeError(e, t)
     notify.error(t('common.error'), { description: message })
   } finally {
     loadingInvitationId.value = null
@@ -133,7 +134,7 @@ async function handleReject(invitationId: string) {
     notify.info(t('teams.invitationDeclined'), { description: t('teams.invitationDeclinedDescription') })
     invitations.value = invitations.value.filter(i => i.id !== invitationId)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('teams.failedToDeclineInvitation')
+    const message = localizeError(e, t)
     notify.error(t('common.error'), { description: message })
   } finally {
     loadingInvitationId.value = null

@@ -4,7 +4,11 @@ import { croutonAssetsConfig } from '../collections/assets/app/composables/useCr
 
 export default defineAppConfig({
   croutonCollections: {
-    croutonAssets: { ...croutonAssetsConfig, container: 'modal' }
+    croutonAssets: {
+      ...croutonAssetsConfig,
+      container: 'modal',
+      adminNav: { label: 'crouton.collections.assets.title' }
+    }
   },
 
   // App auto-discovery registration for crouton-assets

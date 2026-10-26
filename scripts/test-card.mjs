@@ -29,26 +29,51 @@ export function decideTestCard({ subIssues = [], labels = [], comments = [], dep
   return { post: true, reason: `all ${subIssues.length} children closed + deployed to staging` }
 }
 
-/** Up to `max` phone-friendly check lines from the epic body's "Done when" section. */
-export function extractChecks(body = '', max = 3) {
-  const m = /^#{1,4}\s*Done when\s*$([\s\S]*?)(?=^#{1,4}\s|\n---|$(?![\s\S]))/im.exec(body)
-  const lines = (m ? m[1] : '')
+const NO_APP_LINE = 'Nothing to open: this changes how GitHub and the pipeline behave. Check it on the epic itself.'
+const METADATA_LINE = /^(?:Blocked-by:|Dedup-checked:|Packages-approved:|Workflow-change:|Parent:|Refs\s+#|Closes\s+#|<!--)/i
+
+export function sectionChecks(body, heading) {
+  const re = new RegExp(`^#{2,4}\\s*${heading}\\s*$([\\s\\S]*?)(?=^#{1,4}\\s|\\n---|$(?![\\s\\S]))`, 'im')
+  const m = re.exec(body)
+  return (m ? m[1] : '')
     .split('\n')
     .map(l => l.replace(/^\s*(?:[-*]|\d+\.)\s+/, '').trim())
-    .filter(l => l && !l.startsWith('<!--'))
-  return lines.slice(0, max)
+    .filter(l => l && !METADATA_LINE.test(l))
+    .map(l => l.replace(/\*\*/g, '').trim())
+    .filter(Boolean)
+}
+
+/** True when the body has at least one step under a `How to test` heading (not the `Done when` fallback). */
+export function hasTestSteps(body = '') {
+  return sectionChecks(body, '(?:🧪\\s*)?How to test').length > 0
+}
+
+/**
+ * Up to `max` phone-friendly check lines: the "How to test" section (written for a person) first,
+ * "Done when" (written for the worker) as the fallback. Metadata lines are dropped.
+ */
+export function extractChecks(body = '', max = 3) {
+  const howTo = sectionChecks(body, '(?:🧪\\s*)?How to test')
+  return (howTo.length ? howTo : sectionChecks(body, 'Done when')).slice(0, max)
 }
 
 /** Build the card comment. No password is ever included — only the account to log in as. */
 export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', reviewAccount = '', checks = [] } = {}) {
-  const list = checks.length ? checks : [`Open the app and try what "${title}" changed`]
+  const list = checks.length ? checks : [app ? `Open the app and try what "${title}" changed` : `Read the epic and check "${title}" did what it says`]
+  const where = !app
+    ? [NO_APP_LINE]
+    : stagingUrl
+      ? [
+          `**App:** ${app}`,
+          `**Try it:** ${stagingUrl}`,
+          `**Log in as:** ${reviewAccount || 'the review account'} (no password here — use the review sign-in link)`
+        ]
+      : [`**App:** ${app} — no staging link yet`]
   return [
     CARD_MARKER,
     `## 🧪 Test card — ${title || `epic #${epicNumber}`}`,
     '',
-    `**App:** ${app || '(see epic)'}`,
-    `**Try it:** ${stagingUrl || '(staging URL not configured)'}`,
-    `**Log in as:** ${reviewAccount || 'the review account'} (no password here — use the review sign-in link)`,
+    ...where,
     '',
     ...list.map(c => `- Check: ${c}`),
     '',
@@ -67,10 +92,11 @@ export function extractSummary(body = '', max = 400) {
  * steps, the one-click sign-in link (email-only, #2358). Plain text, no emojis. PURE.
  */
 export function buildTestMail({ epicNumber, title = '', app = '', staging = true, summary = '', checks = [], loginUrl = '', epicUrl = '' } = {}) {
-  const steps = ['Open the link below and sign in.', ...(checks.length ? checks : [`Try what "${title}" changed.`])]
-  const subject = `[${app || 'App'}] Test: ${title || `epic #${epicNumber}`}`
+  const fallback = app ? `Try what "${title}" changed.` : `Check "${title}" on the epic.`
+  const steps = [...(app ? ['Open the link below and sign in.'] : []), ...(checks.length ? checks : [fallback])]
+  const subject = `${app ? `[${app}] ` : ''}Test: ${title || `epic #${epicNumber}`}`
   const text = [
-    `App: ${app || '(see epic)'}${staging ? ' (staging)' : ''}`,
+    app ? `App: ${app}${staging ? ' (staging)' : ' — no staging link yet'}` : NO_APP_LINE,
     '',
     'What changed:',
     summary || title,
@@ -78,8 +104,7 @@ export function buildTestMail({ epicNumber, title = '', app = '', staging = true
     'What to test:',
     ...steps.map((s, i) => `${i + 1}. ${s}`),
     '',
-    `Open and sign in: ${loginUrl || '(no sign-in link available)'}`,
-    '',
+    ...(app ? [`Open and sign in: ${loginUrl || '(no sign-in link available)'}`, ''] : []),
     'Reply on the epic: ok, or not ok: <what is wrong>',
     epicUrl
   ].join('\n')

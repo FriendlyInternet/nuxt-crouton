@@ -25,6 +25,7 @@ import {
   AuthError,
   getErrorMessage,
   getErrorCode,
+  localizeError,
   isAuthError,
   AUTH_ERROR_CODES,
   type AuthErrorCode
@@ -43,11 +44,11 @@ export function useAuthError(options: UseAuthErrorOptions = {}) {
   const { showToast = true, toastDuration = 5000 } = options
 
   const error = ref<AuthError | null>(null)
-  const errorMessage = computed(() => error.value?.toUserMessage() ?? null)
-  const errorCode = computed(() => error.value?.code ?? null)
-
   const notify = useNotify()
   const { t } = useT()
+
+  const errorMessage = computed(() => error.value ? localizeError(error.value, t) : null)
+  const errorCode = computed(() => error.value?.code ?? null)
 
   /**
    * Clear the current error
@@ -73,7 +74,7 @@ export function useAuthError(options: UseAuthErrorOptions = {}) {
     // Show toast notification
     if (toastOptions?.show ?? showToast) {
       notify.error(t('common.error'), {
-        description: authError.toUserMessage(),
+        description: localizeError(authError, t),
         icon: 'i-lucide-circle-alert',
       } as any)
     }

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { localizeError } from '../../utils/errors'
 /**
  * AuthRouteModal
  *
@@ -152,7 +153,7 @@ async function handleOAuth(provider: string) {
   try {
     await loginWithOAuth(provider)
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('auth.oauthLoginFailed')
+    const message = e instanceof Error ? localizeError(e, t) : t('auth.oauthLoginFailed')
     formError.value = message
     notify.error(t('common.error'), { description: message })
   }
@@ -164,7 +165,7 @@ async function handlePasskey() {
     await loginWithPasskey()
     await handleSuccess()
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('auth.passkeyLoginFailed')
+    const message = e instanceof Error ? localizeError(e, t) : t('auth.passkeyLoginFailed')
     formError.value = message
     notify.error(t('common.error'), { description: message })
   }
@@ -239,7 +240,7 @@ async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: 
     await handleSuccess()
   } catch (e: unknown) {
     submitting.value = false
-    const message = e instanceof Error ? e.message : t('auth.loginFailed')
+    const message = e instanceof Error ? localizeError(e, t) : t('auth.loginFailed')
     formError.value = message
     notify.error(t('common.error'), { description: message })
   }
@@ -252,7 +253,7 @@ async function handleMagicLink(email: string) {
     magicLinkEmail.value = email
     notify.success(t('auth.checkYourInbox'), { description: t('auth.magicLinkSentDescription') })
   } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : t('auth.magicLinkFailed')
+    const message = e instanceof Error ? localizeError(e, t) : t('auth.magicLinkFailed')
     formError.value = message
     notify.error(t('common.error'), { description: message })
   }
@@ -307,7 +308,7 @@ async function onRegisterSubmit(event: FormSubmitEvent<{ name: string, email: st
     await handleSuccess()
   } catch (e: unknown) {
     submitting.value = false
-    const message = e instanceof Error ? e.message : t('auth.registrationFailed')
+    const message = e instanceof Error ? localizeError(e, t) : t('auth.registrationFailed')
     formError.value = message
     notify.error(t('common.error'), { description: message })
   }
