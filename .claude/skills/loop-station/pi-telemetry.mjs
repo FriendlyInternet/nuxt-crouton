@@ -31,7 +31,7 @@
 
 import fs from 'node:fs'
 import path from 'node:path'
-import { skillLoadsFromSession } from './lib/skill-loads.mjs'
+import { skillLoadsFromSession, toolStatsFromSession, formatToolStats } from './lib/skill-loads.mjs'
 
 function num(v) {
   if (v === null || v === undefined || v === '') return null
@@ -228,6 +228,31 @@ export function readSessionSkillLoads(dir) {
   return out
 }
 
+/** Merge tool-call stats (#2548) across every session JSONL under `dir`. */
+export function readSessionToolStats(dir) {
+  const total = { calls: {}, claudeReads: [], bashSkillTouches: 0 }
+  if (!dir || !fs.existsSync(dir)) return total
+  const stack = [dir]
+  while (stack.length) {
+    const cur = stack.pop()
+    let entries
+    try { entries = fs.readdirSync(cur, { withFileTypes: true }) } catch { continue }
+    for (const e of entries) {
+      const full = path.join(cur, e.name)
+      if (e.isDirectory()) { stack.push(full); continue }
+      if (!e.name.endsWith('.jsonl')) continue
+      try {
+        const s = toolStatsFromSession(fs.readFileSync(full, 'utf8'))
+        for (const [k, v] of Object.entries(s.calls)) total.calls[k] = (total.calls[k] || 0) + v
+        total.claudeReads.push(...s.claudeReads)
+        total.bashSkillTouches += s.bashSkillTouches
+      } catch { /* skip bad file */ }
+    }
+  }
+  total.claudeReads = total.claudeReads.slice(0, 10)
+  return total
+}
+
 /**
  * One-shot: a pi telemetry directory (+ optionally the run's session dir) → WS2 trace events
  * (with the leading `meta` header line the data seam expects). Agent events come from the
@@ -253,12 +278,17 @@ export function buildPiTrace(dir, opts = {}) {
 // slice per subagent (JSONL). Used by prepare-data.mjs and for manual inspection.
 if (import.meta.url === `file://${process.argv[1]}`) {
   const args = process.argv.slice(2)
+  const tsIdx = args.indexOf('--tool-stats')
+  if (tsIdx >= 0) {
+    console.log(formatToolStats(readSessionToolStats(args[tsIdx + 1])))
+    process.exit(0)
+  }
   const sessIdx = args.indexOf('--session')
   const sessionDir = sessIdx >= 0 ? args[sessIdx + 1] : undefined
   const dir = args.find((a, i) => !a.startsWith('--') && !(sessIdx >= 0 && i === sessIdx + 1))
   const ledger = args.includes('--ledger')
   if (!dir && !sessionDir) {
-    console.error('usage: node pi-telemetry.mjs <pi-telemetry-dir> [--session <pi-session-dir>] [--ledger]')
+    console.error('usage: node pi-telemetry.mjs <pi-telemetry-dir> [--session <pi-session-dir>] [--ledger] | --tool-stats <pi-session-dir>')
     process.exit(1)
   }
   if (ledger) {

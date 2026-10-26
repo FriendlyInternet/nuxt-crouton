@@ -57,3 +57,48 @@ export function skillLoadsFromSession(text) {
   }
   return out
 }
+
+/**
+ * Tool-call stats from a pi session log (#2548) — answers "did the worker call `read` on a
+ * skill, or is the telemetry miscounting?". Counts every `toolCall` by `name` EXACTLY as
+ * recorded (no lowercasing: the raw name is the evidence). `claudeReads` = repo-relative
+ * paths of read-like calls (name lowercases to `read`) under `.claude/`, max 10.
+ * `bashSkillTouches` = bash calls whose command mentions `.claude/skills/`.
+ * Names and paths only, never content (same privacy rule as above).
+ */
+export function toolStatsFromSession(text) {
+  const calls = {}
+  const claudeReads = []
+  let bashSkillTouches = 0
+  if (!text) return { calls, claudeReads, bashSkillTouches }
+  for (const line of text.split('\n')) {
+    const t = line.trim()
+    if (!t) continue
+    let rec
+    try { rec = JSON.parse(t) } catch { continue }
+    const content = rec?.message?.content
+    if (!Array.isArray(content)) continue
+    for (const c of content) {
+      if (c?.type !== 'toolCall' || typeof c.name !== 'string') continue
+      calls[c.name] = (calls[c.name] || 0) + 1
+      const a = c.arguments || {}
+      const lower = c.name.toLowerCase()
+      if (lower === 'read') {
+        const p = a.path ?? a.file_path
+        if (typeof p === 'string' && p.includes('.claude/') && claudeReads.length < 10) {
+          const i = p.indexOf('.claude/')
+          claudeReads.push(p.slice(i))
+        }
+      } else if (lower === 'bash' && typeof a.command === 'string' && a.command.includes('.claude/skills/')) {
+        bashSkillTouches++
+      }
+    }
+  }
+  return { calls, claudeReads, bashSkillTouches }
+}
+
+/** One-line summary: `tools: bash×31 read×12 · .claude reads: 0 · bash touching skills: 0`. */
+export function formatToolStats(s) {
+  const tools = Object.entries(s.calls).sort((a, b) => b[1] - a[1]).map(([n, k]) => `${n}×${k}`).join(' ') || 'none'
+  return `tools: ${tools} · .claude reads: ${s.claudeReads.length} · bash touching skills: ${s.bashSkillTouches}`
+}
