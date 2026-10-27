@@ -340,7 +340,10 @@ function renderSignoffArtifacts(signoff, state) {
       const hf = `${tmp}/signoff-ui.html`
       writeFileSync(hf, signoff.ui)
       mkdirSync('writeups/ui-mockups', { recursive: true })
-      const png = 'writeups/ui-mockups/signoff-ui.png'
+      // A new name per run (#2809): re-holding with the same name collided with the tracked copy on
+      // the epic branch, so every revised mockup was silently dropped and the comment kept showing
+      // the first one (and raw.githubusercontent would cache it anyway).
+      const png = `writeups/ui-mockups/signoff-ui-${process.env.GITHUB_RUN_ID || Date.now()}.png`
       state.exec('node', ['.claude/skills/ui-proposal/render.mjs', hf, png])
       if (linkable(png, 'UI mockup')) { state.artifacts.push(png); out.images.push({ label: 'UI mockup', path: png }) }
     })
