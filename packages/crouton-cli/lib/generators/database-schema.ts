@@ -2,6 +2,15 @@
 import { SYSTEM_FIELD_GROUPS, metadataFields as systemMetadataFields, hierarchyFields as systemHierarchyFields } from '../utils/system-fields.ts'
 import { toSnakeCase } from '../utils/helpers.ts'
 
+// Date columns get no implicit default: nullable dates (publishedAt, deletedAt) must stay null
+// unless meta.default asks for a value ('now' → new Date(), anything else → that literal).
+function dateDefault(field: Record<string, any>): string {
+  const def = field.meta?.default
+  if (def === undefined || def === null || def === '') return ''
+  if (def === 'now') return '.$default(() => new Date())'
+  return `.$default(() => new Date(${JSON.stringify(def)}))`
+}
+
 export function generateSchema(data: Record<string, any>, dialect: string, config: Record<string, any> | null = null): string {
   const { plural, layer, layerPascalCase, singular, hierarchy, pascalCasePlural } = data
 
@@ -83,7 +92,7 @@ export function generateSchema(data: Record<string, any>, dialect: string, confi
         } else if (field.type === 'number' || field.type === 'decimal') {
           return `  ${field.name}: ${field.type === 'decimal' ? 'real' : 'integer'}('${field.name}')${nullable}${unique}`
         } else if (field.type === 'date') {
-          return `  ${field.name}: integer('${field.name}', { mode: 'timestamp' })${nullable}${unique}.$default(() => new Date())`
+          return `  ${field.name}: integer('${field.name}', { mode: 'timestamp' })${nullable}${unique}${dateDefault(field)}`
         } else if (field.type === 'json' || field.type === 'repeater' || field.type === 'array' || isDependentField) {
         // Use [] for arrays/repeaters/dependent fields, {} for json objects
           const defaultValue = (field.type === 'array' || field.type === 'repeater' || isDependentField) ? 'null' : '{}'
@@ -102,7 +111,7 @@ export function generateSchema(data: Record<string, any>, dialect: string, confi
         } else if (field.type === 'decimal') {
           return `  ${field.name}: numeric('${field.name}')${nullable}${unique}`
         } else if (field.type === 'date') {
-          return `  ${field.name}: timestamp('${field.name}', { withTimezone: true })${nullable}${unique}.$default(() => new Date())`
+          return `  ${field.name}: timestamp('${field.name}', { withTimezone: true })${nullable}${unique}${dateDefault(field)}`
         } else if (field.type === 'json' || field.type === 'repeater' || field.type === 'array' || isDependentField) {
         // Use [] for arrays/repeaters/dependent fields, {} for json objects
           const defaultValue = (field.type === 'array' || field.type === 'repeater' || isDependentField) ? 'null' : '{}'
