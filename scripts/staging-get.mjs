@@ -12,6 +12,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
+import { signIn, mergeCookies, cookieHeader } from './lib/review-login.mjs'
 
 /** Same derivation as post-test-card.mjs loginLink() / deploy-app.yml (key `main`). */
 export function reviewAccount(app, secret) {
@@ -35,62 +36,54 @@ export function fillTeam(path, teamId) {
   return path.replace(/<team>/g, teamId ? encodeURIComponent(teamId) : '<team>')
 }
 
-function cookieJar(jar, res) {
-  for (const sc of res.headers.getSetCookie?.() ?? []) {
-    const pair = sc.split(';')[0]
-    const eq = pair.indexOf('=')
-    if (eq > 0) jar.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim())
-  }
+const jsonHeaders = (base, jar) => ({ 'content-type': 'application/json', origin: base, cookie: cookieHeader(jar) })
+
+/** Active team id of the signed-in session, activating the account's first team if none is set. */
+async function resolveTeam(base, jar) {
+  const sess = await (await fetch(`${base}/api/auth/get-session`, { headers: jsonHeaders(base, jar) })).json().catch(() => null)
+  const active = sess?.session?.activeOrganizationId
+  if (active) return active
+  const orgs = await (await fetch(`${base}/api/auth/organization/list`, { headers: jsonHeaders(base, jar) })).json().catch(() => [])
+  const teamId = Array.isArray(orgs) ? orgs[0]?.id : undefined
+  if (!teamId) return undefined
+  const r = await fetch(`${base}/api/auth/organization/set-active`, { method: 'POST', headers: jsonHeaders(base, jar), body: JSON.stringify({ organizationId: teamId }) })
+  mergeCookies(jar, r)
+  return teamId
 }
-const cookieHeader = jar => [...jar].map(([k, v]) => `${k}=${v}`).join('; ')
+
+/** Pretty-print a JSON body and count rows (array, or the first top-level array field). */
+export function formatBody(text) {
+  try {
+    const json = JSON.parse(text)
+    const arr = Array.isArray(json) ? json : Object.values(json ?? {}).find(Array.isArray)
+    return { body: JSON.stringify(json, null, 2), count: arr ? ` · ${arr.length} row(s)` : '' }
+  } catch { return { body: text, count: '' } } // non-JSON body printed as-is
+}
+
+function fail(msg, code) { console.error(msg); process.exit(code) }
 
 async function main() {
   const argv = process.argv.slice(2)
   const mi = argv.indexOf('--method')
   const method = mi >= 0 ? (argv.splice(mi, 2)[1] || 'GET').toUpperCase() : 'GET'
   const [app, path] = argv
-  if (!app || !path) {
-    console.error('Usage: REVIEW_SEED_SECRET=… staging-get.mjs <app> <path> [--method GET]')
-    process.exit(2)
-  }
+  if (!app || !path) fail('Usage: REVIEW_SEED_SECRET=… staging-get.mjs <app> <path> [--method GET]', 2)
   const secret = process.env.REVIEW_SEED_SECRET
-  if (!secret) { console.error('REVIEW_SEED_SECRET is not set — cannot derive the review login.'); process.exit(2) }
+  if (!secret) fail('REVIEW_SEED_SECRET is not set — cannot derive the review login.', 2)
   const base = readStagingUrl(app)
-  if (!base) { console.error(`No stagingUrl in apps/${app}/deploy.config.json or pocs/${app}/.`); process.exit(2) }
+  if (!base) fail(`No stagingUrl in apps/${app}/deploy.config.json or pocs/${app}/.`, 2)
 
   const { email, password } = reviewAccount(app, secret)
-  const headers = { 'content-type': 'application/json', origin: base }
-  const jar = new Map()
+  const { loggedIn, jar } = await signIn(base, email, password)
+  if (!loggedIn) fail(`sign-in as ${email} failed`, 1)
 
-  const signIn = await fetch(`${base}/api/auth/sign-in/email`, { method: 'POST', headers, body: JSON.stringify({ email, password }) })
-  cookieJar(jar, signIn)
-  if (!signIn.ok) { console.error(`sign-in as ${email} failed: HTTP ${signIn.status}`); process.exit(1) }
-
-  let sess = await (await fetch(`${base}/api/auth/get-session`, { headers: { ...headers, cookie: cookieHeader(jar) } })).json().catch(() => null)
-  let teamId = sess?.session?.activeOrganizationId
-  if (!teamId && path.includes('<team>')) {
-    // No active team yet — activate the first one the account belongs to.
-    const orgsRes = await fetch(`${base}/api/auth/organization/list`, { headers: { ...headers, cookie: cookieHeader(jar) } })
-    const orgs = await orgsRes.json().catch(() => [])
-    teamId = Array.isArray(orgs) ? orgs[0]?.id : undefined
-    if (teamId) {
-      const r = await fetch(`${base}/api/auth/organization/set-active`, { method: 'POST', headers: { ...headers, cookie: cookieHeader(jar) }, body: JSON.stringify({ organizationId: teamId }) })
-      cookieJar(jar, r)
-    }
-  }
-  if (path.includes('<team>') && !teamId) { console.error(`${email} has no team to fill <team> with.`); process.exit(1) }
+  const wantsTeam = path.includes('<team>')
+  const teamId = wantsTeam ? await resolveTeam(base, jar) : undefined
+  if (wantsTeam && !teamId) fail(`${email} has no team to fill <team> with.`, 1)
 
   const target = fillTeam(path, teamId)
-  const res = await fetch(`${base}${target}`, { method, headers: { ...headers, cookie: cookieHeader(jar) } })
-  const text = await res.text()
-  let body = text
-  let count = ''
-  try {
-    const json = JSON.parse(text)
-    body = JSON.stringify(json, null, 2)
-    const arr = Array.isArray(json) ? json : Object.values(json ?? {}).find(Array.isArray)
-    if (arr) count = ` · ${arr.length} row(s)`
-  } catch { /* non-JSON body printed as-is */ }
+  const res = await fetch(`${base}${target}`, { method, headers: jsonHeaders(base, jar) })
+  const { body, count } = formatBody(await res.text())
   console.log(`${method} ${base}${target} → HTTP ${res.status}${count}`)
   console.log(body.length > 20000 ? `${body.slice(0, 20000)}\n… (truncated)` : body)
 }

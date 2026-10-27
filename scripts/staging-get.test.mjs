@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { reviewAccount, readStagingUrl, fillTeam } from './staging-get.mjs'
+import { reviewAccount, readStagingUrl, fillTeam, formatBody } from './staging-get.mjs'
 
 test('reviewAccount matches the deploy-time derivation (key main)', () => {
   const { email, password } = reviewAccount('velo', 's3')
@@ -24,4 +24,11 @@ test('fillTeam replaces every <team> placeholder, leaves path alone without a te
   assert.equal(fillTeam('/api/teams/<team>/x?t=<team>', 'abc'), '/api/teams/abc/x?t=abc')
   assert.equal(fillTeam('/api/teams/<team>/x', undefined), '/api/teams/<team>/x')
   assert.equal(fillTeam('/api/health', 'abc'), '/api/health')
+})
+
+test('formatBody counts rows for arrays and wrapped arrays, passes non-JSON through', () => {
+  assert.equal(formatBody('[1,2]').count, ' · 2 row(s)')
+  assert.equal(formatBody('{"items":[1,2,3]}').count, ' · 3 row(s)')
+  assert.equal(formatBody('{"ok":true}').count, '')
+  assert.deepEqual(formatBody('<html>'), { body: '<html>', count: '' })
 })
