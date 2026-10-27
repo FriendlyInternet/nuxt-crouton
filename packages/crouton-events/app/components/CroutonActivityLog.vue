@@ -196,7 +196,7 @@ const stats = computed(() => {
         variant="ghost"
         size="sm"
         class="mt-2"
-        @click="refresh"
+        @click="() => refresh()"
       >
         Try Again
       </UButton>

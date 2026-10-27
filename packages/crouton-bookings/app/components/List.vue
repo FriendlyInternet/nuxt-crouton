@@ -428,26 +428,30 @@ const creatingAtDateKey = computed(() => {
               />
             </template>
 
-            <!-- Empty selected day -->
-            <p
-              v-if="dateGroup.bookings.length === 0 && creatingAtDateKey !== dateGroup.dateKey"
-              class="text-sm text-muted px-1 py-2"
-            >
-              {{ t('bookings.calendar.noBookings') }}
-            </p>
-
-            <!-- Ghost row: start a booking for this selected day -->
+            <!-- Ghost row for the selected day: shaped like a booking card, dashed, starts a
+                 booking for that date. On a day without bookings it also says so. -->
             <UButton
               v-if="isSelectedDateKey(dateGroup.dateKey) && creatingAtDateKey !== dateGroup.dateKey"
               block
-              variant="outline"
+              variant="ghost"
               color="neutral"
-              icon="i-lucide-plus"
-              class="border-dashed"
+              class="justify-start gap-3 p-1.5 md:p-2 rounded-lg border border-dashed border-accented text-muted hover:border-primary hover:text-primary hover:bg-primary/5 disabled:opacity-60"
               :disabled="isDayFullyBooked?.(new Date(dateGroup.date))"
               @click="emit('newBooking', new Date(dateGroup.date))"
             >
-              {{ isDayFullyBooked?.(new Date(dateGroup.date)) ? t('bookings.calendar.fullyBooked') : t('bookings.calendar.newBooking') }}
+              <template #leading>
+                <CroutonBookingsDateBadge :date="dateGroup.date" variant="muted" />
+              </template>
+              <span class="flex items-center gap-1.5 text-sm font-medium">
+                <UIcon
+                  :name="isDayFullyBooked?.(new Date(dateGroup.date)) ? 'i-lucide-check' : 'i-lucide-plus'"
+                  class="size-4"
+                />
+                {{ isDayFullyBooked?.(new Date(dateGroup.date)) ? t('bookings.calendar.fullyBooked') : t('bookings.calendar.newBooking') }}
+              </span>
+              <template v-if="dateGroup.bookings.length === 0" #trailing>
+                <span class="ms-auto text-xs text-dimmed">{{ t('bookings.calendar.noBookings') }}</span>
+              </template>
             </UButton>
           </template>
         </div>
