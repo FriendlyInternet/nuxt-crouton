@@ -310,6 +310,8 @@
       "noSlotsDescription": "Tous les créneaux horaires sont indisponibles à cette date",
       "allSlotsTaken": "Tous les créneaux pris",
       "allSlotsTakenDescription": "Tous les créneaux horaires de tous les lieux sont complets pour cette journée.",
+      "noLocations": "Aucun lieu pour l'instant",
+      "noLocationsDescription": "Un lieu est nécessaire pour réserver. Demandez à un administrateur d'en ajouter un.",
       "emailSent": "E-mail envoyé",
       "emailSentDescription": "L'e-mail de confirmation a été renvoyé avec succès",
       "emailFailed": "Échec de l'envoi de l'e-mail",

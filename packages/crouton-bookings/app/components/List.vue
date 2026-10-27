@@ -439,7 +439,7 @@ const creatingAtDateKey = computed(() => {
               :disabled="isDayFullyBooked?.(new Date(dateGroup.date))"
               @click="emit('newBooking', new Date(dateGroup.date))"
             >
-              <template #leading>
+              <template v-if="dateGroup.bookings.length === 0" #leading>
                 <CroutonBookingsDateBadge :date="dateGroup.date" variant="muted" />
               </template>
               <span class="flex items-center gap-1.5 text-sm font-medium">

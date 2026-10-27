@@ -310,6 +310,8 @@
       "noSlotsDescription": "Alle tijdslots zijn niet beschikbaar op deze datum",
       "allSlotsTaken": "Alle slots bezet",
       "allSlotsTakenDescription": "Alle tijdslots op alle locaties zijn volgeboekt voor deze dag.",
+      "noLocations": "Nog geen locaties",
+      "noLocationsDescription": "Er is een locatie nodig om te kunnen boeken. Vraag een beheerder er een toe te voegen.",
       "emailSent": "E-mail verzonden",
       "emailSentDescription": "Bevestigingsmail is succesvol opnieuw verzonden",
       "emailFailed": "E-mail verzenden mislukt",
