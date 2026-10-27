@@ -5,7 +5,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { uiTouched, isCommentOrBlank, underUiKey } from './ui-touched.mjs'
+import { uiTouched, commentLines, underUiKey } from './ui-touched.mjs'
 
 const none = () => null
 
@@ -41,8 +41,10 @@ const CONFIG_OLD = [
   '})'
 ]
 
+const LIBRARY_VUE = ['<script setup lang="ts">', ...Array(8).fill('const a = 1'), "// The package registers a partial 'assets' config (no apiPath),", '</script>']
+
 test('PR #2720 replays as not visual', () => {
-  assert.equal(uiTouched(PR_2720, () => CONFIG_OLD), 0)
+  assert.equal(uiTouched(PR_2720, (_s, p) => (p.endsWith('.vue') ? LIBRARY_VUE : CONFIG_OLD)), 0)
 })
 
 test('a template class= change is visual', () => {
@@ -81,13 +83,41 @@ test('app.config.ts change under ui: is visual; unreadable file holds', () => {
   assert.equal(uiTouched(d(7), none), 1)
 })
 
-test('comment/blank classifier', () => {
-  assert.ok(isCommentOrBlank('  // hi'))
-  assert.ok(isCommentOrBlank('<!-- hi -->'))
-  assert.ok(isCommentOrBlank(' * doc line'))
-  assert.ok(isCommentOrBlank(''))
-  assert.ok(!isCommentOrBlank('* { margin: 0 }'))
-  assert.ok(!isCommentOrBlank('<div> <!-- x -->'))
+// a diff that replaces line `n` of `path` with `line`
+const one = (path, n, line) => `diff --git a/${path} b/${path}
+--- a/${path}
++++ b/${path}
+@@ -${n} +${n} @@
+-old
++${line}
+`
+
+test('comment/blank classifier (whole-line only)', () => {
+  const c = (lines, path = 'x.vue') => commentLines(lines, path)
+  assert.deepEqual(c(['<script setup>', '// hi', '</script>']), [false, true, false])
+  assert.deepEqual(c(['<template>', '<!-- hi -->', '', '</template>']), [false, true, true, false])
+  assert.deepEqual(c(['<script>', '/*', ' * doc line', ' */', '</script>']), [false, true, true, true, false])
+  assert.deepEqual(c(['<!--', 'text', '-->']), [true, true, true])
+  assert.deepEqual(c(['<div> <!-- x -->']), [false])
+  assert.deepEqual(c(['* { margin: 0 }'], 'a.css'), [false])
+  assert.deepEqual(c(['// not css'], 'a.css'), [false])
+  assert.deepEqual(c(['/* css comment */'], 'a.css'), [true])
+  assert.deepEqual(c(['/* c */ .a { color: red }'], 'a.css'), [false])
+})
+
+test('<!-- note --><UButton/> is visual', () => {
+  const lines = ['<template>', '<!-- note --><UButton/>', '</template>']
+  assert.equal(uiTouched(one('x.vue', 2, lines[1]), () => lines), 1)
+})
+
+test('a template line `// Total` is visual', () => {
+  const lines = ['<template>', '// Total', '</template>']
+  assert.equal(uiTouched(one('x.vue', 2, lines[1]), () => lines), 1)
+})
+
+test('a // comment inside <script setup> is not visual', () => {
+  const lines = ['<script setup>', '// comment', '</script>']
+  assert.equal(uiTouched(one('x.vue', 2, lines[1]), () => lines), 0)
 })
 
 test('underUiKey walks ancestors', () => {
