@@ -42,11 +42,11 @@ describe('loadFields alias resolution (#285)', () => {
     expect(byName.count.zod).toBe('z.number()')
   })
 
-  it('leaves canonical types and unknown types untouched', async () => {
-    const byName = await loadFromSchema({ title: { type: 'string' }, when: { type: 'date' }, weird: { type: 'nope' } })
+  it('leaves canonical types untouched and rejects unknown types (#2732)', async () => {
+    const byName = await loadFromSchema({ title: { type: 'string' }, when: { type: 'date' } })
     expect(byName.title.type).toBe('string')
     expect(byName.when.type).toBe('date')
-    expect(byName.weird.type).toBe('string') // unknown → string fallback
+    await expect(loadFromSchema({ weird: { type: 'nope' } })).rejects.toThrow(/Field "weird" has unknown type "nope"/)
   })
 })
 
@@ -64,12 +64,6 @@ describe('loadFields attaches the manifest-declared form component (#2286)', () 
     const byName = await loadFromSchema({ at: { type: 'datetime' }, n: { type: 'integer' } })
     expect(byName.at.component).toBe('CroutonCalendar')
     expect(byName.n.component).toBe('UInputNumber')
-  })
-
-  it('gives an unknown type the string fallback\'s component (unknown → string, as before)', async () => {
-    const byName = await loadFromSchema({ weird: { type: 'nope' } })
-    expect(byName.weird.type).toBe('string')
-    expect(byName.weird.component).toBe('UInput')
   })
 
   it('attaches `component` to each repeater property as well (aliases resolved)', async () => {
