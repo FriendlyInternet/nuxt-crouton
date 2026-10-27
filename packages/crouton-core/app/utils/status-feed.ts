@@ -47,26 +47,28 @@ export interface TeamEventRow {
 }
 
 /**
- * Merge team events into the local history: dedupe (by id, and our own events
- * against in-memory entries for the same collection+item+operation), newest first, capped at STATUS_RECENT_MAX.
+ * Merge the current user's own events into the local history (so they survive a reload).
+ * Other users' events are dropped (they return via live sync); with no `currentUserId`
+ * nothing is merged. Dedupes by id and against in-memory entries for the same
+ * collection+item+operation, newest first, capped at STATUS_RECENT_MAX.
  */
 export function mergeTeamEvents(history: StatusMessage[], events: TeamEventRow[], t: Translate, currentUserId?: string): StatusMessage[] {
+  if (!currentUserId) return history
   const known = new Set(history.map(m => m.id))
   const fromEvents: StatusMessage[] = []
   for (const ev of events) {
     const id = `event-${ev.id}`
     const timestamp = new Date(ev.timestamp).getTime()
     if (known.has(id) || Number.isNaN(timestamp)) continue
-    const isOwn = !!currentUserId && ev.userId === currentUserId
-    if (isOwn && ev.itemId && history.some(m =>
+    if (ev.userId !== currentUserId) continue
+    if (ev.itemId && history.some(m =>
       !m.id.startsWith('event-')
       && m.collection === ev.collectionName
       && m.itemId === ev.itemId
       && m.operation === ev.operation,
     )) continue
     known.add(id)
-    const userName = isOwn ? undefined : ev.userName?.split(' ')[0]
-    const { text, icon } = mutationStatus({ operation: ev.operation, collection: ev.collectionName, userName }, t)
+    const { text, icon } = mutationStatus({ operation: ev.operation, collection: ev.collectionName }, t)
     fromEvents.push({ id, text, icon, type: 'success', timestamp, collection: ev.collectionName, operation: ev.operation, itemId: ev.itemId, seen: true })
   }
   return [...history, ...fromEvents]
