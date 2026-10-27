@@ -479,7 +479,7 @@ defineExpose({
           <CroutonBookingsPanelFilters
             :locations="resolvedLocations"
             :selected-locations="filterState.locations"
-            :selected-dates-count="selectedDate ? 1 : 0"
+            :has-selected-date="!!selectedDate"
             :show-locations="showLocations"
             :show-map="showMap"
             :show-calendar="showCalendar"
