@@ -86,8 +86,10 @@ export function generateSchema(data: Record<string, any>, _dialect: string, conf
       }
     }).join(',\n')
 
-  const imports = `import { nanoid } from 'nanoid'
-import { sqliteTable, text, integer, real, customType${uniqueFields.length > 0 ? ', uniqueIndex' : ''} } from 'drizzle-orm/sqlite-core'
+  const usesJson = schemaFields.includes('jsonColumn(') || translationsField.includes('jsonColumn(')
+  const usesReal = schemaFields.includes(": real(") || schemaFields.includes(" real(")
+
+  const jsonColumnDef = `
 
 // Custom JSON column that handles NULL values gracefully during LEFT JOINs
 const jsonColumn = customType<any>({
@@ -107,7 +109,11 @@ const jsonColumn = customType<any>({
   toDriver(value: any): string {
     return JSON.stringify(value)
   },
-})`
+})
+`
+
+  const imports = `import { nanoid } from 'nanoid'
+import { ${['sqliteTable', 'text', 'integer', ...(usesReal ? ['real'] : []), ...(usesJson ? ['customType'] : []), ...(uniqueFields.length > 0 ? ['uniqueIndex'] : [])].join(', ')} } from 'drizzle-orm/sqlite-core'${usesJson ? jsonColumnDef.trimEnd() : ''}`
 
   const tableFn = 'sqliteTable'
 

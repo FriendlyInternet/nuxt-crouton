@@ -461,7 +461,7 @@ function buildSelectJoins(
 }
 
 // Generate post-query processing code for JSON fields (repeater, json types)
-// These fields come back as strings from SQLite and need to be parsed
+// jsonColumn.fromDriver already parses them, so only null defaults are applied here
 function buildJsonFieldProcessing(
   jsonFields: { fieldName: string; fieldType: string; defaultValue: string }[],
   camelCasePlural: string
@@ -469,15 +469,7 @@ function buildJsonFieldProcessing(
   let jsonFieldProcessing = ''
   if (jsonFields.length > 0) {
     const fieldParsers = jsonFields.map(field => `
-      // Parse ${field.fieldName} from JSON string
-      if (typeof item.${field.fieldName} === 'string') {
-        try {
-          item.${field.fieldName} = JSON.parse(item.${field.fieldName})
-        } catch (e) {
-          console.error('Error parsing ${field.fieldName}:', e)
-          item.${field.fieldName} = ${field.defaultValue}
-        }
-      }
+      // ${field.fieldName} is already parsed by jsonColumn.fromDriver; only default it
       if (item.${field.fieldName} === null || item.${field.fieldName} === undefined) {
         item.${field.fieldName} = ${field.defaultValue}
       }`).join('')
@@ -524,35 +516,16 @@ function buildArrayRefProcessing(
       // Build the ID collection logic for all fields referencing this collection
       const idCollectionCode = refs.map(ref => `
     ${camelCasePlural}.forEach(item => {
-        if (item.${ref.fieldName}) {
-          try {
-            const ids = typeof item.${ref.fieldName} === 'string'
-              ? JSON.parse(item.${ref.fieldName})
-              : item.${ref.fieldName}
-            if (Array.isArray(ids)) {
-              ids.forEach(id => all${collectionVarName}Ids.add(id))
-            }
-          } catch (e) {
-            // Handle parsing errors gracefully
-            console.error('Error parsing ${ref.fieldName}:', e)
-          }
+        if (Array.isArray(item.${ref.fieldName})) {
+          item.${ref.fieldName}.forEach(id => all${collectionVarName}Ids.add(id))
         }
       })`).join('')
 
       // Build the mapping logic for all fields
       const mappingCode = refs.map(ref => `
         item.${ref.fieldName}Data = []
-        if (item.${ref.fieldName}) {
-          try {
-            const ids = typeof item.${ref.fieldName} === 'string'
-              ? JSON.parse(item.${ref.fieldName})
-              : item.${ref.fieldName}
-            if (Array.isArray(ids)) {
-              item.${ref.fieldName}Data = related${collectionVarName}.filter(r => ids.includes(r.id))
-            }
-          } catch (e) {
-            console.error('Error mapping ${ref.fieldName}:', e)
-          }
+        if (Array.isArray(item.${ref.fieldName})) {
+          item.${ref.fieldName}Data = related${collectionVarName}.filter(r => item.${ref.fieldName}.includes(r.id))
         }`).join('')
 
       processingBlocks.push(`
