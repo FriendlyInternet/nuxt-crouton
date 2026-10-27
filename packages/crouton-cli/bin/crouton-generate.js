@@ -26,6 +26,15 @@ async function tsImport(specifier) {
 const pkgPath = join(__dirname, '..', 'package.json')
 const pkg = JSON.parse(await readFile(pkgPath, 'utf-8'))
 
+// ─── Helper: sqlite is the only supported dialect (#2735) ──────────
+
+function assertSqliteDialect(dialect) {
+  if (dialect && dialect !== 'sqlite') {
+    consola.error(`Unsupported dialect '${dialect}' — only sqlite is supported`)
+    process.exit(1)
+  }
+}
+
 // ─── Helper: detect crouton.config.{ts,js,mjs,cjs} ────────────────
 
 function detectConfigFile() {
@@ -46,7 +55,7 @@ const generate = defineCommand({
     collection: { type: 'positional', description: 'Collection name', required: false },
     fieldsFile: { type: 'string', alias: 'f', description: 'Path to JSON schema file' },
     config: { type: 'string', alias: 'c', description: 'Use config file instead of CLI args' },
-    dialect: { type: 'string', alias: 'd', description: 'Database dialect (sqlite|pg)', default: 'sqlite' },
+    dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
     autoRelations: { type: 'boolean', description: 'Add relation stubs in comments' },
     dryRun: { type: 'boolean', description: 'Preview without writing' },
     noTranslations: { type: 'boolean', description: 'Skip translation fields' },
@@ -59,6 +68,7 @@ const generate = defineCommand({
     noAutoMerge: { type: 'boolean', description: 'Skip the setup questions of extended packages' },
   },
   async run({ args }) {
+    assertSqliteDialect(args.dialect)
     // If --config is provided, delegate to config mode
     if (args.config) {
       const { runConfig } = await tsImport(join(__dirname, '..', 'lib', 'generate-collection.ts'))
@@ -177,7 +187,7 @@ const initCmd = defineCommand({
     name: { type: 'positional', description: 'App name', required: true },
     features: { type: 'string', description: 'Comma-separated feature names (e.g., bookings,pages,editor)', default: '' },
     theme: { type: 'string', description: 'Theme to wire into extends (e.g., ko)' },
-    dialect: { type: 'string', alias: 'd', description: 'Database dialect (sqlite or pg)', default: 'sqlite' },
+    dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
     noCf: { type: 'boolean', description: 'Skip Cloudflare-specific config (wrangler.jsonc, CF stubs)' },
     domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev)' },
     poc: { type: 'boolean', description: 'Scaffold into pocs/<name> (the incubator) instead of apps/<name>' },
@@ -185,6 +195,7 @@ const initCmd = defineCommand({
     dryRun: { type: 'boolean', description: 'Preview what will be generated without writing files' },
   },
   async run({ args }) {
+    assertSqliteDialect(args.dialect)
     const initPath = join(__dirname, '..', 'lib', 'init-app.ts')
     const { initApp } = await tsImport(initPath)
 
@@ -372,12 +383,13 @@ const scaffoldAppCmd = defineCommand({
     name: { type: 'positional', description: 'App name', required: true },
     features: { type: 'string', description: 'Comma-separated feature names (e.g., bookings,pages,editor)', default: '' },
     theme: { type: 'string', description: 'Theme to wire into extends (e.g., ko)' },
-    dialect: { type: 'string', alias: 'd', description: 'Database dialect (sqlite or pg)', default: 'sqlite' },
+    dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
     noCf: { type: 'boolean', description: 'Skip Cloudflare-specific config (wrangler.jsonc, CF stubs)' },
     domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev)' },
     dryRun: { type: 'boolean', description: 'Preview what will be generated without writing files' },
   },
   async run({ args }) {
+    assertSqliteDialect(args.dialect)
     const scaffoldPath = join(__dirname, '..', 'lib', 'scaffold-app.ts')
     const { scaffoldApp } = await tsImport(scaffoldPath)
 
