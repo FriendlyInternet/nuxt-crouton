@@ -1005,13 +1005,13 @@ jobs:
             const app = '${{ inputs.app }}'
             const email = `${{ steps.seed.outputs.email }}`
             const marker = `<!-- deploy-staging:${app} -->`
-            // Review login (#608). The password and the one-click link that carries it are
-            // NEVER posted here — PR comments are public on this repo (#2358). The link goes
-            // to the owner by email (step above); this only says the login exists.
-            const login = email
-              ? `\n\n🔑 Review login \`${email}\` — the sign-in link comes by email when the epic is ready to test.`
-              : ''
+            // Review login (#608, #2817). No credentials are ever posted here — PR comments
+            // are public on this repo (#2358). The status app signs in server-side and
+            // redirects to this PR's preview, so the link is safe to post.
             const pr = context.issue.number
+            const login = email
+              ? `\n\n🔑 [Open and sign in](https://status.pmcp.dev/api/status/login/${app}?key=pr${pr})\n<sub>The sign-in email is separate: one per epic, once the work is merged and live on staging.</sub>`
+              : ''
             // #2462: the gallery deploys for a PR that changes a shared UI piece — link each
             // changed piece's own review page, not just the gallery's front door.
             let pieces = ''
