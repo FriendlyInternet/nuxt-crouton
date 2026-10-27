@@ -6,8 +6,9 @@ export function reviewLogin(secret: string, app: string, key: string) {
   return { email: `review+${app}-${key}@example.com`, password }
 }
 
-export function reviewLoginUrl(baseUrl: string, secret: string, app: string, key: string): string {
+export function reviewLoginUrl(baseUrl: string, secret: string, app: string, key: string, redirect = ''): string {
   const { email, password } = reviewLogin(secret, app, key)
   const q = new URLSearchParams({ email, password })
+  if (redirect) q.set('redirect', redirect)
   return `${baseUrl.replace(/\/+$/, '')}/auth/login?${q}`
 }
