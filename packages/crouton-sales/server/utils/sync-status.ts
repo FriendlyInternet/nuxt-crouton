@@ -38,6 +38,14 @@ async function loadStatusSchema() {
   return { salesSyncStatus }
 }
 
+/** The identity a heartbeat is recorded for: a paired till, or the legacy shared-key row. */
+export interface SyncDevice {
+  deviceId: string
+  teamId: string | null
+}
+
+const SHARED_KEY_DEVICE: SyncDevice = { deviceId: SYNC_STATUS_ROW_ID, teamId: null }
+
 /**
  * Stamp the heartbeat after an ingest call. `appliedCount` is how many events
  * the batch applied (0 for an idle ping). `lastContactAt` always advances;
@@ -48,33 +56,29 @@ async function loadStatusSchema() {
 export async function recordSyncHeartbeat(
   db: any,
   appliedCount: number,
-  device?: { deviceId: string, teamId: string }
+  device: SyncDevice = SHARED_KEY_DEVICE
 ): Promise<void> {
-  const rowId = device?.deviceId ?? SYNC_STATUS_ROW_ID
   try {
     const { salesSyncStatus } = await loadStatusSchema()
     const now = new Date()
     const applied = Number(appliedCount) || 0
+    const data = applied > 0 ? { lastEventAt: now, lastBatchApplied: applied } : undefined
 
-    const base = { lastContactAt: now, updatedAt: now }
-    const dataFields = applied > 0 ? { lastEventAt: now, lastBatchApplied: applied } : {}
-
-    const updated = await db
-      .update(salesSyncStatus)
-      .set({ ...base, ...dataFields })
-      .where(eq(salesSyncStatus.id, rowId))
-      .returning({ id: salesSyncStatus.id })
-
-    if (updated.length === 0) {
-      await db.insert(salesSyncStatus).values({
-        id: rowId,
-        teamId: device?.teamId ?? null,
+    await db
+      .insert(salesSyncStatus)
+      .values({
+        id: device.deviceId,
+        teamId: device.teamId,
         lastContactAt: now,
-        lastEventAt: applied > 0 ? now : null,
-        lastBatchApplied: applied,
+        lastEventAt: null,
+        lastBatchApplied: 0,
         updatedAt: now,
+        ...data,
       })
-    }
+      .onConflictDoUpdate({
+        target: salesSyncStatus.id,
+        set: { lastContactAt: now, updatedAt: now, ...data },
+      })
   }
   catch (err: any) {
     console.warn('[crouton-sales] sync heartbeat write failed (ignored):', err?.message || err)
@@ -112,4 +116,26 @@ export function freshestStatus(statuses: SyncStatus[]): SyncStatus | null {
     const t = s.lastContactAt?.getTime() ?? -1
     return !best || t > (best.lastContactAt?.getTime() ?? -1) ? s : best
   }, null)
+}
+
+/**
+ * The status endpoint's payload: the freshest till as the headline (so existing
+ * banners keep working) plus every till of the team, freshest first (#2725).
+ * `now` is the server clock, so clients compute age immune to device clock skew.
+ */
+export function toStatusPayload(statuses: SyncStatus[], now: number = Date.now()) {
+  const ms = (d: Date | null) => d?.getTime() ?? null
+  const freshest = freshestStatus(statuses)
+  return {
+    lastContactAt: ms(freshest?.lastContactAt ?? null),
+    lastEventAt: ms(freshest?.lastEventAt ?? null),
+    lastBatchApplied: freshest?.lastBatchApplied ?? 0,
+    devices: statuses.map(s => ({
+      deviceId: s.deviceId,
+      lastContactAt: ms(s.lastContactAt),
+      lastEventAt: ms(s.lastEventAt),
+      lastBatchApplied: s.lastBatchApplied,
+    })),
+    serverNow: now,
+  }
 }

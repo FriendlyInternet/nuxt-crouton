@@ -36,7 +36,7 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `server/utils/cloud-sync-auth.ts` | Ingest auth (#2725): `authenticateSync()` — paired till sends `x-device-id` + `x-device-secret` (verified via crouton-auth grant; rows scoped to the grant's team). `x-sync-key` shared secret is **deprecated**, honoured only when no device headers are sent |
 | `server/utils/cloud-sync-pusher.ts` | Pi-side push loop (#177) — `pushPendingOutbox()` drains outbox → ingest; `pingHeartbeat()` idle empty-batch ping (#179) |
 | `server/plugins/cloud-sync-pusher.ts` | Nitro plugin running the push loop (gated, backoff) + idle heartbeat ping (#179) |
-| `server/utils/sync-status.ts` | Cloud-side freshness heartbeat (#179) — `recordSyncHeartbeat()` (best-effort upsert on every ingest, keyed per device id since #2725) + `readSyncStatuses()` |
+| `server/utils/sync-status.ts` | Cloud-side freshness heartbeat (#179) — `recordSyncHeartbeat()` (best-effort upsert on every ingest, keyed per device id since #2725) + `readSyncStatuses()` + `toStatusPayload()` (the status endpoint's response shape) |
 | `server/api/crouton-sales/sync/ingest.post.ts` | Cloud D1 ingest endpoint (#178); also stamps the freshness heartbeat (#179) |
 | `server/api/crouton-sales/teams/[id]/sync-status.get.ts` | Live-dashboard freshness read (#179) — `{ lastContactAt, lastEventAt, lastBatchApplied, devices[], serverNow }` (headline = freshest till) |
 | `app/components/Sync/Status.vue` | `SalesSyncStatus` — mirror freshness banner (#179): "synced Xs ago" / stale, polls sync-status |

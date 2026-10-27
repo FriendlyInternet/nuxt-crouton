@@ -25,6 +25,11 @@ export type SyncIdentity
   = | { kind: 'device', deviceId: string, teamId: string }
     | { kind: 'shared-key' }
 
+/** The paired device behind an identity; undefined for the deprecated shared key. */
+export function deviceOf(identity: SyncIdentity): { deviceId: string, teamId: string } | undefined {
+  return identity.kind === 'device' ? identity : undefined
+}
+
 export type VerifyDevice = (deviceId: string, secret: string) => Promise<
   { ok: true, organizationId: string } | { ok: false, reason?: string }
 >

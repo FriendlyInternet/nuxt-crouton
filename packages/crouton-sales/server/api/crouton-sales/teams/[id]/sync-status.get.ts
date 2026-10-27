@@ -10,28 +10,9 @@
  * filtered to the caller's team — see server/database/schema.ts.
  */
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { freshestStatus, readSyncStatuses } from '../../../../utils/sync-status'
+import { readSyncStatuses, toStatusPayload } from '../../../../utils/sync-status'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
-  const db = useDB()
-
-  const statuses = await readSyncStatuses(db, team.id)
-  const freshest = freshestStatus(statuses)
-  const ms = (d: Date | null) => (d ? d.getTime() : null)
-
-  return {
-    // Headline = the freshest till, so existing banners keep working.
-    lastContactAt: ms(freshest?.lastContactAt ?? null),
-    lastEventAt: ms(freshest?.lastEventAt ?? null),
-    lastBatchApplied: freshest?.lastBatchApplied ?? 0,
-    // Every till of the team (#2725), freshest first.
-    devices: statuses.map(s => ({
-      deviceId: s.deviceId,
-      lastContactAt: ms(s.lastContactAt),
-      lastEventAt: ms(s.lastEventAt),
-      lastBatchApplied: s.lastBatchApplied,
-    })),
-    serverNow: Date.now(),
-  }
+  return toStatusPayload(await readSyncStatuses(useDB(), team.id))
 })
