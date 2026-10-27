@@ -328,7 +328,7 @@ export async function applyOutboxEvents(
     }
 
     try {
-      await applyEvent(db, tables, e, ackId, result, scopeTeamId, opts)
+      await applyEvent(db, tables, e!, ackId, result, scopeTeamId, opts)
     }
     catch (err: any) {
       // DB-level failure (e.g. transition before its create) — retryable.
