@@ -7,6 +7,8 @@ export interface ToTestItem {
   app: string | null
   what: string
   steps: string[]
+  /** App path the steps point at (e.g. `/admin/bookings`), or '' when none. */
+  to: string
 }
 
 /** Text under a "How to test" heading (any level, optional emoji), up to the next heading. */
@@ -58,4 +60,39 @@ export function hasOwnerOk(comments: Array<{ body?: string | null, user?: { logi
     c.user?.login?.toLowerCase() === ownerLogin.toLowerCase()
     && /^\s*(ok|okay|lgtm|approved?)\b/i.test(c.body ?? '')
   )
+}
+
+/** A redirect target is safe only as a same-origin absolute path: `/x`, never `//host`, `\\`, or a scheme. */
+export function isSafePath(to: unknown): to is string {
+  return typeof to === 'string'
+    && to.length <= 500
+    && /^\/(?!\/)/.test(to)
+    && !/[\\\u0000-\u001f\u007f]/.test(to)
+}
+
+/** First app path (`/admin/x?y=1`) or same-host URL found in the steps, else ''. */
+export function extractTargetPath(steps: string[], stagingUrl?: string | null): string {
+  let host = ''
+  try { host = stagingUrl ? new URL(stagingUrl).host : '' } catch { /* no host to match */ }
+  for (const s of steps) {
+    const re = /(https?:\/\/[^\s`'"<>)]+)|(?:^|[\s`'"(])(\/[A-Za-z0-9_\-.~%/?=&#:@+,]*)/g
+    for (const m of s.matchAll(re)) {
+      let path = m[2]
+      if (m[1]) {
+        try {
+          const u = new URL(m[1])
+          if (!host || u.host !== host) continue
+          path = u.pathname + u.search + u.hash
+        } catch { continue }
+      }
+      path = (path ?? '').replace(/[.,;:]+$/, '')
+      if (path.length > 1 && isSafePath(path)) return path
+    }
+  }
+  return ''
+}
+
+/** Steps about GitHub itself ("on this PR, the comment appears…") — pipeline checks, not app tests. */
+export function isGithubOnly(steps: string[]): boolean {
+  return steps.length > 0 && steps.every(s => /\b(on|in) (this|the) (pr|pull request|issue)\b|\bgithub\b|\bthe (pr|pull request) (comment|body|description)\b/i.test(s))
 }
