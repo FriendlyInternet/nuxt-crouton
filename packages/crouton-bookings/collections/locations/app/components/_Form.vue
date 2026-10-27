@@ -216,7 +216,7 @@
 </template>
 
 <script setup lang="ts">
-import type { LocationData } from '../types/booking'
+import type { LocationData } from '../../../../app/types/booking'
 
 // useBookingsLocations is auto-imported from the generated collection layer at runtime
 declare function useBookingsLocations(): {
