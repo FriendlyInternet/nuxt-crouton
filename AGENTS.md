@@ -56,6 +56,19 @@ grep for banned words; the same term can be fine in a commit body and wrong to t
 6. **Land via a PR** (`Closes #NN`), never a direct push to trunk.
 7. **Observe + retro** — measure the harness; postmortem at epic close.
 
+## The interactive agent plans; the pipeline builds
+
+An agent in a live (interactive) session **plans, hands off and follows up — it does not code and does
+not merge.** Every change is built by the pipeline, so traffic control sees all of it.
+
+- **Plan** — turn the ask into a ticket: the hypothesis, the acceptance, and (for logic) the agreed
+  test cases written into the ticket. The worker builds to those cases.
+- **Hand off** — open or mark the ticket for the pipeline, then report the PR and preview it produces.
+- **Follow up** — review the pipeline's PR; request changes by commenting on it, not by pushing.
+- **Never** commit to a feature branch, push, or merge from an interactive session.
+
+The check: after a week, the history shows only pipeline authors, no interactive-session commits.
+
 ## Stages
 
 A **declared** concept, not a hardcoded folder name. `harness.config.mjs` maps each stage to its
