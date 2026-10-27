@@ -416,7 +416,12 @@ function isDayFullyBookedAllLocations(date: Date): boolean {
 // Handle calendar day click (+ button) - start inline creation at that date (disabled in preview mode)
 function onCalendarDayClick(date: Date) {
   if (previewMode.value) return
-  if (resolvedLocations.value.length === 0) return
+  if (resolvedLocations.value.length === 0) {
+    notify.warning(t('bookings.notifications.noLocations'), {
+      description: t('bookings.notifications.noLocationsDescription'),
+    })
+    return
+  }
 
   if (isDateUnavailableForAll(date)) return
 
