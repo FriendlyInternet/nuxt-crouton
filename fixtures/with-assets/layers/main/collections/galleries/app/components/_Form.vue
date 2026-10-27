@@ -2,7 +2,6 @@
   @crouton-generated
   @collection galleries
   @layer main
-  @generated 2026-10-19
 
   ## AI Context
   - Form component for galleries collection
@@ -75,7 +74,7 @@ const { defaultValue, schema, collection } = useMainGalleries()
 const { t } = useT()
 
 // Form layout configuration
-const tabs = ref(false)
+
 
 
 
@@ -120,8 +119,6 @@ const handleSubmit = async () => {
 
   } catch (error) {
     console.error('Form submission failed:', error)
-    // You can add toast notification here if available
-    // toast.add({ title: 'Error', description: 'Failed to submit form', color: 'red' })
   }
 }
 </script>

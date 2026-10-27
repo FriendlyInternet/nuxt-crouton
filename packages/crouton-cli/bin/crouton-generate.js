@@ -26,6 +26,15 @@ async function tsImport(specifier) {
 const pkgPath = join(__dirname, '..', 'package.json')
 const pkg = JSON.parse(await readFile(pkgPath, 'utf-8'))
 
+// ─── Helper: sqlite is the only supported dialect (#2735) ──────────
+
+function assertSqliteDialect(dialect) {
+  if (dialect && dialect !== 'sqlite') {
+    consola.error(`Unsupported dialect '${dialect}' — only sqlite is supported`)
+    process.exit(1)
+  }
+}
+
 // ─── Helper: detect crouton.config.{ts,js,mjs,cjs} ────────────────
 
 function detectConfigFile() {
@@ -46,8 +55,7 @@ const generate = defineCommand({
     collection: { type: 'positional', description: 'Collection name', required: false },
     fieldsFile: { type: 'string', alias: 'f', description: 'Path to JSON schema file' },
     config: { type: 'string', alias: 'c', description: 'Use config file instead of CLI args' },
-    dialect: { type: 'string', alias: 'd', description: 'Database dialect (sqlite|pg)', default: 'sqlite' },
-    autoRelations: { type: 'boolean', description: 'Add relation stubs in comments' },
+    dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
     dryRun: { type: 'boolean', description: 'Preview without writing' },
     noTranslations: { type: 'boolean', description: 'Skip translation fields' },
     force: { type: 'boolean', description: 'Force generation despite missing dependencies' },
@@ -59,6 +67,7 @@ const generate = defineCommand({
     noAutoMerge: { type: 'boolean', description: 'Skip the setup questions of extended packages' },
   },
   async run({ args }) {
+    assertSqliteDialect(args.dialect)
     // If --config is provided, delegate to config mode
     if (args.config) {
       const { runConfig } = await tsImport(join(__dirname, '..', 'lib', 'generate-collection.ts'))
@@ -107,7 +116,6 @@ const generate = defineCommand({
       collection: args.collection,
       fieldsFile: args.fieldsFile,
       dialect: args.dialect || 'sqlite',
-      autoRelations: args.autoRelations,
       dryRun: args.dryRun,
       noDb: args.noDb,
       force: args.force,
@@ -151,24 +159,6 @@ const configCmd = defineCommand({
   }
 })
 
-// ─── install ───────────────────────────────────────────────────────
-
-const installCmd = defineCommand({
-  meta: { name: 'install', description: 'Install required Nuxt modules' },
-  args: {},
-  async run() {
-    const installModulesPath = join(__dirname, '..', 'lib', 'install-modules.ts')
-    if (!existsSync(installModulesPath)) {
-      consola.error('Install script not found')
-      console.log('Please install modules manually:')
-      console.log('  pnpm add @fyit/crouton-core')
-      process.exit(1)
-    }
-    // install-modules.ts is self-executing on import
-    await tsImport(installModulesPath)
-  }
-})
-
 // ─── init ──────────────────────────────────────────────────────────
 
 const initCmd = defineCommand({
@@ -177,7 +167,7 @@ const initCmd = defineCommand({
     name: { type: 'positional', description: 'App name', required: true },
     features: { type: 'string', description: 'Comma-separated feature names (e.g., bookings,pages,editor)', default: '' },
     theme: { type: 'string', description: 'Theme to wire into extends (e.g., ko)' },
-    dialect: { type: 'string', alias: 'd', description: 'Database dialect (sqlite or pg)', default: 'sqlite' },
+    dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
     noCf: { type: 'boolean', description: 'Skip Cloudflare-specific config (wrangler.jsonc, CF stubs)' },
     domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev)' },
     poc: { type: 'boolean', description: 'Scaffold into pocs/<name> (the incubator) instead of apps/<name>' },
@@ -185,6 +175,7 @@ const initCmd = defineCommand({
     dryRun: { type: 'boolean', description: 'Preview what will be generated without writing files' },
   },
   async run({ args }) {
+    assertSqliteDialect(args.dialect)
     const initPath = join(__dirname, '..', 'lib', 'init-app.ts')
     const { initApp } = await tsImport(initPath)
 
@@ -327,22 +318,6 @@ const rollbackBulkCmd = defineCommand({
   }
 })
 
-// ─── rollback-interactive ──────────────────────────────────────────
-
-const rollbackInteractiveCmd = defineCommand({
-  meta: { name: 'rollback-interactive', description: 'Interactive rollback with selection UI' },
-  args: {
-    dryRun: { type: 'boolean', description: 'Preview what will be removed' },
-    keepFiles: { type: 'boolean', description: 'Keep generated files, only clean configs' },
-  },
-  async run({ args }) {
-    const { interactiveRollback } = await tsImport(
-      join(__dirname, '..', 'lib', 'rollback-interactive.ts')
-    )
-    await interactiveRollback({ dryRun: args.dryRun, keepFiles: args.keepFiles })
-  }
-})
-
 // ─── doctor ────────────────────────────────────────────────────────
 
 const doctorCmd = defineCommand({
@@ -372,12 +347,13 @@ const scaffoldAppCmd = defineCommand({
     name: { type: 'positional', description: 'App name', required: true },
     features: { type: 'string', description: 'Comma-separated feature names (e.g., bookings,pages,editor)', default: '' },
     theme: { type: 'string', description: 'Theme to wire into extends (e.g., ko)' },
-    dialect: { type: 'string', alias: 'd', description: 'Database dialect (sqlite or pg)', default: 'sqlite' },
+    dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
     noCf: { type: 'boolean', description: 'Skip Cloudflare-specific config (wrangler.jsonc, CF stubs)' },
     domain: { type: 'string', description: 'Cloudflare zone for custom-domain routes (e.g. pmcp.dev → <app>.pmcp.dev / <app>-preview.pmcp.dev)' },
     dryRun: { type: 'boolean', description: 'Preview what will be generated without writing files' },
   },
   async run({ args }) {
+    assertSqliteDialect(args.dialect)
     const scaffoldPath = join(__dirname, '..', 'lib', 'scaffold-app.ts')
     const { scaffoldApp } = await tsImport(scaffoldPath)
 
@@ -392,37 +368,6 @@ const scaffoldAppCmd = defineCommand({
       cf: !args.noCf,
       domain: args.domain,
       dryRun: args.dryRun,
-    })
-  }
-})
-
-// ─── seed-translations ─────────────────────────────────────────────
-
-const seedTranslationsCmd = defineCommand({
-  meta: { name: 'seed-translations', description: 'Seed translations from JSON locale files to database' },
-  args: {
-    layer: { type: 'string', description: 'Seed from specific layer only' },
-    team: { type: 'string', description: 'Team ID/slug to seed to (default: system)' },
-    dryRun: { type: 'boolean', description: 'Preview translations without seeding' },
-    force: { type: 'boolean', description: 'Overwrite existing translations' },
-    apiUrl: { type: 'string', description: 'API base URL (default: http://localhost:3000)' },
-    sql: { type: 'boolean', description: 'Output SQL statements instead of using API' },
-  },
-  async run({ args }) {
-    const seedPath = join(__dirname, '..', 'lib', 'seed-translations.ts')
-    if (!existsSync(seedPath)) {
-      consola.error('Seed translations script not found. Please ensure the package is properly installed.')
-      process.exit(1)
-    }
-
-    const { seedTranslationsFromJson } = await tsImport(seedPath)
-    await seedTranslationsFromJson({
-      layer: args.layer,
-      team: args.team,
-      dryRun: args.dryRun,
-      force: args.force,
-      apiUrl: args.apiUrl,
-      sql: args.sql,
     })
   }
 })
@@ -448,22 +393,6 @@ const dbPullCmd = defineCommand({
   }
 })
 
-// ─── deploy-check ─────────────────────────────────────────────────
-
-const deployCheckCmd = defineCommand({
-  meta: { name: 'deploy-check', description: 'Validate deployment readiness (wrangler config, CI workflow, bindings)' },
-  args: {
-    dir: { type: 'positional', description: 'App directory to check', required: false },
-  },
-  async run({ args }) {
-    const { deployCheck, printDeployReport } = await tsImport(join(__dirname, '..', 'lib', 'deploy-check.ts'))
-    const appDir = args.dir || process.cwd()
-    const result = await deployCheck(appDir)
-    printDeployReport(result)
-    if (!result.ok) process.exit(1)
-  }
-})
-
 // ─── main ──────────────────────────────────────────────────────────
 
 const main = defineCommand({
@@ -475,16 +404,12 @@ const main = defineCommand({
   subCommands: {
     generate,
     config: configCmd,
-    install: installCmd,
     init: initCmd,
     add: addCmd,
     rollback: rollbackCmd,
     'rollback-bulk': rollbackBulkCmd,
-    'rollback-interactive': rollbackInteractiveCmd,
     doctor: doctorCmd,
-    'deploy-check': deployCheckCmd,
     'scaffold-app': scaffoldAppCmd,
-    'seed-translations': seedTranslationsCmd,
     'db-pull': dbPullCmd,
   },
 })

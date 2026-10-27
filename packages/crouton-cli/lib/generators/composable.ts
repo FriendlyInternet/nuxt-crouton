@@ -73,7 +73,6 @@ function generateAIHeader(data: Record<string, any>, apiPath: string): string {
  * @crouton-generated
  * @collection ${plural}
  * @layer ${layer}
- * @generated ${new Date().toISOString().split('T')[0]}
  *
  * ## AI Context
  * - Composable: use${layerPascalCase}${pascalCasePlural}

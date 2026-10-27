@@ -6,9 +6,8 @@
  * They serve as regression guards — if behavior changes, these tests break
  * and force a conscious decision about the change.
  *
- * All 11 commands are covered:
- *   generate, config, install, init, add, rollback, rollback-bulk,
- *   rollback-interactive, doctor, scaffold-app, seed-translations
+ * Commands covered:
+ *   generate, config, init, add, rollback, rollback-bulk, doctor, scaffold-app
  */
 
 import { execFile } from 'node:child_process'
@@ -164,22 +163,6 @@ describe('config command', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════
-// 3. install
-// ═══════════════════════════════════════════════════════════════════
-
-describe('install command', () => {
-  it('runs without crashing', async () => {
-    const result = await runCLI(['install'], { cwd: tmpDir })
-
-    // May exit 0 or 1 depending on project state (no real project here)
-    // but it should produce output and not throw an unhandled error
-    const combined = result.stdout + result.stderr
-    // Should mention modules, checking, installing, or an error message
-    expect(combined.length).toBeGreaterThan(0)
-  })
-})
-
-// ═══════════════════════════════════════════════════════════════════
 // 4. init
 // ═══════════════════════════════════════════════════════════════════
 
@@ -274,6 +257,17 @@ describe('rollback command', () => {
 // ═══════════════════════════════════════════════════════════════════
 
 describe('rollback-bulk command', () => {
+  it('aborts without deleting when stdin is not a TTY and --force is absent', async () => {
+    const layerDir = join(tmpDir, 'layers', 'guarded', 'collections', 'things')
+    await mkdir(layerDir, { recursive: true })
+    await writeFile(join(layerDir, 'keep.txt'), 'x')
+
+    const result = await runCLI(['rollback-bulk', '--layer=guarded'], { cwd: tmpDir })
+
+    expect(result.stdout + result.stderr).toMatch(/Not an interactive terminal|No collections found/)
+    expect(existsSync(join(layerDir, 'keep.txt'))).toBe(true)
+  })
+
   it('handles non-existent layer gracefully with dry-run', async () => {
     const result = await runCLI(
       ['rollback-bulk', '--layer=nonexistent', '--dry-run'],
@@ -292,27 +286,6 @@ describe('rollback-bulk command', () => {
     expect(result.exitCode).not.toBe(0)
     const combined = result.stdout + result.stderr
     expect(combined).toMatch(/must specify|--layer|--config|error/i)
-  })
-})
-
-// ═══════════════════════════════════════════════════════════════════
-// 8. rollback-interactive
-// ═══════════════════════════════════════════════════════════════════
-
-describe('rollback-interactive command', () => {
-  it('has the module file present on disk', () => {
-    // rollback-interactive requires a TTY for inquirer prompts,
-    // so we cannot run it as a subprocess in tests.
-    // Instead, verify the implementation file exists.
-    const modulePath = resolve(PKG_ROOT, 'lib', 'rollback-interactive.ts')
-    expect(existsSync(modulePath)).toBe(true)
-  })
-
-  it('is registered as a CLI command', async () => {
-    const result = await runCLI(['--help'])
-
-    expect(result.exitCode).toBe(0)
-    expect(result.stdout).toMatch(/rollback-interactive/)
   })
 })
 
@@ -384,31 +357,6 @@ describe('scaffold-app command', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════════
-// 11. seed-translations
-// ═══════════════════════════════════════════════════════════════════
-
-describe('seed-translations command', () => {
-  it('runs dry-run without crashing', async () => {
-    const result = await runCLI(['seed-translations', '--dry-run'], { cwd: tmpDir })
-
-    // May exit 0 or non-zero (no nuxt.config.ts in tmpDir), but should not crash
-    const combined = result.stdout + result.stderr
-    expect(combined.length).toBeGreaterThan(0)
-  })
-
-  it('accepts --layer and --team flags', async () => {
-    const result = await runCLI(
-      ['seed-translations', '--dry-run', '--layer=shop', '--team=test-team'],
-      { cwd: tmpDir }
-    )
-
-    // Should not crash — command processes flags without error
-    const combined = result.stdout + result.stderr
-    expect(combined.length).toBeGreaterThan(0)
-  })
-})
-
-// ═══════════════════════════════════════════════════════════════════
 // CLI help / meta
 // ═══════════════════════════════════════════════════════════════════
 
@@ -419,17 +367,17 @@ describe('CLI meta', () => {
     expect(result.exitCode).toBe(0)
 
     const out = result.stdout
-    // Verify all 11 commands are listed in help
+    // Verify the live commands are listed in help
     expect(out).toContain('generate')
     expect(out).toContain('config')
-    expect(out).toContain('install')
     expect(out).toContain('init')
     expect(out).toContain('add')
     expect(out).toContain('rollback-bulk')
-    expect(out).toContain('rollback-interactive')
     expect(out).toContain('doctor')
     expect(out).toContain('scaffold-app')
-    expect(out).toContain('seed-translations')
+    for (const removed of ['install', 'deploy-check', 'seed-translations', 'rollback-interactive']) {
+      expect(out).not.toMatch(new RegExp(`^\\s+${removed}\\b`, 'm'))
+    }
   })
 
   it('shows version', async () => {

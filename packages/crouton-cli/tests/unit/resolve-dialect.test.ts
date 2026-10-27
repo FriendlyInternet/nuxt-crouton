@@ -30,6 +30,5 @@ describe('resolveDialect', () => {
 
   it('preserves an explicitly chosen dialect', () => {
     expect(resolveDialect({ dialect: 'sqlite' })).toBe('sqlite')
-    expect(resolveDialect({ dialect: 'pg' })).toBe('pg')
   })
 })

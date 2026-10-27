@@ -5,12 +5,10 @@ import { toCase } from '../utils/helpers.ts'
  * Generate field-specific components for dependent field rendering
  * Creates [FieldName]/Input.vue, Select.vue, and CardMini.vue
  *
- * @param {string|object} fieldOrName - Field name string or field object
+ * @param {object} field - Field object
  * @param {object} collectionData - Collection data with layer info
  */
-export function generateFieldComponents(fieldOrName: string | Record<string, any>, collectionData: Record<string, any>): { input: string; select: string; cardMini: string } {
-  // Support both old signature (fieldName string) and new signature (field object)
-  const field = typeof fieldOrName === 'object' ? fieldOrName : { name: fieldOrName }
+export function generateFieldComponents(field: Record<string, any>, collectionData: Record<string, any>): { input: string; select: string; cardMini: string } {
   const fieldName = field.name
   const { pascalCase: fieldPascalCase } = toCase(fieldName)
   const { pascalCase, pascalCasePlural, layerPascalCase } = collectionData
