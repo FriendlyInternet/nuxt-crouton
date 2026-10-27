@@ -3,7 +3,7 @@ import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/t
 import { croutonOperations } from '../../../../database/schema'
 
 /**
- * GET /api/teams/:teamId/crouton-operations
+ * GET /api/teams/:id/crouton-operations
  *
  * Query persisted system operations for a team.
  *
