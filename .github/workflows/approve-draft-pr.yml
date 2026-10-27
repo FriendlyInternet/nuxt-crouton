@@ -1,9 +1,9 @@
 name: Approve a held draft PR
 
-# Release a UI-gated draft PR by commenting ON THE PR — ✅ (or `lgtm`). (#2051)
+# Release a UI-gated draft PR by commenting ON THE PR — ✅ / `ok` (or legacy `lgtm`). (#2051)
 #
 # THE GAP THIS CLOSES. The UI sign-off gate opens a `.vue`-touching PR as a DRAFT so it
-# cannot auto-merge, and the PR body says "reply `lgtm` to release it". Nothing listened.
+# cannot auto-merge, and the PR body says "reply `ok` to release it". Nothing listened.
 # Every approval workflow in this repo begins with `!github.event.issue.pull_request` —
 # `resume-on-comment.yml`, `close-epic-on-comment.yml`, `comment-dispatch.yml` — so a
 # comment on a PR reached nothing; and the issue-side route additionally requires
@@ -40,6 +40,7 @@ jobs:
       (contains(github.event.comment.body, '✅') ||
        contains(github.event.comment.body, '✔') ||
        contains(github.event.comment.body, '☑') ||
+       contains(github.event.comment.body, 'ok') ||
        contains(github.event.comment.body, 'lgtm') ||
        contains(github.event.comment.body, 'approve'))
     # ⚠️ The `contains()` tests are a CHEAP PRE-FILTER ONLY, never the decision (#2004).
@@ -101,7 +102,7 @@ jobs:
               } catch (e) { /* label may not have been set (non-UI PR) — fine */ }
             }
 
-            const kind = approvalKind(body) === 'check' ? '✅' : '`lgtm`'
+            const kind = approvalKind(body) === 'check' ? '✅' : '`ok`'
             await github.rest.issues.createComment({ owner, repo, issue_number: pull_number, body:
               `✅ **Released — marked ready for review** (${kind} from @${context.payload.comment.user.login}).\n\n`
               + `This does **not** merge it: the green-gated auto-merge takes over from here, so a red check still holds it.\n\n`

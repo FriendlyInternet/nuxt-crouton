@@ -12,7 +12,7 @@
 // round-trips through `CroutonLayout` and the UI sign-off loop can regenerate it.
 import path from 'node:path'
 import { writeFile } from 'node:fs/promises'
-import { toCase } from './utils/helpers.ts'
+import { toCase, toLayerCamelCase } from './utils/helpers.ts'
 import { composeDefaultLayout, type ComposeCollectionInput } from '@fyit/crouton-layout/app/utils/layout-compose'
 // Layout TYPES intentionally stay in crouton-core (shared contract); only the
 // implementation moved to @fyit/crouton-layout (#751).
@@ -40,17 +40,9 @@ const BOOKINGS_BLOCKS: CroutonLayoutBlockRegistry = {
   },
 }
 
-/** camelCase a layer name the same way the generator does (registry key prefix). */
-function layerCamel(layer: string): string {
-  return layer
-    .split(/[-_]/)
-    .map((part, index) => (index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1)))
-    .join('')
-}
-
 /** The collection's registry key, e.g. `bookingsBookings` (matches the generated composable/config). */
 export function registryKeyFor(layer: string, collection: string): string {
-  return `${layerCamel(layer)}${toCase(collection).pascalCasePlural}`
+  return `${toLayerCamelCase(layer)}${toCase(collection).pascalCasePlural}`
 }
 
 /** Is the bookings package in play (the app extends it, or a collection landed in the `bookings` layer)? */

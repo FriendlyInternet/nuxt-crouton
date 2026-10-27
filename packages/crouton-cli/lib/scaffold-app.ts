@@ -484,31 +484,6 @@ export * from './translations-ui'
 }
 
 function tmplTranslationsUi(vars: ScaffoldVars): string {
-  if (vars.dialect === 'pg') {
-    return `import { nanoid } from 'nanoid'
-import { pgTable, text, boolean, timestamp, unique } from 'drizzle-orm/pg-core'
-
-export const translationsUi = pgTable('translations_ui', {
-  id: text('id').primaryKey().$default(() => nanoid()),
-  userId: text('user_id').notNull(),
-  teamId: text('team_id'),
-  namespace: text('namespace').notNull().default('ui'),
-  keyPath: text('key_path').notNull(),
-  category: text('category').notNull(),
-  values: text('values').$type<Record<string, string>>().notNull(),
-  description: text('description'),
-  isOverrideable: boolean('is_overrideable').notNull().default(true),
-  createdAt: timestamp('created_at').notNull().$default(() => new Date()),
-  updatedAt: timestamp('updated_at').notNull().$onUpdate(() => new Date())
-}, (table) => ({
-  uniqueTeamNamespaceKey: unique().on(table.teamId, table.namespace, table.keyPath)
-}))
-
-export type TranslationsUi = typeof translationsUi.$inferSelect
-export type NewTranslationsUi = typeof translationsUi.$inferInsert
-`
-  }
-
   return `import { nanoid } from 'nanoid'
 import { sqliteTable, text, integer, unique } from 'drizzle-orm/sqlite-core'
 

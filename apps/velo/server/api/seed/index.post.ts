@@ -688,6 +688,10 @@ async function seedPages(ctx: SeedContext): Promise<void> {
       slug: pageCfg.slug,
       pageType: pageCfg.pageType,
       content: frBlockContent,
+      translations: {
+        fr: { title: frParsed.data.title || pageCfg.slug, content: frBlockContent },
+        nl: { title: nlParsed.data.title || pageCfg.slug, content: nlBlockContent }
+      },
       config,
       status: 'published',
       visibility: 'public',

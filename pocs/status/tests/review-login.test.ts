@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { reviewLogin, reviewLoginUrl } from '../server/utils/review-login'
+import { previewSessionToken, reviewLogin, reviewLoginUrl } from '../server/utils/review-login'
 
 describe('reviewLogin', () => {
   it('matches the deploy derivation (sha256 of secret:app:key, first 24 hex)', () => {
@@ -51,5 +51,12 @@ describe('walk redirect', () => {
   it('carries both the page and the walk', async () => {
     const u = new URL(reviewLoginUrl('https://v.dev', 's', 'velo', 'main', '/admin/bookings?tab=1', 'eyJhIjoxfQ'))
     expect(u.searchParams.get('redirect')).toBe('/admin/bookings?tab=1&walk=eyJhIjoxfQ')
+  })
+})
+
+describe('previewSessionToken', () => {
+  it('matches the CI derivation (sha256 of secret:app:preview-session:key, first 32 hex)', () => {
+    const expected = createHash('sha256').update('s:status:preview-session:pr7').digest('hex').slice(0, 32)
+    expect(previewSessionToken('s', 'status', 'pr7')).toBe(expected)
   })
 })

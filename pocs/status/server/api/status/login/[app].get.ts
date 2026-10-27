@@ -1,8 +1,8 @@
 import { appTargetFor } from '../../../utils/app-urls'
 import { reviewLoginUrl, sanitizeWalk, withWalk } from '../../../utils/review-login'
-import { listLiveApps, listPreviews } from '../../../utils/live-apps'
+import { listLiveApps, resolvePrLogin } from '../../../utils/live-apps'
 import { isSafePath } from '../../../utils/totest-core'
-import { decidePreview, previewGoneHtml } from '../../../utils/live-apps-core'
+import { previewGoneHtml, previewNoneHtml } from '../../../utils/live-apps-core'
 
 // Owner-only one-tap sign-in to an app's staging review login. The URL carries the
 // password, so it is never logged or rendered into HTML — only a 302 Location.
@@ -46,7 +46,12 @@ export default defineEventHandler(async (event) => {
   }
   let base = target.stagingUrl
   if (key !== 'main') {
-    const decision = decidePreview((await listPreviews(event)).data, app, key)
+    const decision = await resolvePrLogin(event, app, key)
+    if (decision.gone === 'none') {
+      setResponseStatus(event, 404)
+      setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
+      return previewNoneHtml(decision.pr, app, target.stagingUrl)
+    }
     if (decision.gone) {
       setResponseStatus(event, 410)
       setHeader(event, 'Content-Type', 'text/html; charset=utf-8')

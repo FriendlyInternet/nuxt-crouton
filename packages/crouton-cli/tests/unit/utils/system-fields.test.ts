@@ -25,14 +25,12 @@ describe('system-fields: one enumeration, pinned to the core manifest', () => {
     }
   })
 
-  it('metadataFields rides useMetadata: timestamps + audit, or nothing', () => {
-    expect(metadataFields(true)).toEqual(['createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
-    expect(metadataFields(false)).toEqual([])
+  it('metadataFields: timestamps + audit', () => {
+    expect(metadataFields()).toEqual(['createdAt', 'updatedAt', 'createdBy', 'updatedBy'])
   })
 
-  it('autoRefFields: owner is unconditional, the audit pair rides useMetadata', () => {
-    expect(autoRefFields(true)).toEqual(['owner', 'createdBy', 'updatedBy'])
-    expect(autoRefFields(false)).toEqual(['owner'])
+  it('autoRefFields: owner plus the audit pair', () => {
+    expect(autoRefFields()).toEqual(['owner', 'createdBy', 'updatedBy'])
   })
 
   it('hierarchyFields honours custom names and is empty when hierarchy is off', () => {

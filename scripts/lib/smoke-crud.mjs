@@ -27,12 +27,18 @@ export function fillPlaceholders(value, vars) {
   return value
 }
 
+/** First 500 chars of a failing response body, for the failure line (#2812); '' when there is none. */
+export function bodyExcerpt(text) {
+  const t = typeof text === 'string' ? text.trim().replace(/\s+/g, ' ') : ''
+  return t ? ` — ${t.slice(0, 500)}` : ''
+}
+
 /** One GET/PATCH step: pushes a failure and returns false when it is not ok or misses `expectIncludes`. */
 async function runStep(name, step, { auth, method = 'GET', body }, { http, fill, failures }) {
-  const { res, json } = await http(method, fill(step.path), body, { auth })
+  const { res, json, text } = await http(method, fill(step.path), body, { auth })
   const expect = step.expectIncludes == null ? null : fill(step.expectIncludes)
   if (res.ok && !(expect && !JSON.stringify(json ?? '').includes(expect))) return true
-  failures.push(`crud.${name}: HTTP ${res.status}${expect ? ` / missing "${expect}"` : ''}`)
+  failures.push(`crud.${name}: HTTP ${res.status}${expect ? ` / missing "${expect}"` : ''}${res.ok ? '' : bodyExcerpt(text)}`)
   return false
 }
 
@@ -52,9 +58,9 @@ async function runChecks(crud, ctx) {
 
 async function runDelete(d, id, { http, fill, failures, log }) {
   try {
-    const { res } = await http(d.method || 'DELETE', fill(d.path), undefined, { auth: true })
+    const { res, text } = await http(d.method || 'DELETE', fill(d.path), undefined, { auth: true })
     if (res.ok) log('✓ crud.delete ok')
-    else failures.push(`crud.delete: HTTP ${res.status} (record ${id} left behind)`)
+    else failures.push(`crud.delete: HTTP ${res.status} (record ${id} left behind)${bodyExcerpt(text)}`)
   } catch (e) { failures.push(`crud.delete: ${e.message}`) }
 }
 
@@ -73,8 +79,8 @@ export async function runCrud(crud, { http, getTeamId, log = () => {}, rand = Ma
   const ctx = { http, fill: v => fillPlaceholders(v, vars), failures, log }
 
   const c = crud.create
-  const { res: cr, json: cj } = await http(c.method || 'POST', ctx.fill(c.path), ctx.fill(c.body ?? {}))
-  if (!cr.ok) return [`crud.create: HTTP ${cr.status}`]
+  const { res: cr, json: cj, text: ct } = await http(c.method || 'POST', ctx.fill(c.path), ctx.fill(c.body ?? {}))
+  if (!cr.ok) return [`crud.create: HTTP ${cr.status}${bodyExcerpt(ct)}`]
   const id = crud.idFrom ? dotGet(cj, crud.idFrom) : (cj?.id ?? cj?.data?.id)
   vars.id = id
   log(`✓ crud.create ok${id != null ? ` (id=${id})` : ''}`)
