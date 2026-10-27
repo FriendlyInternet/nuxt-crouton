@@ -5,6 +5,8 @@
 //
 // The reply side (`ok` / `not ok: …`) is parsed by scripts/approval.mjs (#2540).
 
+import { fileMatchesAny } from './deploy-detect.mjs'
+
 /** Hidden marker that makes the card idempotent — one card per epic, ever. */
 export const CARD_MARKER = '<!-- test-card -->'
 
@@ -27,6 +29,21 @@ export function decideTestCard({ subIssues = [], labels = [], comments = [], dep
   if (open > 0) return { post: false, reason: `${open} child issue(s) still open` }
   if (!deployed) return { post: false, reason: 'merged result not on staging yet' }
   return { post: true, reason: `all ${subIssues.length} children closed + deployed to staging` }
+}
+
+/**
+ * Which app(s) did an epic's merged PR deploy? PURE (#2748). Used when the epic has no `app:`
+ * label: the apps whose watch paths (deploy-detect's computeMatrix, the same rule deploy-apps.yml
+ * uses) cover the PR's changed files. The lockfile alone is ignored — it matches every app.
+ *   apps: [{ app, watchPaths }]   text: the epic's How-to-test text
+ * One match → that app. Several → the one named in `text`, else all of them (caller lists them).
+ */
+export function deriveApps({ changedFiles = [], apps = [], text = '' } = {}) {
+  const files = changedFiles.filter(f => f && f !== 'pnpm-lock.yaml')
+  const hit = apps.filter(a => files.some(f => fileMatchesAny(f, a.watchPaths || []))).map(a => a.app)
+  if (hit.length <= 1) return hit
+  const named = hit.filter(n => new RegExp(`\\b${n}\\b`, 'i').test(text))
+  return named.length === 1 ? named : hit
 }
 
 const NO_APP_LINE = 'Nothing to open: this changes how GitHub and the pipeline behave. Check it on the epic itself.'
@@ -52,7 +69,7 @@ export function hasTestSteps(body = '') {
  * Up to `max` phone-friendly check lines: the "How to test" section (written for a person) first,
  * "Done when" (written for the worker) as the fallback. Metadata lines are dropped.
  */
-export function extractChecks(body = '', max = 3) {
+export function extractChecks(body = '', max = 5) {
   const howTo = sectionChecks(body, '(?:🧪\\s*)?How to test')
   return (howTo.length ? howTo : sectionChecks(body, 'Done when')).slice(0, max)
 }
