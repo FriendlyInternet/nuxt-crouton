@@ -60,6 +60,14 @@ Each todo requires:
 - `content`: Imperative form (e.g., "Fix authentication bug")
 - `activeForm`: Present continuous (e.g., "Fixing authentication bug")
 
+## Interactive session = plan, hand off, follow up (#2785)
+
+See `AGENTS.md` → *The interactive agent plans; the pipeline builds*. In this repo:
+
+- **Hand off** by labelling the ticket `delegate` (the pipeline classifies it and its worker opens the PR on the epic branch). Don't write the code or `git commit`/push/merge it yourself.
+- **Follow up** on the pipeline PR with a top-level comment starting `**Worker:** <what to change>` (#2453) — that re-runs the worker.
+- **Test-first** (packages/* logic): the agreed test cases go into the ticket text; the worker builds to them. Steps 3 and 6 below describe what the *pipeline worker* does, not the interactive agent.
+
 ## Task Execution Workflow (MANDATORY)
 
 Every task is a **GitHub issue** (see `### GitHub Issue Tracking` below) and follows this 5-step flow:
