@@ -31,47 +31,38 @@ const RANK = { none: 0, poc: 1, app: 2, package: 3, infra: 4 }
 
 const top = (file, root) => file.startsWith(root) ? file.slice(root.length).split('/')[0] : null
 
+const stageOf = (file, model) => {
+  if (INFRA.some(re => re.test(file))) return 'infra'
+  const { name } = stageForPath(file, model)
+  return name && RANK[name] !== undefined ? name : 'none'
+}
+
+const topNames = (files, root) => new Set(files.map(f => top(f, root)).filter(Boolean))
+
+function affectedApps({ files, stage, event, apps, readPkg }) {
+  if (stage === 'infra' || event === 'push') return apps.map(a => a.name)
+  const changed = topNames(files, 'apps/')
+  const pkgFiles = files.filter(f => f.startsWith('packages/'))
+  const dependsOnChange = (a) => {
+    const watch = deriveWatchPaths({ app: a.name, pkg: a.pkg, readPkg: n => readPkg(n.slice('@fyit/'.length)) })
+    return pkgFiles.some(f => fileMatchesAny(f, watch))
+  }
+  return apps.filter(a => changed.has(a.name) || dependsOnChange(a)).map(a => a.name)
+}
+
 /**
  * PURE. `apps` = [{ name, pkg }] for every apps/* dir; `readPkg(shortName)` returns a package's
  * package.json (null if unknown) — injected so the dependency walk stays testable.
  */
 export function detect({ files = [], event = '', baseRef = '', apps = [], readPkg = () => null, model }) {
-  let stage = 'none'
-  const packages = new Set()
-  const changedApps = new Set()
-  const pocs = new Set()
-  for (const file of files) {
-    const { name } = stageForPath(file, model)
-    let s = name && RANK[name] !== undefined ? name : 'none'
-    if (INFRA.some(re => re.test(file))) s = 'infra'
-    if (RANK[s] > RANK[stage]) stage = s
-    const pkg = top(file, 'packages/')
-    if (pkg) packages.add(pkg)
-    const app = top(file, 'apps/')
-    if (app) changedApps.add(app)
-    const poc = top(file, 'pocs/')
-    if (poc) pocs.add(poc)
-  }
-
-  const all = apps.map(a => a.name)
-  let affected
-  if (stage === 'infra' || event === 'push') {
-    affected = all
-  } else {
-    affected = apps
-      .filter((a) => {
-        if (changedApps.has(a.name)) return true
-        const watch = deriveWatchPaths({ app: a.name, pkg: a.pkg, readPkg: n => readPkg(n.slice('@fyit/'.length)) })
-        return files.some(f => f.startsWith('packages/') && fileMatchesAny(f, watch))
-      })
-      .map(a => a.name)
-  }
+  const stage = files.map(f => stageOf(f, model)).reduce((hi, s) => RANK[s] > RANK[hi] ? s : hi, 'none')
+  const packages = topNames(files, 'packages/')
 
   return {
     stage,
-    apps: affected,
+    apps: affectedApps({ files, stage, event, apps, readPkg }),
     packages: [...packages].sort(),
-    pocs: [...pocs].sort(),
+    pocs: [...topNames(files, 'pocs/')].sort(),
     mcp: stage === 'infra' || packages.has('crouton-mcp'),
     workflows: files.some(f => /^\.github\/(workflows|actions)\//.test(f)),
     base_is_epic: baseRef.startsWith('epic/')
