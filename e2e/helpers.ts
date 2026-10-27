@@ -135,6 +135,14 @@ export interface EjectedFormSpec {
   marker: string
 }
 
+/** "Ejected list wins" — same rule as forms, for `<Layer><Plural>List`. */
+export interface EjectedListSpec {
+  /** Packaged collection key whose list the fixture overrides. */
+  collectionKey: string
+  /** Text the fixture's list renders, proving the override won. */
+  marker: string
+}
+
 export interface FixtureManifest {
   collections: CollectionSpec[]
   /** Optional package-specific surfaces; omit for fixtures with nothing extra. */
@@ -145,6 +153,8 @@ export interface FixtureManifest {
   maps?: MapsSpec
   /** Optional app-form-overrides-package-form check. */
   ejectedForm?: EjectedFormSpec
+  /** Optional app-list-overrides-package-list check. */
+  ejectedList?: EjectedListSpec
   /**
    * Opt the WHOLE fixture out of the axe-core a11y scan (a11y.smoke.spec.ts).
    * Set `false` to skip every collection/surface scan for this fixture. Omit

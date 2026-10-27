@@ -13,6 +13,11 @@ describe('renderCollectionForms', () => {
     expect(src).not.toContain('CroutonTable')
   })
 
+  it('includes <Layer><Plural>List components so lists resolve like forms', () => {
+    const src = renderCollectionForms(['BookingsLocationsList', 'UButton'])
+    expect(src).toContain('BookingsLocationsList: LazyBookingsLocationsList')
+  })
+
   it('dedupes and sorts names so the output is stable', () => {
     const src = renderCollectionForms(['BFoo' + 'Form', 'AFooForm', 'BFooForm'])
     expect(src.match(/BFooForm: /g)).toHaveLength(1)
@@ -26,7 +31,7 @@ describe('renderCollectionForms', () => {
   })
 
   it('template filename matches the #build import the loaders hard-code', () => {
-    for (const f of ['FormDynamicLoader.vue', 'FormDependentFieldLoader.vue']) {
+    for (const f of ['FormDynamicLoader.vue', 'FormDependentFieldLoader.vue', 'CollectionViewer.vue']) {
       const src = readFileSync(resolve(__dirname, '../app/components', f), 'utf8')
       expect(src).toContain(`'#build/${COLLECTION_FORMS_TEMPLATE}'`)
     }

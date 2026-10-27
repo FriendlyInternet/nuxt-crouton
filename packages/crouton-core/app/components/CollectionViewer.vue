@@ -95,9 +95,9 @@
              effectiveLayout gives the component cards-on-mobile (#690) while
              honoring an explicit pick (#1169); the skeleton takes the
              plain-string displayedLayout so it matches what will render. -->
-        <Suspense v-else-if="componentName">
+        <Suspense v-else-if="listComponent">
           <component
-            :is="componentName"
+            :is="listComponent"
             :layout="effectiveLayout"
             class="h-full"
           />
@@ -145,6 +145,7 @@
 
 <script setup lang="ts">
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
 import type { CroutonItemAction } from '../types/table'
 
 interface Props {
@@ -272,6 +273,13 @@ const switcherMenuItems = computed(() =>
 const componentName = computed(() => {
   if (!props.collectionName) return null
   return `${toPascalCase(props.collectionName)}List`
+})
+
+// Nuxt's resolved winner (app beats layer) from the build-time map; falls back to
+// the runtime registry name for lists the map doesn't know (off-convention names).
+const listComponent = computed(() => {
+  if (!componentName.value) return null
+  return collectionForms[componentName.value] ?? componentName.value
 })
 
 // Try to resolve the component
