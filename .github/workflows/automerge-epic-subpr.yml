@@ -170,7 +170,7 @@ jobs:
               const SWEEP_MAX = 100
               const open = await github.paginate(github.rest.pulls.list,
                 { owner, repo, state: 'open', per_page: 100 })
-              const subPrs = open.filter(p => !p.draft && (p.base.ref.startsWith('epic/') || (p.base.ref === 'main' && (p.head.ref.startsWith('epic/') || p.head.ref.startsWith('work-')))))
+              const subPrs = open.filter(p => !p.draft && (p.base.ref.startsWith('epic/') || (p.base.ref === 'main' && p.head.ref.startsWith('epic/'))))
               for (const p of subPrs.slice(0, SWEEP_MAX)) candidates.add(p.number)
               core.info(`Sweep: ${open.length} open PRs, ${subPrs.length} open non-draft sub-PRs on epic branches.`)
               if (subPrs.length > SWEEP_MAX) {
@@ -213,12 +213,27 @@ jobs:
               if (pr.draft) { core.info(`#${pull_number} is a draft (gate PR) — skip.`); continue }
               // An epic → main PR (#2832) is evaluated too, but ONLY merges on an owner `ok` (below).
               const epicToMain = pr.base.ref === 'main' && pr.head.ref.startsWith('epic/')
-              // A pipeline leaf PR straight into main (head `work-<N>`, no epic) — same rule: ONLY an owner `ok` merges it.
-              const leafToMain = pr.base.ref === 'main' && pr.head.ref.startsWith('work-')
-              if (!pr.base.ref.startsWith('epic/') && !epicToMain && !leafToMain) { core.info(`#${pull_number} base ${pr.base.ref} not an epic branch — skip.`); continue }
+              if (!pr.base.ref.startsWith('epic/') && !epicToMain) { core.info(`#${pull_number} base ${pr.base.ref} not an epic branch — skip.`); continue }
               if (!BOTS.includes(pr.user.login)) { core.info(`#${pull_number} not pipeline-authored (${pr.user.login}) — skip.`); continue }
 
               // 'dirty' = merge conflicts; 'blocked' = a required check/approval pending. Leave both.
+              // An epic → main PR that conflicts with main would otherwise sit forever with no checks
+              // (#2875): start the conflict resolver once per head (marker carries the sha).
+              if (epicToMain && state === 'dirty') {
+                const marker = `<!-- epic-conflict-resolve:${pr.head.sha} -->`
+                const prior = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
+                if (!prior.some(x => (x.body || '').includes(marker))) {
+                  const epicIssue = Number(/^epic\/(\d+)-/.exec(pr.head.ref)?.[1])
+                  try {
+                    const note = await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
+                      body: `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _epic PR conflicts with main (#2875)_\n\n`
+                        + `🔧 **This PR conflicts with \`main\`.** The pi worker is merging \`main\` into \`${pr.head.ref}\` and resolving the conflicts (a merge, never a rebase). Instruction: bring this branch up to date with main.` })
+                    await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml', ref: 'main',
+                      inputs: { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref } })
+                    core.info(`#${pull_number} conflicts with main — started the resolver (#2875).`)
+                  } catch (e) { core.warning(`#${pull_number}: could not start the conflict resolver: ${e.message}`) }
+                }
+              }
               if (['dirty', 'blocked'].includes(state)) {
                 core.info(`#${pull_number} not auto-mergeable (state=${state}) — leaving for a human.`); continue
               }
@@ -265,7 +280,7 @@ jobs:
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
               const go = ownerMergeGo({ comments: prComments, commits: prCommits, owner: OWNER })
               core.info(`#${pull_number} owner go: ${go.go} (${go.reason})`)
-              if ((epicToMain || leafToMain) && !go.go) { core.info(`#${pull_number} ${leafToMain ? 'leaf' : 'epic'} → main PR — waits for the owner's ok.`); continue }
+              if (epicToMain && !go.go) { core.info(`#${pull_number} epic → main PR — waits for the owner's ok.`); continue }
 
               // Shared-code pause (#339): hold any PR that touches packages/ for a human — and
               // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
