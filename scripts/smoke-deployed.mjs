@@ -32,17 +32,20 @@
  *     "required": true,                 // caller gates the deploy on this smoke
  *     "screenshotPath": "/",            // authenticated page to screenshot (default "/")
  *     "crud": {
- *       "create":     { "path": "/api/teams/.../posts", "method": "POST", "body": { ... } },
+ *       "create":     { "path": "/api/teams/{teamId}/posts", "method": "POST", "body": { ... } },
  *       "idFrom":     "id",             // dot-path to the new record's id in the create response
- *       "readPublic": { "path": "/api/.../posts/{id}", "expectIncludes": "<text from body>" },
- *       "delete":     { "path": "/api/.../posts/{id}", "method": "DELETE" }   // optional cleanup
- *     }
+ *       "update":     { "path": "/api/teams/{teamId}/posts/{id}", "method": "PATCH", "body": { ... } },  // optional
+ *       "read":       { "path": "/api/teams/{teamId}/posts?ids={id}", "expectIncludes": "<new value>" }, // optional, authenticated
+ *       "readPublic": { "path": "/api/.../posts/{id}", "expectIncludes": "<text from body>" },          // optional, anonymous
+ *       "delete":     { "path": "/api/teams/{teamId}/posts/{id}", "method": "DELETE" }                   // always attempted after create
+ *     }   // placeholders: {id}, {teamId} (session's active team), {rand} (per-run token) — see scripts/lib/smoke-crud.mjs
  *   }
  */
 
 import { existsSync, mkdirSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { runCrud } from './lib/smoke-crud.mjs'
 
 // ── args ────────────────────────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -109,10 +112,6 @@ async function http(method, path, body, { auth = true } = {}) {
   return { res, json }
 }
 
-function dotGet(obj, dotPath) {
-  return dotPath.split('.').reduce((o, k) => (o == null ? o : o[k]), obj)
-}
-
 // ── load optional manifest ───────────────────────────────────────────────────
 async function loadSmokeManifest() {
   const candidates = [
@@ -160,36 +159,23 @@ async function crudProof(smoke, loggedIn) {
   if (!crud?.create) { info('no smoke.crud declared — skipping CRUD check.'); return }
   if (!loggedIn) { failures.push('crud: declared but not logged in'); fail('crud declared but login failed — cannot CRUD.'); return }
 
-  // create
-  const c = crud.create
-  const { res: cr, json: cj } = await http(c.method || 'POST', c.path, c.body ?? {})
-  if (!cr.ok) { failures.push(`crud.create: HTTP ${cr.status}`); fail(`crud.create returned HTTP ${cr.status}`); return }
-  const id = crud.idFrom ? dotGet(cj, crud.idFrom) : (cj?.id ?? cj?.data?.id)
-  info(`✓ crud.create ok${id != null ? ` (id=${id})` : ''}`)
+  const failed = await runCrud(crud, {
+    http,
+    getTeamId: resolveTeamId,
+    log: m => info(m),
+  })
+  for (const f of failed) { failures.push(f); fail(f) }
+}
 
-  // read (public = no cookie when asked)
-  if (crud.readPublic) {
-    const rp = crud.readPublic
-    const path = String(rp.path).replace('{id}', String(id ?? ''))
-    const { res: rr, json: rj } = await http('GET', path, undefined, { auth: false })
-    const bodyText = JSON.stringify(rj ?? '')
-    const ok = rr.ok && (!rp.expectIncludes || bodyText.includes(rp.expectIncludes))
-    if (!ok) {
-      failures.push(`crud.readPublic: HTTP ${rr.status}${rp.expectIncludes ? ` / missing "${rp.expectIncludes}"` : ''}`)
-      fail(`crud.readPublic failed (HTTP ${rr.status})`)
-    } else {
-      info('✓ crud.readPublic ok — created record is publicly readable')
-    }
-  }
-
-  // cleanup (best-effort, never fails the smoke)
-  if (crud.delete && id != null) {
-    const d = crud.delete
-    try {
-      await http(d.method || 'DELETE', String(d.path).replace('{id}', String(id)))
-      info('✓ crud.delete cleanup ok')
-    } catch (e) { warn(`crud.delete cleanup failed (non-fatal): ${e.message}`) }
-  }
+/** Active team of the logged-in session; activates the account's first team when none is set. */
+async function resolveTeamId() {
+  const { json } = await http('GET', '/api/auth/get-session')
+  const active = json?.session?.activeOrganizationId
+  if (active) return active
+  const { json: orgs } = await http('GET', '/api/auth/organization/list')
+  const teamId = Array.isArray(orgs) ? orgs[0]?.id : undefined
+  if (teamId) await http('POST', '/api/auth/organization/set-active', { organizationId: teamId })
+  return teamId
 }
 
 async function screenshot(smoke, loggedIn) {
