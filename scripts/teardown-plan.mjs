@@ -44,7 +44,8 @@ function scopeFor(app, kind, env, config) {
   }
 }
 
-export function planTeardown({ deletedPaths = [], remainingPaths = [], configsByApp = {} } = {}) {
+/** Apps touched by the deletion that are gone for good (not still present, not moved under another root). */
+function goneApps(deletedPaths, remainingPaths) {
   const touched = new Map() // "root/app" → { root, app }
   for (const p of deletedPaths) {
     const a = appOf(p)
@@ -58,10 +59,12 @@ export function planTeardown({ deletedPaths = [], remainingPaths = [], configsBy
     stillThere.add(`${a.root}/${a.app}`)
     nameStillThere.add(a.app)
   }
+  return [...touched.values()].filter(({ root, app }) => !stillThere.has(`${root}/${app}`) && !nameStillThere.has(app))
+}
 
+export function planTeardown({ deletedPaths = [], remainingPaths = [], configsByApp = {} } = {}) {
   const plan = []
-  for (const { root, app } of touched.values()) {
-    if (stillThere.has(`${root}/${app}`) || nameStillThere.has(app)) continue
+  for (const { root, app } of goneApps(deletedPaths, remainingPaths)) {
     const kind = ROOTS[root]
     const config = loadConfig(configsByApp[app])
     // A POC has one deploy at the base name. A launched app is staging only: production is manual.
