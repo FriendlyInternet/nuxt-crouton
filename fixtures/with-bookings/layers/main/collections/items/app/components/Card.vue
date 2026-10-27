@@ -10,6 +10,8 @@
 </template>
 
 <script setup lang="ts">
+// fallow-ignore-file unused-component-props
+// Card contract props: declared so <CroutonCollection>'s extras don't fall through onto the root as attrs.
 defineProps<{
   item: any
   layout?: string
