@@ -3,7 +3,7 @@
 > **Normal path (#2693):** add `extends: ['@fyit/crouton-collab']` to the app and `"collab": true` to
 > `apps/<app>/deploy.config.json`. The deploy workflow then deploys this Worker in place
 > (`<app>-collab-staging`, `<app>-collab` in production, `<app>-pr<N>-collab` for PR previews), shares
-> the app's `BETTER_AUTH_SECRET`, applies the D1 migration and builds the app with
+> the app's `COLLAB_TOKEN_SECRET`, applies the D1 migration and builds the app with
 > `NUXT_PUBLIC_COLLAB_WORKER_URL`. Everything below is the manual fallback.
 
 Standalone Cloudflare Worker that hosts the `CollabRoom` Durable Object for real-time collaboration. Cloudflare Pages cannot host Durable Objects, so every app using `crouton-collab` in production needs a copy of this worker.
@@ -54,11 +54,11 @@ Leaving the array empty allows all origins (useful for development).
 
 ### 5. Set the shared secret
 
-The worker and your Pages app must share the same `BETTER_AUTH_SECRET` for token-based auth:
+The worker and your Pages app must share the same `COLLAB_TOKEN_SECRET` for token-based auth:
 
 ```bash
 cd workers/my-app-collab
-npx wrangler secret put BETTER_AUTH_SECRET
+npx wrangler secret put COLLAB_TOKEN_SECRET
 # Paste the same secret used in your Pages app
 ```
 

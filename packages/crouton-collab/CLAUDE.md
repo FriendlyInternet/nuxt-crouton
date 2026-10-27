@@ -69,7 +69,7 @@ CollabRoom Durable Object
   └── Auth: HMAC token verification
 
 Nuxt app (Cloudflare Workers)
-  └── /api/collab/token → HMAC-signed {userId, exp} using BETTER_AUTH_SECRET
+  └── /api/collab/token → HMAC-signed {userId, exp} using COLLAB_TOKEN_SECRET
 ```
 
 ### Cross-Origin Auth Flow
@@ -82,7 +82,7 @@ Since the collab worker is a different origin, session cookies aren't sent. `use
 4. Client passes token as `?token=` query param to worker WebSocket
 5. CollabRoom DO verifies HMAC signature and expiry
 
-Both the app and collab worker must share `BETTER_AUTH_SECRET`.
+Both the app and collab worker must share `COLLAB_TOKEN_SECRET`.
 
 ### Runtime Config
 
@@ -118,7 +118,7 @@ The `type` query parameter differentiates room types:
 - **CollabRoom ships as a dedicated Worker** — the DO lives in its own standalone Worker (decoupled deploy lifecycle; the app's Nitro worker doesn't export DO classes), referenced via `script_name`.
 - **`NUXT_PUBLIC_COLLAB_WORKER_URL` is build-time** — It's baked into the client bundle. Changing it requires a rebuild.
 - **Token expiry is 60 seconds** — Enough for initial connection. Reconnections auto-fetch a fresh token.
-- **`BETTER_AUTH_SECRET` must match** — Both the Nuxt app and collab worker use the same secret for HMAC signing/verification.
+- **`COLLAB_TOKEN_SECRET` must match** — Both the Nuxt app and collab worker use the same secret for HMAC signing/verification.
 
 ## Real-Time Collection Sync
 
@@ -194,7 +194,7 @@ export default defineNuxtConfig({
 **One setting (#2693):** with `extends: ['@fyit/crouton-collab']` in the app, set `"collab": true` in
 `apps/<app>/deploy.config.json`. The reusable `deploy-app.yml` then deploys the Worker from
 `worker-template` (`<app>-collab-staging` / `<app>-collab`, `<app>-pr<N>-collab` for previews) with
-auto-provisioned D1, shares the app's `BETTER_AUTH_SECRET`, applies the migration, and builds the app
+auto-provisioned D1, sets the same derived `COLLAB_TOKEN_SECRET` on Worker and app, applies the migration, and builds the app
 with `NUXT_PUBLIC_COLLAB_WORKER_URL` — in that order. Steps 2–5 below are the manual fallback only.
 
 
@@ -203,7 +203,7 @@ The collab Durable Object ships as a standalone Worker:
 ```
 workers/collab-worker/
 ├── src/index.ts          # Routes /{roomKey}/{action} to CollabRoom DO
-├── wrangler.toml         # DO bindings, D1 binding, BETTER_AUTH_SECRET
+├── wrangler.toml         # DO bindings, D1 binding, COLLAB_TOKEN_SECRET
 └── package.json
 ```
 
@@ -228,7 +228,7 @@ new_classes = ["CollabRoom"]
 Deploy the worker and set the shared secret:
 ```bash
 cd workers/collab-worker
-npx wrangler secret put BETTER_AUTH_SECRET  # Same value as your Nuxt app
+npx wrangler secret put COLLAB_TOKEN_SECRET  # Same value as your Nuxt app
 npx wrangler deploy
 ```
 

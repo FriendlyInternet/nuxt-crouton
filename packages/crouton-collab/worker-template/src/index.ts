@@ -16,7 +16,7 @@
  * Setup:
  *   1. Copy this directory to workers/{{APP_NAME}}-collab/
  *   2. Replace all {{PLACEHOLDER}} values in wrangler.toml
- *   3. Set BETTER_AUTH_SECRET: npx wrangler secret put BETTER_AUTH_SECRET
+ *   3. Set BETTER_AUTH_SECRET: npx wrangler secret put COLLAB_TOKEN_SECRET
  *   4. Deploy: npx wrangler deploy
  */
 
@@ -28,7 +28,7 @@ export { CollabRoom } from '../../server/durable-objects/CollabRoom'
 interface Env {
   COLLAB_ROOMS: DurableObjectNamespace
   DB: D1Database
-  BETTER_AUTH_SECRET?: string
+  COLLAB_TOKEN_SECRET?: string
 }
 
 /** Origins allowed to connect via WebSocket. Add your app's domains here. */

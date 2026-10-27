@@ -3,23 +3,22 @@
  * Deploy the crouton-collab live-sync Worker for an app (#2693) — the deploy-time half of
  * `"collab": true` in deploy.config.json. Order: Worker -> D1 migration -> (caller builds app).
  *
- *   node scripts/deploy-collab-worker.mjs --name <worker> --db <d1-name> [--secret-file <path>]
+ *   COLLAB_TOKEN_SECRET=<secret> node scripts/deploy-collab-worker.mjs --name <worker> --db <d1-name>
  *
  * The Worker comes from packages/crouton-collab/worker-template, deployed IN PLACE through a
  * generated id-less config (D1 auto-provisions, like the app's own first deploy), so nothing
- * is copied and no ids are committed. Reads the shared secret from COLLAB_AUTH_SECRET (the
- * app's BETTER_AUTH_SECRET, when the secrets bundle supplies it); otherwise sets one only if
- * the Worker has none, and writes it to --secret-file so the app's secret step can reuse it.
+ * is copied and no ids are committed. COLLAB_TOKEN_SECRET is REQUIRED: a deterministic value the
+ * workflow derives and also sets on the app (secrets can't be read back, so we never copy one).
  *
  * Prints `url=<worker url>` (also appended to $GITHUB_OUTPUT). Fails loudly — never exits 0
  * having deployed nothing.
  */
 import { execFileSync } from 'node:child_process'
 import { appendFileSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
-import { randomBytes } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { applyD1Ids } from './lib/pr-preview-db-id.mjs'
+import { buildCollabConfig, extractWorkerUrl } from './lib/collab-worker.mjs'
 
 const arg = (flag) => {
   const i = process.argv.indexOf(flag)
@@ -27,24 +26,20 @@ const arg = (flag) => {
 }
 const name = arg('--name')
 const db = arg('--db')
-const secretFile = arg('--secret-file')
+const tokenSecret = process.env.COLLAB_TOKEN_SECRET
 if (!name || !db) {
-  console.error('usage: deploy-collab-worker.mjs --name <worker> --db <d1-name> [--secret-file <path>]')
+  console.error('usage: deploy-collab-worker.mjs --name <worker> --db <d1-name>')
+  process.exit(2)
+}
+if (!tokenSecret) {
+  console.error('::error::COLLAB_TOKEN_SECRET is not set — refusing to deploy a collab Worker whose tokens could not verify.')
   process.exit(2)
 }
 
 const pkg = resolve(import.meta.dirname, '../packages/crouton-collab')
 const dir = mkdtempSync(join(tmpdir(), 'collab-worker-'))
 const cfgPath = join(dir, 'wrangler.json')
-const config = {
-  name,
-  main: join(pkg, 'worker-template/src/index.ts'),
-  compatibility_date: '2024-09-02',
-  compatibility_flags: ['nodejs_compat'],
-  d1_databases: [{ binding: 'DB', database_name: db }],
-  durable_objects: { bindings: [{ name: 'COLLAB_ROOMS', class_name: 'CollabRoom' }] },
-  migrations: [{ tag: 'collab-v1', new_classes: ['CollabRoom'] }],
-}
+const config = buildCollabConfig({ name, db, main: join(pkg, 'worker-template/src/index.ts') })
 writeFileSync(cfgPath, JSON.stringify(config, null, 2))
 
 const wrangler = (args, opts = {}) =>
@@ -53,27 +48,15 @@ const wrangler = (args, opts = {}) =>
 // 1. Worker (provisions the D1 on first run)
 const out = wrangler(['deploy', '--config', cfgPath])
 process.stdout.write(out)
-const url = out.match(/https:\/\/[a-z0-9.-]+\.workers\.dev/i)?.[0]
-if (!url) {
-  console.error(`::error::Collab Worker ${name} deployed but no workers.dev URL was printed — the app could not be pointed at it.`)
+let url
+try { url = extractWorkerUrl(out, name) } catch (e) {
+  console.error(`::error::${e.message}`)
   process.exit(1)
 }
 
-// 2. Shared secret
-let secrets = ''
-try { secrets = wrangler(['secret', 'list', '--config', cfgPath]) } catch { /* treated as none */ }
-const supplied = process.env.COLLAB_AUTH_SECRET
-if (supplied) {
-  wrangler(['secret', 'put', 'BETTER_AUTH_SECRET', '--config', cfgPath], { input: supplied })
-  console.log('Collab Worker BETTER_AUTH_SECRET set from the secrets bundle.')
-} else if (!secrets.includes('BETTER_AUTH_SECRET')) {
-  const generated = randomBytes(32).toString('hex')
-  wrangler(['secret', 'put', 'BETTER_AUTH_SECRET', '--config', cfgPath], { input: generated })
-  if (secretFile) writeFileSync(secretFile, generated, { mode: 0o600 })
-  console.log('Collab Worker BETTER_AUTH_SECRET generated; the app will be given the same value if it has none.')
-} else {
-  console.log('::warning::Collab Worker already has a BETTER_AUTH_SECRET and no secrets bundle supplies one — assuming it matches the app\'s.')
-}
+// 2. Shared token secret (set on every deploy; the workflow sets the same value on the app)
+wrangler(['secret', 'put', 'COLLAB_TOKEN_SECRET', '--config', cfgPath], { input: tokenSecret })
+console.log('Collab Worker COLLAB_TOKEN_SECRET set.')
 
 // 3. D1 migration (idempotent: CREATE ... IF NOT EXISTS). Needs the id the deploy just provisioned.
 const list = JSON.parse(wrangler(['d1', 'list', '--json']).replace(/^[^[{]*/, ''))

@@ -262,14 +262,15 @@ jobs:
       # crouton-collab Worker and points the app at it. Runs BEFORE the app build because the
       # Worker's URL is baked into the client bundle (NUXT_PUBLIC_COLLAB_WORKER_URL, below).
       # Order: Worker -> D1 migration -> app. Apps that don't set the flag skip it entirely.
-      # Secrets: the app's BETTER_AUTH_SECRET from the WORKER_SECRETS_JSON bundle when present;
-      # otherwise one is generated here and the "Ensure BETTER_AUTH_SECRET" step reuses it for
-      # the app, so the two always match on a fresh deploy.
+      # Secret: a dedicated COLLAB_TOKEN_SECRET = sha256(REVIEW_SEED_SECRET:app:scope:collab),
+      # derived here (wrangler secrets can't be read back, so nothing is copied) and set on BOTH
+      # the Worker (here) and the app (the "Set COLLAB_TOKEN_SECRET on the app" step below).
+      # Missing seed -> the deploy fails loudly; no fallback to BETTER_AUTH_SECRET.
       - name: Deploy collab Worker (collab flag)
         id: collab
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
-          SECRETS_JSON: ${{ secrets.WORKER_SECRETS_JSON }}
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           ENVIRONMENT: ${{ inputs.environment }}
         run: |
           set -o pipefail
@@ -278,19 +279,21 @@ jobs:
             exit 0
           fi
           PR_NUM="${{ github.event.pull_request.number }}"
-          if [ "$ENVIRONMENT" = "production" ]; then
-            WORKER="${{ inputs.app }}-collab"
-          elif [ -n "$PR_NUM" ]; then
-            WORKER="${{ inputs.app }}-pr${PR_NUM}-collab"
-          else
-            WORKER="${{ inputs.app }}-collab-staging"
+          if [ -z "$REVIEW_SEED_SECRET" ]; then
+            echo "::error::REVIEW_SEED_SECRET is not set, so the collab token secret cannot be derived. Add it as a repository Actions secret."
+            exit 1
           fi
-          if [ -n "$SECRETS_JSON" ]; then
-            COLLAB_AUTH_SECRET="$(printf '%s' "$SECRETS_JSON" | jq -r '.BETTER_AUTH_SECRET // empty')"
-            if [ -n "$COLLAB_AUTH_SECRET" ]; then echo "::add-mask::$COLLAB_AUTH_SECRET"; export COLLAB_AUTH_SECRET; fi
-          fi
-          node "$GITHUB_WORKSPACE/scripts/deploy-collab-worker.mjs" --name "$WORKER" --db "$WORKER-db" \
-            --secret-file "$RUNNER_TEMP/collab-auth-secret"
+          read -r WORKER SCOPE < <(node --input-type=module -e "
+            import { collabWorkerName } from '$GITHUB_WORKSPACE/scripts/lib/collab-worker.mjs'
+            const [app, environment, pr] = process.argv.slice(1)
+            const scope = environment === 'production' || !pr ? environment : 'pr' + pr
+            console.log(collabWorkerName({ app, environment, pr }), scope)
+          " "${{ inputs.app }}" "$ENVIRONMENT" "$PR_NUM")
+          COLLAB_TOKEN_SECRET="$(printf '%s' "$REVIEW_SEED_SECRET:${{ inputs.app }}:$SCOPE:collab" | sha256sum | cut -d' ' -f1)"
+          echo "::add-mask::$COLLAB_TOKEN_SECRET"
+          export COLLAB_TOKEN_SECRET
+          printf '%s' "$COLLAB_TOKEN_SECRET" > "$RUNNER_TEMP/collab-token-secret"
+          node "$GITHUB_WORKSPACE/scripts/deploy-collab-worker.mjs" --name "$WORKER" --db "$WORKER-db"
 
       - name: Deploy (build → provision → sync ids → migrate)
         id: deploy
@@ -733,15 +736,24 @@ jobs:
             echo "✓ BETTER_AUTH_SECRET already present on the Worker — leaving it untouched."
           else
             echo "::notice::No BETTER_AUTH_SECRET on ${{ inputs.app }} ($ENVIRONMENT) — generating one (persists; override anytime via a repo-level WORKER_SECRETS_JSON)."
-            # Collab flag (#2693): reuse the secret the collab Worker was just given, so the
-            # app's tokens verify there. Absent otherwise -> a fresh random one as before.
-            if [ -s "$RUNNER_TEMP/collab-auth-secret" ]; then
-              npx wrangler secret put BETTER_AUTH_SECRET $ENV_FLAG < "$RUNNER_TEMP/collab-auth-secret"
-              rm -f "$RUNNER_TEMP/collab-auth-secret"
-            else
-              printf '%s' "$(openssl rand -hex 32)" | npx wrangler secret put BETTER_AUTH_SECRET $ENV_FLAG
-            fi
+            printf '%s' "$(openssl rand -hex 32)" | npx wrangler secret put BETTER_AUTH_SECRET $ENV_FLAG
           fi
+
+      # Live sync (#2693): give the app the SAME derived token secret the collab Worker got, on
+      # every deploy (idempotent). /api/collab/token signs with it; CollabRoom verifies with it.
+      - name: Set COLLAB_TOKEN_SECRET on the app (collab flag)
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -o pipefail
+          [ -f "$RUNNER_TEMP/collab-token-secret" ] || { echo "No collab flag — nothing to set."; exit 0; }
+          PR_NUM="${{ github.event.pull_request.number }}"
+          if [ "$ENVIRONMENT" = "production" ]; then ENV_FLAG=""
+          elif [ -n "$PR_NUM" ] && [ -f .output/server/wrangler.json ]; then ENV_FLAG="--config .output/server/wrangler.json"
+          else ENV_FLAG="--env staging"; fi
+          npx wrangler secret put COLLAB_TOKEN_SECRET $ENV_FLAG < "$RUNNER_TEMP/collab-token-secret"
+          rm -f "$RUNNER_TEMP/collab-token-secret"
 
       # Seed the app's COLLECTION fixtures + package demo data into the staging D1 so the
       # preview isn't an empty shell (#1370): the generated seed.json rows (#298) + the demo
