@@ -162,6 +162,14 @@ jobs:
             echo "summary=no usable shot — ${WHY:-no surface result printed (marker not found, or the script crashed)}" | head -c 600 >> "$GITHUB_OUTPUT"; echo >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # A rejected surface (loading screen, blank frame, error page) turns the check red even when
+          # another surface produced a shot — a partial pass would hide it (#2699).
+          BAD=$(grep -E '^surface=[^ ]+ status=(rejected|error) ' "$LOG" | sed -E 's/^surface=([^ ]+) status=[a-z]+ reason=/\1: /' | head -5 | paste -sd';' - || true)
+          if [ -n "$BAD" ]; then
+            echo "result=miss" >> "$GITHUB_OUTPUT"
+            echo "summary=rejected capture — ${BAD}" | head -c 600 >> "$GITHUB_OUTPUT"; echo >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           NAMES=$(printf '%s, ' "${PNGS[@]##*/}"); NAMES="${NAMES%, }"
           BR="$RUNNER_TEMP/uip-branch"; rm -rf "$BR"
           git clone --depth=1 --branch "$HEAD_REF" "https://x-access-token:${GH_TOKEN_PUSH}@github.com/${REPO}.git" "$BR" 2>/dev/null || {
