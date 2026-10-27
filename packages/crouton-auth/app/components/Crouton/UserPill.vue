@@ -38,8 +38,10 @@ const props = withDefaults(defineProps<Props>(), {
 const { t } = useT()
 const route = useRoute()
 const { user, userInitials, dropdownItems, preferenceItems } = useUserMenuItems({ useModal: props.useModal })
-const { currentTeam, currentRole } = useTeam()
-const { current, recent, unread, markAllSeen, dismiss } = useCroutonStatus()
+const { currentTeam, currentRole, isAdmin } = useTeam()
+const { current, recent, unread, markAllSeen, dismiss, refreshTeamEvents } = useCroutonStatus()
+const { hasApp } = useCroutonApps()
+const { teamSlug } = useTeamContext()
 
 const pageChrome = useState<{ hideNav?: boolean, hideAuthControls?: boolean }>('pageChrome', () => ({}))
 const scopedSession = useState<{ displayName: string } | null>('crouton:scoped-session', () => null)
@@ -146,14 +148,19 @@ const menuItems = computed<DropdownMenuItem[][]>(() => {
       ]
     : []
 
+  const seeAllGroup: DropdownMenuItem[] = hasApp('events') && teamSlug.value && isAdmin.value
+    ? [{ label: t('userPill.seeAll'), icon: 'i-lucide-history', to: `/admin/${teamSlug.value}/activity` } as DropdownMenuItem]
+    : []
+
   // First group of dropdownItems is the user header — replaced by ours above
   const [, ...rest] = dropdownItems.value
   const withExtras = props.extraItems.length ? [rest[0] ?? [], props.extraItems, ...rest.slice(1)] : rest
-  return [header, ...(recentGroup.length ? [recentGroup] : []), ...withExtras]
+  return [header, ...(recentGroup.length ? [recentGroup] : []), ...(seeAllGroup.length ? [seeAllGroup] : []), ...withExtras]
 })
 
 function onOpenChange(open: boolean) {
   if (!open) return
+  refreshTeamEvents()
   markAllSeen()
   if (current.value?.type === 'error') dismiss(current.value.id)
 }
@@ -223,6 +230,7 @@ function retry() {
       >
         <button
           type="button"
+          data-testid="user-pill"
           class="relative flex h-11 min-w-11 items-center gap-2 rounded-full pl-1.5 pr-1.5 text-default focus-visible:outline-2 focus-visible:outline-primary"
           :class="showName && firstName ? 'sm:pr-3' : ''"
           :aria-label="t('userPill.accountAndStatus')"

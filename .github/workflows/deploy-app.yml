@@ -478,40 +478,40 @@ jobs:
       # Magic-link mail swallows every error (crouton-auth `.catch(() => {})`, crouton-email's
       # try/catch), so a preview can look fine while nothing is sent (#2557). Prove it from CI:
       # tail the Worker, request a link for the owner, and print the `[crouton-email]` lines
-      # (owner address and URLs masked), then request again so the log shows a repeat attempt.
+      # (URLs masked). It mails Resend's test inbox, never the owner (#2702).
       - name: Probe status magic-link send (PR preview)
         if: ${{ inputs.app == 'status' && github.event.pull_request.number != '' && inputs.environment != 'production' }}
         continue-on-error: true
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
-          OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
+          # Resend's test inbox: the send is real (and logged) but never reaches the owner (#2702).
+          PROBE_EMAIL: delivered@resend.dev
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
         run: |
-          if [ -z "$OWNER_EMAIL" ] || [ -z "$DEPLOY_URL" ] || [ ! -f .output/server/wrangler.json ]; then
-            echo "::notice::magic-link probe skipped (owner email, URL or built config missing)."
+          if [ -z "$DEPLOY_URL" ] || [ ! -f .output/server/wrangler.json ]; then
+            echo "::notice::magic-link probe skipped (URL or built config missing)."
             exit 0
           fi
           npx wrangler tail --config .output/server/wrangler.json --format pretty > "$RUNNER_TEMP/tail.log" 2>&1 &
           TAIL_PID=$!
           sleep 15
-          for i in 1 2; do
-            BODY=$(jq -n --arg e "$OWNER_EMAIL" '{email:$e, callbackURL:"/"}')
-            CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
-              -H 'Content-Type: application/json' -d "$BODY" || true)
-            echo "request $i → HTTP $CODE"
-            sleep 10
-          done
+          BODY=$(jq -n --arg e "$PROBE_EMAIL" '{email:$e, callbackURL:"/"}')
+          CODE=$(curl -s -m 30 -o /dev/null -w '%{http_code}' -X POST "$DEPLOY_URL/api/auth/sign-in/magic-link" \
+            -H 'Content-Type: application/json' -d "$BODY" || true)
+          echo "probe request → HTTP $CODE"
+          sleep 10
           kill "$TAIL_PID" 2>/dev/null || true
           echo "--- [crouton-email] lines from the Worker tail ---"
           sed -E 's/\x1b\[[0-9;]*m//g' "$RUNNER_TEMP/tail.log" \
             | grep -F -e '[crouton-email]' -e 'Error' -e 'POST' \
-            | sed -e "s|$OWNER_EMAIL|<owner>|Ig" -E -e 's|https?://[^ "]*token=[^ "]*|<link>|g' \
+            | sed -E -e 's|https?://[^ "]*token=[^ "]*|<link>|g' \
             | head -40 || echo "(no matching lines)"
 
-      # Send the owner a sign-in link by mail on every status deploy, so they never have to type
+      # Send the owner a sign-in link when status updates on staging, so they never have to type
       # an email on a phone. Owner address is never printed.
       - name: Email owner a status sign-in link
-        if: ${{ inputs.app == 'status' && steps.deploy.outputs.url != '' }}
+        # Only when status itself updates on staging (push to main), never on PR previews (#2702).
+        if: ${{ inputs.app == 'status' && github.event_name == 'push' && steps.deploy.outputs.url != '' }}
         continue-on-error: true
         env:
           OWNER_EMAIL: ${{ vars.REVIEW_LOGIN_EMAIL || vars.DIGEST_REPORT_EMAIL }}
