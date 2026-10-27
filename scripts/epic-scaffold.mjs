@@ -11,7 +11,8 @@
 // THE PLAN (JSON):
 //   { "title": "...", "body": "... Dedup-checked: ...", "labels": ["epic","pkg:x"],
 //     "slug": "optional-branch-slug",
-//     "packagesApproved": "optional — appended to every child as `Packages-approved: …`",
+//     "packagesApproved": "optional — string, or { why, packages: [...] }: stamps every child with
+//        `Packages-approved: …` and (object form) one `pkg:<name>` label per package (#2778)",
 //     "children": [ { "title", "body", "labels", "blockedBy": [siblingIdx…], "needsSplit"? } ] }
 //
 // The epic body MUST carry a `Dedup-checked:` line — this must not become a way around the
@@ -50,12 +51,6 @@ function parseJsonObject(raw) {
   return p
 }
 
-/** Append `Packages-approved: <why>` to a child body unless it already carries one. */
-function withPackagesApproved(child, approved) {
-  if (!approved || typeof child?.body !== 'string' || /^\s*Packages-approved:/im.test(child.body)) return child?.body
-  return `${child.body.trimEnd()}\n\nPackages-approved: ${approved}\n`
-}
-
 /** Validate the scaffold plan → { title, body, labels, slug, children } (children via parsePlan). */
 export function parseScaffoldPlan(raw) {
   const p = parseJsonObject(raw)
@@ -65,10 +60,10 @@ export function parseScaffoldPlan(raw) {
     throw new PlanError('epic body has no `Dedup-checked:` line — run the issue-dedup search first and attest it (the scaffold must not bypass the dedup gate)')
   }
   if (!hasTestSteps(p.body)) throw new PlanError(NO_TEST_STEPS_MSG)
-  const approved = typeof p.packagesApproved === 'string' && p.packagesApproved.trim() ? p.packagesApproved.trim() : null
   const children = parsePlan({
     leaf: false,
-    children: (p.children || []).map(c => ({ ...c, body: withPackagesApproved(c, approved) })),
+    packagesApproved: p.packagesApproved,
+    children: p.children || [],
   }).children
   const labels = Array.isArray(p.labels) ? p.labels.filter(l => typeof l === 'string' && l) : []
   if (!labels.includes('epic')) labels.unshift('epic')
@@ -135,7 +130,8 @@ function ensureBranch(branch, sha) {
 /** Labels the plan uses that the repo taxonomy doesn't have — an unknown one fails creation midway. */
 export function unknownPlanLabels(plan, knownLabels) {
   if (!knownLabels.length) return []
-  return plan.labels.filter(l => !knownLabels.includes(l))
+  const used = [...plan.labels, ...plan.children.flatMap(c => c.labels.filter(l => l.startsWith('pkg:')))]
+  return [...new Set(used)].filter(l => !knownLabels.includes(l))
 }
 
 function main(argv) {

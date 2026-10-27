@@ -338,6 +338,15 @@ test('the real repo commits the sign-off artifact paths and still ignores screen
   assert.equal(isGitIgnored('screenshots/x.png', { exec: realExec }), true, 'screenshots stay ignored')
 })
 
+test('an approved package with no label in the taxonomy fails loud (#2778)', async () => {
+  const { parsePlan, planToActions } = await import('./apply-decompose-plan.mjs')
+  const plan = parsePlan({ leaf: false, packagesApproved: { why: 'x', packages: ['nope'] }, children: [{ title: 'A', body: 'b' }] })
+  assert.throws(() => planToActions(plan, { target: 1, epic: 1, knownLabels: ['type:feat'] }), /pkg:nope/)
+  const ok = parsePlan({ leaf: false, packagesApproved: { why: 'x', packages: ['a'] }, children: [{ title: 'A', body: 'b' }] })
+  const create = planToActions(ok, { target: 1, epic: 1, knownLabels: ['pkg:a'] }).find(a => a.type === 'create')
+  assert.deepEqual(create.labels, ['pkg:a'])
+})
+
 test('missingMockupReason: silent for non-UI holds, loud when a mockup was promised but absent (#2809)', () => {
   assert.equal(missingMockupReason({ summary: 'data model fork', questions: ['equal vs weighted?'] }, []), '')
   assert.match(missingMockupReason({ summary: 'The mockup shows a phone frame', questions: [] }, []), /no `ui`/)
