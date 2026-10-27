@@ -385,7 +385,8 @@ export async function ensureLayersExtended(layers: string[]): Promise<void> {
 
   try {
     const nuxtConfigPath = path.resolve('nuxt.config.ts')
-    let content = await fsp.readFile(nuxtConfigPath, 'utf-8')
+    const original = await fsp.readFile(nuxtConfigPath, 'utf-8')
+    let content = original
 
     // Check if extends exists
     if (!content.includes('extends:')) {
@@ -451,8 +452,10 @@ export async function ensureLayersExtended(layers: string[]): Promise<void> {
       }
     }
 
-    await fsp.writeFile(nuxtConfigPath, content, 'utf-8')
-    console.log(`✓ Updated nuxt.config.ts to extend required layers`)
+    if (content !== original) {
+      await fsp.writeFile(nuxtConfigPath, content, 'utf-8')
+      console.log(`✓ Updated nuxt.config.ts to extend required layers`)
+    }
   } catch (e: any) {
     console.warn(`⚠️  Could not update nuxt.config.ts: ${e.message}`)
     console.log(`   Please manually add to extends array:`)
