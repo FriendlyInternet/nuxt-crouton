@@ -219,6 +219,23 @@ jobs:
               if (!BOTS.includes(pr.user.login)) { core.info(`#${pull_number} not pipeline-authored (${pr.user.login}) — skip.`); continue }
 
               // 'dirty' = merge conflicts; 'blocked' = a required check/approval pending. Leave both.
+              // An epic → main PR that conflicts with main would otherwise sit forever with no checks
+              // (#2875): start the conflict resolver once per head (marker carries the sha).
+              if (epicToMain && state === 'dirty') {
+                const marker = `<!-- epic-conflict-resolve:${pr.head.sha} -->`
+                const prior = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
+                if (!prior.some(x => (x.body || '').includes(marker))) {
+                  const epicIssue = Number(/^epic\/(\d+)-/.exec(pr.head.ref)?.[1])
+                  try {
+                    const note = await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
+                      body: `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _epic PR conflicts with main (#2875)_\n\n`
+                        + `🔧 **This PR conflicts with \`main\`.** The pi worker is merging \`main\` into \`${pr.head.ref}\` and resolving the conflicts (a merge, never a rebase). Instruction: bring this branch up to date with main.` })
+                    await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml', ref: 'main',
+                      inputs: { issue: String(epicIssue), feedback: String(note.data.id), branch: pr.head.ref } })
+                    core.info(`#${pull_number} conflicts with main — started the resolver (#2875).`)
+                  } catch (e) { core.warning(`#${pull_number}: could not start the conflict resolver: ${e.message}`) }
+                }
+              }
               if (['dirty', 'blocked'].includes(state)) {
                 core.info(`#${pull_number} not auto-mergeable (state=${state}) — leaving for a human.`); continue
               }
