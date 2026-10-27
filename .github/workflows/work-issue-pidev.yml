@@ -337,7 +337,7 @@ jobs:
       # finish scripts from main — and hand the comment text to the prompt. REV_START is the
       # PR head: the finish step stacks on it and compares against it to tell "changed nothing".
       - id: revise
-        if: ${{ inputs.feedback != '' }}
+        if: ${{ inputs.feedback != '' && inputs.mode != 'plan' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue }}
@@ -400,6 +400,7 @@ jobs:
           REVISE: ${{ inputs.feedback != '' && '1' || '' }}
           # #2755: plan mode — the planner persona, no commit/PR (see the `plan` step below).
           PLAN: ${{ inputs.mode == 'plan' && '1' || '' }}
+          FEEDBACK_ID: ${{ inputs.mode == 'plan' && inputs.feedback || '' }}
         run: |
           set -uo pipefail
           # The Harness App identity for any commits pi makes (so they're attributable
@@ -426,6 +427,12 @@ jobs:
           fi
           if [ -n "${PLAN:-}" ]; then
             node scripts/pipeline-prompt.mjs pi-planner --var "issue=$ISSUE" > "$PROMPT_FILE"
+            # #2756: a plan REVIEW sent the plan back — `feedback` is the review comment id. Append
+            # it so the new plan answers the review's reasons (the revise step is skipped in plan mode).
+            if [ -n "${FEEDBACK_ID:-}" ]; then
+              gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
+              { printf '\n\nYOUR PREVIOUS PLAN WAS SENT BACK by the plan reviewer. Post a NEW plan (same marker and sections) that fixes every FAIL below by actually investigating, not by rewording:\n\n'; cat "$RUNNER_TEMP/feedback.txt"; } >> "$PROMPT_FILE"
+            fi
           elif [ -n "${REVISE:-}" ]; then
             PRN="$(gh pr list --head "work-${ISSUE}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
             node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" \

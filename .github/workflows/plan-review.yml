@@ -1,0 +1,158 @@
+name: Plan review (independent reviewer — pi.dev)
+
+# #2756 (epic #2754) — a separate reviewer on the strongest model (the `review` tier of
+# .claude/pipeline-models.json) reads a worker's PLAN comment and the code it names, grades it
+# against a fixed rubric (.claude/agents/plan-reviewer.md) and posts a verdict:
+#   go           → label `plan:approved`
+#   no-go        → re-run the plan with the review as feedback; after 2 sent-back rounds, hold
+#   needs-owner  → one yes/no question, held `status:blocked`
+#
+# SAFETY: the pi step is READ-ONLY and holds NO GitHub token (checkout persist-credentials:false,
+# the App token is only used by the trusted steps). The model comes from the ONE setting — no
+# hard-coded model, and NO silent fallback: if the review model does not run on the pipeline's
+# provider, the preflight below fails loudly and says so on the issue.
+#
+# Workflow-change: new workflow for the plan-review gate (#2756).
+
+on:
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: plan-review-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    # Only a bot-posted plan on a plain issue (not a PR) — a human cannot start an expensive run
+    # by pasting the marker.
+    if: >-
+      ${{ !github.event.issue.pull_request
+      && github.event.comment.user.login == 'nuxt-harness[bot]'
+      && contains(github.event.comment.body, '<!-- pipeline-plan:v1 -->') }}
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      ISSUE: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Resolve review model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs review)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "review model: $MODEL (from .claude/pipeline-models.json)"
+
+      - name: Set up pi + Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      # Does the review model run on the pipeline's provider at all? One tiny call. If not, fail
+      # LOUDLY and tell the issue — never fall back to another model (#2756).
+      - name: Preflight — the review model runs on claude-bridge
+        env:
+          MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -uo pipefail
+          OUT="$(timeout 180 pi --print --approve --provider claude-bridge --model "$MODEL" 'Reply with exactly the two letters OK and nothing else.' 2>&1)"
+          if ! echo "$OUT" | grep -q 'OK'; then
+            echo "$OUT" | tail -n 20
+            echo "::error::review model $MODEL did not answer on provider claude-bridge — plan review NOT run, no fallback to another model (#2756)"
+            gh issue comment "$ISSUE" --body "$(printf '<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). I did not fall back to another model.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$MODEL")" || true
+            exit 1
+          fi
+          echo "preflight: $MODEL answers on claude-bridge"
+
+      - name: Gather the issue and the plan
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PLAN_ID: ${{ github.event.comment.id }}
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/plan-review"; mkdir -p "$D"
+          gh issue view "$ISSUE" --json title,body --jq '"# " + .title + "\n\n" + .body' > "$D/issue.md"
+          gh api "repos/${{ github.repository }}/issues/comments/${PLAN_ID}" --jq .body > "$D/plan.md"
+          # Prior review rounds: each sent-back verdict carries a hidden verdict line.
+          PRIOR="$(gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" \
+            --jq '[.[] | select(.body | contains("<!-- plan-review-verdict:no-go -->"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
+          echo "$PRIOR" > "$D/prior"
+          echo "prior sent-back rounds: $PRIOR"
+
+      # ── The reviewer: READ-ONLY, no GitHub token in its env ──────────────────────
+      - id: pi
+        env:
+          PI_MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/plan-review"
+          awk '/^---$/ && n < 2 { n++; next } n >= 2' .claude/agents/plan-reviewer.md \
+            | sed -e "s#{{issue}}#${ISSUE}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
+                  -e "s#{{issue_file}}#$D/issue.md#g" -e "s#{{plan_file}}#$D/plan.md#g" > "$D/prompt.txt"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills "$(cat "$D/prompt.txt")" 2>&1 | tee "$D/pi.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Post the verdict
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MODEL: ${{ steps.model.outputs.model }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PLAN_ID: ${{ github.event.comment.id }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/plan-review"
+          PRIOR="$(cat "$D/prior" 2>/dev/null || echo 0)"; ROUND=$((PRIOR + 1))
+          if [ ! -s "$D/verdict.md" ]; then
+            echo "::error::the reviewer wrote no verdict file"
+            gh issue comment "$ISSUE" --body "$(printf '<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review produced no verdict** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$RUN_URL")" || true
+            exit 1
+          fi
+          if ! DECISION="$(node scripts/lib/plan-verdict.mjs "$D/plan.md" "$D/verdict.md")"; then
+            echo "::error::malformed verdict: $DECISION"
+            gh issue comment "$ISSUE" --body "$(printf '<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review verdict was malformed** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$RUN_URL")" || true
+            exit 1
+          fi
+          VERDICT="$(echo "$DECISION" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).verdict)')"
+          node scripts/lib/plan-verdict.mjs render "$D/plan.md" "$D/verdict.md" "$ROUND" "$MODEL" > "$D/comment.md"
+          # remove-then-add: re-adding a label the issue already carries fires no event.
+          gh issue edit "$ISSUE" --remove-label "plan:approved" 2>/dev/null || true
+          REVIEW_URL="$(gh issue comment "$ISSUE" --body-file "$D/comment.md")"
+          echo "verdict: $VERDICT (round $ROUND) → $REVIEW_URL"
+          case "$VERDICT" in
+            go)
+              gh issue edit "$ISSUE" --add-label "plan:approved"
+              ;;
+            needs-owner)
+              gh issue edit "$ISSUE" --add-label "status:blocked"
+              ;;
+            no-go)
+              if [ "$ROUND" -ge 2 ]; then
+                gh issue edit "$ISSUE" --add-label "status:blocked"
+              else
+                REVIEW_ID="$(gh api "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" --jq '[.[] | select(.body | contains("<!-- plan-review-verdict:no-go -->"))] | last | .id')"
+                gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f mode=plan -f feedback="$REVIEW_ID"
+              fi
+              ;;
+          esac
