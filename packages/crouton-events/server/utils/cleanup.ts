@@ -45,7 +45,7 @@ export async function cleanupOldEvents(options: CleanupOptions = {}): Promise<Cl
     const totalBefore = await db
       .select({ count: sql<number>`count(*)` })
       .from(croutonEvents)
-      .then(rows => rows[0]?.count || 0)
+      .then((rows: { count: number }[]) => rows[0]?.count || 0)
 
     console.log(`  Total events before: ${totalBefore}`)
 
@@ -54,7 +54,7 @@ export async function cleanupOldEvents(options: CleanupOptions = {}): Promise<Cl
       .select({ count: sql<number>`count(*)` })
       .from(croutonEvents)
       .where(lt(croutonEvents.timestamp, cutoffDate))
-      .then(rows => rows[0]?.count || 0)
+      .then((rows: { count: number }[]) => rows[0]?.count || 0)
 
     console.log(`  Events older than ${retentionDays} days: ${toDeleteByDate}`)
 
@@ -96,7 +96,7 @@ export async function cleanupOldEvents(options: CleanupOptions = {}): Promise<Cl
           const batchSize = 1000
           for (let i = 0; i < oldestEvents.length; i += batchSize) {
             const batch = oldestEvents.slice(i, i + batchSize)
-            const ids = batch.map(e => e.id)
+            const ids = batch.map((e: { id: string }) => e.id)
 
             await db
               .delete(croutonEvents)
@@ -118,7 +118,7 @@ export async function cleanupOldEvents(options: CleanupOptions = {}): Promise<Cl
       .from(croutonEvents)
       .orderBy(croutonEvents.timestamp)
       .limit(1)
-      .then(rows => rows[0]?.timestamp || null)
+      .then((rows: { timestamp: Date }[]) => rows[0]?.timestamp || null)
 
     console.log(`  Total deleted: ${totalDeleted}`)
     console.log(`  Total remaining: ${totalAfter}`)

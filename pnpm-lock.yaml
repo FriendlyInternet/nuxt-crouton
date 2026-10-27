@@ -201,6 +201,9 @@ importers:
       '@fyit/crouton-email':
         specifier: workspace:*
         version: link:../../packages/crouton-email
+      '@fyit/crouton-events':
+        specifier: workspace:*
+        version: link:../../packages/crouton-events
       '@fyit/crouton-i18n':
         specifier: workspace:*
         version: link:../../packages/crouton-i18n
