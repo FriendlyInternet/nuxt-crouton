@@ -14,6 +14,10 @@ definePageMeta({
 
 const { teamSlug } = useTeamContext()
 const { t } = useT()
+const route = useRoute()
+
+// Only the overview bounds its height (calendar fixed, list scrolls); other tabs scroll normally
+const fillBody = computed(() => route.path.replace(/\/$/, '') === `/admin/${teamSlug.value}/bookings`)
 
 // Tab navigation items
 const tabs = computed(() => [
@@ -52,6 +56,7 @@ const tabs = computed(() => [
   <CroutonTabsPanel
     :title="t('bookings.admin.sectionTitle')"
     :tabs="tabs"
+    :fill="fillBody"
   >
     <NuxtPage />
   </CroutonTabsPanel>

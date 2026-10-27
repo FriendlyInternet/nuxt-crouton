@@ -75,7 +75,7 @@ async function handleBookingChange() {
 </script>
 
 <template>
-  <div class="w-full min-h-0 p-4 sm:p-6 flex flex-col gap-3">
+  <div class="w-full flex-1 min-h-0 p-4 sm:p-6 flex flex-col gap-3">
     <!-- Impersonation banner -->
     <Transition
       enter-active-class="transition-all duration-300 ease-out"
@@ -121,8 +121,9 @@ async function handleBookingChange() {
       </UDropdownMenu>
     </div>
 
-    <div class="flex-1 min-h-0">
+    <div class="flex-1 min-h-0 flex flex-col">
       <CroutonBookingsPanel
+        class="flex-1"
         :bookings="bookings"
         :locations="locations"
         :settings="firstSettings"
