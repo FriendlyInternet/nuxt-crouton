@@ -8,7 +8,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { loadConfig } from 'c12'
 
 // Import utilities
-import { toCase, toSnakeCase } from './utils/helpers.ts'
+import { toCase, toSnakeCase, toLayerCamelCase, pascal } from './utils/helpers.ts'
 import { loadTypeMapping, discoverManifests, getGeneratorDetectors, getGeneratorContributions } from './utils/manifest-loader.ts'
 import type { DetectionResult, DetectedField, FormEnhancement, ListEnhancement, GeneratorContribution } from '@fyit/crouton-core/shared/manifest'
 import { detectRequiredDependencies, displayMissingDependencies, ensureLayersExtended } from './utils/module-detector.ts'
@@ -346,10 +346,7 @@ function runListContributions(
 // rollback target the SAME file — otherwise the asymmetry just moves (#1445 WS4).
 export async function buildSchemaExportNames(collectionName: string, layer: string) {
   const cases = toCase(collectionName)
-  const layerCamelCase = layer
-    .split(/[-_]/)
-    .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
+  const layerCamelCase = toLayerCamelCase(layer)
   return {
     exportName: `${layerCamelCase}${cases.pascalCasePlural}`,
     importPath: `../../layers/${layer}/collections/${cases.plural}/server/database/schema`,
@@ -623,14 +620,8 @@ function buildGeneratorData(params: {
 }) {
   const { layer, collection, fields, hierarchy, sortable, collab, config, collectionConfig } = params
   const cases = toCase(collection)
-  const layerPascalCase = layer
-    .split(/[-_]/)
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
-  const layerCamelCase = layer
-    .split(/[-_]/)
-    .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
+  const layerPascalCase = pascal(layer)
+  const layerCamelCase = toLayerCamelCase(layer)
 
   const fieldsSchema = buildFieldsSchema({ fields, config, hierarchy, cases, layerCamelCase })
   // Wire-facing variants for the generated endpoints: accept null on every

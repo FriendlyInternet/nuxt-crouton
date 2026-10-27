@@ -1,6 +1,6 @@
 // Generator for Drizzle schema
 import { SYSTEM_FIELD_GROUPS, metadataFields as systemMetadataFields, hierarchyFields as systemHierarchyFields } from '../utils/system-fields.ts'
-import { toSnakeCase } from '../utils/helpers.ts'
+import { toSnakeCase, toLayerCamelCase } from '../utils/helpers.ts'
 
 // SQLite only — the pg dialect was removed (#2735); callers reject anything else up front.
 export function generateSchema(data: Record<string, any>, _dialect: string, config: Record<string, any> | null = null): string {
@@ -11,10 +11,7 @@ export function generateSchema(data: Record<string, any>, _dialect: string, conf
   const originalCollectionName = data.originalCollectionName || plural
   // Use layer-prefixed name for the export to avoid conflicts
   // Convert layer to camelCase to ensure valid JavaScript identifier
-  const layerCamelCase = layer
-    .split(/[-_]/)
-    .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
+  const layerCamelCase = toLayerCamelCase(layer)
   // Use pascalCasePlural which properly handles hyphens (e.g., email-templates -> EmailTemplates)
   const exportName = `${layerCamelCase}${pascalCasePlural}`
 

@@ -10,41 +10,9 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileExists } from '@fyit/crouton-core/shared/utils/fs'
+import { pascal, toLayerCamelCase } from '../utils/helpers.ts'
+import pluralize from 'pluralize'
 import { getAllLayers, getAllCollectionsInLayer } from '../utils/layer-discovery.ts'
-
-/**
- * Convert a string to PascalCase
- */
-function toPascalCase(str: string): string {
-  return str
-    .split(/[-_\s]+/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join('')
-}
-
-/**
- * Convert a string to camelCase
- */
-function toCamelCase(str: string): string {
-  const pascal = toPascalCase(str)
-  return pascal.charAt(0).toLowerCase() + pascal.slice(1)
-}
-
-/**
- * Get singular form (simple heuristic)
- */
-function toSingular(plural: string): string {
-  if (plural.endsWith('ies')) {
-    return plural.slice(0, -3) + 'y'
-  }
-  if (plural.endsWith('es') && (plural.endsWith('sses') || plural.endsWith('xes') || plural.endsWith('ches') || plural.endsWith('shes'))) {
-    return plural.slice(0, -2)
-  }
-  if (plural.endsWith('s') && !plural.endsWith('ss')) {
-    return plural.slice(0, -1)
-  }
-  return plural
-}
 
 /**
  * Discover all collections and their type information
@@ -66,9 +34,9 @@ export async function discoverCollections(basePath: string = '.'): Promise<Recor
       }
 
       // Extract naming info
-      const layerPascal = toPascalCase(layer)
-      const singular = toSingular(collection)
-      const singularPascal = toPascalCase(singular)
+      const layerPascal = pascal(layer)
+      const singular = pluralize.singular(collection)
+      const singularPascal = pascal(singular)
 
       // The generated type names follow this pattern:
       // Interface: {LayerPascal}{SingularPascal} (e.g., BlogPost)
@@ -78,7 +46,7 @@ export async function discoverCollections(basePath: string = '.'): Promise<Recor
 
       // The collection key used in composables
       // Uses camelCase: {layer}{Collection} (e.g., blogPosts)
-      const collectionKey = `${toCamelCase(layer)}${toPascalCase(collection)}`
+      const collectionKey = `${toLayerCamelCase(layer)}${pascal(collection)}`
 
       collections.push({
         layer,
