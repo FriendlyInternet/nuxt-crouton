@@ -6,7 +6,6 @@ import {
   schemaWithAllTypesData,
   schemaWithSortableData,
   minimalConfig,
-  noMetadataConfig,
   translationsConfig
 } from '../../fixtures/sample-data.mjs'
 
@@ -54,12 +53,6 @@ describe('generateSchema', () => {
       expect(result).toContain("updatedAt: integer('updatedAt', { mode: 'timestamp' })")
       expect(result).toContain("createdBy: text('createdBy').notNull()")
       expect(result).toContain("updatedBy: text('updatedBy').notNull()")
-    })
-
-    it('excludes metadata fields when disabled', () => {
-      const result = generateSchema(schemaData, 'sqlite', noMetadataConfig as AnyConfig)
-      expect(result).not.toContain("createdAt:")
-      expect(result).not.toContain("updatedAt:")
     })
 
     describe('field type mappings', () => {

@@ -34,12 +34,6 @@ describe('collectFilterFields', () => {
     expect(collectFilterFields(data)).toContain('assigneeId')
   })
 
-  it('drops the audit pair when metadata is off, keeping owner', () => {
-    // Mirrors detectReferenceFields: owner is unconditional, createdBy/updatedBy ride useMetadata.
-    const out = collectFilterFields({ fields: [] }, { flags: { useMetadata: false } })
-    expect(out).toEqual(['owner'])
-  })
-
   it('tolerates a collection with no fields array', () => {
     expect(() => collectFilterFields({})).not.toThrow()
   })

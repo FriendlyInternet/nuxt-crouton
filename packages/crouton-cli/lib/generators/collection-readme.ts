@@ -33,7 +33,7 @@ export function generateCollectionReadme(data: Record<string, any>, config: Reco
     })
     .join('\n')
 
-  const systemRows = metadataFields(config?.flags?.useMetadata !== false)
+  const systemRows = metadataFields()
     .map(name => `| ${name} | ${name.endsWith('At') ? 'timestamp' : 'string'} | Auto |`)
     .join('\n')
 

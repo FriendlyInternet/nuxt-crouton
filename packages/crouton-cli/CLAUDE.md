@@ -16,8 +16,6 @@ crouton init <name> [options]                 # Full pipeline: scaffold → gene
 crouton rollback <layer> <collection>        # Remove collection (code-only)
 crouton rollback <layer> <collection> --drop-table          # …and emit a DROP TABLE migration
 crouton rollback <layer> <collection> --drop-table --dry-run # …preview that DROP, write nothing
-crouton rollback-interactive                 # Interactive removal UI
-crouton seed-translations                    # Seed i18n data
 crouton db-pull                              # Pull remote D1 → local dev
 crouton db-pull --env staging                # Pull from staging environment
 crouton-seed --db <name> [--remote]          # Seed an app DB from its packages' providers

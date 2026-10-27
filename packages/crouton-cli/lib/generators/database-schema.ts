@@ -50,12 +50,10 @@ export function generateSchema(data: Record<string, any>, _dialect: string, conf
 
   // Conditional field generation based on config flags
   // Team fields are always required (all generated endpoints use @crouton/auth)
-  const useMetadata = config?.flags?.useMetadata ?? true
-
   // Build list of reserved fields to filter out based on config
   const reservedFields = [
     ...SYSTEM_FIELD_GROUPS.id,
-    ...systemMetadataFields(useMetadata),
+    ...systemMetadataFields(),
     ...TEAM_FIELDS, // Always included - required for @crouton/auth
     ...HIERARCHY_FIELDS,
     ...SORTABLE_FIELDS
@@ -70,26 +68,24 @@ export function generateSchema(data: Record<string, any>, _dialect: string, conf
     .filter(field => !reservedFields.includes(field.name))
     .map((field) => {
       const nullable = field.meta?.required ? '.notNull()' : ''
-      // unique is handled via composite (teamId, field) index, not per-column .unique()
-      const unique = ''
 
       // Check if this is a dependent field (should be stored as JSON array)
       const isDependentField = field.meta?.dependsOn || field.meta?.displayAs === 'slotButtonGroup'
 
       if (field.type === 'boolean') {
         const boolDefault = field.meta?.default === true ? 'true' : 'false'
-        return `  ${field.name}: integer('${field.name}', { mode: 'boolean' })${nullable}${unique}.$default(() => ${boolDefault})`
+        return `  ${field.name}: integer('${field.name}', { mode: 'boolean' })${nullable}.$default(() => ${boolDefault})`
       } else if (field.type === 'number' || field.type === 'decimal') {
-        return `  ${field.name}: ${field.type === 'decimal' ? 'real' : 'integer'}('${field.name}')${nullable}${unique}`
+        return `  ${field.name}: ${field.type === 'decimal' ? 'real' : 'integer'}('${field.name}')${nullable}`
       } else if (field.type === 'date') {
-        return `  ${field.name}: integer('${field.name}', { mode: 'timestamp' })${nullable}${unique}.$default(() => new Date())`
+        return `  ${field.name}: integer('${field.name}', { mode: 'timestamp' })${nullable}.$default(() => new Date())`
       } else if (field.type === 'json' || field.type === 'repeater' || field.type === 'array' || isDependentField) {
       // Use [] for arrays/repeaters/dependent fields, {} for json objects
         const defaultValue = (field.type === 'array' || field.type === 'repeater' || isDependentField) ? 'null' : '{}'
         // Use customType to handle NULL values gracefully in LEFT JOINs
-        return `  ${field.name}: jsonColumn('${field.name}')${nullable}${unique}.$default(() => (${defaultValue}))`
+        return `  ${field.name}: jsonColumn('${field.name}')${nullable}.$default(() => (${defaultValue}))`
       } else {
-        return `  ${field.name}: text('${field.name}')${nullable}${unique}`
+        return `  ${field.name}: text('${field.name}')${nullable}`
       }
     }).join(',\n')
 
@@ -162,14 +158,11 @@ const jsonColumn = customType<any>({
   order: integer('order').notNull().$default(() => 0)`
   }
 
-  // Build metadata fields conditionally
-  const metadataFields = useMetadata
-    ? `
+  const metadataFields = `
   createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$default(() => new Date()),
   updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$onUpdate(() => new Date()),
   createdBy: text('createdBy').notNull(),
   updatedBy: text('updatedBy').notNull()`
-    : ''
 
   // Build the complete field list with proper comma handling
   const allFields = [
