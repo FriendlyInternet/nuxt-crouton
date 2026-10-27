@@ -21,6 +21,8 @@
  * generate-print-queues.ts.
  */
 import { and, eq, getTableColumns } from 'drizzle-orm'
+import { resolveConflict, type ConfigVersion, type ConflictReason } from './config-conflict'
+import { isConfigEntityType, type ConfigEntityType } from './config-capture'
 import type { OutboxEntityType } from './sync-outbox'
 
 export interface IngestEvent {
@@ -34,14 +36,36 @@ export interface IngestEvent {
   operation?: string
 }
 
+/** A config write that lost the conflict rule; kept for the review log (#816). */
+export interface IngestConflict {
+  id: string
+  entityType: ConfigEntityType
+  entityId: string
+  reason: ConflictReason
+  /** What the cloud kept, and what the till sent. */
+  local: ConfigVersion
+  incoming: ConfigVersion
+  payload: Record<string, unknown>
+  operation: string
+}
+
+export interface IngestOptions {
+  /** The authenticated device's id; the deterministic tie-break for equal timestamps. */
+  deviceId?: string
+  /** Injectable for tests: the delete-marker table. */
+  tombstones?: any
+}
+
 export interface IngestResult {
   /** Event ids that were upserted — the pusher advances its cursor past these. */
   applied: string[]
   /** Events not applied. `permanent` ⇒ malformed (drop it); else retryable. */
   skipped: Array<{ id: string, reason: string, permanent: boolean }>
+  /** Config writes the conflict rule kept the cloud's version over (acked, not applied). */
+  conflicts?: IngestConflict[]
 }
 
-const VALID_TYPES: OutboxEntityType[] = ['order', 'orderitem', 'printstatus']
+const VALID_TYPES: OutboxEntityType[] = ['order', 'orderitem', 'printstatus', 'event', 'eventsetting', 'category', 'product', 'location', 'printer']
 
 async function loadTables(): Promise<Record<OutboxEntityType, any>> {
   const { salesOrders } = await import('../../collections/orders/server/database/schema')
@@ -51,7 +75,23 @@ async function loadTables(): Promise<Record<OutboxEntityType, any>> {
   // is a print_jobs row, so the mirror target must be print_jobs — not the old
   // salesPrintqueues (#325/#329 migration).
   const { printJobs } = await import('@fyit/crouton-printing/server/database/schema')
-  return { order: salesOrders, orderitem: salesOrderitems, printstatus: printJobs }
+  const { salesEvents } = await import('../../collections/events/server/database/schema')
+  const { salesEventsettings } = await import('../../collections/eventsettings/server/database/schema')
+  const { salesCategories } = await import('../../collections/categories/server/database/schema')
+  const { salesProducts } = await import('../../collections/products/server/database/schema')
+  const { salesLocations } = await import('../../collections/locations/server/database/schema')
+  const { salesPrinters } = await import('../../collections/printers/server/database/schema')
+  return {
+    order: salesOrders,
+    orderitem: salesOrderitems,
+    printstatus: printJobs,
+    event: salesEvents,
+    eventsetting: salesEventsettings,
+    category: salesCategories,
+    product: salesProducts,
+    location: salesLocations,
+    printer: salesPrinters
+  }
 }
 
 /**
@@ -76,15 +116,98 @@ function coerceToColumns(table: any, payload: Record<string, unknown>): Record<s
   return out
 }
 
+const toMs = (v: unknown): number | null => {
+  if (v == null) return null
+  const ms = v instanceof Date ? v.getTime() : new Date(typeof v === 'number' ? v : String(v)).getTime()
+  return Number.isNaN(ms) ? null : ms
+}
+
+/**
+ * Apply one till config write on the cloud with the conflict rule (#814):
+ * compare it with the cloud's current row (or its delete marker), then apply or
+ * keep. A kept write is still acked (the till is done with it) and reported in
+ * `result.conflicts`. Replaying the same event converges to the same state.
+ */
+async function applyConfigEvent(
+  db: any,
+  tables: Record<OutboxEntityType, any>,
+  e: IngestEvent & { entityType: ConfigEntityType },
+  values: Record<string, unknown>,
+  ackId: string,
+  result: IngestResult,
+  opts: IngestOptions
+) {
+  const table = tables[e.entityType]
+  const teamId = values.teamId as string | undefined
+  const tombstones = opts.tombstones ?? (await import('../database/schema')).salesSyncTombstones
+  const isDelete = e.operation === 'delete'
+
+  const payload = e.payload as { updatedAt?: unknown, deletedAt?: unknown }
+  const incoming: ConfigVersion = {
+    updatedAt: toMs(payload.updatedAt) ?? toMs(payload.deletedAt) ?? Date.now(),
+    deletedAt: isDelete ? (toMs(payload.deletedAt) ?? toMs(payload.updatedAt) ?? Date.now()) : null,
+    deviceId: opts.deviceId ?? null
+  }
+
+  const [row] = await db.select().from(table).where(eq(table.id, e.entityId)).limit(1)
+  const [mark] = await db.select().from(tombstones)
+    .where(and(eq(tombstones.entityType, e.entityType), eq(tombstones.entityId, e.entityId))).limit(1)
+
+  let local: ConfigVersion | null = null
+  if (row) local = { updatedAt: toMs(row.updatedAt) ?? 0, deviceId: null }
+  else if (mark) local = { updatedAt: 0, deletedAt: toMs(mark.deletedAt) ?? 0, deviceId: null }
+
+  if (local) {
+    // The row's event decides who wins while it is live.
+    let status: unknown = e.entityType === 'event' ? (row?.status ?? values.status) : undefined
+    const eventId = row?.eventId ?? values.eventId
+    if (e.entityType !== 'event' && eventId) {
+      const eventsTable = tables.event
+      const [ev] = await db.select({ status: eventsTable.status }).from(eventsTable).where(eq(eventsTable.id, eventId)).limit(1)
+      status = ev?.status
+    }
+    const verdict = resolveConflict(local, incoming, { eventLive: status === 'active', side: 'cloud' })
+    if (verdict.decision === 'keep') {
+      result.conflicts?.push({
+        id: ackId, entityType: e.entityType, entityId: e.entityId, reason: verdict.reason,
+        local, incoming, payload: e.payload, operation: e.operation ?? 'upsert'
+      })
+      result.applied.push(ackId)
+      return
+    }
+  }
+
+  if (isDelete) {
+    await db.delete(table).where(and(eq(table.id, e.entityId), ...(teamId ? [eq(table.teamId, teamId)] : [])))
+    const deletedAt = new Date(incoming.deletedAt as number)
+    await db.insert(tombstones)
+      .values({ entityType: e.entityType, entityId: e.entityId, teamId: teamId ?? '', deletedAt })
+      .onConflictDoUpdate({ target: [tombstones.entityType, tombstones.entityId], set: { deletedAt } })
+    result.applied.push(ackId)
+    return
+  }
+
+  const setObj = { ...values }
+  delete setObj.id
+  const updated = Object.keys(setObj).length > 0
+    ? await db.update(table).set(setObj).where(eq(table.id, e.entityId)).returning({ id: table.id })
+    : []
+  if (updated.length === 0) await db.insert(table).values(values)
+  // A newer edit brings a deleted row back; the marker no longer applies.
+  if (mark) await db.delete(tombstones).where(and(eq(tombstones.entityType, e.entityType), eq(tombstones.entityId, e.entityId)))
+  result.applied.push(ackId)
+}
+
 export async function applyOutboxEvents(
   db: any,
   events: IngestEvent[],
   // Injectable for tests; defaults to the lazily-imported app-layer schema.
   tablesOverride?: Record<OutboxEntityType, any>,
   /** The authenticated device's team (#2725). Rows for any other team are rejected. */
-  scopeTeamId?: string
+  scopeTeamId?: string,
+  opts: IngestOptions = {}
 ): Promise<IngestResult> {
-  const result: IngestResult = { applied: [], skipped: [] }
+  const result: IngestResult = { applied: [], skipped: [], conflicts: [] }
   if (!Array.isArray(events) || events.length === 0) return result
 
   const tables = tablesOverride ?? await loadTables()
@@ -136,6 +259,11 @@ export async function applyOutboxEvents(
           continue
         }
       }
+      if (isConfigEntityType(e.entityType)) {
+        await applyConfigEvent(db, tables, e as IngestEvent & { entityType: ConfigEntityType }, values, ackId, result, opts)
+        continue
+      }
+
       const rowWhere = scopeTeamId ? and(eq(table.id, e.entityId), eq(table.teamId, scopeTeamId)) : eq(table.id, e.entityId)
 
       // UPDATE existing row (idempotent: a replay re-sets the same values).

@@ -28,7 +28,11 @@ export default defineEventHandler(async (event) => {
   }
 
   const db = useDB()
-  const result = await applyOutboxEvents(db, body.events, undefined, device?.teamId)
+  const result = await applyOutboxEvents(db, body.events, undefined, device?.teamId, { deviceId: device?.deviceId })
+
+  if (result.conflicts?.length) {
+    console.info(`[crouton-sales] sync ingest kept the cloud version for ${result.conflicts.length} config write(s)`)
+  }
 
   // Stamp the freshness heartbeat the online dashboard (#179) reads. Advances on
   // every call — a real batch or the pusher's idle ping (events: []) — so a
