@@ -7,7 +7,7 @@
  * the change in the same outbox orders use, with the edit time corrected by the
  * till's last known clock offset. Deletes also leave a tombstone row.
  *
- * Only the till captures (`isCloudSyncEnabled()`); elsewhere this is a no-op.
+ * Only the till writes the outbox (`isCloudSyncEnabled()`); delete markers are written on both sides (#815).
  * Best-effort like the order capture: it never fails the request.
  */
 import { correctTimestamp } from './config-conflict'
@@ -60,11 +60,14 @@ export function buildConfigEvent(w: ConfigWrite, offsetMs = 0): OutboxEvent {
 }
 
 export async function captureConfigWrite(db: any, writes: ConfigWrite | ConfigWrite[]): Promise<void> {
-  if (!isCloudSyncEnabled()) return
-  const list = Array.isArray(writes) ? writes : [writes]
-  if (list.length === 0) return
-  const offset = getClockOffset()
-  const events = list.map(w => buildConfigEvent(w, offset))
+  const syncOn = isCloudSyncEnabled()
+  const list = (Array.isArray(writes) ? writes : [writes])
+  // Markers are written on both sides (#815): the cloud's own deletes must reach
+  // the till. The outbox is till-only.
+  const relevant = syncOn ? list : list.filter(w => w.operation === 'delete')
+  if (relevant.length === 0) return
+  const offset = syncOn ? getClockOffset() : 0
+  const events = relevant.map(w => buildConfigEvent(w, offset))
 
   try {
     const { salesSyncTombstones } = await import('../database/schema')

@@ -160,12 +160,14 @@ describe('capture details', () => {
       .toMatchObject({ operation: 'delete', payload: { deletedAt: 1250 } })
   })
 
-  it('records nothing unless cloud sync is on', async () => {
+  it('writes no outbox row unless cloud sync is on, and no marker for an edit', async () => {
     vi.stubEnv('CROUTON_SALES_CLOUD_SYNC', '')
     const db = makeDb()
     await captureConfigWrite(db, { entityType: 'product', operation: 'delete', entityId: 'p1', teamId: 'A' })
+    await captureConfigWrite(db, { entityType: 'product', operation: 'update', entityId: 'p2', teamId: 'A', data: { price: 1 } })
     expect(db.select().from(salesSyncOutbox).all()).toEqual([])
-    expect(db.select().from(salesSyncTombstones).all()).toEqual([])
+    // Delete markers are written on the cloud too (#815), so only the delete leaves one.
+    expect(db.select().from(salesSyncTombstones).all().map(m => m.entityId)).toEqual(['p1'])
   })
 
   it('the pusher learns the clock offset from the ingest reply', async () => {
