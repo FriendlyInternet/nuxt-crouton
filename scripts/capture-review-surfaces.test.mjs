@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
-import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine } from './capture-review-surfaces.mjs'
+import { slug, outName, parseSurfaces, parseAction, isFlatFrame, parsePrSurfaces, resolveSurfaces, resultLine, deriveSurfaces } from './capture-review-surfaces.mjs'
 
 test('slug: safe stable filename fragment', () => {
   assert.equal(slug('Data Pane / Filter!'), 'data-pane-filter')
@@ -158,4 +158,30 @@ test('resultLine is one machine-readable line per surface (#2572)', () => {
 test("parsePrSurfaces keeps a quoted has-text('Month') selector intact (#2572)", () => {
   const body = "<!-- review-surface: velo /admin/test1/bookings name:month click:button:has-text('Month') wait:1500 -->"
   assert.deepEqual(parsePrSurfaces(body, 'velo'), [{ name: 'month', path: '/admin/test1/bookings', do: ["click:button:has-text('Month')", 'wait:1500'] }])
+})
+
+test('deriveSurfaces: page file → route, team segment → seeded team (#2698)', () => {
+  const s = deriveSurfaces({ app: 'velo', changedFiles: [
+    'apps/velo/app/pages/admin/[team]/sales/index.vue',
+    'apps/velo/app/pages/index.vue',
+    'apps/velo/app/pages/posts/[id].vue', // unknown dynamic segment → skipped
+    'apps/velo/app/components/Foo.vue', // not a page, not gallery → skipped
+    'README.md'
+  ] })
+  assert.deepEqual(s.map(x => x.path), ['/admin/test1/sales', '/'])
+})
+
+test('deriveSurfaces: package component only maps for the gallery', () => {
+  const f = ['packages/crouton-core/app/components/Pill.vue']
+  assert.deepEqual(deriveSurfaces({ app: 'velo', changedFiles: f }), [])
+  const g = deriveSurfaces({ app: 'gallery', changedFiles: f })
+  assert.equal(g[0].path, '/__review?file=packages%2Fcrouton-core%2Fapp%2Fcomponents%2FPill.vue')
+})
+
+test('resolveSurfaces: declared wins over derived; derived wins over the landing page', () => {
+  const changedFiles = ['apps/velo/app/pages/about.vue']
+  const body = '<!-- review-surface: velo /x -->'
+  assert.equal(resolveSurfaces({ manifest: {}, prBody: body, app: 'velo', changedFiles }).surfaces[0].path, '/x')
+  assert.equal(resolveSurfaces({ manifest: {}, prBody: '', app: 'velo', changedFiles }).surfaces[0].path, '/about')
+  assert.equal(resolveSurfaces({ manifest: {}, prBody: '', app: 'velo', changedFiles: [] }).surfaces[0].path, '/')
 })
