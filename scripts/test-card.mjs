@@ -77,8 +77,9 @@ export function extractChecks(body = '', max = 5) {
 /** Markers for the "app is broken / back up" notices on an open test card (#2870). */
 export const BROKEN_MARKER = '<!-- test-card: app-broken -->'
 export const BACKUP_MARKER = '<!-- test-card: app-back -->'
-export const BROKEN_NOTICE = `${BROKEN_MARKER}\n⚠️ The app is broken on staging right now, so hold off testing. I'll say when it's back.`
-export const BACKUP_NOTICE = `${BACKUP_MARKER}\n✅ Back up, you can test.`
+const NOTICE_PROVENANCE = '> 🤖 **Claude Code** · agent pipeline (CI) · _staging check (#2870)_'
+export const BROKEN_NOTICE = `${NOTICE_PROVENANCE}\n\n${BROKEN_MARKER}\n⚠️ The app is broken on staging right now, so hold off testing. I'll say when it's back.`
+export const BACKUP_NOTICE = `${NOTICE_PROVENANCE}\n\n${BACKUP_MARKER}\n✅ Back up, you can test.`
 
 /**
  * Which apps did a deploy run's jobs name with the given conclusion? PURE. Matrix job names
