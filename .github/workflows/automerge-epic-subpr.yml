@@ -170,7 +170,7 @@ jobs:
               const SWEEP_MAX = 100
               const open = await github.paginate(github.rest.pulls.list,
                 { owner, repo, state: 'open', per_page: 100 })
-              const subPrs = open.filter(p => !p.draft && (p.base.ref.startsWith('epic/') || (p.base.ref === 'main' && p.head.ref.startsWith('epic/'))))
+              const subPrs = open.filter(p => !p.draft && (p.base.ref.startsWith('epic/') || (p.base.ref === 'main' && (p.head.ref.startsWith('epic/') || p.head.ref.startsWith('work-')))))
               for (const p of subPrs.slice(0, SWEEP_MAX)) candidates.add(p.number)
               core.info(`Sweep: ${open.length} open PRs, ${subPrs.length} open non-draft sub-PRs on epic branches.`)
               if (subPrs.length > SWEEP_MAX) {
@@ -213,7 +213,9 @@ jobs:
               if (pr.draft) { core.info(`#${pull_number} is a draft (gate PR) — skip.`); continue }
               // An epic → main PR (#2832) is evaluated too, but ONLY merges on an owner `ok` (below).
               const epicToMain = pr.base.ref === 'main' && pr.head.ref.startsWith('epic/')
-              if (!pr.base.ref.startsWith('epic/') && !epicToMain) { core.info(`#${pull_number} base ${pr.base.ref} not an epic branch — skip.`); continue }
+              // A pipeline leaf PR straight into main (head `work-<N>`, no epic) — same rule: ONLY an owner `ok` merges it.
+              const leafToMain = pr.base.ref === 'main' && pr.head.ref.startsWith('work-')
+              if (!pr.base.ref.startsWith('epic/') && !epicToMain && !leafToMain) { core.info(`#${pull_number} base ${pr.base.ref} not an epic branch — skip.`); continue }
               if (!BOTS.includes(pr.user.login)) { core.info(`#${pull_number} not pipeline-authored (${pr.user.login}) — skip.`); continue }
 
               // 'dirty' = merge conflicts; 'blocked' = a required check/approval pending. Leave both.
@@ -280,7 +282,7 @@ jobs:
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
               const go = ownerMergeGo({ comments: prComments, commits: prCommits, owner: OWNER })
               core.info(`#${pull_number} owner go: ${go.go} (${go.reason})`)
-              if (epicToMain && !go.go) { core.info(`#${pull_number} epic → main PR — waits for the owner's ok.`); continue }
+              if ((epicToMain || leafToMain) && !go.go) { core.info(`#${pull_number} ${leafToMain ? 'leaf' : 'epic'} → main PR — waits for the owner's ok.`); continue }
 
               // Shared-code pause (#339): hold any PR that touches packages/ for a human — and
               // (#2442) any PR that touches .github/workflows/**: the pipeline may now edit its own
