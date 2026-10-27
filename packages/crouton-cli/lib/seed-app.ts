@@ -391,14 +391,18 @@ function readConfiguredLocale(appDir: string): string | null {
   return m ? m[1] : null
 }
 
+/** --locale wins; else the app's configured defaultLocale; else en. */
+function resolveLocale(explicit: string | undefined, appDir: string): string {
+  return explicit ?? readConfiguredLocale(appDir) ?? 'en'
+}
+
 /** Resolve the seed's effective inputs (app dir + team + locale defaults). */
 function normalizeSeedOptions(options: SeedAppOptions): { appDir: string, teamSlug: string, locale: string } {
   const appDir = resolve(options.dir ?? process.cwd())
   return {
     appDir,
     teamSlug: options.team ?? 'test1',
-    // --locale wins; else the app's configured defaultLocale; else en.
-    locale: options.locale ?? readConfiguredLocale(appDir) ?? 'en',
+    locale: resolveLocale(options.locale, appDir),
   }
 }
 
