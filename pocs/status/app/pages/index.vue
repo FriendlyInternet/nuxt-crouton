@@ -9,6 +9,7 @@ interface ToTestItem {
   app: string | null
   what: string
   steps: string[]
+  to: string
   stagingUrl: string | null
   mergedAt?: string | null
 }
@@ -34,6 +35,9 @@ const tabs = [
 const { data: totest, status: totestStatus } = await useFetch<{ data: ToTestItem[] | null, error: string | null }>('/api/status/totest', { lazy: true })
 const { data: decisionsRes, status: decisionsStatus } = await useFetch<{ data: { decisions: Decision[], openQuestions: OpenQuestion[] } | null, error: string | null }>('/api/status/decisions', { lazy: true })
 const { data: changelogRes, status: changelogStatus } = await useFetch<{ data: ChangelogRow[] | null, error: string | null }>('/api/status/changelog', { lazy: true })
+
+const loginHref = (app: string, to: string) =>
+  `/api/status/login/${app}${to ? `?to=${encodeURIComponent(to)}` : ''}`
 
 // --- Apps ---
 const { data: appsRes, status: appsStatus } = await useFetch<{ data: AppRow[] | null, error: string | null }>('/api/status/apps', { lazy: true })
@@ -109,7 +113,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
                   <ol v-if="i.steps.length" class="list-decimal space-y-1 pl-5 text-sm">
                     <li v-for="(s, n) in i.steps" :key="n">{{ s }}</li>
                   </ol>
-                  <UButton block icon="i-lucide-log-in" label="Open and sign in" :href="`/api/status/login/${a.app}`" target="_blank" />
+                  <UButton block icon="i-lucide-log-in" label="Open and sign in" :href="loginHref(a.app, i.to)" target="_blank" />
                 </div>
               </div>
 
@@ -193,7 +197,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
                   size="lg"
                   icon="i-lucide-log-in"
                   label="Open and sign in"
-                  :href="`/api/status/login/${i.app}`"
+                  :href="loginHref(i.app, i.to)"
                   target="_blank"
                 />
               </div>
