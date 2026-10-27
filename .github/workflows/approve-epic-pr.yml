@@ -1,6 +1,6 @@
 name: Merge an approved epic PR into main
 
-# The owner's `lgtm` / ✅ on an `epic/*` → `main` PR merges it once `CI Gate` and `E2E Gate`
+# The owner's `ok` / `lgtm` / ✅ on an `epic/*` → `main` PR merges it once `CI Gate` and `E2E Gate`
 # are green (#2819). The decision lives in scripts/epic-merge-decision.mjs (unit-tested);
 # this file only makes the calls. approve-draft-pr.yml releases drafts; resume-on-comment.yml
 # handles issues — neither merged a PR, so an lgtm on an epic PR did nothing.
@@ -29,6 +29,7 @@ jobs:
       (contains(github.event.comment.body, '✅') ||
        contains(github.event.comment.body, '✔') ||
        contains(github.event.comment.body, '☑') ||
+       contains(github.event.comment.body, 'ok') ||
        contains(github.event.comment.body, 'lgtm') ||
        contains(github.event.comment.body, 'approve'))
     # contains() is a cheap pre-filter only; decideEpicMerge() is the decision (#2004).
