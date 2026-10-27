@@ -96,7 +96,9 @@
       "noBookings": "Aucune réservation",
       "bookingCount": "{count} réservation | {count} réservations",
       "closed": "Fermé",
-      "blocked": "Bloqué"
+      "blocked": "Bloqué",
+      "newBooking": "Nouvelle réservation",
+      "fullyBooked": "Complet"
     },
     "card": {
       "activity": "Activité",
