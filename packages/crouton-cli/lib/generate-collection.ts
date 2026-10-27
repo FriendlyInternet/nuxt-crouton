@@ -269,7 +269,7 @@ function runFormContributions(
   const ctx = {
     fields: data.fields as DetectedField[],
     collectionConfig: data.collectionConfig,
-    dialect: dialect as 'sqlite' | 'pg',
+    dialect: dialect as 'sqlite',
     detected: data.detected as DetectionResult,
     layerCamelCase: data.layerCamelCase as string,
   }
@@ -1722,13 +1722,12 @@ async function applyPackageConfiguration(config: Record<string, any>, options: R
   }
 }
 
-// Resolve the database dialect for a loaded config. An explicit 'sqlite'/'pg'
-// wins, but an absent / null / empty `dialect` falls back to **sqlite** — never
-// pg. pg is unexercised in the D1-only stack, and c12's `defaults.dialect` only
+// Resolve the database dialect for a loaded config. An absent / null / empty
+// `dialect` falls back to **sqlite** (the only supported dialect, #2735). c12's `defaults.dialect` only
 // covers an *absent* key: an explicit `dialect: null`/`''` survives defu, so this
 // is the one source of truth for the fallback (#1450).
-export function resolveDialect(config: Record<string, any> | null | undefined): 'sqlite' | 'pg' {
-  return (config?.dialect as 'sqlite' | 'pg' | null | undefined) || 'sqlite'
+export function resolveDialect(config: Record<string, any> | null | undefined): string {
+  return config?.dialect || 'sqlite'
 }
 
 // Generate one collection entry from the enhanced config format. Returns the

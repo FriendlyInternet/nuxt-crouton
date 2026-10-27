@@ -72,10 +72,10 @@ describe('validateConfig — dialect', () => {
   const base = { collections: [{ name: 'notes', fieldsFile: './schemas/notes.json' }], targets: [{ layer: 'main', collections: ['notes'] }] }
   const dialectErrors = (r: { errors: string[] }) => r.errors.filter(e => /dialect/i.test(e))
 
-  it('refuses an unknown dialect, naming the value and the allowed ones', async () => {
+  it('refuses an unknown dialect, naming the value and that only sqlite is supported', async () => {
     const result = await validateConfig({ ...base, dialect: 'mysql' })
     expect(result.valid).toBe(false)
-    expect(dialectErrors(result)).toEqual([expect.stringMatching(/'mysql'.*'sqlite'.*'pg'/)])
+    expect(dialectErrors(result)).toEqual([expect.stringMatching(/'mysql'.*only sqlite is supported/)])
   })
 
   it('never claims to default to pg', async () => {
@@ -83,7 +83,13 @@ describe('validateConfig — dialect', () => {
     expect([...result.errors, ...result.warnings].join('\n')).not.toMatch(/defaulting to 'pg'/)
   })
 
-  it.each(['sqlite', 'pg', undefined])('accepts dialect %s', async (dialect) => {
+  it('refuses pg — the dialect was removed (#2735)', async () => {
+    const result = await validateConfig({ ...base, dialect: 'pg' })
+    expect(result.valid).toBe(false)
+    expect(dialectErrors(result)).toEqual([expect.stringMatching(/'pg'.*only sqlite is supported/)])
+  })
+
+  it.each(['sqlite', undefined])('accepts dialect %s', async (dialect) => {
     const result = await validateConfig({ ...base, dialect })
     expect(dialectErrors(result)).toEqual([])
   })
