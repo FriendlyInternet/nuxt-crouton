@@ -119,6 +119,39 @@ describe('config capture → ingest', () => {
   })
 })
 
+describe('team isolation of delete markers', () => {
+  const tables: any = { product: salesProducts, event: salesEvents }
+  const ingestOpts = { tombstones: salesSyncTombstones }
+
+  it('a till on team A cannot revive or remove team B\'s delete marker', async () => {
+    const cloud = makeDb()
+    cloud.insert(salesSyncTombstones).values({ id: 'm1', entityType: 'product', entityId: 'pB', teamId: 'B', deletedAt: new Date(T0) } as any).run()
+    const res = await applyOutboxEvents(cloud, [
+      { id: 'x1', entityType: 'product', entityId: 'pB', operation: 'update', payload: product({ id: 'pB', teamId: 'A', updatedAt: T0 + 60_000 }) },
+    ], tables, 'A', ingestOpts)
+    expect(res.skipped).toEqual([{ id: 'x1', reason: 'team mismatch', permanent: true }])
+    expect(cloud.select().from(salesProducts).all()).toEqual([])
+    expect(cloud.select().from(salesSyncTombstones).all()).toHaveLength(1)
+  })
+
+  it('a delete with no team is a permanent skip, not an empty-team marker', async () => {
+    const cloud = makeDb()
+    const res = await applyOutboxEvents(cloud, [
+      { id: 'x2', entityType: 'product', entityId: 'p1', operation: 'delete', payload: { deletedAt: T0 } },
+    ], tables, undefined, ingestOpts)
+    expect(res.skipped).toEqual([{ id: 'x2', reason: 'missing team', permanent: true }])
+    expect(cloud.select().from(salesSyncTombstones).all()).toEqual([])
+  })
+
+  it('a config event without a timestamp is a permanent skip', async () => {
+    const cloud = makeDb()
+    const res = await applyOutboxEvents(cloud, [
+      { id: 'x3', entityType: 'product', entityId: 'p1', operation: 'update', payload: { price: 9, teamId: 'A' } },
+    ], tables, 'A', ingestOpts)
+    expect(res.skipped).toEqual([{ id: 'x3', reason: 'missing timestamp', permanent: true }])
+  })
+})
+
 describe('capture details', () => {
   it('stamps the edit time on the cloud clock', () => {
     const ev = buildConfigEvent({ entityType: 'product', operation: 'update', entityId: 'p1', teamId: 'A', data: { price: 1 }, now: 1000 }, 250)

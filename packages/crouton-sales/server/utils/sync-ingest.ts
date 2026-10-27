@@ -138,14 +138,17 @@ async function liveEventStatus(
   return ev?.status
 }
 
-function incomingVersion(e: IngestEvent, opts: IngestOptions): ConfigVersion {
+/** The till's version of a config write, or null when it carries no usable timestamp. */
+function incomingVersion(e: IngestEvent, opts: IngestOptions): ConfigVersion | null {
   const payload = e.payload as { updatedAt?: unknown, deletedAt?: unknown }
-  const isDelete = e.operation === 'delete'
-  return {
-    updatedAt: toMs(payload.updatedAt) ?? toMs(payload.deletedAt) ?? Date.now(),
-    deletedAt: isDelete ? (toMs(payload.deletedAt) ?? toMs(payload.updatedAt) ?? Date.now()) : null,
-    deviceId: opts.deviceId ?? null
+  if (e.operation === 'delete') {
+    const deletedAt = toMs(payload.deletedAt)
+    if (deletedAt == null) return null
+    return { updatedAt: deletedAt, deletedAt, deviceId: opts.deviceId ?? null }
   }
+  const updatedAt = toMs(payload.updatedAt)
+  if (updatedAt == null) return null
+  return { updatedAt, deletedAt: null, deviceId: opts.deviceId ?? null }
 }
 
 function localVersion(row: any, mark: any): ConfigVersion | null {
@@ -159,13 +162,13 @@ async function deleteWithTombstone(
   table: any,
   tombstones: any,
   e: IngestEvent,
-  teamId: string | undefined,
+  teamId: string,
   deletedAtMs: number
 ) {
-  await db.delete(table).where(and(eq(table.id, e.entityId), ...(teamId ? [eq(table.teamId, teamId)] : [])))
+  await db.delete(table).where(and(eq(table.id, e.entityId), eq(table.teamId, teamId)))
   const deletedAt = new Date(deletedAtMs)
   await db.insert(tombstones)
-    .values({ entityType: e.entityType, entityId: e.entityId, teamId: teamId ?? '', deletedAt })
+    .values({ entityType: e.entityType, entityId: e.entityId, teamId, deletedAt })
     .onConflictDoUpdate({ target: [tombstones.entityType, tombstones.entityId], set: { deletedAt } })
 }
 
@@ -197,10 +200,25 @@ async function applyConfigEvent(
   const teamId = values.teamId as string | undefined
   const tombstones = opts.tombstones ?? (await import('../database/schema')).salesSyncTombstones
   const incoming = incomingVersion(e, opts)
+  if (!incoming) {
+    result.skipped.push({ id: ackId, reason: 'missing timestamp', permanent: true })
+    return
+  }
+  if (e.operation === 'delete' && !teamId) {
+    result.skipped.push({ id: ackId, reason: 'missing team', permanent: true })
+    return
+  }
 
   const [row] = await db.select().from(table).where(eq(table.id, e.entityId)).limit(1)
   const [mark] = await db.select().from(tombstones)
     .where(and(eq(tombstones.entityType, e.entityType), eq(tombstones.entityId, e.entityId))).limit(1)
+
+  // A marker left by another team is never read, revived or removed from here.
+  if (teamId && mark && mark.teamId !== teamId) {
+    console.warn(`[crouton-sales] sync ingest rejected ${e.entityType} ${e.entityId}: delete marker belongs to another team`)
+    teamMismatch(result, ackId)
+    return
+  }
 
   const local = localVersion(row, mark)
   if (local) {
@@ -217,7 +235,7 @@ async function applyConfigEvent(
   }
 
   if (e.operation === 'delete') {
-    await deleteWithTombstone(db, table, tombstones, e, teamId, incoming.deletedAt as number)
+    await deleteWithTombstone(db, table, tombstones, e, teamId!, incoming.deletedAt as number)
   }
   else {
     await upsertRow(db, table, e.entityId, values)
