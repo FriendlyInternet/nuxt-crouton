@@ -124,6 +124,19 @@ export interface MapsSpec {
   }
 }
 
+/**
+ * A two-client live-sync check exercising crouton-collab. Two browser contexts
+ * (same saved auth, same team) open the collection list; we assert both join the
+ * team room (/api/collab/[roomId]/users) and that a save by client B shows up on
+ * client A's list without a reload. Omit for fixtures without crouton-collab.
+ */
+export interface CollabSpec {
+  /** Collection key whose list both clients open (e.g. "mainItems"). */
+  collectionKey: string
+  /** Field label filled when client B creates a row. */
+  field: string
+}
+
 export interface FixtureManifest {
   collections: CollectionSpec[]
   /** Optional package-specific surfaces; omit for fixtures with nothing extra. */
@@ -132,6 +145,8 @@ export interface FixtureManifest {
   i18n?: I18nSpec
   /** Optional maps + geocoding check; omit for fixtures without crouton-maps. */
   maps?: MapsSpec
+  /** Optional two-client live-sync check; omit for fixtures without crouton-collab. */
+  collab?: CollabSpec
   /**
    * Opt the WHOLE fixture out of the axe-core a11y scan (a11y.smoke.spec.ts).
    * Set `false` to skip every collection/surface scan for this fixture. Omit
