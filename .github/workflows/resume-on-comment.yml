@@ -160,7 +160,7 @@ jobs:
             await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: ['delegate-pi'] })
             await github.rest.issues.createComment({ ...context.repo, issue_number,
               body: '> 🤖 **Claude Code** · agent pipeline (CI) · _resumed from your reply (#1828)_\n\n'
-                + '🔨 **Approved — rebuilding.** Re-running the pi decomposer on your reply; it will split this epic into build children now (not another design hold). Watch for the sub-issues + their PRs.' })
+                + '🔁 **Re-running the planner on your reply.** It reads the thread and either revises the design or, if you approved, splits the epic into build children.' })
             core.setOutput('redispatch', 'true')
             core.info(`Re-dispatched pi decompose for #${issue_number} (design-hold approved).`)
 
@@ -538,7 +538,8 @@ jobs:
       !github.event.issue.pull_request &&
       github.event.comment.user.type != 'Bot' &&
       !contains(github.event.issue.labels.*.name, 'status:blocked') &&
-      (contains(github.event.comment.body, 'lgtm') ||
+      (contains(github.event.comment.body, 'ok') ||
+       contains(github.event.comment.body, 'lgtm') ||
        contains(github.event.comment.body, 'approve') ||
        contains(github.event.comment.body, '✅') ||
        contains(github.event.comment.body, '✔') ||

@@ -1,5 +1,4 @@
 // API endpoint generators using @crouton/auth for team authentication
-import { serverManagedFields } from '../utils/system-fields.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
 
 // Wire-facing body schema for the generated endpoints (#1403): accepts null on
@@ -44,9 +43,7 @@ export default defineEventHandler(async (event) => {
   authTimer.end()
 
   const query = getQuery(event)${hasTranslations
-    ? `
-  // Accept locale for future translation handling
-  const locale = String(query.locale || 'en')`
+    ? ``
     : ''}
 
   const dbTimer = timing.start('db')
@@ -81,7 +78,6 @@ export function generatePostEndpoint(data: Record<string, any>, config: Record<s
 
   // Check if hierarchy is enabled
   const hasHierarchy = data.hierarchy?.enabled === true
-  const useMetadata = config?.flags?.useMetadata ?? true
 
   // Get hierarchy field names
   const parentField = data.hierarchy?.parentField || 'parentId'
@@ -132,7 +128,7 @@ import { nanoid } from 'nanoid'`
     : ''
 
   // Generate metadata fields for create call
-  const metadataFields = useMetadata ? `\n    createdBy: user.id,\n    updatedBy: user.id` : ''
+  const metadataFields = `\n    createdBy: user.id,\n    updatedBy: user.id`
 
   // Generate the create call based on hierarchy
   const createCall = hasHierarchy
@@ -190,23 +186,6 @@ export function generatePatchEndpoint(data: Record<string, any>, config: Record<
 
   // Check if this collection has translations
   const hasTranslations = config?.translations?.collections?.[plural] || config?.translations?.collections?.[singular]
-
-  // System fields that should not be in PATCH body — they are managed by the server (one list: system-fields.ts)
-  const systemFields = serverManagedFields()
-
-  // Generate field selection for update with date conversion (exclude id and system fields)
-  const patchableFields = fields.filter((f) => !systemFields.has(f.name))
-  let fieldSelection = patchableFields.map((field) => {
-    if (field.type === 'date') {
-      return `    ${field.name}: body.${field.name} ? new Date(body.${field.name}) : body.${field.name}`
-    }
-    return `    ${field.name}: body.${field.name}`
-  }).join(',\n')
-
-  // Add translations field if needed
-  if (hasTranslations) {
-    fieldSelection += ',\n    translations: body.translations'
-  }
 
   // Add imports based on translation needs
   const queriesPath = '../../../../database/queries'

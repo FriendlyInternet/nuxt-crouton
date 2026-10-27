@@ -8,7 +8,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { loadConfig } from 'c12'
 
 // Import utilities
-import { toCase, toSnakeCase } from './utils/helpers.ts'
+import { toCase, toSnakeCase, toLayerCamelCase, pascal } from './utils/helpers.ts'
 import { loadTypeMapping, discoverManifests, getGeneratorDetectors, getGeneratorContributions } from './utils/manifest-loader.ts'
 import type { DetectionResult, DetectedField, FormEnhancement, ListEnhancement, GeneratorContribution } from '@fyit/crouton-core/shared/manifest'
 import { detectRequiredDependencies, displayMissingDependencies, ensureLayersExtended } from './utils/module-detector.ts'
@@ -45,7 +45,6 @@ import { generateTypes } from './generators/types.ts'
 import { generateNuxtConfig } from './generators/nuxt-config.ts'
 import { generateCollectionTest } from './generators/collection-test.ts'
 import { generateApiTest } from './generators/api-test.ts'
-import { generateRepeaterItemComponent } from './generators/repeater-item-component.ts'
 import { generateFieldComponents } from './generators/field-components.ts'
 import { generateSeedFile } from './generators/seed-data.ts'
 import { generateSeedFixture } from './generators/collection-seed-fixture.ts'
@@ -114,7 +113,6 @@ interface WriteScaffoldOptions {
   collection: string
   fields: Field[]
   dialect: string
-  autoRelations: boolean
   dryRun: boolean
   noDb: boolean
   force?: boolean
@@ -141,7 +139,6 @@ interface RunGenerateOptions {
   collection?: string
   fieldsFile?: string
   dialect?: string
-  autoRelations?: boolean
   dryRun?: boolean
   noDb?: boolean
   force?: boolean
@@ -269,7 +266,7 @@ function runFormContributions(
   const ctx = {
     fields: data.fields as DetectedField[],
     collectionConfig: data.collectionConfig,
-    dialect: dialect as 'sqlite' | 'pg',
+    dialect: dialect as 'sqlite',
     detected: data.detected as DetectionResult,
     layerCamelCase: data.layerCamelCase as string,
   }
@@ -346,10 +343,7 @@ function runListContributions(
 // rollback target the SAME file — otherwise the asymmetry just moves (#1445 WS4).
 export async function buildSchemaExportNames(collectionName: string, layer: string) {
   const cases = toCase(collectionName)
-  const layerCamelCase = layer
-    .split(/[-_]/)
-    .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
+  const layerCamelCase = toLayerCamelCase(layer)
   return {
     exportName: `${layerCamelCase}${cases.pascalCasePlural}`,
     importPath: `../../layers/${layer}/collections/${cases.plural}/server/database/schema`,
@@ -623,14 +617,8 @@ function buildGeneratorData(params: {
 }) {
   const { layer, collection, fields, hierarchy, sortable, collab, config, collectionConfig } = params
   const cases = toCase(collection)
-  const layerPascalCase = layer
-    .split(/[-_]/)
-    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
-  const layerCamelCase = layer
-    .split(/[-_]/)
-    .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
+  const layerPascalCase = pascal(layer)
+  const layerCamelCase = toLayerCamelCase(layer)
 
   const fieldsSchema = buildFieldsSchema({ fields, config, hierarchy, cases, layerCamelCase })
   // Wire-facing variants for the generated endpoints: accept null on every
@@ -1336,7 +1324,7 @@ async function registerCollectionInAppConfig(params: {
   }
 }
 
-async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, tests = false }: WriteScaffoldOptions): Promise<void> {
+async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, tests = false }: WriteScaffoldOptions): Promise<void> {
   // REFUSE an unresolvable relation BEFORE anything is written or installed (#1957). The queries
   // generator would otherwise fall through its `// or unknown — fall back to existing behavior`
   // branch and emit an import to a collection that does not exist, turning a local, obvious
@@ -1722,13 +1710,12 @@ async function applyPackageConfiguration(config: Record<string, any>, options: R
   }
 }
 
-// Resolve the database dialect for a loaded config. An explicit 'sqlite'/'pg'
-// wins, but an absent / null / empty `dialect` falls back to **sqlite** — never
-// pg. pg is unexercised in the D1-only stack, and c12's `defaults.dialect` only
+// Resolve the database dialect for a loaded config. An absent / null / empty
+// `dialect` falls back to **sqlite** (the only supported dialect, #2735). c12's `defaults.dialect` only
 // covers an *absent* key: an explicit `dialect: null`/`''` survives defu, so this
 // is the one source of truth for the fallback (#1450).
-export function resolveDialect(config: Record<string, any> | null | undefined): 'sqlite' | 'pg' {
-  return (config?.dialect as 'sqlite' | 'pg' | null | undefined) || 'sqlite'
+export function resolveDialect(config: Record<string, any> | null | undefined): string {
+  return config?.dialect || 'sqlite'
 }
 
 // Generate one collection entry from the enhanced config format. Returns the
@@ -1776,7 +1763,6 @@ async function generateConfigEntry(params: {
     collection: collectionName,
     fields,
     dialect: resolveDialect(config),
-    autoRelations: config.flags?.autoRelations || false,
     dryRun: config.flags?.dryRun || false,
     noDb: true, // Skip individual db:generate
     force: config.flags?.force || false,
@@ -1925,7 +1911,6 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
       collection: options.collection,
       fieldsFile: options.fieldsFile,
       dialect: options.dialect || 'sqlite',
-      autoRelations: options.autoRelations || false,
       dryRun: options.dryRun || false,
       noDb: options.noDb || false,
       force: options.force || false,

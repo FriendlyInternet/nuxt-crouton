@@ -180,6 +180,35 @@ jobs:
         id: claim
         run: node scripts/pipeline-loop-guard.mjs claim-guard < "$RUNNER_TEMP/claim-facts.json"
 
+      # ── TRAFFIC CONTROL (#2786) — a ticket waits while open pipeline work touches its package ──
+      # Two tickets on one package built at once collide at merge. Facts are gathered here; the
+      # DECISION is the pure, unit-tested `decideTraffic`. On `wait` the ticket gets status:blocked
+      # + a comment, and the run stops (deliberate, like the claim guard). traffic-release.yml
+      # starts it again when the blocking work lands. Fails OPEN: a gather glitch must not wedge.
+      # Revision runs (inputs.feedback, #2446) finish work already in flight — they never wait.
+      - name: Traffic control
+        id: traffic
+        if: ${{ inputs.feedback == '' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
+            const tc = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
+            let verdict
+            try {
+              const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number })
+              const labels = issue.labels.map((l) => l.name || l)
+              const others = await tc.gatherTrafficFacts({ github, context, issueNumber: issue_number, labels })
+              verdict = tc.decideTraffic({ issue: issue_number, labels, others })
+            } catch (e) {
+              core.warning(`traffic control could not read its facts (${e.message}) — proceeding.`)
+              return
+            }
+            if (verdict.action === 'proceed') { core.info(`Traffic control OK — ${verdict.reason}.`); return }
+            await tc.applyWait({ github, context, issueNumber: issue_number, verdict })
+            core.setFailed(`Traffic control: ${verdict.reason}. Deliberate stop — the ticket restarts when that work lands (#2786).`)
+
       # ── FOLLOW-ALONG BREADCRUMB (#2176) — post a live run link ON the ticket ──────────
       # The owner couldn't follow a run from its issue: the worker only comments at the ENDS
       # ("done → PR #N" on success, the red no-op box on failure), so a run in flight was
@@ -342,13 +371,18 @@ jobs:
           gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
           FROM="$(gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .html_url)"
           git fetch origin "work-${ISSUE}" --quiet
+          # The conflict helper (#2848) comes from the checked-out ref, copied aside BEFORE the PR
+          # branch replaces the tree — an old PR branch may not have it yet.
+          cp scripts/conflict-resolution.mjs "$RUNNER_TEMP/conflict-resolution.mjs"
           git checkout -f -B "work-${ISSUE}" "origin/work-${ISSUE}" 2>&1 | tail -1
           echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "from=${FROM}" >> "$GITHUB_OUTPUT"
           # Merge the current base in BEFORE pi edits (#2658). The PR may be days behind its base
           # (#2439 would have undone #2433/#2446); pi must work on — and the finish step stack on —
           # an up-to-date tree. rev_start stays the ORIGINAL head so the push lease still guards
-          # against a concurrent push. A conflict is never auto-resolved: abort and hand to a person.
+          # against a concurrent push. A conflict is NOT aborted (#2848, reverses #2658): the merge
+          # stays in progress and pi resolves it (keep both sides, regenerate generated files); the
+          # `conflict` step below verifies the result and commits it, or posts a 🔀 choice.
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           git config user.name  "nuxt-harness[bot]"
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
@@ -361,14 +395,16 @@ jobs:
             echo "base merged: ${BASE_TIP}"
             echo "base_merged=${BASE_TIP}" >> "$GITHUB_OUTPUT"
           else
-            CONFLICTS="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
-            git merge --abort || true
-            RPR="$(gh pr list --head "work-${ISSUE}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-            [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2658)_\n\nThis PR is behind `%s` and conflicts in:\n\n%s\n\nA person needs to resolve these; I made no change.' "$BASE" "$CONFLICTS")" 2>&1 | tail -1 || true
-            echo "::error::PR is behind ${BASE} and conflicts — not auto-resolved (#2658)"
-            exit 1
+            # Conflict: give pi the resolution task, with the owner's comment queued after it.
+            CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
+            node "$RUNNER_TEMP/conflict-resolution.mjs" prompt "$BASE" "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-task.txt"
+            { cat "$RUNNER_TEMP/conflict-task.txt"; printf '\nOnly AFTER the conflicts are resolved, also do what this comment asks (skip it if you wrote a choice):\n\n'; cat "$RUNNER_TEMP/feedback.txt"; } > "$RUNNER_TEMP/feedback.combined"
+            mv "$RUNNER_TEMP/feedback.combined" "$RUNNER_TEMP/feedback.txt"
+            echo "conflict=1" >> "$GITHUB_OUTPUT"
+            echo "base_merged=${BASE_TIP}" >> "$GITHUB_OUTPUT"
+            echo "::notice::PR is behind ${BASE} and conflicts — pi resolves it (#2848)"
           fi
-          echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          [ -f .git/MERGE_HEAD ] || echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "revise mode: work-${ISSUE} @ $(git rev-parse --short HEAD), feedback ${FROM}"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
@@ -482,6 +518,44 @@ jobs:
           # classify WHY a run produced nothing (pi emits no structured execution_file like claude).
           echo "exec_log=$LOG" >> "$GITHUB_OUTPUT"
 
+      # ── CONFLICT CONCLUSION (#2848) — assert pi's resolution, then commit it as ONE merge ──
+      # Runs only when the revise base-merge conflicted. Three outcomes, each visible on the PR:
+      # a choice file (pi found incompatible intents) → abort + one 🔀 A/B; leftover markers or a
+      # failing generator --check / test → abort + fail loudly; otherwise commit the merge and list
+      # how each file was resolved. The checks are the script's (scripts/conflict-resolution.mjs).
+      - id: conflict
+        if: ${{ !cancelled() && steps.revise.outputs.conflict == '1' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ inputs.issue }}
+          EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+        run: |
+          set -uo pipefail
+          BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
+          CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
+          RPR="$(gh pr list --head "work-${ISSUE}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+          say() { [ -n "$RPR" ] && gh pr comment "$RPR" --body "$1" 2>&1 | tail -1 || true; }
+          HDR='> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
+          UNMERGED="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
+          node "$RUNNER_TEMP/conflict-resolution.mjs" verify "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-files.txt"
+          RC=$?
+          if [ "$RC" = 3 ]; then
+            git merge --abort || true
+            say "$(printf '%s\n\n## 🔀 Blocked — this PR and `%s` want different things in the same place\n**Needs:** answer\n\n@pmcp %s\n\n<details><summary>Conflicting files</summary>\n\n%s\n</details>' "$HDR" "$BASE" "$(cat "$CHOICE_FILE")" "$UNMERGED")"
+            gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
+            echo "::notice::conflict is a real clash of intent — asked the owner (#2848)"
+            exit 0
+          elif [ "$RC" != 0 ]; then
+            git merge --abort || true
+            say "$(printf '%s\n\n⚠️ Behind `%s` and conflicting, and my resolution did not pass its checks (see the run log). Nothing was pushed.\n\n%s' "$HDR" "$BASE" "$UNMERGED")"
+            echo "::error::conflict resolution failed its checks (#2848)"
+            exit 1
+          fi
+          LIST="$(sed 's/^/- `/; s/$/` — resolved, both sides kept/' "$RUNNER_TEMP/conflict-files.txt")"
+          git commit -q -m "Merge ${BASE} into work-${ISSUE} (resolve conflicts)" -m "$(printf 'Conflicts resolved by the revise worker (#2848):\n%s' "$(sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt")")"
+          echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          say "$(printf '%s\n\nMerged `%s` into this PR and resolved the conflicts:\n\n%s\n\nGenerated files were rebuilt, not hand-merged; no conflict markers remain and the checks pass.' "$HDR" "$BASE" "$LIST")"
+
       # ── FINISH — commit pi's EDITED-FILE LEDGER (Pattern B), never `git add -A` ──────────
       # pi narrates the commit and stops without emitting it (#1764), so the HARNESS owns the
       # commit. But NOT via `git add -A`: that blanket-adds tool/runtime junk (the #1786 `.pi/npm/`
@@ -498,7 +572,7 @@ jobs:
         # still persisted — but NOT after a claim-guard refusal (#2027): pi never ran, there is
         # nothing to finish, and the step's own failure then fed the artifact-gate a false
         # "the harness crashed" signal.
-        if: ${{ !cancelled() && steps.claim.outcome != 'failure' }}
+        if: ${{ !cancelled() && steps.claim.outcome != 'failure' && steps.traffic.outcome != 'failure' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -508,7 +582,7 @@ jobs:
           # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
           REV_START: ${{ steps.revise.outputs.rev_start }}
           # #2658: REV_START + the current base merged in (equals REV_START when already current).
-          REV_BASE: ${{ steps.revise.outputs.rev_base }}
+          REV_BASE: ${{ steps.conflict.outputs.rev_base || steps.revise.outputs.rev_base }}
           BASE_MERGED: ${{ steps.revise.outputs.base_merged }}
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
@@ -743,8 +817,14 @@ jobs:
           # Deliberately excludes `<script>`-only files? No — a .vue diff can move layout from
           # script, so any .vue counts. server/**, config, tests and docs do not (#307's scope).
           UI_TOUCHED=0
-          if git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '\.(vue|css)$|/app/(components|layouts|pages)/|app\.config\.ts$'; then
-            UI_TOUCHED=1
+          # #2780: comment-only/whitespace-only .vue|.css edits and app.config.ts changes outside a
+          # `ui:` block cannot change what is on screen. scripts/ui-touched.mjs decides; if it
+          # fails to run we fall back to the old file-name match (fail towards holding).
+          if ! UI_TOUCHED="$(node scripts/ui-touched.mjs "$BASE_SHA..HEAD" 2>/dev/null)" || ! [[ "$UI_TOUCHED" =~ ^[01]$ ]]; then
+            UI_TOUCHED=0
+            if git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '\.(vue|css)$|/app/(components|layouts|pages)/|app\.config\.ts$'; then
+              UI_TOUCHED=1
+            fi
           fi
           echo "visual surface touched: $UI_TOUCHED"
 
@@ -905,7 +985,7 @@ jobs:
             # below — the live preview is independent of whether the local screenshot capture
             # (#2057) happened to succeed this run. Keep in sync with UI_SIGNOFF_MARKER there.
             if [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "1" ]; then
-              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `lgtm` to release it. A capture is attached in the run-record comment below; a live preview link should also follow in a separate comment once the staging deploy finishes.\n\n<!-- deploy-preview: full-watch -->')"
+              HOLD_NOTE="$(printf '\n\n👁 **Visual change — held for sign-off.** This PR touches a surface you have to LOOK at, so it opens as a draft and does not auto-merge. Reply `ok` to release it, or `not ok: what is wrong`. A capture is attached in the run-record comment below; a live preview link should also follow in a separate comment once the staging deploy finishes.\n\n<!-- deploy-preview: full-watch -->')"
             elif [ "$UI_TOUCHED" = "1" ]; then
               # Honest version (#2057): the old text here always said "evidence should be
               # attached above", even when nothing was — which is exactly what happened on
@@ -975,7 +1055,7 @@ jobs:
               [ "$UI_TOUCHED" = "1" ] && [ "$EVIDENCE_ATTACHED" = "0" ] && {
                 echo
                 echo "👁 **visual evidence: MISSING** — this PR touches a surface you have to look at, but no capture landed in \`writeups/ui-proposals/\` this run."
-                echo "This is a harness gap (#2057), not a signal that it's safe to approve blind — ask for a screenshot or staging preview before replying \`lgtm\`."
+                echo "This is a harness gap (#2057), not a signal that it's safe to approve blind — ask for a screenshot or staging preview before replying \`ok\`."
               }
             } > "$REC"
             gh pr comment "$PRNUM" --body-file "$REC" 2>&1 | tail -1 || true
@@ -1050,7 +1130,7 @@ jobs:
           exit 1
 
       - name: Artifact-gate — fail if the agent produced nothing
-        if: ${{ always() && steps.claim.outcome != 'failure' }}
+        if: ${{ always() && steps.claim.outcome != 'failure' && steps.traffic.outcome != 'failure' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}

@@ -5,7 +5,7 @@ A powerful CLI tool for generating complete CRUD collections in Nuxt Crouton app
 ## Features
 
 - 🚀 **Complete CRUD Generation** - API endpoints, Vue components, database schemas
-- 🗄️ **Multi-Database Support** - PostgreSQL and SQLite
+- 🗄️ **SQLite** - Cloudflare D1 / libSQL (the only supported dialect)
 - 🎯 **Type-Safe** - Full TypeScript support with Zod validation
 - 🌱 **Seed Data** - Generate realistic test data with drizzle-seed
 - ✅ **Optional Tests** - `--tests` emits a Zod schema-smoke test + an API route handler test (auth/team-scope + 400/403/404 paths) per collection
@@ -140,7 +140,7 @@ crouton-generate <layer> <collection> [options]
 
 - `--fields-file <path>` - Path to JSON schema file
 - `--config <path>` - Use configuration file instead of CLI arguments
-- `--dialect <pg|sqlite>` - Database dialect (default: pg)
+- `--dialect sqlite` - Database dialect (only sqlite is supported; anything else exits non-zero)
 - `--seed` - Generate seed data file with realistic test data
 - `--count <number>` - Number of seed records to generate (default: 25)
 - `--no-translations` - Skip translation fields

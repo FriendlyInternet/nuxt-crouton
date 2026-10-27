@@ -24,4 +24,8 @@ describe('reviewLogin', () => {
     expect(reviewLoginUrl('https://velo.pmcp.dev/', 's', 'velo', 'main'))
       .toBe(`https://velo.pmcp.dev/auth/login?email=review%2Bvelo-main%40example.com&password=${password}`)
   })
+
+  it('adds redirect when given', () => {
+    expect(new URL(reviewLoginUrl('https://v.dev', 's', 'velo', 'main', '/admin?a=1')).searchParams.get('redirect')).toBe('/admin?a=1')
+  })
 })

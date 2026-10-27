@@ -56,6 +56,19 @@ grep for banned words; the same term can be fine in a commit body and wrong to t
 6. **Land via a PR** (`Closes #NN`), never a direct push to trunk.
 7. **Observe + retro** — measure the harness; postmortem at epic close.
 
+## The interactive agent plans; the pipeline builds
+
+An agent in a live (interactive) session **plans, hands off and follows up — it does not code and does
+not merge.** Every change is built by the pipeline, so traffic control sees all of it.
+
+- **Plan** — turn the ask into a ticket: the hypothesis, the acceptance, and (for logic) the agreed
+  test cases written into the ticket. The worker builds to those cases.
+- **Hand off** — open or mark the ticket for the pipeline, then report the PR and preview it produces.
+- **Follow up** — review the pipeline's PR; request changes by commenting on it, not by pushing.
+- **Never** commit to a feature branch, push, or merge from an interactive session.
+
+The check: after a week, the history shows only pipeline authors, no interactive-session commits.
+
 ## Stages
 
 A **declared** concept, not a hardcoded folder name. `harness.config.mjs` maps each stage to its
@@ -96,15 +109,16 @@ A probabilistic runtime needs gates where a human should decide. A gate proposes
   missing test is made visible, not blocking — the stack adapter says how.)
 - **Code review** — the diff, for correctness + simplification.
 
-One shared loop: hold on a `blocked` status; the **only** resume signal is a reply comment containing
-`lgtm`/`approve` — not a reaction, not a label. Anything else is a change request. When unsure a diff
+One shared loop: hold on a `blocked` status; the **only** resume signal is a reply that is only `ok`
+(`lgtm`/`approve` still accepted) — not a reaction, not a label. `not ok: …` and anything else is a change request.
+On a PR held for a human, the owner's `ok` is also the merge go: once checks are green the pipeline merges it. When unsure a diff
 is in scope, don't gate.
 
 **Done is signed off, not asserted.** A unit of work is "done" only when the thing it promised is
 *checked and concretely signed off* — never on a proxy. A green build, a passing typecheck, a deploy
 URL, the agent's own confidence: every one of those can be true while the work is wrong (each lied
 during a real graduation, #988). So status is **derived from a recorded sign-off**, not self-asserted:
-no `lgtm`, not done. Where the work has an enumerable contract (a behaviour spec, an acceptance list),
+no `ok`, not done. Where the work has an enumerable contract (a behaviour spec, an acceptance list),
 "done" is *per entry* — each one checked and signed, not the set waved through at once. And the verdict
 comes from **comparison against the expected result**, not from re-reading the list: a list can't
 reveal its own gaps; running the real thing next to the contract can.
