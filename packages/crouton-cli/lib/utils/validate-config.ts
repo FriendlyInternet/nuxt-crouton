@@ -78,8 +78,8 @@ export async function validateConfig(config: Record<string, any> | null): Promis
   }
 
   // Validate dialect — a typo is a config bug, not something to default around (#1472)
-  if (config.dialect && !['pg', 'sqlite'].includes(config.dialect)) {
-    errors.push(`Unknown dialect '${config.dialect}' — use 'sqlite' (the default) or 'pg'`)
+  if (config.dialect && config.dialect !== 'sqlite') {
+    errors.push(`Unsupported dialect '${config.dialect}' — only sqlite is supported`)
   }
 
   // Check if collections in targets match defined collections (for enhanced format)

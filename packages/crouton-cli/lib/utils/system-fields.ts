@@ -11,7 +11,7 @@ export const SYSTEM_FIELD_GROUPS = {
   id: ['id'],
   /** Always present — every generated endpoint is team-scoped (@fyit/crouton-auth). */
   team: ['teamId', 'owner'],
-  /** Ride `flags.useMetadata` (default true; no in-repo config turns it off). */
+  /** Metadata columns, present on every generated table. */
   timestamps: ['createdAt', 'updatedAt'],
   audit: ['createdBy', 'updatedBy'],
   /** Default names; a hierarchy config may rename each (see hierarchyFields). */
@@ -26,14 +26,14 @@ export const AUTO_GENERATED_FIELDS: string[] = [
   ...SYSTEM_FIELD_GROUPS.audit
 ]
 
-/** The columns gated by `useMetadata`: timestamps + audit, in that order. */
-export function metadataFields(useMetadata: boolean): string[] {
-  return useMetadata ? [...SYSTEM_FIELD_GROUPS.timestamps, ...SYSTEM_FIELD_GROUPS.audit] : []
+/** The metadata columns: timestamps + audit, in that order. */
+export function metadataFields(): string[] {
+  return [...SYSTEM_FIELD_GROUPS.timestamps, ...SYSTEM_FIELD_GROUPS.audit]
 }
 
-/** The auto user-reference columns a list may filter by: owner always, the audit pair with metadata. */
-export function autoRefFields(useMetadata: boolean): string[] {
-  return useMetadata ? ['owner', ...SYSTEM_FIELD_GROUPS.audit] : ['owner']
+/** The auto user-reference columns a list may filter by: owner plus the audit pair. */
+export function autoRefFields(): string[] {
+  return ['owner', ...SYSTEM_FIELD_GROUPS.audit]
 }
 
 export interface HierarchyNames {

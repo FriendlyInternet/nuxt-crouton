@@ -17,6 +17,7 @@ import { join, resolve, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import { resolveExtendedPackages } from './utils/extended-packages.ts'
+import { layerConfigPath, readExtends } from './utils/schema-sources.ts'
 
 export interface SeedAppOptions {
   /** App directory (defaults to cwd). */
@@ -89,13 +90,9 @@ const UMBRELLA = '@fyit/crouton'
  * `extends` array (the caller then falls back to walking the umbrella).
  */
 function extendedCroutonPackages(appDir: string): string[] | null {
-  const configPath = ['nuxt.config.ts', 'nuxt.config.js', 'nuxt.config.mjs']
-    .map(file => join(appDir, file))
-    .find(path => existsSync(path))
-  if (!configPath) return null
-  const block = readFileSync(configPath, 'utf8').match(/extends:\s*\[([\s\S]*?)\]/)
-  if (!block) return null
-  return [...block[1]!.matchAll(/['"](@fyit\/crouton-[\w-]+)['"]/g)].map(m => m[1]!)
+  const configPath = layerConfigPath(appDir)
+  if (!configPath || readExtends(configPath).length === 0) return null
+  return resolveExtendedPackages(appDir).map(id => `@fyit/${id}`)
 }
 
 /**

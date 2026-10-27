@@ -29,7 +29,7 @@ describe('generateCollectionReadme', () => {
   })
 
   it('lists the system columns from the single enumeration', () => {
-    for (const name of metadataFields(true)) {
+    for (const name of metadataFields()) {
       expect(readme()).toContain(`| ${name} |`)
     }
   })
