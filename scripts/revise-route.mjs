@@ -23,6 +23,12 @@ export function workIssueFromRef(ref) {
   return m ? Number(m[1]) : null
 }
 
+/** `epic/2754-plan-before-build` → 2754; anything else → null. An epic → main PR's head (#2875). */
+export function epicIssueFromRef(ref) {
+  const m = /^epic\/(\d+)-/.exec(String(ref || ''))
+  return m ? Number(m[1]) : null
+}
+
 /**
  * Should this comment revise the PR?
  *
@@ -60,15 +66,18 @@ export function shouldRevise({ body, authorAssociation, userType } = {}) {
 }
 
 /**
- * The PR side: a comment on an OPEN PR whose head is `work-<N>`.
- * @returns {{ revise: boolean, issue: number|null, reason: string, reply: boolean }}
+ * The PR side: a comment on an OPEN PR whose head is `work-<N>` or `epic/<N>-…`.
+ * `branch` is set only for an epic head: the dispatch must name it, since it is not `work-<issue>`.
+ * @returns {{ revise: boolean, issue: number|null, branch: string, reason: string, reply: boolean }}
  */
 export function routePrComment({ pr = {}, comment = {} } = {}) {
-  const issue = workIssueFromRef(pr.headRef)
-  if (!issue) return { revise: false, issue: null, reason: `head \`${pr.headRef}\` is not a pi worker branch`, reply: false }
-  if (pr.state !== 'open') return { revise: false, issue, reason: 'the PR is not open', reply: false }
+  const epic = epicIssueFromRef(pr.headRef)
+  const issue = workIssueFromRef(pr.headRef) ?? epic
+  const branch = epic ? pr.headRef : ''
+  if (!issue) return { revise: false, issue: null, branch, reason: `head \`${pr.headRef}\` is not a pi worker or epic branch`, reply: false }
+  if (pr.state !== 'open') return { revise: false, issue, branch, reason: 'the PR is not open', reply: false }
   const d = shouldRevise(comment)
-  return { revise: d.revise, issue, reason: d.reason, reply: Boolean(d.reply) }
+  return { revise: d.revise, issue, branch, reason: d.reason, reply: Boolean(d.reply) }
 }
 
 // CLI: `node scripts/revise-route.mjs pr < event.json` → prints {revise,issue,reason}.
