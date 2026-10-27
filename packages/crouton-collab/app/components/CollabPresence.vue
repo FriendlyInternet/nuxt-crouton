@@ -48,12 +48,12 @@ const sizeClasses = computed(() => ({
 }[props.size] ?? 'size-8 text-sm'))
 
 const overlapOffset = computed(() => ({
-  xs: '-ml-2',
-  sm: '-ml-2.5',
-  md: '-ml-3'
-}[props.size] ?? '-ml-2.5'))
+  xs: '-ml-1.5',
+  sm: '-ml-2',
+  md: '-ml-2.5'
+}[props.size] ?? '-ml-2'))
 
-const avatarBase = 'collab-presence-avatar rounded-full flex items-center justify-center font-medium border-2 border-white dark:border-gray-900 shadow-sm overflow-hidden'
+const avatarBase = 'collab-presence-avatar rounded-full flex items-center justify-center font-medium ring-2 ring-[var(--ui-bg)] overflow-hidden'
 
 function colorOf(state: CollabAwarenessState): string {
   const user = state.user

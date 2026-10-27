@@ -89,12 +89,12 @@ const { otherUsers, loading, users: polledUsers } = useCollabRoomUsers({
 const displayUsers = computed(() => props.users ?? (props.showSelf ? polledUsers.value : otherUsers.value))
 const displayCount = computed(() => displayUsers.value.length)
 
+const { t } = useT()
+
 // Badge text
 const badgeText = computed(() => {
   const count = displayCount.value
-  if (count === 0) return ''
-  if (count === 1) return '1 editing'
-  return `${count} editing`
+  return count === 0 ? '' : t('collab.editingCount', { count })
 })
 
 // Pill sizing only; avatars come from CollabPresence
@@ -139,12 +139,12 @@ const avatarsTooltip = computed(() => {
   const names = displayUsers.value.map(u => u.user?.name || 'Unknown')
 
   if (count === 1) {
-    return `1 editing: ${names[0]}`
+    return `${badgeText.value}: ${names[0]}`
   }
   if (names.length <= 3) {
-    return `${count} editing: ${names.join(', ')}`
+    return `${badgeText.value}: ${names.join(', ')}`
   }
-  return `${count} editing: ${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
+  return `${badgeText.value}: ${names.slice(0, 3).join(', ')} +${names.length - 3}`
 })
 </script>
 
@@ -153,18 +153,21 @@ const avatarsTooltip = computed(() => {
     v-if="displayCount > 0 && !loading"
     class="collab-editing-badge inline-flex items-center"
   >
-    <!-- AVATARS VARIANT: Just stacked circles with simple tooltip -->
+    <!-- AVATARS VARIANT: stacked circles + "N editing" label, simple tooltip -->
     <UTooltip
       v-if="variant === 'avatars'"
       :delay-duration="200"
       :text="avatarsTooltip"
     >
-      <CollabPresence
-        :users="displayUsers"
-        :max-visible="3"
-        :size="size"
-        :show-tooltip="false"
-      />
+      <div class="inline-flex items-center gap-2">
+        <CollabPresence
+          :users="displayUsers"
+          :max-visible="3"
+          :size="size"
+          :show-tooltip="false"
+        />
+        <span class="text-xs font-medium text-muted whitespace-nowrap">{{ badgeText }}</span>
+      </div>
     </UTooltip>
 
     <!-- BADGE VARIANT: Green pill with text + avatars (default) -->
@@ -190,7 +193,7 @@ const avatarsTooltip = computed(() => {
       <template #content>
         <div class="p-2 max-w-xs">
           <p class="text-sm font-medium mb-2">
-            Currently editing:
+            {{ t('collab.currentlyEditing') }}
           </p>
           <div class="flex flex-wrap gap-1.5">
             <div
