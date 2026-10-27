@@ -58,6 +58,9 @@ interface Props {
 
   /** Show self in the count (for testing) - normally only shows other users */
   showSelf?: boolean
+
+  /** Fixed users to show instead of polling the room (previews, tests) */
+  users?: CollabAwarenessState[]
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -68,21 +71,22 @@ const props = withDefaults(defineProps<Props>(), {
   showAvatars: true,
   maxAvatars: 5,
   variant: 'badge',
-  showSelf: false
+  showSelf: false,
+  users: undefined
 })
 
 // Use the composable with reactive roomId
-const { otherUsers, otherCount, loading, users } = useCollabRoomUsers({
+const { otherUsers, loading, users: polledUsers } = useCollabRoomUsers({
   roomId: toRef(() => props.roomId),
   roomType: props.roomType,
   currentUserId: toRef(() => props.currentUserId),
   pollInterval: props.pollInterval,
   excludeSelf: !!props.currentUserId,
-  immediate: true
+  immediate: !props.users
 })
 
 // Display users/count - use all users when showSelf is true, otherwise just others
-const displayUsers = computed(() => props.showSelf ? users.value : otherUsers.value)
+const displayUsers = computed(() => props.users ?? (props.showSelf ? polledUsers.value : otherUsers.value))
 const displayCount = computed(() => displayUsers.value.length)
 
 // Badge text
