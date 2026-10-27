@@ -67,8 +67,11 @@ export const salesSyncOutbox = sqliteTable('sales_sync_outbox', {
  * own DB simply never has a row here.
  */
 export const salesSyncStatus = sqliteTable('sales_sync_status', {
-  // Single global heartbeat row.
+  // One heartbeat row per paired till (the device id, #2725). Legacy
+  // shared-key setups keep writing the single 'live' row.
   id: text('id').primaryKey().$default(() => 'live'),
+  // The device's team (null for the legacy 'live' row).
+  teamId: text('team_id'),
   // Last time the cloud heard from the Pi at all (data batch OR idle ping) —
   // the liveness clock the dashboard reads to detect an offline Pi.
   lastContactAt: integer('last_contact_at', { mode: 'timestamp' }),

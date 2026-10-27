@@ -200,7 +200,8 @@
       "syncedAgo": "gesynchroniseerd {ago}",
       "staleDetail": "laatst gesynchroniseerd {ago} — de kassa is mogelijk offline",
       "waitingDetail": "wachten op de eerste synchronisatie vanaf de kassa",
-      "unavailableDetail": "kon de synchronisatiestatus niet ophalen"
+      "unavailableDetail": "kon de synchronisatiestatus niet ophalen",
+      "tillsSynced": "{n} kassa's synchroniseren"
     },
     "dashboard": {
       "revenue": "Omzet",

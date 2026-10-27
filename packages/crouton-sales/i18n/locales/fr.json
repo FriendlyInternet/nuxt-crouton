@@ -199,7 +199,8 @@
       "syncedAgo": "synchronisé {ago}",
       "staleDetail": "dernière synchronisation {ago} — la caisse est peut-être hors ligne",
       "waitingDetail": "en attente de la première synchronisation depuis la caisse",
-      "unavailableDetail": "impossible d'obtenir le statut de synchronisation"
+      "unavailableDetail": "impossible d'obtenir le statut de synchronisation",
+      "tillsSynced": "{n} caisses synchronisent"
     },
     "dashboard": {
       "revenue": "Chiffre d'affaires",

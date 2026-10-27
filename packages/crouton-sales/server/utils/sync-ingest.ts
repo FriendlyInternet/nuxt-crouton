@@ -80,7 +80,9 @@ export async function applyOutboxEvents(
   db: any,
   events: IngestEvent[],
   // Injectable for tests; defaults to the lazily-imported app-layer schema.
-  tablesOverride?: Record<OutboxEntityType, any>
+  tablesOverride?: Record<OutboxEntityType, any>,
+  /** The authenticated device's team (#2725). Rows for any other team are rejected. */
+  scopeTeamId?: string
 ): Promise<IngestResult> {
   const result: IngestResult = { applied: [], skipped: [] }
   if (!Array.isArray(events) || events.length === 0) return result
@@ -105,10 +107,23 @@ export async function applyOutboxEvents(
       continue
     }
 
+    // Team scoping (#2725): a paired till may only write its own team's rows.
+    // A foreign teamId is a permanent skip (logged); a missing one is forced.
+    const rowTeamId = (e.payload as { teamId?: unknown }).teamId
+    if (scopeTeamId && rowTeamId != null && rowTeamId !== scopeTeamId) {
+      console.warn(`[crouton-sales] sync ingest rejected ${e.entityType} ${e.entityId}: row team ${String(rowTeamId)} ≠ device team ${scopeTeamId}`)
+      result.skipped.push({ id: ackId, reason: 'team mismatch', permanent: true })
+      continue
+    }
+
     const table = tables[e.entityType]
     try {
       // The upsert key always wins over whatever the payload carried.
-      const values = coerceToColumns(table, { ...e.payload, id: e.entityId })
+      const values = coerceToColumns(table, {
+        ...e.payload,
+        ...(scopeTeamId ? { teamId: scopeTeamId } : {}),
+        id: e.entityId
+      })
       const setObj = { ...values }
       delete setObj.id
 

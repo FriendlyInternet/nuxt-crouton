@@ -22,6 +22,10 @@ export interface PushOptions {
   url?: string
   /** Shared secret; defaults to env NUXT_CROUTON_SALES_CLOUD_SYNC_SECRET. */
   secret?: string
+  /** Paired device id; defaults to env CROUTON_SALES_DEVICE_ID (legacy FANFARE_DEVICE_ID). */
+  deviceId?: string
+  /** Paired device secret; defaults to env CROUTON_SALES_DEVICE_SECRET (legacy FANFARE_DEVICE_SECRET). */
+  deviceSecret?: string
   /** Max rows per batch. Default 100. */
   batchSize?: number
   /** Per-request timeout (ms). Default 15000. */
@@ -31,6 +35,7 @@ export interface PushOptions {
 }
 
 interface IngestResponse {
+  serverNow?: number
   applied?: string[]
   skipped?: Array<{ id: string, reason?: string, permanent?: boolean }>
 }
@@ -40,6 +45,21 @@ export interface PushResult {
   applied: number
   skippedRetry: number
   skippedPermanent: number
+}
+
+/**
+ * Auth headers for the ingest. A paired till sends its device identity (#2725);
+ * only a till with no identity falls back to the deprecated shared key.
+ */
+export function syncAuthHeaders(opts: PushOptions): Record<string, string> {
+  const deviceId = opts.deviceId || process.env.CROUTON_SALES_DEVICE_ID || process.env.FANFARE_DEVICE_ID
+  const deviceSecret = opts.deviceSecret || process.env.CROUTON_SALES_DEVICE_SECRET || process.env.FANFARE_DEVICE_SECRET
+  if (deviceId && deviceSecret) {
+    return { 'x-device-id': deviceId, 'x-device-secret': deviceSecret }
+  }
+  const secret = opts.secret || process.env.NUXT_CROUTON_SALES_CLOUD_SYNC_SECRET
+  if (!secret) throw new Error('No device identity (CROUTON_SALES_DEVICE_ID/SECRET) and NUXT_CROUTON_SALES_CLOUD_SYNC_SECRET not set')
+  return { 'x-sync-key': secret }
 }
 
 async function loadOutboxSchema() {
@@ -53,9 +73,8 @@ async function loadOutboxSchema() {
  */
 export async function pushPendingOutbox(db: any, opts: PushOptions = {}): Promise<PushResult> {
   const url = opts.url || process.env.CROUTON_SALES_CLOUD_SYNC_URL
-  const secret = opts.secret || process.env.NUXT_CROUTON_SALES_CLOUD_SYNC_SECRET
   if (!url) throw new Error('CROUTON_SALES_CLOUD_SYNC_URL not set')
-  if (!secret) throw new Error('NUXT_CROUTON_SALES_CLOUD_SYNC_SECRET not set')
+  const headers = syncAuthHeaders(opts)
 
   const { salesSyncOutbox } = await loadOutboxSchema()
   const batchSize = opts.batchSize ?? 100
@@ -83,7 +102,7 @@ export async function pushPendingOutbox(db: any, opts: PushOptions = {}): Promis
   const doFetch = opts.fetcher ?? (globalThis as any).$fetch
   const res: IngestResponse = await doFetch(url, {
     method: 'POST',
-    headers: { 'x-sync-key': secret },
+    headers,
     body: { events },
     timeout: opts.timeoutMs ?? 15000,
     retry: 0,
@@ -119,14 +138,13 @@ export async function pushPendingOutbox(db: any, opts: PushOptions = {}): Promis
  */
 export async function pingHeartbeat(opts: PushOptions = {}): Promise<void> {
   const url = opts.url || process.env.CROUTON_SALES_CLOUD_SYNC_URL
-  const secret = opts.secret || process.env.NUXT_CROUTON_SALES_CLOUD_SYNC_SECRET
   if (!url) throw new Error('CROUTON_SALES_CLOUD_SYNC_URL not set')
-  if (!secret) throw new Error('NUXT_CROUTON_SALES_CLOUD_SYNC_SECRET not set')
+  const headers = syncAuthHeaders(opts)
 
   const doFetch = opts.fetcher ?? (globalThis as any).$fetch
   await doFetch(url, {
     method: 'POST',
-    headers: { 'x-sync-key': secret },
+    headers,
     body: { events: [] },
     timeout: opts.timeoutMs ?? 15000,
     retry: 0,

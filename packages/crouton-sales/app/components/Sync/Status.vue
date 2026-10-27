@@ -19,6 +19,8 @@ interface SyncStatusResponse {
   lastContactAt: number | null
   lastEventAt: number | null
   lastBatchApplied: number
+  /** Every till of the team, freshest first (#2725). */
+  devices?: Array<{ deviceId: string, lastContactAt: number | null }>
   serverNow: number
 }
 
@@ -83,6 +85,20 @@ function relativeLabel(ms: number | null): string {
   return t('sales.sync.hoursAgo', { n: h })
 }
 
+// With several tills the banner shows the freshest; the rest are in the tooltip.
+const deviceCount = computed(() => data.value?.devices?.length ?? 0)
+const title = computed(() => {
+  const lines = [ui.value.detail]
+  if (deviceCount.value > 1) {
+    lines.push(t('sales.sync.tillsSynced', { n: deviceCount.value }))
+    for (const d of data.value!.devices!) {
+      const age = d.lastContactAt ? (nowTick.value + clockOffset.value) - d.lastContactAt : null
+      lines.push(`${d.deviceId.replace('device:', '').slice(0, 8)} — ${age == null ? '…' : relativeLabel(age)}`)
+    }
+  }
+  return lines.join('\n')
+})
+
 const ui = computed(() => {
   switch (state.value) {
     case 'live':
@@ -112,7 +128,7 @@ onMounted(() => {
 <template>
   <div
     class="sales-sync-status flex items-center gap-2.5 rounded-full border border-default bg-elevated/60 px-3.5 py-1.5 text-sm"
-    :title="ui.detail"
+    :title="title"
   >
     <span class="relative flex size-2.5 shrink-0">
       <span

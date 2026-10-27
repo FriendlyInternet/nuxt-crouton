@@ -6,23 +6,32 @@
  * the Pi is offline. Read-only; team-members-only (mirror data is team-scoped).
  *
  * `serverNow` is included so the client computes age against the *server's*
- * clock, immune to device clock skew. The heartbeat is a single global row
- * (one venue Pi → one cloud deploy), so this is team-gated for access but not
- * team-keyed in storage — see server/database/schema.ts.
+ * clock, immune to device clock skew. Heartbeats are keyed per paired till (#2725) and
+ * filtered to the caller's team — see server/database/schema.ts.
  */
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { readSyncStatus } from '../../../../utils/sync-status'
+import { freshestStatus, readSyncStatuses } from '../../../../utils/sync-status'
 
 export default defineEventHandler(async (event) => {
-  await resolveTeamAndCheckMembership(event)
+  const { team } = await resolveTeamAndCheckMembership(event)
   const db = useDB()
 
-  const status = await readSyncStatus(db)
+  const statuses = await readSyncStatuses(db, team.id)
+  const freshest = freshestStatus(statuses)
+  const ms = (d: Date | null) => (d ? d.getTime() : null)
 
   return {
-    lastContactAt: status.lastContactAt ? status.lastContactAt.getTime() : null,
-    lastEventAt: status.lastEventAt ? status.lastEventAt.getTime() : null,
-    lastBatchApplied: status.lastBatchApplied,
+    // Headline = the freshest till, so existing banners keep working.
+    lastContactAt: ms(freshest?.lastContactAt ?? null),
+    lastEventAt: ms(freshest?.lastEventAt ?? null),
+    lastBatchApplied: freshest?.lastBatchApplied ?? 0,
+    // Every till of the team (#2725), freshest first.
+    devices: statuses.map(s => ({
+      deviceId: s.deviceId,
+      lastContactAt: ms(s.lastContactAt),
+      lastEventAt: ms(s.lastEventAt),
+      lastBatchApplied: s.lastBatchApplied,
+    })),
     serverNow: Date.now(),
   }
 })
