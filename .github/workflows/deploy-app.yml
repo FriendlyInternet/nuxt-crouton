@@ -258,12 +258,48 @@ jobs:
       # with NITRO_PRESET=cloudflare_module, deploys (auto-provisioning id-less
       # D1/KV on first run), syncs the provisioned ids back into wrangler.jsonc,
       # and applies remote D1 migrations.
+      # LIVE SYNC (#2693) — `"collab": true` in the app's deploy.config.json also deploys the
+      # crouton-collab Worker and points the app at it. Runs BEFORE the app build because the
+      # Worker's URL is baked into the client bundle (NUXT_PUBLIC_COLLAB_WORKER_URL, below).
+      # Order: Worker -> D1 migration -> app. Apps that don't set the flag skip it entirely.
+      # Secrets: the app's BETTER_AUTH_SECRET from the WORKER_SECRETS_JSON bundle when present;
+      # otherwise one is generated here and the "Ensure BETTER_AUTH_SECRET" step reuses it for
+      # the app, so the two always match on a fresh deploy.
+      - name: Deploy collab Worker (collab flag)
+        id: collab
+        working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
+        env:
+          SECRETS_JSON: ${{ secrets.WORKER_SECRETS_JSON }}
+          ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -o pipefail
+          if [ "$(jq -r '.collab == true' deploy.config.json 2>/dev/null)" != "true" ]; then
+            echo "${{ inputs.app }} has no \"collab\": true in deploy.config.json — no live-sync Worker."
+            exit 0
+          fi
+          PR_NUM="${{ github.event.pull_request.number }}"
+          if [ "$ENVIRONMENT" = "production" ]; then
+            WORKER="${{ inputs.app }}-collab"
+          elif [ -n "$PR_NUM" ]; then
+            WORKER="${{ inputs.app }}-pr${PR_NUM}-collab"
+          else
+            WORKER="${{ inputs.app }}-collab-staging"
+          fi
+          if [ -n "$SECRETS_JSON" ]; then
+            COLLAB_AUTH_SECRET="$(printf '%s' "$SECRETS_JSON" | jq -r '.BETTER_AUTH_SECRET // empty')"
+            if [ -n "$COLLAB_AUTH_SECRET" ]; then echo "::add-mask::$COLLAB_AUTH_SECRET"; export COLLAB_AUTH_SECRET; fi
+          fi
+          node "$GITHUB_WORKSPACE/scripts/deploy-collab-worker.mjs" --name "$WORKER" --db "$WORKER-db" \
+            --secret-file "$RUNNER_TEMP/collab-auth-secret"
+
       - name: Deploy (build → provision → sync ids → migrate)
         id: deploy
         working-directory: ${{ inputs.workspace }}/${{ inputs.app }}
         env:
           # BETTER_AUTH_* are only needed by the prerender pass at build time.
           BETTER_AUTH_SECRET: prerender-placeholder
+          # Live sync (#2693): the collab Worker deployed above, empty when the flag is off.
+          NUXT_PUBLIC_COLLAB_WORKER_URL: ${{ steps.collab.outputs.url }}
           BETTER_AUTH_URL: ${{ inputs.environment == 'production' && inputs['production-url'] || inputs['staging-url'] }}
           # REVIEW OVERLAY (#2070) — set HERE, not in each app's cf:staging script.
           # The flag existed only in the CLI's scaffold template (scaffold-app.ts), so the
@@ -697,7 +733,14 @@ jobs:
             echo "✓ BETTER_AUTH_SECRET already present on the Worker — leaving it untouched."
           else
             echo "::notice::No BETTER_AUTH_SECRET on ${{ inputs.app }} ($ENVIRONMENT) — generating one (persists; override anytime via a repo-level WORKER_SECRETS_JSON)."
-            printf '%s' "$(openssl rand -hex 32)" | npx wrangler secret put BETTER_AUTH_SECRET $ENV_FLAG
+            # Collab flag (#2693): reuse the secret the collab Worker was just given, so the
+            # app's tokens verify there. Absent otherwise -> a fresh random one as before.
+            if [ -s "$RUNNER_TEMP/collab-auth-secret" ]; then
+              npx wrangler secret put BETTER_AUTH_SECRET $ENV_FLAG < "$RUNNER_TEMP/collab-auth-secret"
+              rm -f "$RUNNER_TEMP/collab-auth-secret"
+            else
+              printf '%s' "$(openssl rand -hex 32)" | npx wrangler secret put BETTER_AUTH_SECRET $ENV_FLAG
+            fi
           fi
 
       # Seed the app's COLLECTION fixtures + package demo data into the staging D1 so the

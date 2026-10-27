@@ -21,9 +21,9 @@
  */
 
 // Re-export the Durable Object class so Cloudflare registers it.
-// After copying to workers/my-app-collab/, this path should resolve to
-// the crouton-collab package in your monorepo.
-export { CollabRoom } from '../../packages/crouton-collab/server/durable-objects/CollabRoom'
+// Resolves in place (packages/crouton-collab/worker-template/src). The deploy workflow
+// deploys this template directly via `"collab": true`; a manual copy must adjust the path.
+export { CollabRoom } from '../../server/durable-objects/CollabRoom'
 
 interface Env {
   COLLAB_ROOMS: DurableObjectNamespace

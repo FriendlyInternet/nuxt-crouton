@@ -189,7 +189,14 @@ export default defineNuxtConfig({
 })
 ```
 
-### 2. Deploy a Collab Worker (Production)
+### 2. Deploy a Collab Worker
+
+**One setting (#2693):** with `extends: ['@fyit/crouton-collab']` in the app, set `"collab": true` in
+`apps/<app>/deploy.config.json`. The reusable `deploy-app.yml` then deploys the Worker from
+`worker-template` (`<app>-collab-staging` / `<app>-collab`, `<app>-pr<N>-collab` for previews) with
+auto-provisioned D1, shares the app's `BETTER_AUTH_SECRET`, applies the migration, and builds the app
+with `NUXT_PUBLIC_COLLAB_WORKER_URL` — in that order. Steps 2–5 below are the manual fallback only.
+
 
 The collab Durable Object ships as a standalone Worker:
 

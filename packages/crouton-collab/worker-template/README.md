@@ -1,5 +1,11 @@
 # Collab Worker Template
 
+> **Normal path (#2693):** add `extends: ['@fyit/crouton-collab']` to the app and `"collab": true` to
+> `apps/<app>/deploy.config.json`. The deploy workflow then deploys this Worker in place
+> (`<app>-collab-staging`, `<app>-collab` in production, `<app>-pr<N>-collab` for PR previews), shares
+> the app's `BETTER_AUTH_SECRET`, applies the D1 migration and builds the app with
+> `NUXT_PUBLIC_COLLAB_WORKER_URL`. Everything below is the manual fallback.
+
 Standalone Cloudflare Worker that hosts the `CollabRoom` Durable Object for real-time collaboration. Cloudflare Pages cannot host Durable Objects, so every app using `crouton-collab` in production needs a copy of this worker.
 
 ## Quick Start
@@ -30,7 +36,7 @@ Also update `package.json` — replace `{{APP_NAME}}` in the name field.
 
 ### 3. Update the import path
 
-In `src/index.ts`, verify the relative import path to `CollabRoom` is correct for your project structure. If you placed the worker at `workers/my-app-collab/`, the default path (`../../packages/crouton-collab/server/durable-objects/CollabRoom`) should work for a standard monorepo layout.
+In `src/index.ts`, verify the relative import path to `CollabRoom` is correct for your project structure. If you placed the worker at `workers/my-app-collab/`, the default path (`../../server/durable-objects/CollabRoom` in place; adjust it when copied elsewhere) should work for a standard monorepo layout.
 
 ### 4. Configure allowed origins
 
