@@ -23,12 +23,12 @@ async function getLayerStats(layer: string): Promise<LayerStats> {
   }
 }
 
-function handleCancel<T>(value: T | symbol): T {
+function handleCancel<T>(value: T): Exclude<T, symbol> {
   if (p.isCancel(value)) {
     p.cancel('Rollback cancelled.')
     process.exit(0)
   }
-  return value as T
+  return value as Exclude<T, symbol>
 }
 
 export async function interactiveRollback({ dryRun = false, keepFiles = false }: { dryRun?: boolean; keepFiles?: boolean }): Promise<void> {
