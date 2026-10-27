@@ -201,7 +201,14 @@
       "staleDetail": "last synced {ago} — the till may be offline",
       "waitingDetail": "waiting for the first sync from the till",
       "unavailableDetail": "couldn't reach the sync status",
-      "tillsSynced": "{n} tills syncing"
+      "tillsSynced": "{n} tills syncing",
+      "never": "never",
+      "lastPush": "Last push",
+      "lastPull": "Last pull",
+      "lostEdits": "Edits that lost a conflict",
+      "noLostEdits": "No edits have lost a conflict.",
+      "cloudWon": "The cloud version was kept",
+      "title": "Cloud sync"
     },
     "dashboard": {
       "revenue": "Revenue",

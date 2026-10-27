@@ -20,7 +20,18 @@ interface SyncStatusResponse {
   lastEventAt: number | null
   lastBatchApplied: number
   /** Every till of the team, freshest first (#2725). */
-  devices?: Array<{ deviceId: string, lastContactAt: number | null }>
+  devices?: Array<{ deviceId: string, lastContactAt: number | null, lastPullAt?: number | null }>
+  /** Latest config edits that lost a conflict, newest first (#816). */
+  lostEdits?: Array<{
+    id: string
+    deviceId: string | null
+    entityType: string
+    entityId: string
+    reason: string
+    lost: Record<string, unknown>
+    kept: Record<string, unknown>
+    at: number
+  }>
   serverNow: number
 }
 
@@ -30,10 +41,13 @@ const props = withDefaults(defineProps<{
   pollMs?: number
   /** Age beyond which the mirror is considered stale (Pi likely offline). */
   staleMs?: number
+  /** Also list each till's last push/pull and the edits that lost a conflict. */
+  detailed?: boolean
 }>(), {
   pollMs: 5000,
   // The Pi pings at least every 30s when online; 90s = ~3 missed pings.
   staleMs: 90000,
+  detailed: false,
 })
 
 const { t } = useT()
@@ -99,6 +113,20 @@ const title = computed(() => {
   return lines.join('\n')
 })
 
+function agoOf(at: number | null | undefined): string {
+  return at ? relativeLabel((nowTick.value + clockOffset.value) - at) : t('sales.sync.never')
+}
+const tillName = (id: string | null) => (id ?? '').replace('device:', '').slice(0, 8) || '—'
+const lostEdits = computed(() => data.value?.lostEdits ?? [])
+/** "price: 5 → 6" for the fields that differ; falls back to the lost values alone. */
+function diffLabel(l: { lost: Record<string, unknown>, kept: Record<string, unknown> }): string {
+  const keys = Object.keys(l.lost).filter(k => k in l.kept && JSON.stringify(l.lost[k]) !== JSON.stringify(l.kept[k]))
+  return (keys.length ? keys : Object.keys(l.lost).slice(0, 3))
+    .slice(0, 4)
+    .map(k => `${k}: ${JSON.stringify(l.lost[k])} → ${JSON.stringify(l.kept[k] ?? null)}`)
+    .join(', ')
+}
+
 const ui = computed(() => {
   switch (state.value) {
     case 'live':
@@ -126,8 +154,9 @@ onMounted(() => {
 </script>
 
 <template>
+  <div class="sales-sync-status-wrap space-y-3">
   <div
-    class="sales-sync-status flex items-center gap-2.5 rounded-full border border-default bg-elevated/60 px-3.5 py-1.5 text-sm"
+    class="sales-sync-status flex w-fit max-w-full items-center gap-2.5 rounded-full border border-default bg-elevated/60 px-3.5 py-1.5 text-sm"
     :title="title"
   >
     <span class="relative flex size-2.5 shrink-0">
@@ -140,5 +169,31 @@ onMounted(() => {
     </span>
     <span class="font-medium" :class="ui.color">{{ ui.label }}</span>
     <span class="text-muted truncate">{{ ui.detail }}</span>
+  </div>
+
+    <div v-if="detailed" class="space-y-3 text-sm">
+      <ul v-if="data?.devices?.length" class="divide-y divide-default rounded-lg border border-default">
+        <li v-for="d in data.devices" :key="d.deviceId" class="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2">
+          <span class="font-medium">{{ tillName(d.deviceId) }}</span>
+          <span class="text-muted">
+            {{ t('sales.sync.lastPush') }}: {{ agoOf(d.lastContactAt) }} · {{ t('sales.sync.lastPull') }}: {{ agoOf(d.lastPullAt) }}
+          </span>
+        </li>
+      </ul>
+      <div v-if="lostEdits.length">
+        <p class="mb-1 font-medium">{{ t('sales.sync.lostEdits') }}</p>
+        <ul class="divide-y divide-default rounded-lg border border-default">
+          <li v-for="l in lostEdits" :key="l.id" class="space-y-0.5 px-3 py-2">
+            <div class="flex flex-wrap justify-between gap-x-4">
+              <span class="font-medium">{{ l.entityType }} · {{ tillName(l.deviceId) }}</span>
+              <span class="text-muted">{{ agoOf(l.at) }}</span>
+            </div>
+            <p class="break-words text-muted">{{ diffLabel(l) }}</p>
+            <p class="text-xs text-muted">{{ t('sales.sync.cloudWon') }}</p>
+          </li>
+        </ul>
+      </div>
+      <p v-else class="text-muted">{{ t('sales.sync.noLostEdits') }}</p>
+    </div>
   </div>
 </template>

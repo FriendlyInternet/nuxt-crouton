@@ -200,7 +200,14 @@
       "staleDetail": "dernière synchronisation {ago} — la caisse est peut-être hors ligne",
       "waitingDetail": "en attente de la première synchronisation depuis la caisse",
       "unavailableDetail": "impossible d'obtenir le statut de synchronisation",
-      "tillsSynced": "{n} caisses synchronisent"
+      "tillsSynced": "{n} caisses synchronisent",
+      "never": "jamais",
+      "lastPush": "Dernier envoi",
+      "lastPull": "Dernière réception",
+      "lostEdits": "Modifications perdues lors d'un conflit",
+      "noLostEdits": "Aucune modification n'a perdu un conflit.",
+      "cloudWon": "La version du cloud a été conservée",
+      "title": "Synchronisation cloud"
     },
     "dashboard": {
       "revenue": "Chiffre d'affaires",

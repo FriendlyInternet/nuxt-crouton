@@ -13,7 +13,7 @@
  */
 import { authenticateSync, deviceOf } from '../../../utils/cloud-sync-auth'
 import { applyOutboxEvents, type IngestEvent } from '../../../utils/sync-ingest'
-import { recordSyncHeartbeat } from '../../../utils/sync-status'
+import { recordLostEdits, recordSyncHeartbeat } from '../../../utils/sync-status'
 
 interface IngestBody {
   events?: IngestEvent[]
@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
   const db = useDB()
   const result = await applyOutboxEvents(db, events, undefined, device?.teamId, { deviceId: device?.deviceId })
   logConflicts(result.conflicts)
+  await recordLostEdits(db, result.conflicts, { deviceId: device?.deviceId, teamId: device?.teamId })
 
   // Stamp the freshness heartbeat the online dashboard (#179) reads. Advances on
   // every call — a real batch or the pusher's idle ping (events: []) — so a

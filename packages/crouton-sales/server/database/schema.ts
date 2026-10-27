@@ -80,6 +80,8 @@ export const salesSyncStatus = sqliteTable('sales_sync_status', {
   lastEventAt: integer('last_event_at', { mode: 'timestamp' }),
   // Rows applied in the most recent non-empty batch (informational hint).
   lastBatchApplied: integer('last_batch_applied').notNull().$default(() => 0),
+  // Last time this till pulled config changes from the cloud (#816).
+  lastPullAt: integer('last_pull_at', { mode: 'timestamp' }),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
 })
 
@@ -116,3 +118,27 @@ export const salesSyncPullState = sqliteTable('sales_sync_pull_state', {
   skip: integer('skip').notNull().$default(() => 0),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
 })
+
+/**
+ * Config edits that lost a conflict on the cloud (#816, epic #801).
+ *
+ * The cloud keeps its own version when a till's config write loses the
+ * conflict rule (#814); without a trace that overwrite is silent. One row per
+ * lost edit: what the till sent (`lostJson`) and what the cloud kept
+ * (`keptJson`), both trimmed snapshots. Cloud-only; the till has no row here.
+ */
+export const salesSyncConflicts = sqliteTable('sales_sync_conflicts', {
+  id: text('id').primaryKey().$default(() => nanoid()),
+  teamId: text('team_id').notNull(),
+  // The till whose edit lost; null for the shared-key setup.
+  deviceId: text('device_id'),
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id').notNull(),
+  // Why it lost (a ConflictReason). The cloud's version always won here.
+  reason: text('reason').notNull(),
+  lostJson: text('lost_json').notNull(),
+  keptJson: text('kept_json').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+}, table => [
+  index('idx_sales_sync_conflicts_team').on(table.teamId, table.createdAt),
+])

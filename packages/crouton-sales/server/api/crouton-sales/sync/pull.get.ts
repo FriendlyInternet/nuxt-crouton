@@ -10,6 +10,7 @@
  */
 import { authenticateSync, deviceOf } from '../../../utils/cloud-sync-auth'
 import { collectConfigChanges, DEFAULT_PULL_LIMIT } from '../../../utils/sync-pull'
+import { recordSyncPull } from '../../../utils/sync-status'
 
 // fallow-ignore-next-line complexity — thin handler: query-param clamping only, the logic is unit-tested in sync-pull.ts
 export default defineEventHandler(async (event) => {
@@ -22,8 +23,10 @@ export default defineEventHandler(async (event) => {
   const since = Number(query.since)
   const limit = Number(query.limit)
   const skip = Number(query.skip)
+  const db = useDB()
+  await recordSyncPull(db, device)
   return collectConfigChanges(
-    useDB(),
+    db,
     device.teamId,
     Number.isFinite(since) && since > 0 ? since : 0,
     {

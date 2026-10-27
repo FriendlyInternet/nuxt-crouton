@@ -47,6 +47,8 @@ export interface IngestConflict {
   incoming: ConfigVersion
   payload: Record<string, unknown>
   operation: string
+  /** The cloud row that was kept (null when it was a delete marker). */
+  current?: Record<string, unknown> | null
 }
 
 export interface IngestOptions {
@@ -227,7 +229,8 @@ async function applyConfigEvent(
     if (verdict.decision === 'keep') {
       result.conflicts?.push({
         id: ackId, entityType: e.entityType, entityId: e.entityId, reason: verdict.reason,
-        local, incoming, payload: e.payload, operation: e.operation ?? 'upsert'
+        local, incoming, payload: e.payload, operation: e.operation ?? 'upsert',
+        current: row ?? null
       })
       result.applied.push(ackId)
       return

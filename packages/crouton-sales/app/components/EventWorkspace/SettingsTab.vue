@@ -638,6 +638,16 @@ function helperExpiry(value: string): string {
             <p class="text-sm text-muted">{{ t('sales.workspace.duplicateEventDesc') }}</p>
           </div>
 
+          <USeparator />
+
+          <!-- Per-till sync: last push/pull and edits that lost a conflict (#816). -->
+          <div class="space-y-2">
+            <p class="text-sm font-medium leading-5">{{ t('sales.sync.title') }}</p>
+            <ClientOnly>
+              <SalesSyncStatus :team-param="teamParam" detailed />
+            </ClientOnly>
+          </div>
+
           <div class="space-y-1">
             <div class="flex items-center justify-between gap-3">
               <p class="text-sm font-medium leading-5">{{ t('sales.workspace.deleteEvent') }}</p>

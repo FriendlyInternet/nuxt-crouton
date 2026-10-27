@@ -201,7 +201,14 @@
       "staleDetail": "laatst gesynchroniseerd {ago} — de kassa is mogelijk offline",
       "waitingDetail": "wachten op de eerste synchronisatie vanaf de kassa",
       "unavailableDetail": "kon de synchronisatiestatus niet ophalen",
-      "tillsSynced": "{n} kassa's synchroniseren"
+      "tillsSynced": "{n} kassa's synchroniseren",
+      "never": "nooit",
+      "lastPush": "Laatst verstuurd",
+      "lastPull": "Laatst opgehaald",
+      "lostEdits": "Wijzigingen die een conflict verloren",
+      "noLostEdits": "Geen wijzigingen hebben een conflict verloren.",
+      "cloudWon": "De versie in de cloud is behouden",
+      "title": "Cloudsynchronisatie"
     },
     "dashboard": {
       "revenue": "Omzet",
