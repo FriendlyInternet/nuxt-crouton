@@ -342,13 +342,18 @@ jobs:
           gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
           FROM="$(gh api "repos/${{ github.repository }}/issues/comments/${FEEDBACK_ID}" --jq .html_url)"
           git fetch origin "work-${ISSUE}" --quiet
+          # The conflict helper (#2848) comes from the checked-out ref, copied aside BEFORE the PR
+          # branch replaces the tree — an old PR branch may not have it yet.
+          cp scripts/conflict-resolution.mjs "$RUNNER_TEMP/conflict-resolution.mjs"
           git checkout -f -B "work-${ISSUE}" "origin/work-${ISSUE}" 2>&1 | tail -1
           echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "from=${FROM}" >> "$GITHUB_OUTPUT"
           # Merge the current base in BEFORE pi edits (#2658). The PR may be days behind its base
           # (#2439 would have undone #2433/#2446); pi must work on — and the finish step stack on —
           # an up-to-date tree. rev_start stays the ORIGINAL head so the push lease still guards
-          # against a concurrent push. A conflict is never auto-resolved: abort and hand to a person.
+          # against a concurrent push. A conflict is NOT aborted (#2848, reverses #2658): the merge
+          # stays in progress and pi resolves it (keep both sides, regenerate generated files); the
+          # `conflict` step below verifies the result and commits it, or posts a 🔀 choice.
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           git config user.name  "nuxt-harness[bot]"
           git config user.email "nuxt-harness[bot]@users.noreply.github.com"
@@ -361,14 +366,16 @@ jobs:
             echo "base merged: ${BASE_TIP}"
             echo "base_merged=${BASE_TIP}" >> "$GITHUB_OUTPUT"
           else
-            CONFLICTS="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
-            git merge --abort || true
-            RPR="$(gh pr list --head "work-${ISSUE}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-            [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2658)_\n\nThis PR is behind `%s` and conflicts in:\n\n%s\n\nA person needs to resolve these; I made no change.' "$BASE" "$CONFLICTS")" 2>&1 | tail -1 || true
-            echo "::error::PR is behind ${BASE} and conflicts — not auto-resolved (#2658)"
-            exit 1
+            # Conflict: give pi the resolution task, with the owner's comment queued after it.
+            CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
+            node "$RUNNER_TEMP/conflict-resolution.mjs" prompt "$BASE" "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-task.txt"
+            { cat "$RUNNER_TEMP/conflict-task.txt"; printf '\nOnly AFTER the conflicts are resolved, also do what this comment asks (skip it if you wrote a choice):\n\n'; cat "$RUNNER_TEMP/feedback.txt"; } > "$RUNNER_TEMP/feedback.combined"
+            mv "$RUNNER_TEMP/feedback.combined" "$RUNNER_TEMP/feedback.txt"
+            echo "conflict=1" >> "$GITHUB_OUTPUT"
+            echo "base_merged=${BASE_TIP}" >> "$GITHUB_OUTPUT"
+            echo "::notice::PR is behind ${BASE} and conflicts — pi resolves it (#2848)"
           fi
-          echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          [ -f .git/MERGE_HEAD ] || echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "revise mode: work-${ISSUE} @ $(git rev-parse --short HEAD), feedback ${FROM}"
 
       # ── The agent: pi.dev (replaces claude-code-action) ──────────────────────────
@@ -482,6 +489,44 @@ jobs:
           # classify WHY a run produced nothing (pi emits no structured execution_file like claude).
           echo "exec_log=$LOG" >> "$GITHUB_OUTPUT"
 
+      # ── CONFLICT CONCLUSION (#2848) — assert pi's resolution, then commit it as ONE merge ──
+      # Runs only when the revise base-merge conflicted. Three outcomes, each visible on the PR:
+      # a choice file (pi found incompatible intents) → abort + one 🔀 A/B; leftover markers or a
+      # failing generator --check / test → abort + fail loudly; otherwise commit the merge and list
+      # how each file was resolved. The checks are the script's (scripts/conflict-resolution.mjs).
+      - id: conflict
+        if: ${{ !cancelled() && steps.revise.outputs.conflict == '1' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ inputs.issue }}
+          EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
+        run: |
+          set -uo pipefail
+          BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
+          CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
+          RPR="$(gh pr list --head "work-${ISSUE}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+          say() { [ -n "$RPR" ] && gh pr comment "$RPR" --body "$1" 2>&1 | tail -1 || true; }
+          HDR='> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
+          UNMERGED="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
+          node "$RUNNER_TEMP/conflict-resolution.mjs" verify "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-files.txt"
+          RC=$?
+          if [ "$RC" = 3 ]; then
+            git merge --abort || true
+            say "$(printf '%s\n\n## 🔀 Blocked — this PR and `%s` want different things in the same place\n**Needs:** answer\n\n@pmcp %s\n\n<details><summary>Conflicting files</summary>\n\n%s\n</details>' "$HDR" "$BASE" "$(cat "$CHOICE_FILE")" "$UNMERGED")"
+            gh issue edit "$ISSUE" --add-label status:blocked 2>&1 | tail -1 || true
+            echo "::notice::conflict is a real clash of intent — asked the owner (#2848)"
+            exit 0
+          elif [ "$RC" != 0 ]; then
+            git merge --abort || true
+            say "$(printf '%s\n\n⚠️ Behind `%s` and conflicting, and my resolution did not pass its checks (see the run log). Nothing was pushed.\n\n%s' "$HDR" "$BASE" "$UNMERGED")"
+            echo "::error::conflict resolution failed its checks (#2848)"
+            exit 1
+          fi
+          LIST="$(sed 's/^/- `/; s/$/` — resolved, both sides kept/' "$RUNNER_TEMP/conflict-files.txt")"
+          git commit -q -m "Merge ${BASE} into work-${ISSUE} (resolve conflicts)" -m "$(printf 'Conflicts resolved by the revise worker (#2848):\n%s' "$(sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt")")"
+          echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          say "$(printf '%s\n\nMerged `%s` into this PR and resolved the conflicts:\n\n%s\n\nGenerated files were rebuilt, not hand-merged; no conflict markers remain and the checks pass.' "$HDR" "$BASE" "$LIST")"
+
       # ── FINISH — commit pi's EDITED-FILE LEDGER (Pattern B), never `git add -A` ──────────
       # pi narrates the commit and stops without emitting it (#1764), so the HARNESS owns the
       # commit. But NOT via `git add -A`: that blanket-adds tool/runtime junk (the #1786 `.pi/npm/`
@@ -508,7 +553,7 @@ jobs:
           # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
           REV_START: ${{ steps.revise.outputs.rev_start }}
           # #2658: REV_START + the current base merged in (equals REV_START when already current).
-          REV_BASE: ${{ steps.revise.outputs.rev_base }}
+          REV_BASE: ${{ steps.conflict.outputs.rev_base || steps.revise.outputs.rev_base }}
           BASE_MERGED: ${{ steps.revise.outputs.base_merged }}
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
