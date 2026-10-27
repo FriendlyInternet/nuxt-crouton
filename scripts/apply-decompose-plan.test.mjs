@@ -14,7 +14,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import {
   parsePlan, PlanError, sanitizeLabels, buildChildBody, planToActions, runActions,
-  formatBlockedBy, parseBlockedBy, isGitIgnored,
+  formatBlockedBy, parseBlockedBy, isGitIgnored, missingMockupReason,
 } from './apply-decompose-plan.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { WORKER_TRIGGER, MAX_DEPTH } from './pipeline-loop-guard.mjs'
@@ -336,4 +336,11 @@ test('the real repo commits the sign-off artifact paths and still ignores screen
     assert.equal(isGitIgnored(p, { exec: realExec }), false, `${p} must be committable`)
   }
   assert.equal(isGitIgnored('screenshots/x.png', { exec: realExec }), true, 'screenshots stay ignored')
+})
+
+test('missingMockupReason: silent for non-UI holds, loud when a mockup was promised but absent (#2809)', () => {
+  assert.equal(missingMockupReason({ summary: 'data model fork', questions: ['equal vs weighted?'] }, []), '')
+  assert.match(missingMockupReason({ summary: 'The mockup shows a phone frame', questions: [] }, []), /no `ui`/)
+  assert.match(missingMockupReason({ summary: 'x', questions: [], ui: '<p/>' }, [], 'boom'), /boom/)
+  assert.equal(missingMockupReason({ summary: 'mockup', questions: [], ui: '<p/>' }, [{ label: 'UI mockup', path: 'a.png' }]), '')
 })

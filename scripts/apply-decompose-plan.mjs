@@ -280,7 +280,7 @@ export function runActions(actions, { repo, exec = realExec, log = console.error
     if (!handler) throw new Error(`unknown action type: ${a.type}`)
     handler(a, state)
   }
-  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked }
+  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked, mockupMissing: !!state.mockupMissing }
 }
 
 // Render the artifacts pi proposed for a design sign-off. BEST-EFFORT: every render is guarded so a
@@ -289,9 +289,9 @@ export function runActions(actions, { repo, exec = realExec, log = console.error
 // The render scripts are plain `node` (schema-review / ui-proposal / ticket-excalidraw) — pi-runnable.
 function renderSignoffArtifacts(signoff, state) {
   const tmp = process.env.RUNNER_TEMP || '/tmp'
-  const out = { schemaMd: '', images: [] }
+  const out = { schemaMd: '', images: [], errors: {} }
   const tryRender = (label, fn) => {
-    try { fn() } catch (e) { state.log(`⚠️  signoff render skipped (${label}): ${e.message}`) }
+    try { fn() } catch (e) { out.errors[label] = e.message; state.log(`⚠️  signoff render skipped (${label}): ${e.message}`) }
   }
   // Only link an image the repo will actually commit (#1933). `git add` on an ignored path is a
   // SILENT no-op — exit 0, no warning — so #1821's two new artifact dirs were never committed and
@@ -340,7 +340,10 @@ function renderSignoffArtifacts(signoff, state) {
       const hf = `${tmp}/signoff-ui.html`
       writeFileSync(hf, signoff.ui)
       mkdirSync('writeups/ui-mockups', { recursive: true })
-      const png = 'writeups/ui-mockups/signoff-ui.png'
+      // A new name per run (#2809): re-holding with the same name collided with the tracked copy on
+      // the epic branch, so every revised mockup was silently dropped and the comment kept showing
+      // the first one (and raw.githubusercontent would cache it anyway).
+      const png = `writeups/ui-mockups/signoff-ui-${process.env.GITHUB_RUN_ID || Date.now()}.png`
       state.exec('node', ['.claude/skills/ui-proposal/render.mjs', hf, png])
       if (linkable(png, 'UI mockup')) { state.artifacts.push(png); out.images.push({ label: 'UI mockup', path: png }) }
     })
@@ -348,6 +351,17 @@ function renderSignoffArtifacts(signoff, state) {
   return out
 }
 
+
+// #2809: a hold that talks about a mockup/UI must show one or say plainly why not. Returns the
+// reason string when a UI mockup was expected but no image was linked, else ''.
+const MOCKUP_RE = /\b(mock-?up|wireframe|layout|screenshot)\b/i
+export function missingMockupReason(signoff, images = [], renderError = '') {
+  if (images.some(i => i.label === 'UI mockup')) return ''
+  const text = [signoff.summary, ...(signoff.questions || [])].join(' ')
+  if (!signoff.ui && !MOCKUP_RE.test(text)) return ''
+  if (!signoff.ui) return 'the plan included no `ui` mockup HTML'
+  return renderError ? `the mockup render failed (${renderError})` : 'the mockup image was not rendered or not committable (gitignored path?)'
+}
 
 const ACTION_HANDLERS = {
   // A leaf: stamp the WS2 block onto the target's CURRENT body (merge, don't clobber prose).
@@ -379,6 +393,12 @@ const ACTION_HANDLERS = {
       lines.push('')
       lines.push('### Rendered')
       for (const img of art.images) lines.push(`**${img.label}**\n\n![${img.label}](${rawBase}/${img.path})`)
+    }
+    const missing = missingMockupReason(a.signoff, art.images, art.errors.ui)
+    if (missing) {
+      lines.push('')
+      lines.push(`⚠️ **Mockup missing:** ${missing}. Reply and ask for it, or answer the forks without one.`)
+      state.mockupMissing = true
     }
     lines.push('')
     lines.push('---')
@@ -489,6 +509,8 @@ function main(argv) {
     // them to the epic branch (their raw URLs are referenced in the posted comment).
     if (summary.artifacts.length) console.log(`SIGNOFF_ARTIFACTS ${summary.artifacts.join(' ')}`)
     if (!summary.held.length) { console.error('signoff plan produced no hold — failing'); process.exit(1) }
+    // The hold posted (with a visible warning), but a UI hold without its image is a defect: go red.
+    if (summary.mockupMissing) { console.error('design hold described a mockup but none was linked — failing (#2809)'); process.exit(1) }
     return
   }
   if (!plan.leaf && summary.created.length === 0) {
