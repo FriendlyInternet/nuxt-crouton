@@ -2,7 +2,7 @@
 // Primary: epics labelled status:to-test. Fallback: merged PRs touching an app that carry a
 // "How to test" section and have no owner "ok" reply.
 import { requireStatusOwner, ghFetch } from '../../utils/github'
-import { appFromFiles, extractHowToTest, extractSteps, firstParagraph, hasOwnerOk, type ToTestItem } from '../../utils/totest-core'
+import { appFromFiles, extractTargetPath, isGithubOnly, extractHowToTest, extractSteps, firstParagraph, hasOwnerOk, type ToTestItem } from '../../utils/totest-core'
 
 const REPO = 'FriendlyInternet/nuxt-crouton'
 const OWNER_LOGIN = 'pmcp'
@@ -35,7 +35,7 @@ export default defineEventHandler(async (event) => {
     const section = extractHowToTest(i.body)
     items.push({
       kind: 'epic', number: i.number, title: i.title, url: i.html_url, app: null,
-      what: firstParagraph(i.body), steps: extractSteps(section), stagingUrl: null
+      what: firstParagraph(i.body), steps: extractSteps(section), to: extractTargetPath(extractSteps(section)), stagingUrl: null
     })
   }
 
@@ -49,10 +49,12 @@ export default defineEventHandler(async (event) => {
       ghFetch<Array<{ body?: string, user?: { login?: string } }>>(event, `/repos/${REPO}/issues/${p.number}/comments?per_page=100`)
     ])
     const app = appFromFiles((files.data ?? []).map(f => f.filename))
-    if (!app || hasOwnerOk(comments.data ?? [], OWNER_LOGIN)) continue
+    const steps = extractSteps(section)
+    if (!app || hasOwnerOk(comments.data ?? [], OWNER_LOGIN) || isGithubOnly(steps)) continue
+    const url = await stagingUrl(event, app)
     items.push({
       kind: 'pr', number: p.number, title: p.title, url: p.html_url, app,
-      what: firstParagraph(p.body), steps: extractSteps(section), stagingUrl: await stagingUrl(event, app), mergedAt: p.merged_at
+      what: firstParagraph(p.body), steps, to: extractTargetPath(steps, url), stagingUrl: url, mergedAt: p.merged_at
     })
   }
 

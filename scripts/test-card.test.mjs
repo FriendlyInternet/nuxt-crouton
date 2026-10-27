@@ -24,9 +24,9 @@ test('idempotent: marker comment or label stops a second card', () => {
   assert.equal(decideTestCard({ ...base, labels: ['status:to-test'] }).post, false)
   assert.equal(decideTestCard({ ...base, labels: ['status:verified'] }).post, false)
 })
-test('extractChecks reads the Done when section, max 3', () => {
+test('extractChecks reads the Done when section, max 5', () => {
   const body = '## Do\n- x\n\n## Done when\n- a\n- b\n- c\n- d\n\n---\nfooter'
-  assert.deepEqual(extractChecks(body), ['a', 'b', 'c'])
+  assert.deepEqual(extractChecks(body), ['a', 'b', 'c', 'd'])
   assert.deepEqual(extractChecks('no section'), [])
 })
 test('buildCard has marker, account, checks, reply line, no password', () => {
@@ -78,4 +78,20 @@ test('hasTestSteps: only a How to test section counts, not Done when', () => {
   assert.equal(hasTestSteps('## Done when\n- it works'), false)
   assert.equal(hasTestSteps('## 🧪 How to test\n\nDedup-checked: x'), false)
   assert.equal(hasTestSteps('no section'), false)
+})
+
+import { deriveApps } from './test-card.mjs'
+test('extractChecks keeps a 4-step How to test (max 5)', () => {
+  assert.equal(extractChecks('## 🧪 How to test\n1. a\n2. b\n3. c\n4. d\n').length, 4)
+})
+test('deriveApps: app from changed files, lockfile ignored, tie broken by text', () => {
+  const apps = [
+    { app: 'velo', watchPaths: ['apps/velo/**', 'pnpm-lock.yaml', 'packages/crouton-core/**'] },
+    { app: 'kassa', watchPaths: ['apps/kassa/**', 'pnpm-lock.yaml', 'packages/crouton-core/**'] }
+  ]
+  assert.deepEqual(deriveApps({ changedFiles: ['apps/velo/a.vue'], apps }), ['velo'])
+  assert.deepEqual(deriveApps({ changedFiles: ['pnpm-lock.yaml'], apps }), [])
+  assert.deepEqual(deriveApps({ changedFiles: ['.github/x.yml'], apps }), [])
+  assert.deepEqual(deriveApps({ changedFiles: ['packages/crouton-core/a.ts'], apps }), ['velo', 'kassa'])
+  assert.deepEqual(deriveApps({ changedFiles: ['packages/crouton-core/a.ts'], apps, text: 'Open Kassa and pay' }), ['kassa'])
 })

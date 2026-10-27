@@ -127,6 +127,7 @@ export function decideClaim({
   now = null,
   ttlMinutes = CLAIM_TTL_MINUTES,
   defaultBranch = DEFAULT_BRANCH,
+  lastReopenedAt = null,
   self = {},
 } = {}) {
   if (issueState === 'closed') {
@@ -137,9 +138,17 @@ export function decideClaim({
   // `self.prs` holds EVERY PR on our branch (a re-run can leave a closed one beside an open one).
   const mine = new Set([...(self?.prs || []), self?.pr].filter((n) => n != null))
   const others = (linkedPRs || []).filter((pr) => pr && !mine.has(pr.number))
-  const merged = others.find((pr) => pr.merged && (pr.baseRef == null || pr.baseRef === defaultBranch))
+  // A merge that PREDATES the issue's last reopen is history: reopening means "work it again"
+  // (#2779 — #813 was reopened after PR #817 removed its feature, and the guard refused it).
+  // An unknown time on either side fails SAFE: the merge still counts.
+  const reopened = lastReopenedAt ? Date.parse(lastReopenedAt) : NaN
+  const predatesReopen = (pr) => {
+    const at = pr.mergedAt ? Date.parse(pr.mergedAt) : NaN
+    return Number.isFinite(reopened) && Number.isFinite(at) && at < reopened
+  }
+  const merged = others.find((pr) => pr.merged && (pr.baseRef == null || pr.baseRef === defaultBranch) && !predatesReopen(pr))
   if (merged) {
-    return { action: 'refuse', claimedBy: merged.number, reason: `PR #${merged.number} already merged for this issue` }
+    return { action: 'refuse', claimedBy: merged.number, reason: `PR #${merged.number} already merged for this issue (reopened after it? that counts as new work — reopen the issue after the merge to work it again)` }
   }
   const open = others.find((pr) => pr.state === 'open')
   if (open) {
