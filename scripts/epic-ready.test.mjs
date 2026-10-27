@@ -131,3 +131,11 @@ test('the carried line satisfies packages-guard — the two agree (#2494 accepta
   assert.equal(g.declared, true)
   assert.equal(g.signal, 'attestation')
 })
+
+import { collectApprovalLines } from './epic-ready.mjs'
+test('collectApprovalLines copies Packages-approved lines from epic + children, de-duplicated', () => {
+  const a = 'intro\nPackages-approved: owner ok #1\n'
+  const b = 'x\n  Packages-approved: owner ok #1\nPackages-approved: other\n```\nPackages-approved: in fence\n```'
+  assert.deepEqual(collectApprovalLines([a, b, null]), ['Packages-approved: owner ok #1', 'Packages-approved: other'])
+  assert.deepEqual(collectApprovalLines(['nothing']), [])
+})

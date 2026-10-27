@@ -4,5 +4,33 @@
   "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-email",
   "reviewLogin": {
     "landing": "/admin/test1/sales/events/vlaamsekermis"
+  },
+  "smoke": {
+    "crud": {
+      "create": {
+        "path": "/api/teams/{teamId}/sales-categories",
+        "method": "POST",
+        "body": {
+          "eventId": "smoke-check",
+          "title": "smoke-{rand}"
+        }
+      },
+      "idFrom": "id",
+      "update": {
+        "path": "/api/teams/{teamId}/sales-categories/{id}",
+        "method": "PATCH",
+        "body": {
+          "title": "smoke-{rand}-b"
+        }
+      },
+      "read": {
+        "path": "/api/teams/{teamId}/sales-categories?ids={id}",
+        "expectIncludes": "smoke-{rand}-b"
+      },
+      "delete": {
+        "path": "/api/teams/{teamId}/sales-categories/{id}",
+        "method": "DELETE"
+      }
+    }
   }
 }
