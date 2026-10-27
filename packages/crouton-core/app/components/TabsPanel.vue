@@ -47,7 +47,7 @@ const props = withDefaults(defineProps<{
 })
 
 const panelUi = computed(() => ({
-  body: ['p-0 sm:p-0 gap-0 sm:gap-0', props.fill && 'overflow-hidden'].filter(Boolean).join(' ')
+  body: props.fill ? 'p-0 sm:p-0 gap-0 sm:gap-0 overflow-hidden' : 'p-0 sm:p-0 gap-0 sm:gap-0'
 }))
 </script>
 
