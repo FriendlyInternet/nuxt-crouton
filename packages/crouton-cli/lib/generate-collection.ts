@@ -1298,9 +1298,6 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   // Handle translation configuration
   config = resolveTranslationConfig({ fields, config, collectionConfig, noTranslations, plural: cases.plural })
 
-  // Check for required modules/dependencies
-  await ensureRequiredDependencies(config, noTranslations, force)
-
   // Prepare data for all generators
   // Typed as Record<string, any> so contribution results can be attached dynamically
   const data: Record<string, any> = buildGeneratorData({ layer, collection, fields, hierarchy, sortable, collab, config, collectionConfig })
@@ -1315,6 +1312,9 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
     printDryRunPlan({ base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, tests, noDb })
     return
   }
+
+  // Check for required modules/dependencies (writes nuxt.config.ts — never in a dry run)
+  await ensureRequiredDependencies(config, noTranslations, force)
 
   // Create directories
   const apiPath = resolveApiPath(layer, collection, cases)
@@ -1363,18 +1363,16 @@ async function writeScaffold({ layer, collection, fields, dialect, autoRelations
   await registerCollectionInAppConfig({ layer, cases, layerPascalCase, layerCamelCase })
 
   // Record generation history for DevTools Generators tab
-  if (!dryRun) {
-    try {
-      recordGenerationHistory({
-        collection: cases.plural,
-        fields: fields.filter(f => f.name !== 'id').map(f => f.name),
-        generator: 'crouton-cli',
-        timestamp: new Date().toISOString(),
-        layer,
-      })
-    } catch {
-      // Non-fatal — history recording failure should not block generation
-    }
+  try {
+    recordGenerationHistory({
+      collection: cases.plural,
+      fields: fields.filter(f => f.name !== 'id').map(f => f.name),
+      generator: 'crouton-cli',
+      timestamp: new Date().toISOString(),
+      layer,
+    })
+  } catch {
+    // Non-fatal — history recording failure should not block generation
   }
 
   console.log(`\n✓ Successfully generated collection '${cases.plural}' in layer '${layer}'`)
@@ -1534,7 +1532,7 @@ async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
   }
 
   // Setup CSS @source directive for Tailwind
-  await setupTailwindCss()
+  if (!dryRun) await setupTailwindCss()
 
   // Generate the type/query registries and the default layout
   if (!dryRun) {
@@ -1647,7 +1645,7 @@ async function persistPromptedConfigs(
 // Ask the setup questions of the packages the app extends (prompts
 // interactively, defaults in CI) and persist the answers.
 async function applyPackageConfiguration(config: Record<string, any>, options: RunConfigOptions): Promise<void> {
-  if (options.noAutoMerge) return
+  if (options.noAutoMerge || options.dryRun) return
 
   const { applyManifestConfiguration } = await import('./utils/manifest-configuration.ts')
   const promptedConfigs = await applyManifestConfiguration(config, resolveExtendedPackages(process.cwd()))
