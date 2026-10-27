@@ -12,7 +12,13 @@ export default defineEventHandler(async (event) => {
   const owner = String(cfg.statusOwnerEmail || '').trim().toLowerCase()
   const session = await useServerAuth(event).api.getSession({ headers: event.headers }).catch(() => null)
   const email = String(session?.user?.email ?? '').trim().toLowerCase()
-  if (!owner || !email || email !== owner) {
+  if (!email) {
+    // Signed out: send to sign-in and come back here afterwards (path is built from a validated slug).
+    const slug = String(getRouterParam(event, 'app') ?? '')
+    const back = /^[a-z0-9-]+$/.test(slug) ? `/api/status/login/${slug}` : '/'
+    return sendRedirect(event, `/auth/login?redirect=${encodeURIComponent(back)}`, 302)
+  }
+  if (!owner || email !== owner) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 

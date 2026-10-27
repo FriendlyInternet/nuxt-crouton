@@ -14,6 +14,8 @@ import type { LayoutTree } from '@fyit/crouton-core/app/types/layout'
 definePageMeta({ layout: 'admin', middleware: ['auth'] })
 
 const LAYOUT_ID = 'default'
+// One record selection per collection, shared by the blocks on this page (#2598).
+provideCollectionSelections()
 
 const tree = ref<LayoutTree | null>(null)
 const loading = ref(true)
