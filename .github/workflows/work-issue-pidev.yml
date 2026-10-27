@@ -180,6 +180,33 @@ jobs:
         id: claim
         run: node scripts/pipeline-loop-guard.mjs claim-guard < "$RUNNER_TEMP/claim-facts.json"
 
+      # ── TRAFFIC CONTROL (#2786) — a ticket waits while open pipeline work touches its package ──
+      # Two tickets on one package built at once collide at merge. Facts are gathered here; the
+      # DECISION is the pure, unit-tested `decideTraffic`. On `wait` the ticket gets status:blocked
+      # + a comment, and the run stops (deliberate, like the claim guard). traffic-release.yml
+      # starts it again when the blocking work lands. Fails OPEN: a gather glitch must not wedge.
+      - name: Traffic control
+        id: traffic
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const issue_number = Number('${{ inputs.issue || github.event.issue.number }}')
+            const tc = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
+            let verdict
+            try {
+              const { data: issue } = await github.rest.issues.get({ ...context.repo, issue_number })
+              const labels = issue.labels.map((l) => l.name || l)
+              const others = await tc.gatherTrafficFacts({ github, context, issueNumber: issue_number, labels })
+              verdict = tc.decideTraffic({ issue: issue_number, labels, others })
+            } catch (e) {
+              core.warning(`traffic control could not read its facts (${e.message}) — proceeding.`)
+              return
+            }
+            if (verdict.action === 'proceed') { core.info(`Traffic control OK — ${verdict.reason}.`); return }
+            await tc.applyWait({ github, context, issueNumber: issue_number, verdict })
+            core.setFailed(`Traffic control: ${verdict.reason}. Deliberate stop — the ticket restarts when that work lands (#2786).`)
+
       # ── FOLLOW-ALONG BREADCRUMB (#2176) — post a live run link ON the ticket ──────────
       # The owner couldn't follow a run from its issue: the worker only comments at the ENDS
       # ("done → PR #N" on success, the red no-op box on failure), so a run in flight was
@@ -498,7 +525,7 @@ jobs:
         # still persisted — but NOT after a claim-guard refusal (#2027): pi never ran, there is
         # nothing to finish, and the step's own failure then fed the artifact-gate a false
         # "the harness crashed" signal.
-        if: ${{ !cancelled() && steps.claim.outcome != 'failure' }}
+        if: ${{ !cancelled() && steps.claim.outcome != 'failure' && steps.traffic.outcome != 'failure' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -1056,7 +1083,7 @@ jobs:
           exit 1
 
       - name: Artifact-gate — fail if the agent produced nothing
-        if: ${{ always() && steps.claim.outcome != 'failure' }}
+        if: ${{ always() && steps.claim.outcome != 'failure' && steps.traffic.outcome != 'failure' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           PI_EXEC_LOG: ${{ steps.pi.outputs.exec_log }}

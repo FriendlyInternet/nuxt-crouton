@@ -1,0 +1,33 @@
+# Traffic control, release side (#2786). When a pipeline PR (`work-<n>`) closes, re-check every
+# ticket parked by the start-of-run traffic check and start the ones that are now clear.
+# Logic + tests: scripts/traffic-control.mjs. Workflow-change: new workflow, owner grant #2108.
+name: traffic-release
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  release:
+    if: startsWith(github.event.pull_request.head.ref, 'work-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      # App token (not GITHUB_TOKEN): its label events must cascade into work-issue-pidev.yml.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { releaseWaiting } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/traffic-control.mjs`)
+            const released = await releaseWaiting({ github, context })
+            core.info(released.length ? `released: ${released.map((n) => '#' + n).join(', ')}` : 'nothing to release')
