@@ -1,0 +1,146 @@
+name: Ticket review (independent reviewer — pi.dev)
+
+# #2776 (epic #2754) — before an epic's first ticket starts, the same top-model reviewer as the plan
+# review (the `review` tier of .claude/pipeline-models.json) reads the epic, its Decisions log, every
+# child ticket and the code they name (.claude/agents/ticket-reviewer.md) and returns go / no-go /
+# needs-owner per ticket:
+#   go           → label the epic `tickets:approved`, then release the unblocked children
+#   no-go        → epic held `status:blocked`, the comment names each ticket and why; fix, re-run
+#   needs-owner  → one yes/no question, epic held `status:blocked`
+# Started by epic-scaffold.mjs / apply-decompose-plan.mjs (which create the children WITHOUT a
+# trigger label), or by hand: `gh workflow run ticket-review.yml -f epic=N`.
+#
+# SAFETY: the pi step is READ-ONLY and holds NO GitHub token (checkout persist-credentials:false;
+# the App token is only used by the trusted steps). No hard-coded model and NO silent fallback.
+#
+# Workflow-change: new workflow for the ticket-review gate (#2776).
+
+on:
+  workflow_dispatch:
+    inputs:
+      epic:
+        description: Epic issue number whose tickets to review
+        required: true
+
+concurrency:
+  group: ticket-review-${{ inputs.epic }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+    env:
+      EPIC: ${{ inputs.epic }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Resolve review model
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs review)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "review model: $MODEL (from .claude/pipeline-models.json)"
+
+      - name: Set up pi + Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      - name: Preflight — the review model runs on claude-bridge
+        env:
+          MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -uo pipefail
+          OUT="$(timeout 180 pi --print --approve --provider claude-bridge --model "$MODEL" 'Reply with exactly the two letters OK and nothing else.' 2>&1)"
+          if ! echo "$OUT" | grep -q 'OK'; then
+            echo "$OUT" | tail -n 20
+            echo "::error::review model $MODEL did not answer on provider claude-bridge — ticket review NOT run, no fallback to another model (#2776)"
+            gh issue comment "$EPIC" --body "$(printf '<!-- ticket-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _ticket review (#2776)_\n\n🔴 **Ticket review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). Nothing was approved and no ticket started.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$MODEL")" || true
+            exit 1
+          fi
+
+      - name: Gather the epic and its tickets
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/ticket-review"; mkdir -p "$D"
+          { gh issue view "$EPIC" --json title,body --jq '"# " + .title + "\n\n" + .body'
+            echo; echo "## Epic comments"
+            gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/comments?per_page=100" --jq '.[] | "---\n" + .user.login + ":\n" + .body'
+          } > "$D/epic.md"
+          gh api --paginate "repos/${{ github.repository }}/issues/${EPIC}/sub_issues?per_page=100" \
+            --jq '[.[] | select(.state == "open") | {number, title, body, labels: [.labels[].name]}]' \
+            | jq -s 'add // []' > "$D/tickets.json"
+          echo "tickets: $(jq length "$D/tickets.json")"
+          [ "$(jq length "$D/tickets.json")" -gt 0 ] || { echo "::error::epic #$EPIC has no open sub-issues to review"; exit 1; }
+
+      # ── The reviewer: READ-ONLY, no GitHub token in its env ──────────────────────
+      - id: pi
+        env:
+          PI_MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/ticket-review"
+          awk '/^---$/ && n < 2 { n++; next } n >= 2' .claude/agents/ticket-reviewer.md \
+            | sed -e "s#{{epic}}#${EPIC}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
+                  -e "s#{{epic_file}}#$D/epic.md#g" -e "s#{{tickets_file}}#$D/tickets.json#g" > "$D/prompt.txt"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills "$(cat "$D/prompt.txt")" 2>&1 | tee "$D/pi.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Post the verdict and release
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MODEL: ${{ steps.model.outputs.model }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/ticket-review"
+          fail() {
+            echo "::error::$1"
+            gh issue comment "$EPIC" --body "$(printf '<!-- ticket-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _ticket review (#2776)_\n\n🔴 **Ticket review %s** — nothing was approved and no ticket started.\n**Needs:** action — re-run [the review](%s).' "$1" "$RUN_URL")" || true
+            exit 1
+          }
+          [ -s "$D/verdict.md" ] || fail "produced no verdict"
+          DECISION="$(node scripts/lib/ticket-verdict.mjs "$D/tickets.json" "$D/verdict.md")" || { echo "$DECISION"; fail "verdict was malformed"; }
+          VERDICT="$(echo "$DECISION" | jq -r .verdict)"
+          node scripts/lib/ticket-verdict.mjs render "$D/tickets.json" "$D/verdict.md" "$MODEL" > "$D/comment.md"
+          # remove-then-add: re-adding a label the issue already carries fires no event.
+          gh issue edit "$EPIC" --remove-label "tickets:approved" 2>/dev/null || true
+          URL="$(gh issue comment "$EPIC" --body-file "$D/comment.md")"
+          echo "verdict: $VERDICT → $URL"
+          case "$VERDICT" in
+            go)
+              gh issue edit "$EPIC" --add-label "tickets:approved"
+              node scripts/lib/ticket-verdict.mjs releasable "$D/tickets.json" | jq -c '.[]' | while read -r R; do
+                N="$(echo "$R" | jq -r .number)"; L="$(echo "$R" | jq -r .label)"
+                gh issue edit "$N" --add-label "$L"
+                echo "released #$N with $L"
+              done
+              ;;
+            *)
+              gh issue edit "$EPIC" --add-label "status:blocked"
+              ;;
+          esac

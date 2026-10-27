@@ -1,0 +1,27 @@
+<!-- ticket-review:v1 -->
+## Ticket #1
+### Verdict
+go
+### Rubric
+- 3: PASS — single call site checked
+- 4: PASS — one-line change
+- 5: PASS — no casts
+- 6: PASS — one change
+- 7: PASS — mechanical
+- 8: PASS — a test aims at the rule
+- 9: PASS — no conflict with the record
+### Question
+
+## Ticket #2
+### Verdict
+go
+### Rubric
+- 3: PASS — single call site checked
+- 4: PASS — one-line change
+- 5: PASS — no casts
+- 6: PASS — one change
+- 7: PASS — mechanical
+- 8: PASS — a test aims at the rule
+- 9: PASS — no conflict with the record
+### Question
+

@@ -35,11 +35,13 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { writePipelineBlock } from './pipeline-context.mjs'
+import { shouldReview, APPROVED_LABEL } from './lib/ticket-verdict.mjs'
 import { labelForChild, MAX_CHILDREN, MAX_DEPTH, WORKER_TRIGGER } from './pipeline-loop-guard.mjs'
 
 export class PlanError extends Error {}
 
 /** Parse + validate the plan pi wrote. Throws PlanError on anything malformed (→ honest failure). */
+// fallow-ignore-next-line complexity -- unchanged by #2776; the import added above shifted its line, so fallow's position-based attribution now charges this inherited finding to the PR
 export function parsePlan(raw) {
   let p
   if (typeof raw === 'string') {
@@ -168,7 +170,7 @@ export function buildChildBody(body, { epic, childDepth, epic_branch, dispatch =
  * delegate-pi chain always terminates.
  */
 export function planToActions(plan, ctx) {
-  const { target, epic, depth = 0, epic_branch, knownLabels = [] } = ctx
+  const { target, epic, depth = 0, epic_branch, knownLabels = [], reviewTickets = false } = ctx
   const childDepth = (Number.isFinite(depth) ? depth : 0) + 1
   const actions = []
   if (plan.signoff) {
@@ -203,7 +205,7 @@ export function planToActions(plan, ctx) {
     actions.push({
       type: 'create', ref: `child${i}`,
       title: c.title,
-      body: buildChildBody(c.body, { epic, childDepth, epic_branch, dispatch: isBlocked ? dispatch : null }),
+      body: buildChildBody(c.body, { epic, childDepth, epic_branch, dispatch: isBlocked || reviewTickets ? dispatch : null }),
       labels: kept, droppedLabels: dropped,
     })
     actions.push({ type: 'link', parent: target, ref: `child${i}` })
@@ -217,6 +219,12 @@ export function planToActions(plan, ctx) {
       actions.push({ type: 'note-blocked', ref: `child${i}`, blockedByRefs: deps.map(d => `child${d}`) })
     }
   })
+  // TICKET REVIEW (#2776): an unreviewed epic starts nothing. The unblocked children keep their
+  // recorded `dispatch=` and wait; ticket-review.yml releases them once the tickets are approved.
+  if (reviewTickets) {
+    actions.push({ type: 'request-ticket-review', epic: target })
+    return actions
+  }
   plan.children.forEach((c, i) => {
     if ((c.blockedBy || []).length) return
     actions.push({ type: 'trigger-label', ref: `child${i}`, label: labelForChild({ depth: childDepth, isLeaf: !c.needsSplit, maxDepth: MAX_DEPTH }) })
@@ -423,6 +431,11 @@ const ACTION_HANDLERS = {
     ghAddLabel(exec, repo, child, a.label)
     labelled.push({ issue: child, label: a.label })
   },
+  // Hold-then-review (#2776): start the ticket review run, which releases the first tickets on go.
+  'request-ticket-review'(a, { repo, exec, log }) {
+    exec('gh', ['workflow', 'run', 'ticket-review.yml', '--repo', repo, '-f', `epic=${a.epic}`])
+    log(`ticket review requested for epic #${a.epic} — no ticket starts until it is approved`)
+  },
   // ORDERING (#1750): stamp `Blocked-by: #N` onto a child that must wait. This is the ONLY
   // record of the dependency, and the format is load-bearing, not decoration: the wave scheduler
   // (`wave-gate.mjs` → `parseBlockers`, #283) reads these lines back off the body to decide what a
@@ -465,6 +478,13 @@ function knownLabelsFromFile(path = '.github/labels.yml') {
   } catch { return [] }
 }
 
+/** Does the issue carry this label? A failed lookup answers false, so the review runs (fail closed). */
+function hasLabel(repo, n, label) {
+  try {
+    return realExec('gh', ['api', issueApi(repo, n), '-q', '[.labels[].name]|join(",")']).split(',').includes(label)
+  } catch { return false }
+}
+
 function main(argv) {
   const args = parseArgs(argv)
   if (args._[0] !== 'apply' || !args._[1]) {
@@ -479,6 +499,11 @@ function main(argv) {
     depth: args.depth != null ? Number(args.depth) : 0,
     epic_branch: args['epic-branch'] || '',
     knownLabels: knownLabelsFromFile(),
+    reviewTickets: false,
+  }
+  // #2776: the first split of an epic is reviewed before anything starts (once — `tickets:approved`).
+  if (!plan.leaf && !plan.signoff && ctx.depth === 0 && shouldReview(plan.children)) {
+    ctx.reviewTickets = !hasLabel(args.repo, target, APPROVED_LABEL)
   }
   const actions = planToActions(plan, ctx)
   const summary = runActions(actions, { repo: args.repo })
