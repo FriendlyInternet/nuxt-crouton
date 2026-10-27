@@ -47,3 +47,20 @@ test('an interactive-agent comment that addresses the worker revises (#2453)', (
   assert.equal(d.revise, true)
   assert.match(d.reason, /addressed to the worker/)
 })
+
+test('a skipped 🛠 action comment with no **Worker:** line earns a reply; status comments do not (#2707)', () => {
+  const head = "> 🤖 **Claude Code** · interactive agent · _x_\n\n"
+  const act = shouldRevise(owner(head + '🛠 **action** — please add the page\n'))
+  assert.equal(act.revise, false)
+  assert.equal(act.reply, true)
+  assert.equal(Boolean(shouldRevise(owner(head + '✅ **done** — shipped\n')).reply), false)
+  assert.equal(Boolean(shouldRevise(owner(head + '👀 **review**\n')).reply), false)
+  // addressed to the worker → revises, no "ignored" reply
+  const addressed = shouldRevise(owner(head + '🛠 **action**\n**Worker:** do X\n'))
+  assert.equal(addressed.revise, true)
+  assert.equal(Boolean(addressed.reply), false)
+  // pipeline comments never get one
+  assert.equal(Boolean(shouldRevise(owner('> 🤖 **pi.dev harness** · agent pipeline (CI)\n\n🛠 **action**')).reply), false)
+  const pr = { headRef: 'work-7', state: 'open' }
+  assert.equal(routePrComment({ pr, comment: owner(head + '🛠 act') }).reply, true)
+})
