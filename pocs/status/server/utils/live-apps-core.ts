@@ -23,7 +23,7 @@ export function liveAppFromConfig(app: string, cfg: { stagingUrl?: string, revie
   return { app, stagingUrl: cfg.stagingUrl ?? null, hasSignIn: cfg.reviewLogin !== false }
 }
 
-export type PreviewDecision = { gone: false, url: string } | { gone: true, pr: number }
+export type PreviewDecision = { gone: false, url: string } | { gone: true, pr: number } | { gone: 'none', pr: number }
 
 /** Decides a `pr<N>` login: redirect to the preview, or show the "build is gone" page. */
 export function decidePreview(openPreviews: Preview[], app: string, key: string): PreviewDecision {
@@ -51,19 +51,6 @@ export function configPathsFromTree(tree: Array<{ path: string, type: string }>)
   })
 }
 
-/** Preview entries from repo-wide issue comments, kept only for the given open PRs. */
-export function previewsFromComments(comments: Array<{ body?: string, issue_url?: string }>, open: Map<number, { title: string, updated_at: string }>): Preview[] {
-  const seen = new Set<string>()
-  return comments.flatMap((c) => {
-    const pr = Number(/\/issues\/(\d+)$/.exec(c.issue_url ?? '')?.[1])
-    const meta = open.get(pr)
-    const parsed = meta ? parseDeployComment(c.body) : null
-    if (!meta || !parsed || seen.has(`${parsed.app}#${pr}`)) return []
-    seen.add(`${parsed.app}#${pr}`)
-    return [{ app: parsed.app, pr, title: meta.title, updatedAt: meta.updated_at, url: parsed.url }]
-  })
-}
-
 /** Every app with a deploy.config.json on main: 1 tree call + 1 read per config. Failed reads go into `error`. */
 export async function loadLiveApps(get: GhGet): Promise<{ data: LiveApp[], error: string | null }> {
   const tree = await get<{ tree: Array<{ path: string, type: string }>, truncated?: boolean }>(`/repos/${REPO}/git/trees/main?recursive=1`)
@@ -79,18 +66,55 @@ export async function loadLiveApps(get: GhGet): Promise<{ data: LiveApp[], error
   return { data: apps.filter((a): a is LiveApp => !!a).sort((a, b) => a.app.localeCompare(b.app)), error: errors.length ? errors.join('; ') : null }
 }
 
-/** Open-PR previews: 1 pulls call + ≤3 repo-wide comment pages (most recently updated first — the sticky deploy comment is edited on each deploy), not one call per PR. */
+/** Open-PR previews: 1 pulls call + 1 comments read per recently-updated open PR, so it doesn't depend on repo-wide comment volume. */
 export async function loadPreviews(get: GhGet, now = Date.now()): Promise<{ data: Preview[], error: string | null }> {
   const pulls = await get<Array<{ number: number, title: string, updated_at: string }>>(`/repos/${REPO}/pulls?state=open&per_page=50`, { fresh: true })
   if (pulls.error) return { data: [], error: pulls.error }
-  const open = new Map((pulls.data ?? []).map(p => [p.number, p]))
-  const since = new Date(now - 14 * 86400_000).toISOString()
-  const comments: Array<{ body?: string, issue_url?: string }> = []
+  const cutoff = now - 14 * 86400_000
+  const recent = (pulls.data ?? []).filter(p => !p.updated_at || Date.parse(p.updated_at) >= cutoff)
+  const errors: string[] = []
+  const perPr = await Promise.all(recent.map(async (p) => {
+    const r = await get<Array<{ body?: string }>>(`/repos/${REPO}/issues/${p.number}/comments?per_page=100`)
+    if (r.error) { errors.push(`#${p.number}: ${r.error}`); return [] }
+    let comments = r.data ?? []
+    // A busy PR has more than one page: the sticky deploy comment is old, so read the newest page too.
+    if (comments.length === 100) {
+      const last = await get<Array<{ body?: string }>>(`/repos/${REPO}/issues/${p.number}/comments?per_page=100&page=2`)
+      if (!last.error) comments = [...comments, ...(last.data ?? [])]
+    }
+    const seen = new Set<string>()
+    return comments.flatMap((c): Preview[] => {
+      const parsed = parseDeployComment(c.body)
+      if (!parsed || seen.has(parsed.app)) return []
+      seen.add(parsed.app)
+      return [{ app: parsed.app, pr: p.number, title: p.title, updatedAt: p.updated_at, url: parsed.url }]
+    })
+  }))
+  return { data: perPr.flat(), error: errors.length ? errors.join('; ') : null }
+}
+
+/** Resolves a `pr<N>` login from that PR's own state + comments (fresh), not the repo-wide list. */
+export async function decidePrLogin(get: GhGet, app: string, key: string): Promise<PreviewDecision> {
+  const pr = Number(key.slice(2))
+  const info = await get<{ state?: string }>(`/repos/${REPO}/pulls/${pr}`, { fresh: true })
+  if (info.data?.state === 'closed') return { gone: true, pr }
+  const comments: Array<{ body?: string }> = []
   for (let page = 1; page <= 3; page++) {
-    const r = await get<Array<{ body?: string, issue_url?: string }>>(`/repos/${REPO}/issues/comments?since=${since}&sort=updated&direction=desc&per_page=100&page=${page}`)
-    if (r.error) return { data: previewsFromComments(comments, open), error: r.error }
+    const r = await get<Array<{ body?: string }>>(`/repos/${REPO}/issues/${pr}/comments?per_page=100&page=${page}`, { fresh: true })
+    if (r.error) break
     comments.push(...(r.data ?? []))
     if ((r.data ?? []).length < 100) break
   }
-  return { data: previewsFromComments(comments, open), error: null }
+  for (const c of comments) {
+    const parsed = parseDeployComment(c.body)
+    if (parsed?.app === app) return { gone: false, url: parsed.url }
+  }
+  // Only "gone" when GitHub says closed; an open (or unreadable) PR just has no build yet.
+  return { gone: 'none', pr }
+}
+
+/** Page for an open PR that has no test build for the app yet. */
+export function previewNoneHtml(pr: number, app: string, stagingUrl: string): string {
+  const prUrl = `https://github.com/${REPO}/pull/${pr}`
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PR #${pr} has no test build</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>PR #${pr} has no test build yet</h1><p>No <strong>${esc(app)}</strong> test build has been posted on this PR.</p><p><a href="${esc(prUrl)}">Open PR #${pr}</a> · <a href="${esc(stagingUrl)}">Open ${esc(app)} staging</a></p></body>`
 }

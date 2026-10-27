@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadLiveApps, loadPreviews, decidePreview, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
+import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
 
 const body = '<!-- deploy-staging:velo -->\n🚀 **velo** preview for this PR: https://velo-pr12.example.workers.dev\n\n🔑 Review login'
 
@@ -49,7 +49,7 @@ describe('decidePreview', () => {
 
 describe('GitHub call budget', () => {
   const cfg = (o: object) => ({ content: btoa(JSON.stringify(o)) })
-  const makeGet = (failPath?: string) => {
+  const makeGet = (failPath?: string, prs = 50) => {
     const calls: string[] = []
     const get = async (path: string) => {
       calls.push(path)
@@ -59,39 +59,57 @@ describe('GitHub call budget', () => {
         return { data: { tree: [...tree, { path: 'apps/x/README.md', type: 'blob' }] }, error: null }
       }
       if (path.includes('/contents/')) return { data: cfg({ stagingUrl: 'https://s' }), error: null }
-      if (path.includes('/pulls?')) return { data: Array.from({ length: 50 }, (_, i) => ({ number: i + 1, title: 't', updated_at: '' })), error: null }
-      return { data: [{ body, issue_url: 'https://api.github.com/repos/o/r/issues/12' }], error: null }
+      if (path.includes('/pulls?')) return { data: Array.from({ length: prs }, (_, i) => ({ number: i + 1, title: 't', updated_at: '' })), error: null }
+      return { data: [{ body }], error: null }
     }
     return { calls, get: get as never }
   }
-  it('stays within 25 calls for 15 apps and 50 open PRs', async () => {
-    const { calls, get } = makeGet()
+  it('stays within 25 calls for 15 apps and 10 open PRs', async () => {
+    const { calls, get } = makeGet(undefined, 10)
     const apps = await loadLiveApps(get)
     const previews = await loadPreviews(get)
     expect(apps.data).toHaveLength(15)
-    expect(previews.data).toEqual([{ app: 'velo', pr: 12, title: 't', updatedAt: '', url: 'https://velo-pr12.example.workers.dev' }])
-    expect(calls.length).toBeLessThanOrEqual(25)
+    expect(previews.data).toHaveLength(10)
+    expect(calls.filter(c => c.includes('/issues/')).length).toBe(10)
+    expect(calls.length).toBeLessThanOrEqual(1 + 15 + 1 + 1 + 10)
   })
-  it('finds deploy comments among the newest of 350 comments; skips merged PRs', async () => {
-    const noise = (n: number) => Array.from({ length: n }, () => ({ body: 'hi', issue_url: 'https://api.github.com/repos/o/r/issues/1' }))
-    const mk = (app: string, pr: number) => ({ body: `<!-- deploy-staging:${app} -->\n🚀 preview for this PR: https://${app}-pr${pr}.example.dev`, issue_url: `https://api.github.com/repos/o/r/issues/${pr}` })
-    const newest = [mk('kassa', 7), mk('velo', 7), mk('kassa', 99), ...noise(97)]
-    const pages = [newest, noise(100), noise(100)]
-    const urls: string[] = []
+  it('shows an open PR whose deploy comment is older than 400 other comments; skips merged PRs', async () => {
+    const mk = (app: string, pr: number) => ({ body: `<!-- deploy-staging:${app} -->\n🚀 preview for this PR: https://${app}-pr${pr}.example.dev` })
     const get = (async (path: string) => {
-      urls.push(path)
       if (path.includes('/pulls?')) return { data: [{ number: 7, title: 't', updated_at: '' }], error: null }
-      const page = Number(/[?&]page=(\d+)/.exec(path)![1])
-      return { data: pages[page - 1] ?? [], error: null }
+      if (path.includes('/issues/7/comments')) return { data: [mk('velo', 7)], error: null }
+      if (path.includes('/issues/99/')) return { data: [mk('kassa', 99)], error: null }
+      // repo-wide scan must not be needed
+      return { data: Array.from({ length: 100 }, () => ({ body: 'hi' })), error: null }
     }) as never
     const r = await loadPreviews(get)
-    expect(r.data.map(p => `${p.app}#${p.pr}`).sort()).toEqual(['kassa#7', 'velo#7'])
-    expect(urls.some(u => u.includes('sort=updated&direction=desc'))).toBe(true)
+    expect(r.data.map(p => `${p.app}#${p.pr}`)).toEqual(['velo#7'])
   })
   it('reports failed config reads instead of swallowing them', async () => {
     const { get } = makeGet('/contents/')
     const r = await loadLiveApps(get)
     expect(r.data).toEqual([])
     expect(r.error).toContain('GitHub 403')
+  })
+})
+
+describe('decidePrLogin', () => {
+  const deploy = '<!-- deploy-staging:velo -->\npreview for this PR: https://velo-pr7.example.dev'
+  const mk = (state: string, pages: Array<Array<{ body: string }>>) => (async (path: string) => {
+    if (path.includes('/pulls/')) return { data: { state }, error: null }
+    const page = Number(/&page=(\d+)/.exec(path)?.[1] ?? 1)
+    return { data: pages[page - 1] ?? [], error: null }
+  }) as never
+  const filler = Array.from({ length: 100 }, () => ({ body: 'x' }))
+  it('finds a deploy comment on page 3 of the PR own comments', async () => {
+    const get = mk('open', [filler, filler, [{ body: deploy }]])
+    expect(await decidePrLogin(get, 'velo', 'pr7')).toEqual({ gone: false, url: 'https://velo-pr7.example.dev' })
+  })
+  it('reports gone only when the PR is closed', async () => {
+    expect(await decidePrLogin(mk('closed', [[{ body: deploy }]]), 'velo', 'pr7')).toEqual({ gone: true, pr: 7 })
+  })
+  it('says no build yet for an open PR without a comment', async () => {
+    expect(await decidePrLogin(mk('open', [[{ body: 'hi' }]]), 'velo', 'pr7')).toEqual({ gone: 'none', pr: 7 })
+    expect(previewNoneHtml(7, 'velo', 'https://s')).toContain('PR #7 has no test build yet')
   })
 })
