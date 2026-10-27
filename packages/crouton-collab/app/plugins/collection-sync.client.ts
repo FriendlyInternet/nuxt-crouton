@@ -39,14 +39,18 @@ export default defineNuxtPlugin((nuxtApp) => {
         // Find all cache keys for this collection and refresh them
         const prefix = `collection:${collection}:`
 
-        // Get all matching keys from Nuxt's async data payload
-        const allKeys = Object.keys(nuxtApp.payload.data || {})
-        const matchingKeys = allKeys.filter(key => key.startsWith(prefix))
+        // payload.data only holds SSR-hydrated entries; queries created client-side
+        // (e.g. after client navigation) live in the live async-data registry, so
+        // read both — otherwise the refresh silently matches nothing.
+        const allKeys = [...new Set([
+          ...Object.keys(nuxtApp.payload.data || {}),
+          ...Object.keys((nuxtApp as any)._asyncData || {})
+        ])]
+        const matchingKeys = new Set(allKeys.filter(key => key.startsWith(prefix)))
+        // Same fallback useCollectionMutation uses for the base collection key
+        matchingKeys.add(`${prefix}{}`)
 
-        if (matchingKeys.length > 0) {
-          // Refresh all matching queries
-          await Promise.all(matchingKeys.map(key => refreshNuxtData(key)))
-        }
+        await Promise.all([...matchingKeys].map(key => refreshNuxtData(key)))
 
         // Also refresh individual item caches for this collection
         const itemPrefix = `collection-item:${collection}:`
