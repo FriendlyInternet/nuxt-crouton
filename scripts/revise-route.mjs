@@ -12,6 +12,9 @@ import { pathToFileURL } from 'node:url'
 import { isApproval } from './approval.mjs'
 import { parseCommand } from './comment-command.mjs'
 
+/** The skip reason a 🛠 action comment gets a "not sent to the worker" reply for (#2707). */
+export const IGNORED_AGENT_REASON = 'an interactive-agent comment without a **Worker:** line'
+
 const COLLABORATOR = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
 
 /** `work-2414` → 2414; anything else → null. The pi worker always pushes to `work-<issue>`. */
@@ -27,7 +30,7 @@ export function workIssueFromRef(ref) {
  * @param {string} c.body               the comment text
  * @param {string} [c.authorAssociation] OWNER / MEMBER / COLLABORATOR / …
  * @param {string} [c.userType]          'User' or 'Bot'
- * @returns {{ revise: boolean, reason: string }}
+ * @returns {{ revise: boolean, reason: string, reply?: boolean }}
  */
 export function shouldRevise({ body, authorAssociation, userType } = {}) {
   const text = String(body || '').trim()
@@ -44,7 +47,10 @@ export function shouldRevise({ body, authorAssociation, userType } = {}) {
     const interactive = /^>\s*🤖[^\n]*interactive agent/iu.test(text)
     const addressesWorker = /^\s*\*\*Worker:\*\*/mu.test(text)
     if (!interactive) return { revise: false, reason: 'a pipeline comment (🤖 header)' }
-    if (!addressesWorker) return { revise: false, reason: 'an interactive-agent comment without a **Worker:** line' }
+    // Only a 🛠 action brief reads like a request; status/FYI comments stay silent (#2707).
+    if (!addressesWorker) {
+      return { revise: false, reason: IGNORED_AGENT_REASON, reply: /^\s*🛠/mu.test(text) }
+    }
     return { revise: true, reason: 'an interactive-agent change request addressed to the worker' }
   }
   if (isApproval(text)) return { revise: false, reason: 'an approval — approve-draft-pr releases it' }
@@ -55,14 +61,14 @@ export function shouldRevise({ body, authorAssociation, userType } = {}) {
 
 /**
  * The PR side: a comment on an OPEN PR whose head is `work-<N>`.
- * @returns {{ revise: boolean, issue: number|null, reason: string }}
+ * @returns {{ revise: boolean, issue: number|null, reason: string, reply: boolean }}
  */
 export function routePrComment({ pr = {}, comment = {} } = {}) {
   const issue = workIssueFromRef(pr.headRef)
-  if (!issue) return { revise: false, issue: null, reason: `head \`${pr.headRef}\` is not a pi worker branch` }
-  if (pr.state !== 'open') return { revise: false, issue, reason: 'the PR is not open' }
+  if (!issue) return { revise: false, issue: null, reason: `head \`${pr.headRef}\` is not a pi worker branch`, reply: false }
+  if (pr.state !== 'open') return { revise: false, issue, reason: 'the PR is not open', reply: false }
   const d = shouldRevise(comment)
-  return { revise: d.revise, issue, reason: d.reason }
+  return { revise: d.revise, issue, reason: d.reason, reply: Boolean(d.reply) }
 }
 
 // CLI: `node scripts/revise-route.mjs pr < event.json` → prints {revise,issue,reason}.

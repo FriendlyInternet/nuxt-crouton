@@ -39,3 +39,8 @@ test('logTail: respects maxLines and maxBytes', () => {
     assert.ok(Buffer.byteLength(small) <= 50)
     assert.equal(small.endsWith('##[error]boom'), true)
   })
+
+test('logTail: strips ANSI colour codes, real and rendered', () => {
+  const out = logTail(`${ts}\x1b[36;1mpnpm test\x1b[0m\n${ts}^[[36;1mrun\n${ts}##[error]x`)
+  assert.equal(out.text, 'pnpm test\nrun\n##[error]x')
+})
