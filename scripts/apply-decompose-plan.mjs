@@ -35,11 +35,13 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSy
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { writePipelineBlock } from './pipeline-context.mjs'
+import { shouldReview, APPROVED_LABEL } from './lib/ticket-verdict.mjs'
 import { labelForChild, MAX_CHILDREN, MAX_DEPTH, WORKER_TRIGGER } from './pipeline-loop-guard.mjs'
 
 export class PlanError extends Error {}
 
 /** Parse + validate the plan pi wrote. Throws PlanError on anything malformed (→ honest failure). */
+// fallow-ignore-next-line complexity -- unchanged by #2776; the import added above shifted its line, so fallow's position-based attribution now charges this inherited finding to the PR
 export function parsePlan(raw) {
   let p
   if (typeof raw === 'string') {
@@ -168,7 +170,7 @@ export function buildChildBody(body, { epic, childDepth, epic_branch, dispatch =
  * delegate-pi chain always terminates.
  */
 export function planToActions(plan, ctx) {
-  const { target, epic, depth = 0, epic_branch, knownLabels = [] } = ctx
+  const { target, epic, depth = 0, epic_branch, knownLabels = [], reviewTickets = false } = ctx
   const childDepth = (Number.isFinite(depth) ? depth : 0) + 1
   const actions = []
   if (plan.signoff) {
@@ -203,7 +205,7 @@ export function planToActions(plan, ctx) {
     actions.push({
       type: 'create', ref: `child${i}`,
       title: c.title,
-      body: buildChildBody(c.body, { epic, childDepth, epic_branch, dispatch: isBlocked ? dispatch : null }),
+      body: buildChildBody(c.body, { epic, childDepth, epic_branch, dispatch: isBlocked || reviewTickets ? dispatch : null }),
       labels: kept, droppedLabels: dropped,
     })
     actions.push({ type: 'link', parent: target, ref: `child${i}` })
@@ -217,6 +219,12 @@ export function planToActions(plan, ctx) {
       actions.push({ type: 'note-blocked', ref: `child${i}`, blockedByRefs: deps.map(d => `child${d}`) })
     }
   })
+  // TICKET REVIEW (#2776): an unreviewed epic starts nothing. The unblocked children keep their
+  // recorded `dispatch=` and wait; ticket-review.yml releases them once the tickets are approved.
+  if (reviewTickets) {
+    actions.push({ type: 'request-ticket-review', epic: target })
+    return actions
+  }
   plan.children.forEach((c, i) => {
     if ((c.blockedBy || []).length) return
     actions.push({ type: 'trigger-label', ref: `child${i}`, label: labelForChild({ depth: childDepth, isLeaf: !c.needsSplit, maxDepth: MAX_DEPTH }) })
@@ -280,7 +288,7 @@ export function runActions(actions, { repo, exec = realExec, log = console.error
     if (!handler) throw new Error(`unknown action type: ${a.type}`)
     handler(a, state)
   }
-  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked }
+  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked, mockupMissing: !!state.mockupMissing }
 }
 
 // Render the artifacts pi proposed for a design sign-off. BEST-EFFORT: every render is guarded so a
@@ -289,9 +297,9 @@ export function runActions(actions, { repo, exec = realExec, log = console.error
 // The render scripts are plain `node` (schema-review / ui-proposal / ticket-excalidraw) — pi-runnable.
 function renderSignoffArtifacts(signoff, state) {
   const tmp = process.env.RUNNER_TEMP || '/tmp'
-  const out = { schemaMd: '', images: [] }
+  const out = { schemaMd: '', images: [], errors: {} }
   const tryRender = (label, fn) => {
-    try { fn() } catch (e) { state.log(`⚠️  signoff render skipped (${label}): ${e.message}`) }
+    try { fn() } catch (e) { out.errors[label] = e.message; state.log(`⚠️  signoff render skipped (${label}): ${e.message}`) }
   }
   // Only link an image the repo will actually commit (#1933). `git add` on an ignored path is a
   // SILENT no-op — exit 0, no warning — so #1821's two new artifact dirs were never committed and
@@ -340,7 +348,10 @@ function renderSignoffArtifacts(signoff, state) {
       const hf = `${tmp}/signoff-ui.html`
       writeFileSync(hf, signoff.ui)
       mkdirSync('writeups/ui-mockups', { recursive: true })
-      const png = 'writeups/ui-mockups/signoff-ui.png'
+      // A new name per run (#2809): re-holding with the same name collided with the tracked copy on
+      // the epic branch, so every revised mockup was silently dropped and the comment kept showing
+      // the first one (and raw.githubusercontent would cache it anyway).
+      const png = `writeups/ui-mockups/signoff-ui-${process.env.GITHUB_RUN_ID || Date.now()}.png`
       state.exec('node', ['.claude/skills/ui-proposal/render.mjs', hf, png])
       if (linkable(png, 'UI mockup')) { state.artifacts.push(png); out.images.push({ label: 'UI mockup', path: png }) }
     })
@@ -348,6 +359,17 @@ function renderSignoffArtifacts(signoff, state) {
   return out
 }
 
+
+// #2809: a hold that talks about a mockup/UI must show one or say plainly why not. Returns the
+// reason string when a UI mockup was expected but no image was linked, else ''.
+const MOCKUP_RE = /\b(mock-?up|wireframe|layout|screenshot)\b/i
+export function missingMockupReason(signoff, images = [], renderError = '') {
+  if (images.some(i => i.label === 'UI mockup')) return ''
+  const text = [signoff.summary, ...(signoff.questions || [])].join(' ')
+  if (!signoff.ui && !MOCKUP_RE.test(text)) return ''
+  if (!signoff.ui) return 'the plan included no `ui` mockup HTML'
+  return renderError ? `the mockup render failed (${renderError})` : 'the mockup image was not rendered or not committable (gitignored path?)'
+}
 
 const ACTION_HANDLERS = {
   // A leaf: stamp the WS2 block onto the target's CURRENT body (merge, don't clobber prose).
@@ -379,6 +401,12 @@ const ACTION_HANDLERS = {
       lines.push('')
       lines.push('### Rendered')
       for (const img of art.images) lines.push(`**${img.label}**\n\n![${img.label}](${rawBase}/${img.path})`)
+    }
+    const missing = missingMockupReason(a.signoff, art.images, art.errors.ui)
+    if (missing) {
+      lines.push('')
+      lines.push(`⚠️ **Mockup missing:** ${missing}. Reply and ask for it, or answer the forks without one.`)
+      state.mockupMissing = true
     }
     lines.push('')
     lines.push('---')
@@ -423,6 +451,11 @@ const ACTION_HANDLERS = {
     ghAddLabel(exec, repo, child, a.label)
     labelled.push({ issue: child, label: a.label })
   },
+  // Hold-then-review (#2776): start the ticket review run, which releases the first tickets on go.
+  'request-ticket-review'(a, { repo, exec, log }) {
+    exec('gh', ['workflow', 'run', 'ticket-review.yml', '--repo', repo, '-f', `epic=${a.epic}`])
+    log(`ticket review requested for epic #${a.epic} — no ticket starts until it is approved`)
+  },
   // ORDERING (#1750): stamp `Blocked-by: #N` onto a child that must wait. This is the ONLY
   // record of the dependency, and the format is load-bearing, not decoration: the wave scheduler
   // (`wave-gate.mjs` → `parseBlockers`, #283) reads these lines back off the body to decide what a
@@ -465,6 +498,13 @@ function knownLabelsFromFile(path = '.github/labels.yml') {
   } catch { return [] }
 }
 
+/** Does the issue carry this label? A failed lookup answers false, so the review runs (fail closed). */
+function hasLabel(repo, n, label) {
+  try {
+    return realExec('gh', ['api', issueApi(repo, n), '-q', '[.labels[].name]|join(",")']).split(',').includes(label)
+  } catch { return false }
+}
+
 function main(argv) {
   const args = parseArgs(argv)
   if (args._[0] !== 'apply' || !args._[1]) {
@@ -479,6 +519,11 @@ function main(argv) {
     depth: args.depth != null ? Number(args.depth) : 0,
     epic_branch: args['epic-branch'] || '',
     knownLabels: knownLabelsFromFile(),
+    reviewTickets: false,
+  }
+  // #2776: the first split of an epic is reviewed before anything starts (once — `tickets:approved`).
+  if (!plan.leaf && !plan.signoff && ctx.depth === 0 && shouldReview(plan.children)) {
+    ctx.reviewTickets = !hasLabel(args.repo, target, APPROVED_LABEL)
   }
   const actions = planToActions(plan, ctx)
   const summary = runActions(actions, { repo: args.repo })
@@ -489,6 +534,8 @@ function main(argv) {
     // them to the epic branch (their raw URLs are referenced in the posted comment).
     if (summary.artifacts.length) console.log(`SIGNOFF_ARTIFACTS ${summary.artifacts.join(' ')}`)
     if (!summary.held.length) { console.error('signoff plan produced no hold — failing'); process.exit(1) }
+    // The hold posted (with a visible warning), but a UI hold without its image is a defect: go red.
+    if (summary.mockupMissing) { console.error('design hold described a mockup but none was linked — failing (#2809)'); process.exit(1) }
     return
   }
   if (!plan.leaf && summary.created.length === 0) {

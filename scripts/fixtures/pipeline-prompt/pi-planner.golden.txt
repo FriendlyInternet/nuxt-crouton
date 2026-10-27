@@ -2,6 +2,7 @@ PLAN issue #1932 — do NOT build it. Read the issue (gh issue view 1932), then 
 
 INVESTIGATE FIRST, WRITE SECOND:
 - REPRODUCE it. For a bug, boot the app (`pnpm preview <app>`, drive it with Playwright) or run the failing test, and paste what you observed. For a package or feature change, run the closest existing test or command and show what it does today. "I did not run it" is a failed step: if it truly cannot be reproduced here, say the concrete reason.
+- STAGING BUGS (#2760) — a bug reported on staging (an app URL on `*.pmcp.dev`) is reproduced FIRST with `node scripts/staging-get.mjs <app> <path>` (signs in as the review login; `<team>` in the path is filled with its active team id) and, for a failing save, `--method PATCH --body …`. Put the HTTP statuses and responses under Reproduced, and the evidence under Assumptions. "Can't reach staging" is not an acceptable finding.
 - For a bug or regression, run the bug-archaeology protocol (git log -S / -G, blame, bisect): find the first bad commit, or rule it a non-code cause. Record it in Cause.
 - Link evidence as GitHub permalinks at the current SHA (`git rev-parse HEAD`): https://github.com/${GITHUB_REPOSITORY}/blob/<sha>/<path>#L<line>, never bare paths.
 

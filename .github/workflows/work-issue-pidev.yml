@@ -99,6 +99,11 @@ on:
         default: "build"
         type: choice
         options: ["build", "plan"]
+      plan:
+        description: "BUILD from an approved plan (#2757): id of the plan comment (marker <!-- pipeline-plan:v1 -->) the plan reviewer approved. The build implements exactly that plan. Blank = no approved plan."
+        required: false
+        default: ""
+        type: string
   # Single-use trigger (#1685/#1686): a human OR the decomposer (via the Harness App token, so
   # it's nuxt-harness[bot]-actored and passes the bot-actor guard + cascades) applies `work-this`
   # to a LEAF issue → this one-shot worker implements it and opens a PR. We fire on EVERY labeled
@@ -108,13 +113,77 @@ on:
     types: [labeled]
 
 jobs:
+  # ── ROUTE (#2757, epic #2754) — plan first, or build directly? ─────────────────────────
+  # A `work-this` LABEL event on a bug / packages/ change / auth-sync-team code starts in PLAN
+  # mode: this job dispatches this workflow with mode=plan and tells `work-pi` to stand down.
+  # The plan reviewer (plan-review.yml, #2756) then labels `plan:approved` and plan-approved.yml
+  # dispatches the build. Chores and app-only tweaks, a manual dispatch, a revise round and an
+  # issue already carrying `plan:approved` all go straight to `work-pi`. The rules are
+  # .claude/plan-routing.json (labels `plan-first` / `no-plan` override).
+  route:
+    name: Route (plan first or build)
+    if: |
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      build: ${{ steps.route.outputs.build }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        if: ${{ github.event_name == 'issues' }}
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ github.event_name == 'issues' }}
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ github.event_name == 'issues' }}
+        with:
+          node-version: 22
+      - id: route
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          EVENT: ${{ github.event_name }}
+          ISSUE: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # A dispatch (manual, revise, plan, build-from-plan) always runs as asked.
+          if [ "$EVENT" = "workflow_dispatch" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          gh issue view "$ISSUE" --repo "$REPO" --json title,body,labels --jq '.title + "\n" + .body' > "$RUNNER_TEMP/route-issue.txt"
+          LABELS="$(gh issue view "$ISSUE" --repo "$REPO" --json labels --jq '[.labels[].name] | join(",")')"
+          if echo ",$LABELS," | grep -q ',plan:approved,'; then
+            echo "issue #$ISSUE already carries plan:approved → build"
+            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          R="$(node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/route-issue.txt")"
+          echo "route: $R"
+          MODE="$(echo "$R" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).mode)')"
+          if [ "$MODE" = "plan" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            gh workflow run work-issue-pidev.yml --repo "$REPO" -f issue="$ISSUE" -f mode=plan
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   work-pi:
+    needs: route
     # Fire on: a manual dispatch, OR the EXACT `work-this` label freshly applied to a leaf
     # issue. The exact-label check is what stops a re-fire loop when the worker adds its own
     # labels (status:in-progress) mid-run (#535). Anything else → no run.
     if: |
+      needs.route.outputs.build == 'true' && (
       (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this')
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this'))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     # One worker at a time per issue (#2645). `work-this` applied at creation fired two runs
     # (#2629) and #1491 got two PRs on `work-1491`. Queue, don't cancel.
@@ -403,6 +472,8 @@ jobs:
           # #2755: plan mode — the planner persona, no commit/PR (see the `plan` step below).
           PLAN: ${{ inputs.mode == 'plan' && '1' || '' }}
           FEEDBACK_ID: ${{ inputs.mode == 'plan' && inputs.feedback || '' }}
+          # #2757: the approved plan to build from (build mode only).
+          APPROVED_PLAN_ID: ${{ inputs.mode != 'plan' && inputs.feedback == '' && inputs.plan || '' }}
         run: |
           set -uo pipefail
           # The Harness App identity for any commits pi makes (so they're attributable
@@ -441,6 +512,16 @@ jobs:
               --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
           else
             node scripts/pipeline-prompt.mjs pi-worker --var "issue=$ISSUE" --var "branch_instr=$BRANCH_INSTR" > "$PROMPT_FILE"
+            # #2757: BUILD FROM AN APPROVED PLAN — plan-approved.yml passes the plan comment id.
+            # The worker implements exactly that plan, and records the plan-review ledger row.
+            if [ -n "${APPROVED_PLAN_ID:-}" ]; then
+              gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${APPROVED_PLAN_ID}" --jq .body > "$RUNNER_TEMP/approved-plan.txt"
+              LEDGER_ROW="$(node scripts/plan-ledger.mjs "$ISSUE" 2>/dev/null || echo '{}')"
+              {
+                printf '\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment %s, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\n\nAlso append this ONE line to writeups/reports/plan-review-ledger.jsonl (create the file if missing; otherwise read it and keep every existing line; use the edit/write tool): %s\n\n--- APPROVED PLAN ---\n' "$APPROVED_PLAN_ID" "$LEDGER_ROW"
+                cat "$RUNNER_TEMP/approved-plan.txt"
+              } >> "$PROMPT_FILE"
+            fi
           fi
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
           # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
@@ -554,6 +635,8 @@ jobs:
           SINCE: ${{ steps.t0.outputs.ts }}
           # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
           REV_START: ${{ steps.revise.outputs.rev_start }}
+          # #2757: the approved plan this build implements (linked from the PR body).
+          APPROVED_PLAN_ID: ${{ inputs.mode != 'plan' && inputs.feedback == '' && inputs.plan || '' }}
           # #2658: REV_START + the current base merged in (equals REV_START when already current).
           REV_BASE: ${{ steps.revise.outputs.rev_base }}
           BASE_MERGED: ${{ steps.revise.outputs.base_merged }}
@@ -790,8 +873,14 @@ jobs:
           # Deliberately excludes `<script>`-only files? No — a .vue diff can move layout from
           # script, so any .vue counts. server/**, config, tests and docs do not (#307's scope).
           UI_TOUCHED=0
-          if git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '\.(vue|css)$|/app/(components|layouts|pages)/|app\.config\.ts$'; then
-            UI_TOUCHED=1
+          # #2780: comment-only/whitespace-only .vue|.css edits and app.config.ts changes outside a
+          # `ui:` block cannot change what is on screen. scripts/ui-touched.mjs decides; if it
+          # fails to run we fall back to the old file-name match (fail towards holding).
+          if ! UI_TOUCHED="$(node scripts/ui-touched.mjs "$BASE_SHA..HEAD" 2>/dev/null)" || ! [[ "$UI_TOUCHED" =~ ^[01]$ ]]; then
+            UI_TOUCHED=0
+            if git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '\.(vue|css)$|/app/(components|layouts|pages)/|app\.config\.ts$'; then
+              UI_TOUCHED=1
+            fi
           fi
           echo "visual surface touched: $UI_TOUCHED"
 
@@ -972,10 +1061,15 @@ jobs:
             # #2433: carry the issue's `<!-- review-surface: <app> <path> -->` markers onto the PR,
             # so the deploy screenshots the page that shows the change, not the app's start page.
             SURFACES="$(grep -oE '<!--[[:space:]]*review-surface:[^>]*-->' "$RUNNER_TEMP/issue-body.txt" 2>/dev/null | sed 's/^/\n/' | tr -d '\r' || true)"
+            # #2757: a build from an approved plan links that plan in the PR body.
+            PLAN_NOTE=""
+            if [ -n "${APPROVED_PLAN_ID:-}" ]; then
+              PLAN_NOTE="$(printf '\n\n📋 Built from the approved plan: https://github.com/%s/issues/%s#issuecomment-%s' "$GITHUB_REPOSITORY" "$ISSUE" "$APPROVED_PLAN_ID")"
+            fi
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$TITLE" \
-                --body "$(printf 'Closes #%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$PLAN_NOTE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ref, computed, reactive } from 'vue'
+import { errorText } from '../../utils/error-text'
 
 // Mock route
 let mockRoute = {
@@ -49,6 +50,7 @@ const mockConsoleGroupEnd = vi.fn()
 vi.stubGlobal('ref', ref)
 vi.stubGlobal('computed', computed)
 vi.stubGlobal('reactive', reactive)
+vi.stubGlobal('errorText', errorText)
 vi.stubGlobal('useRoute', () => mockRoute)
 vi.stubGlobal('$fetch', mockFetch)
 vi.stubGlobal('generateCorrelationId', () => 'crtn_test_12345678')

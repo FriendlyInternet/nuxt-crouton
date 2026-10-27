@@ -276,6 +276,13 @@ jobs:
         if: ${{ steps.resume.outputs.resume != '1' }}
         run: pnpm install --frozen-lockfile
 
+      # A design sign-off hold renders its UI mockup / schema table to PNG with Playwright
+      # (.claude/skills/ui-proposal/render.mjs). Without a browser every render failed with
+      # "Could not launch Chromium" and the hold posted no image (#2809, seen on #2804).
+      - name: Ensure Playwright browser (design sign-off renders)
+        if: ${{ steps.resume.outputs.resume != '1' }}
+        run: npx playwright install chromium 2>&1 | tail -2 || true
+
       # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
       # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
       # proves the token answers + the provider registers BEFORE the pi run — a dead token must fail here in seconds, not
