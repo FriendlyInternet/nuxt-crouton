@@ -15,7 +15,7 @@ test('generated config is id-less and binds the room DO + D1', () => {
   assert.deepEqual(c.d1_databases, [{ binding: 'DB', database_name: 'w-db' }])
   assert.equal(c.d1_databases[0].database_id, undefined)
   assert.deepEqual(c.durable_objects.bindings, [{ name: 'COLLAB_ROOMS', class_name: 'CollabRoom' }])
-  assert.deepEqual(c.migrations[0].new_classes, ['CollabRoom'])
+  assert.deepEqual(c.migrations[0].new_sqlite_classes, ['CollabRoom'])
 })
 
 test('extracts the workers.dev URL', () => {

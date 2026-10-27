@@ -30,7 +30,7 @@ export function buildCollabConfig({ name, db, main }) {
     compatibility_flags: ['nodejs_compat'],
     d1_databases: [{ binding: 'DB', database_name: db }],
     durable_objects: { bindings: [{ name: 'COLLAB_ROOMS', class_name: 'CollabRoom' }] },
-    migrations: [{ tag: 'collab-v1', new_classes: ['CollabRoom'] }],
+    migrations: [{ tag: 'collab-v1', new_sqlite_classes: ['CollabRoom'] }],
   }
 }
 
