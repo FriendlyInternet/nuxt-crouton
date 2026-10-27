@@ -73,6 +73,8 @@ jobs:
             node scripts/teardown-app.mjs --app "$app" --scope staging --backup-dir "teardown-backups/$app" 2>&1 | tee "$RUNNER_TEMP/logs/$app.log" || FAILED="$FAILED $app"
           done
           echo "failed=$(echo $FAILED | tr ' ' '\n' | sort -u | tr '\n' ' ' | xargs)" >> "$GITHUB_OUTPUT"
+          # fail the step when any app failed, so the final "Fail if anything was not deleted" step fires
+          [ -z "$FAILED" ]
         continue-on-error: true
 
       - name: Upload database backups
