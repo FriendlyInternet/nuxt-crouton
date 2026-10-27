@@ -102,3 +102,17 @@ export const salesSyncTombstones = sqliteTable('sales_sync_tombstones', {
 }, table => [
   uniqueIndex('uq_sales_sync_tombstones_entity').on(table.entityType, table.entityId),
 ])
+
+/**
+ * Till-side pull cursor (#815, epic #801): how far this till has pulled config
+ * changes from the cloud. One row per till (`id` = its device id, else 'default').
+ * `cursor` is epoch ms on the cloud's clock, as returned by the pull endpoint.
+ * The cloud never has a row here.
+ */
+export const salesSyncPullState = sqliteTable('sales_sync_pull_state', {
+  id: text('id').primaryKey(),
+  cursor: integer('cursor').notNull().$default(() => 0),
+  // Changes at exactly `cursor` already applied, while a page is still being drained.
+  skip: integer('skip').notNull().$default(() => 0),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
+})

@@ -67,7 +67,7 @@ export interface IngestResult {
 
 const VALID_TYPES: OutboxEntityType[] = ['order', 'orderitem', 'printstatus', 'event', 'eventsetting', 'category', 'product', 'location', 'printer']
 
-async function loadTables(): Promise<Record<OutboxEntityType, any>> {
+export async function loadTables(): Promise<Record<OutboxEntityType, any>> {
   const { salesOrders } = await import('../../collections/orders/server/database/schema')
   const { salesOrderitems } = await import('../../collections/orderitems/server/database/schema')
   // printstatus mirrors the generic crouton-printing `print_jobs` table (the
@@ -100,7 +100,7 @@ async function loadTables(): Promise<Record<OutboxEntityType, any>> {
  * - revive timestamp-mode columns (dataType 'date') from the ISO string / epoch
  *   number JSON produced, leaving text columns (e.g. completedAt) as-is.
  */
-function coerceToColumns(table: any, payload: Record<string, unknown>): Record<string, unknown> {
+export function coerceToColumns(table: any, payload: Record<string, unknown>): Record<string, unknown> {
   const cols = getTableColumns(table) as Record<string, { dataType: string }>
   const out: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(payload)) {
@@ -123,7 +123,7 @@ const toMs = (v: unknown): number | null => {
 }
 
 /** The event whose status decides who wins while the row is live. */
-async function liveEventStatus(
+export async function liveEventStatus(
   db: any,
   tables: Record<OutboxEntityType, any>,
   e: IngestEvent,
@@ -172,7 +172,7 @@ async function deleteWithTombstone(
     .onConflictDoUpdate({ target: [tombstones.entityType, tombstones.entityId], set: { deletedAt } })
 }
 
-async function upsertRow(db: any, table: any, id: string, values: Record<string, unknown>) {
+export async function upsertRow(db: any, table: any, id: string, values: Record<string, unknown>) {
   const setObj = { ...values }
   delete setObj.id
   const updated = Object.keys(setObj).length > 0

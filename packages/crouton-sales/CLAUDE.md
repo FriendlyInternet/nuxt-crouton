@@ -38,6 +38,7 @@ Event-based Point of Sale (POS) system for Nuxt Crouton. Provides products, cate
 | `server/plugins/cloud-sync-pusher.ts` | Nitro plugin running the push loop (gated, backoff) + idle heartbeat ping (#179) |
 | `server/utils/sync-status.ts` | Cloud-side freshness heartbeat (#179) — `recordSyncHeartbeat()` (best-effort upsert on every ingest, keyed per device id since #2725) + `readSyncStatuses()` + `toStatusPayload()` (the status endpoint's response shape) |
 | `server/api/crouton-sales/sync/ingest.post.ts` | Cloud D1 ingest endpoint (#178); also stamps the freshness heartbeat (#179) |
+| `server/utils/sync-pull.ts` + `sync/pull.get.ts` | Cloud → till config sync (#815): `collectConfigChanges()` (cloud, device-authed, per team, cursor + `skip` paging) and `pullConfigChanges()` (till, runs after each push; applies via `resolveConflict` side=till; cursor in `sales_sync_pull_state`; never writes the outbox). Equal timestamps keep the till's version on both sides. Delete markers are written on both sides (`captureConfigWrite`) |
 | `server/api/crouton-sales/teams/[id]/sync-status.get.ts` | Live-dashboard freshness read (#179) — `{ lastContactAt, lastEventAt, lastBatchApplied, devices[], serverNow }` (headline = freshest till) |
 | `app/components/Sync/Status.vue` | `SalesSyncStatus` — mirror freshness banner (#179): "synced Xs ago" / stale, polls sync-status |
 | `app/components/Dashboard/SalesSummary.vue` | `SalesDashboardSalesSummary` — live revenue/orders/avg + top products (#179), built on the chart endpoints |
