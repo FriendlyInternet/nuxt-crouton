@@ -23,7 +23,7 @@ export function liveAppFromConfig(app: string, cfg: { stagingUrl?: string, revie
   return { app, stagingUrl: cfg.stagingUrl ?? null, hasSignIn: cfg.reviewLogin !== false }
 }
 
-export type PreviewDecision = { gone: false, url: string } | { gone: true, pr: number }
+export type PreviewDecision = { gone: false, url: string } | { gone: true, pr: number } | { gone: 'none', pr: number }
 
 /** Decides a `pr<N>` login: redirect to the preview, or show the "build is gone" page. */
 export function decidePreview(openPreviews: Preview[], app: string, key: string): PreviewDecision {
@@ -79,18 +79,44 @@ export async function loadLiveApps(get: GhGet): Promise<{ data: LiveApp[], error
   return { data: apps.filter((a): a is LiveApp => !!a).sort((a, b) => a.app.localeCompare(b.app)), error: errors.length ? errors.join('; ') : null }
 }
 
-/** Open-PR previews: 1 pulls call + ≤3 repo-wide comment pages (last 14 days), not one call per PR. */
+/** Open-PR previews: 1 pulls call + ≤3 repo-wide comment pages (newest first, last 3 days), not one call per PR. */
 export async function loadPreviews(get: GhGet, now = Date.now()): Promise<{ data: Preview[], error: string | null }> {
   const pulls = await get<Array<{ number: number, title: string, updated_at: string }>>(`/repos/${REPO}/pulls?state=open&per_page=50`, { fresh: true })
   if (pulls.error) return { data: [], error: pulls.error }
   const open = new Map((pulls.data ?? []).map(p => [p.number, p]))
-  const since = new Date(now - 14 * 86400_000).toISOString()
+  const since = new Date(now - 3 * 86400_000).toISOString()
   const comments: Array<{ body?: string, issue_url?: string }> = []
   for (let page = 1; page <= 3; page++) {
-    const r = await get<Array<{ body?: string, issue_url?: string }>>(`/repos/${REPO}/issues/comments?since=${since}&per_page=100&page=${page}`)
+    const r = await get<Array<{ body?: string, issue_url?: string }>>(`/repos/${REPO}/issues/comments?sort=updated&direction=desc&since=${since}&per_page=100&page=${page}`)
     if (r.error) return { data: previewsFromComments(comments, open), error: r.error }
     comments.push(...(r.data ?? []))
     if ((r.data ?? []).length < 100) break
   }
   return { data: previewsFromComments(comments, open), error: null }
+}
+
+/** Resolves a `pr<N>` login from that PR's own state + comments (fresh), not the repo-wide list. */
+export async function decidePrLogin(get: GhGet, app: string, key: string): Promise<PreviewDecision> {
+  const pr = Number(key.slice(2))
+  const info = await get<{ state?: string }>(`/repos/${REPO}/pulls/${pr}`, { fresh: true })
+  if (info.data?.state === 'closed') return { gone: true, pr }
+  const comments: Array<{ body?: string }> = []
+  for (let page = 1; page <= 3; page++) {
+    const r = await get<Array<{ body?: string }>>(`/repos/${REPO}/issues/${pr}/comments?per_page=100&page=${page}`, { fresh: true })
+    if (r.error) break
+    comments.push(...(r.data ?? []))
+    if ((r.data ?? []).length < 100) break
+  }
+  for (const c of comments) {
+    const parsed = parseDeployComment(c.body)
+    if (parsed?.app === app) return { gone: false, url: parsed.url }
+  }
+  // Only "gone" when GitHub says closed; an open (or unreadable) PR just has no build yet.
+  return { gone: 'none', pr }
+}
+
+/** Page for an open PR that has no test build for the app yet. */
+export function previewNoneHtml(pr: number, app: string, stagingUrl: string): string {
+  const prUrl = `https://github.com/${REPO}/pull/${pr}`
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PR #${pr} has no test build</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>PR #${pr} has no test build yet</h1><p>No <strong>${esc(app)}</strong> test build has been posted on this PR.</p><p><a href="${esc(prUrl)}">Open PR #${pr}</a> · <a href="${esc(stagingUrl)}">Open ${esc(app)} staging</a></p></body>`
 }
