@@ -24,11 +24,11 @@
 // afterwards — that runs the decomposer on an epic that already has children and dispatches the
 // unblocked ones a second time. Use `--dry-run` to look before anything starts.
 
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 import { hasTestSteps } from './test-card.mjs'
-import { parsePlan, planToActions, runActions, PlanError } from './apply-decompose-plan.mjs'
+import { parsePlan, planToActions, runActions, ghCreateIssue, PlanError } from './apply-decompose-plan.mjs'
 
 export const NO_TEST_STEPS_MSG = 'epic body has no "## 🧪 How to test" section with steps — write 2–3 steps the owner can do on a phone'
 export const DEDUP_RE = /Dedup-checked:/i
@@ -106,12 +106,31 @@ function knownLabelsFromFile(path = '.github/labels.yml') {
   } catch { return [] }
 }
 
-/** Create the branch from origin/main on the remote, idempotently (never a duplicate). */
-function ensureBranch(branch) {
+/**
+ * Resolve main's sha WITHOUT relying on a local `origin/main` ref (absent in a shallow/single-branch
+ * clone). Asked of the remote itself, so it also proves the remote is reachable — run it BEFORE
+ * creating anything, so a failure here can't leave a half-made epic (#2708).
+ */
+export function resolveMainSha(run = exec) {
+  const out = run('git', ['ls-remote', 'origin', 'refs/heads/main'])
+  const sha = (out.split(/\s+/)[0] || '').trim()
+  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`cannot resolve origin main (ls-remote said: ${out || 'nothing'})`)
+  return sha
+}
+
+/** Create the branch at main's sha on the remote, idempotently (never a duplicate). */
+function ensureBranch(branch, sha) {
   if (exec('git', ['ls-remote', '--heads', 'origin', branch])) return false
+  // Fetch main explicitly so the object exists locally, then push the SHA — not `origin/main`.
   exec('git', ['fetch', 'origin', 'main'])
-  exec('git', ['push', 'origin', `origin/main:refs/heads/${branch}`])
+  exec('git', ['push', 'origin', `${sha}:refs/heads/${branch}`])
   return true
+}
+
+/** Labels the plan uses that the repo taxonomy doesn't have — an unknown one fails creation midway. */
+export function unknownPlanLabels(plan, knownLabels) {
+  if (!knownLabels.length) return []
+  return plan.labels.filter(l => !knownLabels.includes(l))
 }
 
 function main(argv) {
@@ -133,16 +152,39 @@ function main(argv) {
     console.log(renderTree(plan, scaffoldActions(plan, { epic: 'N', knownLabels })))
     return
   }
-  const url = exec('gh', ['issue', 'create', '--repo', repo, '--title', plan.title, '--body-file', '-', ...plan.labels.flatMap(l => ['--label', l])], plan.body)
-  const epic = Number((url.match(/\/issues\/(\d+)/) || [])[1])
-  if (!Number.isFinite(epic)) throw new Error(`could not parse epic number from: ${url}`)
+  // PRECONDITIONS first: nothing is created until labels and the remote branch base check out.
+  const missing = unknownPlanLabels(plan, knownLabels)
+  if (missing.length) {
+    console.error(`epic-scaffold: unknown label(s) on the epic: ${missing.join(', ')} — nothing was created`)
+    process.exit(1)
+  }
+  let sha
+  try { sha = resolveMainSha() } catch (e) {
+    console.error(`epic-scaffold: ${e.message} — nothing was created`)
+    process.exit(1)
+  }
+  const dir = process.env.RUNNER_TEMP || '/tmp'
+  const bodyFile = `${dir}/epic-scaffold-body.md`
+  writeFileSync(bodyFile, plan.body)
+  const epic = ghCreateIssue(exec, repo, { title: plan.title, file: bodyFile, labels: plan.labels })
+  const url = `https://github.com/${repo}/issues/${epic}`
   const branch = epicBranch(epic, plan.slug)
-  // Branch BEFORE any child exists, so no worker can start against a missing epic branch.
-  const made = ensureBranch(branch)
-  const summary = runActions(scaffoldActions(plan, { epic, knownLabels }), { repo })
+  // From here the epic EXISTS: any failure must say so and what is left, not just throw.
+  let made = false
+  let summary = { created: [] }
+  try {
+    // Branch BEFORE any child exists, so no worker can start against a missing epic branch.
+    made = ensureBranch(branch, sha)
+    summary = runActions(scaffoldActions(plan, { epic, knownLabels }), { repo })
+  } catch (e) {
+    console.error(`epic-scaffold: FAILED after creating epic #${epic} (${url}): ${e.message}`)
+    console.error(`  branch ${branch}: ${made ? 'created' : 'NOT created (or already existed)'}`)
+    console.error(`  children created: ${summary.created.length}/${plan.children.length} — finish the rest by hand, or close #${epic} and re-run`)
+    process.exit(1)
+  }
   console.log(JSON.stringify({ epic, url, branch, branchCreated: made, ...summary }, null, 2))
   if (summary.created.length !== plan.children.length) {
-    console.error('epic-scaffold: not every child was created')
+    console.error(`epic-scaffold: not every child was created for epic #${epic}`)
     process.exit(1)
   }
 }
