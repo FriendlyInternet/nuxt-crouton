@@ -45,7 +45,19 @@ jobs:
               comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type },
             })
             core.info(`PR #${pull_number} (${pr.head.ref}): revise=${route.revise} — ${route.reason}`)
-            if (!route.revise) return
+            if (!route.revise) {
+              // A 🛠 action comment that never reached the worker says so, once per comment (#2707).
+              if (route.reply) {
+                const marker = `<!-- revise-ignored:${c.id} -->`
+                const prior = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: pull_number, per_page: 100 })
+                if (!prior.some(x => x.body.includes(marker))) {
+                  await github.rest.issues.createComment({ ...context.repo, issue_number: pull_number,
+                    body: `${marker}\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _comment not routed (#2707)_\n\n`
+                      + 'Not sent to the worker — start a line with `**Worker:**` to ask it for a change.' })
+                }
+              }
+              return
+            }
 
             try { await github.rest.reactions.createForIssueComment({ ...context.repo, comment_id: c.id, content: 'eyes' }) } catch (e) {}
             await github.rest.actions.createWorkflowDispatch({

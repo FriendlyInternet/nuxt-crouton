@@ -5,27 +5,23 @@ import { swipeDirection, lockAxis } from '../utils/swipe'
  * finger; on release past the threshold the content slides to the next/prev
  * period and `onNext`/`onPrev` fire, otherwise it springs back.
  *
- * `peek: true` — a 3-panel track (prev · current · next) is rendered, so the
- * neighbour is visible while dragging. `peek: false` — single panel that slides
- * out, swaps, and slides in from the opposite side.
+ * The track is a 3-panel strip (prev · current · next), so the neighbour is
+ * visible while dragging.
  */
 export function useSlideSwipe(
   el: Ref<HTMLElement | null>,
-  opts: { onNext: () => void, onPrev: () => void, peek?: boolean, track: Ref<HTMLElement | null> },
+  opts: { onNext: () => void, onPrev: () => void, track: Ref<HTMLElement | null> },
 ) {
   const SLIDE_MS = 250
   // Plain variables, not refs: the track's transform is written straight to the
   // DOM so a drag frame never re-renders the panels (and the consumer's slots).
   let dragX = 0
   let animating = false
-  const dragging = ref(false)
 
   function render() {
     const t = opts.track.value
     if (!t) return
-    t.style.transform = opts.peek
-      ? `translateX(calc(-100% + ${dragX}px))`
-      : `translateX(${dragX}px)`
+    t.style.transform = `translateX(calc(-100% + ${dragX}px))`
     t.style.transition = animating ? `transform ${SLIDE_MS}ms ease-out` : 'none'
   }
   let lock: 'x' | 'y' | null = null
@@ -39,12 +35,6 @@ export function useSlideSwipe(
 
   const SIGN = { next: -1, prev: 1 } as const
 
-  // wait until the new period has actually rendered before sliding it in
-  async function settle() {
-    await nextTick()
-    await new Promise(r => requestAnimationFrame(r))
-  }
-
   async function animateSlide(fire: () => void, w: number) {
     animating = true
     render()
@@ -54,21 +44,8 @@ export function useSlideSwipe(
     animating = false
     render()
     fire()
-    if (opts.peek) {
-      // neighbour panel is already in view: data swapped, snap back to centre
-      dragX = 0
-      render()
-      return
-    }
-    dragX = -w
-    render()
-    await settle()
-    animating = true
-    render()
+    // neighbour panel is already in view: data swapped, snap back to centre
     dragX = 0
-    render()
-    await wait(SLIDE_MS)
-    animating = false
     render()
   }
 
@@ -120,7 +97,6 @@ export function useSlideSwipe(
       if (busy) return
       lock ??= lockAxis(-lengthX.value, -lengthY.value)
       if (lock !== 'x') return
-      dragging.value = true
       animating = false
       render()
       dragX = -lengthX.value
@@ -129,7 +105,6 @@ export function useSlideSwipe(
     onSwipeEnd() {
       const wasX = lock === 'x'
       lock = null
-      dragging.value = false
       if (!wasX || busy) return
       const dir = swipeDirection(-lengthX.value, -lengthY.value)
       if (dir) slide(dir)
@@ -137,5 +112,5 @@ export function useSlideSwipe(
     },
   })
 
-  return { slide, dragging }
+  return { slide }
 }

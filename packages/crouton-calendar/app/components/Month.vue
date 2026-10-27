@@ -15,6 +15,9 @@ const emit = defineEmits<{
   select: [value: Date]
 }>()
 
+// The month being shown (any date in it)
+const date = defineModel<Date>('date', { required: true })
+
 defineSlots<{
   day(props: { day: DateValue, jsDate: Date, neighbour: boolean }): any
 }>()
@@ -24,7 +27,7 @@ const { locale } = useI18n()
 
 const now = today(getLocalTimeZone())
 const selected = ref<DateValue | undefined>(new CalendarDate(now.year, now.month, 1))
-const placeholder = ref<DateValue>(new CalendarDate(now.year, now.month, 1))
+const placeholder = computed<DateValue>(() => new CalendarDate(date.value.getFullYear(), date.value.getMonth() + 1, 1))
 const swipeEl = ref<HTMLElement | null>(null)
 
 const isSameMonth = (a: { year: number, month: number }, b: { year: number, month: number }) =>
@@ -33,9 +36,8 @@ const isSameMonth = (a: { year: number, month: number }, b: { year: number, mont
 const trackEl = ref<HTMLElement | null>(null)
 const { slide } = useSlideSwipe(swipeEl, {
   track: trackEl,
-  peek: true,
-  onNext: () => { placeholder.value = placeholder.value.add({ months: 1 }) },
-  onPrev: () => { placeholder.value = placeholder.value.subtract({ months: 1 }) },
+  onNext: () => showMonth(placeholder.value.add({ months: 1 })),
+  onPrev: () => showMonth(placeholder.value.subtract({ months: 1 })),
 })
 
 const panels = computed(() => [-1, 0, 1].map(offset => ({
@@ -60,14 +62,12 @@ const weekdays = computed(() => {
   return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2024, 0, 1 + i)))
 })
 
-function goToToday() {
-  const d = today(getLocalTimeZone())
-  placeholder.value = new CalendarDate(d.year, d.month, 1)
+function showMonth(d: DateValue) {
+  date.value = d.toDate(getLocalTimeZone())
 }
 
-function goToDate(date: Date) {
-  placeholder.value = new CalendarDate(date.getFullYear(), date.getMonth() + 1, 1)
-  selected.value = new CalendarDate(date.getFullYear(), date.getMonth() + 1, date.getDate())
+function goToToday() {
+  date.value = new Date()
 }
 
 // Day activation comes through UCalendar's own cellTrigger (a real <button>,
@@ -79,12 +79,10 @@ function onActivate(value: any) {
   selected.value = single
   // Tapping a greyed neighbour-month day selects it and slides to that month.
   if (single && !isSameMonth(single, placeholder.value)) {
-    placeholder.value = new CalendarDate(single.year, single.month, 1)
+    showMonth(single)
   }
   if (single) emit('select', single.toDate(getLocalTimeZone()))
 }
-
-defineExpose({ goToDate, goToToday })
 </script>
 
 <template>

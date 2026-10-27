@@ -22,6 +22,8 @@ import { BOARD_HIDDEN_KEY, collectHidden, collapsePlacement, type HiddenItem } f
 // data path for its blocks — a follow-up, not this ticket.
 definePageMeta({ middleware: ['auth'] })
 const route = useRoute()
+// List + Form blocks of one collection share which record is open (#2598).
+provideCollectionSelections()
 const slug = computed(() => String(route.params.slug))
 const { data: page } = await useFetch<{ title: string, board: Record<string, unknown> }>(() => `/api/site/${encodeURIComponent(slug.value)}`)
 useHead({ title: () => page.value?.title ?? 'Page' })
