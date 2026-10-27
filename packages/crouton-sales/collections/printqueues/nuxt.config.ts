@@ -12,7 +12,8 @@ export default defineNuxtConfig({
       {
         path: join(currentDir, 'app/components'),
         prefix: 'SalesPrintqueues',
-        global: true
+        global: true,
+        priority: -1
       }
     ]
   }

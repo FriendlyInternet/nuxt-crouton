@@ -35,13 +35,13 @@ export default defineNuxtConfig({
   ],
 
   // Components auto-import with CroutonPages prefix
-  // Form.vue → CroutonPagesForm
   components: {
     dirs: [
       {
         path: join(currentDir, 'app/components'),
         prefix: 'CroutonPages',
-        global: true
+        global: true,
+        priority: -1
       },
       // Stubs dir: registers AIPageGenerator without prefix so crouton-ai can override it.
       // priority: -1 matches the pattern used by crouton-i18n stubs — overridden by real packages.

@@ -56,13 +56,8 @@ export function buildCroutonConfig(options: ConfigBuilderOptions): string {
 
   const publishableSet = new Set(publishableCollections)
 
-  // Extra options for known package collections that provide their own form UI
-  const PACKAGE_COLLECTION_CONFIGS: Record<string, { formComponent?: string; hierarchy?: string }> = {
-    pages: {
-      formComponent: 'CroutonPagesForm',
-      hierarchy: `{ enabled: true, parentField: 'parentId', orderField: 'order', pathField: 'path', depthField: 'depth' }`,
-    },
-  }
+  // The pages collection is a tree
+  const PAGES_HIERARCHY = `{ enabled: true, parentField: 'parentId', orderField: 'order', pathField: 'path', depthField: 'depth' }`
 
   // User-provided schemas (may be for collections that are also in a package layer)
   const userEntries = collectionNames.map((name) => {
@@ -79,9 +74,7 @@ export function buildCroutonConfig(options: ConfigBuilderOptions): string {
     .filter(pkg => !coveredSchemas.has(pkg.name))
     .map(({ name, layerName }) => {
       const opts = [`name: '${name}'`, `fieldsFile: './schemas/${name}.json'`]
-      const pkgConfig = PACKAGE_COLLECTION_CONFIGS[name] ?? PACKAGE_COLLECTION_CONFIGS[layerName] ?? {}
-      if (pkgConfig.formComponent) opts.push(`formComponent: '${pkgConfig.formComponent}'`)
-      if (pkgConfig.hierarchy) opts.push(`hierarchy: ${pkgConfig.hierarchy}`)
+      if (name === 'pages' || layerName === 'pages') opts.push(`hierarchy: ${PAGES_HIERARCHY}`)
       return `    { ${opts.join(', ')} }`
     })
 

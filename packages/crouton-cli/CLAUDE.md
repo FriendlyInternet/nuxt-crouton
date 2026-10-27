@@ -817,7 +817,7 @@ export default {
     { name: 'authors', fieldsFile: './schemas/authors.json', seed: true },          // seed with defaults
     { name: 'posts', fieldsFile: './schemas/posts.json', kind: 'content', seed: { count: 50 } },  // content kind
     { name: 'bookings', fieldsFile: './schemas/bookings.json', collab: true },      // enable collab presence
-    { name: 'articles', fieldsFile: './schemas/articles.json', kind: 'content', formComponent: 'BlogArticleEditor' },
+    { name: 'articles', fieldsFile: './schemas/articles.json', kind: 'content' },
     { name: 'gallery', fieldsFile: './schemas/gallery.json', kind: 'media' }        // media kind
   ],
   dialect: 'sqlite',
@@ -890,41 +890,16 @@ features: {
 | `seed` | boolean \| object | Generate seed data file with Faker |
 | `collab` | boolean | Enable real-time presence indicators |
 | `translatable` | boolean | Mark all string fields as translatable |
-| `formComponent` | string | Use a custom form component instead of generating Form.vue |
 | `kind` | string | Collection kind: `'data'` (default), `'content'`, or `'media'`. Affects admin sidebar grouping |
 | `publishable` | boolean | Auto-register as page type in crouton-pages (requires crouton-pages) |
 | `tests` | boolean | Emit the per-collection tests — schema-smoke (#785) + API route handler test (#791) — for this collection (default `false`; set `true` to opt in, like `--tests`) |
 
-### formComponent Option
+### Form component names
 
-When you (or a package) provide a form component for a collection the app generates, skip the
-redundant Form.vue by specifying `formComponent`:
-
-```javascript
-collections: [
-  {
-    name: 'articles',
-    fieldsFile: './schemas/articles.json',
-    formComponent: 'BlogArticleEditor',  // Use your own form
-  }
-]
-```
-
-**What this does:**
-1. Skips generating `Form.vue` in the collection directory
-2. Sets `componentName` in the composable to the specified component name
-3. That component is used instead for create/edit operations
-
-**When to use:** you have a custom form component that handles the collection's data entry.
-Not for package-owned collections (sales, bookings, pages, assets, #2278): the package ships them,
-form included, and the CLI refuses to generate them.
-
-**Dry-run output:**
-```
-• Form.vue skipped (using BlogArticleEditor)
-• layers/blog/collections/articles/app/components/List.vue
-...
-```
+Every collection form is named `<Layer><Plural>Form` (e.g. `ShopProductsForm`) — there is no
+`formComponent` override. To customise a form, put your own component with that name in the app's
+`app/components`; it wins over the generated and package-registered ones (package component dirs
+register at `priority: -1`).
 
 ## Examples
 

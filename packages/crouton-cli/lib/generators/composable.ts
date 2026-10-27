@@ -180,8 +180,8 @@ export function generateComposable(data: Record<string, any>, config: Record<str
   // Generate AI context header
   const aiHeader = generateAIHeader(data, apiPath)
 
-  // Compute form component name - use custom formComponent from config or generate default
-  const formComponentName = data.collectionConfig?.formComponent || `${layerPascalCase}${pascalCasePlural}Form`
+  // One canonical name per collection form — no override path
+  const formComponentName = `${layerPascalCase}${pascalCasePlural}Form`
 
   // Generate item schemas for repeater fields with translatableProperties or properties
   const repeaterItemSchemas = fields

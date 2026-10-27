@@ -1,4 +1,4 @@
-import { defineCroutonManifest, defineGeneratorContribution } from '@fyit/crouton-core/shared/manifest'
+import { defineCroutonManifest } from '@fyit/crouton-core/shared/manifest'
 
 export default defineCroutonManifest({
   id: 'crouton-pages',
@@ -44,7 +44,6 @@ export default defineCroutonManifest({
     ],
     components: [
       { name: 'CroutonPagesRenderer', description: 'Renders page based on type', props: ['page'] },
-      { name: 'CroutonPagesForm', description: 'Page creation/editing form', props: ['collection'] },
       { name: 'CroutonPagesRegularContent', description: 'Rich text content display', props: ['content'] },
       { name: 'CroutonPagesBlockContent', description: 'Block-based content display', props: ['content'] },
       { name: 'CroutonPagesEditorBlockEditor', description: 'Block-based page editor', props: ['modelValue'] },
@@ -53,12 +52,5 @@ export default defineCroutonManifest({
       '/api/teams/[id]/pages',
       '/api/teams/[id]/pages/[slug]',
     ],
-  },
-})
-
-export const generatorContribution = defineGeneratorContribution({
-  getFormComponent(ctx) {
-    if (ctx.collectionName === 'pages') return 'CroutonPagesForm'
-    return null
   },
 })

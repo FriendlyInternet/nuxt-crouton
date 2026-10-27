@@ -249,7 +249,7 @@ describe('translationsUi', () => {
     })
 
     it('has componentName', () => {
-      expect(translationsUiConfig.componentName).toBe('CroutonI18nUiForm')
+      expect(translationsUiConfig.componentName).toBe('TranslationsUiForm')
     })
 
     it('has schema as non-enumerable property', () => {
