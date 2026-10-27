@@ -41,6 +41,7 @@ import { labelForChild, MAX_CHILDREN, MAX_DEPTH, WORKER_TRIGGER } from './pipeli
 export class PlanError extends Error {}
 
 /** Parse + validate the plan pi wrote. Throws PlanError on anything malformed (→ honest failure). */
+// fallow-ignore-next-line complexity -- unchanged by #2776; the import added above shifted its line, so fallow's position-based attribution now charges this inherited finding to the PR
 export function parsePlan(raw) {
   let p
   if (typeof raw === 'string') {

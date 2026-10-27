@@ -71,6 +71,7 @@ const section = (body, name) => {
 }
 
 /** PURE. Parse the reviewer's file → { ok, errors, tickets: { [n]: { stated, items, question } } }. */
+// fallow-ignore-next-line complexity -- linear line-format parser; the branches are one guard per reviewer-file shape, covered by ticket-verdict.test.mjs (#2776)
 export function parseVerdicts(body) {
   const errors = []
   if (!body.includes(TICKET_MARKER)) errors.push(`missing marker ${TICKET_MARKER}`)
@@ -97,6 +98,7 @@ export function parseVerdicts(body) {
 }
 
 /** PURE. Merge floor + reviewer into one decision per ticket and an overall one for the epic. */
+// fallow-ignore-next-line complexity -- one flat pass merging floor + reviewer per ticket; each branch is a distinct disagreement rule, covered by ticket-verdict.test.mjs (#2776)
 export function decide(tickets, verdictBody) {
   const v = parseVerdicts(verdictBody)
   if (!v.ok) return { ok: false, errors: v.errors }
