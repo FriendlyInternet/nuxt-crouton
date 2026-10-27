@@ -175,14 +175,14 @@ jobs:
               // Names alone still meant leaving the notification, opening the checks tab, picking
               // a job and scrolling a log — on a phone that is the entire task.
               //
-              // `CI Gate` is the AGGREGATE (`if: always()` over 14 needs). It is never an
+              // `CI Gate` / `E2E Gate` are AGGREGATES (`if: always()` over 14 needs). It is never an
               // independent cause; naming it beside the real failure doubles the apparent problem
               // and sends the reader to a log that only says "not every job succeeded". Drop it
               // whenever something else is red — but keep it when it is the ONLY red check, since
               // that means something genuinely different (a needed job cancelled or stuck).
-              const ROLLUP = 'CI Gate'
+              const ROLLUPS = new Set(['CI Gate', 'E2E Gate']) // every aggregate gate (#2710)
               const all = st.failing || []
-              const causes = all.length > 1 ? all.filter(f => f.name !== ROLLUP) : all
+              const causes = all.length > 1 ? all.filter(f => !ROLLUPS.has(f.name)) : all
               const names = causes.slice(0, 5)
               const more = causes.length - names.length
               const list = names.length
