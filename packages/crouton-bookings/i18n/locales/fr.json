@@ -92,6 +92,8 @@
       "signIn": "Se connecter"
     },
     "calendar": {
+      "newBooking": "Nouvelle réservation",
+      "fullyBooked": "Complet",
       "units": "Unités",
       "noBookings": "Aucune réservation",
       "bookingCount": "{count} réservation | {count} réservations",

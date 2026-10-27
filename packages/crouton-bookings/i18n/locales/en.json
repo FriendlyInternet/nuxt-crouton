@@ -92,6 +92,8 @@
       "signIn": "Sign in"
     },
     "calendar": {
+      "newBooking": "New booking",
+      "fullyBooked": "Fully booked",
       "units": "Units",
       "noBookings": "No bookings",
       "bookingCount": "{count} booking | {count} bookings",

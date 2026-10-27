@@ -94,9 +94,10 @@ defineExpose({
 // View is controlled by parent via v-model:view
 const currentView = computed(() => props.view)
 
-// Only days with bookings are selectable in the month grid
+// Every available day is selectable in the month grid
 function onMonthSelect(date: Date) {
-  if (hasBookings(date)) emit('select', date)
+  if (props.isDateUnavailable && isDayUnavailable(date)) return
+  emit('select', date)
 }
 
 // Parse statuses from settings
@@ -344,9 +345,10 @@ function getIndicatorsForDate(date: Date): IndicatorData[] {
   return indicators
 }
 
-// Handle week strip select (day click) - only if date has bookings
+// Handle week strip select (day click) - any available day
 function onWeekSelect(date: Date | null) {
-  if (!date || !hasBookings(date)) return
+  if (!date) return
+  if (props.isDateUnavailable && isDayUnavailable(date)) return
   emit('select', date)
 }
 

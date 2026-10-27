@@ -92,6 +92,8 @@
       "signIn": "Inloggen"
     },
     "calendar": {
+      "newBooking": "Nieuwe boeking",
+      "fullyBooked": "Volgeboekt",
       "units": "Eenheden",
       "noBookings": "Geen boekingen",
       "bookingCount": "{count} boeking | {count} boekingen",

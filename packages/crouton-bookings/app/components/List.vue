@@ -23,6 +23,8 @@ interface Props {
   scrollToDate?: Date | null
   /** Active location filter - when set, only these locations are selectable in create form */
   activeLocationFilter?: string[]
+  /** Whether every location is fully booked on a date (disables the New booking row) */
+  isDayFullyBooked?: (date: Date) => boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -36,6 +38,7 @@ const props = withDefaults(defineProps<Props>(), {
   creatingAtDate: null,
   scrollToDate: null,
   activeLocationFilter: undefined,
+  isDayFullyBooked: undefined,
 })
 
 const emit = defineEmits<{
@@ -49,6 +52,8 @@ const emit = defineEmits<{
   updated: []
   /** Emitted when an email is sent (so parent can refresh email stats) */
   emailSent: []
+  /** Emitted when the ghost "New booking" row of a day is tapped */
+  newBooking: [date: Date]
 }>()
 
 // Recently created booking IDs for highlight effect
@@ -215,19 +220,8 @@ const groupedBookings = computed((): MonthGroup[] => {
   return monthGroups
 })
 
-// Extended grouped bookings that includes the creation date placeholder in the correct position
-const groupedBookingsWithCreateDate = computed((): MonthGroup[] => {
-  const baseGroups = groupedBookings.value
-
-  // If not creating or already has bookings on that date, return as-is
-  if (!props.creatingAtDate || creatingDateHasBookings.value) {
-    return baseGroups
-  }
-
-  // Create a deep copy to avoid mutating the original
-  const result: MonthGroup[] = JSON.parse(JSON.stringify(baseGroups))
-
-  const createDate = props.creatingAtDate
+// Insert an empty date group (creation target or selected day without bookings) in date order
+function insertEmptyDateGroup(result: MonthGroup[], createDate: Date, isCreatePlaceholder: boolean) {
   const createMonthKey = `${createDate.getFullYear()}-${String(createDate.getMonth()).padStart(2, '0')}`
   const createDateKey = formatDateKey(createDate)
   const createMonthLabel = new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' }).format(createDate)
@@ -244,7 +238,7 @@ const groupedBookingsWithCreateDate = computed((): MonthGroup[] => {
         dateKey: createDateKey,
         date: new Date(createDate),
         bookings: [],
-        isCreatePlaceholder: true,
+        isCreatePlaceholder,
       }],
     }
 
@@ -282,10 +276,35 @@ const groupedBookingsWithCreateDate = computed((): MonthGroup[] => {
       dateKey: createDateKey,
       date: new Date(createDate),
       bookings: [],
-      isCreatePlaceholder: true,
+      isCreatePlaceholder,
     })
   }
+}
 
+// Grouped bookings plus empty sections for the creation date and every selected day without bookings
+const groupedBookingsWithCreateDate = computed((): MonthGroup[] => {
+  const baseGroups = groupedBookings.value
+  const existingKeys = new Set(allDateKeys.value)
+  const extraDates: { date: Date, isCreatePlaceholder: boolean }[] = []
+
+  if (props.creatingAtDate && !creatingDateHasBookings.value) {
+    extraDates.push({ date: props.creatingAtDate, isCreatePlaceholder: true })
+    existingKeys.add(formatDateKey(props.creatingAtDate))
+  }
+  for (const date of props.selectedDates ?? []) {
+    const key = formatDateKey(date)
+    if (existingKeys.has(key)) continue
+    existingKeys.add(key)
+    extraDates.push({ date, isCreatePlaceholder: false })
+  }
+
+  if (extraDates.length === 0) return baseGroups
+
+  // Create a deep copy to avoid mutating the original
+  const result: MonthGroup[] = JSON.parse(JSON.stringify(baseGroups))
+  for (const { date, isCreatePlaceholder } of extraDates) {
+    insertEmptyDateGroup(result, date, isCreatePlaceholder)
+  }
   return result
 })
 
@@ -422,15 +441,17 @@ watch(
     // Scroll to the most recently added date (last in array)
     const latestDate = dates[dates.length - 1]!
     const targetKey = formatDateKey(latestDate)
-    if (!allDateKeys.value.includes(targetKey)) return
 
-    const element = dateElementRefs.value.get(targetKey)
-    if (element) {
-      element.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      })
-    }
+    // Days without bookings get their own section on render, so wait for the DOM
+    nextTick(() => {
+      const element = dateElementRefs.value.get(targetKey)
+      if (element) {
+        element.scrollIntoView({
+          behavior: 'smooth',
+          block: 'start',
+        })
+      }
+    })
   },
   { deep: true },
 )
@@ -462,6 +483,11 @@ watch(
     })
   },
 )
+
+// Whether a day section belongs to a calendar-selected date (shows the New booking row)
+function isSelectedDateKey(dateKey: string): boolean {
+  return (props.selectedDates ?? []).some(d => formatDateKey(d) === dateKey)
+}
 
 // Check if a booking should be highlighted
 function isHighlighted(booking: Booking): boolean {
@@ -559,7 +585,7 @@ watch(
     </div>
 
     <!-- Empty state (but might have create card) -->
-    <div v-else-if="resolvedBookings.length === 0">
+    <div v-else-if="resolvedBookings.length === 0 && selectedDates.length === 0">
       <!-- Inline create card when empty -->
       <div v-if="creatingAtDate" :ref="setCreateCardRef" class="scroll-mt-4">
         <CroutonBookingsBookingCreateCard
@@ -657,6 +683,28 @@ watch(
                 @edit="handleEditClick(booking)"
               />
             </template>
+
+            <!-- Empty selected day -->
+            <p
+              v-if="dateGroup.bookings.length === 0 && creatingAtDateKey !== dateGroup.dateKey"
+              class="text-sm text-muted px-1 py-2"
+            >
+              {{ t('bookings.calendar.noBookings') }}
+            </p>
+
+            <!-- Ghost row: start a booking for this selected day -->
+            <UButton
+              v-if="isSelectedDateKey(dateGroup.dateKey) && creatingAtDateKey !== dateGroup.dateKey"
+              block
+              variant="outline"
+              color="neutral"
+              icon="i-lucide-plus"
+              class="border-dashed"
+              :disabled="isDayFullyBooked?.(new Date(dateGroup.date))"
+              @click="emit('newBooking', new Date(dateGroup.date))"
+            >
+              {{ isDayFullyBooked?.(new Date(dateGroup.date)) ? t('bookings.calendar.fullyBooked') : t('bookings.calendar.newBooking') }}
+            </UButton>
           </template>
         </div>
       </div>
