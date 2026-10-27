@@ -22,13 +22,6 @@ export default defineNitroPlugin((nitroApp) => {
   const stockResolve = ws.resolve
   if (!stockResolve) return
 
-  ws.resolve = async (info) => {
-    const hooks = await stockResolve(info)
-    if (hooks && Object.keys(hooks).length > 0) return hooks
-
-    const url = info.request?.url || info.url || '/'
-    const pathname = new URL(String(url), 'http://localhost').pathname
-    const resolved = await (nitroApp.router.handler as any).__resolve__?.(pathname)
-    return resolved?.handler?.__websocket__ || {}
-  }
+  ws.resolve = info =>
+    resolveWsHooks(info, stockResolve, (pathname: string) => (nitroApp.router.handler as any).__resolve__?.(pathname))
 })
