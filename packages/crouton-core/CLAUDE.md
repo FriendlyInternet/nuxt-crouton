@@ -54,6 +54,7 @@ export default defineNuxtConfig({
 | `app/composables/useCollectionMutation.ts` | Create/update/delete with auto cache invalidation |
 | `app/composables/useCollections.ts` | Collection config registry from `app.config.croutonCollections` |
 | `app/composables/useCroutonShortcuts.ts` | Keyboard shortcuts for CRUD operations |
+| `app/composables/useCollectionSelection.ts` | Which record of a collection is open, and where (#2598). Pure `createCollectionSelections({ open, containerFor })` (one selection per collection: `itemId`/`mode`/`sessionKey`, `act`, `attachEditor`, `saved`/`deleted`/`cancelled`) + Nuxt glue: `provideCollectionSelections()` (call once per page), `useCollectionSelections()` (inject, or a private set = overlay behaviour), `provideSelectionItemActions(collection)` (route child rows' actions to it). A mounted editor `attachEditor()`s → rows open in it; none → the collection's overlay; delete always a modal. Used by `CollectionViewer` (inline mode) and crouton-layout's List/Form blocks |
 | `app/composables/useCollectionExport.ts` | CSV/JSON export for collection data |
 | `app/composables/useCollectionImport.ts` | CSV/JSON import with column mapping, validation, and batched POST |
 | `app/composables/useDisplayConfig.ts` | Resolves display config (title/subtitle/image/badge/description) with auto-inference |
@@ -461,7 +462,9 @@ interface HierarchyConfig { enabled, parentField?, orderField?, pathField? }
 When `container: 'inline'` is set in collection config, `CollectionViewer` renders a split-view:
 any layout on the left (shrinks to 40%) + `WorkspaceEditor` on the right.
 
-`CollectionViewer` provides `CROUTON_ITEM_ACTION_KEY` via Vue's provide/inject.
+`CollectionViewer` provides `CROUTON_ITEM_ACTION_KEY` via Vue's provide/inject — through the shared
+`useCollectionSelection` (#2598), the same selection crouton-layout's List/Form blocks use; in inline
+mode its editor panel registers as the on-screen editor.
 All child components (Table, DefaultCard, KanbanColumn, Detail, ItemCardMini, TableHeader)
 inject this handler instead of calling `crouton.open()` directly. This allows the container type
 to be changed without modifying any layout component.
