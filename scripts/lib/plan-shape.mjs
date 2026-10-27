@@ -73,6 +73,20 @@ export function parseAssumptions(text) {
   return { items, errors }
 }
 
+function parseReproduced(text, errors) {
+  const m = text.match(/^\W*(yes|no)\b\W*(.*)/is)
+  if (!m) { errors.push('Reproduced must open with yes or no'); return null }
+  const reproduced = m[1].toLowerCase() === 'yes'
+  if (!reproduced && m[2].trim().length < 15) errors.push('Reproduced: no — needs a concrete reason it cannot be reproduced')
+  return reproduced
+}
+
+function parseNeedsOwner(text, errors) {
+  const m = text.match(/^\W*(yes|no)\b/i)
+  if (!m) { errors.push('Needs owner must open with yes or no'); return null }
+  return m[1].toLowerCase() === 'yes'
+}
+
 export function parsePlan(body) {
   const errors = []
   if (!body.includes(PLAN_MARKER)) errors.push(`missing marker ${PLAN_MARKER}`)
@@ -80,28 +94,11 @@ export function parsePlan(body) {
   for (const s of SECTIONS) {
     if (!sections[s]) errors.push(`missing or empty section: ${s}`)
   }
-  let reproduced = null
-  if (sections.Reproduced) {
-    const m = sections.Reproduced.match(/^\W*(yes|no)\b\W*(.*)/is)
-    if (!m) errors.push('Reproduced must open with yes or no')
-    else {
-      reproduced = m[1].toLowerCase() === 'yes'
-      if (!reproduced && m[2].trim().length < 15) errors.push('Reproduced: no — needs a concrete reason it cannot be reproduced')
-    }
-  }
-  let needsOwner = null
-  if (sections['Needs owner']) {
-    const m = sections['Needs owner'].match(/^\W*(yes|no)\b/i)
-    if (!m) errors.push('Needs owner must open with yes or no')
-    else needsOwner = m[1].toLowerCase() === 'yes'
-  }
-  let assumptions = []
-  if (sections.Assumptions) {
-    const a = parseAssumptions(sections.Assumptions)
-    assumptions = a.items
-    errors.push(...a.errors)
-  }
-  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions, unverified: reproduced === false }
+  const reproduced = sections.Reproduced ? parseReproduced(sections.Reproduced, errors) : null
+  const needsOwner = sections['Needs owner'] ? parseNeedsOwner(sections['Needs owner'], errors) : null
+  const a = sections.Assumptions ? parseAssumptions(sections.Assumptions) : { items: [], errors: [] }
+  errors.push(...a.errors)
+  return { ok: errors.length === 0, errors, reproduced, needsOwner, assumptions: a.items, unverified: reproduced === false }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
