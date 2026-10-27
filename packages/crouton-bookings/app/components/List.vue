@@ -221,6 +221,14 @@ function getWeekKey(date: Date): string {
 
 // Report the top visible day to the calendar when its week changes
 let lastEmittedWeek: string | null = null
+const listRoot = ref<HTMLElement | null>(null)
+// The list scrolls inside its panel, so observe against that scroll container
+const scrollRoot = computed(() => {
+  for (let el = listRoot.value?.parentElement; el; el = el.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(el).overflowY)) return el
+  }
+  return null
+})
 useIntersectionObserver(
   () => [...dateElementRefs.value.values()],
   (entries) => {
@@ -245,7 +253,7 @@ useIntersectionObserver(
       emit('topVisibleDateChange', date)
     }
   },
-  { rootMargin: '-10% 0px -80% 0px', threshold: 0 }, // Top 10-20% of viewport triggers
+  { root: scrollRoot, rootMargin: '-10% 0px -80% 0px', threshold: 0 }, // Top 10-20% of viewport triggers
 )
 
 // Register the element of a date section for scroll targeting
@@ -298,7 +306,7 @@ const creatingAtDateKey = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <div ref="listRoot" class="space-y-4">
     <!-- Loading state -->
     <div v-if="resolvedLoading" class="flex flex-col gap-3">
       <div v-for="i in 5" :key="i" class="bg-elevated/50 rounded-lg p-3 animate-pulse">
@@ -333,7 +341,7 @@ const creatingAtDateKey = computed(() => {
     <!-- Empty state (but might have create card) -->
     <div v-else-if="resolvedBookings.length === 0 && !selectedDate">
       <!-- Inline create card when empty -->
-      <div v-if="creatingAtDate" class="scroll-mt-4">
+      <div v-if="creatingAtDate">
         <CroutonBookingsBookingCreateCard
           :date="creatingAtDate"
           :active-location-filter="activeLocationFilter"
@@ -374,12 +382,11 @@ const creatingAtDateKey = computed(() => {
           v-for="dateGroup in monthGroup.dateGroups"
           :key="dateGroup.dateKey"
           :ref="(el) => setDateRef(dateGroup.dateKey, el as HTMLElement)"
-          class="flex flex-col gap-1.5 scroll-mt-4"
+          class="flex flex-col gap-1.5"
         >
           <!-- Create card for placeholder date (new date with no bookings) -->
           <div
             v-if="dateGroup.isCreatePlaceholder && creatingAtDate"
-            class="scroll-mt-4"
           >
             <CroutonBookingsBookingCreateCard
               :date="creatingAtDate"
@@ -394,7 +401,6 @@ const creatingAtDateKey = computed(() => {
             <!-- Inline create card at TOP if creating at this date (existing date with bookings) -->
             <div
               v-if="creatingAtDateKey === dateGroup.dateKey"
-                class="scroll-mt-4"
             >
               <CroutonBookingsBookingCreateCard
                 :date="creatingAtDate!"

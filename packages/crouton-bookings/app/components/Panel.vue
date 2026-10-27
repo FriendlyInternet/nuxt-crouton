@@ -107,25 +107,6 @@ async function refresh() {
 // Ref for PanelMap control (to fly to specific locations)
 const panelMapRef = ref<{ flyToLocation: (locationId: string) => void } | null>(null)
 
-// Scroll direction detection — reveals filters on scroll-up, hides on scroll-down
-const scrollingUp = ref(false)
-let lastScrollY = 0
-
-function onScroll() {
-  const y = window.scrollY
-  scrollingUp.value = y < lastScrollY
-  lastScrollY = y
-}
-
-onMounted(() => {
-  lastScrollY = window.scrollY
-  window.addEventListener('scroll', onScroll, { passive: true })
-})
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', onScroll)
-})
-
 // Crouton form and team auth for location creation
 const { open: openCroutonForm } = useCrouton()
 const { isAdmin } = useTeam()
@@ -331,11 +312,10 @@ defineExpose({
 </script>
 
 <template>
-  <div class="booking-panel rounded-[calc(var(--ui-radius)*2)] border border-default bg-default">
-      <!-- Sticky: filters + calendar. Negative top hides filters above viewport;
-           scrolling up reveals them. Calendar stays pinned. -->
-      <div class="sticky z-20 bg-default rounded-t-[calc(var(--ui-radius)*2)] transition-[top] duration-300 flex flex-col gap-2" :class="scrollingUp ? 'top-0' : '-top-12'">
-        <!-- Filter controls (hidden above viewport when stuck) -->
+  <div class="booking-panel flex h-full min-h-0 flex-col rounded-[calc(var(--ui-radius)*2)] border border-default bg-default">
+      <!-- Fixed on top: filters + calendar. Only the list below scrolls. -->
+      <div class="shrink-0 bg-default rounded-t-[calc(var(--ui-radius)*2)] flex flex-col gap-2">
+        <!-- Filter controls -->
         <div class="px-2 pt-2 pb-1.5 md:px-4 md:pt-3 md:pb-2">
           <CroutonBookingsPanelFilters
             :locations="resolvedLocations"
@@ -382,6 +362,8 @@ defineExpose({
         <div v-else class="border-b border-default" />
       </div>
 
+      <!-- Scroll area: map + list -->
+      <div class="flex-1 min-h-0 overflow-y-auto">
       <!-- Map section (scrolls with content) -->
       <Transition
         enter-active-class="transition-all duration-300 ease-out"
@@ -424,6 +406,7 @@ defineExpose({
           @updated="onBookingUpdated"
           @email-sent="onEmailSent"
         />
+      </div>
       </div>
   </div>
 </template>
