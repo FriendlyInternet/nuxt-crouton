@@ -19,6 +19,8 @@
 </template>
 
 <script setup lang="ts">
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
+
 const props = defineProps({
   collection: String,
   loading: String,
@@ -33,23 +35,13 @@ const props = defineProps({
   }
 })
 
-// Registered-component check without resolveComponent's "failed to resolve" warning.
-// Nuxt registers both <Name> and Lazy<Name>; prefer the lazy one so forms stay out of the entry chunk.
-const instance = getCurrentInstance()
-const lookup = (name: string): unknown => {
-  const registry = instance?.appContext.components
-  if (!registry) return undefined
-  return registry[name] ? resolveComponent(name) : undefined
-}
-const isRegistered = (name: string) => {
-  const found = lookup(name)
-  return !!found && typeof found !== 'string'
-}
+// Build-time map of every *Form / *Detail component (Nuxt's resolved winner, lazy chunk).
+// Keyed by unprefixed name; the resolver chain asks for Lazy<Name>.
+const unlazy = (name: string) => name.replace(/^Lazy/, '')
+const has = (name: string) => Object.hasOwn(collectionForms, unlazy(name))
 
 const resolution = computed(() =>
-  resolveFormChain(props.collection, props.action, name =>
-    isRegistered(name) || isRegistered(name.replace(/^Lazy/, ''))
-  )
+  resolveFormChain(props.collection, props.action, has)
 )
 
 const isGenericDetail = computed(() => {
@@ -59,10 +51,7 @@ const isGenericDetail = computed(() => {
 
 const currentComponent = computed(() => {
   const r = resolution.value
-  if (r.kind !== 'component') return null
-  const lazy = lookup(r.name)
-  if (lazy && typeof lazy !== 'string') return lazy
-  return lookup(r.name.replace(/^Lazy/, '')) as any
+  return r.kind === 'component' ? collectionForms[unlazy(r.name)] : null
 })
 
 // Determine mode based on route context
