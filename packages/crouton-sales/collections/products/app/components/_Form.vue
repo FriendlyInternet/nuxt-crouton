@@ -1,5 +1,5 @@
 <!--
-  SalesProductForm
+  SalesProductsForm
   Package-provided form for the sales products collection.
   Replaces the CLI-generated _Form.vue (wired via componentName in
   useSalesProducts config).

@@ -1,5 +1,5 @@
 <!--
-  SalesLocationForm
+  SalesLocationsForm
   Package-provided form for the sales locations collection.
   Replaces the CLI-generated _Form.vue (wired via componentName in
   useSalesLocations config). Event is implied by the event workspace.

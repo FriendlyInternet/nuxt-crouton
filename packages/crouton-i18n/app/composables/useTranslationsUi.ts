@@ -59,7 +59,7 @@ const _translationsUiConfig = {
   apiPath: 'translations-ui',
   displayName: 'UI Translations',
   singularName: 'Translation',
-  componentName: 'CroutonI18nUiForm',
+  componentName: 'TranslationsUiForm',
   defaultValues: TRANSLATIONS_UI_DEFAULTS,
   columns: TRANSLATIONS_UI_COLUMNS,
   defaultPagination: TRANSLATIONS_UI_PAGINATION,

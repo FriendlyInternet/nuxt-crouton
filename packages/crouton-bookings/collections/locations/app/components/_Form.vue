@@ -1,5 +1,5 @@
 <!--
-  CroutonBookingsLocationForm
+  BookingsLocationsForm
   Package-provided form for the bookings locations collection.
   Replaces the CLI-generated _Form.vue with a polished 3-tab layout.
 
@@ -216,7 +216,7 @@
 </template>
 
 <script setup lang="ts">
-import type { LocationData } from '../types/booking'
+import type { LocationData } from '../../../../app/types/booking'
 
 // useBookingsLocations is auto-imported from the generated collection layer at runtime
 declare function useBookingsLocations(): {

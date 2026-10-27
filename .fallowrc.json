@@ -23,6 +23,8 @@
     "packages/*/collections/**/app/components/**/*.vue",
     "packages/*/collections/**/app/composables/**/*.ts",
     "packages/*/collections/**/types.ts",
+    // A package's own collection form/list, registered as a Nuxt components dir (TranslationsUiForm)
+    "packages/*/app/collection-components/**/*.vue",
     // Loaded by crouton-core's nuxt.config at build time (join(process.cwd(), ...))
     "**/crouton.config.js",
     // Referenced from nuxt.config `css:` arrays, not imports

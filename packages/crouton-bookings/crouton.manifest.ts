@@ -1,4 +1,4 @@
-import { defineCroutonManifest, defineGeneratorContribution } from '@fyit/crouton-core/shared/manifest'
+import { defineCroutonManifest } from '@fyit/crouton-core/shared/manifest'
 import bookingSchema from './schemas/booking.json'
 import locationSchema from './schemas/location.json'
 import settingsSchema from './schemas/settings.json'
@@ -132,21 +132,5 @@ export default defineCroutonManifest({
       '/api/crouton-bookings/teams/[teamId]/bookings/[bookingId]',
       '/api/crouton-bookings/teams/[teamId]/bookings/[bookingId]/resend-email'
     ]
-  }
-})
-
-// The package ships a bespoke location form (PanelMap-based). Declaring it here
-// wires the composable's componentName + skips the generic generated _Form.vue
-// for ANY consuming app — no per-app `formComponent` config needed (velo set it
-// by hand), and it survives regen. Without this, the maps generator detector
-// (location has address + coordinate fields) injects a CroutonMapsMap/useGeocode
-// form into a package that doesn't extend crouton-maps → broken codegen (#558).
-export const generatorContribution = defineGeneratorContribution({
-  getFormComponent({ collectionName }) {
-    const forms: Record<string, string> = {
-      location: 'CroutonBookingsLocationForm',
-      locations: 'CroutonBookingsLocationForm',
-    }
-    return forms[collectionName] ?? null
   }
 })

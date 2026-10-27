@@ -956,20 +956,6 @@
         "count": 2
       }
     },
-    "packages/crouton-bookings/app/components/LocationForm.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "packages/crouton-bookings/app/components/OpenDaysPicker.vue": {
       "crap_high": {
         "count": 1
@@ -2869,12 +2855,12 @@
         "count": 2
       }
     },
-    "packages/crouton-i18n/app/components/UiForm.vue": {
+    "packages/crouton-i18n/app/collection-components/UiForm.vue": {
       "crap_high": {
         "count": 1
       }
     },
-    "packages/crouton-i18n/app/components/UiList.vue": {
+    "packages/crouton-i18n/app/collection-components/UiList.vue": {
       "complexity_critical": {
         "count": 2
       },
@@ -4208,17 +4194,6 @@
         "count": 3
       }
     },
-    "packages/crouton-sales/app/components/PrinterForm.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
-      }
-    },
     "packages/crouton-sales/app/components/PrintqueuesCard.vue": {
       "crap_critical": {
         "count": 1
@@ -5338,7 +5313,6 @@
     "packages/crouton-triage/app/components/flows/OutputManager.vue:complexity",
     "packages/crouton-sales/app/components/EventWorkspace/Shell.vue:complexity",
     "scripts/db-clone.mjs:complexity",
-    "packages/crouton-i18n/app/components/UiList.vue:complexity",
     "packages/crouton-events/app/components/CroutonEventChangesTable.vue:complexity",
     "packages/crouton-pages/app/components/Blocks/Properties/ButtonRowEditor.vue:complexity",
     "packages/crouton-pages/app/components/Blocks/Properties/ImageEditor.vue:complexity",
@@ -5359,6 +5333,7 @@
     "packages/crouton-triage/app/components/usermappings/SlackUserDiscovery.vue:complexity",
     "packages/crouton-triage/app/components/usermappings/NotionUserDiscovery.vue:complexity",
     "packages/crouton-triage/app/components/flows/InputManager.vue:complexity",
-    "packages/crouton-cli/lib/seed-translations.ts:complexity"
+    "packages/crouton-cli/lib/seed-translations.ts:complexity",
+    "packages/crouton-i18n/app/collection-components/UiList.vue:complexity"
   ]
 }
