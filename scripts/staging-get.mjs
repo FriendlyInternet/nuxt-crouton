@@ -77,17 +77,21 @@ export function formatBody(text) {
 
 function fail(msg, code) { console.error(msg); process.exit(code) }
 
-async function main() {
-  const argv = process.argv.slice(2)
-  const mi = argv.indexOf('--method')
-  const method = mi >= 0 ? (argv.splice(mi, 2)[1] || 'GET').toUpperCase() : 'GET'
+/** Parse CLI args: positional <app> <path> plus --method / --body / --body-file (body must be JSON). */
+function parseArgs(argv) {
   const take = (flag) => { const i = argv.indexOf(flag); return i >= 0 ? argv.splice(i, 2)[1] : undefined }
+  const method = (take('--method') || 'GET').toUpperCase()
   let reqBody = take('--body')
   const bodyFile = take('--body-file')
   if (bodyFile) reqBody = readFileSync(bodyFile, 'utf8')
   if (reqBody !== undefined) { try { JSON.parse(reqBody) } catch { fail('--body / --body-file must be valid JSON.', 2) } }
   const [app, path] = argv
   if (!app || !path) fail('Usage: REVIEW_SEED_SECRET=… staging-get.mjs <app> <path> [--method PATCH --body <json> | --body-file <path>]', 2)
+  return { method, reqBody, app, path }
+}
+
+async function main() {
+  const { method, reqBody, app, path } = parseArgs(process.argv.slice(2))
   const secret = process.env.REVIEW_SEED_SECRET
   if (!secret) fail('REVIEW_SEED_SECRET is not set — cannot derive the review login.', 2)
   const base = readStagingUrl(app)
