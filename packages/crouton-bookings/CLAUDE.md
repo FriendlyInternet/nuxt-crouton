@@ -9,6 +9,7 @@ Booking system layer for Nuxt applications that provides both slot-based booking
 | File | Purpose |
 |------|---------|
 | `nuxt.config.ts` | Layer configuration, component registration, i18n setup |
+| `app/composables/useBookingsStore.ts` | **One bookings screen's shared state (#2561)** — filters, the one selected day (`selectDay` from the calendar; `selectDate` for a booking's date / `goToToday` also shows its period), `shownDate` (the calendar's week/month; `showPeriod` when the list scrolls), `scrollTarget` (a fresh Date per request, so the same day scrolls again), hovered booking, and the "new booking" date (`startCreate` refuses read-only / no locations / closed / fully booked and says which; `finishCreate(reload)` closes, reloads, then scrolls). Holds no data: handed the page's `bookings`, `calendarBookings` (whole team, decides "full" via `utils/day-availability`), `locations`, `readOnly`. Pure `createBookingsStore` (tested in `test/bookings-store.test.ts`) + `provideBookingsStore` / `useBookingsStore` (inject). The Panel provides one; the layout blocks move onto it next (they still use `useBookingsLayoutFilters`) |
 | `app/composables/useBookingAvailability.ts` | Check slot/inventory availability |
 | `app/composables/useBookingCart.ts` | Shopping cart for bookings |
 | `app/composables/useBookingsSettings.ts` | Team booking settings |
