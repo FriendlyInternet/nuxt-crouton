@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
 import { nanoid } from 'nanoid'
 
 /**
@@ -82,3 +82,23 @@ export const salesSyncStatus = sqliteTable('sales_sync_status', {
   lastBatchApplied: integer('last_batch_applied').notNull().$default(() => 0),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$default(() => new Date()),
 })
+
+/**
+ * Delete markers for synced config rows (#814, epic #801).
+ *
+ * Config deletes are hard deletes, so nothing is left to sync or to lose a
+ * conflict against. A marker per deleted config row keeps every list query
+ * unchanged (a soft-delete column would have touched all of them). Written by
+ * the till's delete endpoints (when cloud sync is on) and by the cloud ingest
+ * when it applies a delete; read by the conflict rule so a stale edit cannot
+ * bring a deleted row back.
+ */
+export const salesSyncTombstones = sqliteTable('sales_sync_tombstones', {
+  id: text('id').primaryKey().$default(() => nanoid()),
+  entityType: text('entity_type').notNull(),
+  entityId: text('entity_id').notNull(),
+  teamId: text('team_id').notNull(),
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }).notNull(),
+}, table => [
+  uniqueIndex('uq_sales_sync_tombstones_entity').on(table.entityType, table.entityId),
+])

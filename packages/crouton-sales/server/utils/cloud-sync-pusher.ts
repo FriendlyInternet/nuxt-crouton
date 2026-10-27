@@ -16,6 +16,7 @@
  * The outbox schema is package-owned (`../database/schema`, imported lazily).
  */
 import { asc, inArray, isNull } from 'drizzle-orm'
+import { updateClockOffset } from './sync-clock'
 
 export interface PushOptions {
   /** Ingest endpoint URL; defaults to env CROUTON_SALES_CLOUD_SYNC_URL. */
@@ -100,6 +101,7 @@ export async function pushPendingOutbox(db: any, opts: PushOptions = {}): Promis
   }))
 
   const doFetch = opts.fetcher ?? (globalThis as any).$fetch
+  const sentAt = Date.now()
   const res: IngestResponse = await doFetch(url, {
     method: 'POST',
     headers,
@@ -107,6 +109,9 @@ export async function pushPendingOutbox(db: any, opts: PushOptions = {}): Promis
     timeout: opts.timeoutMs ?? 15000,
     retry: 0,
   })
+
+  // Learn the cloud clock offset so config edits are stamped on the cloud's time (#814).
+  updateClockOffset(res?.serverNow, sentAt, Date.now())
 
   const applied = Array.isArray(res?.applied) ? res.applied : []
   const skipped = Array.isArray(res?.skipped) ? res.skipped : []
