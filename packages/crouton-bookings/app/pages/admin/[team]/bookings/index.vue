@@ -75,7 +75,7 @@ async function handleBookingChange() {
 </script>
 
 <template>
-  <div class="h-full p-4 sm:p-6 flex flex-col gap-3">
+  <div class="w-full min-h-0 p-4 sm:p-6 flex flex-col gap-3">
     <!-- Impersonation banner -->
     <Transition
       enter-active-class="transition-all duration-300 ease-out"

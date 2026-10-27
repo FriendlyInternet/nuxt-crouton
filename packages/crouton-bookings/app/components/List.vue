@@ -27,6 +27,8 @@ interface Props {
   activeLocationFilter?: string[]
   /** Whether every location is fully booked on a date (disables the New booking row) */
   isDayFullyBooked?: (date: Date) => boolean
+  /** Scroll container the list lives in (IntersectionObserver root) */
+  scrollRoot?: HTMLElement | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -41,6 +43,7 @@ const props = withDefaults(defineProps<Props>(), {
   scrollTarget: null,
   activeLocationFilter: undefined,
   isDayFullyBooked: undefined,
+  scrollRoot: null,
 })
 
 const emit = defineEmits<{
@@ -221,14 +224,6 @@ function getWeekKey(date: Date): string {
 
 // Report the top visible day to the calendar when its week changes
 let lastEmittedWeek: string | null = null
-const listRoot = ref<HTMLElement | null>(null)
-// The list scrolls inside its panel, so observe against that scroll container
-const scrollRoot = computed(() => {
-  for (let el = listRoot.value?.parentElement; el; el = el.parentElement) {
-    if (/(auto|scroll)/.test(getComputedStyle(el).overflowY)) return el
-  }
-  return null
-})
 useIntersectionObserver(
   () => [...dateElementRefs.value.values()],
   (entries) => {
@@ -253,7 +248,7 @@ useIntersectionObserver(
       emit('topVisibleDateChange', date)
     }
   },
-  { root: scrollRoot, rootMargin: '-10% 0px -80% 0px', threshold: 0 }, // Top 10-20% of viewport triggers
+  { root: () => props.scrollRoot, rootMargin: '-10% 0px -80% 0px', threshold: 0 }, // Top 10-20% of viewport triggers
 )
 
 // Register the element of a date section for scroll targeting
@@ -306,7 +301,7 @@ const creatingAtDateKey = computed(() => {
 </script>
 
 <template>
-  <div ref="listRoot" class="space-y-4">
+  <div class="space-y-4">
     <!-- Loading state -->
     <div v-if="resolvedLoading" class="flex flex-col gap-3">
       <div v-for="i in 5" :key="i" class="bg-elevated/50 rounded-lg p-3 animate-pulse">

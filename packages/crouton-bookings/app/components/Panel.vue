@@ -104,6 +104,9 @@ async function refresh() {
   }
 }
 
+// Scroll container for map + list (also the list's observer root)
+const scrollAreaRef = ref<HTMLElement | null>(null)
+
 // Ref for PanelMap control (to fly to specific locations)
 const panelMapRef = ref<{ flyToLocation: (locationId: string) => void } | null>(null)
 
@@ -363,7 +366,7 @@ defineExpose({
       </div>
 
       <!-- Scroll area: map + list -->
-      <div class="flex-1 min-h-0 overflow-y-auto">
+      <div ref="scrollAreaRef" class="flex-1 min-h-0 overflow-y-auto">
       <!-- Map section (scrolls with content) -->
       <Transition
         enter-active-class="transition-all duration-300 ease-out"
@@ -387,6 +390,7 @@ defineExpose({
       <!-- List section -->
       <div class="px-2 py-3 md:px-4 md:py-4">
         <CroutonBookingsList
+          :scroll-root="scrollAreaRef"
           :bookings="filteredBookings"
           :loading="resolvedLoading"
           :error="resolvedError"
