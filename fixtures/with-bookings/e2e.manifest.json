@@ -8,6 +8,7 @@
     }
   ],
   "ejectedForm": { "collectionKey": "bookingsLocations", "marker": "EJECTED-FORM-WINS" },
+  "ejectedList": { "collectionKey": "bookingsEmailtemplates", "marker": "EJECTED-LIST-WINS" },
   "surfaces": [
     {
       "name": "bookings admin section renders",

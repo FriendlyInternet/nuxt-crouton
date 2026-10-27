@@ -1,7 +1,7 @@
 import { addTemplate, addTypeTemplate, defineNuxtModule } from '@nuxt/kit'
 
 /**
- * Build-time map of every `*Form` / `*Detail` / `*Select` component → its lazy component.
+ * Build-time map of every `*Form` / `*Detail` / `*Select` / `*List` component → its lazy component.
  *
  * FormDynamicLoader resolves a collection's form by canonical name
  * (`<Layer><Plural>Form`). Doing that through the runtime component registry
@@ -10,12 +10,14 @@ import { addTemplate, addTypeTemplate, defineNuxtModule } from '@nuxt/kit'
  * app-beats-layer winner is Nuxt's own — ejecting a form is still "add one file".
  * `*Select` covers generated dependent-field selects (`<Layer><Plural><Field>Select`),
  * looked up by FormDependentFieldLoader the same way.
+ * `*List` is the collection list (`<Layer><Plural>List`), looked up by CollectionViewer
+ * the same way, so an app ejects a list by adding one file.
  * Each value is Nuxt's `Lazy<Name>` export from `#components`, a real lazy chunk.
  */
 
 export const COLLECTION_FORMS_TEMPLATE = 'crouton-collection-forms.mjs'
 
-const isFormOrDetail = (name: string) => /(Form|Detail|Select)$/.test(name)
+const isFormOrDetail = (name: string) => /(Form|Detail|Select|List)$/.test(name)
 
 /** Render the template source for a list of resolved component names. */
 export function renderCollectionForms(pascalNames: string[]): string {
