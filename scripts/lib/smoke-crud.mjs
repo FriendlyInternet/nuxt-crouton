@@ -27,6 +27,37 @@ export function fillPlaceholders(value, vars) {
   return value
 }
 
+/** One GET/PATCH step: pushes a failure and returns false when it is not ok or misses `expectIncludes`. */
+async function runStep(name, step, { auth, method = 'GET', body }, { http, fill, failures }) {
+  const { res, json } = await http(method, fill(step.path), body, { auth })
+  const expect = step.expectIncludes == null ? null : fill(step.expectIncludes)
+  if (res.ok && !(expect && !JSON.stringify(json ?? '').includes(expect))) return true
+  failures.push(`crud.${name}: HTTP ${res.status}${expect ? ` / missing "${expect}"` : ''}`)
+  return false
+}
+
+/** update → read → readPublic, each logged on success. */
+async function runChecks(crud, ctx) {
+  const { fill, log } = ctx
+  const u = crud.update
+  const steps = [
+    u && ['update', u, { auth: true, method: u.method || 'PATCH', body: fill(u.body ?? {}) }, '✓ crud.update ok'],
+    crud.read && ['read', crud.read, { auth: true }, '✓ crud.read ok — saved record reads back'],
+    crud.readPublic && ['readPublic', crud.readPublic, { auth: false }, '✓ crud.readPublic ok — created record is publicly readable'],
+  ].filter(Boolean)
+  for (const [name, step, opts, okMsg] of steps) {
+    if (await runStep(name, step, opts, ctx)) log(okMsg)
+  }
+}
+
+async function runDelete(d, id, { http, fill, failures, log }) {
+  try {
+    const { res } = await http(d.method || 'DELETE', fill(d.path), undefined, { auth: true })
+    if (res.ok) log('✓ crud.delete ok')
+    else failures.push(`crud.delete: HTTP ${res.status} (record ${id} left behind)`)
+  } catch (e) { failures.push(`crud.delete: ${e.message}`) }
+}
+
 /**
  * @param {object} crud       the manifest's smoke.crud block
  * @param {object} deps       { http(method, path, body, {auth}) → {res:{ok,status}, json}, getTeamId() → Promise<string|undefined>, log(msg), rand? }
@@ -35,48 +66,21 @@ export function fillPlaceholders(value, vars) {
 export async function runCrud(crud, { http, getTeamId, log = () => {}, rand = Math.random().toString(36).slice(2, 8) }) {
   const failures = []
   const vars = { rand }
-  const needsTeam = JSON.stringify(crud).includes('{teamId}')
-  if (needsTeam) {
+  if (JSON.stringify(crud).includes('{teamId}')) {
     vars.teamId = await getTeamId()
     if (!vars.teamId) return ['crud: path uses {teamId} but the session has no active team']
   }
-  const fill = v => fillPlaceholders(v, vars)
+  const ctx = { http, fill: v => fillPlaceholders(v, vars), failures, log }
 
   const c = crud.create
-  const { res: cr, json: cj } = await http(c.method || 'POST', fill(c.path), fill(c.body ?? {}))
+  const { res: cr, json: cj } = await http(c.method || 'POST', ctx.fill(c.path), ctx.fill(c.body ?? {}))
   if (!cr.ok) return [`crud.create: HTTP ${cr.status}`]
   const id = crud.idFrom ? dotGet(cj, crud.idFrom) : (cj?.id ?? cj?.data?.id)
   vars.id = id
   log(`✓ crud.create ok${id != null ? ` (id=${id})` : ''}`)
-  if (id == null) failures.push('crud.create: response has no id')
+  if (id == null) return ['crud.create: response has no id']
 
-  const check = async (name, step, { auth, method = 'GET', body }) => {
-    const { res, json } = await http(method, fill(step.path), body, { auth })
-    const text = JSON.stringify(json ?? '')
-    const expect = step.expectIncludes == null ? null : fill(step.expectIncludes)
-    if (!res.ok || (expect && !text.includes(expect))) {
-      failures.push(`crud.${name}: HTTP ${res.status}${expect ? ` / missing "${expect}"` : ''}`)
-      return false
-    }
-    return true
-  }
-
-  if (id != null) {
-    if (crud.update) {
-      const u = crud.update
-      if (await check('update', u, { auth: true, method: u.method || 'PATCH', body: fill(u.body ?? {}) })) log('✓ crud.update ok')
-    }
-    if (crud.read && await check('read', crud.read, { auth: true })) log('✓ crud.read ok — saved record reads back')
-    if (crud.readPublic && await check('readPublic', crud.readPublic, { auth: false })) log('✓ crud.readPublic ok — created record is publicly readable')
-
-    if (crud.delete) {
-      const d = crud.delete
-      try {
-        const { res } = await http(d.method || 'DELETE', fill(d.path), undefined, { auth: true })
-        if (res.ok) log('✓ crud.delete ok')
-        else failures.push(`crud.delete: HTTP ${res.status} (record ${id} left behind)`)
-      } catch (e) { failures.push(`crud.delete: ${e.message}`) }
-    }
-  }
+  await runChecks(crud, ctx)
+  if (crud.delete) await runDelete(crud.delete, id, ctx)
   return failures
 }
