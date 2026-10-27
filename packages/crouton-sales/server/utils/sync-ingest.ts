@@ -122,6 +122,62 @@ const toMs = (v: unknown): number | null => {
   return Number.isNaN(ms) ? null : ms
 }
 
+/** The event whose status decides who wins while the row is live. */
+async function liveEventStatus(
+  db: any,
+  tables: Record<OutboxEntityType, any>,
+  e: IngestEvent,
+  row: any,
+  values: Record<string, unknown>
+): Promise<unknown> {
+  if (e.entityType === 'event') return row?.status ?? values.status
+  const eventId = row?.eventId ?? values.eventId
+  if (!eventId) return undefined
+  const eventsTable = tables.event
+  const [ev] = await db.select({ status: eventsTable.status }).from(eventsTable).where(eq(eventsTable.id, eventId)).limit(1)
+  return ev?.status
+}
+
+function incomingVersion(e: IngestEvent, opts: IngestOptions): ConfigVersion {
+  const payload = e.payload as { updatedAt?: unknown, deletedAt?: unknown }
+  const isDelete = e.operation === 'delete'
+  return {
+    updatedAt: toMs(payload.updatedAt) ?? toMs(payload.deletedAt) ?? Date.now(),
+    deletedAt: isDelete ? (toMs(payload.deletedAt) ?? toMs(payload.updatedAt) ?? Date.now()) : null,
+    deviceId: opts.deviceId ?? null
+  }
+}
+
+function localVersion(row: any, mark: any): ConfigVersion | null {
+  if (row) return { updatedAt: toMs(row.updatedAt) ?? 0, deviceId: null }
+  if (mark) return { updatedAt: 0, deletedAt: toMs(mark.deletedAt) ?? 0, deviceId: null }
+  return null
+}
+
+async function deleteWithTombstone(
+  db: any,
+  table: any,
+  tombstones: any,
+  e: IngestEvent,
+  teamId: string | undefined,
+  deletedAtMs: number
+) {
+  await db.delete(table).where(and(eq(table.id, e.entityId), ...(teamId ? [eq(table.teamId, teamId)] : [])))
+  const deletedAt = new Date(deletedAtMs)
+  await db.insert(tombstones)
+    .values({ entityType: e.entityType, entityId: e.entityId, teamId: teamId ?? '', deletedAt })
+    .onConflictDoUpdate({ target: [tombstones.entityType, tombstones.entityId], set: { deletedAt } })
+}
+
+async function upsertRow(db: any, table: any, id: string, values: Record<string, unknown>) {
+  const setObj = { ...values }
+  delete setObj.id
+  const updated = Object.keys(setObj).length > 0
+    ? await db.update(table).set(setObj).where(eq(table.id, id)).returning({ id: table.id })
+    : []
+  if (updated.length === 0) await db.insert(table).values(values)
+}
+
 /**
  * Apply one till config write on the cloud with the conflict rule (#814):
  * compare it with the cloud's current row (or its delete marker), then apply or
@@ -140,32 +196,15 @@ async function applyConfigEvent(
   const table = tables[e.entityType]
   const teamId = values.teamId as string | undefined
   const tombstones = opts.tombstones ?? (await import('../database/schema')).salesSyncTombstones
-  const isDelete = e.operation === 'delete'
-
-  const payload = e.payload as { updatedAt?: unknown, deletedAt?: unknown }
-  const incoming: ConfigVersion = {
-    updatedAt: toMs(payload.updatedAt) ?? toMs(payload.deletedAt) ?? Date.now(),
-    deletedAt: isDelete ? (toMs(payload.deletedAt) ?? toMs(payload.updatedAt) ?? Date.now()) : null,
-    deviceId: opts.deviceId ?? null
-  }
+  const incoming = incomingVersion(e, opts)
 
   const [row] = await db.select().from(table).where(eq(table.id, e.entityId)).limit(1)
   const [mark] = await db.select().from(tombstones)
     .where(and(eq(tombstones.entityType, e.entityType), eq(tombstones.entityId, e.entityId))).limit(1)
 
-  let local: ConfigVersion | null = null
-  if (row) local = { updatedAt: toMs(row.updatedAt) ?? 0, deviceId: null }
-  else if (mark) local = { updatedAt: 0, deletedAt: toMs(mark.deletedAt) ?? 0, deviceId: null }
-
+  const local = localVersion(row, mark)
   if (local) {
-    // The row's event decides who wins while it is live.
-    let status: unknown = e.entityType === 'event' ? (row?.status ?? values.status) : undefined
-    const eventId = row?.eventId ?? values.eventId
-    if (e.entityType !== 'event' && eventId) {
-      const eventsTable = tables.event
-      const [ev] = await db.select({ status: eventsTable.status }).from(eventsTable).where(eq(eventsTable.id, eventId)).limit(1)
-      status = ev?.status
-    }
+    const status = await liveEventStatus(db, tables, e, row, values)
     const verdict = resolveConflict(local, incoming, { eventLive: status === 'active', side: 'cloud' })
     if (verdict.decision === 'keep') {
       result.conflicts?.push({
@@ -177,24 +216,90 @@ async function applyConfigEvent(
     }
   }
 
-  if (isDelete) {
-    await db.delete(table).where(and(eq(table.id, e.entityId), ...(teamId ? [eq(table.teamId, teamId)] : [])))
-    const deletedAt = new Date(incoming.deletedAt as number)
-    await db.insert(tombstones)
-      .values({ entityType: e.entityType, entityId: e.entityId, teamId: teamId ?? '', deletedAt })
-      .onConflictDoUpdate({ target: [tombstones.entityType, tombstones.entityId], set: { deletedAt } })
-    result.applied.push(ackId)
+  if (e.operation === 'delete') {
+    await deleteWithTombstone(db, table, tombstones, e, teamId, incoming.deletedAt as number)
+  }
+  else {
+    await upsertRow(db, table, e.entityId, values)
+    // A newer edit brings a deleted row back; the marker no longer applies.
+    if (mark) await db.delete(tombstones).where(and(eq(tombstones.entityType, e.entityType), eq(tombstones.entityId, e.entityId)))
+  }
+  result.applied.push(ackId)
+}
+
+/** Shape check — malformed events are permanent skips (drop, don't retry). */
+function shapeError(e: IngestEvent | undefined): string | null {
+  if (!e || !VALID_TYPES.includes(e.entityType)) return `unknown entityType: ${e?.entityType}`
+  if (!e.entityId || typeof e.entityId !== 'string') return 'missing entityId'
+  if (!e.payload || typeof e.payload !== 'object') return 'missing payload'
+  return null
+}
+
+const teamMismatch = (result: IngestResult, ackId: string) =>
+  result.skipped.push({ id: ackId, reason: 'team mismatch', permanent: true })
+
+/** Apply one well-formed event; records the outcome on `result`. Throws on DB failure. */
+async function applyEvent(
+  db: any,
+  tables: Record<OutboxEntityType, any>,
+  e: IngestEvent,
+  ackId: string,
+  result: IngestResult,
+  scopeTeamId: string | undefined,
+  opts: IngestOptions
+) {
+  // Team scoping (#2725): a paired till may only write its own team's rows.
+  // A foreign teamId is a permanent skip (logged); a missing one is forced.
+  const rowTeamId = (e.payload as { teamId?: unknown }).teamId
+  if (scopeTeamId && rowTeamId != null && rowTeamId !== scopeTeamId) {
+    console.warn(`[crouton-sales] sync ingest rejected ${e.entityType} ${e.entityId}: row team ${String(rowTeamId)} ≠ device team ${scopeTeamId}`)
+    teamMismatch(result, ackId)
     return
   }
 
+  const table = tables[e.entityType]
+  // The upsert key always wins over whatever the payload carried.
+  const values = coerceToColumns(table, {
+    ...e.payload,
+    ...(scopeTeamId ? { teamId: scopeTeamId } : {}),
+    id: e.entityId
+  })
   const setObj = { ...values }
   delete setObj.id
-  const updated = Object.keys(setObj).length > 0
-    ? await db.update(table).set(setObj).where(eq(table.id, e.entityId)).returning({ id: table.id })
-    : []
-  if (updated.length === 0) await db.insert(table).values(values)
-  // A newer edit brings a deleted row back; the marker no longer applies.
-  if (mark) await db.delete(tombstones).where(and(eq(tombstones.entityType, e.entityType), eq(tombstones.entityId, e.entityId)))
+
+  // An existing row under another team is never touched or re-inserted.
+  if (scopeTeamId) {
+    const [owner] = await db.select({ teamId: table.teamId }).from(table).where(eq(table.id, e.entityId)).limit(1)
+    if (owner && owner.teamId !== scopeTeamId) {
+      console.warn(`[crouton-sales] sync ingest rejected ${e.entityType} ${e.entityId}: existing row belongs to another team`)
+      teamMismatch(result, ackId)
+      return
+    }
+  }
+  if (isConfigEntityType(e.entityType)) {
+    await applyConfigEvent(db, tables, e as IngestEvent & { entityType: ConfigEntityType }, values, ackId, result, opts)
+    return
+  }
+
+  const rowWhere = scopeTeamId ? and(eq(table.id, e.entityId), eq(table.teamId, scopeTeamId)) : eq(table.id, e.entityId)
+
+  // UPDATE existing row (idempotent: a replay re-sets the same values).
+  let exists = false
+  if (Object.keys(setObj).length > 0) {
+    const updated = await db.update(table).set(setObj).where(rowWhere).returning({ id: table.id })
+    exists = updated.length > 0
+  }
+  else {
+    const [row] = await db.select({ id: table.id }).from(table).where(rowWhere).limit(1)
+    exists = !!row
+  }
+
+  // INSERT only when absent. A partial transition payload on a missing row
+  // fails NOT NULL here → caught by the caller as a retryable skip.
+  if (!exists) {
+    await db.insert(table).values(values)
+  }
+
   result.applied.push(ackId)
 }
 
@@ -216,74 +321,14 @@ export async function applyOutboxEvents(
     const e = events[i]
     const ackId = e?.id || e?.entityId || `#${i}`
 
-    // Validate shape — malformed events are permanent skips (drop, don't retry).
-    if (!e || !VALID_TYPES.includes(e.entityType)) {
-      result.skipped.push({ id: ackId, reason: `unknown entityType: ${e?.entityType}`, permanent: true })
-      continue
-    }
-    if (!e.entityId || typeof e.entityId !== 'string') {
-      result.skipped.push({ id: ackId, reason: 'missing entityId', permanent: true })
-      continue
-    }
-    if (!e.payload || typeof e.payload !== 'object') {
-      result.skipped.push({ id: ackId, reason: 'missing payload', permanent: true })
+    const shapeProblem = shapeError(e)
+    if (shapeProblem) {
+      result.skipped.push({ id: ackId, reason: shapeProblem, permanent: true })
       continue
     }
 
-    // Team scoping (#2725): a paired till may only write its own team's rows.
-    // A foreign teamId is a permanent skip (logged); a missing one is forced.
-    const rowTeamId = (e.payload as { teamId?: unknown }).teamId
-    if (scopeTeamId && rowTeamId != null && rowTeamId !== scopeTeamId) {
-      console.warn(`[crouton-sales] sync ingest rejected ${e.entityType} ${e.entityId}: row team ${String(rowTeamId)} ≠ device team ${scopeTeamId}`)
-      result.skipped.push({ id: ackId, reason: 'team mismatch', permanent: true })
-      continue
-    }
-
-    const table = tables[e.entityType]
     try {
-      // The upsert key always wins over whatever the payload carried.
-      const values = coerceToColumns(table, {
-        ...e.payload,
-        ...(scopeTeamId ? { teamId: scopeTeamId } : {}),
-        id: e.entityId
-      })
-      const setObj = { ...values }
-      delete setObj.id
-
-      // An existing row under another team is never touched or re-inserted.
-      if (scopeTeamId) {
-        const [owner] = await db.select({ teamId: table.teamId }).from(table).where(eq(table.id, e.entityId)).limit(1)
-        if (owner && owner.teamId !== scopeTeamId) {
-          console.warn(`[crouton-sales] sync ingest rejected ${e.entityType} ${e.entityId}: existing row belongs to another team`)
-          result.skipped.push({ id: ackId, reason: 'team mismatch', permanent: true })
-          continue
-        }
-      }
-      if (isConfigEntityType(e.entityType)) {
-        await applyConfigEvent(db, tables, e as IngestEvent & { entityType: ConfigEntityType }, values, ackId, result, opts)
-        continue
-      }
-
-      const rowWhere = scopeTeamId ? and(eq(table.id, e.entityId), eq(table.teamId, scopeTeamId)) : eq(table.id, e.entityId)
-
-      // UPDATE existing row (idempotent: a replay re-sets the same values).
-      let exists = false
-      if (Object.keys(setObj).length > 0) {
-        const updated = await db.update(table).set(setObj).where(rowWhere).returning({ id: table.id })
-        exists = updated.length > 0
-      }
-      else {
-        const [row] = await db.select({ id: table.id }).from(table).where(rowWhere).limit(1)
-        exists = !!row
-      }
-
-      // INSERT only when absent. A partial transition payload on a missing row
-      // fails NOT NULL here → caught below as a retryable skip.
-      if (!exists) {
-        await db.insert(table).values(values)
-      }
-
-      result.applied.push(ackId)
+      await applyEvent(db, tables, e, ackId, result, scopeTeamId, opts)
     }
     catch (err: any) {
       // DB-level failure (e.g. transition before its create) — retryable.

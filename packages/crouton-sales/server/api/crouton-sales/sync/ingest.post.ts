@@ -19,20 +19,25 @@ interface IngestBody {
   events?: IngestEvent[]
 }
 
-export default defineEventHandler(async (event) => {
-  const device = deviceOf(await authenticateSync(event))
-
+async function readEvents(event: Parameters<typeof readBody>[0]): Promise<IngestEvent[]> {
   const body = await readBody<IngestBody>(event)
   if (!body || !Array.isArray(body.events)) {
     throw createError({ status: 400, statusText: 'Body must be { events: [...] }' })
   }
+  return body.events
+}
+
+function logConflicts(count: number) {
+  if (count) console.info(`[crouton-sales] sync ingest kept the cloud version for ${count} config write(s)`)
+}
+
+export default defineEventHandler(async (event) => {
+  const device = deviceOf(await authenticateSync(event))
+  const events = await readEvents(event)
 
   const db = useDB()
-  const result = await applyOutboxEvents(db, body.events, undefined, device?.teamId, { deviceId: device?.deviceId })
-
-  if (result.conflicts?.length) {
-    console.info(`[crouton-sales] sync ingest kept the cloud version for ${result.conflicts.length} config write(s)`)
-  }
+  const result = await applyOutboxEvents(db, events, undefined, device?.teamId, { deviceId: device?.deviceId })
+  logConflicts(result.conflicts?.length ?? 0)
 
   // Stamp the freshness heartbeat the online dashboard (#179) reads. Advances on
   // every call — a real batch or the pusher's idle ping (events: []) — so a
@@ -41,7 +46,7 @@ export default defineEventHandler(async (event) => {
   await recordSyncHeartbeat(db, result.applied.length, device)
 
   return {
-    received: body.events.length,
+    received: events.length,
     // Server clock (epoch ms) so a till can correct its own clock skew (#813/#814).
     serverNow: Date.now(),
     appliedCount: result.applied.length,
