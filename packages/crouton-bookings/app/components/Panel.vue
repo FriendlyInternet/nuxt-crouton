@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useElementSize } from '@vueuse/core'
 import { isDayFullyBooked } from '../utils/day-availability'
 import type { Booking, LocationData, SettingsData } from '../types/booking'
 
@@ -110,6 +111,10 @@ const panelMapRef = ref<{ flyToLocation: (locationId: string) => void } | null>(
 
 // Scroll direction detection — reveals filters on scroll-up, hides on scroll-down
 const scrollingUp = ref(false)
+
+// Height of the sticky filters + calendar, so a scrolled-to day lands just below it, not behind it
+const stickyEl = ref<HTMLElement | null>(null)
+const { height: stickyHeight } = useElementSize(stickyEl, undefined, { box: 'border-box' })
 let lastScrollY = 0
 
 function onScroll() {
@@ -475,10 +480,10 @@ defineExpose({
 </script>
 
 <template>
-  <div class="booking-panel rounded-[calc(var(--ui-radius)*2)] border border-default bg-default">
+  <div class="booking-panel rounded-[calc(var(--ui-radius)*2)] border border-default bg-default" :style="{ '--bookings-sticky-h': `${stickyHeight}px` }">
       <!-- Sticky: filters + calendar. Negative top hides filters above viewport;
            scrolling up reveals them. Calendar stays pinned. -->
-      <div class="sticky z-20 bg-default rounded-t-[calc(var(--ui-radius)*2)] transition-[top] duration-300 flex flex-col gap-2" :class="scrollingUp ? 'top-0' : '-top-12'">
+      <div ref="stickyEl" class="sticky z-20 bg-default rounded-t-[calc(var(--ui-radius)*2)] transition-[top] duration-300 flex flex-col gap-2" :class="scrollingUp ? 'top-0' : '-top-12'">
         <!-- Filter controls (hidden above viewport when stuck) -->
         <div class="px-2 pt-2 pb-1.5 md:px-4 md:pt-3 md:pb-2">
           <CroutonBookingsPanelFilters

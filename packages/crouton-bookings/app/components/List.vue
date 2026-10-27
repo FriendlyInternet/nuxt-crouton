@@ -333,7 +333,7 @@ const creatingAtDateKey = computed(() => {
     <!-- Empty state (but might have create card) -->
     <div v-else-if="resolvedBookings.length === 0 && !selectedDate">
       <!-- Inline create card when empty -->
-      <div v-if="creatingAtDate" class="scroll-mt-4">
+      <div v-if="creatingAtDate" class="scroll-mt-[calc(var(--bookings-sticky-h,0px)+0.5rem)]">
         <CroutonBookingsBookingCreateCard
           :date="creatingAtDate"
           :active-location-filter="activeLocationFilter"
@@ -374,12 +374,12 @@ const creatingAtDateKey = computed(() => {
           v-for="dateGroup in monthGroup.dateGroups"
           :key="dateGroup.dateKey"
           :ref="(el) => setDateRef(dateGroup.dateKey, el as HTMLElement)"
-          class="flex flex-col gap-1.5 scroll-mt-4"
+          class="flex flex-col gap-1.5 scroll-mt-[calc(var(--bookings-sticky-h,0px)+0.5rem)]"
         >
           <!-- Create card for placeholder date (new date with no bookings) -->
           <div
             v-if="dateGroup.isCreatePlaceholder && creatingAtDate"
-            class="scroll-mt-4"
+            class="scroll-mt-[calc(var(--bookings-sticky-h,0px)+0.5rem)]"
           >
             <CroutonBookingsBookingCreateCard
               :date="creatingAtDate"
@@ -394,7 +394,7 @@ const creatingAtDateKey = computed(() => {
             <!-- Inline create card at TOP if creating at this date (existing date with bookings) -->
             <div
               v-if="creatingAtDateKey === dateGroup.dateKey"
-                class="scroll-mt-4"
+                class="scroll-mt-[calc(var(--bookings-sticky-h,0px)+0.5rem)]"
             >
               <CroutonBookingsBookingCreateCard
                 :date="creatingAtDate!"
