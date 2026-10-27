@@ -29,6 +29,7 @@
     "@fyit/crouton-maps": "workspace:*",
     "@fyit/crouton-devtools": "workspace:*",
     "@fyit/crouton-email": "workspace:*",
+    "@fyit/crouton-events": "workspace:*",
     "@fyit/crouton-i18n": "workspace:*",
     "@fyit/crouton-pages": "workspace:*",
     "better-auth": "^1.7.7",

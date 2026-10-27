@@ -6,6 +6,10 @@ const cfStubs = resolve(__dirname, 'server/utils/_cf-stubs')
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  // The builder is a signed-in editing tool: the server can't know the page being
+  // edited, so a server render showed an empty board with disabled buttons that the
+  // browser sometimes never re-enabled (#2598). Render it in the browser only.
+  routeRules: { '/builder/**': { ssr: false } },
   modules: ['@fyit/crouton-devtools'],
   css: ['~/assets/css/main.css'],
   compatibilityDate: '2025-07-15',
