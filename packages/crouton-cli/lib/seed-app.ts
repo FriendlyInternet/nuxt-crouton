@@ -382,12 +382,23 @@ function makeSeedChunkRunner(db: string, appDir: string, remote: boolean): (sql:
   }
 }
 
+/** The app's `defaultLocale` from crouton.config.{js,mjs,ts}, or null when it declares none. */
+function readConfiguredLocale(appDir: string): string | null {
+  const file = ['crouton.config.js', 'crouton.config.mjs', 'crouton.config.ts']
+    .map(f => join(appDir, f)).find(existsSync)
+  if (!file) return null
+  const m = readFileSync(file, 'utf8').match(/^\s*defaultLocale:\s*['"]([\w-]+)['"]/m)
+  return m ? m[1] : null
+}
+
 /** Resolve the seed's effective inputs (app dir + team + locale defaults). */
 function normalizeSeedOptions(options: SeedAppOptions): { appDir: string, teamSlug: string, locale: string } {
+  const appDir = resolve(options.dir ?? process.cwd())
   return {
-    appDir: resolve(options.dir ?? process.cwd()),
+    appDir,
     teamSlug: options.team ?? 'test1',
-    locale: options.locale ?? 'nl',
+    // --locale wins; else the app's configured defaultLocale; else en.
+    locale: options.locale ?? readConfiguredLocale(appDir) ?? 'en',
   }
 }
 
