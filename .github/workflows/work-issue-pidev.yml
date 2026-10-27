@@ -185,8 +185,10 @@ jobs:
       # DECISION is the pure, unit-tested `decideTraffic`. On `wait` the ticket gets status:blocked
       # + a comment, and the run stops (deliberate, like the claim guard). traffic-release.yml
       # starts it again when the blocking work lands. Fails OPEN: a gather glitch must not wedge.
+      # Revision runs (inputs.feedback, #2446) finish work already in flight — they never wait.
       - name: Traffic control
         id: traffic
+        if: ${{ inputs.feedback == '' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}

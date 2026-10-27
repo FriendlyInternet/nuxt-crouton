@@ -12,7 +12,7 @@
  * workflow steps only gather facts (`gatherTrafficFacts`) and apply the verdict.
  *
  * RELEASE. `work-issue-pidev.yml` marks a waiting ticket with `WAIT_MARKER` in its comment.
- * When any `work-*` PR closes, `releaseWaiting` re-checks each waiting ticket and, if clear,
+ * When any `work-*` PR closes (or an issue closes / loses a label), `releaseWaiting` re-checks each waiting ticket and, if clear,
  * removes `status:blocked` and does REMOVE-then-ADD of `work-this` — adding a label the issue
  * already carries fires no event (#1750).
  */
@@ -25,6 +25,19 @@ const names = (labels) => (labels || []).map((l) => (typeof l === 'string' ? l :
 /** The scope labels (`pkg:*`, `app:*`, `poc:*`) of a label list. */
 export function scopeLabels(labels) {
   return names(labels).filter((n) => SCOPE_PREFIXES.some((p) => n.startsWith(p)))
+}
+
+export const PIPELINE_LABELS = ['delegate', 'delegate-pi', 'work-this']
+
+/**
+ * Does this ticket count as open pipeline work? Never an epic; otherwise an open `work-<n>` PR,
+ * or `status:in-progress` AND pipeline-owned (a hand-held in-progress ticket has no PR coming).
+ */
+function isBlocker(o) {
+  const n = names(o.labels)
+  if (n.includes('epic')) return false
+  if (o.openPr) return true
+  return n.includes('status:in-progress') && n.some((l) => PIPELINE_LABELS.includes(l))
 }
 
 /**
@@ -42,7 +55,7 @@ export function decideTraffic({ issue, labels, others }) {
   if (!mine.length) return { action: 'proceed', waitingFor: [], reason: 'ticket has no pkg:/app:/poc: label' }
   const blockers = (others || [])
     .filter((o) => o.number !== issue)
-    .filter((o) => o.openPr || names(o.labels).includes('status:in-progress'))
+    .filter((o) => isBlocker(o))
     .filter((o) => scopeLabels(o.labels).some((l) => mine.includes(l)))
     .map((o) => o.number)
     .sort((a, b) => a - b)
@@ -90,8 +103,11 @@ export async function releaseWaiting({ github, context }) {
   const waiting = await github.paginate(github.rest.issues.listForRepo,
     { owner, repo, state: 'open', labels: 'status:blocked', per_page: 100 })
   const released = []
+  const claimed = new Set() // scopes already released this pass: one ticket per scope
+  waiting.sort((a, b) => a.number - b.number)
   for (const it of waiting) {
     if (it.pull_request) continue
+    if (scopeLabels(it.labels).some((l) => claimed.has(l))) continue
     const comments = await github.paginate(github.rest.issues.listComments,
       { owner, repo, issue_number: it.number, per_page: 100 })
     if (!comments.some((c) => String(c.body || '').includes(WAIT_MARKER))) continue
@@ -104,7 +120,7 @@ export async function releaseWaiting({ github, context }) {
     } catch { /* not present */ }
     await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: ['work-this'] })
     released.push(it.number)
-    // Only one per scope per pass would be ideal; the start-of-run check re-serialises any race.
+    for (const l of scopeLabels(labels)) claimed.add(l)
   }
   return released
 }

@@ -1,14 +1,17 @@
 # Traffic control, release side (#2786). When a pipeline PR (`work-<n>`) closes, re-check every
 # ticket parked by the start-of-run traffic check and start the ones that are now clear.
-# Logic + tests: scripts/traffic-control.mjs. Workflow-change: new workflow, owner grant #2108.
+# Logic + tests: scripts/traffic-control.mjs. Workflow-change: new workflow (also issues closed/unlabeled), owner grant #2108.
 name: traffic-release
 on:
   pull_request:
     types: [closed]
+  # A blocker with no PR (closed or unlabelled issue) would otherwise never release its waiter.
+  issues:
+    types: [closed, unlabeled]
 
 jobs:
   release:
-    if: startsWith(github.event.pull_request.head.ref, 'work-')
+    if: github.event_name == 'issues' || startsWith(github.event.pull_request.head.ref, 'work-')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
