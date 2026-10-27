@@ -108,8 +108,10 @@ async function http(method, path, body, { auth = true } = {}) {
   })
   if (auth) mergeCookies(jar, res)
   let json = null
-  try { json = await res.clone().json() } catch { /* non-JSON */ }
-  return { res, json }
+  let text = ''
+  try { text = await res.clone().text() } catch { /* unreadable body */ }
+  try { json = JSON.parse(text) } catch { /* non-JSON */ }
+  return { res, json, text }
 }
 
 // ── load optional manifest ───────────────────────────────────────────────────
