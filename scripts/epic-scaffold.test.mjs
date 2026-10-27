@@ -87,3 +87,12 @@ test('scaffoldActions ends with exactly one trigger-label per unblocked child', 
   assert.equal(tail.length, 1)
   assert.deepEqual(tail.map(a => [a.type, a.ref]), [['trigger-label', 'child0']])
 })
+
+test('resolveMainSha reads main from the remote, not a local origin/main ref (#2708)', async () => {
+  const { resolveMainSha, unknownPlanLabels } = await import('./epic-scaffold.mjs')
+  const sha = 'a'.repeat(40)
+  assert.equal(resolveMainSha(() => `${sha}\trefs/heads/main`), sha)
+  assert.throws(() => resolveMainSha(() => ''), /cannot resolve origin main/)
+  assert.deepEqual(unknownPlanLabels({ labels: ['epic', 'nope'] }, ['epic']), ['nope'])
+  assert.deepEqual(unknownPlanLabels({ labels: ['x'] }, []), [])
+})

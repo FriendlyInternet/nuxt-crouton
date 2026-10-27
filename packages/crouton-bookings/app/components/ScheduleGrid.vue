@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { SlotItem, SlotSchedule } from '../types/booking'
+import { parseLocationSlots } from '../composables/useBookingSlots'
 
 interface Props {
   modelValue?: SlotSchedule | string | null
@@ -33,18 +34,7 @@ const days = computed(() => [
 ])
 
 // Parse slots
-const parsedSlots = computed<SlotItem[]>(() => {
-  if (!props.slots) return []
-  if (typeof props.slots === 'string') {
-    try {
-      const parsed = JSON.parse(props.slots)
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
-  return Array.isArray(props.slots) ? props.slots : []
-})
+const parsedSlots = computed<SlotItem[]>(() => parseLocationSlots({ slots: props.slots }))
 
 // Parse schedule
 const schedule = computed<SlotSchedule>(() => {

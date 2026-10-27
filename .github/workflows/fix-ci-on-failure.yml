@@ -59,6 +59,8 @@ jobs:
       pull-requests: write
       issues: write
       id-token: write
+      # #2719: hand a refused fix back to the pi worker (workflow_dispatch from GITHUB_TOKEN).
+      actions: write
     steps:
       # ── Gate: resolve the PR, enforce the attempt cap, bump the counter ──────────
       - id: gate
@@ -148,6 +150,7 @@ jobs:
             core.setOutput('pr_number', String(pr.number))
             core.setOutput('issue_number', issueNumber ? String(issueNumber) : '')
             core.setOutput('head_branch', full.head.ref)
+            core.setOutput('base_ref', full.base.ref)
             core.setOutput('attempt', String(next))
             core.setOutput('packages_allowed', packagesAllowed)
             core.setOutput('packages_names', pkgNames)
@@ -173,6 +176,13 @@ jobs:
           ref: ${{ steps.gate.outputs.head_branch }}
           token: ${{ steps.app-token.outputs.token }}
           fetch-depth: 0
+
+      # #2719: remember where the branch stood BEFORE the fix, so the guard below can diff the
+      # fix against it. The fixer commits but does not push — this workflow pushes (or refuses).
+      - name: Record pre-fix head
+        if: steps.gate.outputs.proceed == 'true'
+        id: prefix
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       # Model comes from the ONE setting, .claude/pipeline-models.json (#2161) — change it there.
       # No fallback literal on purpose: a broken config fails this step loudly instead of
@@ -203,7 +213,7 @@ jobs:
           # its turns on denials and crashes with max_turns, never reaching the fix (the first real
           # live-lane run, 31589320044, did exactly this). Same reason red-team-daily.yml sets it.
           # max-turns 40 (was 30): a full pnpm install + typecheck + fix + verify cycle is turn-hungry.
-          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions --disallowedTools 'Bash(git push:*)'"
           show_full_output: true
           prompt: |
             CI failed on this pipeline PR — you are the fix-bot. This is auto-fix attempt
@@ -218,6 +228,13 @@ jobs:
                `pnpm lint`, or the failing test/e2e) to see the actual error. Read the failing job's logs if you need to.
             2. Diagnose the root cause and make the MINIMAL fix on this branch. Keep it tightly
                scoped to the failure — do not refactor, do not touch unrelated files.
+               NEVER make CI green by DELETING the worker's new code (#2719). If a symbol/menu
+               group/key/route is referenced but undefined, IMPLEMENT the missing piece, taking the
+               intent from the linked issue (`gh issue view ${{ steps.gate.outputs.issue_number }}`)
+               and the latest owner/orchestrator comments on the PR and issue — not just the log. If
+               you cannot implement it confidently, do not commit; comment on the issue, @mention
+               @pmcp, apply `status:blocked`, and stop. A deterministic check after you rejects any
+               commit that removes lines the worker added (blank lines and imports excepted).
             3. SHARED CODE (`packages/`) — read this carefully, it depends on the issue:
                - packages_allowed for this run: ${{ steps.gate.outputs.packages_allowed }} (packages: ${{ steps.gate.outputs.packages_names }}).
                - If packages_allowed is `false`: do NOT modify anything under `packages/`. If the only
@@ -232,11 +249,88 @@ jobs:
                  PR still holds for a human to merge (the shared-code merge guard), so you are producing
                  the fix, not landing it. Do NOT commit `.claude/.package-edit-approved` (it is gitignored).
             4. Verify green: re-run the command from step 1 and confirm it passes.
-            5. Commit with the /commit skill (reference the issue) and push to this branch. CI re-runs
-               automatically; if it still fails, the fix-bot will get another attempt (up to the cap).
+            5. Commit with the /commit skill (reference the issue) but do NOT push — the workflow
+               checks your commit and pushes it. CI then re-runs automatically; if it still fails,
+               the fix-bot will get another attempt (up to the cap).
 
             If you cannot find a confident fix, do NOT guess or push a speculative change — comment on
             issue #${{ steps.gate.outputs.issue_number }}, @mention @pmcp, apply `status:blocked`, and stop.
+
+      # ── Guard (#2719): refuse a "fix" that deletes the worker's own new code ────────────
+      # Compare the fix commit(s) with what the PR's worker commits added. If the fix removes any
+      # of those lines (blank lines/imports aside) it is not pushed: the branch is reset, the PR
+      # gets the lines listed, and the pi worker is re-run with the CI failure as feedback (the
+      # revise path, #2446). Otherwise the fix is pushed as before. Attempt cap and packages/ rules
+      # are untouched.
+      - name: Guard and push the fix
+        if: steps.gate.outputs.proceed == 'true'
+        id: guard
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRE: ${{ steps.prefix.outputs.sha }}
+          BASE: ${{ steps.gate.outputs.base_ref }}
+          BRANCH: ${{ steps.gate.outputs.head_branch }}
+          PR: ${{ steps.gate.outputs.pr_number }}
+          ISSUE: ${{ steps.gate.outputs.issue_number }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+        run: |
+          set -euo pipefail
+          HEAD_NOW="$(git rev-parse HEAD)"
+          # Belt and braces: `git push` is disallowed for the agent, but if it pushed anyway the
+          # remote head has moved past $PRE. Judge those commits too; if refused, revert them.
+          git fetch -q origin "$BRANCH"
+          REMOTE_NOW="$(git rev-parse "origin/$BRANCH")"
+          PUSHED=0
+          if [ "$REMOTE_NOW" != "$PRE" ] && git merge-base --is-ancestor "$PRE" "$REMOTE_NOW"; then PUSHED=1; fi
+          if [ "$HEAD_NOW" = "$PRE" ] && [ "$PUSHED" = 0 ]; then echo "No fix commit — nothing to push."; exit 0; fi
+          git fetch -q origin "$BASE"
+          git diff "origin/$BASE...$PRE" > "$RUNNER_TEMP/worker.diff"
+          git diff "$PRE" "$HEAD_NOW" > "$RUNNER_TEMP/fix.diff"
+          if [ "$PUSHED" = 1 ]; then git diff "$PRE" "$REMOTE_NOW" >> "$RUNNER_TEMP/fix.diff"; fi
+          node -e '
+            const fs = require("fs")
+            import("./scripts/lib/fix-removes-worker-code.mjs").then(({ findRemovedWorkerLines }) => {
+              const r = findRemovedWorkerLines(fs.readFileSync(process.argv[1], "utf8"), fs.readFileSync(process.argv[2], "utf8"))
+              fs.writeFileSync(process.argv[3], JSON.stringify(r))
+              process.exit(r.refuse ? 3 : 0)
+            })
+          ' "$RUNNER_TEMP/worker.diff" "$RUNNER_TEMP/fix.diff" "$RUNNER_TEMP/verdict.json" && ok=1 || ok=0
+          if [ "$ok" = 1 ]; then
+            if [ "$HEAD_NOW" != "$PRE" ]; then git push origin "HEAD:$BRANCH"; fi
+            exit 0
+          fi
+
+          echo "refused=true" >> "$GITHUB_OUTPUT"
+          git reset -q --hard "$PRE"
+          # No force-push: if the agent already pushed, add a revert commit restoring $PRE's tree.
+          if [ "$PUSHED" = 1 ]; then bash scripts/revert-pushed-fix.sh "$PRE" "$BRANCH"; fi
+          LINES="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1]));console.log(r.removed.map(x=>"- `"+x.file+"`: `"+x.line.trim()+"`").join(String.fromCharCode(10)))' "$RUNNER_TEMP/verdict.json")"
+          ERR="$(gh run view "$RUN_ID" --log-failed 2>/dev/null | tail -n 60 || true)"
+          {
+            echo "> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix refused_"
+            echo
+            echo "🔧 **Auto-fix not pushed: it would delete code this PR was asked to add.** Handing back to the worker to implement the missing piece instead."
+            echo
+            echo "**Lines the fix would remove:**"
+            echo "$LINES"
+            echo
+            echo "<details><summary>CI failure (\`$RUN_NAME\`) the worker should fix</summary>"
+            echo
+            echo '```'
+            echo "$ERR"
+            echo '```'
+            echo "[failing run]($RUN_URL)"
+            echo "</details>"
+            echo
+            echo "**Revise instruction:** CI is red. Make it green by IMPLEMENTING what the lines above reference — do not delete them. Use the error text above."
+          } > "$RUNNER_TEMP/handback.md"
+          gh pr comment "$PR" --body-file "$RUNNER_TEMP/handback.md"
+          if [ -n "$ISSUE" ]; then
+            CID="$(gh api "repos/$GITHUB_REPOSITORY/issues/$ISSUE/comments" --method POST -F body=@"$RUNNER_TEMP/handback.md" --jq .id)"
+            gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f feedback="$CID"
+          fi
 
       # Ship the payload-free invocation trace for the weekly usage rollup (#1064).
       - uses: ./.github/actions/loop-station-trace
