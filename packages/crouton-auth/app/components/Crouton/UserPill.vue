@@ -154,7 +154,7 @@ const menuItems = computed<DropdownMenuItem[][]>(() => {
   // First group of dropdownItems is the user header — replaced by ours above
   const [, ...rest] = dropdownItems.value
   const withExtras = props.extraItems.length ? [rest[0] ?? [], props.extraItems, ...rest.slice(1)] : rest
-  return [header, ...(recentGroup.length ? [recentGroup] : []), ...(seeAllGroup.length ? [seeAllGroup] : []), ...withExtras]
+  return [header, ...(recentGroup.length ? [recentGroup] : []), ...withExtras]
 })
 
 function onOpenChange(open: boolean) {
