@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: Worker run id to read annotations from (default for dispatch: none)
+        description: 'Worker run id to read annotations from (default for dispatch: none)'
         required: false
 
 jobs:
