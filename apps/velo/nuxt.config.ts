@@ -25,6 +25,7 @@ export default defineNuxtConfig({
     '@fyit/crouton-bookings',
     '@fyit/crouton-email',
     '@fyit/crouton-maps',
+    '@fyit/crouton-events',
   ],
   hub: {
     blob: true,
