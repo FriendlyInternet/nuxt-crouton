@@ -18,9 +18,9 @@ Automatic event tracking and audit trail for Nuxt Crouton collections. Hooks int
 | `app/components/CroutonEventChangesTable.vue` | Before/after diff table |
 | `server/database/schema.ts` | Internal Drizzle schema for crouton_events table |
 | `server/database/migrations/` | SQL migrations bundled with the package |
-| `server/api/teams/[teamId]/crouton-collection-events/index.post.ts` | Write endpoint (called by tracker) |
-| `server/api/teams/[teamId]/crouton-events/index.get.ts` | Query endpoint (called by useCroutonEvents) |
-| `server/api/teams/[teamId]/crouton-events/export.get.ts` | Export API endpoint |
+| `server/api/teams/[id]/crouton-collection-events/index.post.ts` | Write endpoint (called by tracker) |
+| `server/api/teams/[id]/crouton-events/index.get.ts` | Query endpoint (called by useCroutonEvents) |
+| `server/api/teams/[id]/crouton-events/export.get.ts` | Export API endpoint |
 | `events-schema.json` | Event collection schema |
 
 ## How It Works

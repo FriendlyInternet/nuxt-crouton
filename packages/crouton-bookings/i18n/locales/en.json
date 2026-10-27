@@ -96,7 +96,9 @@
       "noBookings": "No bookings",
       "bookingCount": "{count} booking | {count} bookings",
       "closed": "Closed",
-      "blocked": "Blocked"
+      "blocked": "Blocked",
+      "newBooking": "New booking",
+      "fullyBooked": "Fully booked"
     },
     "card": {
       "activity": "Activity",
@@ -308,6 +310,8 @@
       "noSlotsDescription": "All time slots are unavailable on this date",
       "allSlotsTaken": "All slots taken",
       "allSlotsTakenDescription": "All time slots across all locations are fully booked for this day.",
+      "noLocations": "No locations yet",
+      "noLocationsDescription": "Locations are needed before a booking can be made. Ask an admin to add one.",
       "emailSent": "Email sent",
       "emailSentDescription": "Confirmation email has been resent successfully",
       "emailFailed": "Failed to send email",
