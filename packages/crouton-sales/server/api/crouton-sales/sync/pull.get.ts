@@ -12,7 +12,7 @@ import { authenticateSync, deviceOf } from '../../../utils/cloud-sync-auth'
 import { collectConfigChanges, DEFAULT_PULL_LIMIT } from '../../../utils/sync-pull'
 import { recordSyncPull } from '../../../utils/sync-status'
 
-// fallow-ignore-next-line complexity — thin handler: query-param clamping only, the logic is unit-tested in sync-pull.ts
+// fallow-ignore-next-line complexity -- thin handler: query-param clamping only, the logic is unit-tested in sync-pull.ts
 export default defineEventHandler(async (event) => {
   const device = deviceOf(await authenticateSync(event))
   if (!device) {

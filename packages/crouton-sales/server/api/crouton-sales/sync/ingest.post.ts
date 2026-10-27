@@ -32,6 +32,7 @@ function logConflicts(conflicts?: unknown[]) {
   if (count) console.info(`[crouton-sales] sync ingest kept the cloud version for ${count} config write(s)`)
 }
 
+// fallow-ignore-next-line complexity -- thin handler: optional device fields only, the logic is unit-tested in sync-ingest.ts
 export default defineEventHandler(async (event) => {
   const device = deviceOf(await authenticateSync(event))
   const events = await readEvents(event)
