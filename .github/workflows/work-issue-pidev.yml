@@ -394,6 +394,8 @@ jobs:
           PI_MODEL: ${{ inputs.model || (github.event.label.name == 'delegate-hard' && steps.model.outputs.hard) || steps.model.outputs.default }}
           PI_PROVIDER: ${{ inputs.provider || 'claude-bridge' }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # #2760: lets the worker sign in to staging as the review login (scripts/staging-get.mjs).
+          REVIEW_SEED_SECRET: ${{ secrets.REVIEW_SEED_SECRET }}
           ISSUE: ${{ inputs.issue || github.event.issue.number }}
           # WS2 (#1695): the integration branch parsed off the issue's pipeline block (empty → main).
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
