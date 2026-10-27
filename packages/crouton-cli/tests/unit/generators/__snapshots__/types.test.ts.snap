@@ -5,7 +5,6 @@ exports[`generateTypes > generates correct types for basic collection 1`] = `
  * @crouton-generated
  * @collection products
  * @layer shop
- * @generated 2025-01-01
  *
  * ## AI Context
  * - Main interface: ShopProduct

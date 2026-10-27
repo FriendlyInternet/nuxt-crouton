@@ -11,6 +11,8 @@
           "pageType": "pages:regular",
           "status": "draft",
           "visibility": "public",
+          "title": "smoke-{rand}",
+          "slug": "smoke-{rand}",
           "translations": {
             "en": {
               "title": "smoke-{rand}",

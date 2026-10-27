@@ -24,10 +24,9 @@ export function collectFilterFields(
     .filter((f: Record<string, any>) => f.refTarget)
     .map((f: Record<string, any>) => f.name as string)
 
-  // Mirrors the auto refs `detectReferenceFields` appends: owner is unconditional, the audit
-  // pair rides `useMetadata`. Order matches so the emitted opts read the same in both files.
-  const useMetadata = config?.flags?.useMetadata ?? true
-  const auto = autoRefFields(useMetadata)
+  // Mirrors the auto refs `detectReferenceFields` appends: owner then the audit
+  // pair. Order matches so the emitted opts read the same in both files.
+  const auto = autoRefFields()
 
   return [...declared, ...auto]
 }

@@ -192,7 +192,7 @@ export default defineNuxtConfig({
 ```
 
 ::callout{icon="i-lucide-info" color="blue"}
-**Additional Commands:** The CLI also provides `add`, `doctor`, `scaffold-app`, `seed-translations`, `db-pull`, and `deploy-check` commands. See the [CLI Reference](/generation/cli-reference) for complete documentation of all available commands.
+**Additional Commands:** The CLI also provides `add`, `doctor`, `scaffold-app`, and `db-pull` commands. See the [CLI Reference](/generation/cli-reference) for complete documentation of all available commands.
 ::
 
 ## Rollback Commands
@@ -206,9 +206,6 @@ crouton rollback <layer> <collection>
 
 # Remove entire layer
 crouton rollback-bulk --layer=<name>
-
-# Interactive removal
-crouton rollback-interactive
 ```
 
 ## Complete CLI Flags Reference

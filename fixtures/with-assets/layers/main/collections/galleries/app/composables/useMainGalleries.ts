@@ -2,7 +2,6 @@
  * @crouton-generated
  * @collection galleries
  * @layer main
- * @generated 2026-10-19
  *
  * ## AI Context
  * - Composable: useMainGalleries
