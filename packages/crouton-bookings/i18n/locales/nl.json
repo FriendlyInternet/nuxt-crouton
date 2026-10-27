@@ -96,7 +96,9 @@
       "noBookings": "Geen boekingen",
       "bookingCount": "{count} boeking | {count} boekingen",
       "closed": "Gesloten",
-      "blocked": "Geblokkeerd"
+      "blocked": "Geblokkeerd",
+      "newBooking": "Nieuwe boeking",
+      "fullyBooked": "Volgeboekt"
     },
     "card": {
       "activity": "Activiteit",

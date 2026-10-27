@@ -96,7 +96,9 @@
       "noBookings": "No bookings",
       "bookingCount": "{count} booking | {count} bookings",
       "closed": "Closed",
-      "blocked": "Blocked"
+      "blocked": "Blocked",
+      "newBooking": "New booking",
+      "fullyBooked": "Fully booked"
     },
     "card": {
       "activity": "Activity",
