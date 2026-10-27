@@ -3,7 +3,7 @@ import { pascalCase, snakeCase, kebabCase } from 'scule'
 import pluralize from 'pluralize'
 
 export const pascal = pascalCase
-export const toSnakeCase = snakeCase
+export const toSnakeCase: (str: string) => string = snakeCase
 export const toKebabCase = kebabCase
 
 export interface CaseVariants {

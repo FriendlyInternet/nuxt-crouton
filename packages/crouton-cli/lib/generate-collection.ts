@@ -10,7 +10,7 @@ import { loadConfig } from 'c12'
 // Import utilities
 import { toCase, toSnakeCase } from './utils/helpers.ts'
 import { loadTypeMapping, discoverManifests, getGeneratorDetectors, getGeneratorContributions } from './utils/manifest-loader.ts'
-import type { DetectionResult, DetectedField, FormEnhancement, ListEnhancement, GeneratorContribution } from '@fyit/crouton-core/shared/manifest'
+import type { DetectionResult, DetectedField, GeneratorContribution } from '@fyit/crouton-core/shared/manifest'
 import { detectRequiredDependencies, displayMissingDependencies, ensureLayersExtended } from './utils/module-detector.ts'
 import { setupCroutonCssSource, displayManualCssSetupInstructions } from './utils/css-setup.ts'
 import { addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-config.ts'
@@ -45,7 +45,6 @@ import { generateTypes } from './generators/types.ts'
 import { generateNuxtConfig } from './generators/nuxt-config.ts'
 import { generateCollectionTest } from './generators/collection-test.ts'
 import { generateApiTest } from './generators/api-test.ts'
-import { generateRepeaterItemComponent } from './generators/repeater-item-component.ts'
 import { generateFieldComponents } from './generators/field-components.ts'
 import { generateSeedFile } from './generators/seed-data.ts'
 import { generateSeedFixture } from './generators/collection-seed-fixture.ts'
@@ -893,7 +892,7 @@ async function applyManifestEnhancements(params: {
   // reserving "location"/"product"/"category"/"printer") forces its bespoke form on
   // an unrelated collection and skips Form.vue generation (#558).
   if (!collectionConfig?.formComponent) {
-    const formComponentCtx = { collectionName: collection, fields, detected }
+    const formComponentCtx = { collectionName: collection, fields: fields as unknown as DetectedField[], detected }
     for (const { contribution } of contributions) {
       const result = contribution.getFormComponent?.(formComponentCtx)
       if (result) {
@@ -1624,7 +1623,7 @@ async function loadAndPrepareConfig(options: RunConfigOptions): Promise<Record<s
     : undefined
   const configCwd = resolvedConfigPath ? path.dirname(resolvedConfigPath) : process.cwd()
 
-  const { config } = await loadConfig({
+  const { config } = await loadConfig<Record<string, any>>({
     name: 'crouton',
     cwd: configCwd,
     configFile: resolvedConfigPath || undefined,
@@ -1900,7 +1899,7 @@ async function validateGenerateArgs(args: Record<string, any>): Promise<void> {
 
   // Check dependencies unless force flag
   if (!args.force) {
-    const dependencies = await detectRequiredDependencies()
+    const dependencies = await detectRequiredDependencies({})
 
     if (dependencies.missing.length > 0) {
       console.log('\n⚠️  Missing dependencies detected:')
@@ -1966,19 +1965,6 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
     // Generate the type + query registries for type-safe CRUD composables
     if (!args.dryRun) {
       await generateRegistryFiles()
-
-      // Print .env hints for prompted configurations
-      if (promptedConfigs.length > 0) {
-        const allHints = promptedConfigs.flatMap(pc => pc.envHints || [])
-        if (allHints.length > 0) {
-          console.log(`\n${'═'.repeat(60)}`)
-          console.log(`  ENVIRONMENT VARIABLES`)
-          console.log(`${'═'.repeat(60)}\n`)
-          console.log(`Add these to your .env file:\n`)
-          allHints.forEach(hint => console.log(`   ${hint}`))
-          console.log('')
-        }
-      }
 
       console.log(`\n${'═'.repeat(60)}`)
       console.log(`  ALL DONE!`)

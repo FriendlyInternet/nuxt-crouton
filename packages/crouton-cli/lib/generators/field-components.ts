@@ -35,7 +35,7 @@ export function generateFieldComponents(fieldOrName: string | Record<string, any
 function generateInputComponent(field: Record<string, any>, fieldPascalCase: string, collectionData: Record<string, any>): string {
   const { layerPascalCase, pascalCasePlural } = collectionData
   const interfaceName = `${layerPascalCase}${pascalCasePlural}${fieldPascalCase}Item`
-  const properties = field.meta?.properties || {}
+  const properties: Record<string, any> = field.meta?.properties || {}
   const hasProperties = Object.keys(properties).length > 0
 
   // Generate interface fields from schema properties
@@ -145,7 +145,7 @@ function generateTranslatableInputComponent(field: Record<string, any>, fieldPas
   const interfaceName = `${layerPascalCase}${pascalCasePlural}${fieldPascalCase}Item`
 
   const translatableProps = field.meta?.translatableProperties || []
-  const properties = field.meta?.properties || {}
+  const properties: Record<string, any> = field.meta?.properties || {}
 
   // Generate interface fields
   const interfaceFields = ['id: string']
