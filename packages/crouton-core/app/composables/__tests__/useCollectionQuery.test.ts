@@ -92,9 +92,11 @@ vi.stubGlobal('console', {
 // Import composables/utils after mocking
 import useCollections from '../useCollections'
 import { useTeamContext } from '../useTeamContext'
+import { useRemoteCollectionRefresh } from '../useRemoteCollectionRefresh'
 
 vi.stubGlobal('useCollections', useCollections)
 vi.stubGlobal('useTeamContext', useTeamContext)
+vi.stubGlobal('useRemoteCollectionRefresh', useRemoteCollectionRefresh)
 
 // Import the composable under test
 import { useCollectionQuery } from '../useCollectionQuery'
@@ -495,25 +497,10 @@ describe('useCollectionQuery', () => {
   })
 
   describe('remote change subscription', () => {
-    it('refreshes when crouton:remoteChange names its collection', async () => {
+    it('wires remote changes to refresh', async () => {
       await useCollectionQuery('products')
       for (const fn of remoteHooks) await fn({ collection: 'products' })
       expect(mockFetchState.refresh).toHaveBeenCalledTimes(1)
-    })
-
-    it('ignores other collections', async () => {
-      await useCollectionQuery('products')
-      for (const fn of remoteHooks) await fn({ collection: 'posts' })
-      expect(mockFetchState.refresh).not.toHaveBeenCalled()
-    })
-
-    it('unsubscribes when its scope is disposed', async () => {
-      remoteHooks.clear()
-      const scope = effectScope()
-      await scope.run(() => useCollectionQuery('products'))
-      expect(remoteHooks.size).toBe(1)
-      scope.stop()
-      expect(remoteHooks.size).toBe(0)
     })
   })
 
