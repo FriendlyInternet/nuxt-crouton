@@ -214,15 +214,6 @@ export const translationsConfig = {
   }
 }
 
-/**
- * Config without metadata
- */
-export const noMetadataConfig = {
-  flags: {
-    useMetadata: false
-  }
-}
-
 // ============ Form Component Test Data ============
 
 /**

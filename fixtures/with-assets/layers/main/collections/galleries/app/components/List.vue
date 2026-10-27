@@ -2,7 +2,6 @@
   @crouton-generated
   @collection galleries
   @layer main
-  @generated 2026-10-19
 
   ## AI Context
   - List component for galleries collection
@@ -49,7 +48,7 @@
 <script setup lang="ts">
 import useMainGalleries from '../composables/useMainGalleries'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   layout?: any
 }>(), {
   layout: 'table'
