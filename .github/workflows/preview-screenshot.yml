@@ -140,8 +140,11 @@ jobs:
           PR_NUMBER: ${{ steps.target.outputs.pr }}
           HEAD_REF: ${{ steps.target.outputs.head_ref }}
           REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -o pipefail
+          # Changed files drive which page is shot when the PR declares no review-surface (#2698).
+          CHANGED_FILES=$(gh pr diff "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --name-only 2>/dev/null || true); export CHANGED_FILES
           npx --yes playwright install --with-deps chromium >/dev/null 2>&1 || npx playwright install chromium >/dev/null 2>&1 || true
           [ -n "$REVIEW_SEED_SECRET" ] || { echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=REVIEW_SEED_SECRET is not set — cannot log in to the preview" >> "$GITHUB_OUTPUT"; exit 0; }
           OUT="$RUNNER_TEMP/uip"; rm -rf "$OUT"; mkdir -p "$OUT"

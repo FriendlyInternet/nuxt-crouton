@@ -24,6 +24,8 @@
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
 //        [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out writeups/ui-proposals] [--desktop]
 //   PR_BODY (env): the PR body, read for review-surface markers (#2433).
+//   CHANGED_FILES (env): newline-separated changed paths; with no declared surface the page to
+//   shoot is derived from them (#2698).
 //
 // Output: writeups/ui-proposals/pr<N>-<app>-<name>.png for each surface that captured a NON-blank page.
 // Prints `captured=<file>` per kept shot (the workflow commits them). NEVER exits non-zero on a
@@ -76,6 +78,42 @@ export function parsePrSurfaces(prBody, app) {
   return out
 }
 
+// The seeded review team every preview is signed into (#2698).
+const SEEDED_TEAM = 'test1'
+
+/**
+ * Review surfaces derived from the PR's changed files (#2698), used when the PR declares none:
+ *  - a page file (`…/app/pages/**.vue`) → its route, with a `[team]`-style segment → the seeded team;
+ *    pages with any other dynamic segment are skipped (no data to open them with);
+ *  - a shared component (`packages/crouton-*\/app/components/**.vue`) → the gallery's
+ *    `/__review?file=<path>` page, only for the gallery app (other apps have no such page).
+ */
+export function deriveSurfaces({ changedFiles, app }) {
+  const out = []
+  const add = (path, label) => {
+    if (out.some(s => s.path === path)) return
+    let name = slug(label)
+    while (out.some(s => s.name === name)) name = `${name}-${out.length + 1}`
+    out.push({ name, path, do: [] })
+  }
+  for (const raw of changedFiles || []) {
+    const file = String(raw).trim()
+    if (!file.endsWith('.vue')) continue
+    const page = /(?:^|\/)app\/pages\/(.+)\.vue$/.exec(file)
+    if (page) {
+      if (page[1].startsWith('__review')) continue
+      const segs = page[1].split('/').filter(s => s !== 'index')
+      const dynamic = segs.filter(s => /^\[.*\]$/.test(s))
+      if (dynamic.some(s => !/^\[(team|teamSlug|team-slug|slug)\]$/i.test(s) || dynamic.indexOf(s) > 0)) continue
+      const route = '/' + segs.map(s => /^\[.*\]$/.test(s) ? SEEDED_TEAM : s).join('/')
+      add(route, segs.join('-') || 'index')
+    } else if (app === 'gallery' && /^packages\/crouton-[^/]+\/app\/components\/.+\.vue$/.test(file)) {
+      add(`/__review?file=${encodeURIComponent(file)}`, file.split('/').pop().replace(/\.vue$/, ''))
+    }
+  }
+  return out
+}
+
 /**
  * What to capture for one app on one PR (#2433):
  *  - surfaces the PR declares for this app win;
@@ -83,9 +121,11 @@ export function parsePrSurfaces(prBody, app) {
  *    the gate while showing nothing of the change (#2045), so the PR shows evidence as missing;
  *  - any other PR keeps the manifest's surfaces / landing, as before.
  */
-export function resolveSurfaces({ manifest, prBody, app }) {
+export function resolveSurfaces({ manifest, prBody, app, changedFiles }) {
   const declared = parsePrSurfaces(prBody, app)
   if (declared.length) return { surfaces: declared, reason: 'declared on the PR' }
+  const derived = deriveSurfaces({ changedFiles, app })
+  if (derived.length) return { surfaces: derived, reason: 'derived from the changed files (#2698)' }
   if (String(prBody || '').includes(HOLD_MARKER)) {
     return { surfaces: [], reason: `held for visual sign-off but declares no review-surface for ${app} — not capturing the start page (#2433)` }
   }
@@ -164,7 +204,7 @@ async function main() {
   const outDir = args.out || 'writeups/ui-proposals'
   const viewport = args.desktop ? { width: 1280, height: 900 } : { width: 390, height: 844 } // phone-first (#722)
   const app = args.app || ''
-  const { surfaces, reason } = resolveSurfaces({ manifest: loadManifest(args.manifest), prBody: process.env.PR_BODY || '', app })
+  const { surfaces, reason } = resolveSurfaces({ manifest: loadManifest(args.manifest), prBody: process.env.PR_BODY || '', app, changedFiles: (process.env.CHANGED_FILES || '').split('\n') })
   log(`origin=${origin} app=${app || '-'} surfaces=${surfaces.length} (${reason}) viewport=${viewport.width}x${viewport.height}`)
   if (!surfaces.length) { report('-', 'none', reason); return }
 
