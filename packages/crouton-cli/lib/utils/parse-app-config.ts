@@ -4,6 +4,7 @@
 import { join } from 'node:path'
 import { readFile, access } from 'node:fs/promises'
 import { parseModule } from 'magicast'
+import { readExtends } from './schema-sources.ts'
 
 async function pathExists(p: string): Promise<boolean> {
   try {
@@ -78,14 +79,7 @@ async function parseNuxtConfig(appDir: string): Promise<{
     return { extends: extendsArr, hub, hasHardcodedPreset }
   } catch {
     // Fallback to regex for complex configs magicast can't handle
-    const extendsMatch = code.match(/extends\s*:\s*\[([\s\S]*?)\]/m)
-    const extendsArr: string[] = []
-    if (extendsMatch) {
-      const entries = extendsMatch[1].matchAll(/['"]([^'"]+)['"]/g)
-      for (const m of entries) {
-        extendsArr.push(m[1])
-      }
-    }
+    const extendsArr = readExtends(configPath)
 
     const hubDb = code.match(/db\s*:\s*['"](\w+)['"]/)
     const hasKv = /kv\s*:\s*true/.test(code)
