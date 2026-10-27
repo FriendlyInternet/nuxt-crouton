@@ -93,10 +93,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # CI fixtures (with-collab is intentionally excluded — its crouton-collab package
-          # has pre-existing type errors that fail the #197 typecheck gate; #210 keeps it a
-          # local-only spike until type-clean).
-          ALL="minimal with-pages with-bookings with-assets with-maps with-devtools with-sales"
+          # CI fixtures.
+          ALL="minimal with-pages with-bookings with-assets with-maps with-devtools with-sales with-collab"
           # Packages whose change can affect EVERY fixture (shared base + generator + harness inputs).
           UNIVERSAL="crouton crouton-core crouton-i18n crouton-cli crouton-auth"
 
@@ -121,7 +119,7 @@ jobs:
                 case "$f" in
                   fixtures/*/*)
                     fx=$(printf '%s' "$f" | cut -d/ -f2)
-                    case " $ALL " in *" $fx "*) add "$fx";; esac   # ignore non-CI fixtures (with-collab)
+                    case " $ALL " in *" $fx "*) add "$fx";; esac   # ignore non-CI fixtures
                     ;;
                   packages/*/*)
                     pkg=$(printf '%s' "$f" | cut -d/ -f2)
