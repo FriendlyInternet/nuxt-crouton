@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { renderCollectionForms } from '../modules/collection-forms'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+import { COLLECTION_FORMS_TEMPLATE, renderCollectionForms } from '../modules/collection-forms'
 
 describe('renderCollectionForms', () => {
   it('keeps only Form/Detail/Select components, each as its Lazy export from #components', () => {
@@ -21,5 +23,12 @@ describe('renderCollectionForms', () => {
     const src = renderCollectionForms(['UButton'])
     expect(src).not.toContain('#components')
     expect(src).toContain('export const collectionForms = {')
+  })
+
+  it('template filename matches the #build import the loaders hard-code', () => {
+    for (const f of ['FormDynamicLoader.vue', 'FormDependentFieldLoader.vue']) {
+      const src = readFileSync(resolve(__dirname, '../app/components', f), 'utf8')
+      expect(src).toContain(`'#build/${COLLECTION_FORMS_TEMPLATE}'`)
+    }
   })
 })
