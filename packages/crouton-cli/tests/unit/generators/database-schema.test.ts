@@ -24,6 +24,32 @@ afterAll(() => {
 })
 
 describe('generateSchema', () => {
+  describe('date column defaults', () => {
+    const base = (meta: Record<string, any>) => ({
+      ...schemaData,
+      fields: [{ name: 'publishedAt', type: 'date', meta }]
+    })
+    for (const dialect of ['sqlite', 'pg']) {
+      it(`${dialect}: no $default on a user date column`, () => {
+        const result = generateSchema(base({}), dialect, minimalConfig as AnyConfig)
+        const line = result.split('\n').find(l => l.includes('publishedAt:'))!
+        expect(line).toBeDefined()
+        expect(line).not.toContain('$default')
+      })
+
+      it(`${dialect}: meta.default 'now' adds new Date()`, () => {
+        const result = generateSchema(base({ default: 'now' }), dialect, minimalConfig as AnyConfig)
+        expect(result).toContain('publishedAt')
+        expect(result).toMatch(/publishedAt:.*\.\$default\(\(\) => new Date\(\)\)/)
+      })
+
+      it(`${dialect}: meta.default literal is wrapped in new Date()`, () => {
+        const result = generateSchema(base({ default: '2025-01-01' }), dialect, minimalConfig as AnyConfig)
+        expect(result).toContain('.$default(() => new Date("2025-01-01"))')
+      })
+    }
+  })
+
   describe('SQLite dialect', () => {
     it('generates correct schema for basic collection', () => {
       const result = generateSchema(schemaData, 'sqlite', minimalConfig as AnyConfig)
