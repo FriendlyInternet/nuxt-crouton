@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { isDayFullyBooked } from '../utils/day-availability'
 import type { Booking, LocationData, SettingsData } from '../types/booking'
 
 interface FilterState {
@@ -135,91 +134,26 @@ const notify = useNotify()
 // Preview mode - injected from admin page, defaults to false
 const previewMode = inject<Ref<boolean>>('bookings-preview-mode', ref(false))
 
-// Schedule rules per location — used to disable closed days in the calendar
-const locationScheduleRules = computed(() => {
-  return resolvedLocations.value.map((location) => {
-    const openDaysRaw = location.openDays
-    let openDays: number[] | null = null
-    if (openDaysRaw != null) {
-      if (Array.isArray(openDaysRaw)) {
-        openDays = openDaysRaw.length > 0 ? openDaysRaw : null
-      } else if (typeof openDaysRaw === 'string') {
-        try {
-          const parsed = JSON.parse(openDaysRaw)
-          openDays = Array.isArray(parsed) && parsed.length > 0 ? parsed : null
-        } catch {
-          openDays = null
-        }
-      }
-    }
-
-    let blockedDates: { startDate: string, endDate: string, blockedSlots?: string[] }[] = []
-    const blockedRaw = location.blockedDates
-    if (blockedRaw != null) {
-      if (Array.isArray(blockedRaw)) {
-        blockedDates = blockedRaw
-      } else if (typeof blockedRaw === 'string') {
-        try {
-          const parsed = JSON.parse(blockedRaw)
-          blockedDates = Array.isArray(parsed) ? parsed : []
-        } catch {
-          blockedDates = []
-        }
-      }
-    }
-
-    return { openDays, blockedDates }
-  })
+// This screen's shared state — filters, the selected day, hover, the new-booking
+// date, the calendar's period and the list's scroll target (#2561). The bookings
+// layout blocks will read the same store.
+const store = provideBookingsStore({
+  bookings: resolvedBookings,
+  calendarBookings: resolvedCalendarBookings,
+  locations: resolvedLocations,
+  readOnly: previewMode,
+  initialFilters: props.initialFilters,
 })
 
-// Check if ALL visible locations are unavailable on a date (closed or fully blocked)
+// Closed days in the calendar: no location takes bookings that day.
 function isDateUnavailableForAll(date: Date): boolean {
-  const rules = locationScheduleRules.value
-  if (rules.length === 0) return false
-
-  const dayOfWeek = date.getDay()
-  const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-  return rules.every(({ openDays, blockedDates }) => {
-    // Check openDays
-    if (openDays && !openDays.includes(dayOfWeek)) return true
-
-    // Check full-day blocked dates
-    for (const blocked of blockedDates) {
-      if (!blocked.startDate || !blocked.endDate) continue
-      if (dateKey >= blocked.startDate && dateKey <= blocked.endDate) {
-        if (!blocked.blockedSlots || blocked.blockedSlots.length === 0) return true
-      }
-    }
-
-    return false
-  })
+  return store.closedReason(date) !== null
 }
 
-// Get reason why a date is unavailable
 function getBlockedReasonForAll(date: Date): string | null {
-  if (!isDateUnavailableForAll(date)) return null
-
-  const dayOfWeek = date.getDay()
-  const rules = locationScheduleRules.value
-  const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-
-  // Check if all are closed by openDays
-  const allClosedByOpenDays = rules.every(({ openDays }) => openDays && !openDays.includes(dayOfWeek))
-  if (allClosedByOpenDays) return t('bookings.calendar.closed')
-
-  // Check for blocked date reason
-  for (const { blockedDates } of rules) {
-    for (const blocked of blockedDates) {
-      if (!blocked.startDate || !blocked.endDate) continue
-      if (dateKey >= blocked.startDate && dateKey <= blocked.endDate) {
-        if (!blocked.blockedSlots || blocked.blockedSlots.length === 0) {
-          return (blocked as { reason?: string }).reason || t('bookings.calendar.blocked')
-        }
-      }
-    }
-  }
-
+  const reason = store.closedReason(date)
+  if (!reason) return null
+  if (reason.kind === 'blocked') return reason.reason || t('bookings.calendar.blocked')
   return t('bookings.calendar.closed')
 }
 
@@ -269,24 +203,11 @@ nuxtApp.hook('crouton:mutation', async (event: { operation: string; collection: 
   }
 })
 
-// Selected day (from calendar clicks) - highlights its bookings and shows its New booking row
-const selectedDate = ref<Date | null>(null)
-
-// The period the calendar shows (week or month containing this date)
-const shownDate = ref(new Date())
-
-// Day the list scrolls to. A fresh Date each time, so the same day can be targeted again.
-const scrollTarget = ref<Date | null>(null)
-
-// Hovered booking ID (from calendar indicator hover) - used to highlight specific booking in list
-const hoveredBookingId = ref<string | null>(null)
-
-// Filter state (status, location and showCancelled toggle)
-const filterState = ref<FilterState>({
-  statuses: props.initialFilters.statuses ?? [],
-  locations: props.initialFilters.locations ?? [],
-  showCancelled: props.initialFilters.showCancelled ?? false,
-})
+const selectedDate = store.selectedDate
+const shownDate = store.shownDate
+const scrollTarget = store.scrollTarget
+const hoveredBookingId = store.hoveredBookingId
+const filterState = store.filters
 
 // Visibility states for panel sections
 const showCalendar = ref(true)
@@ -297,9 +218,7 @@ const showMap = ref(false)
 const calendarView = ref<'week' | 'month'>('week')
 
 // Handle go-to-today from pill controls
-function onGoToToday() {
-  selectDate(new Date())
-}
+const onGoToToday = store.goToToday
 
 // Parse GeoJSON coordinates from location data
 function parseLocationCoordinates(location: LocationData): [number, number] | null {
@@ -331,16 +250,7 @@ const hasLocationsWithCoordinates = computed(() => {
 })
 
 // Toggle location filter (used by map marker clicks)
-function toggleLocation(locationId: string) {
-  const current = [...filterState.value.locations]
-  const index = current.indexOf(locationId)
-  if (index === -1) {
-    current.push(locationId)
-  } else {
-    current.splice(index, 1)
-  }
-  filterState.value.locations = current
-}
+const toggleLocation = store.toggleLocation
 
 // Emit filter changes
 watch(filterState, (newFilters) => {
@@ -348,7 +258,7 @@ watch(filterState, (newFilters) => {
 }, { deep: true })
 
 // Inline creation state - date where we're creating a booking
-const creatingAtDate = ref<Date | null>(null)
+const creatingAtDate = store.creatingAt
 
 // Watch for booking creation signal from shared state.
 // The emit('created') chain from BookingCreateCard → List → Panel can be lost
@@ -360,90 +270,40 @@ watch(lastBookingCreatedAt, (ts) => {
   }
 })
 
-// Check if any filters are active
-const hasActiveFilters = computed(() => {
-  return filterState.value.statuses.length > 0
-    || filterState.value.locations.length > 0
-    || filterState.value.showCancelled
-})
+const hasActiveFilters = store.hasActiveFilters
+const filteredBookings = store.filteredBookings
 
-// Apply filters to bookings
-const filteredBookings = computed(() => {
-  let result = resolvedBookings.value
-
-  // Filter cancelled bookings based on toggle
-  // By default (showCancelled = false), hide cancelled bookings
-  if (!filterState.value.showCancelled) {
-    result = result.filter(booking => booking.status !== 'cancelled')
-  }
-
-  // Filter by specific statuses if provided
-  if (filterState.value.statuses.length > 0) {
-    result = result.filter(booking =>
-      filterState.value.statuses.includes(booking.status),
-    )
-  }
-
-  // Filter by location
-  if (filterState.value.locations.length > 0) {
-    result = result.filter(booking =>
-      filterState.value.locations.includes(booking.location),
-    )
-  }
-
-  return result
-})
-
-// Select a day, show its period and scroll the list to it
-function selectDate(date: Date) {
-  selectedDate.value = date
-  shownDate.value = date
-  scrollTarget.value = new Date(date)
-}
+// Select a day, show its period and scroll the list to it (a booking's date)
+const selectDate = store.selectDate
 
 // Handle calendar day select (the period is already visible)
 function onCalendarSelect(date: Date | null) {
-  if (!date) return
-  selectedDate.value = date
-  scrollTarget.value = new Date(date)
+  if (date) store.selectDay(date)
 }
 
-// Check if all locations are fully booked for a given date (calendar bookings give team-wide availability)
-function isDayFullyBookedAllLocations(date: Date): boolean {
-  return isDayFullyBooked(date, resolvedLocations.value, resolvedCalendarBookings.value)
-}
+// Calendar bookings give team-wide availability
+const isDayFullyBookedAllLocations = store.isFullyBooked
 
 // Handle calendar day click (+ button) - start inline creation at that date (disabled in preview mode)
 function onCalendarDayClick(date: Date) {
-  if (previewMode.value) return
-  if (resolvedLocations.value.length === 0) {
+  const result = store.startCreate(date)
+  if (result === 'no-locations') {
     notify.warning(t('bookings.notifications.noLocations'), {
       description: t('bookings.notifications.noLocationsDescription'),
     })
-    return
   }
-
-  if (isDateUnavailableForAll(date)) return
-
-  if (isDayFullyBookedAllLocations(date)) {
+  else if (result === 'full') {
     notify.warning(t('bookings.notifications.allSlotsTaken'), {
       description: t('bookings.notifications.allSlotsTakenDescription'),
     })
-    return
   }
-
-  creatingAtDate.value = date
-  scrollTarget.value = new Date(date)
 }
 
 // Handle booking created - refresh all data (including calendar indicators), then scroll to its day
 async function onBookingCreated() {
-  const createdAt = creatingAtDate.value
-  creatingAtDate.value = null
+  const done = store.finishCreate(refresh)
   emit('created')
-
-  await refresh()
-  if (createdAt) scrollTarget.value = new Date(createdAt)
+  await done
 }
 
 // Handle booking updated - refresh the list
@@ -459,14 +319,10 @@ async function onEmailSent() {
 }
 
 // Handle cancel creation
-function onCancelCreate() {
-  creatingAtDate.value = null
-}
+const onCancelCreate = store.cancelCreate
 
 // Handle list scroll - sync calendar to top visible date (week changes)
-function onTopVisibleDateChange(date: Date) {
-  shownDate.value = date
-}
+const onTopVisibleDateChange = store.showPeriod
 
 // Expose methods for external control
 defineExpose({
