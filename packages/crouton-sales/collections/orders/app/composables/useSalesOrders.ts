@@ -54,7 +54,6 @@ const _salesOrdersConfig = {
   name: 'salesOrders',
   layer: 'sales',
   apiPath: 'sales-orders',
-  componentName: 'SalesOrdersForm',
   defaultValues: {
     eventId: '',
     clientId: '',

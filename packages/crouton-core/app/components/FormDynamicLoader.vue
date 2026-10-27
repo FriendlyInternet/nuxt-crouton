@@ -19,8 +19,6 @@
 </template>
 
 <script setup lang="ts">
-// import useCollections from '~/layers/test/all/composables/useCollections'
-
 const props = defineProps({
   collection: String,
   loading: String,
@@ -35,58 +33,36 @@ const props = defineProps({
   }
 })
 
-// Get component mapping from test composable
-const { componentMap, getConfig } = useCollections()
-
-const getEffectiveFormName = (collection: string) => {
-  return componentMap[collection]
+// Registered-component check without resolveComponent's "failed to resolve" warning.
+// Nuxt registers both <Name> and Lazy<Name>; prefer the lazy one so forms stay out of the entry chunk.
+const instance = getCurrentInstance()
+const lookup = (name: string): unknown => {
+  const registry = instance?.appContext.components
+  if (!registry) return undefined
+  return registry[name] ? resolveComponent(name) : undefined
+}
+const isRegistered = (name: string) => {
+  const found = lookup(name)
+  return !!found && typeof found !== 'string'
 }
 
-// Track whether the resolved component is the generic CroutonDetail
-const isGenericDetail = ref(false)
+const resolution = computed(() =>
+  resolveFormChain(props.collection, props.action, name =>
+    isRegistered(name) || isRegistered(name.replace(/^Lazy/, ''))
+  )
+)
+
+const isGenericDetail = computed(() => {
+  const r = resolution.value
+  return r.kind === 'component' && !!r.generic
+})
 
 const currentComponent = computed(() => {
-  if (!props.collection) return null
-
-  isGenericDetail.value = false
-
-  // If action is 'view', try to resolve a Detail component by convention
-  // Resolution chain: {Name}Detail → CroutonDetail (generic fallback) → Form
-  if (props.action === 'view') {
-    const formComponentName = getEffectiveFormName(props.collection)
-    if (formComponentName) {
-      // Convention: Replace 'Form' with 'Detail' in component name
-      // e.g., 'DiscubotJobsForm' -> 'DiscubotJobsDetail'
-      const detailComponentName = formComponentName.replace(/Form$/, 'Detail')
-
-      try {
-        // Try to resolve the per-collection Detail component
-        const detailComponent = resolveComponent(detailComponentName)
-        // If it exists (not a string), use it
-        if (typeof detailComponent !== 'string') {
-          return detailComponent
-        }
-      } catch {
-        // Detail component doesn't exist, try generic fallback
-      }
-
-      // Try CroutonDetail generic fallback (if collection has field metadata)
-      try {
-        const genericDetail = resolveComponent('CroutonDetail')
-        if (typeof genericDetail !== 'string') {
-          isGenericDetail.value = true
-          return genericDetail
-        }
-      } catch {
-        // Generic detail not available, fall through to Form
-      }
-    }
-  }
-
-  // Fall back to standard form component (for view, create, update, delete)
-  const formName = getEffectiveFormName(props.collection)
-  if (!formName) return null
-  return resolveComponent(formName)
+  const r = resolution.value
+  if (r.kind !== 'component') return null
+  const lazy = lookup(r.name)
+  if (lazy && typeof lazy !== 'string') return lazy
+  return lookup(r.name.replace(/^Lazy/, '')) as any
 })
 
 // Determine mode based on route context

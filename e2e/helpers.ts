@@ -124,6 +124,17 @@ export interface MapsSpec {
   }
 }
 
+/**
+ * "Ejected form wins" — the fixture ships its own `app/components/<Layer><Plural>Form.vue`
+ * for a collection a package also provides, and the form loader must render the app's.
+ */
+export interface EjectedFormSpec {
+  /** Packaged collection key whose form the fixture overrides (e.g. "bookingsLocations"). */
+  collectionKey: string
+  /** Text the fixture's form renders, proving the override won. */
+  marker: string
+}
+
 export interface FixtureManifest {
   collections: CollectionSpec[]
   /** Optional package-specific surfaces; omit for fixtures with nothing extra. */
@@ -132,6 +143,8 @@ export interface FixtureManifest {
   i18n?: I18nSpec
   /** Optional maps + geocoding check; omit for fixtures without crouton-maps. */
   maps?: MapsSpec
+  /** Optional app-form-overrides-package-form check. */
+  ejectedForm?: EjectedFormSpec
   /**
    * Opt the WHOLE fixture out of the axe-core a11y scan (a11y.smoke.spec.ts).
    * Set `false` to skip every collection/surface scan for this fixture. Omit

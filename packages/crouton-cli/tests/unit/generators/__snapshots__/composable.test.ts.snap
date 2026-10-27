@@ -47,7 +47,6 @@ const _shopProductsConfig = {
   name: 'shopProducts',
   layer: 'shop',
   apiPath: 'shop-products',
-  componentName: 'ShopProductsForm',
   defaultValues: {
     name: '',
     description: '',

@@ -46,7 +46,6 @@ const _salesEventsettingsConfig = {
   name: 'salesEventsettings',
   layer: 'sales',
   apiPath: 'sales-eventsettings',
-  componentName: 'SalesEventsettingsForm',
   defaultValues: {
     eventId: '',
     settingKey: '',

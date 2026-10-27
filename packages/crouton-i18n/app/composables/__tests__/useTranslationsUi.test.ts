@@ -248,10 +248,6 @@ describe('translationsUi', () => {
       expect(translationsUiConfig.singularName).toBe('Translation')
     })
 
-    it('has componentName', () => {
-      expect(translationsUiConfig.componentName).toBe('TranslationsUiForm')
-    })
-
     it('has schema as non-enumerable property', () => {
       const descriptor = Object.getOwnPropertyDescriptor(translationsUiConfig, 'schema')
 
