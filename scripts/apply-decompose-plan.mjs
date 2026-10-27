@@ -250,6 +250,25 @@ function realExec(file, args, input) {
   return execFileSync(file, args, { input, encoding: 'utf8', maxBuffer: 1024 * 1024 * 16 }).trim()
 }
 
+// REST, not GraphQL (#2708): `gh issue create|edit|view|comment` all go through GraphQL, which is
+// blocked in interactive Claude sessions. `gh api repos/...` is plain REST and works everywhere.
+// `-F body=@file` reads the body file verbatim, so the array-args / no-shell guarantee holds.
+export const issueApi = (repo, n, tail = '') => `repos/${repo}/issues/${n}${tail}`
+export const ghGetBody = (exec, repo, n) => exec('gh', ['api', issueApi(repo, n), '-q', '.body']) || ''
+export const ghAddLabel = (exec, repo, n, label) => exec('gh', ['api', '--method', 'POST', issueApi(repo, n, '/labels'), '-f', `labels[]=${label}`])
+export const ghRemoveLabel = (exec, repo, n, label) => exec('gh', ['api', '--method', 'DELETE', issueApi(repo, n, `/labels/${encodeURIComponent(label)}`)])
+export const ghSetBody = (exec, repo, n, file) => exec('gh', ['api', '--method', 'PATCH', issueApi(repo, n), '-F', `body=@${file}`])
+export const ghComment = (exec, repo, n, file) => exec('gh', ['api', '--method', 'POST', issueApi(repo, n, '/comments'), '-F', `body=@${file}`])
+/** Create an issue; returns its number. Throws (creating nothing further) if the number can't be read. */
+export function ghCreateIssue(exec, repo, { title, file, labels = [] }) {
+  const args = ['api', '--method', 'POST', `repos/${repo}/issues`, '-f', `title=${title}`, '-F', `body=@${file}`, '-q', '.number']
+  for (const l of labels) args.push('-f', `labels[]=${l}`)
+  const out = exec('gh', args)
+  const num = Number(out)
+  if (!Number.isFinite(num) || num <= 0) throw new Error(`could not parse issue number from create output: ${out}`)
+  return num
+}
+
 /**
  * Execute the action list. Returns a summary of what was created/labelled. `exec` is injectable.
  * One small handler per action type (a dispatch table) — each closes over the shared run state.
@@ -261,7 +280,7 @@ export function runActions(actions, { repo, exec = realExec, log = console.error
     if (!handler) throw new Error(`unknown action type: ${a.type}`)
     handler(a, state)
   }
-  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked }
+  return { created: state.created, labelled: state.labelled, held: state.held, artifacts: state.artifacts, blocked: state.blocked, mockupMissing: !!state.mockupMissing }
 }
 
 // Render the artifacts pi proposed for a design sign-off. BEST-EFFORT: every render is guarded so a
@@ -270,9 +289,9 @@ export function runActions(actions, { repo, exec = realExec, log = console.error
 // The render scripts are plain `node` (schema-review / ui-proposal / ticket-excalidraw) — pi-runnable.
 function renderSignoffArtifacts(signoff, state) {
   const tmp = process.env.RUNNER_TEMP || '/tmp'
-  const out = { schemaMd: '', images: [] }
+  const out = { schemaMd: '', images: [], errors: {} }
   const tryRender = (label, fn) => {
-    try { fn() } catch (e) { state.log(`⚠️  signoff render skipped (${label}): ${e.message}`) }
+    try { fn() } catch (e) { out.errors[label] = e.message; state.log(`⚠️  signoff render skipped (${label}): ${e.message}`) }
   }
   // Only link an image the repo will actually commit (#1933). `git add` on an ignored path is a
   // SILENT no-op — exit 0, no warning — so #1821's two new artifact dirs were never committed and
@@ -330,12 +349,22 @@ function renderSignoffArtifacts(signoff, state) {
 }
 
 
+// #2809: a hold that talks about a mockup/UI must show one or say plainly why not. Returns the
+// reason string when a UI mockup was expected but no image was linked, else ''.
+const MOCKUP_RE = /\b(mock-?up|wireframe|layout|screenshot)\b/i
+export function missingMockupReason(signoff, images = [], renderError = '') {
+  if (images.some(i => i.label === 'UI mockup')) return ''
+  const text = [signoff.summary, ...(signoff.questions || [])].join(' ')
+  if (!signoff.ui && !MOCKUP_RE.test(text)) return ''
+  if (!signoff.ui) return 'the plan included no `ui` mockup HTML'
+  return renderError ? `the mockup render failed (${renderError})` : 'the mockup image was not rendered or not committable (gitignored path?)'
+}
+
 const ACTION_HANDLERS = {
   // A leaf: stamp the WS2 block onto the target's CURRENT body (merge, don't clobber prose).
   'edit-body'(a, { repo, exec, writeBody }) {
-    const cur = exec('gh', ['issue', 'view', String(a.issue), '--repo', repo, '--json', 'body', '-q', '.body'])
-    const f = writeBody(`edit-${a.issue}`, writePipelineBlock(cur, a.ctx))
-    exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--body-file', f])
+    const cur = ghGetBody(exec, repo, a.issue)
+    ghSetBody(exec, repo, a.issue, writeBody(`edit-${a.issue}`, writePipelineBlock(cur, a.ctx)))
   },
   // Design sign-off hold (#1821): render the proposed artifacts, post them + the forks on the epic,
   // and add status:blocked. Creates NO children — the lgtm→resume-on-comment loop continues later.
@@ -362,6 +391,12 @@ const ACTION_HANDLERS = {
       lines.push('### Rendered')
       for (const img of art.images) lines.push(`**${img.label}**\n\n![${img.label}](${rawBase}/${img.path})`)
     }
+    const missing = missingMockupReason(a.signoff, art.images, art.errors.ui)
+    if (missing) {
+      lines.push('')
+      lines.push(`⚠️ **Mockup missing:** ${missing}. Reply and ask for it, or answer the forks without one.`)
+      state.mockupMissing = true
+    }
     lines.push('')
     lines.push('---')
     // @mention the owner: a hold is an ASK — it needs action, so it must notify (#1745). Without
@@ -369,14 +404,14 @@ const ACTION_HANDLERS = {
     // Per CLAUDE.md an @mention is a request for action, which is exactly what this is.
     lines.push('@pmcp — reply **`lgtm`** / **`approve`** to proceed to build, or answer the forks above and I\'ll revise. Holding on `status:blocked`.')
     const f = writeBody(`signoff-${a.issue}`, lines.join('\n'))
-    exec('gh', ['issue', 'comment', String(a.issue), '--repo', repo, '--body-file', f])
-    try { exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--add-label', 'status:blocked']) } catch (e) { state.log(`addLabel status:blocked: ${e.message}`) }
+    ghComment(exec, repo, a.issue, f)
+    try { ghAddLabel(exec, repo, a.issue, 'status:blocked') } catch (e) { state.log(`addLabel status:blocked: ${e.message}`) }
     state.held.push({ issue: a.issue, questions: a.signoff.questions.length, images: art.images.length })
   },
   // Plain, idempotent add — for a label that describes the issue (`epic`, #2501), where adding
   // one already present is the desired no-op and no `labeled` event is wanted.
   'ensure-label'(a, { repo, exec, labelled }) {
-    exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--add-label', a.label])
+    ghAddLabel(exec, repo, a.issue, a.label)
     labelled.push({ issue: a.issue, label: a.label })
   },
   'add-label'(a, { repo, exec, labelled }) {
@@ -384,18 +419,14 @@ const ACTION_HANDLERS = {
     // prior run, and a plain --add-label is then a silent no-op that fires NO `labeled` event —
     // so the single-use worker never triggers and the decompose gate sees no `leafDispatched`
     // (exactly the #1741 failure). Remove-then-add guarantees the event fires.
-    try { exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--remove-label', a.label]) } catch { /* wasn't present */ }
-    exec('gh', ['issue', 'edit', String(a.issue), '--repo', repo, '--add-label', a.label])
+    try { ghRemoveLabel(exec, repo, a.issue, a.label) } catch { /* wasn't present */ }
+    ghAddLabel(exec, repo, a.issue, a.label)
     labelled.push({ issue: a.issue, label: a.label })
   },
   'create'(a, { repo, exec, writeBody, log, refToNumber, created }) {
     if (a.droppedLabels?.length) log(`⚠️  dropped unknown labels on "${a.title}": ${a.droppedLabels.join(', ')}`)
     const f = writeBody(a.ref, a.body)
-    const args = ['issue', 'create', '--repo', repo, '--title', a.title, '--body-file', f]
-    for (const l of a.labels) args.push('--label', l)
-    const url = exec('gh', args)
-    const num = Number((url.match(/\/issues\/(\d+)/) || [])[1])
-    if (!Number.isFinite(num)) throw new Error(`could not parse issue number from create output: ${url}`)
+    const num = ghCreateIssue(exec, repo, { title: a.title, file: f, labels: a.labels })
     refToNumber[a.ref] = num
     created.push({ ref: a.ref, number: num, title: a.title })
   },
@@ -406,7 +437,7 @@ const ACTION_HANDLERS = {
   },
   'trigger-label'(a, { repo, exec, refToNumber, labelled }) {
     const child = refToNumber[a.ref]
-    exec('gh', ['issue', 'edit', String(child), '--repo', repo, '--add-label', a.label])
+    ghAddLabel(exec, repo, child, a.label)
     labelled.push({ issue: child, label: a.label })
   },
   // ORDERING (#1750): stamp `Blocked-by: #N` onto a child that must wait. This is the ONLY
@@ -418,9 +449,9 @@ const ACTION_HANDLERS = {
     const child = refToNumber[a.ref]
     const blockers = a.blockedByRefs.map(r => refToNumber[r]).filter(Boolean)
     if (!blockers.length) return
-    const body = exec('gh', ['issue', 'view', String(child), '--repo', repo, '--json', 'body', '-q', '.body']) || ''
+    const body = ghGetBody(exec, repo, child)
     const line = formatBlockedBy(blockers)
-    exec('gh', ['issue', 'edit', String(child), '--repo', repo, '--body', `${line}\n\n${body}`])
+    exec('gh', ['api', '--method', 'PATCH', issueApi(repo, child), '-f', `body=${line}\n\n${body}`])
     blocked.push({ issue: child, blockers })
   },
 }
@@ -475,6 +506,8 @@ function main(argv) {
     // them to the epic branch (their raw URLs are referenced in the posted comment).
     if (summary.artifacts.length) console.log(`SIGNOFF_ARTIFACTS ${summary.artifacts.join(' ')}`)
     if (!summary.held.length) { console.error('signoff plan produced no hold — failing'); process.exit(1) }
+    // The hold posted (with a visible warning), but a UI hold without its image is a defect: go red.
+    if (summary.mockupMissing) { console.error('design hold described a mockup but none was linked — failing (#2809)'); process.exit(1) }
     return
   }
   if (!plan.leaf && summary.created.length === 0) {

@@ -106,6 +106,23 @@ export function packagesApprovalCarry({ subPrs = [], owner } = {}) {
   return { packagesPrs, approved, unapproved, line }
 }
 
+/**
+ * Every `Packages-approved:` line found in the given bodies (epic body, children's bodies),
+ * de-duplicated, in first-seen order. PURE (#2748). Code spans/fences are skipped so a quoted
+ * example never counts as a declaration.
+ */
+export function collectApprovalLines(bodies = []) {
+  const seen = new Set()
+  for (const b of bodies) {
+    const prose = String(b || '').replace(/```[\s\S]*?```/g, '')
+    for (const l of prose.split('\n')) {
+      const t = l.trim()
+      if (ATTESTATION_RE.test(t) && !t.startsWith('`')) seen.add(t)
+    }
+  }
+  return [...seen]
+}
+
 // The guard and the carry must agree on the attestation shape — asserted at import time too,
 // so a future edit to either regex or the line can't silently un-declare every epic PR.
 if (!ATTESTATION_RE.test(packagesApprovalCarry({ subPrs: [{ number: 1, files: ['packages/x/a.ts'], comments: [{ login: 'o', body: 'lgtm' }] }], owner: 'o' }).line)) {

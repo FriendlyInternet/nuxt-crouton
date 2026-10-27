@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import type { DateValue } from '@internationalized/date'
 import { CalendarDate, today, getLocalTimeZone } from '@internationalized/date'
+import { isSameDay } from '@fyit/crouton-core/shared/utils/date'
 
 interface Props {
   modelValue?: Date | null
   weekStartsOn?: 0 | 1 // 0 = Sunday, 1 = Monday
   size?: 'sm' | 'md' | 'lg'
   variant?: 'default' | 'beams' | 'bars'
-  /** Dates to highlight (selected dates from click multi-select) */
-  selectedDates?: Date[]
+  /** The selected day */
+  selectedDate?: Date | null
   /** Date shown as the active one (e.g. being created/edited) */
   activeDate?: Date | null
   /** Function to check if a date is disabled by schedule rules */
@@ -22,7 +23,7 @@ const props = withDefaults(defineProps<Props>(), {
   weekStartsOn: 1, // Monday default
   size: 'md',
   variant: 'default',
-  selectedDates: () => [],
+  selectedDate: null,
   activeDate: null,
   isDateDisabled: null,
 })
@@ -33,8 +34,9 @@ const emit = defineEmits<{
 
 const { locale } = useI18n()
 
-// Current week's reference date (for navigation)
-const referenceDate = ref(today(getLocalTimeZone()))
+// The week being shown (any date in it)
+const date = defineModel<Date>('date', { required: true })
+const referenceDate = computed(() => new CalendarDate(date.value.getFullYear(), date.value.getMonth() + 1, date.value.getDate()))
 
 // Compute the start of the week, `offset` weeks away from the reference date
 function weekStartFor(offset: number) {
@@ -87,13 +89,12 @@ const weekLabel = computed(() => {
 })
 
 // Navigation
-function prevWeek() {
-  referenceDate.value = referenceDate.value.subtract({ weeks: 1 })
+function showWeek(d: DateValue) {
+  date.value = d.toDate(getLocalTimeZone())
 }
 
-function nextWeek() {
-  referenceDate.value = referenceDate.value.add({ weeks: 1 })
-}
+const prevWeek = () => showWeek(referenceDate.value.subtract({ weeks: 1 }))
+const nextWeek = () => showWeek(referenceDate.value.add({ weeks: 1 }))
 
 // Horizontal swipe on the strip: the panels follow the finger, then slide to
 // the next/previous week or spring back. Vertical drags pass through to the
@@ -102,28 +103,13 @@ const swipeEl = ref<HTMLElement | null>(null)
 const trackEl = ref<HTMLElement | null>(null)
 const { slide } = useSlideSwipe(swipeEl, {
   track: trackEl,
-  peek: true,
   onNext: nextWeek,
   onPrev: prevWeek,
 })
 
 function goToToday() {
-  referenceDate.value = today(getLocalTimeZone())
+  date.value = new Date()
 }
-
-function goToDate(date: Date) {
-  referenceDate.value = new CalendarDate(
-    date.getFullYear(),
-    date.getMonth() + 1,
-    date.getDate(),
-  )
-}
-
-// Expose methods for parent control
-defineExpose({
-  goToDate,
-  goToToday,
-})
 
 function isToday(day: { date: DateValue }): boolean {
   const todayDate = today(getLocalTimeZone())
@@ -131,21 +117,12 @@ function isToday(day: { date: DateValue }): boolean {
 }
 
 function isHighlighted(day: { jsDate: Date }): boolean {
-  return props.selectedDates.some(d =>
-    day.jsDate.getFullYear() === d.getFullYear()
-    && day.jsDate.getMonth() === d.getMonth()
-    && day.jsDate.getDate() === d.getDate(),
-  )
+  return !!props.selectedDate && isSameDay(day.jsDate, props.selectedDate)
 }
 
 // Check if a date is the creating date
 function isActiveDate(day: { jsDate: Date }): boolean {
-  if (!props.activeDate) return false
-  return (
-    day.jsDate.getFullYear() === props.activeDate.getFullYear()
-    && day.jsDate.getMonth() === props.activeDate.getMonth()
-    && day.jsDate.getDate() === props.activeDate.getDate()
-  )
+  return !!props.activeDate && isSameDay(day.jsDate, props.activeDate)
 }
 
 function isDayDisabled(day: { jsDate: Date }): boolean {

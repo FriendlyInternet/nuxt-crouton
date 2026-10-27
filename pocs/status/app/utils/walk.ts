@@ -17,7 +17,12 @@ export function walkParam(item: { app?: string | null, number: number, title: st
   return out.length > 2048 ? '' : out
 }
 
-export function loginHref(item: { app?: string | null, number: number, title: string, steps: string[] }): string {
-  const w = item.steps.length ? walkParam(item) : ''
-  return `/api/status/login/${item.app}${w ? `?walk=${w}` : ''}`
+export function loginHref(item: { app?: string | null, number: number, title: string, steps?: string[] | null, to?: string | null }): string {
+  const steps = item.steps ?? []
+  const q = new URLSearchParams()
+  if (item.to) q.set('to', item.to)
+  const w = steps.length ? walkParam({ ...item, steps }) : ''
+  if (w) q.set('walk', w)
+  const qs = q.toString()
+  return `/api/status/login/${item.app}${qs ? `?${qs}` : ''}`
 }

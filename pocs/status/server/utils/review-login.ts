@@ -12,9 +12,16 @@ export function sanitizeWalk(raw: unknown): string | null {
   return typeof raw === 'string' && raw.length <= 2048 && /^[A-Za-z0-9_-]+={0,2}$/.test(raw) ? raw : null
 }
 
-export function reviewLoginUrl(baseUrl: string, secret: string, app: string, key: string, walk?: string | null): string {
+/** Adds `walk` to a same-app path (keeps any query it already has). */
+export function withWalk(path: string, walk?: string | null): string {
+  if (!walk) return path
+  return `${path || '/'}${(path || '/').includes('?') ? '&' : '?'}${new URLSearchParams({ walk })}`
+}
+
+export function reviewLoginUrl(baseUrl: string, secret: string, app: string, key: string, redirect = '', walk?: string | null): string {
   const { email, password } = reviewLogin(secret, app, key)
   const q = new URLSearchParams({ email, password })
-  if (walk) q.set('redirect', `/?${new URLSearchParams({ walk })}`)
+  const target = withWalk(redirect, walk)
+  if (target) q.set('redirect', target)
   return `${baseUrl.replace(/\/+$/, '')}/auth/login?${q}`
 }

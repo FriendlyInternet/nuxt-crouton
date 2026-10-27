@@ -24,6 +24,10 @@ describe('reviewLogin', () => {
     expect(reviewLoginUrl('https://velo.pmcp.dev/', 's', 'velo', 'main'))
       .toBe(`https://velo.pmcp.dev/auth/login?email=review%2Bvelo-main%40example.com&password=${password}`)
   })
+
+  it('adds redirect when given', () => {
+    expect(new URL(reviewLoginUrl('https://v.dev', 's', 'velo', 'main', '/admin?a=1')).searchParams.get('redirect')).toBe('/admin?a=1')
+  })
 })
 
 describe('walk redirect', () => {
@@ -31,7 +35,7 @@ describe('walk redirect', () => {
     const { sanitizeWalk } = await import('../server/utils/review-login')
     const w = sanitizeWalk('eyJhIjoxfQ')
     expect(w).toBe('eyJhIjoxfQ')
-    const u = new URL(reviewLoginUrl('https://velo.pmcp.dev', 's', 'velo', 'main', w))
+    const u = new URL(reviewLoginUrl('https://velo.pmcp.dev', 's', 'velo', 'main', '', w))
     expect(u.searchParams.get('redirect')).toBe('/?walk=eyJhIjoxfQ')
     expect(u.searchParams.get('walk')).toBeNull()
   })
@@ -41,6 +45,11 @@ describe('walk redirect', () => {
     expect(sanitizeWalk('not base64!')).toBeNull()
     expect(sanitizeWalk('a'.repeat(2049))).toBeNull()
     expect(sanitizeWalk(undefined)).toBeNull()
-    expect(reviewLoginUrl('https://v.dev', 's', 'velo', 'main', null)).not.toContain('redirect')
+    expect(reviewLoginUrl('https://v.dev', 's', 'velo', 'main', '', null)).not.toContain('redirect')
+  })
+
+  it('carries both the page and the walk', async () => {
+    const u = new URL(reviewLoginUrl('https://v.dev', 's', 'velo', 'main', '/admin/bookings?tab=1', 'eyJhIjoxfQ'))
+    expect(u.searchParams.get('redirect')).toBe('/admin/bookings?tab=1&walk=eyJhIjoxfQ')
   })
 })
