@@ -73,7 +73,7 @@ The rule of thumb, every working session:
 - **Keep the `README.md` thin:** usage / dev / deploy + a pointer to `HANDOFF.md`. Design decisions
   live in *one* place (`HANDOFF.md`) so they don't drift.
 
-`pocs/crouton-builder-demo/HANDOFF.md` is the worked example. (Apps that never graduate — pure
+`pocs/crouton-builder/docs/origin-HANDOFF.md` is the worked example. (Apps that never graduate — pure
 consumer demos — don't need one; this is for POCs incubating a future package.)
 
 **Pair it with a chronological decision log (`changelog.json`).** Where `HANDOFF.md` is the *curated
@@ -82,7 +82,7 @@ iteration `{ v, note, commit }`, newest first — recording **how** we got here 
 change + its commit). The two complement each other: the changelog never prunes, the handoff always
 does. Surface it in-app where it's verifiable on the deployed preview (the builder POC shows a `vNN`
 chip that opens the changelog; an entry's `commit` is backfilled when the next entry is added, since
-the hash isn't known until push). `pocs/crouton-builder-demo/app/spike-changelog.json` is the example.
+the hash isn't known until push). (The removed `crouton-builder-demo` had the original example, #2807.)
 
 **At handoff, the doc is reconciled against the running POC — both directions.** The `graduate`
 skill's reconcile gate (step 1.5) drives the live app and sorts behaviour into *confirmed /
@@ -140,7 +140,7 @@ not append-only like the changelog):
 and sign off entries against the running POC — the spec is the *walk script*, the live POC is the
 *expected result*. A reconstructed-after-the-fact ledger can't be certified exhaustive, which is the
 whole reason to capture at sign-off rather than rebuild it at graduation (the retrofit path in the
-`graduate` skill is the lossy fallback, not the goal). `pocs/crouton-builder-demo` is the POC the
+`graduate` skill is the lossy fallback, not the goal). `pocs/crouton-builder` is the POC the
 convention will first be retrofitted onto.
 
 **Enforced (#992 WS5):** a `PreToolUse` hook (`.claude/hooks/gate-spec-signoff.mjs`) blocks any
