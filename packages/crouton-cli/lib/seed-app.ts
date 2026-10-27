@@ -382,27 +382,29 @@ function makeSeedChunkRunner(db: string, appDir: string, remote: boolean): (sql:
   }
 }
 
-/** The app's `defaultLocale` from crouton.config.{js,mjs,ts}, or null when it declares none. */
-function readConfiguredLocale(appDir: string): string | null {
+/** The app's `defaultLocale` from crouton.config.{js,mjs,ts} (loaded, not parsed), or null when it declares none. */
+async function readConfiguredLocale(appDir: string): Promise<string | null> {
   const file = ['crouton.config.js', 'crouton.config.mjs', 'crouton.config.ts']
     .map(f => join(appDir, f)).find(existsSync)
   if (!file) return null
-  const m = readFileSync(file, 'utf8').match(/^\s*defaultLocale:\s*['"]([\w-]+)['"]/m)
-  return m ? m[1] : null
+  const jiti = createJiti(import.meta.url)
+  const mod: any = await jiti.import(file)
+  const config = mod?.default ?? mod
+  return typeof config?.defaultLocale === 'string' ? config.defaultLocale : null
 }
 
 /** --locale wins; else the app's configured defaultLocale; else en. */
-function resolveLocale(explicit: string | undefined, appDir: string): string {
-  return explicit ?? readConfiguredLocale(appDir) ?? 'en'
+export async function resolveLocale(explicit: string | undefined, appDir: string): Promise<string> {
+  return explicit ?? await readConfiguredLocale(appDir) ?? 'en'
 }
 
 /** Resolve the seed's effective inputs (app dir + team + locale defaults). */
-function normalizeSeedOptions(options: SeedAppOptions): { appDir: string, teamSlug: string, locale: string } {
+async function normalizeSeedOptions(options: SeedAppOptions): Promise<{ appDir: string, teamSlug: string, locale: string }> {
   const appDir = resolve(options.dir ?? process.cwd())
   return {
     appDir,
     teamSlug: options.team ?? 'test1',
-    locale: resolveLocale(options.locale, appDir),
+    locale: await resolveLocale(options.locale, appDir),
   }
 }
 
@@ -427,7 +429,7 @@ function reportSeedOutcome(r: { ok: number, skipped: string[], db: string, remot
  * dry runs).
  */
 export async function seedApp(options: SeedAppOptions): Promise<string> {
-  const { appDir, teamSlug, locale } = normalizeSeedOptions(options)
+  const { appDir, teamSlug, locale } = await normalizeSeedOptions(options)
 
   consola.start(`Seeding ${options.db} (${options.remote ? 'remote' : 'local'}) — team "${teamSlug}", locale "${locale}"`)
 
