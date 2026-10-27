@@ -144,17 +144,18 @@ const menuItems = computed<DropdownMenuItem[][]>(() => {
           description: m.description ? `${m.description} · ${timeAgo(m.timestamp)}` : timeAgo(m.timestamp),
           class: TYPE_ICON_COLOR[m.type],
           onSelect: (e: Event) => e.preventDefault()
-        } as DropdownMenuItem)),
-        ...(hasApp('events') && teamSlug.value
-          ? [{ label: t('userPill.seeAll'), icon: 'i-lucide-history', to: `/admin/${teamSlug.value}/activity` } as DropdownMenuItem]
-          : [])
+        } as DropdownMenuItem))
       ]
+    : []
+
+  const seeAllGroup: DropdownMenuItem[] = hasApp('events') && teamSlug.value && isAdmin.value
+    ? [{ label: t('userPill.seeAll'), icon: 'i-lucide-history', to: `/admin/${teamSlug.value}/activity` } as DropdownMenuItem]
     : []
 
   // First group of dropdownItems is the user header — replaced by ours above
   const [, ...rest] = dropdownItems.value
   const withExtras = props.extraItems.length ? [rest[0] ?? [], props.extraItems, ...rest.slice(1)] : rest
-  return [header, ...(recentGroup.length ? [recentGroup] : []), ...withExtras]
+  return [header, ...(recentGroup.length ? [recentGroup] : []), ...(seeAllGroup.length ? [seeAllGroup] : []), ...withExtras]
 })
 
 function onOpenChange(open: boolean) {
