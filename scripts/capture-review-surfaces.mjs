@@ -221,6 +221,7 @@ async function captureSurface(context, origin, surface, file) {
       report(surface.name, 'rejected', "stuck on Nuxt's loading screen")
       return null
     }
+    await waitForHydration(page)
     await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
     await page.waitForTimeout(1200)
     await runInteractions(page, surface, log)
@@ -267,6 +268,16 @@ async function isLoading(page) {
   const html = await page.content().catch(() => '')
   const textLen = await page.evaluate(() => (document.body?.innerText || '').trim().length).catch(() => 0)
   return looksLikeLoadingScreen({ html }) || textLen <= 50
+}
+
+/** Wait (≤15s) until Nuxt has hydrated and the route rendered content, not just the SSR shell (#2699). Best-effort: a miss falls through to the rejection checks. */
+async function waitForHydration(page) {
+  await page.waitForFunction(() => {
+    const root = document.querySelector('#__nuxt')
+    if (!root || (root.innerText || '').trim().length <= 50) return false
+    const nuxt = window.useNuxtApp?.()
+    return nuxt ? !nuxt.isHydrating : true
+  }, null, { timeout: 15000 }).catch(() => {})
 }
 
 /** Request the first surface until the server answers with the app, not the loader. */
