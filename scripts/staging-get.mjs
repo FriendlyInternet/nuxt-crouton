@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * staging-get.mjs — GET a path on an app's STAGING as that app's review login (#2760),
- * so a pipeline worker can reproduce a staging bug with real responses.
+ * staging-get.mjs — call a path on an app's STAGING as that app's review login (#2760, #2798),
+ * so a pipeline worker can reproduce a staging bug (incl. a failing save) with real responses.
  *
- *   REVIEW_SEED_SECRET=… node scripts/staging-get.mjs <app> <path> [--method GET]
+ *   REVIEW_SEED_SECRET=… node scripts/staging-get.mjs <app> <path> [--method PATCH --body '{"a":1}' | --body-file f.json]
  *
  * `<path>` may contain `<team>`, filled with the review login's active team id.
  * Prints HTTP status, row count (arrays, or a top-level array field) and the JSON body.
- * Never prints the password or the session cookie. Read-only: non-GET needs --method.
+ * Never prints the password or the session cookie. Staging hosts (*.pmcp.dev) only: any other
+ * host is refused. A body is sent as JSON for non-GET methods.
  */
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -36,6 +37,20 @@ export function fillTeam(path, teamId) {
   return path.replace(/<team>/g, teamId ? encodeURIComponent(teamId) : '<team>')
 }
 
+/** Staging only (*.pmcp.dev) — a write must never reach production. Returns an error string or ''. */
+export function stagingGuard(base) {
+  let host = ''
+  try { host = new URL(base).hostname } catch { /* falls through to refusal */ }
+  return host.endsWith('.pmcp.dev') ? '' : `Refusing ${base || '(empty URL)'}: staging hosts (*.pmcp.dev) only.`
+}
+
+/** Request init for the target: body only for non-GET/HEAD, and only when one was given. */
+export function buildInit(method, headers, body) {
+  const init = { method, headers }
+  if (body !== undefined && !['GET', 'HEAD'].includes(method)) init.body = body
+  return init
+}
+
 const jsonHeaders = (base, jar) => ({ 'content-type': 'application/json', origin: base, cookie: cookieHeader(jar) })
 
 /** Active team id of the signed-in session, activating the account's first team if none is set. */
@@ -62,16 +77,28 @@ export function formatBody(text) {
 
 function fail(msg, code) { console.error(msg); process.exit(code) }
 
-async function main() {
-  const argv = process.argv.slice(2)
-  const mi = argv.indexOf('--method')
-  const method = mi >= 0 ? (argv.splice(mi, 2)[1] || 'GET').toUpperCase() : 'GET'
+/** Parse CLI args: positional <app> <path> plus --method / --body / --body-file (body must be JSON). */
+function parseArgs(argv) {
+  const take = (flag) => { const i = argv.indexOf(flag); return i >= 0 ? argv.splice(i, 2)[1] : undefined }
+  const method = (take('--method') || 'GET').toUpperCase()
+  let reqBody = take('--body')
+  const bodyFile = take('--body-file')
+  if (bodyFile) reqBody = readFileSync(bodyFile, 'utf8')
+  if (reqBody !== undefined) { try { JSON.parse(reqBody) } catch { fail('--body / --body-file must be valid JSON.', 2) } }
   const [app, path] = argv
-  if (!app || !path) fail('Usage: REVIEW_SEED_SECRET=… staging-get.mjs <app> <path> [--method GET]', 2)
+  if (!app || !path) fail('Usage: REVIEW_SEED_SECRET=… staging-get.mjs <app> <path> [--method PATCH --body <json> | --body-file <path>]', 2)
+  return { method, reqBody, app, path }
+}
+
+async function main() {
+  const { method, reqBody, app, path } = parseArgs(process.argv.slice(2))
   const secret = process.env.REVIEW_SEED_SECRET
   if (!secret) fail('REVIEW_SEED_SECRET is not set — cannot derive the review login.', 2)
   const base = readStagingUrl(app)
   if (!base) fail(`No stagingUrl in apps/${app}/deploy.config.json or pocs/${app}/.`, 2)
+
+  const refusal = stagingGuard(base)
+  if (refusal) fail(refusal, 2)
 
   const { email, password } = reviewAccount(app, secret)
   const { loggedIn, jar } = await signIn(base, email, password)
@@ -82,7 +109,8 @@ async function main() {
   if (wantsTeam && !teamId) fail(`${email} has no team to fill <team> with.`, 1)
 
   const target = fillTeam(path, teamId)
-  const res = await fetch(`${base}${target}`, { method, headers: jsonHeaders(base, jar) })
+  const res = await fetch(`${base}${target}`, buildInit(method, jsonHeaders(base, jar), reqBody))
+  if (!['GET', 'HEAD'].includes(method)) console.log(`WRITE: ${method} touched ${target} on ${base}`)
   const { body, count } = formatBody(await res.text())
   console.log(`${method} ${base}${target} → HTTP ${res.status}${count}`)
   console.log(body.length > 20000 ? `${body.slice(0, 20000)}\n… (truncated)` : body)

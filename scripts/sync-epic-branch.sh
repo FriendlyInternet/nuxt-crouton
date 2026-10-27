@@ -34,6 +34,21 @@ fi
 
 echo "epic-sync: ${EPIC_BRANCH} ← main"
 
+# #2788: a missing epic branch (deleted after its first batch merged while the epic stayed open)
+# used to leave later children with nothing to land on. Recreate it from main and say so, rather
+# than letting the worker silently fall back to main.
+if [ -z "$(git ls-remote --heads origin "refs/heads/${EPIC_BRANCH}" | cut -f1)" ]; then
+  git fetch origin main --quiet 2>/dev/null || true
+  MAIN_TIP="$(git ls-remote origin refs/heads/main | cut -f1)"
+  if [ -n "$MAIN_TIP" ] && git push origin "${MAIN_TIP}:refs/heads/${EPIC_BRANCH}" >/dev/null 2>&1 \
+     && [ -n "$(git ls-remote --heads origin "refs/heads/${EPIC_BRANCH}" | cut -f1)" ]; then
+    echo "::notice::epic-sync: ${EPIC_BRANCH} was MISSING on the remote — recreated from main (${MAIN_TIP:0:7}) (#2788)"
+    exit 0
+  fi
+  echo "::warning::epic-sync: ${EPIC_BRANCH} is missing and could not be recreated from main"
+  exit 0
+fi
+
 # The checkout is depth-1 on main. A merge needs a common ancestor, so deepen both refs;
 # fall back to the full history if the epic branch is older than the window.
 if ! git fetch origin --depth=1000 "main" "$EPIC_BRANCH" --quiet 2>&1; then

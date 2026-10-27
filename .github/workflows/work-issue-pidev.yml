@@ -743,8 +743,14 @@ jobs:
           # Deliberately excludes `<script>`-only files? No — a .vue diff can move layout from
           # script, so any .vue counts. server/**, config, tests and docs do not (#307's scope).
           UI_TOUCHED=0
-          if git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '\.(vue|css)$|/app/(components|layouts|pages)/|app\.config\.ts$'; then
-            UI_TOUCHED=1
+          # #2780: comment-only/whitespace-only .vue|.css edits and app.config.ts changes outside a
+          # `ui:` block cannot change what is on screen. scripts/ui-touched.mjs decides; if it
+          # fails to run we fall back to the old file-name match (fail towards holding).
+          if ! UI_TOUCHED="$(node scripts/ui-touched.mjs "$BASE_SHA..HEAD" 2>/dev/null)" || ! [[ "$UI_TOUCHED" =~ ^[01]$ ]]; then
+            UI_TOUCHED=0
+            if git diff --name-only "$BASE_SHA"..HEAD 2>/dev/null | grep -qE '\.(vue|css)$|/app/(components|layouts|pages)/|app\.config\.ts$'; then
+              UI_TOUCHED=1
+            fi
           fi
           echo "visual surface touched: $UI_TOUCHED"
 
