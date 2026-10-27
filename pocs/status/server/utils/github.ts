@@ -23,7 +23,8 @@ export async function ghFetch<T = unknown>(event: H3Event, path: string, opts: {
   const token = githubToken(event)
   if (!token) return { data: null, error: 'GITHUB_TOKEN is not configured' }
   try {
-    if (opts.fresh) return await ghGet(path, token) as GhResult<T> // bypass the cache: always live (await cachedGh(path, token)) as GhResult<T>
+    if (opts.fresh) return await ghGet(path, token) as GhResult<T> // bypass the cache: always live
+    return (await cachedGh(path, token)) as GhResult<T>
   } catch (e) {
     return { data: null, error: e instanceof Error ? e.message : String(e) }
   }
