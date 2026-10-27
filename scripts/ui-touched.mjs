@@ -32,35 +32,49 @@ const APP_CONFIG = /(^|\/)app\.config\.ts$/
  */
 export function commentLines(lines, path) {
   const isVue = /\.vue$/.test(path)
-  const isCss = /\.css$/.test(path)
-  let inHtml = false
-  let inBlock = false
-  let region = isVue ? 'template' : isCss ? 'style' : 'script'
+  const st = { inHtml: false, inBlock: false, region: isVue ? 'template' : /\.css$/.test(path) ? 'style' : 'script' }
   return lines.map(raw => {
     const t = raw.trim()
-    const free = isVue && !inHtml && !inBlock
-    if (free && /^<script\b/.test(t)) region = 'script'
-    else if (free && /^<style\b/.test(t)) region = 'style'
-    let result
-    if (inHtml) {
-      const k = t.indexOf('-->')
-      if (k === -1) result = true
-      else { inHtml = false; result = t.slice(k + 3).trim() === '' }
-    } else if (inBlock) {
-      const k = t.indexOf('*/')
-      if (k === -1) result = true
-      else { inBlock = false; result = t.slice(k + 2).trim() === '' }
-    } else if (t === '') result = true
-    else if (t.startsWith('<!--')) {
-      const k = t.indexOf('-->', 4)
-      if (k === -1) { inHtml = true; result = true } else result = t.slice(k + 3).trim() === ''
-    } else if (t.startsWith('/*') && region !== 'template') {
-      const k = t.indexOf('*/', 2)
-      if (k === -1) { inBlock = true; result = true } else result = t.slice(k + 2).trim() === ''
-    } else result = t.startsWith('//') && region === 'script'
-    if (isVue && !inHtml && !inBlock && /<\/(script|style)>/.test(t)) region = 'template'
+    if (isVue && !st.inHtml && !st.inBlock) st.region = openRegion(t, st.region)
+    const result = classify(t, st)
+    if (isVue && !st.inHtml && !st.inBlock && /<\/(script|style)>/.test(t)) st.region = 'template'
     return result
   })
+}
+
+function openRegion(t, region) {
+  if (/^<script\b/.test(t)) return 'script'
+  if (/^<style\b/.test(t)) return 'style'
+  return region
+}
+
+/** Text after `close` ends the comment on this line: whole-line comment only if nothing follows. */
+function afterClose(t, close, from) {
+  const k = t.indexOf(close, from)
+  return k === -1 ? null : t.slice(k + close.length).trim() === ''
+}
+
+/** Is this trimmed line a whole-line comment/blank? Mutates the open-comment flags in `st`. */
+function classify(t, st) {
+  if (st.inHtml) return continueComment(t, '-->', st, 'inHtml')
+  if (st.inBlock) return continueComment(t, '*/', st, 'inBlock')
+  if (t === '') return true
+  if (t.startsWith('<!--')) return startComment(t, '-->', 4, st, 'inHtml')
+  if (t.startsWith('/*') && st.region !== 'template') return startComment(t, '*/', 2, st, 'inBlock')
+  return t.startsWith('//') && st.region === 'script'
+}
+
+function continueComment(t, close, st, flag) {
+  const r = afterClose(t, close, 0)
+  if (r === null) return true
+  st[flag] = false
+  return r
+}
+
+function startComment(t, close, from, st, flag) {
+  const r = afterClose(t, close, from)
+  if (r === null) { st[flag] = true; return true }
+  return r
 }
 
 /** Parse `git diff -U0` into [{ path, oldPath, changes: [{ side: 'old'|'new', n, text }] }]. */
