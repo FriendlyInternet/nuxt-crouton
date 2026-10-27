@@ -14,21 +14,26 @@
 const isTrivial = line =>
   line.trim() === '' || /^\s*import\s[^;]*\sfrom\s+['"][^'"]+['"]\s*;?\s*$/.test(line) || /^\s*import\s+['"][^'"]+['"]\s*;?\s*$/.test(line)
 
+const HEADER_PREFIXES = ['--- ', 'diff ', 'index ', '@@']
+
+/** Path from a `+++ ` header line, or null for /dev/null. */
+const headerPath = raw => {
+  const p = raw.slice(4).trim()
+  return p === '/dev/null' ? null : p.replace(/^b\//, '')
+}
+
 /** Parse a unified diff into { file -> { added: string[], removed: string[] } }. */
 export function parseDiff(diff) {
   const files = {}
-  let file = null
+  let current = null
   for (const raw of String(diff || '').split('\n')) {
     if (raw.startsWith('+++ ')) {
-      const p = raw.slice(4).trim()
-      file = p === '/dev/null' ? null : p.replace(/^b\//, '')
-      if (file) files[file] ??= { added: [], removed: [] }
-      continue
+      const path = headerPath(raw)
+      current = path ? (files[path] ??= { added: [], removed: [] }) : null
+    } else if (current && !HEADER_PREFIXES.some(h => raw.startsWith(h))) {
+      if (raw.startsWith('+')) current.added.push(raw.slice(1))
+      else if (raw.startsWith('-')) current.removed.push(raw.slice(1))
     }
-    if (raw.startsWith('--- ') || raw.startsWith('diff ') || raw.startsWith('index ') || raw.startsWith('@@')) continue
-    if (!file) continue
-    if (raw.startsWith('+')) files[file].added.push(raw.slice(1))
-    else if (raw.startsWith('-')) files[file].removed.push(raw.slice(1))
   }
   return files
 }
