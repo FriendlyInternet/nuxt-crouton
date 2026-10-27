@@ -30,7 +30,7 @@ export default defineNuxtConfig({
     // Must be before @nuxthub/core — sets hub.blob = true as a default so apps
     // that only declare hub: { db: 'sqlite' } still get blob storage enabled.
     join(currentDir, 'modules/ensure-hub-blob'),
-    '@nuxthub/core', '@nuxt/ui', '@vueuse/nuxt', '@nuxt/image', join(currentDir, 'modules/ipx-blob'), '@nuxtjs/seo'
+    '@nuxthub/core', '@nuxt/ui', '@vueuse/nuxt', '@nuxt/image', join(currentDir, 'modules/ipx-blob'), join(currentDir, 'modules/collection-forms'), '@nuxtjs/seo'
   ],
 
   // Runtime config for server-side secrets

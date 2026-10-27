@@ -88,7 +88,6 @@ const _bookingsLocationsConfig = {
   name: 'bookingsLocations',
   layer: 'bookings',
   apiPath: 'bookings-locations',
-  componentName: 'BookingsLocationsForm',
   defaultValues: {
     title: '',
     color: '',

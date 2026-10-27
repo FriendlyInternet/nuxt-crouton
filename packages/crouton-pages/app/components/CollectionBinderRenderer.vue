@@ -218,9 +218,9 @@ const { data: detailItem, status: detailStatus } = await useFetch<Record<string,
 const detailComponent = computed(() => {
   if (!collectionName.value) return null
   const config = colConfig.value
-  if (!config?.componentName) return null
+  if (!config) return null
 
-  const detailName = config.componentName.replace(/Form$/, 'Detail')
+  const detailName = canonicalDetailName(collectionName.value)
   try {
     const component = resolveComponent(detailName)
     if (typeof component !== 'string') return component

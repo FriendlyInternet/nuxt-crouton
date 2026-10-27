@@ -1,7 +1,7 @@
 <!--
   SalesCategoriesForm
   Package-provided form for the sales categories collection.
-  Replaces the CLI-generated _Form.vue (wired via componentName in
+  Replaces the CLI-generated _Form.vue (picked up by its canonical name,
   useSalesCategories config). Event is implied by the event workspace.
 -->
 

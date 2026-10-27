@@ -83,10 +83,10 @@ const detailComponent = computed(() => {
   if (!collectionName.value) return null
 
   const config = collections.getConfig(collectionName.value)
-  if (!config?.componentName) return null
+  if (!config) return null
 
   // Try per-collection detail component (e.g., StoreBikesDetail)
-  const detailName = config.componentName.replace(/Form$/, 'Detail')
+  const detailName = canonicalDetailName(collectionName.value)
   try {
     const component = resolveComponent(detailName)
     if (typeof component !== 'string') return component
