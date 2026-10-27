@@ -1,8 +1,9 @@
 // db-pull.ts — Pull production D1 data into local dev
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, unlinkSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import consola from 'consola'
+import Database from 'better-sqlite3'
 
 interface D1Database {
   binding: string
@@ -189,23 +190,22 @@ export async function dbPull(options: DbPullOptions = {}): Promise<void> {
 
   // Step 2: Export remote DB via wrangler
   consola.start('Exporting remote database...')
-  const exportCmd = [
-    'npx wrangler d1 export',
+  const exportArgs = [
+    'wrangler', 'd1', 'export',
     db.database_name,
     '--remote',
     `--output=${SEED_FILE}`,
-    env ? `--env=${env}` : '',
-  ].filter(Boolean).join(' ')
+    ...(env ? [`--env=${env}`] : []),
+  ]
 
+  // A non-zero exit means the export is untrustworthy — never import a partial file.
   try {
-    execSync(exportCmd, { stdio: 'inherit' })
+    execFileSync('npx', exportArgs, { stdio: 'inherit' })
   } catch {
-    // wrangler d1 export may exit non-zero even on success — check if file was created
-    if (!existsSync(SEED_FILE)) {
-      throw new Error(
-        `Failed to export remote database. Make sure you're logged in to Cloudflare (npx wrangler login).`
-      )
-    }
+    rmSync(SEED_FILE, { force: true })
+    throw new Error(
+      `Failed to export remote database. Make sure you're logged in to Cloudflare (npx wrangler login).`
+    )
   }
 
   if (!existsSync(SEED_FILE)) {
@@ -227,22 +227,22 @@ export async function dbPull(options: DbPullOptions = {}): Promise<void> {
   // After clearing, we need to run dev once or create the dir.
   // Instead, use wrangler d1 execute to import locally which handles DB creation.
   consola.start('Importing into local database...')
-  const importCmd = [
-    'npx wrangler d1 execute',
+  const importArgs = [
+    'wrangler', 'd1', 'execute',
     db.database_name,
     '--local',
     `--file=${SEED_FILE}`,
     '--yes',
-  ].join(' ')
+  ]
 
   try {
-    execSync(importCmd, { stdio: 'inherit' })
+    execFileSync('npx', importArgs, { stdio: 'inherit' })
   } catch {
     // Fallback: try sqlite3 direct import if wrangler d1 execute fails
     consola.warn('wrangler d1 execute failed, trying sqlite3 direct import...')
     try {
       const localDb = findLocalDb(d1Dir)
-      execSync(`sqlite3 ${localDb} < ${SEED_FILE}`, { stdio: 'inherit', shell: '/bin/sh' })
+      execFileSync('sqlite3', [localDb], { input: readFileSync(SEED_FILE), stdio: ['pipe', 'inherit', 'inherit'] })
     } catch {
       throw new Error(
         'Failed to import database. Ensure sqlite3 is installed and wrangler is configured correctly.'
@@ -272,12 +272,14 @@ export async function dbPull(options: DbPullOptions = {}): Promise<void> {
     if (migrations.length > 0) {
       consola.start('Marking NuxtHub migrations as applied...')
       try {
-        const insertStatements = migrations
-          .map(name => `INSERT OR IGNORE INTO _hub_migrations (name) VALUES ('${name}');`)
-          .join('\n')
-        const hubDb = resolve(NUXTHUB_DB_FILE)
-        execSync(`sqlite3 "${hubDb}" "CREATE TABLE IF NOT EXISTS _hub_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, applied_at TEXT DEFAULT (datetime('now')));"`, { stdio: 'pipe' })
-        execSync(`sqlite3 "${hubDb}" "${insertStatements}"`, { stdio: 'pipe' })
+        const hubDb = new Database(resolve(NUXTHUB_DB_FILE))
+        try {
+          hubDb.exec(`CREATE TABLE IF NOT EXISTS _hub_migrations (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL, applied_at TEXT DEFAULT (datetime('now')))`)
+          const insert = hubDb.prepare('INSERT OR IGNORE INTO _hub_migrations (name) VALUES (?)')
+          hubDb.transaction((names: string[]) => names.forEach(name => insert.run(name)))(migrations)
+        } finally {
+          hubDb.close()
+        }
         consola.success(`Marked ${migrations.length} migrations as applied`)
       } catch (err) {
         consola.warn(`Could not mark migrations: ${err}`)
