@@ -1,0 +1,17 @@
+[
+  {
+    "collection": "loans",
+    "fields": [
+      "itemName",
+      "borrowerName",
+      "lentDate",
+      "expectedBackDate",
+      "returned",
+      "notes"
+    ],
+    "generator": "crouton-cli",
+    "timestamp": "2026-08-04T14:06:41.397Z",
+    "layer": "lend",
+    "gitSha": "0384baf04"
+  }
+]

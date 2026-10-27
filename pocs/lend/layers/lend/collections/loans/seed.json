@@ -1,0 +1,30 @@
+{
+  "table": "lend_loans",
+  "key": "itemName",
+  "rows": [
+    {
+      "itemName": "Sample itemName 1",
+      "borrowerName": "Sample borrowerName 1",
+      "lentDate": 1785852401,
+      "expectedBackDate": 1785852401,
+      "returned": true,
+      "notes": "Sample notes content for row 1. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "itemName": "Sample itemName 2",
+      "borrowerName": "Sample borrowerName 2",
+      "lentDate": 1785766001,
+      "expectedBackDate": 1785766001,
+      "returned": false,
+      "notes": "Sample notes content for row 2. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    },
+    {
+      "itemName": "Sample itemName 3",
+      "borrowerName": "Sample borrowerName 3",
+      "lentDate": 1785679601,
+      "expectedBackDate": 1785679601,
+      "returned": true,
+      "notes": "Sample notes content for row 3. Lorem ipsum dolor sit amet, consectetur adipiscing elit."
+    }
+  ]
+}
