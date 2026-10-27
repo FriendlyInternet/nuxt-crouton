@@ -6,23 +6,13 @@
  * the Pi is offline. Read-only; team-members-only (mirror data is team-scoped).
  *
  * `serverNow` is included so the client computes age against the *server's*
- * clock, immune to device clock skew. The heartbeat is a single global row
- * (one venue Pi → one cloud deploy), so this is team-gated for access but not
- * team-keyed in storage — see server/database/schema.ts.
+ * clock, immune to device clock skew. Heartbeats are keyed per paired till (#2725) and
+ * filtered to the caller's team — see server/database/schema.ts.
  */
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { readSyncStatus } from '../../../../utils/sync-status'
+import { readSyncStatuses, toStatusPayload } from '../../../../utils/sync-status'
 
 export default defineEventHandler(async (event) => {
-  await resolveTeamAndCheckMembership(event)
-  const db = useDB()
-
-  const status = await readSyncStatus(db)
-
-  return {
-    lastContactAt: status.lastContactAt ? status.lastContactAt.getTime() : null,
-    lastEventAt: status.lastEventAt ? status.lastEventAt.getTime() : null,
-    lastBatchApplied: status.lastBatchApplied,
-    serverNow: Date.now(),
-  }
+  const { team } = await resolveTeamAndCheckMembership(event)
+  return toStatusPayload(await readSyncStatuses(useDB(), team.id))
 })

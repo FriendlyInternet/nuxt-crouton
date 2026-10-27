@@ -16,12 +16,15 @@
  * The heartbeat schema is package-owned (`../database/schema`), imported lazily
  * to stay import-safe — same pattern as the pusher.
  */
-import { eq } from 'drizzle-orm'
+import { desc, eq, isNull, or } from 'drizzle-orm'
 
-/** The single global heartbeat row id (one venue Pi → one cloud deploy). */
+/** Heartbeat row id for shared-key (deviceless) setups. Paired tills use their device id (#2725). */
 export const SYNC_STATUS_ROW_ID = 'live'
 
 export interface SyncStatus {
+  /** Heartbeat row key: the device id, or 'live' for shared-key setups. */
+  deviceId: string
+  teamId: string | null
   /** Last time the cloud heard from the Pi (data batch OR idle ping); null = never. */
   lastContactAt: Date | null
   /** Last time actual mirrored data was applied (applied > 0); null = never. */
@@ -35,55 +38,104 @@ async function loadStatusSchema() {
   return { salesSyncStatus }
 }
 
+/** The identity a heartbeat is recorded for: a paired till, or the legacy shared-key row. */
+export interface SyncDevice {
+  deviceId: string
+  teamId: string | null
+}
+
+const SHARED_KEY_DEVICE: SyncDevice = { deviceId: SYNC_STATUS_ROW_ID, teamId: null }
+
 /**
  * Stamp the heartbeat after an ingest call. `appliedCount` is how many events
  * the batch applied (0 for an idle ping). `lastContactAt` always advances;
  * `lastEventAt` + `lastBatchApplied` advance only when real data landed.
  *
- * Idempotent upsert of the single `'live'` row. Best-effort — never throws.
+ * Idempotent upsert of the device's row (`'live'` for shared-key setups). Best-effort — never throws.
  */
-export async function recordSyncHeartbeat(db: any, appliedCount: number): Promise<void> {
+export async function recordSyncHeartbeat(
+  db: any,
+  appliedCount: number,
+  device: SyncDevice = SHARED_KEY_DEVICE
+): Promise<void> {
   try {
     const { salesSyncStatus } = await loadStatusSchema()
     const now = new Date()
     const applied = Number(appliedCount) || 0
+    const data = applied > 0 ? { lastEventAt: now, lastBatchApplied: applied } : undefined
 
-    const base = { lastContactAt: now, updatedAt: now }
-    const dataFields = applied > 0 ? { lastEventAt: now, lastBatchApplied: applied } : {}
-
-    const updated = await db
-      .update(salesSyncStatus)
-      .set({ ...base, ...dataFields })
-      .where(eq(salesSyncStatus.id, SYNC_STATUS_ROW_ID))
-      .returning({ id: salesSyncStatus.id })
-
-    if (updated.length === 0) {
-      await db.insert(salesSyncStatus).values({
-        id: SYNC_STATUS_ROW_ID,
+    await db
+      .insert(salesSyncStatus)
+      .values({
+        id: device.deviceId,
+        teamId: device.teamId,
         lastContactAt: now,
-        lastEventAt: applied > 0 ? now : null,
-        lastBatchApplied: applied,
+        lastEventAt: null,
+        lastBatchApplied: 0,
         updatedAt: now,
+        ...data,
       })
-    }
+      .onConflictDoUpdate({
+        target: salesSyncStatus.id,
+        set: { lastContactAt: now, updatedAt: now, ...data },
+      })
   }
   catch (err: any) {
     console.warn('[crouton-sales] sync heartbeat write failed (ignored):', err?.message || err)
   }
 }
 
-/** Read the heartbeat for the dashboard's status endpoint. Null fields = never synced. */
-export async function readSyncStatus(db: any): Promise<SyncStatus> {
+/**
+ * Read the heartbeats for the dashboard's status endpoint — one per till,
+ * freshest first. Null fields = never synced. Pass `teamId` to scope to a team
+ * (paired tills only; the deviceless 'live' row has no team and is always
+ * included, since it predates per-team scoping).
+ */
+export async function readSyncStatuses(db: any, teamId?: string): Promise<SyncStatus[]> {
   const { salesSyncStatus } = await loadStatusSchema()
-  const [row] = await db
+  const rows: any[] = await db
     .select()
     .from(salesSyncStatus)
-    .where(eq(salesSyncStatus.id, SYNC_STATUS_ROW_ID))
-    .limit(1)
+    .where(teamId ? or(eq(salesSyncStatus.teamId, teamId), isNull(salesSyncStatus.teamId)) : undefined)
+    .orderBy(desc(salesSyncStatus.lastContactAt))
+    .limit(200)
 
+  return rows
+    .map(r => ({
+      deviceId: r.id,
+      teamId: r.teamId ?? null,
+      lastContactAt: r.lastContactAt ?? null,
+      lastEventAt: r.lastEventAt ?? null,
+      lastBatchApplied: r.lastBatchApplied ?? 0,
+    }))
+}
+
+/** Pick the freshest status (the banner's headline). */
+export function freshestStatus(statuses: SyncStatus[]): SyncStatus | null {
+  return statuses.reduce<SyncStatus | null>((best, s) => {
+    const t = s.lastContactAt?.getTime() ?? -1
+    return !best || t > (best.lastContactAt?.getTime() ?? -1) ? s : best
+  }, null)
+}
+
+/**
+ * The status endpoint's payload: the freshest till as the headline (so existing
+ * banners keep working) plus every till of the team, freshest first (#2725).
+ * `now` is the server clock, so clients compute age immune to device clock skew.
+ */
+export function toStatusPayload(statuses: SyncStatus[], now: number = Date.now()) {
+  const ms = (d: Date | null) => d?.getTime() ?? null
+  const freshest = freshestStatus(statuses)
   return {
-    lastContactAt: row?.lastContactAt ?? null,
-    lastEventAt: row?.lastEventAt ?? null,
-    lastBatchApplied: row?.lastBatchApplied ?? 0,
+    lastContactAt: ms(freshest?.lastContactAt ?? null),
+    lastEventAt: ms(freshest?.lastEventAt ?? null),
+    lastBatchApplied: freshest?.lastBatchApplied ?? 0,
+    devices: statuses.map(s => ({
+      deviceId: s.deviceId,
+      lastContactAt: ms(s.lastContactAt),
+      lastEventAt: ms(s.lastEventAt),
+      lastBatchApplied: s.lastBatchApplied,
+    })),
+    serverNow: now,
   }
 }
