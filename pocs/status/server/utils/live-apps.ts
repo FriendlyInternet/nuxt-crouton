@@ -24,9 +24,9 @@ export async function listLiveApps(event: H3Event): Promise<{ data: LiveApp[], e
   return { data: found.flat().sort((a, b) => a.app.localeCompare(b.app)), error: errors.length ? errors.join('; ') : null }
 }
 
-/** One entry per open PR × app that has a deploy-staging comment. */
+/** One entry per open PR × app that has a deploy-staging comment. The open-PR list is always read live, so merged PRs never show. */
 export async function listPreviews(event: H3Event): Promise<{ data: Preview[], error: string | null }> {
-  const pulls = await ghFetch<Array<{ number: number, title: string, updated_at: string }>>(event, `/repos/${REPO}/pulls?state=open&per_page=50`)
+  const pulls = await ghFetch<Array<{ number: number, title: string, updated_at: string }>>(event, `/repos/${REPO}/pulls?state=open&per_page=50`, { fresh: true })
   if (pulls.error) return { data: [], error: pulls.error }
   const errors: string[] = []
   const all = await Promise.all((pulls.data ?? []).map(async (p) => {

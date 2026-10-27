@@ -10,7 +10,7 @@ const cachedGh = defineCachedFunction(
     if (result.error) throw new Error(result.error)
     return result
   },
-  { name: 'status-gh', maxAge: 60 * 5, getKey: (path: string) => path }
+  { name: 'status-gh', maxAge: 60 * 5, swr: false, getKey: (path: string) => path }
 )
 
 function githubToken(event: H3Event): string | undefined {
@@ -18,12 +18,12 @@ function githubToken(event: H3Event): string | undefined {
   return env?.GITHUB_TOKEN || process.env.GITHUB_TOKEN
 }
 
-/** GET a GitHub API path (e.g. `/repos/o/r/issues`), cached ~5 min. */
-export async function ghFetch<T = unknown>(event: H3Event, path: string): Promise<GhResult<T>> {
+/** GET a GitHub API path (e.g. `/repos/o/r/issues`), cached ~5 min (`fresh: true` skips the cache). */
+export async function ghFetch<T = unknown>(event: H3Event, path: string, opts: { fresh?: boolean } = {}): Promise<GhResult<T>> {
   const token = githubToken(event)
   if (!token) return { data: null, error: 'GITHUB_TOKEN is not configured' }
   try {
-    return (await cachedGh(path, token)) as GhResult<T>
+    if (opts.fresh) return await ghGet(path, token) as GhResult<T> // bypass the cache: always live (await cachedGh(path, token)) as GhResult<T>
   } catch (e) {
     return { data: null, error: e instanceof Error ? e.message : String(e) }
   }

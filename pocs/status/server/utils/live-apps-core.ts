@@ -22,3 +22,18 @@ export function resolvePreviewUrl(previews: Preview[], app: string, key: string)
 export function liveAppFromConfig(app: string, cfg: { stagingUrl?: string, reviewLogin?: boolean }): LiveApp {
   return { app, stagingUrl: cfg.stagingUrl ?? null, hasSignIn: cfg.reviewLogin !== false }
 }
+
+export type PreviewDecision = { gone: false, url: string } | { gone: true, pr: number }
+
+/** Decides a `pr<N>` login: redirect to the preview, or show the "build is gone" page. */
+export function decidePreview(openPreviews: Preview[], app: string, key: string): PreviewDecision {
+  const url = resolvePreviewUrl(openPreviews, app, key)
+  return url ? { gone: false, url } : { gone: true, pr: Number(key.slice(2)) }
+}
+
+const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
+
+/** Readable replacement for a 404 when the PR was merged/closed and its test build is torn down. */
+export function previewGoneHtml(pr: number, app: string, stagingUrl: string): string {
+  return `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PR #${pr} is gone</title><body style="font-family:system-ui;max-width:32rem;margin:3rem auto;padding:0 1rem"><h1>PR #${pr} was merged or closed</h1><p>Its test build for <strong>${esc(app)}</strong> is gone.</p><p><a href="${esc(stagingUrl)}">Open ${esc(app)} staging</a></p></body>`
+}
