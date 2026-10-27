@@ -308,10 +308,23 @@ jobs:
                 continue
               }
 
-              try {
-                await github.rest.pulls.merge({ owner, repo, pull_number, merge_method: 'merge' })
-                core.info(`Auto-merged non-gate sub-PR #${pull_number} into ${pr.base.ref}.`)
-              } catch (e) {
-                core.warning(`merge #${pull_number} failed: ${e.message}`)
+              // #2904: two merges into the same base seconds apart — the second gets HTTP 405
+              // "Base branch was modified". Retry that (only that) a few times; any other error is final.
+              let merged = false
+              for (let attempt = 1; attempt <= 3 && !merged; attempt++) {
+                try {
+                  await github.rest.pulls.merge({ owner, repo, pull_number, merge_method: 'merge' })
+                  merged = true
+                  core.info(`Auto-merged non-gate sub-PR #${pull_number} into ${pr.base.ref}.`)
+                } catch (e) {
+                  const baseMoved = e.status === 405 && /base branch was modified/i.test(e.message || '')
+                  if (baseMoved && attempt < 3) {
+                    core.info(`merge #${pull_number}: base moved, retry ${attempt}/2 in 5s`)
+                    await new Promise(r => setTimeout(r, 5000))
+                    continue
+                  }
+                  core.warning(`merge #${pull_number} failed: ${e.message}`)
+                  break
+                }
               }
             }
