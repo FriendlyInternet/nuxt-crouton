@@ -20,11 +20,11 @@ export default defineNuxtPlugin((nuxtApp) => {
   if (!import.meta.client) return
   if (!(import.meta.dev || useRuntimeConfig().public.croutonFeedback)) return
 
-  const { open, walk, badge } = useSpecWalk()
+  const { open, walk, badge, startAdhoc } = useSpecWalk()
   const registry = useFeedbackTools()
 
   const tool = createSpecWalkTool({
-    count: () => walk.length,
+    count: () => walk.value.length,
     getBadge: () => badge.value,
     setOpen: (v) => { open.value = v }
   })
@@ -36,6 +36,15 @@ export default defineNuxtPlugin((nuxtApp) => {
   watch(open, (v) => { if (!v) registry.deactivate(tool) })
 
   nuxtApp.hook('app:mounted', () => {
+    // Ad-hoc walk from the link (`?walk=<base64url JSON>`): open it, then drop the
+    // param so a reload doesn't restart it. Invalid input is ignored.
+    const url = new URL(location.href)
+    const raw = url.searchParams.get('walk')
+    if (raw !== null) {
+      if (startAdhoc(raw)) registry.activate?.(tool)
+      url.searchParams.delete('walk')
+      history.replaceState(history.state, '', url.pathname + url.search + url.hash)
+    }
     mountOverlayInBody(SpecWalkOverlay, nuxtApp.vueApp._context, '__feedback_specwalk_root')
   })
 })

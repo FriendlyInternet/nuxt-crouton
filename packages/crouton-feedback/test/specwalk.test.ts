@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { walkEntries, stepsOf, selectorFor, exportText, type VerdictMap } from '../src/runtime/tools/specwalk-data'
+import { parseWalkParam, MAX_WALK_PARAM, walkEntries, stepsOf, selectorFor, exportText, type VerdictMap } from '../src/runtime/tools/specwalk-data'
 import { createSpecWalkTool } from '../src/runtime/tools/specwalk'
 import type { ComposedPlan } from '../src/runtime/tools/plan-data'
 
@@ -114,5 +114,31 @@ describe('createSpecWalkTool', () => {
     const tool = createSpecWalkTool({ count: () => 1, getBadge: () => '0/1', setOpen: (v) => { open = v } })
     tool.activate!(); expect(open).toBe(true)
     tool.deactivate!(); expect(open).toBe(false)
+  })
+})
+
+describe('parseWalkParam', () => {
+  const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url')
+
+  it('parses steps into walk entries', () => {
+    const w = parseWalkParam(enc({ title: 'T', app: 'velo', ref: '#1', steps: [{ text: 'open it', expect: 'ok' }, { text: 'click' }] }))!
+    expect(w.title).toBe('T')
+    expect(w.entries.map(e => e.behaviour)).toEqual(['open it', 'click'])
+    expect(w.entries[0]!.expect).toBe('ok')
+    expect(new Set(w.entries.map(e => e.id)).size).toBe(2)
+  })
+
+  it('ignores bad input', () => {
+    expect(parseWalkParam(undefined)).toBeNull()
+    expect(parseWalkParam('')).toBeNull()
+    expect(parseWalkParam('%%%')).toBeNull()
+    expect(parseWalkParam(Buffer.from('not json').toString('base64url'))).toBeNull()
+    expect(parseWalkParam(enc({ steps: [] }))).toBeNull()
+    expect(parseWalkParam(enc({ steps: [{ text: '  ' }] }))).toBeNull()
+    expect(parseWalkParam(enc({ steps: 'x' }))).toBeNull()
+  })
+
+  it('ignores oversized input', () => {
+    expect(parseWalkParam('A'.repeat(MAX_WALK_PARAM + 1))).toBeNull()
   })
 })

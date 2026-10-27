@@ -122,7 +122,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
                   size="lg"
                   icon="i-lucide-log-in"
                   label="Open and sign in"
-                  :href="`/api/status/login/${i.app}`"
+                  :href="loginHref(i)"
                   target="_blank"
                 />
               </div>

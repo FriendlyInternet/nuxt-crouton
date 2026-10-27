@@ -1,5 +1,5 @@
 import { appTargetFor } from '../../../utils/app-urls'
-import { reviewLoginUrl } from '../../../utils/review-login'
+import { reviewLoginUrl, sanitizeWalk } from '../../../utils/review-login'
 
 // Owner-only one-tap sign-in to an app's staging review login. The URL carries the
 // password, so it is never logged or rendered into HTML — only a 302 Location.
@@ -38,5 +38,5 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, base, 302)
   }
 
-  return sendRedirect(event, reviewLoginUrl(base, secret, app, key), 302)
+  return sendRedirect(event, reviewLoginUrl(base, secret, app, key, sanitizeWalk(getQuery(event).walk)), 302)
 })
