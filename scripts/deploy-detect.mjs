@@ -233,7 +233,7 @@ function readJson(path) {
   }
 }
 
-function loadApps(root = 'apps') {
+export function loadApps(root = 'apps') {
   if (!existsSync(root)) return []
   const out = []
   for (const name of readdirSync(root)) {

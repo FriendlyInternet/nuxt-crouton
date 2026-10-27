@@ -1,5 +1,53 @@
 {
   "stagingUrl": "https://velo.pmcp.dev",
   "productionUrl": "https://velo.friendlyinter.net",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages"
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages",
+  "smoke": {
+    "crud": {
+      "create": {
+        "path": "/api/teams/{teamId}/pages-pages",
+        "method": "POST",
+        "body": {
+          "pageType": "pages:regular",
+          "status": "draft",
+          "visibility": "public",
+          "title": "smoke-{rand}",
+          "slug": "smoke-{rand}",
+          "translations": {
+            "en": {
+              "title": "smoke-{rand}",
+              "slug": "smoke-{rand}"
+            },
+            "nl": {
+              "title": "smoke-{rand}",
+              "slug": "smoke-{rand}"
+            }
+          }
+        }
+      },
+      "idFrom": "id",
+      "update": {
+        "path": "/api/teams/{teamId}/pages-pages/{id}",
+        "method": "PATCH",
+        "body": {
+          "translations": {
+            "en": {
+              "title": "smoke-{rand}-b"
+            },
+            "nl": {
+              "title": "smoke-{rand}-b"
+            }
+          }
+        }
+      },
+      "read": {
+        "path": "/api/teams/{teamId}/pages-pages?ids={id}",
+        "expectIncludes": "smoke-{rand}-b"
+      },
+      "delete": {
+        "path": "/api/teams/{teamId}/pages-pages/{id}",
+        "method": "DELETE"
+      }
+    }
+  }
 }

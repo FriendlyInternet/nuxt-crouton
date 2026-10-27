@@ -14,7 +14,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import {
   parsePlan, PlanError, sanitizeLabels, buildChildBody, planToActions, runActions,
-  formatBlockedBy, parseBlockedBy, isGitIgnored,
+  formatBlockedBy, parseBlockedBy, isGitIgnored, missingMockupReason,
 } from './apply-decompose-plan.mjs'
 import { parsePipelineBlock } from './pipeline-context.mjs'
 import { WORKER_TRIGGER, MAX_DEPTH } from './pipeline-loop-guard.mjs'
@@ -345,4 +345,11 @@ test('an approved package with no label in the taxonomy fails loud (#2778)', asy
   const ok = parsePlan({ leaf: false, packagesApproved: { why: 'x', packages: ['a'] }, children: [{ title: 'A', body: 'b' }] })
   const create = planToActions(ok, { target: 1, epic: 1, knownLabels: ['pkg:a'] }).find(a => a.type === 'create')
   assert.deepEqual(create.labels, ['pkg:a'])
+})
+
+test('missingMockupReason: silent for non-UI holds, loud when a mockup was promised but absent (#2809)', () => {
+  assert.equal(missingMockupReason({ summary: 'data model fork', questions: ['equal vs weighted?'] }, []), '')
+  assert.match(missingMockupReason({ summary: 'The mockup shows a phone frame', questions: [] }, []), /no `ui`/)
+  assert.match(missingMockupReason({ summary: 'x', questions: [], ui: '<p/>' }, [], 'boom'), /boom/)
+  assert.equal(missingMockupReason({ summary: 'mockup', questions: [], ui: '<p/>' }, [{ label: 'UI mockup', path: 'a.png' }]), '')
 })
