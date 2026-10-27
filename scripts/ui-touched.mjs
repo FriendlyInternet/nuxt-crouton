@@ -73,24 +73,32 @@ export function underUiKey(lines, n) {
   return false
 }
 
+/** app.config.ts: visual only if a changed line sits under a `ui:` key (unreadable file → hold). */
+function appConfigTouchesUi(f, getLines) {
+  return f.changes.some(c => {
+    const lines = getLines(c.side, f.path)
+    // can't read the file → can't prove it's not visual → hold
+    return !lines || underUiKey(lines, c.n)
+  })
+}
+
+/** .vue / .css / app UI dirs: visual unless every changed line is a comment or blank. */
+function visualFileChanged(f) {
+  return f.changes.length === 0 || f.changes.some(c => !isCommentOrBlank(c.text))
+}
+
+function fileTouchesUi(f, getLines) {
+  if (APP_CONFIG.test(f.path)) return appConfigTouchesUi(f, getLines)
+  return VISUAL_PATH.test(f.path) && visualFileChanged(f)
+}
+
 /**
  * @param {string} diff `git diff -U0` output
  * @param {(side:'old'|'new', path:string) => string[] | null} getLines full file lines
  * @returns {0|1}
  */
 export function uiTouched(diff, getLines) {
-  for (const f of parseDiff(diff)) {
-    if (APP_CONFIG.test(f.path)) {
-      for (const c of f.changes) {
-        const lines = getLines(c.side, f.path)
-        // can't read the file → can't prove it's not visual → hold
-        if (!lines || underUiKey(lines, c.n)) return 1
-      }
-    } else if (VISUAL_PATH.test(f.path)) {
-      if (f.changes.length === 0 || f.changes.some(c => !isCommentOrBlank(c.text))) return 1
-    }
-  }
-  return 0
+  return parseDiff(diff).some(f => fileTouchesUi(f, getLines)) ? 1 : 0
 }
 
 function main() {
