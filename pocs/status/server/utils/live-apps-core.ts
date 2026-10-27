@@ -79,7 +79,7 @@ export async function loadLiveApps(get: GhGet): Promise<{ data: LiveApp[], error
   return { data: apps.filter((a): a is LiveApp => !!a).sort((a, b) => a.app.localeCompare(b.app)), error: errors.length ? errors.join('; ') : null }
 }
 
-/** Open-PR previews: 1 pulls call + ≤3 repo-wide comment pages (last 14 days), not one call per PR. */
+/** Open-PR previews: 1 pulls call + ≤3 repo-wide comment pages (most recently updated first — the sticky deploy comment is edited on each deploy), not one call per PR. */
 export async function loadPreviews(get: GhGet, now = Date.now()): Promise<{ data: Preview[], error: string | null }> {
   const pulls = await get<Array<{ number: number, title: string, updated_at: string }>>(`/repos/${REPO}/pulls?state=open&per_page=50`, { fresh: true })
   if (pulls.error) return { data: [], error: pulls.error }
@@ -87,7 +87,7 @@ export async function loadPreviews(get: GhGet, now = Date.now()): Promise<{ data
   const since = new Date(now - 14 * 86400_000).toISOString()
   const comments: Array<{ body?: string, issue_url?: string }> = []
   for (let page = 1; page <= 3; page++) {
-    const r = await get<Array<{ body?: string, issue_url?: string }>>(`/repos/${REPO}/issues/comments?since=${since}&per_page=100&page=${page}`)
+    const r = await get<Array<{ body?: string, issue_url?: string }>>(`/repos/${REPO}/issues/comments?since=${since}&sort=updated&direction=desc&per_page=100&page=${page}`)
     if (r.error) return { data: previewsFromComments(comments, open), error: r.error }
     comments.push(...(r.data ?? []))
     if ((r.data ?? []).length < 100) break

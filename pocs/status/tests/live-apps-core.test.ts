@@ -72,6 +72,22 @@ describe('GitHub call budget', () => {
     expect(previews.data).toEqual([{ app: 'velo', pr: 12, title: 't', updatedAt: '', url: 'https://velo-pr12.example.workers.dev' }])
     expect(calls.length).toBeLessThanOrEqual(25)
   })
+  it('finds deploy comments among the newest of 350 comments; skips merged PRs', async () => {
+    const noise = (n: number) => Array.from({ length: n }, () => ({ body: 'hi', issue_url: 'https://api.github.com/repos/o/r/issues/1' }))
+    const mk = (app: string, pr: number) => ({ body: `<!-- deploy-staging:${app} -->\n🚀 preview for this PR: https://${app}-pr${pr}.example.dev`, issue_url: `https://api.github.com/repos/o/r/issues/${pr}` })
+    const newest = [mk('kassa', 7), mk('velo', 7), mk('kassa', 99), ...noise(97)]
+    const pages = [newest, noise(100), noise(100)]
+    const urls: string[] = []
+    const get = (async (path: string) => {
+      urls.push(path)
+      if (path.includes('/pulls?')) return { data: [{ number: 7, title: 't', updated_at: '' }], error: null }
+      const page = Number(/[?&]page=(\d+)/.exec(path)![1])
+      return { data: pages[page - 1] ?? [], error: null }
+    }) as never
+    const r = await loadPreviews(get)
+    expect(r.data.map(p => `${p.app}#${p.pr}`).sort()).toEqual(['kassa#7', 'velo#7'])
+    expect(urls.some(u => u.includes('sort=updated&direction=desc'))).toBe(true)
+  })
   it('reports failed config reads instead of swallowing them', async () => {
     const { get } = makeGet('/contents/')
     const r = await loadLiveApps(get)
