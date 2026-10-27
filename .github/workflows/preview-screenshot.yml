@@ -167,7 +167,7 @@ jobs:
           git clone --depth=1 --branch "$HEAD_REF" "https://x-access-token:${GH_TOKEN_PUSH}@github.com/${REPO}.git" "$BR" 2>/dev/null || {
             echo "result=miss" >> "$GITHUB_OUTPUT"; echo "summary=captured ${NAMES} but could not clone ${HEAD_REF}" >> "$GITHUB_OUTPUT"; exit 0; }
           mkdir -p "$BR/writeups/ui-proposals"; cp "$OUT"/*.png "$BR/writeups/ui-proposals/"
-          cd "$BR"
+          cd "$BR" || exit 1
           git config user.name "nuxt-harness[bot]"
           git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
           git add writeups/ui-proposals/*.png
