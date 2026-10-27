@@ -22,7 +22,7 @@
 //
 // Usage:
 //   node scripts/capture-review-surfaces.mjs --url <deployedUrl> --pr <N> [--email <e> --password <p>] \
-//        [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out writeups/ui-proposals] [--desktop]
+//        [--preview-token <t>] [--manifest apps/<app>/deploy.config.json] [--app <app>] [--out writeups/ui-proposals] [--desktop]
 //   PR_BODY (env): the PR body, read for review-surface markers (#2433).
 //
 // Output: writeups/ui-proposals/pr<N>-<app>-<name>.png for each surface that captured a NON-blank page.
@@ -32,7 +32,7 @@
 import { resolve } from 'node:path'
 import { readFileSync, existsSync, mkdirSync } from 'node:fs'
 import { parseArgs } from './lib/cli-args.mjs'
-import { signIn, jarToContextCookies } from './lib/review-login.mjs'
+import { signIn, previewSignIn, jarToContextCookies } from './lib/review-login.mjs'
 import { launchChromium } from './lib/chromium-launch.mjs'
 import { colorsAreFlat, looksLikeErrorPage, looksLikeLoadingScreen, sampleFlatness } from './lib/capture-validate.mjs'
 
@@ -178,7 +178,10 @@ async function main() {
 
 /** Sign in, open one browser, capture each surface. Returns the kept files (may be empty). */
 async function captureAll({ origin, args, viewport, surfaces, outDir, app }) {
-  const { loggedIn, jar } = await signIn(origin, args.email, args.password, log)
+  // A link-only app has no password: it trades a derived preview-only token for a session (#2700).
+  const { loggedIn, jar } = args['preview-token']
+    ? await previewSignIn(origin, args['preview-token'], log)
+    : await signIn(origin, args.email, args.password, log)
   const browser = await launchChromium(log)
   if (!browser) { for (const sf of surfaces) report(sf.name, 'error', 'no chromium browser available'); return [] } // evidence is not a gate — no browser ⇒ the sign-off gate withholds
 

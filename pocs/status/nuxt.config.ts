@@ -50,7 +50,10 @@ export default defineNuxtConfig({
     statusOwnerEmail: '',
     // Seed the review-login passwords derive from. Pushed to the Worker by the staging deploy
     // (deploy-app.yml, status app only) as NUXT_REVIEW_SEED_SECRET; never committed.
-    reviewSeedSecret: ''
+    reviewSeedSecret: '',
+    // `pr<N>` on a PR preview Worker only (NUXT_REVIEW_PREVIEW_KEY, pushed by the deploy): turns on
+    // /api/review/preview-session so CI can screenshot the link-only login. Empty everywhere else.
+    reviewPreviewKey: ''
   },
 
   // Cloudflare Workers deployment — stub passkey/webauthn packages (tsyringe is
