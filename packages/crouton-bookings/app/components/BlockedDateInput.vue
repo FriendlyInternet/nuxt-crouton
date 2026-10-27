@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { BlockedDateItem, SlotItem } from '../types/booking'
+import { parseLocationSlots } from '../composables/useBookingSlots'
 
 interface Props {
   modelValue: BlockedDateItem
@@ -76,18 +77,7 @@ function update(field: keyof BlockedDateItem, value: unknown) {
 }
 
 // Parse slots
-const parsedSlots = computed<SlotItem[]>(() => {
-  if (!props.slots) return []
-  if (typeof props.slots === 'string') {
-    try {
-      const parsed = JSON.parse(props.slots)
-      return Array.isArray(parsed) ? parsed : []
-    } catch {
-      return []
-    }
-  }
-  return Array.isArray(props.slots) ? props.slots : []
-})
+const parsedSlots = computed<SlotItem[]>(() => parseLocationSlots({ slots: props.slots }))
 
 const showSlotRestriction = ref(
   (props.modelValue.blockedSlots?.length ?? 0) > 0,

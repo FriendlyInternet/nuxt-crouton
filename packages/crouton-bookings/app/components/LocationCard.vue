@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { LocationData } from '../types/booking'
+import { parseLocationSlots } from '../composables/useBookingSlots'
 
 interface Props {
   location: LocationData
@@ -22,20 +23,7 @@ const { locale } = useI18n()
 const { t } = useT()
 
 // Parse slots count
-const slotCount = computed(() => {
-  const slots = props.location.slots
-  if (!slots) return 0
-  if (Array.isArray(slots)) return slots.length
-  if (typeof slots === 'string') {
-    try {
-      const parsed = JSON.parse(slots)
-      return Array.isArray(parsed) ? parsed.length : 0
-    } catch {
-      return 0
-    }
-  }
-  return 0
-})
+const slotCount = computed(() => parseLocationSlots(props.location).length)
 
 // Localized title with fallbacks
 const title = computed(() => {
