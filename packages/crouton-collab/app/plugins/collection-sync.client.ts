@@ -36,25 +36,11 @@ export default defineNuxtPlugin((nuxtApp) => {
         // Fire hook so pages with raw $fetch can also react to remote changes
         nuxtApp.callHook('crouton:remoteChange' as any, { collection })
 
-        // Find all cache keys for this collection and refresh them
-        const prefix = `collection:${collection}:`
-
-        // payload.data only holds SSR-hydrated entries; queries created client-side
-        // (e.g. after client navigation) live in the live async-data registry, so
-        // read both — otherwise the refresh silently matches nothing.
-        const allKeys = [...new Set([
-          ...Object.keys(nuxtApp.payload.data || {}),
-          ...Object.keys((nuxtApp as any)._asyncData || {})
-        ])]
-        const matchingKeys = new Set(allKeys.filter(key => key.startsWith(prefix)))
-        // Same fallback useCollectionMutation uses for the base collection key
-        matchingKeys.add(`${prefix}{}`)
-
-        await Promise.all([...matchingKeys].map(key => refreshNuxtData(key)))
+        // List queries subscribe to crouton:remoteChange themselves (useCollectionQuery)
 
         // Also refresh individual item caches for this collection
         const itemPrefix = `collection-item:${collection}:`
-        const itemKeys = allKeys.filter(key => key.startsWith(itemPrefix))
+        const itemKeys = Object.keys(nuxtApp.payload.data || {}).filter(key => key.startsWith(itemPrefix))
 
         if (itemKeys.length > 0) {
           await Promise.all(itemKeys.map(key => refreshNuxtData(key)))

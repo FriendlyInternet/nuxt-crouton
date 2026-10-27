@@ -152,6 +152,14 @@ export async function useCollectionQuery(
   // see the user's better-auth session. On the client this is undefined.
   const requestHeaders = import.meta.server ? useRequestHeaders(['cookie']) : undefined
 
+  // Re-fetch when a remote client changed this collection (fired by crouton-collab).
+  // Registered before the await so the Nuxt context + effect scope are still active.
+  let refreshOnRemote: (() => Promise<void>) | undefined
+  const stopRemoteHook = useNuxtApp().hook('crouton:remoteChange' as any, (event: { collection: string }) => {
+    if (event?.collection === collection) return refreshOnRemote?.()
+  })
+  if (getCurrentScope()) onScopeDispose(stopRemoteHook)
+
   // Use Nuxt's useFetch with proper caching
   // Skip fetching if no team context (will re-fetch when context becomes available)
   const fetchOptions: UseFetchOptions<any> = {
@@ -174,6 +182,7 @@ export async function useCollectionQuery(
     }
     await doRefresh()
   }
+  refreshOnRemote = refresh
 
   // Return normalized data structure
   // Handle both array responses and paginated responses
