@@ -2,6 +2,7 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileExists } from '@fyit/crouton-core/shared/utils/fs'
+import { addToConfigArray } from './update-nuxt-config.ts'
 
 interface CssFile {
   path: string
@@ -145,44 +146,22 @@ async function createCssFile(projectRoot = process.cwd()): Promise<CssFile> {
 async function ensureCssInNuxtConfig(projectRoot: string, cssRelativePath: string): Promise<boolean> {
   const configPath = path.join(projectRoot, 'nuxt.config.ts')
 
-  try {
-    let config = await fsp.readFile(configPath, 'utf-8')
+  // Normalize the path for Nuxt 4 (remove 'app/' prefix since ~/ points to project root)
+  // In Nuxt 4, ~/assets/css/main.css resolves to app/assets/css/main.css
+  const normalizedPath = cssRelativePath.replace(/^app\//, '')
 
-    // Check if css array exists and includes our file
-    const cssArrayMatch = config.match(/css:\s*\[([\s\S]*?)\]/)
-
-    // Normalize the path for Nuxt 4 (remove 'app/' prefix since ~/ points to project root)
-    // In Nuxt 4, ~/assets/css/main.css resolves to app/assets/css/main.css
-    const normalizedPath = cssRelativePath.replace(/^app\//, '')
-    const nuxtCssPath = `'~/${normalizedPath}'`
-
-    if (cssArrayMatch) {
-      // Check if already included (check both original and normalized paths)
-      if (cssArrayMatch[1].includes(cssRelativePath) || cssArrayMatch[1].includes(normalizedPath)) {
-        return true // Already configured
-      }
-
-      // Add to existing array
-      const currentCss = cssArrayMatch[1]
-      const hasTrailingComma = currentCss.trim().endsWith(',')
-      const newEntry = hasTrailingComma ? `\n    ${nuxtCssPath}` : `,\n    ${nuxtCssPath}`
-      config = config.replace(cssArrayMatch[0], `css: [${currentCss}${newEntry}\n  ]`)
-    } else {
-      // Add css array to config
-      const configMatch = config.match(/defineNuxtConfig\s*\(\s*\{/)
-      if (configMatch && configMatch.index !== undefined) {
-        const insertIndex = configMatch.index + configMatch[0].length
-        const cssBlock = `\n  css: [${nuxtCssPath}],`
-        config = config.slice(0, insertIndex) + cssBlock + config.slice(insertIndex)
-      }
-    }
-
-    await fsp.writeFile(configPath, config, 'utf-8')
-    return true
-  } catch (error: any) {
-    console.error(`Failed to update nuxt.config.ts: ${error.message}`)
+  const result = await addToConfigArray(
+    configPath,
+    'css',
+    `~/${normalizedPath}`,
+    // Already included under either the original or the normalized path
+    entries => entries.some(e => e.includes(cssRelativePath) || e.includes(normalizedPath)),
+  )
+  if (!result.added && result.reason !== 'already in config') {
+    console.error(`Failed to update nuxt.config.ts: ${result.reason}`)
     return false
   }
+  return true
 }
 
 /**

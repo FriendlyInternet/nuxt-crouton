@@ -16,8 +16,6 @@ crouton init <name> [options]                 # Full pipeline: scaffold → gene
 crouton rollback <layer> <collection>        # Remove collection (code-only)
 crouton rollback <layer> <collection> --drop-table          # …and emit a DROP TABLE migration
 crouton rollback <layer> <collection> --drop-table --dry-run # …preview that DROP, write nothing
-crouton rollback-interactive                 # Interactive removal UI
-crouton seed-translations                    # Seed i18n data
 crouton db-pull                              # Pull remote D1 → local dev
 crouton db-pull --env staging                # Pull from staging environment
 crouton-seed --db <name> [--remote]          # Seed an app DB from its packages' providers
@@ -213,7 +211,7 @@ crouton init my-app --dry-run
 |--------|-------------|
 | `--features <list>` | Comma-separated features (e.g., `bookings,pages,editor`) |
 | `--theme <name>` | Theme to wire into extends (e.g., `ko`) |
-| `-d, --dialect <type>` | `sqlite` or `pg` (default: sqlite) |
+| `-d, --dialect <type>` | `sqlite` (default; the only supported value — others exit non-zero) |
 | `--no-cf` | Skip Cloudflare-specific config |
 | `--domain <zone>` | CF zone for custom-domain routes → `<app>.<zone>` (prod) + `<app>-staging.<zone>` (staging); auto-bound on deploy. Omit → id-less `*.workers.dev` |
 | `--poc` | Scaffold into `pocs/<name>` (the incubator) instead of `apps/<name>` |
@@ -350,7 +348,7 @@ crouton db-pull --config ./custom-wrangler.jsonc
 | Option | Description |
 |--------|-------------|
 | `--fields-file <path>` | Schema JSON file |
-| `--dialect <pg\|sqlite>` | Database dialect (default: sqlite for the direct command; `crouton config` has no flag — it reads the config file's `dialect`, falling back to `sqlite` when omitted or empty; any other value fails validation, #1472) |
+| `--dialect sqlite` | Database dialect (only sqlite is supported — `pg` was removed, #2735; default: sqlite for the direct command; `crouton config` has no flag — it reads the config file's `dialect`, falling back to `sqlite` when omitted or empty; any other value fails validation, #1472/#2735) |
 | `--hierarchy` | Enable tree structure |
 | `--seed` | Generate seed data file (drizzle-seed) |
 | `--count <number>` | Number of seed records (default: 25) |
@@ -958,7 +956,7 @@ When modifying the generator, **always check if examples need updating**:
    bindings beyond `v-model` (today: `CroutonCalendar` → `v-model:date`, `CroutonFormRepeater`
    → `component-name`, `CroutonImageUpload` → `:crop`). JSON and array serialisation stay keyed on
    *type* because they describe the value, not the widget.
-3. Add the SQLite/PG column in `lib/generators/database-schema.ts` if the `drizzle` kind is new.
+3. Add the SQLite column in `lib/generators/database-schema.ts` if the `drizzle` kind is new.
 4. Repeater item inputs (`lib/generators/field-components.ts`) follow the same rule: `loadFields`
    attaches `component` to every `meta.properties[*]`, the item `Input.vue` renders it. Booleans
    are `UCheckbox` everywhere (owner decision 2026-10-16; the old private map rendered `USwitch`
