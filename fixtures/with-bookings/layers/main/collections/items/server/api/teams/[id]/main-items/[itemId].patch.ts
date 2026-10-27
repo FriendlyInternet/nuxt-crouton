@@ -6,7 +6,7 @@ import { z } from 'zod'
 
 const bodySchema = z.object({
   name: z.string().min(1, 'name is required'),
-  done: z.boolean().optional()
+  done: z.boolean().nullish()
 }).partial().strip()
 
 export default defineEventHandler(async (event) => {
