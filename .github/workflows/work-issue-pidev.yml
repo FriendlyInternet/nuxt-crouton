@@ -93,6 +93,12 @@ on:
         required: false
         default: ""
         type: string
+      mode:
+        description: "build (default) = implement and open a PR. plan (#2755) = investigate, reproduce and post ONE plan comment (marker <!-- pipeline-plan:v1 -->) — no commits, no PR."
+        required: false
+        default: "build"
+        type: choice
+        options: ["build", "plan"]
   # Single-use trigger (#1685/#1686): a human OR the decomposer (via the Harness App token, so
   # it's nuxt-harness[bot]-actored and passes the bot-actor guard + cascades) applies `work-this`
   # to a LEAF issue → this one-shot worker implements it and opens a PR. We fire on EVERY labeled
@@ -392,6 +398,8 @@ jobs:
           # WS2 (#1695): the integration branch parsed off the issue's pipeline block (empty → main).
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
           REVISE: ${{ inputs.feedback != '' && '1' || '' }}
+          # #2755: plan mode — the planner persona, no commit/PR (see the `plan` step below).
+          PLAN: ${{ inputs.mode == 'plan' && '1' || '' }}
         run: |
           set -uo pipefail
           # The Harness App identity for any commits pi makes (so they're attributable
@@ -416,7 +424,9 @@ jobs:
           if [ -n "${EPIC_BRANCH:-}" ]; then
             BRANCH_INSTR="branch off the integration branch '${EPIC_BRANCH}' and target the PR THERE (not main)"
           fi
-          if [ -n "${REVISE:-}" ]; then
+          if [ -n "${PLAN:-}" ]; then
+            node scripts/pipeline-prompt.mjs pi-planner --var "issue=$ISSUE" > "$PROMPT_FILE"
+          elif [ -n "${REVISE:-}" ]; then
             PRN="$(gh pr list --head "work-${ISSUE}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
             node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" \
               --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
@@ -491,12 +501,42 @@ jobs:
       # them); `.pi/npm/`, node_modules, logs, lockfile churn are excluded BY CONSTRUCTION (pi
       # never edited them) — no reliance on .gitignore foreseeing them. Files a generator wrote via
       # `bash` (not an edit tool) are NOT in the ledger; they are REPORTED, never silently committed.
+      # ── PLAN mode (#2755) — verify the plan comment, never commit ────────────────────
+      # The planner posts ONE comment carrying the marker. Parse it with scripts/lib/plan-shape.mjs:
+      # a malformed plan (missing section, an assumption with no why / no linked evidence) fails
+      # the run and says why on the issue; "Reproduced: no" labels the issue `plan:unverified`.
+      - id: plan
+        if: ${{ !cancelled() && steps.claim.outcome != 'failure' && inputs.mode == 'plan' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ inputs.issue }}
+          SINCE: ${{ steps.t0.outputs.ts }}
+        run: |
+          set -uo pipefail
+          gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
+            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .body // empty' > "$RUNNER_TEMP/plan.md"
+          if [ ! -s "$RUNNER_TEMP/plan.md" ]; then
+            echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
+            echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
+          fi
+          VERDICT="$(node scripts/lib/plan-shape.mjs "$RUNNER_TEMP/plan.md")"; RC=$?
+          echo "$VERDICT"
+          if [ "$RC" -ne 0 ]; then
+            ERRS="$(echo "$VERDICT" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(v.errors.map(e=>"- "+e).join("\n"))')"
+            gh issue comment "$ISSUE" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan check (#2755)_\n\n⚠️ **The plan above is malformed — the build will not use it.** Re-run in plan mode.\n\n%s' "$ERRS")" || true
+            echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
+          fi
+          echo "ok=1" >> "$GITHUB_OUTPUT"
+          if [ "$(echo "$VERDICT" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).unverified)')" = "true" ]; then
+            gh issue edit "$ISSUE" --add-label "plan:unverified" || true
+          fi
+
       - id: finish
         # `!cancelled()` deliberately keeps this running after a pi failure so partial work is
         # still persisted — but NOT after a claim-guard refusal (#2027): pi never ran, there is
         # nothing to finish, and the step's own failure then fed the artifact-gate a false
-        # "the harness crashed" signal.
-        if: ${{ !cancelled() && steps.claim.outcome != 'failure' }}
+        # "the harness crashed" signal. Plan mode (#2755) never commits, so it skips this.
+        if: ${{ !cancelled() && steps.claim.outcome != 'failure' && inputs.mode != 'plan' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -1067,9 +1107,13 @@ jobs:
           # the PR; a revise that produced neither is failed by its own step above.
           REVISED: ${{ steps.finish.outputs.revised }}
           REVISE_CONFLICT: ${{ steps.finish.outputs.revise_conflict }}
+          # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
+          # fails the run itself when it is missing or malformed.
+          PLAN_OK: ${{ steps.plan.outputs.ok }}
         with:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
+            if (process.env.PLAN_OK === '1') { core.info('Plan comment verified — artifact OK (#2755).'); return }
             if (process.env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
             if (process.env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
             const since = '${{ steps.t0.outputs.ts }}'
