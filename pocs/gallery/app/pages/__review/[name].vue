@@ -127,6 +127,7 @@ const statuses = [
   { label: 'Success', color: 'success' as const, run: () => push({ type: 'success', text: 'You saved “Kayak Rental”' }) },
   { label: 'Info', color: 'info' as const, run: () => push({ type: 'info', text: 'Invitation sent', icon: 'i-lucide-info' }) },
   { label: 'Warning', color: 'warning' as const, run: () => push({ type: 'warning', text: 'Check the highlighted fields', icon: 'i-lucide-triangle-alert' }) },
+  { label: 'Teammate change', color: 'info' as const, run: () => push({ type: 'success', text: 'Lotte changed “Booking 12”', icon: 'i-lucide-pencil' }) },
   {
     label: 'Error',
     color: 'error' as const,
