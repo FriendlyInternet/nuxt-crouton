@@ -22,7 +22,6 @@ export function generateCollectionReadme(data: Record<string, any>, config: Reco
   const prefixedPascalCasePlural = `${layerPascalCase}${pascalCasePlural}`
   const prefixedCamelCasePlural = `${layerCamelCase}${pascalCasePlural}`
   const apiPath = `${layer}-${plural}`
-  const generatedDate = new Date().toISOString().split('T')[0]
 
   const fieldRows = fields
     .filter(f => f.name !== 'id')
@@ -58,7 +57,7 @@ export function generateCollectionReadme(data: Record<string, any>, config: Reco
 
   return `# ${prefixedPascalCasePlural}
 
-> Generated once by @fyit/crouton-cli on ${generatedDate}. From here on it's yours:
+> Generated once by @fyit/crouton-cli. From here on it's yours:
 > edit any file in this folder. \`crouton config\` skips files that already exist;
 > only \`--force\` overwrites them.
 

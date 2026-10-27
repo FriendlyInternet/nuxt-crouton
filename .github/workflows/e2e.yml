@@ -206,6 +206,12 @@ jobs:
       - name: Type-check the generated fixture
         run: pnpm --filter "e2e-fixture-${{ matrix.fixture }}" typecheck
 
+      # Lint gate for CLI output (#2740): the repo eslint rules over what the
+      # generator just emitted, formatting rules off (eslint.generated.config.mjs).
+      # An unused import/variable in a template now fails here, not in a user's app.
+      - name: Lint generated output
+        run: pnpm exec eslint -c eslint.generated.config.mjs --no-warn-ignored "fixtures/${{ matrix.fixture }}/layers/*/collections/**/*.{ts,vue}"
+
       # No browser-install step: the Playwright image already ships Chromium at
       # /ms-playwright (PLAYWRIGHT_BROWSERS_PATH preset), so there's nothing to
       # download and no apt step to hang on. Proven on with-assets in #393.

@@ -1,6 +1,6 @@
 # MainGalleries
 
-> Generated once by @fyit/crouton-cli on 2026-10-19. From here on it's yours:
+> Generated once by @fyit/crouton-cli. From here on it's yours:
 > edit any file in this folder. `crouton config` skips files that already exist;
 > only `--force` overwrites them.
 

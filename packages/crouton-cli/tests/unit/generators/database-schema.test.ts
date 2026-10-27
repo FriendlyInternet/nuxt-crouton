@@ -33,7 +33,9 @@ describe('generateSchema', () => {
     it('includes correct imports for SQLite', () => {
       const result = generateSchema(schemaData, 'sqlite', minimalConfig as AnyConfig)
       expect(result).toContain("import { nanoid } from 'nanoid'")
-      expect(result).toContain("import { sqliteTable, text, integer, real, customType } from 'drizzle-orm/sqlite-core'")
+      expect(result).toContain("import { sqliteTable, text, integer, real } from 'drizzle-orm/sqlite-core'")
+      // only imports what the schema uses — no unused `real` / `jsonColumn`
+      expect(result).not.toContain('jsonColumn')
     })
 
     it('generates nanoid for primary key', () => {

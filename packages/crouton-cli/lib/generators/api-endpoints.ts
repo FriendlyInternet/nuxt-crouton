@@ -43,9 +43,7 @@ export default defineEventHandler(async (event) => {
   authTimer.end()
 
   const query = getQuery(event)${hasTranslations
-    ? `
-  // Accept locale for future translation handling
-  const locale = String(query.locale || 'en')`
+    ? ``
     : ''}
 
   const dbTimer = timing.start('db')
