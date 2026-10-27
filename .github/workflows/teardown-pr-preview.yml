@@ -60,7 +60,8 @@ jobs:
           fi
           REMOVED=0
           for APP in $APPS; do
-            WORKER="${APP}-pr${PR}"
+           # The app's preview Worker, then its live-sync one (<app>-pr<N>-collab, #2693).
+           for WORKER in "${APP}-pr${PR}" "${APP}-pr${PR}-collab"; do
             # `wrangler delete` exits non-zero for a Worker that doesn't exist. For most apps on
             # most PRs that is the NORMAL case (the PR didn't touch that app), so it is noise,
             # not an error — count what actually went away instead of trusting exit codes.
@@ -80,5 +81,6 @@ jobs:
                   fi ;;
               esac
             done
+           done
           done
           echo "teardown for PR #${PR}: ${REMOVED} worker(s) removed"
