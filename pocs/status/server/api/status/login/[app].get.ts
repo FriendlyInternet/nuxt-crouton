@@ -1,7 +1,8 @@
 import { appTargetFor } from '../../../utils/app-urls'
 import { reviewLoginUrl } from '../../../utils/review-login'
 import { listLiveApps, listPreviews } from '../../../utils/live-apps'
-import { resolvePreviewUrl } from '../../../utils/live-apps-core'
+import { isSafePath } from '../../../utils/totest-core'
+import { decidePreview, previewGoneHtml } from '../../../utils/live-apps-core'
 
 // Owner-only one-tap sign-in to an app's staging review login. The URL carries the
 // password, so it is never logged or rendered into HTML — only a 302 Location.
@@ -27,6 +28,11 @@ export default defineEventHandler(async (event) => {
   if (!/^[a-z0-9-]+$/.test(app) || !/^(main|pr\d+)$/.test(key)) {
     throw createError({ statusCode: 400, statusMessage: 'Bad request' })
   }
+  const toRaw = getQuery(event).to
+  const to = toRaw === undefined || toRaw === '' ? '' : String(toRaw)
+  if (to && !isSafePath(to)) {
+    throw createError({ statusCode: 400, statusMessage: 'Bad request' })
+  }
   // Live list from GitHub; the build-time list is only a fallback if GitHub is unreachable.
   const live = await listLiveApps(event)
   const liveApp = live.data.find(a => a.app === app)
@@ -40,16 +46,20 @@ export default defineEventHandler(async (event) => {
   }
   let base = target.stagingUrl
   if (key !== 'main') {
-    const previewUrl = resolvePreviewUrl((await listPreviews(event)).data, app, key)
-    if (!previewUrl) throw createError({ statusCode: 404, statusMessage: 'No open preview for that PR' })
-    base = previewUrl
+    const decision = decidePreview((await listPreviews(event)).data, app, key)
+    if (decision.gone) {
+      setResponseStatus(event, 410)
+      setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
+      return previewGoneHtml(decision.pr, app, target.stagingUrl)
+    }
+    base = decision.url
   }
 
   // No sign-in for this app (opted out, or no seed secret here): just open its staging site.
   const secret = String(cfg.reviewSeedSecret || '')
   if (!target.hasSignIn || !secret) {
-    return sendRedirect(event, base, 302)
+    return sendRedirect(event, to ? `${base.replace(/\/+$/, '')}${to}` : base, 302)
   }
 
-  return sendRedirect(event, reviewLoginUrl(base, secret, app, key), 302)
+  return sendRedirect(event, reviewLoginUrl(base, secret, app, key, to), 302)
 })
