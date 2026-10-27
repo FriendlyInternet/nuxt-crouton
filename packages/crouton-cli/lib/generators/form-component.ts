@@ -13,7 +13,6 @@ function generateAIHeader(data: Record<string, any>, apiPath: string): string {
   @crouton-generated
   @collection ${plural}
   @layer ${layer}
-  @generated ${new Date().toISOString().split('T')[0]}
 
   ## AI Context
   - Form component for ${plural} collection
@@ -544,7 +543,7 @@ function buildNavigationItemsCode(useTabs: boolean, navigationItems: Array<{ lab
 
 const tabs = ref(true)
 const activeSection = ref('${jsString(navigationItems[0]?.value || 'general')}')`
-    : 'const tabs = ref(false)'
+    : ''
 }
 
 // Generate inline options arrays for static USelect fields
@@ -670,8 +669,6 @@ ${useTabs
 
   } catch (error) {
     console.error('Form submission failed:', error)
-    // You can add toast notification here if available
-    // toast.add({ title: 'Error', description: 'Failed to submit form', color: 'red' })
   }
 }`
 }

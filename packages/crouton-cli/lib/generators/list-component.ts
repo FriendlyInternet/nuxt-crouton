@@ -15,7 +15,6 @@ function generateAIHeader(data: Record<string, any>, apiPath: string): string {
   @crouton-generated
   @collection ${plural}
   @layer ${layer}
-  @generated ${new Date().toISOString().split('T')[0]}
 
   ## AI Context
   - List component for ${plural} collection
@@ -214,15 +213,14 @@ export function generateListComponent(data: Record<string, any>, config: Record<
 <script setup lang="ts">
 import use${prefixedPascalCasePlural} from '../composables/use${prefixedPascalCasePlural}'
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   layout?: any
 }>(), {
   layout: 'table'
 })
 ${hasTranslations
   ? `
-const { t } = useEntityTranslations()
-const { locale } = useI18n()`
+const { t } = useEntityTranslations()`
   : ''}
 const { columns } = use${prefixedPascalCasePlural}()
 

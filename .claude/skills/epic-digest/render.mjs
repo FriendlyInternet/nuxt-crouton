@@ -18,6 +18,7 @@ import { resolve, join, dirname } from 'node:path'
 // Brand identity SSOT — shared with crouton-email's transactional templates.
 // Plain ESM relative import: resolves under the full actions/checkout, no install.
 import { BRAND_NAME, BRAND_URL, PRIMARY_COLOR, PRIMARY_COLOR_DARK } from '../../../packages/crouton-email/brand/email-brand.mjs'
+import { screenshotLine } from './screenshot-metric.mjs'
 
 // ── args ──────────────────────────────────────────────────────────────────
 const args = process.argv.slice(2)
@@ -38,6 +39,7 @@ const stamp = flag('date', generated.toISOString().slice(0, 10).replace(/-/g, ''
 const outDir = flag('out-dir', 'writeups/reports')
 const repo = data.repo || 'repo'
 const windowHours = data.windowHours ?? 24
+const shotLine = screenshotLine(data.screenshots)
 
 // ── helpers ─────────────────────────────────────────────────────────────────
 const esc = (s) =>
@@ -423,6 +425,8 @@ const html = `<!doctype html>
       <div class="brand-accent" style="width:44px;height:3px;background:${PRIMARY_COLOR};border-radius:2px"></div>
     </td></tr>
 
+    ${shotLine ? `<tr><td class="mut" style="padding:0 0 18px;font-style:italic;color:${C.mut};font-size:13px">${esc(shotLine)}</td></tr>` : ''}
+
     ${actionablesSection(actionables)}
 
     ${initiativesSection(initiatives)}
@@ -537,6 +541,7 @@ const txt =
   `DAILY EPIC DIGEST — ${prettyDate}\n` +
   `${repo} · last ${windowHours}h · ${epics.length} open epic(s)\n` +
   `${'='.repeat(64)}\n\n` +
+  (shotLine ? `${shotLine}\n\n` : '') +
   txtActionables(actionables) +
   txtInitiatives(initiatives) +
   txtReadyToClose(epics) +
@@ -662,6 +667,7 @@ const mdReadyToClose = (allEpics) => {
 const md =
   `## 📊 Daily epic digest — ${prettyDate}\n` +
   `_${repo} · last ${windowHours}h · ${epics.length} open epic${epics.length === 1 ? '' : 's'}_\n\n` +
+  (shotLine ? `_${shotLine}_\n\n` : '') +
   mdActionables(actionables) +
   mdInitiatives(initiatives) +
   mdReadyToClose(epics) +

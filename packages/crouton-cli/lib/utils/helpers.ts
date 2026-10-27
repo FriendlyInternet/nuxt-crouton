@@ -6,6 +6,14 @@ export const pascal = pascalCase
 export const toSnakeCase: (str: string) => string = snakeCase
 export const toKebabCase = kebabCase
 
+/** `knowledge-base` / `my_app` → `knowledgeBase` / `myApp`; an already-camel layer is unchanged. */
+export function toLayerCamelCase(layer: string): string {
+  return layer
+    .split(/[-_]/)
+    .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
+    .join('')
+}
+
 export interface CaseVariants {
   singular: string
   plural: string

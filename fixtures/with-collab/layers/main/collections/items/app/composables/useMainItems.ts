@@ -2,7 +2,6 @@
  * @crouton-generated
  * @collection items
  * @layer main
- * @generated 2026-06-16
  *
  * ## AI Context
  * - Composable: useMainItems

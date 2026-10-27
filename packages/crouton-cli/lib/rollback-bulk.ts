@@ -3,10 +3,32 @@
 
 import path from 'node:path'
 import consola from 'consola'
+import { confirm, isCancel } from '@clack/prompts'
 
 // Import utilities
 import { rollbackCollection, fileExists, cleanRootNuxtConfig } from './rollback-collection.ts'
 import { getAllCollectionsInLayer, getAllLayers } from './utils/layer-discovery.ts'
+
+/**
+ * Ask before a destructive rollback. Never proceeds unattended: a closed or
+ * non-TTY stdin aborts (pass --force to skip), instead of timing out into a delete.
+ */
+async function confirmRollback(warning: string, question: string): Promise<boolean> {
+  consola.error(warning)
+  consola.warn('Run with --dry-run to preview changes first')
+
+  if (!process.stdin.isTTY) {
+    consola.error('Not an interactive terminal — aborting. Re-run with --force to confirm.')
+    return false
+  }
+
+  const ok = await confirm({ message: question, initialValue: false })
+  if (isCancel(ok) || !ok) {
+    consola.info('Aborted — nothing removed.')
+    return false
+  }
+  return true
+}
 
 export async function rollbackLayer({ layer, dryRun = false, keepFiles = false, force = false }: { layer: string; dryRun?: boolean; keepFiles?: boolean; force?: boolean }): Promise<boolean> {
   console.log('\n' + '═'.repeat(60))
@@ -39,12 +61,9 @@ export async function rollbackLayer({ layer, dryRun = false, keepFiles = false, 
   console.log(`  • Layer "${layer}" from root nuxt.config.ts`)
 
   // Confirmation prompt (unless force or dry-run)
-  if (!force && !dryRun) {
-    consola.error('⚠️  WARNING: This will remove ALL collections in this layer!')
-    consola.warn('Run with --dry-run to preview changes first')
-    console.log('\nPress Ctrl+C to cancel, or wait 5 seconds to continue...')
-
-    await new Promise(resolve => setTimeout(resolve, 5000))
+  if (!force && !dryRun
+    && !await confirmRollback('⚠️  WARNING: This will remove ALL collections in this layer!', `Remove ALL ${collections.length} collections in layer "${layer}"?`)) {
+    return false
   }
 
   console.log('\n' + '─'.repeat(60))
@@ -169,12 +188,9 @@ export async function rollbackFromConfig({ configPath, dryRun = false, keepFiles
   console.log(`  • All affected layers from root nuxt.config.ts`)
 
   // Confirmation prompt (unless force or dry-run)
-  if (!force && !dryRun) {
-    consola.error('⚠️  WARNING: This will remove ALL collections defined in this config!')
-    consola.warn('Run with --dry-run to preview changes first')
-    console.log('\nPress Ctrl+C to cancel, or wait 5 seconds to continue...')
-
-    await new Promise(resolve => setTimeout(resolve, 5000))
+  if (!force && !dryRun
+    && !await confirmRollback('⚠️  WARNING: This will remove ALL collections defined in this config!', 'Remove ALL collections defined in this config?')) {
+    return false
   }
 
   console.log('\n' + '─'.repeat(60))
@@ -258,12 +274,9 @@ export async function rollbackMultiple({ layer, collections, dryRun = false, kee
   collections.forEach(col => console.log(`  • ${col}`))
 
   // Confirmation prompt (unless force or dry-run)
-  if (!force && !dryRun) {
-    consola.error('⚠️  WARNING: This will remove multiple collections!')
-    consola.warn('Run with --dry-run to preview changes first')
-    console.log('\nPress Ctrl+C to cancel, or wait 3 seconds to continue...')
-
-    await new Promise(resolve => setTimeout(resolve, 3000))
+  if (!force && !dryRun
+    && !await confirmRollback('⚠️  WARNING: This will remove multiple collections!', 'Remove these collections?')) {
+    return false
   }
 
   console.log('\n' + '─'.repeat(60))

@@ -11,7 +11,13 @@
           "pageType": "pages:regular",
           "status": "draft",
           "visibility": "public",
+          "title": "smoke-{rand}",
+          "slug": "smoke-{rand}",
           "translations": {
+            "fr": {
+              "title": "smoke-{rand}",
+              "slug": "smoke-{rand}"
+            },
             "en": {
               "title": "smoke-{rand}",
               "slug": "smoke-{rand}"
@@ -29,6 +35,9 @@
         "method": "PATCH",
         "body": {
           "translations": {
+            "fr": {
+              "title": "smoke-{rand}-b"
+            },
             "en": {
               "title": "smoke-{rand}-b"
             },
