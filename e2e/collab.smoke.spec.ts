@@ -5,17 +5,17 @@
  *
  * Two browser contexts share the saved auth + team and open the same collection
  * list over the local crossws socket:
- *   (a) both clients are connected to the team sync room — the room's users
- *       endpoint (/api/collab/team:<id>:sync/users) lists a participant;
+ *   (a) both clients hold an open socket to the team sync room
+ *       (/api/collab/team:<id>:sync/ws). The sync room is a version-signal channel
+ *       only — it never announces awareness — so its /users endpoint is always empty
+ *       and can't prove membership; we watch the sockets themselves instead;
  *   (b) a save by client B refreshes client A's list without a reload
  *       (crouton:mutation -> Yjs version bump -> crouton:remoteChange -> refetch).
  *
- * Both contexts use the same user, and the room dedupes awareness per user id, so
- * (a) asserts presence (>= 1) rather than a count of 2.
  */
 import { test, expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { collectionUrl, activeTeamId, ensureAuthed, fixtureManifest, fillField, AUTH_FILE, TEAM_FILE, FIXTURE } from './helpers'
+import { collectionUrl, ensureAuthed, fixtureManifest, fillField, AUTH_FILE, TEAM_FILE, FIXTURE } from './helpers'
 
 const collab = fixtureManifest().collab
 
@@ -32,7 +32,14 @@ test.describe(`fixture "${FIXTURE}" collab`, () => {
     try {
       const a = await ctxA.newPage()
       const b = await ctxB.newPage()
+      const syncSockets = new Map<typeof a, boolean>()
       for (const page of [a, b]) {
+        page.on('websocket', (ws) => {
+          if (/\/api\/collab\/team:[^/]+:sync\/ws/.test(decodeURIComponent(ws.url()))) {
+            syncSockets.set(page, true)
+            ws.on('close', () => syncSockets.set(page, false))
+          }
+        })
         await ensureAuthed(page, base)
         await page.goto(url, { waitUntil: 'domcontentloaded' })
         await page.waitForLoadState('networkidle').catch(() => {})
@@ -40,16 +47,9 @@ test.describe(`fixture "${FIXTURE}" collab`, () => {
           .toBeVisible({ timeout: 180000 })
       }
 
-      // (a) presence in the team sync room
-      const teamId = await activeTeamId(a, base)
-      expect(teamId).toBeTruthy()
-      const roomId = encodeURIComponent(`team:${teamId}:sync`)
-      await expect.poll(async () => {
-        const res = await a.request.get(`${base}/api/collab/${roomId}/users`, {
-          params: { type: 'sync', teamId: teamId! }
-        })
-        return res.ok() ? (await res.json()).count : -1
-      }, { timeout: 60000 }).toBeGreaterThanOrEqual(1)
+      // (a) both clients are connected to the team sync room
+      await expect.poll(() => [syncSockets.get(a), syncSockets.get(b)], { timeout: 60000 })
+        .toEqual([true, true])
 
       // (b) B saves -> A's list refreshes without a reload
       const name = `collab-sync-${Date.now()}`
