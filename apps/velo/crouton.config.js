@@ -1,4 +1,9 @@
 export default {
+  // Main language French, then Dutch, then English (owner decision, #2762).
+  // Without this the server falls back to `en`, which velo's content never wrote.
+  locales: ['fr', 'nl', 'en'],
+  defaultLocale: 'fr',
+
   // Feature flags - which crouton packages to enable
   features: {
     bookings: { config: { email: { enabled: true } } },

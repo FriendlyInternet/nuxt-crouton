@@ -760,9 +760,9 @@ export default defineEventHandler(async () => {
         title: update.title_fr,
         content: update.fr,
         translations: {
-          en: { title: update.title_en, content: update.en },
-          fr: { title: update.title_fr, content: update.fr },
-          nl: { title: update.title_nl, content: update.nl }
+          en: { title: update.title_en, slug: page.slug, content: update.en },
+          fr: { title: update.title_fr, slug: page.slug, content: update.fr },
+          nl: { title: update.title_nl, slug: page.slug, content: update.nl }
         },
         updatedAt: new Date()
       })

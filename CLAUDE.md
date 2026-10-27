@@ -531,7 +531,7 @@ In the agent pipeline both paths are automated as a gate in `.claude/agents/task
 In an interactive session, do the same by hand. Be conservative — when unsure whether a diff is
 "visual", don't gate.
 
-**What counts as approval** (the sign-off signal): a **reply comment** containing `approve`/`lgtm`.
+**What counts as approval** (the sign-off signal): a **reply comment that is only `ok`** (`not ok: …` is a change request; `lgtm`/`approve` still accepted). On a PR held for a human (shared code, workflows, epic → main) the owner's `ok` is also the merge go: the pipeline merges once green (#2832).
 That comment is the *only* thing that resumes the pipeline — a 👍 reaction and the `ui-approved`
 label do **not** trigger anything (`resume-on-comment.yml` fires only on `issue_comment`; reactions
 raise no event and no workflow listens for the label) (#572). Anything else is a change request —
@@ -551,7 +551,7 @@ expensive after. This sits **after** the machine `validate_schema` step (the hum
 it). In the agent pipeline it's a gate in `.claude/agents/task-worker.md`; interactively, do the
 same by hand. It **reuses the same revision/approval loop and signal as the UI gate** (#310) —
 feedback goes inline on the committed `<collection>.md` in the diff; approval (a **comment**
-containing `lgtm`/`approve` — not a reaction or label, #572) unblocks generation.
+that is only `ok` (legacy `lgtm`/`approve`) — not a reaction or label, #572) unblocks generation.
 
 ## Test Sign-Off (agree on the test before you write the code) — epic #774
 
@@ -582,7 +582,7 @@ by the e2e fixture smoke, not here.
 
 In the agent pipeline it's a gate in `.claude/agents/task-worker.md`; interactively, do the same by
 hand. It **reuses the same revision/approval loop and signal as the UI/Schema gates** (#310) — hold
-on `status:blocked`; approval is a **comment** containing `lgtm`/`approve` (not a reaction or label,
+on `status:blocked`; approval is a **comment** that is only `ok` (legacy `lgtm`/`approve`; not a reaction or label,
 #572) and unblocks the code. (The CI `test` job already hard-gates `pnpm test` — this gate is about
 *order*, writing the test first, not enforcement.)
 

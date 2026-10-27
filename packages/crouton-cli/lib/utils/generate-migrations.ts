@@ -49,8 +49,8 @@ export async function prepareSchemaForMigration(appDir: string): Promise<Prepare
 }
 
 export type GenerateMigrationsResult
-  = | { generated: true }
-    | { generated: false, reason: 'deferred', recipe: string[] }
+  = | { generated: true, reason?: undefined, detail?: undefined }
+    | { generated: false, reason: 'deferred', recipe: string[], detail?: undefined }
     | { generated: false, reason: 'generate-failed', detail?: string }
 
 /**
