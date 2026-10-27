@@ -300,7 +300,8 @@
     "signIn": "Inloggen",
     "signOutHelper": "Uitloggen uit helper-sessie",
     "retry": "Opnieuw",
-    "justNow": "zojuist"
+    "justNow": "zojuist",
+    "seeAll": "Alle activiteit bekijken"
   },
   "errors": {
     "auth": {
