@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { CollabAwarenessState } from '../types/collab'
-import { getInitials, getTextColor } from '../utils/avatar'
+import { generateUserColor, getInitials, getTextColor } from '../utils/avatar'
 
 /**
  * CollabPresence - User presence avatars
@@ -41,26 +41,24 @@ const overflowCount = computed(() => {
 })
 
 
-// Size classes
-const sizeClasses = computed(() => {
-  switch (props.size) {
-    case 'xs': return 'size-6 text-xs'
-    case 'sm': return 'size-8 text-sm'
-    case 'md': return 'size-10 text-base'
-    default: return 'size-8 text-sm'
-  }
-})
+const sizeClasses = computed(() => ({
+  xs: 'size-6 text-[10px]',
+  sm: 'size-8 text-sm',
+  md: 'size-10 text-base'
+}[props.size] ?? 'size-8 text-sm'))
 
-// Overlap offset based on size
-const overlapOffset = computed(() => {
-  switch (props.size) {
-    case 'xs': return '-ml-2'
-    case 'sm': return '-ml-2.5'
-    case 'md': return '-ml-3'
-    default: return '-ml-2.5'
-  }
-})
+const overlapOffset = computed(() => ({
+  xs: '-ml-2',
+  sm: '-ml-2.5',
+  md: '-ml-3'
+}[props.size] ?? '-ml-2.5'))
 
+const avatarBase = 'collab-presence-avatar rounded-full flex items-center justify-center font-medium border-2 border-white dark:border-gray-900 shadow-sm overflow-hidden'
+
+function colorOf(state: CollabAwarenessState): string {
+  const user = state.user
+  return user?.color || (user?.id ? generateUserColor(user.id) : '#6b7280')
+}
 </script>
 
 <template>
@@ -68,63 +66,47 @@ const overlapOffset = computed(() => {
     v-if="users.length > 0"
     class="collab-presence flex items-center"
   >
-    <!-- User avatars -->
     <template
       v-for="(userState, index) in visibleUsers"
       :key="userState.user?.id || index"
     >
       <UTooltip
-        v-if="showTooltip && userState.user?.name"
-        :text="userState.user.name"
+        :text="userState.user?.name || ''"
+        :disabled="!showTooltip || !userState.user?.name"
       >
         <div
-          class="collab-presence-avatar rounded-full flex items-center justify-center font-medium border-2 border-white dark:border-gray-900 shadow-sm"
-          :class="[sizeClasses, index > 0 ? overlapOffset : '']"
+          :class="[avatarBase, sizeClasses, index > 0 ? overlapOffset : '']"
           :style="{
-            backgroundColor: userState.user?.color || '#6b7280',
-            color: getTextColor(userState.user?.color || '#6b7280'),
+            backgroundColor: colorOf(userState),
+            color: getTextColor(colorOf(userState)),
             zIndex: visibleUsers.length - index
           }"
+          :title="showTooltip ? undefined : userState.user?.name"
         >
-          {{ getInitials(userState.user?.name || '') }}
+          <img
+            v-if="userState.user?.image"
+            :src="userState.user.image"
+            :alt="userState.user.name"
+            class="size-full object-cover"
+          >
+          <template v-else>
+            {{ getInitials(userState.user?.name || '') }}
+          </template>
         </div>
       </UTooltip>
-      <div
-        v-else
-        class="collab-presence-avatar rounded-full flex items-center justify-center font-medium border-2 border-white dark:border-gray-900 shadow-sm"
-        :class="[sizeClasses, index > 0 ? overlapOffset : '']"
-        :style="{
-          backgroundColor: userState.user?.color || '#6b7280',
-          color: getTextColor(userState.user?.color || '#6b7280'),
-          zIndex: visibleUsers.length - index
-        }"
-        :title="userState.user?.name"
-      >
-        {{ getInitials(userState.user?.name || '') }}
-      </div>
     </template>
 
-    <!-- Overflow indicator -->
     <UTooltip
-      v-if="overflowCount > 0 && showTooltip"
+      v-if="overflowCount > 0"
       :text="`+${overflowCount} more`"
+      :disabled="!showTooltip"
     >
       <div
-        class="collab-presence-overflow rounded-full flex items-center justify-center font-medium bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-2 border-white dark:border-gray-900 shadow-sm"
-        :class="[sizeClasses, overlapOffset]"
+        :class="[avatarBase, sizeClasses, overlapOffset, 'bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300']"
         :style="{ zIndex: 0 }"
       >
         +{{ overflowCount }}
       </div>
     </UTooltip>
-    <div
-      v-else-if="overflowCount > 0"
-      class="collab-presence-overflow rounded-full flex items-center justify-center font-medium bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-2 border-white dark:border-gray-900 shadow-sm"
-      :class="[sizeClasses, overlapOffset]"
-      :style="{ zIndex: 0 }"
-      :title="`+${overflowCount} more`"
-    >
-      +{{ overflowCount }}
-    </div>
   </div>
 </template>
