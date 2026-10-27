@@ -927,6 +927,7 @@ jobs:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
         run: |
+          set -o pipefail
           MANIFEST="$WORKSPACE/$APP/deploy.config.json"
           # No sign-in to smoke ("reviewLogin": false, #2377): just check the page answers 200.
           if [ "$(jq -r '.reviewLogin == false' "$MANIFEST" 2>/dev/null)" = "true" ]; then
@@ -940,13 +941,40 @@ jobs:
             fi
             exit 0
           fi
-          if node scripts/smoke-deployed.mjs --url "$URL" --email "$EMAIL" --password "$PW" --app "$APP" --manifest "$MANIFEST"; then
+          if node scripts/smoke-deployed.mjs --url "$URL" --email "$EMAIL" --password "$PW" --app "$APP" --manifest "$MANIFEST" 2>&1 | tee "$RUNNER_TEMP/smoke.log"; then
             echo "result=pass" >> "$GITHUB_OUTPUT"
             echo "### ✅ Deployed-preview smoke ($APP) — passed" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "result=fail" >> "$GITHUB_OUTPUT"
             echo "### ❌ Deployed-preview smoke ($APP) — failed (see step log)" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # A report-only failure must not pass unseen (#2812): put the failing step lines and the
+      # server's response on the PR, one sticky comment per head SHA. No @mention, no gate.
+      - name: Comment smoke failure on PR
+        if: ${{ steps.smoke.outputs.result == 'fail' && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          APP: ${{ inputs.app }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const fs = require('fs')
+            const { APP: app, SHA: sha } = process.env
+            let log = ''
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/smoke.log`, 'utf8') } catch { /* page-only smoke has no log */ }
+            const lines = log.split('\n').filter(l => l.includes('✗')).map(l => l.replace(/^\[smoke\] /, '')).slice(0, 20)
+            const detail = lines.length ? lines.join('\n') : 'The page did not answer 200 (see the run log).'
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+            const marker = `<!-- deploy-smoke-fail:${app}:${sha} -->`
+            const body = `${marker}\n⚠️ **${app}** deployed-preview smoke failed (report-only, so the PR is not blocked) — [run log](${runUrl})\n\n\`\`\`\n${detail.slice(0, 6000)}\n\`\`\`\n\n<sub>🤖 Set \`smoke.required: true\` in \`${app}/deploy.config.json\` to make this block the PR.</sub>`
+            const { owner, repo } = context.repo
+            const issue_number = context.issue.number
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 })
+            const existing = comments.find(c => c.body && c.body.includes(marker))
+            if (existing) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body })
 
       - name: Upload smoke screenshot
         if: ${{ always() && steps.smoke.outputs.result != '' }}
