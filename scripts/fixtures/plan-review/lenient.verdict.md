@@ -10,3 +10,5 @@ go
 - 5: PASS — looks fine
 - 6: PASS — looks fine
 - 7: PASS — looks fine
+- 8: PASS — looks fine
+- 9: PASS — looks fine

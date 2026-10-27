@@ -10,3 +10,5 @@ go
 - 5: PASS — no casts or timeouts
 - 6: PASS — only useList touched
 - 7: PASS — mechanical fix
+- 8: PASS — tested against the rule
+- 9: PASS — no conflict with the record

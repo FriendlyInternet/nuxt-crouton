@@ -8,9 +8,10 @@
  *   ### Verdict
  *   go | no-go | needs-owner
  *   ### Rubric
- *   - 1: PASS|FAIL — one line of evidence        (ids: 1 1b 2 3 4 5 6 7)
+ *   - 1: PASS|FAIL — one line of evidence        (ids: 1 1b 2 3 4 5 6 7 8 9)
  *   ### Question          (only for needs-owner: ONE yes/no question)
  *
+ * Items 8 (rule stated and tested) and 9 (contradicts the record) are judged by the reviewer alone.
  * Item 7 is "no owner decision needed": PASS = none needed, FAIL = the owner must decide.
  *
  * Two layers, so a lenient model cannot wave a bad plan through:
@@ -36,6 +37,8 @@ export const RUBRIC = [
   { id: '5', name: 'Best practice, no hacks' },
   { id: '6', name: 'Scope matches the issue' },
   { id: '7', name: 'No owner decision needed' },
+  { id: '8', name: 'Rule stated and tested? (a test aims at the rule, not only the mechanism)' },
+  { id: '9', name: 'Contradicts the record? (no step conflicts with the epic Decisions log, experiments or merged findings)' },
 ]
 const IDS = RUBRIC.map((r) => r.id)
 const HEDGE = /\b(should|probably|likely|presumably|might|i think|seems? to)\b/i
@@ -53,7 +56,7 @@ export function parseVerdict(body) {
   if (!['go', 'no-go', 'needs-owner'].includes(stated)) errors.push('Verdict must be go, no-go or needs-owner')
   const items = {}
   for (const line of section(body, 'Rubric').split('\n')) {
-    const m = line.match(/^\s*(?:[-*]\s+)?\**(1b|[1-7])\**[.:)]?\s*[^\n]*?\b(PASS|FAIL)\b\W*(.*)$/i)
+    const m = line.match(/^\s*(?:[-*]\s+)?\**(1b|[1-9])\**[.:)]?\s*[^\n]*?\b(PASS|FAIL)\b\W*(.*)$/i)
     if (m) items[m[1].toLowerCase()] = { pass: m[2].toUpperCase() === 'PASS', evidence: m[3].replace(/\*\*/g, '').trim() }
   }
   for (const id of IDS) {

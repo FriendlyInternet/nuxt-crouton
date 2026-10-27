@@ -58,6 +58,25 @@ test('a reviewer that says go while its own rubric fails is rejected, not truste
   assert.equal(decide(fx('clean.plan.md'), v).ok, false)
 })
 
+test('item 8: a plan with no test aimed at the rule is no-go even though the precheck passes', () => {
+  assert.deepEqual(precheck(fx('untested-rule.plan.md')), {})
+  const d = decide(fx('untested-rule.plan.md'), fx('untested-rule.verdict.md'))
+  assert.equal(d.verdict, 'no-go')
+  assert.deepEqual(d.failed, ['8'])
+})
+
+test('item 9: a step that contradicts the epic record is no-go', () => {
+  assert.deepEqual(precheck(fx('contradicts-record.plan.md')), {})
+  const d = decide(fx('contradicts-record.plan.md'), fx('contradicts-record.verdict.md'))
+  assert.equal(d.verdict, 'no-go')
+  assert.deepEqual(d.failed, ['9'])
+})
+
+test('a verdict missing item 8 or 9 is rejected', () => {
+  assert.equal(parseVerdict(fx('pass.verdict.md').replace(/- 8:[^\n]*\n/, '')).ok, false)
+  assert.equal(parseVerdict(fx('pass.verdict.md').replace(/- 9:[^\n]*\n/, '')).ok, false)
+})
+
 test('a malformed verdict (missing marker, item, evidence, bad verdict) is rejected', () => {
   assert.equal(parseVerdict('nothing here').ok, false)
   assert.equal(parseVerdict(fx('pass.verdict.md').replace('- 6: PASS — only useList touched\n', '')).ok, false)

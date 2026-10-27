@@ -10,5 +10,7 @@ needs-owner
 - 5: PASS — clean
 - 6: PASS — in scope
 - 7: FAIL — drops a column, irreversible
+- 8: PASS — tested
+- 9: PASS — no conflict with the record
 ### Question
 Drop the legacy `slug` column from production data? yes/no

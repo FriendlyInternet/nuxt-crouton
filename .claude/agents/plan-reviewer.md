@@ -19,7 +19,10 @@ Grade EVERY item PASS or FAIL with ONE line of concrete evidence (a file:line, c
 6. Scope: matches the issue; no drive-by changes.
 7. No owner decision needed: PASS when none. FAIL when the plan needs a product, data or cost decision, or an irreversible step.
 
-Verdict: `no-go` if any of 1–6 is FAIL; else `needs-owner` if 7 is FAIL; else `go`. Write the file in EXACTLY this shape (plain language, written for the owner, no insider jargon):
+8. Rule stated and tested? The plan names the rule that must stay true (the invariant, not just the mechanism) and has at least one test aimed at that rule. A plan that says "force teamId on rows without one" with no cross-team test is FAIL: the test only proves the mechanism ran.
+9. Contradicts the record? No step contradicts the epic's Decisions log, a recorded experiment, or a merged PR's finding. Read the epic body and its comments (the issue file names the epic) and check each step against them. A plan that sets `priority: -1` on package component dirs while the epic records "app dir beats layers at equal priority" is FAIL.
+
+Verdict: `no-go` if any of 1–6, 8 or 9 is FAIL; else `needs-owner` if 7 is FAIL; else `go`. Write the file in EXACTLY this shape (plain language, written for the owner, no insider jargon):
 
 <!-- plan-review:v1 -->
 ### Verdict
@@ -33,6 +36,8 @@ go | no-go | needs-owner
 - 5: PASS|FAIL — evidence
 - 6: PASS|FAIL — evidence
 - 7: PASS|FAIL — evidence
+- 8: PASS|FAIL — evidence
+- 9: PASS|FAIL — evidence
 ### Question
 (only for needs-owner: ONE yes/no question for the owner, with your recommendation)
 
