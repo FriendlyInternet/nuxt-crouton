@@ -64,14 +64,7 @@ export default defineEventHandler(async (event) => {
     }
     // Read at runtime: this collection ships from the package (#2278)
     const defaultLocale = useRuntimeConfig(event).croutonI18n?.defaultLocale || 'en'
-    // A page authored in another locale only (e.g. a seeded `nl` page in an app whose
-    // configured default is `en`, #2762) is valid: the default locale is required only
-    // when the page carries it; otherwise one complete locale is enough.
-    const complete = (t: any) => !!(t?.title && t?.slug)
-    const valid = merged[defaultLocale]
-      ? complete(merged[defaultLocale])
-      : Object.values(merged).some(complete)
-    if (!valid) {
+    if (!(merged[defaultLocale]?.title && merged[defaultLocale]?.slug)) {
       throw createError({
         status: 400,
         statusText: `Translations for title, slug (${defaultLocale}) are required`
