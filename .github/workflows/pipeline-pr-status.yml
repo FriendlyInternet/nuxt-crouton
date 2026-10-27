@@ -279,7 +279,7 @@ jobs:
               const body =
                 `${marker}\n` +
                 `🎨 **@${OWNER} — this needs your sign-off** (${title}).\n\n` +
-                `A draft PR is waiting on your \`lgtm\`/\`approve\` reply before it can build or ` +
+                `A draft PR is waiting on your reply (\`ok\`, or \`not ok: what's wrong\`) before it can build or ` +
                 `merge — open this issue's latest comment (or its PR) to see what changed.\n\n` +
                 `<sub>🤖 agent pipeline (CI) · sign-off notify (#1815/#2135)</sub>`
               await github.rest.issues.createComment({ owner, repo, issue_number: epicNumber, body })
@@ -381,7 +381,7 @@ jobs:
               let head, activity
               if (total === 0) {
                 head = epicBlocked ? `## 🎨 Awaiting your sign-off — ${title}` : `## ⏳ Decomposing — ${title}`
-                activity = epicBlocked ? '_now: waiting for your `lgtm` / answer on the design_' : '_now: the decomposer is planning this epic_'
+                activity = epicBlocked ? '_now: waiting for your `ok` / answer on the design_' : '_now: the decomposer is planning this epic_'
                 // #2156: only ASK for sign-off once the held PR is actually reviewable — its CI
                 // is green. Pinging the instant the draft opens asks for a decision that can't be
                 // made yet: on #2156 the sign-off ping fired 4 minutes BEFORE CI went red on a

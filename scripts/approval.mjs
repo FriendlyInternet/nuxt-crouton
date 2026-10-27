@@ -38,6 +38,24 @@ const CHECK_ONLY_LINE = /^[ \t]*(?:[✅✔☑]️?[ \t]*)+$/mu
 const APPROVAL_WORD = /^[ \t]*(?:lgtm|approved?)(?![\w-])/im
 
 /**
+ * The owner's one yes-word (#2832): a reply that is ONLY `ok` — case-insensitive, trailing
+ * punctuation or emoji fine. Anything after it (`ok, but change X`) is a change request,
+ * so a casual "ok, change X first" can never release a merge. The whole reply is tested
+ * (after quotes/code are stripped), not a line of it.
+ */
+const OK_ONLY_REPLY = /^[ \t\r\n]*ok[\p{P}\p{Extended_Pictographic}\u{FE0F}\u{200D}\s]*$/iu
+
+/**
+ * Is this an agent-authored comment? Every agent comment opens with a `> 🤖 …` provenance
+ * header (or a bare 🤖 line); an agent saying "ok" or quoting "lgtm" must never count as
+ * the owner's decision, even when posted from the owner's account.
+ */
+export function isAgentComment(body) {
+  const first = String(body || '').split('\n').find(l => l.trim()) || ''
+  return /^\s*(?:>\s*)?🤖/u.test(first)
+}
+
+/**
  * Is `body` an approval?
  *
  * Code spans, fenced blocks and `>` quotes are stripped FIRST, so a comment that merely
@@ -47,8 +65,10 @@ const APPROVAL_WORD = /^[ \t]*(?:lgtm|approved?)(?![\w-])/im
  * @returns {boolean}
  */
 export function isApproval(body) {
+  if (isAgentComment(body)) return false
   const text = stripNonCommandRegions(String(body || ''))
   if (CHECK_ONLY_LINE.test(text)) return true
+  if (OK_ONLY_REPLY.test(text)) return true
   return APPROVAL_WORD.test(text)
 }
 
