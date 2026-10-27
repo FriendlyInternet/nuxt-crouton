@@ -97,8 +97,6 @@ export function generateTypes(data: Record<string, any>, config: Record<string, 
 
   // Conditional field generation based on config flags
   // Team fields are always required (all generated endpoints use @crouton/auth)
-  const useMetadata = config?.flags?.useMetadata ?? true
-
   // Check if this collection has translations
   const hasTranslations = config?.translations?.collections?.[plural] || config?.translations?.collections?.[singular]
   const translationFields = hasTranslations ? Array.isArray(hasTranslations) ? hasTranslations : [] : []
@@ -108,14 +106,11 @@ export function generateTypes(data: Record<string, any>, config: Record<string, 
   owner: string
 `
 
-  // Build metadata fields conditionally
-  const metadataFields = useMetadata
-    ? `  createdAt: Date
+  const metadataFields = `  createdAt: Date
   updatedAt: Date
   createdBy: string
   updatedBy: string
 `
-    : ''
 
   // Build translations type if needed
   const translationsType = translationFields.length > 0
@@ -125,7 +120,7 @@ export function generateTypes(data: Record<string, any>, config: Record<string, 
     : ''
 
   // Build the omit list for New${prefixedPascalCase} type
-  const omitFields = [...SYSTEM_FIELD_GROUPS.id, ...systemMetadataFields(useMetadata)]
+  const omitFields = [...SYSTEM_FIELD_GROUPS.id, ...systemMetadataFields()]
   const omitList = omitFields.map(f => `'${f}'`).join(' | ')
 
   // Generate AI context header
@@ -160,7 +155,7 @@ export type ${prefixedPascalCase}FormData = z.infer<typeof ${prefixedSingular}Sc
 type NullableOptionals<T> = { [K in keyof T]: undefined extends T[K] ? T[K] | null : T[K] }
 // New* allows the server-set fields (id, createdBy, updatedBy) as optional — the
 // generated POST endpoint provides them; other callers (e.g. seed) may omit them.
-export type New${prefixedPascalCase} = NullableOptionals<Omit<${prefixedPascalCase}, ${omitList}>> & { id?: string${useMetadata ? '; createdBy?: string; updatedBy?: string' : ''} }
+export type New${prefixedPascalCase} = NullableOptionals<Omit<${prefixedPascalCase}, ${omitList}>> & { id?: string; createdBy?: string; updatedBy?: string }
 
 // Props type for the Form component
 export interface ${prefixedPascalCase}FormProps {

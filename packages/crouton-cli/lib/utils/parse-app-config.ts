@@ -1,5 +1,5 @@
 // parse-app-config.ts — Extract deployment-relevant info from an app directory
-// Used by deploy-check to understand what an app needs
+// Used by doctor to understand what an app needs
 
 import { join } from 'node:path'
 import { readFile, access } from 'node:fs/promises'
@@ -24,7 +24,6 @@ export interface AppConfig {
   hasCfStubs: boolean
   wranglerFormat: 'toml' | 'jsonc' | 'json' | null
   wrangler: WranglerConfig | null
-  ciWorkflowPath: string | null
 }
 
 export interface WranglerConfig {
@@ -209,30 +208,6 @@ function parseWranglerJson(content: string): WranglerConfig {
 }
 
 /**
- * Find CI workflow file for this app
- */
-async function findCiWorkflow(appDir: string, appName: string): Promise<string | null> {
-  // Walk up to find .github/workflows
-  let dir = appDir
-  for (let i = 0; i < 5; i++) {
-    const workflowDir = join(dir, '.github', 'workflows')
-    if (await pathExists(workflowDir)) {
-      // Look for deploy-{name}.yml
-      const candidates = [`deploy-${appName}.yml`, `deploy-${appName}.yaml`]
-      for (const name of candidates) {
-        const fullPath = join(workflowDir, name)
-        if (await pathExists(fullPath)) {
-          return fullPath
-        }
-      }
-      return null
-    }
-    dir = join(dir, '..')
-  }
-  return null
-}
-
-/**
  * Check which extended packages have a build script
  */
 export async function getPackagesNeedingBuild(extendsArr: string[], monorepoRoot: string): Promise<string[]> {
@@ -305,9 +280,6 @@ export async function parseAppConfig(appDir: string): Promise<AppConfig> {
   const hasPasskeysDisabled = /passkeys\s*:\s*false/.test(configContent)
   const hasOgImageDisabled = /ogImage\s*:\s*\{\s*enabled\s*:\s*false\s*\}/.test(configContent)
 
-  // Find CI workflow
-  const ciWorkflowPath = await findCiWorkflow(appDir, name)
-
   return {
     name,
     extends: nuxtConfig.extends,
@@ -318,6 +290,5 @@ export async function parseAppConfig(appDir: string): Promise<AppConfig> {
     hasCfStubs,
     wranglerFormat,
     wrangler,
-    ciWorkflowPath,
   }
 }

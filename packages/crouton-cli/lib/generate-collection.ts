@@ -45,7 +45,6 @@ import { generateTypes } from './generators/types.ts'
 import { generateNuxtConfig } from './generators/nuxt-config.ts'
 import { generateCollectionTest } from './generators/collection-test.ts'
 import { generateApiTest } from './generators/api-test.ts'
-import { generateRepeaterItemComponent } from './generators/repeater-item-component.ts'
 import { generateFieldComponents } from './generators/field-components.ts'
 import { generateSeedFile } from './generators/seed-data.ts'
 import { generateSeedFixture } from './generators/collection-seed-fixture.ts'
@@ -114,7 +113,6 @@ interface WriteScaffoldOptions {
   collection: string
   fields: Field[]
   dialect: string
-  autoRelations: boolean
   dryRun: boolean
   noDb: boolean
   force?: boolean
@@ -141,7 +139,6 @@ interface RunGenerateOptions {
   collection?: string
   fieldsFile?: string
   dialect?: string
-  autoRelations?: boolean
   dryRun?: boolean
   noDb?: boolean
   force?: boolean
@@ -1336,7 +1333,7 @@ async function registerCollectionInAppConfig(params: {
   }
 }
 
-async function writeScaffold({ layer, collection, fields, dialect, autoRelations, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, tests = false }: WriteScaffoldOptions): Promise<void> {
+async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb, force = false, noTranslations = false, config = null, collectionConfig = null, hierarchy: hierarchyFlag = false, seed = false, seedCount = 25, tests = false }: WriteScaffoldOptions): Promise<void> {
   // REFUSE an unresolvable relation BEFORE anything is written or installed (#1957). The queries
   // generator would otherwise fall through its `// or unknown — fall back to existing behavior`
   // branch and emit an import to a collection that does not exist, turning a local, obvious
@@ -1775,7 +1772,6 @@ async function generateConfigEntry(params: {
     collection: collectionName,
     fields,
     dialect: resolveDialect(config),
-    autoRelations: config.flags?.autoRelations || false,
     dryRun: config.flags?.dryRun || false,
     noDb: true, // Skip individual db:generate
     force: config.flags?.force || false,
@@ -1924,7 +1920,6 @@ export async function runGenerate(options: RunGenerateOptions = {}): Promise<voi
       collection: options.collection,
       fieldsFile: options.fieldsFile,
       dialect: options.dialect || 'sqlite',
-      autoRelations: options.autoRelations || false,
       dryRun: options.dryRun || false,
       noDb: options.noDb || false,
       force: options.force || false,

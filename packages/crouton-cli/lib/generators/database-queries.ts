@@ -317,7 +317,6 @@ function detectReferenceFields(data: Record<string, any>, config: Record<string,
   // Add standard team/metadata user references
   // These are always single references
   // Team fields are always required (all generated endpoints use @crouton/auth)
-  const useMetadata = config?.flags?.useMetadata ?? true
 
   // owner is always included (required for @crouton/auth)
   singleReferences.push({
@@ -327,20 +326,18 @@ function detectReferenceFields(data: Record<string, any>, config: Record<string,
     isUserReference: true
   })
 
-  if (useMetadata) {
-    singleReferences.push({
-      fieldName: 'createdBy',
-      targetCollection: 'users',
-      isExternal: true,
-      isUserReference: true
-    })
-    singleReferences.push({
-      fieldName: 'updatedBy',
-      targetCollection: 'users',
-      isExternal: true,
-      isUserReference: true
-    })
-  }
+  singleReferences.push({
+    fieldName: 'createdBy',
+    targetCollection: 'users',
+    isExternal: true,
+    isUserReference: true
+  })
+  singleReferences.push({
+    fieldName: 'updatedBy',
+    targetCollection: 'users',
+    isExternal: true,
+    isUserReference: true
+  })
 
   return { singleReferences, arrayReferences }
 }
@@ -614,7 +611,6 @@ interface QueryTemplateContext {
   prefixedPascalCasePlural: string
   camelCase: string
   camelCasePlural: string
-  useMetadata: boolean
   typesPath: string
   ascImport: string
   schemaImports: string
@@ -635,7 +631,7 @@ function buildFileHeader(ctx: QueryTemplateContext): string {
   // `sql` is always needed now — getAll* runs a count(*) for pagination totals.
   const sqlImport = ', sql'
   return `// Generated with JSON field post-processing support (v2025-01-11)
-import { eq, and${ctx.useMetadata ? ', desc' : ''}${ctx.ascImport}, inArray${sqlImport} } from 'drizzle-orm'
+import { eq, and, desc${ctx.ascImport}, inArray${sqlImport} } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import * as tables from './schema'
 import type { ${ctx.prefixedPascalCase}, New${ctx.prefixedPascalCase} } from '${ctx.typesPath}'
@@ -742,8 +738,8 @@ export async function update${ctx.prefixedPascalCase}(
   const [${ctx.camelCase}] = await (db as any)
     .update(tables.${ctx.tableName})
     .set({
-      ...updates,${ctx.useMetadata ? `
-      updatedBy: userId` : ''}
+      ...updates,
+      updatedBy: userId
     })
     .where(and(...conditions))
     .returning()
@@ -840,16 +836,11 @@ export function generateQueries(
   // Check if hierarchy or sortable is enabled for import modifications
   const hasHierarchy = data.hierarchy && data.hierarchy.enabled
   const hasSortable = data.sortable && data.sortable.enabled
-  const useMetadata = config?.flags?.useMetadata ?? true
   const ascImport = (hasHierarchy || hasSortable) ? ', asc' : ''
   const orderField = hasSortable ? (data.sortable.orderField || 'order') : 'order'
   const orderByClause = hasSortable
-    ? (useMetadata
-        ? `asc(tables.${tableName}.${orderField}), desc(tables.${tableName}.createdAt)`
-        : `asc(tables.${tableName}.${orderField})`)
-    : (useMetadata
-        ? `desc(tables.${tableName}.createdAt)`
-        : '')
+    ? `asc(tables.${tableName}.${orderField}), desc(tables.${tableName}.createdAt)`
+    : `desc(tables.${tableName}.createdAt)`
 
   // Generate tree queries if hierarchy is enabled
   const treeQueries = generateTreeQueries(data, tableName, prefixedPascalCase, prefixedPascalCasePlural, camelCasePlural)
@@ -866,7 +857,6 @@ export function generateQueries(
     prefixedPascalCasePlural,
     camelCase,
     camelCasePlural,
-    useMetadata,
     typesPath,
     ascImport,
     schemaImports,

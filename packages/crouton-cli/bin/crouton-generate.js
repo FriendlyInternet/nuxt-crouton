@@ -56,7 +56,6 @@ const generate = defineCommand({
     fieldsFile: { type: 'string', alias: 'f', description: 'Path to JSON schema file' },
     config: { type: 'string', alias: 'c', description: 'Use config file instead of CLI args' },
     dialect: { type: 'string', alias: 'd', description: 'Database dialect (only sqlite is supported)', default: 'sqlite' },
-    autoRelations: { type: 'boolean', description: 'Add relation stubs in comments' },
     dryRun: { type: 'boolean', description: 'Preview without writing' },
     noTranslations: { type: 'boolean', description: 'Skip translation fields' },
     force: { type: 'boolean', description: 'Force generation despite missing dependencies' },
@@ -117,7 +116,6 @@ const generate = defineCommand({
       collection: args.collection,
       fieldsFile: args.fieldsFile,
       dialect: args.dialect || 'sqlite',
-      autoRelations: args.autoRelations,
       dryRun: args.dryRun,
       noDb: args.noDb,
       force: args.force,
@@ -158,24 +156,6 @@ const configCmd = defineCommand({
       tests: args.tests,
       noAutoMerge: args.noAutoMerge,
     })
-  }
-})
-
-// ─── install ───────────────────────────────────────────────────────
-
-const installCmd = defineCommand({
-  meta: { name: 'install', description: 'Install required Nuxt modules' },
-  args: {},
-  async run() {
-    const installModulesPath = join(__dirname, '..', 'lib', 'install-modules.ts')
-    if (!existsSync(installModulesPath)) {
-      consola.error('Install script not found')
-      console.log('Please install modules manually:')
-      console.log('  pnpm add @fyit/crouton-core')
-      process.exit(1)
-    }
-    // install-modules.ts is self-executing on import
-    await tsImport(installModulesPath)
   }
 })
 
@@ -338,22 +318,6 @@ const rollbackBulkCmd = defineCommand({
   }
 })
 
-// ─── rollback-interactive ──────────────────────────────────────────
-
-const rollbackInteractiveCmd = defineCommand({
-  meta: { name: 'rollback-interactive', description: 'Interactive rollback with selection UI' },
-  args: {
-    dryRun: { type: 'boolean', description: 'Preview what will be removed' },
-    keepFiles: { type: 'boolean', description: 'Keep generated files, only clean configs' },
-  },
-  async run({ args }) {
-    const { interactiveRollback } = await tsImport(
-      join(__dirname, '..', 'lib', 'rollback-interactive.ts')
-    )
-    await interactiveRollback({ dryRun: args.dryRun, keepFiles: args.keepFiles })
-  }
-})
-
 // ─── doctor ────────────────────────────────────────────────────────
 
 const doctorCmd = defineCommand({
@@ -408,37 +372,6 @@ const scaffoldAppCmd = defineCommand({
   }
 })
 
-// ─── seed-translations ─────────────────────────────────────────────
-
-const seedTranslationsCmd = defineCommand({
-  meta: { name: 'seed-translations', description: 'Seed translations from JSON locale files to database' },
-  args: {
-    layer: { type: 'string', description: 'Seed from specific layer only' },
-    team: { type: 'string', description: 'Team ID/slug to seed to (default: system)' },
-    dryRun: { type: 'boolean', description: 'Preview translations without seeding' },
-    force: { type: 'boolean', description: 'Overwrite existing translations' },
-    apiUrl: { type: 'string', description: 'API base URL (default: http://localhost:3000)' },
-    sql: { type: 'boolean', description: 'Output SQL statements instead of using API' },
-  },
-  async run({ args }) {
-    const seedPath = join(__dirname, '..', 'lib', 'seed-translations.ts')
-    if (!existsSync(seedPath)) {
-      consola.error('Seed translations script not found. Please ensure the package is properly installed.')
-      process.exit(1)
-    }
-
-    const { seedTranslationsFromJson } = await tsImport(seedPath)
-    await seedTranslationsFromJson({
-      layer: args.layer,
-      team: args.team,
-      dryRun: args.dryRun,
-      force: args.force,
-      apiUrl: args.apiUrl,
-      sql: args.sql,
-    })
-  }
-})
-
 // ─── db-pull ────────────────────────────────────────────────────
 
 const dbPullCmd = defineCommand({
@@ -460,22 +393,6 @@ const dbPullCmd = defineCommand({
   }
 })
 
-// ─── deploy-check ─────────────────────────────────────────────────
-
-const deployCheckCmd = defineCommand({
-  meta: { name: 'deploy-check', description: 'Validate deployment readiness (wrangler config, CI workflow, bindings)' },
-  args: {
-    dir: { type: 'positional', description: 'App directory to check', required: false },
-  },
-  async run({ args }) {
-    const { deployCheck, printDeployReport } = await tsImport(join(__dirname, '..', 'lib', 'deploy-check.ts'))
-    const appDir = args.dir || process.cwd()
-    const result = await deployCheck(appDir)
-    printDeployReport(result)
-    if (!result.ok) process.exit(1)
-  }
-})
-
 // ─── main ──────────────────────────────────────────────────────────
 
 const main = defineCommand({
@@ -487,16 +404,12 @@ const main = defineCommand({
   subCommands: {
     generate,
     config: configCmd,
-    install: installCmd,
     init: initCmd,
     add: addCmd,
     rollback: rollbackCmd,
     'rollback-bulk': rollbackBulkCmd,
-    'rollback-interactive': rollbackInteractiveCmd,
     doctor: doctorCmd,
-    'deploy-check': deployCheckCmd,
     'scaffold-app': scaffoldAppCmd,
-    'seed-translations': seedTranslationsCmd,
     'db-pull': dbPullCmd,
   },
 })
