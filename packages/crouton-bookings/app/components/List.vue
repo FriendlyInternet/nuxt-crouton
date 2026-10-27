@@ -442,18 +442,16 @@ watch(
     const latestDate = dates[dates.length - 1]!
     const targetKey = formatDateKey(latestDate)
 
-    // Days without bookings get their own section on render, so wait for the DOM
-    nextTick(() => {
-      const element = dateElementRefs.value.get(targetKey)
-      if (element) {
-        element.scrollIntoView({
-          behavior: 'smooth',
-          block: 'start',
-        })
-      }
-    })
+    // flush: 'post' — runs after the DOM update, so a day without bookings already has its section
+    const element = dateElementRefs.value.get(targetKey)
+    if (element) {
+      element.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }
   },
-  { deep: true },
+  { deep: true, flush: 'post' },
 )
 
 // Watch for scrollToDate changes (after booking creation)
