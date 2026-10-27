@@ -253,3 +253,46 @@ test('a strong signal outranks a stale label — closed issue still refuses', ()
   })
   assert.equal(v.action, 'refuse')
 })
+
+// ── #2779: a reopened issue can be worked again ───────────────────────────────────
+test('reopened AFTER the merge → claim proceeds (#813: PR #817 merged 2026-06-24, reopened 2026-10-27)', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 817, state: 'closed', merged: true, baseRef: 'main', mergedAt: '2026-06-24T10:00:00Z' }],
+    lastReopenedAt: '2026-10-27T08:00:00Z',
+    now: T0,
+  })
+  assert.equal(v.action, 'proceed')
+})
+
+test('merged AFTER the reopen → still refuses', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 900, state: 'closed', merged: true, baseRef: 'main', mergedAt: '2026-10-28T10:00:00Z' }],
+    lastReopenedAt: '2026-10-27T08:00:00Z',
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+  assert.equal(v.claimedBy, 900)
+  assert.match(v.reason, /reopened after it/)
+})
+
+test('never reopened → a merged PR still refuses', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 817, state: 'closed', merged: true, baseRef: 'main', mergedAt: '2026-06-24T10:00:00Z' }],
+    lastReopenedAt: null,
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+})
+
+test('unknown merge time fails safe → still refuses even if reopened', () => {
+  const v = decideClaim({
+    issueState: 'open',
+    linkedPRs: [{ number: 817, state: 'closed', merged: true, baseRef: 'main' }],
+    lastReopenedAt: '2026-10-27T08:00:00Z',
+    now: T0,
+  })
+  assert.equal(v.action, 'refuse')
+})
