@@ -2,7 +2,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { reviewAccount, readStagingUrl, fillTeam, formatBody } from './staging-get.mjs'
+import { reviewAccount, readStagingUrl, fillTeam, formatBody, stagingGuard, buildInit } from './staging-get.mjs'
 
 test('reviewAccount matches the deploy-time derivation (key main)', () => {
   const { email, password } = reviewAccount('velo', 's3')
@@ -31,4 +31,17 @@ test('formatBody counts rows for arrays and wrapped arrays, passes non-JSON thro
   assert.equal(formatBody('{"items":[1,2,3]}').count, ' · 3 row(s)')
   assert.equal(formatBody('{"ok":true}').count, '')
   assert.deepEqual(formatBody('<html>'), { body: '<html>', count: '' })
+})
+
+test('stagingGuard allows *.pmcp.dev, refuses production and lookalikes', () => {
+  assert.equal(stagingGuard('https://velo.pmcp.dev'), '')
+  assert.match(stagingGuard('https://velo.friendlyinter.net'), /Refusing/)
+  assert.match(stagingGuard('https://pmcp.dev.evil.com'), /Refusing/)
+  assert.match(stagingGuard(''), /Refusing/)
+})
+
+test('buildInit sends the body for non-GET only', () => {
+  assert.equal(buildInit('PATCH', {}, '{"a":1}').body, '{"a":1}')
+  assert.equal('body' in buildInit('GET', {}, '{"a":1}'), false)
+  assert.equal('body' in buildInit('POST', {}, undefined), false)
 })
