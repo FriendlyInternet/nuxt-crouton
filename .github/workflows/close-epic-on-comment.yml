@@ -11,7 +11,7 @@ name: Close epic on /close-epic comment
 # postmortem-before-close, skip the "🧪 Verify the whole thing" gate, and cause reopen
 # churn. The comment stays the explicit human trigger. See #856.
 #
-# Composes with (no clash): strip-status-on-close.yml + project-status.yml (both fire on
+# Composes with (no clash): strip-status-on-close.yml + status.yml (both fire on
 # `issues: closed`); label-ready-epics.yml (the daily labeller). The `/close-epic` keyword
 # is distinct from the `approve`/`lgtm` sign-off keywords (resume-on-comment.yml).
 on:

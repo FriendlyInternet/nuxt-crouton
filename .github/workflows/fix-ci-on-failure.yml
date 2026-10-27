@@ -43,7 +43,7 @@ jobs:
     # AGENT_HARNESS=pi made pi the live lane the condition could not be true for any PR: 1718
     # runs, 100 of the last 100 `skipped`, zero that ever acted (#2089). A false job `if`
     # reports `skipped`, which is indistinguishable from "nothing to do", so it was never red
-    # and nobody noticed. `pipeline-pr-status.yml` learned the same lesson in #1815; this
+    # and nobody noticed. `status.yml` learned the same lesson in #1815; this
     # sibling didn't — the definition now lives once, in scripts/lib/pipeline-branch.mjs.
     if: >
       github.event.workflow_run.conclusion == 'failure' &&
