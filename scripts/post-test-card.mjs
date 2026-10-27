@@ -14,7 +14,8 @@
  */
 import { readFileSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { decideTestCard, buildCard, buildTestMail, extractChecks, extractSummary } from './test-card.mjs'
+import { decideTestCard, buildCard, buildTestMail, extractChecks, extractSummary, deriveApps } from './test-card.mjs'
+import { loadApps } from './deploy-detect.mjs'
 
 const REPO = process.env.DIGEST_REPO || 'FriendlyInternet/nuxt-crouton'
 const [OWNER, NAME] = REPO.split('/')
@@ -43,12 +44,25 @@ async function gh(path, init) {
 const labelNames = it => (it.labels || []).map(l => (typeof l === 'string' ? l : l.name))
 
 // Is the epic's merged epic→main PR contained in the deployed commit?
-async function isDeployed(epicNumber) {
+async function mergedEpicPr(epicNumber) {
   const prs = await gh(`/repos/${OWNER}/${NAME}/pulls?state=closed&base=main&per_page=100`)
-  const pr = prs.find(p => p.merged_at && new RegExp(`^epic/${epicNumber}-`).test(p.head.ref))
+  return prs.find(p => p.merged_at && new RegExp(`^epic/${epicNumber}-`).test(p.head.ref))
+}
+
+async function isDeployed(epicNumber) {
+  const pr = await mergedEpicPr(epicNumber)
   if (!pr?.merge_commit_sha) return false
   const cmp = await gh(`/repos/${OWNER}/${NAME}/compare/${pr.merge_commit_sha}...${SHA}`)
   return cmp.status === 'ahead' || cmp.status === 'identical'
+}
+
+// No `app:`/`poc:` label → derive the app from what the merged epic PR deployed (#2748).
+async function derivedAppLabel(epic) {
+  const pr = await mergedEpicPr(epic.number)
+  if (!pr) return []
+  const files = (await gh(`/repos/${OWNER}/${NAME}/pulls/${pr.number}/files?per_page=100`)).map(f => f.filename)
+  const ids = deriveApps({ changedFiles: files, apps: loadApps(), text: epic.body || '' })
+  return ids.length === 1 ? [`app:${ids[0]}`] : []
 }
 
 function appInfo(labels) {
@@ -101,7 +115,8 @@ for (const e of epics) {
   const deployed = await isDeployed(e.number)
   const d = decideTestCard({ subIssues, labels, comments, deployed })
   if (!d.post) { console.log(`  #${e.number} skip — ${d.reason}`); continue }
-  const info = appInfo(labels)
+  const hasApp = labels.some(n => n.startsWith('app:') || n.startsWith('poc:'))
+  const info = appInfo(hasApp ? labels : [...labels, ...await derivedAppLabel(e).catch(() => [])])
   const checks = extractChecks(e.body || '')
   const body = buildCard({ epicNumber: e.number, title: e.title, ...info, checks })
   console.log(`  #${e.number} ${APPLY ? 'POST' : 'would post'} test card — ${d.reason}`)

@@ -61,7 +61,7 @@ jobs:
             const OWNER = process.env.OWNER_LOGIN || 'pmcp'
             const ws = process.env.GITHUB_WORKSPACE
             const { parsePipelineBlock } = await import(`${ws}/scripts/pipeline-context.mjs`)
-            const { parseEpicNumber, decideOpen, resolveEpicTarget, packagesApprovalCarry, closesNumbers } = await import(`${ws}/scripts/epic-ready.mjs`)
+            const { parseEpicNumber, decideOpen, resolveEpicTarget, packagesApprovalCarry, closesNumbers, collectApprovalLines } = await import(`${ws}/scripts/epic-ready.mjs`)
 
             // Resolve (epicNumber, epicBranch) from either the closed child's pipeline block
             // or a manual dispatch's branch input. When no block/epic is recorded, default
@@ -141,6 +141,7 @@ jobs:
             // issue. The decision is the pure, unit-tested packagesApprovalCarry(); only the
             // fetching lives here. Any lookup failure degrades to "not approved" (the guard then
             // asks, as before) — never to a false declaration.
+            const epicBody = (await github.rest.issues.get({ owner, repo, issue_number: epicNumber })).data.body || ''
             const carryInput = []
             try {
               const merged = (await github.paginate(github.rest.pulls.list,
@@ -165,13 +166,18 @@ jobs:
             } catch (e) { core.warning(`sub-PR approval gather for ${epicBranch}: ${e.message} — the shared-code check will ask`) }
             const carry = packagesApprovalCarry({ subPrs: carryInput, owner: OWNER })
             core.info(`packages sign-off carry: touched=${JSON.stringify(carry.packagesPrs)} approved=${JSON.stringify(carry.approved)} unapproved=${JSON.stringify(carry.unapproved)}`)
-            const carrySection = carry.packagesPrs.length === 0 ? '' :
+            // #2748: approvals already written as `Packages-approved:` lines on the epic or its
+            // children are copied too (de-duplicated), so a hand-approved epic passes the guard.
+            const declared = collectApprovalLines([epicBody, ...subIssues.map(s => s.body)])
+              .filter(l => l !== carry.line)
+            const declaredSection = declared.length ? `\n\n${declared.join('\n')}\n` : ''
+            const carrySection = declaredSection + (carry.packagesPrs.length === 0 ? '' :
               carry.line
                 ? `\n\n${carry.line}\n`
                 : `\n\n## 🔒 Shared code not yet signed off\n` +
                   `These sub-PRs changed \`packages/**\` without an approval from @${OWNER} on the PR or its issue: ` +
                   `${carry.unapproved.map(n => `#${n}`).join(', ')}. The "Packages edit declared" check stays red until you ` +
-                  `add the \`packages:approved\` label here or a \`Packages-approved:\` line. (#2494)\n`
+                  `add the \`packages:approved\` label here or a \`Packages-approved:\` line. (#2494)\n`)
 
             // Reference the epic WITHOUT closing it (postmortem gate, #856).
             const epic = (await github.rest.issues.get({ owner, repo, issue_number: epicNumber })).data

@@ -60,6 +60,14 @@ Each todo requires:
 - `content`: Imperative form (e.g., "Fix authentication bug")
 - `activeForm`: Present continuous (e.g., "Fixing authentication bug")
 
+## Interactive session = plan, hand off, follow up (#2785)
+
+See `AGENTS.md` → *The interactive agent plans; the pipeline builds*. In this repo:
+
+- **Hand off** by labelling the ticket `delegate` (the pipeline classifies it and its worker opens the PR on the epic branch). Don't write the code or `git commit`/push/merge it yourself.
+- **Follow up** on the pipeline PR with a top-level comment starting `**Worker:** <what to change>` (#2453) — that re-runs the worker.
+- **Test-first** (packages/* logic): the agreed test cases go into the ticket text; the worker builds to them. Steps 3 and 6 below describe what the *pipeline worker* does, not the interactive agent.
+
 ## Task Execution Workflow (MANDATORY)
 
 Every task is a **GitHub issue** (see `### GitHub Issue Tracking` below) and follows this 5-step flow:
@@ -497,7 +505,7 @@ UI-touching if it adds/changes a `.vue` component, `app/components|layouts|pages
 (`crouton-themes`, a `ui:` block in `app.config.ts`), or app CSS/theme tokens. Pure
 `<script>`/composables/types, `server/**`, config, tests, and docs are **not** UI — skip this.
 
-**Look before you merge.** An interactive agent does not merge a UI-touching PR until it has *looked at* a usable preview screenshot of the named `review-surface` page. If there is none (missing, blank, loader), hand the owner the preview link and one yes/no instead of merging.
+**Look before you report.** An interactive agent never merges a UI-touching PR. It *looks at* the preview screenshot of the named `review-surface` page and tells the owner (preview link + one yes/no). If the screenshot is missing, blank or a loader, it says so instead of approving.
 
 **Default gate — live preview:** run the **`ui-proposal`** skill to deploy a rough build to
 staging with `NUXT_PUBLIC_CROUTON_REVIEW=true` (via `/poc-deploy` or `pnpm cf:staging`), post the
@@ -578,12 +586,13 @@ on `status:blocked`; approval is a **comment** containing `lgtm`/`approve` (not 
 #572) and unblocks the code. (The CI `test` job already hard-gates `pnpm test` — this gate is about
 *order*, writing the test first, not enforcement.)
 
-**Two lanes, two shapes (owner decision 2026-10-24, #2441).** The *interactive* lane holds for a
-test `lgtm` as above. The *pipeline* lane (`work-issue-pidev.yml`) does **not** hold: the worker
-ships code **and** tests in one PR, and the finish step's tests gate (#1885) opens the PR as a
-**draft** when a `packages/*` logic file lands with no test — visible, not blocking. So a pipeline
-ticket for package logic says "tests included" and must not ask for a test-first hold; a worker
-that meets one in a ticket follows this rule and says so in its done comment.
+**Two lanes, one shape (#2785, supersedes #2441's interactive hold).** The interactive agent does not
+write the code. It agrees the test cases with the owner in plain language and writes them into the
+ticket; the hold happens on the ticket, before `delegate`, not on a PR. The pipeline worker
+(`work-issue-pidev.yml`) then writes the tests **and** the code to those cases in one PR, and the
+finish step's tests gate (#1885) opens the PR as a **draft** when a `packages/*` logic file lands
+with no test — visible, not blocking. A worker that meets a ticket asking for a test-first hold
+follows this rule and says so in its done comment.
 
 **Plan → review → build (pipeline lane, #2757, epic #2754).** A `work-this` issue that is a bug
 (`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
