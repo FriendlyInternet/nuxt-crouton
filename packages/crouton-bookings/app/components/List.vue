@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onMounted, onUnmounted, type ComponentPublicInstance } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useIntersectionObserver } from '@vueuse/core'
+import { toDateKey, isSameDay } from '@fyit/crouton-core/shared/utils/date'
 import type { Booking } from '../types/booking'
 
 interface Props {
@@ -13,16 +15,18 @@ interface Props {
   emptyMessage?: string
   /** Whether filters are active (changes empty state message) */
   hasActiveFilters?: boolean
-  /** Dates to highlight (from calendar multi-select) */
-  selectedDates?: Date[]
+  /** The selected day (from the calendar) */
+  selectedDate?: Date | null
   /** Specific booking ID to highlight (from calendar indicator hover) */
   highlightedBookingId?: string | null
   /** Date where inline creation card should appear */
   creatingAtDate?: Date | null
-  /** Date to scroll to (after booking creation) */
-  scrollToDate?: Date | null
+  /** Day to scroll to. A fresh Date each time, so the same day can be targeted again. */
+  scrollTarget?: Date | null
   /** Active location filter - when set, only these locations are selectable in create form */
   activeLocationFilter?: string[]
+  /** Whether every location is fully booked on a date (disables the New booking row) */
+  isDayFullyBooked?: (date: Date) => boolean
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -31,11 +35,12 @@ const props = withDefaults(defineProps<Props>(), {
   error: undefined,
   emptyMessage: undefined,
   hasActiveFilters: false,
-  selectedDates: () => [],
+  selectedDate: null,
   highlightedBookingId: null,
   creatingAtDate: null,
-  scrollToDate: null,
+  scrollTarget: null,
   activeLocationFilter: undefined,
+  isDayFullyBooked: undefined,
 })
 
 const emit = defineEmits<{
@@ -49,6 +54,8 @@ const emit = defineEmits<{
   updated: []
   /** Emitted when an email is sent (so parent can refresh email stats) */
   emailSent: []
+  /** Emitted when the ghost "New booking" row of a day is tapped */
+  newBooking: [date: Date]
 }>()
 
 // Recently created booking IDs for highlight effect
@@ -151,16 +158,8 @@ function getSendingEmailType(bookingId: string): string | null {
   return null
 }
 
-// Container ref for scrolling
-const listContainerRef = ref<HTMLElement | null>(null)
-
 // Map of date keys to element refs for scroll targeting
 const dateElementRefs = ref<Map<string, HTMLElement>>(new Map())
-
-// Format date as YYYY-MM-DD for map key
-function formatDateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
 
 // Group bookings by month/year for separators, with date subgroups for scrolling
 interface DateGroup {
@@ -176,160 +175,39 @@ interface MonthGroup {
   dateGroups: DateGroup[]
 }
 
+// Bookings grouped by day, plus an empty section for the creation date and the selected day
 const groupedBookings = computed((): MonthGroup[] => {
-  // Use a Map to consolidate all bookings by month (avoids duplicate month headers)
-  const monthMap = new Map<string, MonthGroup>()
+  const days = new Map<string, DateGroup>()
+  const dayFor = (date: Date, isCreatePlaceholder = false) => {
+    const dateKey = toDateKey(date)
+    let day = days.get(dateKey)
+    if (!day) {
+      day = { dateKey, date: new Date(date), bookings: [], isCreatePlaceholder }
+      days.set(dateKey, day)
+    }
+    return day
+  }
 
   for (const booking of resolvedBookings.value) {
-    const date = new Date(booking.date)
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}`
-    const dateKey = formatDateKey(date)
-    const monthLabel = new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' }).format(date)
-
-    // Find or create month group in the Map
-    let monthGroup = monthMap.get(monthKey)
-    if (!monthGroup) {
-      monthGroup = { key: monthKey, label: monthLabel, dateGroups: [] }
-      monthMap.set(monthKey, monthGroup)
-    }
-
-    // Find or create date group within month
-    let dateGroup = monthGroup.dateGroups.find(dg => dg.dateKey === dateKey)
-    if (!dateGroup) {
-      dateGroup = { dateKey, date: new Date(date), bookings: [] }
-      monthGroup.dateGroups.push(dateGroup)
-    }
-
-    dateGroup.bookings.push(booking)
+    dayFor(new Date(booking.date)).bookings.push(booking)
   }
+  if (props.creatingAtDate) dayFor(props.creatingAtDate, true)
+  if (props.selectedDate) dayFor(props.selectedDate)
 
-  // Sort month keys chronologically and convert Map to array
-  const sortedMonthKeys = [...monthMap.keys()].sort()
-  const monthGroups = sortedMonthKeys.map(key => monthMap.get(key)!)
-
-  // Sort date groups within each month chronologically
-  for (const monthGroup of monthGroups) {
-    monthGroup.dateGroups.sort((a, b) => a.date.getTime() - b.date.getTime())
+  const months = new Map<string, MonthGroup>()
+  const sortedDays = [...days.values()].sort((a, b) => a.date.getTime() - b.date.getTime())
+  for (const day of sortedDays) {
+    const key = `${day.date.getFullYear()}-${String(day.date.getMonth()).padStart(2, '0')}`
+    let month = months.get(key)
+    if (!month) {
+      const label = new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' }).format(day.date)
+      month = { key, label, dateGroups: [] }
+      months.set(key, month)
+    }
+    month.dateGroups.push(day)
   }
-
-  return monthGroups
+  return [...months.values()]
 })
-
-// Extended grouped bookings that includes the creation date placeholder in the correct position
-const groupedBookingsWithCreateDate = computed((): MonthGroup[] => {
-  const baseGroups = groupedBookings.value
-
-  // If not creating or already has bookings on that date, return as-is
-  if (!props.creatingAtDate || creatingDateHasBookings.value) {
-    return baseGroups
-  }
-
-  // Create a deep copy to avoid mutating the original
-  const result: MonthGroup[] = JSON.parse(JSON.stringify(baseGroups))
-
-  const createDate = props.creatingAtDate
-  const createMonthKey = `${createDate.getFullYear()}-${String(createDate.getMonth()).padStart(2, '0')}`
-  const createDateKey = formatDateKey(createDate)
-  const createMonthLabel = new Intl.DateTimeFormat(locale.value, { month: 'long', year: 'numeric' }).format(createDate)
-
-  // Find or create the month group for the creation date
-  let monthIndex = result.findIndex(mg => mg.key === createMonthKey)
-
-  if (monthIndex === -1) {
-    // Need to insert a new month group in the correct position
-    const newMonthGroup: MonthGroup = {
-      key: createMonthKey,
-      label: createMonthLabel,
-      dateGroups: [{
-        dateKey: createDateKey,
-        date: new Date(createDate),
-        bookings: [],
-        isCreatePlaceholder: true,
-      }],
-    }
-
-    // Find correct position (sorted by date)
-    const createTime = createDate.getTime()
-    let insertIndex = result.length // default to end
-
-    for (let i = 0; i < result.length; i++) {
-      const firstDateInMonth = result[i]!.dateGroups[0]?.date
-      if (firstDateInMonth && new Date(firstDateInMonth).getTime() > createTime) {
-        insertIndex = i
-        break
-      }
-    }
-
-    result.splice(insertIndex, 0, newMonthGroup)
-  }
-  else {
-    // Month exists, insert the date group in the correct position
-    const monthGroup = result[monthIndex]!
-    const createTime = createDate.getTime()
-
-    // Find correct position within the month (sorted by date)
-    let insertIndex = monthGroup.dateGroups.length // default to end
-
-    for (let i = 0; i < monthGroup.dateGroups.length; i++) {
-      const dateGroupTime = new Date(monthGroup.dateGroups[i]!.date).getTime()
-      if (dateGroupTime > createTime) {
-        insertIndex = i
-        break
-      }
-    }
-
-    monthGroup.dateGroups.splice(insertIndex, 0, {
-      dateKey: createDateKey,
-      date: new Date(createDate),
-      bookings: [],
-      isCreatePlaceholder: true,
-    })
-  }
-
-  return result
-})
-
-// Get all unique date keys for scroll targeting
-const allDateKeys = computed(() => {
-  const keys: string[] = []
-  for (const monthGroup of groupedBookings.value) {
-    for (const dateGroup of monthGroup.dateGroups) {
-      keys.push(dateGroup.dateKey)
-    }
-  }
-  return keys
-})
-
-// Find the nearest date key to scroll to (for dates without bookings)
-function findNearestDateKey(targetDate: Date): string | null {
-  const targetKey = formatDateKey(targetDate)
-  const keys = allDateKeys.value
-
-  if (keys.length === 0) return null
-  if (keys.includes(targetKey)) return targetKey
-
-  // Find nearest date
-  const targetTime = targetDate.getTime()
-  let nearestKey = keys[0]!
-  let nearestDiff = Infinity
-
-  for (const key of keys) {
-    const [year, month, day] = key.split('-').map(Number) as [number, number, number]
-    const keyDate = new Date(year, month - 1, day)
-    const diff = Math.abs(keyDate.getTime() - targetTime)
-
-    if (diff < nearestDiff) {
-      nearestDiff = diff
-      nearestKey = key
-    }
-  }
-
-  return nearestKey
-}
-
-// Track top visible date for calendar sync
-const lastEmittedWeek = ref<string | null>(null)
-const observer = ref<IntersectionObserver | null>(null)
 
 // Get ISO week key to detect week changes
 function getWeekKey(date: Date): string {
@@ -341,127 +219,64 @@ function getWeekKey(date: Date): string {
   return `${d.getFullYear()}-W${weekNum}`
 }
 
-// IntersectionObserver callback to find top visible date group
-function observerCallback(entries: IntersectionObserverEntry[]) {
-  // Find topmost visible date group
-  let topEntry: IntersectionObserverEntry | null = null
-  let topY = Infinity
+// Report the top visible day to the calendar when its week changes
+let lastEmittedWeek: string | null = null
+useIntersectionObserver(
+  () => [...dateElementRefs.value.values()],
+  (entries) => {
+    // Find topmost visible date group
+    let topEntry: IntersectionObserverEntry | null = null
+    let topY = Infinity
 
-  for (const entry of entries) {
-    if (entry.isIntersecting && entry.boundingClientRect.top < topY && entry.boundingClientRect.top >= 0) {
-      topY = entry.boundingClientRect.top
-      topEntry = entry
-    }
-  }
-
-  if (topEntry) {
-    const dateKey = topEntry.target.getAttribute('data-date-key')
-    if (dateKey) {
-      const [year, month, day] = dateKey.split('-').map(Number) as [number, number, number]
-      const date = new Date(year, month - 1, day)
-      const weekKey = getWeekKey(date)
-
-      // Only emit if week changed
-      if (weekKey !== lastEmittedWeek.value) {
-        lastEmittedWeek.value = weekKey
-        emit('topVisibleDateChange', date)
+    for (const entry of entries) {
+      if (entry.isIntersecting && entry.boundingClientRect.top < topY && entry.boundingClientRect.top >= 0) {
+        topY = entry.boundingClientRect.top
+        topEntry = entry
       }
     }
-  }
-}
 
-// Register element ref for a date and observe for scroll tracking
+    const dateKey = topEntry?.target.getAttribute('data-date-key')
+    if (!dateKey) return
+    const [year, month, day] = dateKey.split('-').map(Number) as [number, number, number]
+    const date = new Date(year, month - 1, day)
+    const weekKey = getWeekKey(date)
+    if (weekKey !== lastEmittedWeek) {
+      lastEmittedWeek = weekKey
+      emit('topVisibleDateChange', date)
+    }
+  },
+  { rootMargin: '-10% 0px -80% 0px', threshold: 0 }, // Top 10-20% of viewport triggers
+)
+
+// Register the element of a date section for scroll targeting
 function setDateRef(dateKey: string, el: HTMLElement | null) {
   if (el) {
     dateElementRefs.value.set(dateKey, el)
     el.setAttribute('data-date-key', dateKey)
-    observer.value?.observe(el)
   } else {
-    const existing = dateElementRefs.value.get(dateKey)
-    if (existing) {
-      observer.value?.unobserve(existing)
-    }
     dateElementRefs.value.delete(dateKey)
   }
 }
-
-// Set up IntersectionObserver on mount
-onMounted(() => {
-  observer.value = new IntersectionObserver(observerCallback, {
-    rootMargin: '-10% 0px -80% 0px', // Top 10-20% of viewport triggers
-    threshold: 0,
-  })
-
-  // Observe any already-registered elements
-  for (const el of dateElementRefs.value.values()) {
-    observer.value.observe(el)
-  }
-})
-
-// Clean up observer on unmount
-onUnmounted(() => {
-  observer.value?.disconnect()
-})
 
 // Handle click on booking date - emit to navigate calendar
 function onBookingDateClick(date: Date) {
   emit('dateClick', date)
 }
 
-// Flag to temporarily disable highlight scroll during creation scroll
-const isScrollingToCreated = ref(false)
-
-// Watch for selected dates changes and scroll to the latest one
+// The one scroll path: bring the target day's section into view once the DOM has it
 watch(
-  () => props.selectedDates,
-  (dates) => {
-    // Skip if we're scrolling to a newly created booking
-    if (isScrollingToCreated.value) return
-    if (!dates || dates.length === 0) return
-
-    // Scroll to the most recently added date (last in array)
-    const latestDate = dates[dates.length - 1]!
-    const targetKey = formatDateKey(latestDate)
-    if (!allDateKeys.value.includes(targetKey)) return
-
-    const element = dateElementRefs.value.get(targetKey)
-    if (element) {
-      element.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      })
-    }
+  () => props.scrollTarget,
+  (target) => {
+    if (!target) return
+    dateElementRefs.value.get(toDateKey(target))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   },
-  { deep: true },
+  { flush: 'post' },
 )
 
-// Watch for scrollToDate changes (after booking creation)
-watch(
-  () => props.scrollToDate,
-  (newDate) => {
-    if (!newDate) return
-
-    // Disable highlight scroll temporarily
-    isScrollingToCreated.value = true
-
-    // Wait for DOM to update with new booking
-    nextTick(() => {
-      const targetKey = formatDateKey(newDate)
-      const element = dateElementRefs.value.get(targetKey)
-
-      if (element) {
-        element.scrollIntoView({
-          behavior: 'instant',
-          block: 'center',
-        })
-      }
-      // Re-enable highlight scroll shortly after
-      setTimeout(() => {
-        isScrollingToCreated.value = false
-      }, 100)
-    })
-  },
-)
+// Whether a day section is the calendar-selected day (shows the New booking row)
+function isSelectedDateKey(dateKey: string): boolean {
+  return !!props.selectedDate && toDateKey(props.selectedDate) === dateKey
+}
 
 // Check if a booking should be highlighted
 function isHighlighted(booking: Booking): boolean {
@@ -471,58 +286,15 @@ function isHighlighted(booking: Booking): boolean {
   }
 
   // Fall back to date-based highlight (from calendar day selection)
-  if (!props.selectedDates || props.selectedDates.length === 0) return false
-  const bookingDate = new Date(booking.date)
-  return props.selectedDates.some(d =>
-    bookingDate.getFullYear() === d.getFullYear()
-    && bookingDate.getMonth() === d.getMonth()
-    && bookingDate.getDate() === d.getDate(),
-  )
+  return !!props.selectedDate && isSameDay(new Date(booking.date), props.selectedDate)
 }
 
 // Creation date key for positioning the inline create card
 const creatingAtDateKey = computed(() => {
   if (!props.creatingAtDate) return null
-  return formatDateKey(props.creatingAtDate)
+  return toDateKey(props.creatingAtDate)
 })
 
-// Check if creating at date is in an existing date group
-const creatingDateHasBookings = computed(() => {
-  if (!creatingAtDateKey.value) return false
-  return allDateKeys.value.includes(creatingAtDateKey.value)
-})
-
-// Ref for the create card element - use callback ref to handle multiple conditional refs
-const createCardElement = ref<HTMLElement | null>(null)
-
-// Callback ref setter - ensures we always get the element, not an array
-function setCreateCardRef(el: Element | ComponentPublicInstance | null) {
-  // Handle Vue component instances (get $el) or plain HTML elements
-  if (el && '$el' in el) {
-    createCardElement.value = el.$el as HTMLElement
-  } else {
-    createCardElement.value = el as HTMLElement | null
-  }
-}
-
-// Scroll to create card when it appears
-watch(
-  () => props.creatingAtDate,
-  (newDate) => {
-    if (!newDate) return
-
-    // Scroll to the create card
-    nextTick(() => {
-      const el = createCardElement.value
-      if (el && typeof el.scrollIntoView === 'function') {
-        el.scrollIntoView({
-          behavior: 'smooth',
-          block: 'center',
-        })
-      }
-    })
-  },
-)
 </script>
 
 <template>
@@ -559,9 +331,9 @@ watch(
     </div>
 
     <!-- Empty state (but might have create card) -->
-    <div v-else-if="resolvedBookings.length === 0">
+    <div v-else-if="resolvedBookings.length === 0 && !selectedDate">
       <!-- Inline create card when empty -->
-      <div v-if="creatingAtDate" :ref="setCreateCardRef" class="scroll-mt-4">
+      <div v-if="creatingAtDate" class="scroll-mt-4">
         <CroutonBookingsBookingCreateCard
           :date="creatingAtDate"
           :active-location-filter="activeLocationFilter"
@@ -586,8 +358,8 @@ watch(
     </div>
 
     <!-- Bookings list with month/year separators -->
-    <div v-else ref="listContainerRef" class="flex flex-col gap-4">
-      <div v-for="monthGroup in groupedBookingsWithCreateDate" :key="monthGroup.key" class="flex flex-col gap-2">
+    <div v-else class="flex flex-col gap-4">
+      <div v-for="monthGroup in groupedBookings" :key="monthGroup.key" class="flex flex-col gap-2">
         <!-- Month/Year separator -->
         <div class="flex items-center gap-3 py-2">
           <div class="h-px w-4 bg-muted/30" />
@@ -607,7 +379,6 @@ watch(
           <!-- Create card for placeholder date (new date with no bookings) -->
           <div
             v-if="dateGroup.isCreatePlaceholder && creatingAtDate"
-            :ref="setCreateCardRef"
             class="scroll-mt-4"
           >
             <CroutonBookingsBookingCreateCard
@@ -623,8 +394,7 @@ watch(
             <!-- Inline create card at TOP if creating at this date (existing date with bookings) -->
             <div
               v-if="creatingAtDateKey === dateGroup.dateKey"
-              :ref="setCreateCardRef"
-              class="scroll-mt-4"
+                class="scroll-mt-4"
             >
               <CroutonBookingsBookingCreateCard
                 :date="creatingAtDate!"
@@ -657,6 +427,28 @@ watch(
                 @edit="handleEditClick(booking)"
               />
             </template>
+
+            <!-- Empty selected day -->
+            <p
+              v-if="dateGroup.bookings.length === 0 && creatingAtDateKey !== dateGroup.dateKey"
+              class="text-sm text-muted px-1 py-2"
+            >
+              {{ t('bookings.calendar.noBookings') }}
+            </p>
+
+            <!-- Ghost row: start a booking for this selected day -->
+            <UButton
+              v-if="isSelectedDateKey(dateGroup.dateKey) && creatingAtDateKey !== dateGroup.dateKey"
+              block
+              variant="outline"
+              color="neutral"
+              icon="i-lucide-plus"
+              class="border-dashed"
+              :disabled="isDayFullyBooked?.(new Date(dateGroup.date))"
+              @click="emit('newBooking', new Date(dateGroup.date))"
+            >
+              {{ isDayFullyBooked?.(new Date(dateGroup.date)) ? t('bookings.calendar.fullyBooked') : t('bookings.calendar.newBooking') }}
+            </UButton>
           </template>
         </div>
       </div>

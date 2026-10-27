@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import type { Booking, LocationData } from '../types/booking'
+import { toDateKey } from '@fyit/crouton-core/shared/utils/date'
 
 interface Props {
   /** The date for this booking */
@@ -222,7 +223,7 @@ async function handleSubmit() {
           // Slot is stored as JSON array string in DB
           slot: localSlotIds.value.length > 0 ? JSON.stringify(localSlotIds.value) : null,
           group: localGroupId.value,
-          date: props.date.toISOString().split('T')[0],
+          date: toDateKey(props.date),
         },
       })
       // Clear editing state
