@@ -1,5 +1,5 @@
 // Generator for Field component folder (Input.vue, Select.vue, CardMini.vue)
-import { toCase } from '../utils/helpers.ts'
+import { toCase, jsString, htmlAttr } from '../utils/helpers.ts'
 
 /**
  * Generate field-specific components for dependent field rendering
@@ -62,7 +62,7 @@ function generateInputComponent(field: Record<string, any>, fieldPascalCase: str
 
       if (component === 'UInputNumber') {
         const minAttr = def.min != null ? ` :min="${def.min}"` : ''
-        const placeholder = def.default != null ? ` placeholder="${def.default}"` : ''
+        const placeholder = def.default != null ? ` placeholder="${htmlAttr(def.default)}"` : ''
         formFields.push(`      <UFormField class="w-24">
         <UInputNumber
           v-model="model.${propName}"
@@ -72,7 +72,7 @@ function generateInputComponent(field: Record<string, any>, fieldPascalCase: str
       } else if (component === 'UCheckbox') {
         formFields.push(`      <UFormField>
         <UCheckbox v-model="model.${propName}" />
-        <span class="text-sm ml-2">${label}</span>
+        <span class="text-sm ml-2">${htmlAttr(label)}</span>
       </UFormField>`)
       } else if (component === 'CroutonCalendar') {
         formFields.push(`      <UFormField class="flex-1">
@@ -84,7 +84,7 @@ function generateInputComponent(field: Record<string, any>, fieldPascalCase: str
           v-model="model.${propName}"
           class="w-full"
           size="xl"
-          placeholder="Enter ${label.toLowerCase()}"
+          placeholder="${htmlAttr(`Enter ${label.toLowerCase()}`)}"
         />
       </UFormField>`)
       } else {
@@ -93,7 +93,7 @@ function generateInputComponent(field: Record<string, any>, fieldPascalCase: str
           v-model="model.${propName}"
           class="w-full"
           size="xl"
-          placeholder="Enter ${label.toLowerCase()}"
+          placeholder="${htmlAttr(`Enter ${label.toLowerCase()}`)}"
         />
       </UFormField>`)
       }
@@ -299,16 +299,21 @@ ${englishFormFields.join('\n\n')}
 /**
  * Generate form field markup for a translatable property
  */
+/** Escape for embedding in a backtick template literal inside a Vue binding. */
+function tplString(value: unknown): string {
+  return jsString(value).replace(/`/g, '\\`').replace(/\$\{/g, '\\${')
+}
+
 function generateTranslatableFormField(propName: string, label: string, propDef: Record<string, any>, isRequired: boolean): string {
   const inputType = propDef.type === 'text' ? 'UTextarea' : 'UInput'
   const placeholder = propDef.placeholder || `Enter ${label.toLowerCase()}`
 
   // Generate proper label with optional required asterisk
   const labelExpr = isRequired
-    ? `\`${label} (\${editingLocale.toUpperCase()})\${editingLocale === 'en' ? ' *' : ''}\``
-    : `\`${label} (\${editingLocale.toUpperCase()})\``
+    ? `\`${htmlAttr(tplString(label))} (\${editingLocale.toUpperCase()})\${editingLocale === 'en' ? ' *' : ''}\``
+    : `\`${htmlAttr(tplString(label))} (\${editingLocale.toUpperCase()})\``
 
-  return `    <!-- ${label} (translatable) -->
+  return `    <!-- ${htmlAttr(label)} (translatable) -->
     <UFormField
       :label="${labelExpr}"
       ${isRequired ? `:required="editingLocale === 'en'"` : ''}
@@ -317,7 +322,7 @@ function generateTranslatableFormField(propName: string, label: string, propDef:
         :model-value="getValue('${propName}')"
         :placeholder="editingLocale !== 'en' && getEnglishValue('${propName}')
           ? \`Fallback: \${getEnglishValue('${propName}')}\`
-          : '${placeholder}'"
+          : '${htmlAttr(jsString(placeholder))}'"
         class="w-full"
         @update:model-value="setValue('${propName}', $event)"
       />
@@ -338,15 +343,15 @@ function generateNonTranslatableFormField(propName: string, label: string, propD
 
   // Non-translatable fields only shown in English locale
   // Use v-if with model check to ensure model is defined before accessing properties
-  return `    <!-- ${label} (non-translatable, English only) -->
+  return `    <!-- ${htmlAttr(label)} (non-translatable, English only) -->
     <UFormField
       v-if="editingLocale === 'en' && model"
-      label="${label}"
+      label="${htmlAttr(label)}"
       ${isRequired ? 'required' : ''}
     >
       <${inputType}
         ${vModel}="model.${propName}"
-        placeholder="${placeholder}"
+        placeholder="${htmlAttr(placeholder)}"
         class="w-full"
       />
     </UFormField>`

@@ -41,7 +41,6 @@ function runCLI(args: string[], cwd: string) {
 }
 
 const SCHEMA = JSON.stringify({
-  id: { type: 'uuid', meta: { primaryKey: true } },
   title: { type: 'string', meta: { required: true, maxLength: 200 } },
   price: { type: 'decimal', meta: { precision: 10, scale: 2 } }
 })

@@ -1,5 +1,5 @@
 // Generator for _Form.vue component
-import { toCase } from '../utils/helpers.ts'
+import { toCase, jsString, htmlAttr, jsLiteral } from '../utils/helpers.ts'
 import { resolveRefCollectionKey } from '../utils/ref-collection.ts'
 
 /**
@@ -66,11 +66,6 @@ function humanizeFieldName(fieldName: string): string {
     .trim()
 }
 
-// Helper: Escape single quotes/backslashes for embedding a string in a single-quoted JS literal
-function escapeLabel(value: unknown): string {
-  return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
-}
-
 // Helper: Convert snake_case or kebab-case to human-readable label
 // e.g., 'booking_created' → 'Booking Created'
 function formatOptionLabel(value: unknown): string {
@@ -100,7 +95,7 @@ function resolveComponentName(componentName: string): string {
 function createLabelAttr(fieldsI18nPrefix: string) {
   return (field: Record<string, any>, fallbackOverride?: string): string => {
     const fallback = fallbackOverride ?? field.meta?.label ?? humanizeFieldName(field.name)
-    return `:label="t('${fieldsI18nPrefix}.${field.name}', '${escapeLabel(fallback)}')"`
+    return `:label="t('${fieldsI18nPrefix}.${field.name}', '${htmlAttr(jsString(fallback))}')"`
   }
 }
 
@@ -317,7 +312,7 @@ const BESPOKE_CONTROL_MARKUP: Record<string, (field: Record<string, any>, ctx: F
     return `          <CroutonFormRepeater
             v-model="state.${field.name}"
             component-name="${componentName}"
-            add-label="${addLabel}"
+            add-label="${htmlAttr(addLabel)}"
             ${sortable ? ':sortable="true"' : ':sortable="false"'}
           />`
   }
@@ -480,7 +475,7 @@ function buildGroupSection(groupName: string | null, groupFields: Record<string,
   const groupInjection = ctx.formEnhancements.groupInjections?.[groupKey] || ''
 
   const conditionalWrapper = showConditionally
-    ? `      <div v-show="!tabs || activeSection === '${groupValue}'" class="flex flex-col gap-4 p-1">\n`
+    ? `      <div v-show="!tabs || activeSection === '${htmlAttr(jsString(groupValue))}'" class="flex flex-col gap-4 p-1">\n`
     : `      <div class="flex flex-col gap-4 p-1">\n`
 
   return `${conditionalWrapper}${fieldsMarkup}${groupInjection}
@@ -544,11 +539,11 @@ function buildTranslationField(hasTranslations: boolean, translatableFieldNames:
 function buildNavigationItemsCode(useTabs: boolean, navigationItems: Array<{ label: string, value: string }>): string {
   return useTabs
     ? `const navigationItems = [
-  ${navigationItems.map(item => `{ label: '${item.label}', value: '${item.value}' }`).join(',\n  ')}
+  ${navigationItems.map(item => `{ label: '${jsString(item.label)}', value: '${jsString(item.value)}' }`).join(',\n  ')}
 ]
 
 const tabs = ref(true)
-const activeSection = ref('${navigationItems[0]?.value || 'general'}')`
+const activeSection = ref('${jsString(navigationItems[0]?.value || 'general')}')`
     : 'const tabs = ref(false)'
 }
 
@@ -560,9 +555,9 @@ function buildInlineOptionsCode(fieldsWithInlineOptions: Record<string, any>[]):
         const optionsArray = options.map((opt) => {
           // Support both string values and {label, value} objects
           if (typeof opt === 'object' && opt !== null && opt.label && opt.value !== undefined) {
-            return `  { label: '${opt.label}', value: '${opt.value}' }`
+            return `  { label: '${jsString(opt.label)}', value: ${jsLiteral(opt.value)} }`
           }
-          return `  { label: '${formatOptionLabel(opt)}', value: '${opt}' }`
+          return `  { label: '${jsString(formatOptionLabel(opt))}', value: ${jsLiteral(opt)} }`
         }).join(',\n')
         return `const ${field.name}Options = [\n${optionsArray}\n]`
       }).join('\n\n')

@@ -106,3 +106,28 @@ export function getSeedGenerator(field: Field): string {
 
 // typeMapping has been removed — use loadTypeMapping() from manifest-loader.ts
 // The canonical type definitions now live in crouton-core/crouton.manifest.ts
+
+/** Escape a value for embedding inside a single-quoted JS/TS string literal. */
+export function jsString(value: unknown): string {
+  return String(value)
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029')
+}
+
+/** Escape a value for embedding inside a double-quoted HTML/Vue attribute. */
+export function htmlAttr(value: unknown): string {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}
+
+/** Render an option value as a JS literal, keeping numbers/booleans typed and quoting strings. */
+export function jsLiteral(value: unknown): string {
+  return typeof value === 'number' || typeof value === 'boolean' ? String(value) : `'${jsString(value)}'`
+}
