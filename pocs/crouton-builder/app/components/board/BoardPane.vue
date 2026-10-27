@@ -32,6 +32,15 @@ const hoverEdge = computed<DropEdge | null>(() =>
   hover.value && samePath(hover.value.path, props.path) ? hover.value.edge : null,
 )
 
+// Tapping the block selects it — but a control INSIDE the block (a row's edit
+// button, a form field, a link) does its own job and must not also open the
+// block's settings sheet over it (#2598, owner on iPhone).
+const OWN_CONTROLS = 'button, a, input, textarea, select, label, [role=button], [contenteditable]'
+function onPaneClick(e: MouseEvent) {
+  if ((e.target as Element | null)?.closest(OWN_CONTROLS)) return
+  emit('select', props.path)
+}
+
 function onGripDown(e: PointerEvent) {
   arm(e, { kind: 'pane', path: props.path, label: blockName.value }, { holdMs: 150 })
 }
@@ -44,7 +53,7 @@ function onGripDown(e: PointerEvent) {
     :data-edge="hoverEdge ?? undefined"
     :data-path="path.join('.')"
     data-handoff="board-pane"
-    @click="emit('select', path)"
+    @click="onPaneClick"
   >
     <!-- A leaf renders through the package renderer (registry resolution, config
          sanitising, the admin fill-and-scroll); a nested app renders read-only. -->
