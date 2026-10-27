@@ -213,7 +213,7 @@ jobs:
           # its turns on denials and crashes with max_turns, never reaching the fix (the first real
           # live-lane run, 31589320044, did exactly this). Same reason red-team-daily.yml sets it.
           # max-turns 40 (was 30): a full pnpm install + typecheck + fix + verify cycle is turn-hungry.
-          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions"
+          claude_args: "--model ${{ steps.model.outputs.model }} --max-turns 40 --permission-mode bypassPermissions --disallowedTools 'Bash(git push:*)'"
           show_full_output: true
           prompt: |
             CI failed on this pipeline PR — you are the fix-bot. This is auto-fix attempt
@@ -278,10 +278,17 @@ jobs:
         run: |
           set -euo pipefail
           HEAD_NOW="$(git rev-parse HEAD)"
-          if [ "$HEAD_NOW" = "$PRE" ]; then echo "No fix commit — nothing to push."; exit 0; fi
+          # Belt and braces: `git push` is disallowed for the agent, but if it pushed anyway the
+          # remote head has moved past $PRE. Judge those commits too; if refused, revert them.
+          git fetch -q origin "$BRANCH"
+          REMOTE_NOW="$(git rev-parse "origin/$BRANCH")"
+          PUSHED=0
+          if [ "$REMOTE_NOW" != "$PRE" ] && git merge-base --is-ancestor "$PRE" "$REMOTE_NOW"; then PUSHED=1; fi
+          if [ "$HEAD_NOW" = "$PRE" ] && [ "$PUSHED" = 0 ]; then echo "No fix commit — nothing to push."; exit 0; fi
           git fetch -q origin "$BASE"
           git diff "origin/$BASE...$PRE" > "$RUNNER_TEMP/worker.diff"
           git diff "$PRE" "$HEAD_NOW" > "$RUNNER_TEMP/fix.diff"
+          if [ "$PUSHED" = 1 ]; then git diff "$PRE" "$REMOTE_NOW" >> "$RUNNER_TEMP/fix.diff"; fi
           node -e '
             const fs = require("fs")
             import("./scripts/lib/fix-removes-worker-code.mjs").then(({ findRemovedWorkerLines }) => {
@@ -290,10 +297,15 @@ jobs:
               process.exit(r.refuse ? 3 : 0)
             })
           ' "$RUNNER_TEMP/worker.diff" "$RUNNER_TEMP/fix.diff" "$RUNNER_TEMP/verdict.json" && ok=1 || ok=0
-          if [ "$ok" = 1 ]; then git push origin "HEAD:$BRANCH"; exit 0; fi
+          if [ "$ok" = 1 ]; then
+            if [ "$HEAD_NOW" != "$PRE" ]; then git push origin "HEAD:$BRANCH"; fi
+            exit 0
+          fi
 
           echo "refused=true" >> "$GITHUB_OUTPUT"
           git reset -q --hard "$PRE"
+          # No force-push: if the agent already pushed, add a revert commit restoring $PRE's tree.
+          if [ "$PUSHED" = 1 ]; then bash scripts/revert-pushed-fix.sh "$PRE" "$BRANCH"; fi
           LINES="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1]));console.log(r.removed.map(x=>"- `"+x.file+"`: `"+x.line.trim()+"`").join(String.fromCharCode(10)))' "$RUNNER_TEMP/verdict.json")"
           ERR="$(gh run view "$RUN_ID" --log-failed 2>/dev/null | tail -n 60 || true)"
           {
