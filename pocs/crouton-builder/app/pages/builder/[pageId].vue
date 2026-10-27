@@ -47,7 +47,7 @@ function starterRoot(): LayoutNode {
     direction: 'horizontal',
     children: [
       { type: 'leaf', blockId: 'artists-list', config: { collection: 'builderArtists', heading: 'Artists', layout: 'list' } },
-      { type: 'leaf', blockId: 'artists-form', config: { collection: 'builderArtists', heading: 'New artist' } },
+      { type: 'leaf', blockId: 'artists-form', config: { collection: 'builderArtists', heading: 'Artist' } },
     ],
   }
 }

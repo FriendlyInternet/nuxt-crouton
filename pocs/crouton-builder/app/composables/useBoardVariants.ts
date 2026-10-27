@@ -40,6 +40,10 @@ export function useBoardVariants(opts: {
     if (!p || loadedFor.value === id) return
     const board = (p.board as Record<string, unknown> | null) ?? {}
     const stored = Array.isArray(board.variants) ? board.variants as { id: string, name: string, layout: string }[] : null
+    // A page with nothing saved shows the starter — which is NOT saved yet, so it
+    // starts dirty: "Save" is live and "View page" stores it first. Otherwise the
+    // board shows blocks while the served page reads an empty board (#2598).
+    let unsaved = false
     if (stored?.length) {
       variants.value = stored.map(v => ({ id: v.id, name: v.name, tree: parseLayoutTree(v.layout) ?? starterTree() }))
       liveId.value = typeof board.live === 'string' && variants.value.some(v => v.id === board.live) ? board.live : variants.value[0]!.id
@@ -48,10 +52,11 @@ export function useBoardVariants(opts: {
       const parsed = typeof board.layout === 'string' ? parseLayoutTree(board.layout) : null
       variants.value = [{ id: 'a', name: 'A', tree: parsed ?? starterTree() }]
       liveId.value = 'a'
+      unsaved = !parsed
     }
     showVariant(liveId.value)
     loadedFor.value = id
-    dirty.value = false
+    dirty.value = unsaved
   }, { immediate: true })
 
   function duplicateVariant() {
