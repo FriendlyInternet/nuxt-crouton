@@ -100,11 +100,12 @@ export function useCroutonStatus() {
   }
 
   /**
-   * Merge recent team changes from crouton-events into the feed. No-op without the
+   * Merge the current user's recent changes from crouton-events into the feed. No-op without the
    * events app; throttled to once per minute unless `force`. Call on mount / pill open.
    */
   const refreshTeamEvents = async (force = false) => {
     if (!useCroutonApps().hasApp('events')) return
+    const userId = getUserId()
     const teamId = useTeamContext().getTeamId()
     const now = Date.now()
     if (teamId !== eventsTeamId) {
@@ -116,9 +117,9 @@ export function useCroutonStatus() {
     lastEventsFetch = now
     try {
       const rows = await $fetch<TeamEventRow[]>(`/api/teams/${teamId}/crouton-events`, {
-        query: { pageSize: EVENTS_LIMIT, dateFrom: new Date(now - EVENTS_WINDOW_MS).toISOString() },
+        query: { userId, pageSize: EVENTS_LIMIT, dateFrom: new Date(now - EVENTS_WINDOW_MS).toISOString() },
       })
-      history.value = mergeTeamEvents(history.value, rows, t, getUserId())
+      history.value = mergeTeamEvents(history.value, rows, t, userId)
     } catch {
       // Feed falls back to own changes
     }
