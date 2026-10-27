@@ -1,5 +1,7 @@
 # crouton-builder — handoff (current truth)
 
+> Original spike's handoff (North Star, signed-off decisions): [`docs/origin-HANDOFF.md`](docs/origin-HANDOFF.md).
+
 What this POC is: a phone-first board for putting blocks together and seeing the result in
 every shape — drag to add, drag to resize, design per width, hide blocks into a nav or an edge
 trigger, then open the page as itself. The behaviour contract is `spec.json` (one entry per

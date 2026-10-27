@@ -14,9 +14,6 @@
   "crouton-builder": {
     "stagingUrl": "https://crouton-builder.pmcp.dev"
   },
-  "crouton-builder-demo": {
-    "stagingUrl": "https://crouton-builder-demo.pmcp.dev"
-  },
   "gallery": {
     "stagingUrl": "https://gallery-staging.pmcp.dev"
   },

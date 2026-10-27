@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { loadLiveApps, loadPreviews, decidePreview, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
+import { loadLiveApps, loadPreviews, decidePreview, decidePrLogin, previewNoneHtml, liveAppFromConfig, previewGoneHtml, parseDeployComment, resolvePreviewUrl, type Preview } from '../server/utils/live-apps-core'
 
 const body = '<!-- deploy-staging:velo -->\n🚀 **velo** preview for this PR: https://velo-pr12.example.workers.dev\n\n🔑 Review login'
 
@@ -77,5 +77,31 @@ describe('GitHub call budget', () => {
     const r = await loadLiveApps(get)
     expect(r.data).toEqual([])
     expect(r.error).toContain('GitHub 403')
+  })
+})
+
+describe('decidePrLogin', () => {
+  const deploy = '<!-- deploy-staging:velo -->\npreview for this PR: https://velo-pr7.example.dev'
+  const mk = (state: string, pages: Array<Array<{ body: string }>>) => (async (path: string) => {
+    if (path.includes('/pulls/')) return { data: { state }, error: null }
+    const page = Number(/&page=(\d+)/.exec(path)?.[1] ?? 1)
+    return { data: pages[page - 1] ?? [], error: null }
+  }) as never
+  const filler = Array.from({ length: 100 }, () => ({ body: 'x' }))
+  it('finds a deploy comment on page 3 of the PR own comments', async () => {
+    const get = mk('open', [filler, filler, [{ body: deploy }]])
+    expect(await decidePrLogin(get, 'velo', 'pr7')).toEqual({ gone: false, url: 'https://velo-pr7.example.dev' })
+  })
+  it('reports gone only when the PR is closed', async () => {
+    expect(await decidePrLogin(mk('closed', [[{ body: deploy }]]), 'velo', 'pr7')).toEqual({ gone: true, pr: 7 })
+  })
+  it('says no build yet for an open PR without a comment', async () => {
+    expect(await decidePrLogin(mk('open', [[{ body: 'hi' }]]), 'velo', 'pr7')).toEqual({ gone: 'none', pr: 7 })
+    expect(previewNoneHtml(7, 'velo', 'https://s')).toContain('PR #7 has no test build yet')
+  })
+  it('reads repo-wide comments newest first', async () => {
+    const paths: string[] = []
+    await loadPreviews((async (p: string) => { paths.push(p); return { data: [], error: null } }) as never)
+    expect(paths.find(p => p.includes('issues/comments'))).toContain('sort=updated&direction=desc')
   })
 })

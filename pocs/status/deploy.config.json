@@ -1,4 +1,5 @@
 {
   "stagingUrl": "https://status.pmcp.dev",
+  "reviewLogin": { "method": "preview-token" },
   "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-email"
 }
