@@ -27,7 +27,8 @@ async function readEvents(event: Parameters<typeof readBody>[0]): Promise<Ingest
   return body.events
 }
 
-function logConflicts(count: number) {
+function logConflicts(conflicts?: unknown[]) {
+  const count = conflicts?.length ?? 0
   if (count) console.info(`[crouton-sales] sync ingest kept the cloud version for ${count} config write(s)`)
 }
 
@@ -37,7 +38,7 @@ export default defineEventHandler(async (event) => {
 
   const db = useDB()
   const result = await applyOutboxEvents(db, events, undefined, device?.teamId, { deviceId: device?.deviceId })
-  logConflicts(result.conflicts?.length ?? 0)
+  logConflicts(result.conflicts)
 
   // Stamp the freshness heartbeat the online dashboard (#179) reads. Advances on
   // every call — a real batch or the pusher's idle ping (events: []) — so a
