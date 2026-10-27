@@ -48,26 +48,33 @@ export function render(value, { json = false } = {}) {
   return typeof value === 'string' && !json ? value : JSON.stringify(value, null, 2)
 }
 
+const REGEX_PATHS = ['testsGate.logicPaths', 'testsGate.testPaths', 'generated.junk', 'typecheck.appPattern']
+
+function regexProblems(flavor) {
+  const problems = []
+  for (const path of REGEX_PATHS) {
+    try { new RegExp(getKey(flavor, path)) } catch { problems.push(`${path} is not a valid regex`) }
+  }
+  return problems
+}
+
+function gateProblems(flavor) {
+  const problems = []
+  for (const [gate, g] of Object.entries(flavor.reviewGates || {})) {
+    if (!Array.isArray(g.paths) || !g.paths.length) problems.push(`reviewGates.${gate}: paths must be a non-empty array`)
+    if (!g.prompt) problems.push(`reviewGates.${gate}: prompt file required`)
+  }
+  return problems
+}
+
 /** Validate the config shape. Returns an array of problem strings ([] = valid). */
 export function validate(flavor) {
   const problems = []
   for (const k of REQUIRED_KEYS) if (!(k in (flavor || {}))) problems.push(`missing key "${k}"`)
   if (problems.length) return problems
   if (typeof flavor.install !== 'string' || !flavor.install) problems.push('install must be a non-empty string')
-  for (const [path, v] of [
-    ['testsGate.logicPaths', flavor.testsGate?.logicPaths],
-    ['testsGate.testPaths', flavor.testsGate?.testPaths],
-    ['generated.junk', flavor.generated?.junk],
-    ['typecheck.appPattern', flavor.typecheck?.appPattern]
-  ]) {
-    try { new RegExp(v) } catch { problems.push(`${path} is not a valid regex`) }
-  }
   if (!flavor.bot?.name || !flavor.bot?.email) problems.push('bot needs name and email')
-  for (const [gate, g] of Object.entries(flavor.reviewGates || {})) {
-    if (!Array.isArray(g.paths) || !g.paths.length) problems.push(`reviewGates.${gate}: paths must be a non-empty array`)
-    if (!g.prompt) problems.push(`reviewGates.${gate}: prompt file required`)
-  }
-  return problems
+  return [...problems, ...regexProblems(flavor), ...gateProblems(flavor)]
 }
 
 // ── CLI ───────────────────────────────────────────────────────────────────────
