@@ -15,6 +15,8 @@ export function logTail(text, { maxLines = 80, maxBytes = 4096 } = {}) {
   if (!text) return { text: '', truncated: false }
   const lines = String(text)
     .split(/\r?\n/)
+    // ANSI escapes, real (ESC) or already rendered as `^[[` / bare `[36;1m` residue (#2710)
+    .map(l => l.replace(/(?:\x1b|\^\[)\[[0-9;]*[A-Za-z]/g, ''))
     .map(l => l.replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s?/, ''))
     .filter(l => !/^##\[(group|endgroup)\]/.test(l))
   while (lines.length && !lines[lines.length - 1].trim()) lines.pop()

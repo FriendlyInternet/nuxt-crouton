@@ -300,7 +300,8 @@
     "signIn": "Se connecter",
     "signOutHelper": "Quitter la session d'assistant",
     "retry": "Réessayer",
-    "justNow": "à l'instant"
+    "justNow": "à l'instant",
+    "seeAll": "Voir toute l'activité"
   },
   "errors": {
     "auth": {

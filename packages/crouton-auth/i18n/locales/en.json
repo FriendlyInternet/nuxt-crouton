@@ -300,7 +300,8 @@
     "signIn": "Sign in",
     "signOutHelper": "Sign out of helper session",
     "retry": "Retry",
-    "justNow": "just now"
+    "justNow": "just now",
+    "seeAll": "See all activity"
   },
   "errors": {
     "auth": {

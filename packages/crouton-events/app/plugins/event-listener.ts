@@ -22,6 +22,9 @@ export default defineNuxtPlugin((nuxtApp) => {
     // Only track from client side
     if (!import.meta.client) return
 
+    // Only create/update/delete are recorded as events (move/reorder are not)
+    if (event.operation !== 'create' && event.operation !== 'update' && event.operation !== 'delete') return
+
     // Skip if tracking is disabled
     if (!config.public.croutonEvents?.enabled) return
 

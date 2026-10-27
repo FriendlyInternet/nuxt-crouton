@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { getLocalTimeZone, today } from '@internationalized/date'
+import { toDateKey, isSameDay } from '@fyit/crouton-core/shared/utils/date'
+import { isDayFullyBooked as isDayFull } from '../utils/day-availability'
 import type { Booking, LocationData, SettingsData, SlotItem } from '../types/booking'
 
 interface FilterState {
@@ -16,8 +17,8 @@ interface Props {
   view?: 'week' | 'month'
   /** Filter state for status and location filters */
   filters?: FilterState
-  /** Dates to highlight (selected dates from click multi-select) */
-  selectedDates?: Date[]
+  /** The selected day (from a calendar click) */
+  selectedDate?: Date | null
   /** Date currently being used for booking creation */
   creatingAtDate?: Date | null
   /** Function to check if a date is unavailable by schedule rules */
@@ -32,7 +33,7 @@ const props = withDefaults(defineProps<Props>(), {
   settings: null,
   view: 'week',
   filters: () => ({ statuses: [], locations: [], showCancelled: false }),
-  selectedDates: () => [],
+  selectedDate: null,
   creatingAtDate: null,
   isDateUnavailable: null,
   getBlockedReason: null,
@@ -45,6 +46,9 @@ const emit = defineEmits<{
   'update:view': [value: 'week' | 'month']
   'hoverBooking': [bookingId: string | null]
 }>()
+
+// The period being shown (owned by the parent; standalone use keeps its own)
+const date = defineModel<Date>('date', { default: () => new Date() })
 
 const { t } = useT()
 const { locale } = useI18n()
@@ -61,42 +65,13 @@ function getLocationTitle(location: LocationData): string {
     || t('bookings.untitled')
 }
 
-// Ref for week control
-const weekStripRef = ref<{ goToDate: (date: Date) => void, goToToday: () => void } | null>(null)
-
-// Ref for the month grid (CroutonCalendarMonth)
-const monthRef = ref<{ goToDate: (date: Date) => void, goToToday: () => void } | null>(null)
-
-// Navigate to a specific date (works for both week and month view)
-function goToDate(date: Date) {
-  if (currentView.value === 'week') {
-    weekStripRef.value?.goToDate(date)
-  } else {
-    monthRef.value?.goToDate(date)
-  }
-}
-
-// Navigate to today
-function goToToday() {
-  const todayDate = today(getLocalTimeZone())
-  const jsDate = todayDate.toDate(getLocalTimeZone())
-  goToDate(jsDate)
-  // Also select today as if it was clicked
-  emit('select', jsDate)
-}
-
-// Expose methods for parent control
-defineExpose({
-  goToDate,
-  goToToday,
-})
-
 // View is controlled by parent via v-model:view
 const currentView = computed(() => props.view)
 
-// Only days with bookings are selectable in the month grid
+// Every available day is selectable in the month grid
 function onMonthSelect(date: Date) {
-  if (hasBookings(date)) emit('select', date)
+  if (props.isDateUnavailable && isDayUnavailable(date)) return
+  emit('select', date)
 }
 
 // Parse statuses from settings
@@ -184,7 +159,7 @@ const bookingsByDate = computed(() => {
   const map = new Map<string, Booking[]>()
   for (const booking of filteredBookings.value) {
     const date = new Date(booking.date)
-    const key = formatDateKey(date)
+    const key = toDateKey(date)
     if (!map.has(key)) {
       map.set(key, [])
     }
@@ -193,14 +168,9 @@ const bookingsByDate = computed(() => {
   return map
 })
 
-// Format date as YYYY-MM-DD for map key
-function formatDateKey(date: Date): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
 // Get bookings for a specific date
 function getBookingsForDate(date: Date): Booking[] {
-  const key = formatDateKey(date)
+  const key = toDateKey(date)
   return bookingsByDate.value.get(key) || []
 }
 
@@ -229,6 +199,11 @@ interface IndicatorData {
   inventoryBookedCount: number
 }
 
+// Locations to show (respect location filter)
+const visibleLocations = computed(() => props.filters.locations.length > 0
+  ? props.locations.filter(l => props.filters.locations.includes(l.id))
+  : props.locations)
+
 // Get indicators data for a specific date (all locations, capacity-aware)
 function getIndicatorsForDate(date: Date): IndicatorData[] {
   const dayBookings = getBookingsForDate(date)
@@ -243,14 +218,9 @@ function getIndicatorsForDate(date: Date): IndicatorData[] {
     byLocation.get(locId)!.push(booking)
   }
 
-  // Determine which locations to show (respect location filter)
-  const visibleLocations = props.filters.locations.length > 0
-    ? props.locations.filter(l => props.filters.locations.includes(l.id))
-    : props.locations
-
   const indicators: IndicatorData[] = []
 
-  for (const location of visibleLocations) {
+  for (const location of visibleLocations.value) {
     const isInventoryMode = !!location.inventoryMode
     // Inventory mode ignores named slots — treat as single all-day unit
     const locationSlots = isInventoryMode ? [] : parseLocationSlots(location)
@@ -344,9 +314,10 @@ function getIndicatorsForDate(date: Date): IndicatorData[] {
   return indicators
 }
 
-// Handle week strip select (day click) - only if date has bookings
+// Handle week strip select (day click) - any available day
 function onWeekSelect(date: Date | null) {
-  if (!date || !hasBookings(date)) return
+  if (!date) return
+  if (props.isDateUnavailable && isDayUnavailable(date)) return
   emit('select', date)
 }
 
@@ -357,17 +328,13 @@ function onWeekDayClick(date: Date) {
 
 // Check if a date has bookings
 function hasBookings(date: Date): boolean {
-  const key = formatDateKey(date)
+  const key = toDateKey(date)
   return bookingsByDate.value.has(key)
 }
 
 // Check if a date is highlighted (selected) for month view
 function isDayHighlighted(date: Date): boolean {
-  return props.selectedDates.some(d =>
-    date.getFullYear() === d.getFullYear()
-    && date.getMonth() === d.getMonth()
-    && date.getDate() === d.getDate(),
-  )
+  return !!props.selectedDate && isSameDay(date, props.selectedDate)
 }
 
 // Check if we're in create mode
@@ -375,12 +342,7 @@ const isCreating = computed(() => props.creatingAtDate !== null)
 
 // Check if a date is the creating date
 function isCreatingDate(date: Date): boolean {
-  if (!props.creatingAtDate) return false
-  return (
-    date.getFullYear() === props.creatingAtDate.getFullYear()
-    && date.getMonth() === props.creatingAtDate.getMonth()
-    && date.getDate() === props.creatingAtDate.getDate()
-  )
+  return !!props.creatingAtDate && isSameDay(date, props.creatingAtDate)
 }
 
 // Check if a date is unavailable by schedule rules
@@ -394,35 +356,18 @@ function getDayBlockedReason(date: Date): string | null {
 }
 // Check if a date is fully booked across all visible locations
 function isDayFullyBooked(date: Date): boolean {
-  const indicators = getIndicatorsForDate(date)
-  if (indicators.length === 0) return false
-
-  return indicators.every((indicator) => {
-    if (indicator.isInventoryMode) {
-      return indicator.inventoryBookedCount >= indicator.inventoryQuantity
-    }
-    // All slots must be full
-    return indicator.slotStatuses.length > 0 && indicator.slotStatuses.every(s => s.isFull)
-  })
+  return isDayFull(date, visibleLocations.value, filteredBookings.value)
 }
 
 // Compute max indicators across all days for uniform row height
 // Since we now show all locations on every day, this is the count of visible locations with slots
-const maxIndicatorCount = computed(() => {
-  const visibleLocations = props.filters.locations.length > 0
-    ? props.locations.filter(l => props.filters.locations.includes(l.id))
-    : props.locations
-  return visibleLocations.length
-})
+const maxIndicatorCount = computed(() => visibleLocations.value.length)
 
 // The location with the most slots renders as dots (fixed size) to define the width.
 // All other locations render as bars that stretch to fill the same width.
 const maxSlotCount = computed(() => {
-  const visibleLocations = props.filters.locations.length > 0
-    ? props.locations.filter(l => props.filters.locations.includes(l.id))
-    : props.locations
   let max = 0
-  for (const location of visibleLocations) {
+  for (const location of visibleLocations.value) {
     // Inventory mode locations have a single all-day slot (count as 1)
     const slotCount = location.inventoryMode ? 1 : Math.max(parseLocationSlots(location).length, 1)
     if (slotCount > max) max = slotCount
@@ -466,9 +411,9 @@ const monthCellHeight = computed(() => {
     <!-- Week View -->
     <CroutonCalendarWeek
       v-if="currentView === 'week'"
-      ref="weekStripRef"
+      v-model:date="date"
       size="md"
-      :selected-dates="selectedDates"
+      :selected-date="selectedDate"
       :active-date="creatingAtDate"
       :is-date-disabled="isDateUnavailable ? isDayUnavailable : undefined"
       @select="onWeekSelect"
@@ -563,7 +508,7 @@ const monthCellHeight = computed(() => {
     </CroutonCalendarWeek>
 
     <!-- Month View -->
-    <CroutonCalendarMonth v-else ref="monthRef" @select="onMonthSelect">
+    <CroutonCalendarMonth v-else v-model:date="date" @select="onMonthSelect">
       <template #day="{ day, jsDate, neighbour }">
           <!-- Neighbour months: day number + dots only, so 3x stays cheap -->
           <div
