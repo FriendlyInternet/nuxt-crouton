@@ -10,6 +10,7 @@ jobs:
   release:
     if: startsWith(github.event.pull_request.head.ref, 'work-')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
       issues: write
