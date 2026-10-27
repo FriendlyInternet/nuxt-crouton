@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
-import { reviewLogin, reviewLoginUrl } from '../server/utils/review-login'
+import { previewSessionToken, reviewLogin, reviewLoginUrl } from '../server/utils/review-login'
 
 describe('reviewLogin', () => {
   it('matches the deploy derivation (sha256 of secret:app:key, first 24 hex)', () => {
@@ -23,5 +23,12 @@ describe('reviewLogin', () => {
     const { password } = reviewLogin('s', 'velo', 'main')
     expect(reviewLoginUrl('https://velo.pmcp.dev/', 's', 'velo', 'main'))
       .toBe(`https://velo.pmcp.dev/auth/login?email=review%2Bvelo-main%40example.com&password=${password}`)
+  })
+})
+
+describe('previewSessionToken', () => {
+  it('matches the CI derivation (sha256 of secret:app:preview-session:key, first 32 hex)', () => {
+    const expected = createHash('sha256').update('s:status:preview-session:pr7').digest('hex').slice(0, 32)
+    expect(previewSessionToken('s', 'status', 'pr7')).toBe(expected)
   })
 })

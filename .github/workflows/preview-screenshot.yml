@@ -10,7 +10,7 @@ name: Preview screenshot
 #     successful deploy run for the PR's head commit.
 #
 # Per app it logs into the live preview (login re-derived from REVIEW_SEED_SECRET, same formula as
-# the deploy's seed step), captures the declared review surface(s) with
+# the deploy's seed step; link-only apps use a preview-only token, #2700), captures the declared review surface(s) with
 # scripts/capture-review-surfaces.mjs and commits the PNG(s) to writeups/ui-proposals/ on the PR
 # branch (the sign-off gate looks there). The result is a check run named "Preview screenshot" on
 # the PR head: green = a usable shot, red = none, with the reason in one line.
@@ -155,7 +155,15 @@ jobs:
             EMAIL="review+${APP}-pr${PR_NUMBER}@example.com"
             PW="$(printf '%s' "${REVIEW_SEED_SECRET}:${APP}:pr${PR_NUMBER}" | sha256sum | cut -c1-24)"
             echo "::add-mask::$PW"
-            node scripts/capture-review-surfaces.mjs --url "$URL" --email "$EMAIL" --password "$PW" \
+            # Link-only apps (reviewLogin.method "preview-token") have no password: sign in with the
+            # preview-only token derived from the same secret instead (#2700).
+            AUTH=(--email "$EMAIL" --password "$PW")
+            if [ "$(jq -r '.reviewLogin.method == "preview-token"' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null)" = "true" ]; then
+              TOKEN="$(printf '%s' "${REVIEW_SEED_SECRET}:${APP}:preview-session:pr${PR_NUMBER}" | sha256sum | cut -c1-32)"
+              echo "::add-mask::$TOKEN"
+              AUTH=(--preview-token "$TOKEN")
+            fi
+            node scripts/capture-review-surfaces.mjs --url "$URL" "${AUTH[@]}" \
               --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee -a "$LOG" || true
           done < <(find "$RUNNER_TEMP/records" -name meta.json)
           WHY=$(grep '^surface=' "$LOG" | sed -E 's/^surface=([^ ]+) status=[a-z]+ reason=/\1: /' | head -5 | paste -sd';' - || true)
