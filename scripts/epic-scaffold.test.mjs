@@ -96,3 +96,16 @@ test('resolveMainSha reads main from the remote, not a local origin/main ref (#2
   assert.deepEqual(unknownPlanLabels({ labels: ['epic', 'nope'] }, ['epic']), ['nope'])
   assert.deepEqual(unknownPlanLabels({ labels: ['x'] }, []), [])
 })
+
+test('packagesApproved {why, packages} labels every child with one pkg:* per package (#2778)', () => {
+  const p = parseScaffoldPlan(PLAN({ packagesApproved: { why: 'owner, #227', packages: ['crouton-bookings', 'pkg:crouton-sales', 'crouton-assets'] } }))
+  for (const c of p.children) {
+    for (const l of ['pkg:crouton-bookings', 'pkg:crouton-sales', 'pkg:crouton-assets']) assert.ok(c.labels.includes(l), `${c.title} missing ${l}`)
+    assert.equal(c.body.match(/Packages-approved: owner, #227/g).length, 1)
+  }
+  assert.equal(p.children[0].labels.filter(l => l === 'pkg:crouton-core').length, 1)
+})
+
+test('packagesApproved object without packages is refused', () => {
+  assert.throws(() => parseScaffoldPlan(PLAN({ packagesApproved: { why: 'x', packages: [] } })), PlanError)
+})

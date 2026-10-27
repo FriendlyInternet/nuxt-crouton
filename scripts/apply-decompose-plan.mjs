@@ -76,13 +76,15 @@ export function parsePlan(raw) {
   if (p.children.length > MAX_CHILDREN) {
     throw new PlanError(`too many children (${p.children.length} > MAX_CHILDREN ${MAX_CHILDREN}) — slices too thin`)
   }
+  const approved = normalizePackagesApproved(p.packagesApproved)
   const children = p.children.map((c, i) => {
     if (!c || typeof c.title !== 'string' || !c.title.trim()) throw new PlanError(`child[${i}] needs a non-empty title`)
     if (typeof c.body !== 'string' || !c.body.trim()) throw new PlanError(`child[${i}] needs a non-empty body`)
     return {
       title: c.title.trim(),
-      body: c.body,
-      labels: Array.isArray(c.labels) ? c.labels.filter(l => typeof l === 'string' && l) : [],
+      body: withPackagesApproved(c.body, approved),
+      labels: withPackageLabels(Array.isArray(c.labels) ? c.labels.filter(l => typeof l === 'string' && l) : [], approved),
+      approvedPkgLabels: approved ? approved.labels : [],
       needsSplit: !!c.needsSplit,
       // ORDERING (#1750): sibling INDICES this child depends on. Indices, not issue numbers —
       // at plan time the children do not exist yet, so there is nothing to reference but position.
@@ -91,6 +93,38 @@ export function parsePlan(raw) {
   })
   assertNoDependencyCycle(children)
   return { leaf: false, children }
+}
+
+/**
+ * The approved-packages list (#2778): the issue's `pkg:*` labels ARE the machine-readable scope the
+ * worker, fix-bot and packages-guard read. A plan states it once as `packagesApproved` — either a bare
+ * string (legacy: the `Packages-approved:` reason only) or `{ why, packages: ['crouton-assets', …] }`.
+ * → { why, labels } | null. Package names may be given with or without the `pkg:` prefix.
+ */
+export function normalizePackagesApproved(raw) {
+  if (raw === undefined || raw === null || raw === '') return null
+  if (typeof raw === 'string') return raw.trim() ? { why: raw.trim(), labels: [] } : null
+  if (typeof raw !== 'object' || Array.isArray(raw)) throw new PlanError('packagesApproved must be a string or { why, packages }')
+  const why = typeof raw.why === 'string' ? raw.why.trim() : ''
+  if (!why) throw new PlanError('packagesApproved.why must be a non-empty string (the `Packages-approved:` reason)')
+  if (!Array.isArray(raw.packages) || raw.packages.length === 0) throw new PlanError('packagesApproved.packages must be a non-empty array of package names')
+  const labels = [...new Set(raw.packages.map((n) => {
+    if (typeof n !== 'string' || !n.trim()) throw new PlanError('packagesApproved.packages entries must be non-empty strings')
+    const name = n.trim().replace(/^pkg:/, '')
+    return `pkg:${name}`
+  }))]
+  return { why, labels }
+}
+
+/** Append `Packages-approved: <why>` to a body unless it already carries one. */
+export function withPackagesApproved(body, approved) {
+  if (!approved || typeof body !== 'string' || /^\s*Packages-approved:/im.test(body)) return body
+  return `${body.trimEnd()}\n\nPackages-approved: ${approved.why}\n`
+}
+
+/** Add one `pkg:*` label per approved package (de-duped). */
+export function withPackageLabels(labels, approved) {
+  return approved ? [...new Set([...labels, ...approved.labels])] : labels
 }
 
 /** Validate one child's `blockedBy` → a sorted, de-duped array of in-range sibling indices. */
@@ -194,6 +228,10 @@ export function planToActions(plan, ctx) {
   // five seconds, two of them against preconditions that did not exist yet.
   plan.children.forEach((c, i) => {
     const { kept, dropped } = sanitizeLabels(c.labels, knownLabels)
+    // An approved package whose label is missing would be silently dropped — and the fix-bot would
+    // then ask the owner again (#2778). Fail loudly instead.
+    const lostPkg = dropped.filter(l => (c.approvedPkgLabels || []).includes(l))
+    if (lostPkg.length) throw new PlanError(`child "${c.title}": unknown package label(s) ${lostPkg.join(', ')} — add to .github/labels.yml`)
     // The trigger label this child WOULD get if it were not blocked. For an unblocked child it is
     // applied directly below; for a blocked one it is recorded on the pipeline block (#1923) so the
     // wave scheduler can release it with the right label instead of falling back to `delegate` and
