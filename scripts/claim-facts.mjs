@@ -56,11 +56,13 @@ export async function gatherClaimFacts({ github, context, issueNumber, core }) {
     let headRef = null
     let baseRef = null
     let merged = Boolean(it.pull_request?.merged_at)
+    let mergedAt = it.pull_request?.merged_at ?? null
     try {
       const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: it.number })
       headRef = pr.head?.ref ?? null
       baseRef = pr.base?.ref ?? null
       merged = Boolean(pr.merged_at)
+      mergedAt = pr.merged_at ?? null
     } catch (e) {
       // Leave baseRef null. `decideClaim` then treats a merge as landed — the safer
       // pre-#2027 default, so an unreachable API cannot silently UNLOCK an issue.
@@ -70,23 +72,28 @@ export async function gatherClaimFacts({ github, context, issueNumber, core }) {
       selfPr = it.number
       selfPrs.push(it.number)
     }
-    linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef })
+    linkedPRs.push({ number: it.number, state: it.state, merged, headRef, baseRef, mergedAt })
   }
 
   // When `status:in-progress` was applied — the weakest signal, so it needs its timestamp.
   let inProgressSince = null
+  let lastReopenedAt = null
   const hasInProgress = (issue.labels || []).some((l) => (l.name || l) === 'status:in-progress')
-  if (hasInProgress) {
+  // Events are also needed for the last `reopened` (#2779): a merge older than the reopen is
+  // history, not a claim. Only an issue that was reopened can need it.
+  if (hasInProgress || issue.state_reason === 'reopened' || linkedPRs.some((p) => p.merged)) {
     const events = await github.paginate(github.rest.issues.listEvents,
       { owner, repo, issue_number: issueNumber, per_page: 100 })
+    lastReopenedAt = events.filter((e) => e.event === 'reopened').pop()?.created_at || null
     const last = events.filter((e) => e.event === 'labeled' && e.label?.name === 'status:in-progress').pop()
-    inProgressSince = last?.created_at || null
+    inProgressSince = hasInProgress ? (last?.created_at || null) : null
   }
 
   return {
     issueState: issue.state,
     linkedPRs,
     inProgressSince,
+    lastReopenedAt,
     now: new Date().toISOString(),
     defaultBranch: context.payload?.repository?.default_branch || 'main',
     self: { pr: selfPr, prs: selfPrs },
