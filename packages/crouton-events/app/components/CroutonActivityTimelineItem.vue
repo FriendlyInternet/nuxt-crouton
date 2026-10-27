@@ -40,7 +40,7 @@ const operationConfig = computed(() => {
 const changesSummary = computed(() => {
   const count = props.event.changes?.length || 0
   if (count === 0) return ''
-  if (count === 1) return `${props.event.changes[0].fieldName} changed`
+  if (count === 1) return `${props.event.changes[0]?.fieldName} changed`
   return `${count} fields changed`
 })
 

@@ -146,7 +146,6 @@
 <script setup lang="ts">
 import { useBreakpoints, breakpointsTailwind } from '@vueuse/core'
 import type { CroutonItemAction } from '../types/table'
-import { CROUTON_ITEM_ACTION_KEY } from '../types/table'
 
 interface Props {
   collectionName: string
@@ -174,58 +173,27 @@ const container = computed(() =>
 )
 const isInlineMode = computed(() => container.value === 'inline')
 
-// Inline editor state
-const inlineItemId = ref<string | null>(null)
-const inlineMode = ref<'view' | 'create' | 'edit'>('view')
-const inlineSessionKey = ref(0)
+// Which record is open + where (#2598) — the shared selection, so layout blocks
+// reuse this logic rather than a copy. In inline mode this viewer's own editor
+// panel is "on screen", so rows open beside the list; otherwise in an overlay.
+// The route page can swap collections without remounting, so follow the prop.
+const selections = provideCollectionSelections()
+const selection = computed(() => selections.get(props.collectionName))
+watchEffect((onCleanup) => {
+  if (isInlineMode.value) onCleanup(selection.value.attachEditor())
+})
+const inlineItemId = computed(() => selection.value.itemId.value)
+const inlineSessionKey = computed(() => selection.value.sessionKey.value)
 const showInlineEditor = computed(() =>
-  isInlineMode.value && (inlineMode.value === 'create' || (inlineMode.value === 'edit' && !!inlineItemId.value))
+  isInlineMode.value && (selection.value.mode.value === 'create' || (selection.value.mode.value === 'edit' && !!inlineItemId.value))
 )
 
-// Provide the item action handler for all child components
-const crouton = useCrouton()
+provideSelectionItemActions(() => props.collectionName, selections)
+const handleItemAction: CroutonItemAction = (action, ids, initialData) => selection.value.act(action, ids, initialData)
 
-const handleItemAction: CroutonItemAction = (action, ids = [], initialData?) => {
-  if (isInlineMode.value && action !== 'delete') {
-    // Inline mode: show editor panel
-    if (action === 'create') {
-      inlineItemId.value = null
-      inlineMode.value = 'create'
-      inlineSessionKey.value++
-    } else if (action === 'update' || action === 'view') {
-      inlineItemId.value = ids[0] ?? null
-      inlineMode.value = action === 'view' ? 'view' : 'edit'
-      inlineSessionKey.value++
-    }
-  } else {
-    // Modal/slideover/dialog mode (or delete which always uses overlay)
-    const effectiveContainer = action === 'delete' ? 'modal' : container.value === 'inline' ? 'slideover' : container.value
-    crouton.open(action, props.collectionName, ids, effectiveContainer as any, initialData)
-  }
-}
-
-provide(CROUTON_ITEM_ACTION_KEY, handleItemAction)
-
-// Inline editor event handlers
-function handleInlineSave(savedItem: any) {
-  if (savedItem?.id) {
-    inlineItemId.value = savedItem.id
-    inlineMode.value = 'edit'
-  }
-  inlineSessionKey.value++
-}
-
-function handleInlineDelete() {
-  inlineItemId.value = null
-  inlineMode.value = 'view'
-}
-
-function handleInlineCancel() {
-  if (inlineMode.value === 'create') {
-    inlineMode.value = 'view'
-    inlineItemId.value = null
-  }
-}
+const handleInlineSave = (item: any) => selection.value.saved(item)
+const handleInlineDelete = () => selection.value.deleted()
+const handleInlineCancel = () => selection.value.cancelled()
 
 // All available layout options
 const allLayoutOptions = [
