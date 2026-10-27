@@ -2874,7 +2874,26 @@
         "count": 1
       }
     },
+    "packages/crouton-i18n/app/collection-components/UiForm.vue": {
+      "crap_high": {
+        "count": 1
+      }
+    },
     "packages/crouton-i18n/app/components/UiList.vue": {
+      "complexity_critical": {
+        "count": 2
+      },
+      "crap_critical": {
+        "count": 4
+      },
+      "crap_high": {
+        "count": 1
+      },
+      "crap_moderate": {
+        "count": 1
+      }
+    },
+    "packages/crouton-i18n/app/collection-components/UiList.vue": {
       "complexity_critical": {
         "count": 2
       },
@@ -5359,6 +5378,7 @@
     "packages/crouton-triage/app/components/usermappings/SlackUserDiscovery.vue:complexity",
     "packages/crouton-triage/app/components/usermappings/NotionUserDiscovery.vue:complexity",
     "packages/crouton-triage/app/components/flows/InputManager.vue:complexity",
-    "packages/crouton-cli/lib/seed-translations.ts:complexity"
+    "packages/crouton-cli/lib/seed-translations.ts:complexity",
+    "packages/crouton-i18n/app/collection-components/UiList.vue:complexity"
   ]
 }
