@@ -40,8 +40,7 @@ export default defineNuxtConfig({
       {
         path: join(currentDir, 'app/components'),
         prefix: 'CroutonPages',
-        global: true,
-        priority: -1
+        global: true
       },
       // Stubs dir: registers AIPageGenerator without prefix so crouton-ai can override it.
       // priority: -1 matches the pattern used by crouton-i18n stubs — overridden by real packages.

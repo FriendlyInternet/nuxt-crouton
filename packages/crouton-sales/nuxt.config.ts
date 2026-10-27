@@ -55,8 +55,7 @@ export default defineNuxtConfig({
       {
         path: join(currentDir, 'app/components'),
         prefix: 'Sales',
-        global: true,
-        priority: -1
+        global: true
       }
     ]
   },

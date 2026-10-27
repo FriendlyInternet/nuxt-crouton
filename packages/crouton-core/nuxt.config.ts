@@ -116,8 +116,7 @@ export default defineNuxtConfig({
       {
         path: join(currentDir, 'app/components'),
         prefix: 'Crouton',
-        global: true,
-        priority: -1
+        global: true
       },
       {
         // Stubs - low priority so other packages can override

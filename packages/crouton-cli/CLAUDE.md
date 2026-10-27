@@ -898,8 +898,7 @@ features: {
 
 Every collection form is named `<Layer><Plural>Form` (e.g. `ShopProductsForm`) — there is no
 `formComponent` override. To customise a form, put your own component with that name in the app's
-`app/components`; it wins over the generated and package-registered ones (package component dirs
-register at `priority: -1`).
+`app/components`; it wins over the generated and package-registered ones.
 
 ## Examples
 
