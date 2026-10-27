@@ -12,15 +12,9 @@
  * configured collections (keyed as written, often singular) plus the package-owned targets
  * (keyed by plural directory). Unknown target → current layer, the historical behaviour.
  */
-import { toCase } from './helpers.ts'
+import { toCase, toLayerCamelCase } from './helpers.ts'
 
-/** `knowledge-base` / `my_app` → `knowledgeBase` / `myApp`; an already-camel layer is unchanged. */
-export function toLayerCamelCase(layer: string): string {
-  return layer
-    .split(/[-_]/)
-    .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
-}
+export { toLayerCamelCase }
 
 export function resolveRefCollectionKey(
   refTarget: string,

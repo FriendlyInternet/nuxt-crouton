@@ -10,25 +10,8 @@
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { fileExists } from '@fyit/crouton-core/shared/utils/fs'
+import { pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { getAllLayers, getAllCollectionsInLayer } from '../utils/layer-discovery.ts'
-
-/**
- * Convert a string to PascalCase
- */
-function toPascalCase(str: string): string {
-  return str
-    .split(/[-_\s]+/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join('')
-}
-
-/**
- * Convert a string to camelCase
- */
-function toCamelCase(str: string): string {
-  const pascal = toPascalCase(str)
-  return pascal.charAt(0).toLowerCase() + pascal.slice(1)
-}
 
 interface CollectionQueryInfo {
   layer: string
@@ -58,9 +41,9 @@ export async function discoverCollectionQueries(basePath: string = '.'): Promise
         continue
       }
 
-      const layerPascal = toPascalCase(layer)
-      const collectionPascal = toPascalCase(collection)
-      const collectionKey = `${toCamelCase(layer)}${collectionPascal}`
+      const layerPascal = pascal(layer)
+      const collectionPascal = pascal(collection)
+      const collectionKey = `${toLayerCamelCase(layer)}${collectionPascal}`
       const prefixedPascalCasePlural = `${layerPascal}${collectionPascal}`
       const importPath = `~~/layers/${layer}/collections/${collection}/server/database/queries`
 

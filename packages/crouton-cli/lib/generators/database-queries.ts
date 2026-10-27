@@ -1,5 +1,5 @@
 // Generator for database queries
-import { toKebabCase, pascal } from '../utils/helpers.ts'
+import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
 
 // Shared context for the tree-query template builders below
@@ -340,15 +340,6 @@ function detectReferenceFields(data: Record<string, any>, config: Record<string,
   })
 
   return { singleReferences, arrayReferences }
-}
-
-// Convert a layer name to camelCase to ensure a valid JavaScript identifier
-// (e.g. my-app_core -> myAppCore)
-function toLayerCamelCase(layer: string): string {
-  return layer
-    .split(/[-_]/)
-    .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
 }
 
 // Generate imports for referenced schemas (external, cross-layer, or same-layer)
