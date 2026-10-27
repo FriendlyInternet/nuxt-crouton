@@ -184,7 +184,7 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
 
       return result
     } catch (error: any) {
-      const errorMessage = error.data?.message || error.data || t('mutations.creationFailed')
+      const errorMessage = errorText(error, t('mutations.creationFailed'))
 
       notify.error(t('mutations.creationFailed'), { description: errorMessage })
 
@@ -248,7 +248,7 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
 
       return result
     } catch (error: any) {
-      const errorMessage = error.data?.message || error.data || t('mutations.updateFailed')
+      const errorMessage = errorText(error, t('mutations.updateFailed'))
 
       notify.error(t('mutations.updateFailed'), { description: errorMessage })
 
@@ -291,7 +291,7 @@ export function useCollectionMutation(collection: string): CollectionMutationRet
       // Invalidate cache to trigger refetch (includes individual item caches)
       await invalidateCache(ids)
     } catch (error: any) {
-      const errorMessage = error.data?.message || error.data || t('mutations.deleteFailed')
+      const errorMessage = errorText(error, t('mutations.deleteFailed'))
 
       notify.error(t('mutations.deleteFailed'), { description: errorMessage })
 
