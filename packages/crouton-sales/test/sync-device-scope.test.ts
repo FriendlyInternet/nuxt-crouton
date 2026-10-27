@@ -10,9 +10,10 @@ import { syncAuthHeaders } from '../server/utils/cloud-sync-pusher'
  */
 const tbl = () => sqliteTable('t', { id: text('id').primaryKey(), teamId: text('team_id') })
 
-function fakeDb() {
+function fakeDb(existing: Array<{ teamId: string }> = []) {
   const inserted: any[] = []
   const db = {
+    select: () => ({ from: () => ({ where: () => ({ limit: async () => existing }) }) }),
     update: () => ({ set: () => ({ where: () => ({ returning: async () => [] }) }) }),
     insert: () => ({ values: async (v: any) => { inserted.push(v) } }),
   }
@@ -32,6 +33,18 @@ describe('applyOutboxEvents team scoping', () => {
     expect(res.skipped).toEqual([{ id: 'e1', reason: 'team mismatch', permanent: true }])
     expect(inserted).toEqual([])
     expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it("a till on team A cannot update team B's existing row by id", async () => {
+    const { db, inserted } = fakeDb([{ teamId: 'B' }])
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const res = await applyOutboxEvents(db, [
+      { id: 'e1', entityType: 'order', entityId: 'o1', payload: {} },
+    ], tables, 'A')
+    expect(res.applied).toEqual([])
+    expect(res.skipped).toEqual([{ id: 'e1', reason: 'team mismatch', permanent: true }])
+    expect(inserted).toEqual([])
     warn.mockRestore()
   })
 

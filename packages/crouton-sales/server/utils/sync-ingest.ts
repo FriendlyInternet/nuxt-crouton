@@ -20,7 +20,7 @@
  * The collection tables (`collections/*`) are imported lazily, same pattern as
  * generate-print-queues.ts.
  */
-import { eq, getTableColumns } from 'drizzle-orm'
+import { and, eq, getTableColumns } from 'drizzle-orm'
 import type { OutboxEntityType } from './sync-outbox'
 
 export interface IngestEvent {
@@ -127,14 +127,25 @@ export async function applyOutboxEvents(
       const setObj = { ...values }
       delete setObj.id
 
+      // An existing row under another team is never touched or re-inserted.
+      if (scopeTeamId) {
+        const [owner] = await db.select({ teamId: table.teamId }).from(table).where(eq(table.id, e.entityId)).limit(1)
+        if (owner && owner.teamId !== scopeTeamId) {
+          console.warn(`[crouton-sales] sync ingest rejected ${e.entityType} ${e.entityId}: existing row belongs to another team`)
+          result.skipped.push({ id: ackId, reason: 'team mismatch', permanent: true })
+          continue
+        }
+      }
+      const rowWhere = scopeTeamId ? and(eq(table.id, e.entityId), eq(table.teamId, scopeTeamId)) : eq(table.id, e.entityId)
+
       // UPDATE existing row (idempotent: a replay re-sets the same values).
       let exists = false
       if (Object.keys(setObj).length > 0) {
-        const updated = await db.update(table).set(setObj).where(eq(table.id, e.entityId)).returning({ id: table.id })
+        const updated = await db.update(table).set(setObj).where(rowWhere).returning({ id: table.id })
         exists = updated.length > 0
       }
       else {
-        const [row] = await db.select({ id: table.id }).from(table).where(eq(table.id, e.entityId)).limit(1)
+        const [row] = await db.select({ id: table.id }).from(table).where(rowWhere).limit(1)
         exists = !!row
       }
 

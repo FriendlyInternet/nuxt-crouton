@@ -16,7 +16,7 @@
  * The heartbeat schema is package-owned (`../database/schema`), imported lazily
  * to stay import-safe — same pattern as the pusher.
  */
-import { desc, eq } from 'drizzle-orm'
+import { desc, eq, isNull, or } from 'drizzle-orm'
 
 /** Heartbeat row id for shared-key (deviceless) setups. Paired tills use their device id (#2725). */
 export const SYNC_STATUS_ROW_ID = 'live'
@@ -96,11 +96,11 @@ export async function readSyncStatuses(db: any, teamId?: string): Promise<SyncSt
   const rows: any[] = await db
     .select()
     .from(salesSyncStatus)
+    .where(teamId ? or(eq(salesSyncStatus.teamId, teamId), isNull(salesSyncStatus.teamId)) : undefined)
     .orderBy(desc(salesSyncStatus.lastContactAt))
     .limit(200)
 
   return rows
-    .filter(r => !teamId || !r.teamId || r.teamId === teamId)
     .map(r => ({
       deviceId: r.id,
       teamId: r.teamId ?? null,
