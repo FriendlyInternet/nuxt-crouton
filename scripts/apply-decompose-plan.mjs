@@ -505,6 +505,12 @@ function hasLabel(repo, n, label) {
   } catch { return false }
 }
 
+/** #2776: the first split of an epic is reviewed before anything starts (once — `tickets:approved`). */
+function needsTicketReview(plan, ctx, repo) {
+  if (plan.leaf || plan.signoff || ctx.depth !== 0 || !shouldReview(plan.children)) return false
+  return !hasLabel(repo, ctx.target, APPROVED_LABEL)
+}
+
 function main(argv) {
   const args = parseArgs(argv)
   if (args._[0] !== 'apply' || !args._[1]) {
@@ -519,12 +525,8 @@ function main(argv) {
     depth: args.depth != null ? Number(args.depth) : 0,
     epic_branch: args['epic-branch'] || '',
     knownLabels: knownLabelsFromFile(),
-    reviewTickets: false,
   }
-  // #2776: the first split of an epic is reviewed before anything starts (once — `tickets:approved`).
-  if (!plan.leaf && !plan.signoff && ctx.depth === 0 && shouldReview(plan.children)) {
-    ctx.reviewTickets = !hasLabel(args.repo, target, APPROVED_LABEL)
-  }
+  ctx.reviewTickets = needsTicketReview(plan, ctx, args.repo)
   const actions = planToActions(plan, ctx)
   const summary = runActions(actions, { repo: args.repo })
   console.log(JSON.stringify(summary, null, 2))
