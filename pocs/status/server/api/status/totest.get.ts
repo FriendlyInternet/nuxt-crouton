@@ -26,7 +26,7 @@ async function stagingUrl(event: Parameters<typeof ghFetch>[0], app: string | nu
 export default defineEventHandler(async (event) => {
   await requireStatusOwner(event)
 
-  const items: Array<ToTestItem & { stagingUrl: string | null }> = []
+  const items: Array<ToTestItem & { stagingUrl: string | null, mergedAt?: string | null }> = []
   const errors: string[] = []
 
   const epics = await ghFetch<GhIssue[]>(event, `/repos/${REPO}/issues?labels=status:to-test&state=all&per_page=50`)
@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
     if (!app || hasOwnerOk(comments.data ?? [], OWNER_LOGIN)) continue
     items.push({
       kind: 'pr', number: p.number, title: p.title, url: p.html_url, app,
-      what: firstParagraph(p.body), steps: extractSteps(section), stagingUrl: await stagingUrl(event, app)
+      what: firstParagraph(p.body), steps: extractSteps(section), stagingUrl: await stagingUrl(event, app), mergedAt: p.merged_at
     })
   }
 

@@ -46,6 +46,7 @@ permissions:
   contents: read
   pull-requests: write
   issues: write
+  actions: read # job logs for the red-PR log tail (#2677)
 
 # Key by head SHA (PR/check events) or issue number (issues events) so concurrent refreshes for
 # the SAME target collapse to one (each run recomputes full state, so the latest wins); distinct
@@ -70,6 +71,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # Default branch only (never PR code) — just the pure log-tail helper (#2677).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          sparse-checkout: scripts/lib
+          persist-credentials: false
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           OWNER_LOGIN: ${{ vars.PIPELINE_OWNER || 'pmcp' }}
@@ -211,10 +218,33 @@ jobs:
               const why = excerpts.length
                 ? `\n\n<details><summary>what failed</summary>\n\n\`\`\`\n${excerpts.join('\n\n')}\n\`\`\`\n</details>`
                 : ''
+
+              // The actual end of each failing job's log (#2677): annotations are often noise or
+              // absent (a deploy failure has none). For Actions checks the check-run id IS the job
+              // id. Fenced, so no @mention in a log can ping. Any failure to fetch is skipped.
+              let tails = ''
+              let budget = 20000
+              try {
+                const { logTail } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/log-tail.mjs`)
+                for (const f of names.slice(0, 3)) {
+                  if (!f.id || budget <= 0) continue
+                  try {
+                    const res = await github.rest.actions.downloadJobLogsForWorkflowRun(
+                      { owner, repo, job_id: f.id })
+                    const raw = typeof res.data === 'string' ? res.data : String(res.data || '')
+                    const { text, truncated } = logTail(raw, { maxLines: 80, maxBytes: Math.min(4096, budget) })
+                    if (!text) continue
+                    const tail = text.replace(/```/g, "'''")
+                    budget -= tail.length
+                    const cut = truncated ? ' (truncated)' : ''
+                    tails += `\n\n<details><summary>log tail — ${f.name}${cut}</summary>\n\n\`\`\`\n${tail}\n\`\`\`\n</details>`
+                  } catch (e) { core.warning(`log tail for ${f.name}: ${e.message}`) }
+                }
+              } catch (e) { core.warning(`log-tail helper unavailable: ${e.message}`) }
               const body =
                 `${marker}\n` +
                 `🔴 **@${OWNER} — CI failed on this pipeline PR** (${causes.length} failing ` +
-                `check${causes.length === 1 ? '' : 's'}): ${list}.${why}\n\n` +
+                `check${causes.length === 1 ? '' : 's'}): ${list}.${why}${tails}\n\n` +
                 `**What's needed:** read the failure, then either push a fix to \`${pr.head.ref}\` ` +
                 `or reply here saying why it isn't yours. A red sub-PR won't auto-merge into its ` +
                 `epic, so it sits until one of those happens — **it does not mean the work is ` +

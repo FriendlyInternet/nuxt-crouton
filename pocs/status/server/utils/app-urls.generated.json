@@ -1,0 +1,34 @@
+{
+  "kassa": {
+    "stagingUrl": "https://kassa.pmcp.dev"
+  },
+  "velo": {
+    "stagingUrl": "https://velo.pmcp.dev"
+  },
+  "booking-demo": {
+    "stagingUrl": "https://booking-demo.pmcp.dev"
+  },
+  "crate": {
+    "stagingUrl": "https://crate-staging.pmcp.dev"
+  },
+  "crouton-builder": {
+    "stagingUrl": "https://crouton-builder.pmcp.dev"
+  },
+  "crouton-builder-demo": {
+    "stagingUrl": "https://crouton-builder-demo.pmcp.dev"
+  },
+  "gallery": {
+    "stagingUrl": "https://gallery-staging.pmcp.dev"
+  },
+  "loop-station": {
+    "stagingUrl": "https://loop-station.pmcp.dev",
+    "reviewLogin": false
+  },
+  "pins": {
+    "stagingUrl": "https://pins.pmcp.dev"
+  },
+  "snippets": {},
+  "status": {
+    "stagingUrl": "https://status.pmcp.dev"
+  }
+}
