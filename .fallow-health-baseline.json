@@ -5027,48 +5027,6 @@
         "count": 3
       }
     },
-    "pocs/crouton-builder-demo/app/components/SpikeBlockNode.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/app/components/SpikeFocusShell.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/app/components/SpikePageCard.vue": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/app/components/SpikePagePreview.vue": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/app/pages/hide-recipes.vue": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "pocs/crouton-builder-demo/app/pages/spike-app.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
     "pocs/crouton-builder/app/pages/builder/[pageId].vue": {
       "complexity_critical": {
         "count": 1
@@ -5240,11 +5198,9 @@
     "packages/crouton-core/app/utils/layout-tree.ts:high impact",
     "packages/crouton-core/app/composables/useCrouton.ts:complexity",
     "packages/crouton-sales/app/components/EventWorkspace/ProductsTab.vue:untested risk",
-    "pocs/crouton-builder-demo/app/utils/spike-board.ts:high impact",
     "packages/crouton-bookings/app/composables/useScheduleRules.ts:untested risk",
     "packages/crouton-triage/server/adapters/figma.ts:dead code",
     "packages/crouton-pages/app/components/CollectionBinderRenderer.vue:complexity",
-    "pocs/crouton-builder-demo/app/composables/useSpikeNodeOps.ts:untested risk",
     "packages/crouton-bookings/app/composables/useBookingsList.ts:high impact",
     "packages/crouton-assets/app/utils/asset.ts:high impact",
     "packages/crouton-cli/lib/utils/helpers.ts:high impact",
@@ -5255,7 +5211,6 @@
     "packages/crouton-layout/app/components/LayoutRenderer.vue:complexity",
     "packages/crouton-bookings/app/composables/useBookingSlots.ts:high impact",
     "scripts/lib/session-cost.mjs:untested risk",
-    "pocs/crouton-builder-demo/app/composables/useSpikeSnapDrag.ts:untested risk",
     "packages/crouton-triage/server/adapters/notion.ts:dead code",
     "packages/crouton-bookings/app/components/BookingCreateCard.vue:complexity",
     "apps/fanfare/app/pages/index.vue:untested risk",
@@ -5265,9 +5220,7 @@
     "packages/crouton-pages/app/components/Blocks/Views/ContactBlockView.vue:untested risk",
     "packages/crouton-admin/app/components/TeamDomainSettings.vue:complexity",
     "packages/crouton-pages/app/components/Nav.vue:complexity",
-    "pocs/crouton-builder-demo/app/composables/useSpikeMagic.ts:untested risk",
     "scripts/lib/sync-wrangler-ids.mjs:complexity",
-    "pocs/crouton-builder-demo/app/components/SpikeBlockNode.vue:complexity",
     "pocs/crouton-builder/app/pages/builder/[pageId].vue:complexity",
     "packages/crouton-pages/app/components/Workspace/Editor.vue:complexity",
     "packages/crouton-core/app/components/Detail.vue:complexity",
@@ -5276,9 +5229,7 @@
     "packages/crouton-auth/app/middleware/team-context.global.ts:complexity",
     "packages/crouton-bookings/server/api/crouton-bookings/teams/[id]/customer-bookings-batch.post.ts:complexity",
     "packages/crouton-printing/server/utils/receipt-formatter.ts:complexity",
-    "pocs/crouton-builder-demo/app/components/SpikeFocusShell.vue:complexity",
     "packages/crouton-editor/app/components/Preview.vue:complexity",
-    "pocs/crouton-builder-demo/app/pages/spike-app.vue:complexity",
     "packages/crouton-sales/app/components/Client/Cart.vue:complexity",
     "packages/crouton-bookings/app/components/BookingCard.vue:complexity",
     "packages/crouton-bookings/app/components/LocationForm.vue:complexity",
