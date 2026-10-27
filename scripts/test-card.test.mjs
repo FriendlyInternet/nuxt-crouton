@@ -2,7 +2,7 @@
 //   node --test scripts/test-card.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideTestCard, buildCard, buildTestMail, extractChecks, hasTestSteps, CARD_MARKER } from './test-card.mjs'
+import { decideTestCard, buildCard, buildTestMail, extractChecks, hasTestSteps, CARD_MARKER, appsFromJobs, decideAppNotice, BROKEN_NOTICE, BACKUP_NOTICE, NOT_CHECKED_LINE } from './test-card.mjs'
 
 const C = { state: 'closed' }
 const base = { subIssues: [C, C], labels: ['epic'], comments: [], deployed: true }
@@ -94,4 +94,24 @@ test('deriveApps: app from changed files, lockfile ignored, tie broken by text',
   assert.deepEqual(deriveApps({ changedFiles: ['.github/x.yml'], apps }), [])
   assert.deepEqual(deriveApps({ changedFiles: ['packages/crouton-core/a.ts'], apps }), ['velo', 'kassa'])
   assert.deepEqual(deriveApps({ changedFiles: ['packages/crouton-core/a.ts'], apps, text: 'Open Kassa and pay' }), ['kassa'])
+})
+
+test('card says saving was not checked only when the app has no smoke.crud', () => {
+  assert.match(buildCard({ epicNumber: 1, app: 'Gallery', crudChecked: false }), new RegExp(NOT_CHECKED_LINE))
+  assert.doesNotMatch(buildCard({ epicNumber: 1, app: 'Velo', crudChecked: true }), new RegExp(NOT_CHECKED_LINE))
+  assert.doesNotMatch(buildCard({ epicNumber: 1 }), new RegExp(NOT_CHECKED_LINE))
+})
+test('appsFromJobs matches whole app ids by conclusion', () => {
+  const jobs = [{ name: 'deploy (velo, staging)', conclusion: 'failure' }, { name: 'deploy (kassa, staging)', conclusion: 'success' }]
+  assert.deepEqual(appsFromJobs(jobs, ['velo', 'kassa', 'vel'], 'failure'), ['velo'])
+  assert.deepEqual(appsFromJobs(jobs, ['velo', 'kassa'], 'success'), ['kassa'])
+})
+test('broken notice posts once; back-up notice only after a broken one', () => {
+  assert.equal(decideAppNotice({ kind: 'broken', comments: [] }).body, BROKEN_NOTICE)
+  const afterBroken = [{ body: BROKEN_NOTICE }]
+  assert.equal(decideAppNotice({ kind: 'broken', comments: afterBroken }).post, false)
+  assert.equal(decideAppNotice({ kind: 'back', comments: [] }).post, false)
+  assert.equal(decideAppNotice({ kind: 'back', comments: afterBroken }).body, BACKUP_NOTICE)
+  assert.equal(decideAppNotice({ kind: 'back', comments: [...afterBroken, { body: BACKUP_NOTICE }] }).post, false)
+  assert.equal(decideAppNotice({ kind: 'broken', comments: [...afterBroken, { body: BACKUP_NOTICE }] }).post, true)
 })

@@ -74,8 +74,37 @@ export function extractChecks(body = '', max = 5) {
   return (howTo.length ? howTo : sectionChecks(body, 'Done when')).slice(0, max)
 }
 
+/** Markers for the "app is broken / back up" notices on an open test card (#2870). */
+export const BROKEN_MARKER = '<!-- test-card: app-broken -->'
+export const BACKUP_MARKER = '<!-- test-card: app-back -->'
+export const BROKEN_NOTICE = `${BROKEN_MARKER}\n⚠️ The app is broken on staging right now, so hold off testing. I'll say when it's back.`
+export const BACKUP_NOTICE = `${BACKUP_MARKER}\n✅ Back up, you can test.`
+
+/**
+ * Which apps did a deploy run's jobs name with the given conclusion? PURE. Matrix job names
+ * carry the app id, so match it as a whole word.
+ *   jobs: [{ name, conclusion }]   appIds: string[]
+ */
+export function appsFromJobs(jobs = [], appIds = [], conclusion = 'failure') {
+  return appIds.filter(id => jobs.some(j => j.conclusion === conclusion && new RegExp(`(?<![\\w-])${id}(?![\\w-])`, 'i').test(j.name || '')))
+}
+
+/**
+ * Should a broken/back-up notice be posted on a to-test card? PURE. The latest notice marker in
+ * the comments is the state, so a re-run never double-posts: "broken" only when the card is not
+ * already marked broken; "back" only when it is.
+ */
+export function decideAppNotice({ kind, comments = [] } = {}) {
+  const last = comments.map(c => c.body || '').reduce((acc, b) => (b.includes(BROKEN_MARKER) ? 'broken' : b.includes(BACKUP_MARKER) ? 'back' : acc), '')
+  if (kind === 'broken') return last === 'broken' ? { post: false, reason: 'already marked broken' } : { post: true, body: BROKEN_NOTICE }
+  if (kind === 'back') return last === 'broken' ? { post: true, body: BACKUP_NOTICE } : { post: false, reason: 'was not marked broken' }
+  return { post: false, reason: 'unknown kind' }
+}
+
+export const NOT_CHECKED_LINE = 'Saving was not checked automatically for this app.'
+
 /** Build the card comment. No password is ever included — only the account to log in as. */
-export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', reviewAccount = '', checks = [] } = {}) {
+export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', reviewAccount = '', checks = [], crudChecked } = {}) {
   const list = checks.length ? checks : [app ? `Open the app and try what "${title}" changed` : `Read the epic and check "${title}" did what it says`]
   const where = !app
     ? [NO_APP_LINE]
@@ -93,6 +122,7 @@ export function buildCard({ epicNumber, title = '', app = '', stagingUrl = '', r
     ...where,
     '',
     ...list.map(c => `- Check: ${c}`),
+    ...(app && crudChecked === false ? ['', NOT_CHECKED_LINE] : []),
     '',
     'Reply `ok`, or `not ok: <what is wrong>`.'
   ].join('\n')
