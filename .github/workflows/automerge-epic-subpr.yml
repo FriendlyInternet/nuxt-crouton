@@ -253,6 +253,13 @@ jobs:
               // Green + presence gates above still apply — `ok` never overrides a red check.
               const prComments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
               const prCommits = await github.paginate(github.rest.pulls.listCommits, { owner, repo, pull_number, per_page: 100 })
+              // listCommits omits files; fetch them for non-merge commits so review-capture
+              // commits (writeups/ui-proposals/** only) don't void an approval.
+              for (const k of prCommits) {
+                if ((k.parents || []).length > 1) continue
+                const full = await github.rest.repos.getCommit({ owner, repo, ref: k.sha })
+                k.files = (full.data.files || []).map(f => f.filename)
+              }
               const { ownerMergeGo } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/lib/owner-merge-go.mjs`)
               const go = ownerMergeGo({ comments: prComments, commits: prCommits, owner: OWNER })
               core.info(`#${pull_number} owner go: ${go.go} (${go.reason})`)
