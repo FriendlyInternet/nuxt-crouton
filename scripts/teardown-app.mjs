@@ -337,6 +337,70 @@ function confirmTyped(expected) {
 // main
 // ---------------------------------------------------------------------------
 
+function printBanner({ args, kind, config, liveConfig, history }) {
+  const source = liveConfig
+    ? findWranglerConfig(args.app, repoRoot)
+    : config
+      ? `${history.path} @ ${history.sha.slice(0, 8)} (git history)`
+      : 'no wrangler.jsonc anywhere — using crouton naming convention'
+  console.log(`\n  teardown-app: ${args.app}`)
+  console.log(`    source : ${source}`)
+  console.log(`    kind   : ${kind}${kind === 'poc' ? ' (one deploy, at the base name — no prod counterpart)' : ''}`)
+  console.log(`    scope  : ${args.scope}${kind === 'poc' && args.scope !== 'staging' ? ` → a POC has one env; treating as its single deploy` : ''}\n`)
+
+  // A plan built from a CONVENTION rather than the app's real config is a guess, and a guess
+  // that matches nothing exits 0 and reads as success (#1894). Say so loudly, not in passing.
+  if (!config) {
+    console.log('  ⚠ No wrangler.jsonc found (live or in git history; is the clone shallow?) — every name below is INFERRED from the crouton naming')
+    console.log('    convention, not read from the app. If the app deployed under different names,')
+    console.log('    this plan deletes NOTHING and still reports success. Verify against Cloudflare')
+    console.log('    (or the app\'s branch) before trusting a green run.\n')
+  }
+  if (kind === 'unknown') {
+    console.log('  ⚠ Could not tell whether this is a POC or a launched app (no directory, no')
+    console.log('    poc:/app: label). Falling back to the launched-app layout and KEEPING the prod')
+    console.log('    guard. If it was a POC, its worker is at the base name.\n')
+  }
+}
+
+function printPlan(scopes) {
+  console.log('  Plan (delete these Cloudflare resources):')
+  for (const s of scopes) {
+    console.log(`  • ${s.env}${s.isProd ? ' (PROD ⚠)' : ''}:`)
+    printCmd(['delete', '--name', s.worker])
+    printCmd(['d1', 'delete', s.d1, '-y'])
+    printCmd(['kv', 'namespace', 'delete', s.kvId ? `--namespace-id ${s.kvId}` : `(by title "${s.kvTitle}")`])
+  }
+  console.log('')
+}
+
+// Prod guard — mirror db-clone: typed confirmation (or --confirm in CI). Resolves true to proceed.
+async function confirmProd(args, prodWorker) {
+  if (args.confirm !== undefined) {
+    const ok = args.confirm.trim() === prodWorker
+    if (!ok) console.error(`  --confirm "${args.confirm}" does not match prod worker "${prodWorker}" — aborting.`)
+    return ok
+  }
+  if (process.stdin.isTTY) {
+    const ok = await confirmTyped(prodWorker)
+    if (!ok) console.error('  Confirmation did not match — aborting.')
+    return ok
+  }
+  console.error(`  Scope includes PROD. In a non-interactive run, pass --confirm "${prodWorker}" (or --yes) to proceed.`)
+  return false
+}
+
+/** Print the outcome; returns true when anything was not deleted. */
+function reportResults(results) {
+  const count = st => results.filter(r => r.status === st).length
+  const bad = count('failed') + count('not-deleted')
+  for (const r of results.filter(r => r.status === 'not-deleted' || r.status === 'failed')) {
+    console.error(`  ✗ NOT DELETED: ${r.type} ${r.name}`)
+  }
+  console.log(`\n  ${bad ? '⚠' : '✅'} Done. ${count('deleted')} deleted (verified gone), ${count('absent')} already gone, ${count('failed')} failed, ${count('not-deleted')} NOT DELETED.\n`)
+  return bad > 0
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2))
   if (args.help || !args.app || !SCOPES.has(args.scope)) {
@@ -357,55 +421,16 @@ async function main() {
   const scopes = envs.map(env => resolveScope(args.app, env, config, kind))
   const hasProd = needsProdGuard(kind, args.scope)
 
-  console.log(`\n  teardown-app: ${args.app}`)
-  console.log(`    source : ${liveConfig ? findWranglerConfig(args.app, repoRoot) : config ? `${history.path} @ ${history.sha.slice(0, 8)} (git history)` : 'no wrangler.jsonc anywhere — using crouton naming convention'}`)
-  console.log(`    kind   : ${kind}${kind === 'poc' ? ' (one deploy, at the base name — no prod counterpart)' : ''}`)
-  console.log(`    scope  : ${args.scope}${kind === 'poc' && args.scope !== 'staging' ? ` → a POC has one env; treating as its single deploy` : ''}\n`)
+  printBanner({ args, kind, config, liveConfig, history })
 
-  // A plan built from a CONVENTION rather than the app's real config is a guess, and a guess
-  // that matches nothing exits 0 and reads as success (#1894). Say so loudly, not in passing.
-  if (!config) {
-    console.log('  ⚠ No wrangler.jsonc found (live or in git history; is the clone shallow?) — every name below is INFERRED from the crouton naming')
-    console.log('    convention, not read from the app. If the app deployed under different names,')
-    console.log('    this plan deletes NOTHING and still reports success. Verify against Cloudflare')
-    console.log('    (or the app\'s branch) before trusting a green run.\n')
-  }
-  if (kind === 'unknown') {
-    console.log('  ⚠ Could not tell whether this is a POC or a launched app (no directory, no')
-    console.log('    poc:/app: label). Falling back to the launched-app layout and KEEPING the prod')
-    console.log('    guard. If it was a POC, its worker is at the base name.\n')
-  }
-
-  console.log('  Plan (delete these Cloudflare resources):')
-  for (const s of scopes) {
-    console.log(`  • ${s.env}${s.isProd ? ' (PROD ⚠)' : ''}:`)
-    printCmd(['delete', '--name', s.worker])
-    printCmd(['d1', 'delete', s.d1, '-y'])
-    printCmd(['kv', 'namespace', 'delete', s.kvId ? `--namespace-id ${s.kvId}` : `(by title "${s.kvTitle}")`])
-  }
-  console.log('')
+  printPlan(scopes)
 
   if (args.dryRun) {
     console.log('  --dry-run: no changes made.\n')
     return
   }
 
-  // Prod guard — mirror db-clone: typed confirmation (or --confirm in CI / --yes).
-  if (hasProd && !args.yes) {
-    const prodWorker = scopes.find(s => s.isProd).worker
-    let ok
-    if (args.confirm !== undefined) {
-      ok = args.confirm.trim() === prodWorker
-      if (!ok) console.error(`  --confirm "${args.confirm}" does not match prod worker "${prodWorker}" — aborting.`)
-    } else if (process.stdin.isTTY) {
-      ok = await confirmTyped(prodWorker)
-      if (!ok) console.error('  Confirmation did not match — aborting.')
-    } else {
-      ok = false
-      console.error(`  Scope includes PROD. In a non-interactive run, pass --confirm "${prodWorker}" (or --yes) to proceed.`)
-    }
-    if (!ok) process.exit(1)
-  }
+  if (hasProd && !args.yes && !(await confirmProd(args, scopes.find(s => s.isProd).worker))) process.exit(1)
 
   const backupDir = args.backupDir || 'teardown-backups'
   mkdirSync(backupDir, { recursive: true })
@@ -415,13 +440,7 @@ async function main() {
     process.exit(1)
   }
 
-  const count = st => results.filter(r => r.status === st).length
-  const bad = count('failed') + count('not-deleted')
-  for (const r of results.filter(r => r.status === 'not-deleted' || r.status === 'failed')) {
-    console.error(`  ✗ NOT DELETED: ${r.type} ${r.name}`)
-  }
-  console.log(`\n  ${bad ? '⚠' : '✅'} Done. ${count('deleted')} deleted (verified gone), ${count('absent')} already gone, ${count('failed')} failed, ${count('not-deleted')} NOT DELETED.\n`)
-  if (bad) process.exit(1)
+  if (reportResults(results)) process.exit(1)
 }
 
 // Run only as a CLI — importing this module (e.g. from teardown-app.test.mjs, #1894) must not

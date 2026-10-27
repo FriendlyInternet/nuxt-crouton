@@ -146,35 +146,41 @@ const scope = { env: 'staging', worker: 'foo', d1: 'foo-db', kvTitle: 'foo-kv', 
 function fakeCf({ exists = ['worker:foo', 'd1:foo-db', 'kv:foo-kv'], failExport = false, stubborn = [] } = {}) {
   const live = new Set(exists)
   const calls = []
+  const kill = (key) => { if (!stubborn.includes(key)) live.delete(key) }
+  const need = (key, msg) => { if (!live.has(key)) throw new Error(msg) }
+  const names = (prefix) => [...live].filter(x => x.startsWith(prefix)).map(x => x.slice(prefix.length))
+  const handlers = {
+    'd1 export': (args) => {
+      if (failExport) throw new Error('export boom: 500')
+      need(`d1:${args[2]}`, "Couldn't find DB with name")
+      return ''
+    },
+    'delete': (args) => {
+      need(`worker:${args[2]}`, 'This Worker does not exist [code: 10007]')
+      kill(`worker:${args[2]}`)
+      return ''
+    },
+    'd1 delete': (args) => {
+      need(`d1:${args[2]}`, "Couldn't find DB")
+      kill(`d1:${args[2]}`)
+      return ''
+    },
+    'd1 list': () => JSON.stringify(names('d1:').map(name => ({ name }))),
+    'kv namespace list': () => JSON.stringify(names('kv:').map(t => ({ id: 'id-' + t, title: t }))),
+    'kv namespace delete': (args) => {
+      live.delete('kv:' + args[4].replace('id-', ''))
+      return ''
+    },
+    'deployments': (args) => {
+      need(`worker:${args[3]}`, 'This Worker does not exist [code: 10007]')
+      return '[]'
+    },
+  }
   const run = (args) => {
     calls.push(args.join(' '))
-    const [a, b] = args
-    if (a === 'd1' && b === 'export') {
-      if (failExport) throw new Error('export boom: 500')
-      if (!live.has(`d1:${args[2]}`)) throw new Error("Couldn't find DB with name")
-      return ''
-    }
-    if (a === 'delete') {
-      if (!live.has(`worker:${args[2]}`)) throw new Error('This Worker does not exist [code: 10007]')
-      if (!stubborn.includes(`worker:${args[2]}`)) live.delete(`worker:${args[2]}`)
-      return ''
-    }
-    if (a === 'd1' && b === 'delete') {
-      if (!live.has(`d1:${args[2]}`)) throw new Error("Couldn't find DB")
-      if (!stubborn.includes(`d1:${args[2]}`)) live.delete(`d1:${args[2]}`)
-      return ''
-    }
-    if (a === 'd1' && b === 'list') return JSON.stringify([...live].filter(x => x.startsWith('d1:')).map(x => ({ name: x.slice(3) })))
-    if (a === 'kv' && b === 'namespace' && args[2] === 'list') return JSON.stringify([...live].filter(x => x.startsWith('kv:')).map(x => ({ id: 'id-' + x.slice(3), title: x.slice(3) })))
-    if (a === 'kv' && b === 'namespace' && args[2] === 'delete') {
-      live.delete('kv:' + args[3 + 1].replace('id-', ''))
-      return ''
-    }
-    if (a === 'deployments') {
-      if (!live.has(`worker:${args[3]}`)) throw new Error('This Worker does not exist [code: 10007]')
-      return '[]'
-    }
-    throw new Error('unexpected ' + args.join(' '))
+    const key = [args[0], args[1], args[2]].reduce((found, _, i, a) => found ?? (handlers[a.slice(0, 3 - i).join(' ')] ? a.slice(0, 3 - i).join(' ') : undefined), undefined)
+    if (!key) throw new Error('unexpected ' + args.join(' '))
+    return handlers[key](args)
   }
   return { run, calls, live }
 }
