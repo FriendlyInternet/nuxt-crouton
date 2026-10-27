@@ -107,6 +107,25 @@ describe('#816 pull time and lost edits', () => {
     expect(JSON.parse(rows[0].keptJson)).toEqual({ price: 6 })
   })
 
+  it('records every conflict of a large batch, chunked under the D1 bound-param cap', async () => {
+    const rows: any[] = []
+    const db = {
+      insert: () => ({
+        values: async (v: any[]) => {
+          // a multi-row insert binds ≥ 1 param per column per row; D1 rejects > 100
+          if (v.length * Object.keys(v[0]).length > 100) throw new Error('too many SQL variables')
+          rows.push(...v)
+        },
+      }),
+    }
+    const conflicts = Array.from({ length: 30 }, (_, i) => ({
+      entityType: 'product', entityId: `p${i}`, reason: 'older', payload: { price: i }, current: { price: 0 },
+    }))
+    await recordLostEdits(db, conflicts, { deviceId: 't1', teamId: 'A' })
+    expect(rows).toHaveLength(30)
+    expect(new Set(rows.map(r => r.entityId)).size).toBe(30)
+  })
+
   it('records nothing without conflicts or a team, and never throws', async () => {
     const insert = vi.fn()
     await recordLostEdits({ insert }, [], { teamId: 'A' })

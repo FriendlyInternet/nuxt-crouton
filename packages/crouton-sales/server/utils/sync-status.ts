@@ -16,7 +16,8 @@
  * The heartbeat schema is package-owned (`../database/schema`), imported lazily
  * to stay import-safe — same pattern as the pusher.
  */
-import { desc, eq, isNull, or } from 'drizzle-orm'
+import { desc, eq, getTableColumns, isNull, or } from 'drizzle-orm'
+import { chunkRowsForTable } from '@fyit/crouton-core/shared/utils/d1'
 
 /** Heartbeat row id for shared-key (deviceless) setups. Paired tills use their device id (#2725). */
 export const SYNC_STATUS_ROW_ID = 'live'
@@ -160,7 +161,8 @@ export async function recordLostEdits(
   if (!conflicts?.length || !device.teamId) return
   try {
     const { salesSyncConflicts } = await import('../database/schema')
-    await db.insert(salesSyncConflicts).values(conflicts.map(c => ({
+    // D1 caps a query at 100 bound params and a multi-row insert binds one per column per row.
+    const rows = conflicts.map(c => ({
       teamId: device.teamId!,
       deviceId: device.deviceId ?? null,
       entityType: c.entityType,
@@ -168,7 +170,10 @@ export async function recordLostEdits(
       reason: c.reason,
       lostJson: snapshot(c.payload),
       keptJson: snapshot(c.current),
-    })))
+    }))
+    for (const batch of chunkRowsForTable(rows, getTableColumns(salesSyncConflicts))) {
+      await db.insert(salesSyncConflicts).values(batch)
+    }
   }
   catch (err: any) {
     console.warn('[crouton-sales] lost-edit record failed (ignored):', err?.message || err)
