@@ -1,5 +1,5 @@
 import { appTargetFor } from '../../../utils/app-urls'
-import { reviewLoginUrl } from '../../../utils/review-login'
+import { reviewLoginUrl, sanitizeWalk, withWalk } from '../../../utils/review-login'
 import { listLiveApps, resolvePrLogin } from '../../../utils/live-apps'
 import { isSafePath } from '../../../utils/totest-core'
 import { previewGoneHtml, previewNoneHtml } from '../../../utils/live-apps-core'
@@ -60,11 +60,13 @@ export default defineEventHandler(async (event) => {
     base = decision.url
   }
 
+  const walk = sanitizeWalk(getQuery(event).walk)
+
   // No sign-in for this app (opted out, or no seed secret here): just open its staging site.
   const secret = String(cfg.reviewSeedSecret || '')
   if (!target.hasSignIn || !secret) {
-    return sendRedirect(event, to ? `${base.replace(/\/+$/, '')}${to}` : base, 302)
+    return sendRedirect(event, to || walk ? `${base.replace(/\/+$/, '')}${withWalk(to, walk)}` : base, 302)
   }
 
-  return sendRedirect(event, reviewLoginUrl(base, secret, app, key, to), 302)
+  return sendRedirect(event, reviewLoginUrl(base, secret, app, key, to, walk), 302)
 })
