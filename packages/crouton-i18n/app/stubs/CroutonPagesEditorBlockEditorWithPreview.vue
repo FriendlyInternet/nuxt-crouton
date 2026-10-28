@@ -1,4 +1,5 @@
 <script setup lang="ts">
+// fallow-ignore-file unused-component-props
 // Stub renders nothing — @fyit/crouton-pages overrides it with the real editor with preview.
 defineProps<{
   modelValue?: unknown
