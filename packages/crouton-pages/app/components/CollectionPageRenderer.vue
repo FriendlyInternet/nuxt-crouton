@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
 /**
  * Collection Page Renderer
  *
@@ -83,26 +84,12 @@ const detailComponent = computed(() => {
   if (!collectionName.value) return null
 
   const config = collections.getConfig(collectionName.value)
-  if (!config?.componentName) return null
+  if (!config) return null
 
   // Try per-collection detail component (e.g., StoreBikesDetail)
-  const detailName = config.componentName.replace(/Form$/, 'Detail')
-  try {
-    const component = resolveComponent(detailName)
-    if (typeof component !== 'string') return component
-  } catch {
-    // Not found
-  }
-
-  // Fall back to CroutonDetail generic
-  try {
-    const generic = resolveComponent('CroutonDetail')
-    if (typeof generic !== 'string') return generic
-  } catch {
-    // Not available
-  }
-
-  return null
+  const detailName = canonicalDetailName(collectionName.value)
+  // Per-collection detail wins (app beats layer), else the generic CroutonDetail
+  return collectionForms[detailName] ?? collectionForms.CroutonDetail ?? null
 })
 
 const isLoading = computed(() => fetchStatus.value === 'pending')

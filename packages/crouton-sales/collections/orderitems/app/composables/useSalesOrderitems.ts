@@ -52,7 +52,6 @@ const _salesOrderitemsConfig = {
   name: 'salesOrderitems',
   layer: 'sales',
   apiPath: 'sales-orderitems',
-  componentName: 'SalesOrderitemsForm',
   defaultValues: {
     orderId: '',
     productId: '',

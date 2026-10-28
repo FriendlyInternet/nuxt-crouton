@@ -67,7 +67,6 @@ const _bookingsEmailtemplatesConfig = {
   name: 'bookingsEmailtemplates',
   layer: 'bookings',
   apiPath: 'bookings-emailtemplates',
-  componentName: 'BookingsEmailtemplatesForm',
   defaultValues: {
     name: '',
     subject: '',

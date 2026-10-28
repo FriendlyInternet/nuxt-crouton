@@ -44,7 +44,6 @@ const _salesCategoriesConfig = {
   name: 'salesCategories',
   layer: 'sales',
   apiPath: 'sales-categories',
-  componentName: 'SalesCategoryForm',
   defaultValues: {
     eventId: '',
     title: '',

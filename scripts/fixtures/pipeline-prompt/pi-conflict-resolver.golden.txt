@@ -1,0 +1,17 @@
+THE TASK IS THE MERGE IN PROGRESS IN THE WORKING TREE. You are on the branch epic/227-x of PR #2989, and a merge of its base into it stopped on conflicts. Run `git status`: the unmerged paths are your work. Ticket or epic state (closed child issues, merged sub-PRs, "nothing left to do") is irrelevant and is never a reason to stop. Ending your turn without resolving a file, or without writing the choice file the task below describes, is a FAILED run. Do NOT run git commit and do NOT open a pull request — the workflow verifies and commits the merge.
+
+----- conflict task -----
+RESOLVE THE MERGE CONFLICT with origin/main. Write the choice file if needed.
+----- end conflict task -----
+
+Only AFTER the conflicts are resolved, also do what this owner comment asks (skip it if you wrote a choice file):
+
+----- owner comment -----
+Please rename `foo` to %s and keep {{issue}} literal.
+Second line.
+
+
+----- end owner comment -----
+DESIGN REFERENCE — before you build anything visual, check for writeups/design/<epic>/ (the epic number is the epic= value in this issue's hidden pipeline marker; with no marker, use the issue number). If it exists, open README.md there, then read every PNG it names with the read tool: those boards ARE the design, so build to match them, and name the board you matched in your visual-evidence comment. If they disagree with the issue text, follow the boards and say so in that comment.
+VISUAL EVIDENCE — if your change touches a .vue file, app/components|layouts|pages, CSS or a theme: capture the changed surface with the pre-installed headless chromium (node scripts/app-shots.mjs <baseUrl> <path:name>, booting the app first) and SAVE the PNGs to writeups/ui-proposals/227-<surface>.png. Author them with the write tool so they are committed. Then post ONE comment on the issue embedding each as ![surface](https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/work-227/writeups/ui-proposals/227-<surface>.png), and say in one line what changed visually. A visual PR opens as a DRAFT and waits for the owner to reply lgtm — so a screenshot is not optional politeness, it is the only thing that lets them answer. If the app cannot be booted, say so explicitly in that comment rather than opening a visual PR with no evidence.
+COMPILE CHECK — after editing, run `node scripts/verify-touched-compiles.mjs` and read its output. If it reports errors, the .vue file(s) you changed DO NOT COMPILE (usually an unbalanced/unclosed tag — every tag you open needs its matching close). Fixing that is MANDATORY before you finish: a non-compiling file is broken, not a typecheck nitpick.
