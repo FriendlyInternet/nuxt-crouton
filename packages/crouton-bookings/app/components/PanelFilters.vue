@@ -92,7 +92,7 @@ const settingsItems = computed(() => {
       onUpdateChecked: (v: boolean) => emit('update:showCancelled', v),
       onSelect: keepOpen,
     },
-    ...(props.canManageLocations && locationItems.length > 0
+    ...(locationItems.length > 0
       ? [{
           type: 'checkbox' as const,
           label: t('bookings.filters.locationCards'),
@@ -132,9 +132,7 @@ const settingsItems = computed(() => {
           {{ t('bookings.filters.month') }}
         </UButton>
       </UFieldGroup>
-      <span v-else />
-
-      <div class="flex items-center gap-1 shrink-0">
+      <div class="flex items-center gap-1 shrink-0 ms-auto">
         <UButton
           v-if="showCalendar"
           size="sm"
