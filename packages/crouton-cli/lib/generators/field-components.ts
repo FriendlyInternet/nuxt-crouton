@@ -40,7 +40,7 @@ function generateInputComponent(field: Record<string, any>, fieldPascalCase: str
   const interfaceFields = ['id: string']
   if (hasProperties) {
     for (const [propName, propDef] of Object.entries(properties)) {
-      const tsType = mapPropertyTypeToTS((propDef as any).type)
+      const tsType = (propDef as any).tsType || 'string'
       const optional = (propDef as any).required !== true ? '?' : ''
       interfaceFields.push(`${propName}${optional}: ${tsType}`)
     }
@@ -148,7 +148,7 @@ function generateTranslatableInputComponent(field: Record<string, any>, fieldPas
   // Generate interface fields
   const interfaceFields = ['id: string']
   for (const [propName, propDef] of Object.entries(properties)) {
-    const tsType = mapPropertyTypeToTS(propDef.type)
+    const tsType = propDef.tsType || 'string'
     const optional = propDef.required !== true ? '?' : ''
     interfaceFields.push(`${propName}${optional}: ${tsType}`)
   }
@@ -353,23 +353,6 @@ function generateNonTranslatableFormField(propName: string, label: string, propD
         class="w-full"
       />
     </UFormField>`
-}
-
-/**
- * Map property type to TypeScript type
- */
-function mapPropertyTypeToTS(type: string): string {
-  const typeMap = {
-    string: 'string',
-    text: 'string',
-    number: 'number',
-    decimal: 'number',
-    boolean: 'boolean',
-    date: 'Date | null',
-    json: 'Record<string, any>',
-    array: 'string[]'
-  }
-  return typeMap[type] || 'string'
 }
 
 /**

@@ -106,7 +106,7 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
     // and alias keys; fall back to mapType for unknown types (#285).
     const resolvedType = typeMapping[meta?.type]?.canonical ?? mapType(meta?.type, validTypes)
 
-    attachPropertyComponents(fieldMeta, typeMapping)
+    attachPropertyManifest(fieldMeta, typeMapping)
     return {
       name,
       type: resolvedType,
@@ -123,16 +123,19 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
 
 // Repeater item properties get the same treatment as fields: the manifest's
 // `component` for their (canonical) type, so the item Input.vue renders what the
-// manifest says instead of a private per-type map (#2286). Types are left as
-// written — the property TS mapping has its own fallback — only `component` is
-// attached, and an explicit `component` on the property wins.
-function attachPropertyComponents(fieldMeta: Record<string, any>, typeMapping: Record<string, any>): void {
+// manifest says instead of a private per-type map (#2286). The manifest's
+// `tsType` / `zod` are stamped too, so the types / composable / field-component
+// generators read them instead of three private 8-entry maps. Types are left as
+// written; an explicit `component` on the property wins.
+function attachPropertyManifest(fieldMeta: Record<string, any>, typeMapping: Record<string, any>): void {
   const properties = fieldMeta.properties
   if (!properties || typeof properties !== 'object') return
   for (const def of Object.values(properties as Record<string, any>)) {
-    if (!def || typeof def !== 'object' || def.component) continue
+    if (!def || typeof def !== 'object') continue
     const canonical = typeMapping[def.type]?.canonical ?? def.type
-    const component = typeMapping[canonical]?.component
-    if (component) def.component = component
+    const entry = typeMapping[canonical]
+    if (entry?.component && !def.component) def.component = entry.component
+    if (entry?.tsType) def.tsType = entry.tsType
+    if (entry?.zod) def.zod = entry.zod
   }
 }

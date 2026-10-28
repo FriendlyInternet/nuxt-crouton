@@ -54,7 +54,7 @@ function generateRepeaterItemInterface(field: Record<string, any>, layerPascalCa
   // Add all properties from meta.properties
   for (const [propName, propDef] of Object.entries(properties)) {
     const isRequired = propDef.required === true
-    const tsType = mapPropertyType(propDef.type)
+    const tsType = propDef.tsType || 'string'
     propertyLines.push(`  ${propName}${isRequired ? '' : '?'}: ${tsType}`)
   }
 
@@ -67,23 +67,6 @@ function generateRepeaterItemInterface(field: Record<string, any>, layerPascalCa
   return `export interface ${interfaceName} {
 ${propertyLines.join('\n')}
 }`
-}
-
-/**
- * Map property type to TypeScript type
- */
-function mapPropertyType(type: string): string {
-  const typeMap = {
-    string: 'string',
-    text: 'string',
-    number: 'number',
-    decimal: 'number',
-    boolean: 'boolean',
-    date: 'Date | null',
-    json: 'Record<string, any>',
-    array: 'string[]'
-  }
-  return typeMap[type] || 'string'
 }
 
 export function generateTypes(data: Record<string, any>, config: Record<string, any> | null = null): string {
