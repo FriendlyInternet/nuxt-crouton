@@ -39,15 +39,8 @@ epic-digest:
 
 # Monthly roll-up of the skills in .claude/skills/ + a "what changed since last digest" band
 # (#838/#841). Email-only via Resend (recipient is the DIGEST_REPORT_EMAIL repo var, shared with
-# epic-digest). schedule.mjs gates the daily workflow cron to the 1st of each month.
+# epic-digest). schedule.mjs is a second guard on the (1st-only) workflow cron of each month.
 skills-digest:
   schedule: monthly:1
   deliver: [email]
   # to: [you@example.com]   # the workflow reads the DIGEST_REPORT_EMAIL repo var; this is documentation
-
-# WS6b.2 (#884) — the model-routing scoreboard: cost-per-success per (model × flow), rolled up
-# from writeups/reports/eval-ledger.jsonl and posted to one standing issue. Low-noise weekly is
-# plenty (routing tiers change slowly); a manual dispatch always sends. No email rail needed.
-eval-scoreboard:
-  schedule: weekly:mon
-  deliver: [issue]

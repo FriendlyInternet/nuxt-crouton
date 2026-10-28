@@ -191,10 +191,7 @@ called out as "needs a human decision" with the reason.
 - **CI runs the same engines automatically** (#730, mirroring the red-team workflows):
   `.github/workflows/review.yml` runs the subagent at `depth=quick` on a PR diff — posts a
   sticky `<!-- a11y -->` comment and **fails the check on a 🔴 critical/serious finding**
-  (diff-scoped, so never on the pre-existing backlog). `.github/workflows/a11y-daily.yml`
-  runs `/a11y` at `depth=deep` daily — writes a report (`writeups/reports/a11y-repo-*.md`),
-  updates a public standing issue, and files `a11y` issues for new confirmed criticals.
-  `/a11y` is the **on-demand** brain and human entry point for the same machinery. Both
-  workflows MUST follow the **Claude-action workflow standard** in `.claude/agents/CLAUDE.md`
-  — notably the tool-permission grant (per-PR: `--allowedTools …`; daily sweep:
-  `--permission-mode bypassPermissions`), without which the gate fails open (#834/#1036).
+  (diff-scoped, so never on the pre-existing backlog). The scheduled
+  whole-repo sweep (`a11y-daily.yml`) was deleted (#2892). `/a11y` is the **on-demand** brain and human entry point for the same machinery. The
+  workflow MUST follow the **Claude-action workflow standard** in `.claude/agents/CLAUDE.md`
+  — notably the tool-permission grant (`--allowedTools …`), without which the gate fails open (#834/#1036).
