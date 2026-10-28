@@ -75,21 +75,28 @@ async function releaseOne(ctx, it, blockers, { onlyBlockedBy, branch }) {
   core.info(`Released #${it.number} with ${releaseWith} (${decision.reason})`)
 }
 
+/** Open issues whose body declares `Blocked-by:`. */
+async function findBlockedIssues({ github, context }) {
+  const { owner, repo } = context.repo
+  const q = `repo:${owner}/${repo} is:issue is:open in:body "Blocked-by:"`
+  return github.paginate(github.rest.search.issuesAndPullRequests, { q, per_page: 100 })
+}
+
+/** The blockers to act on for one issue, or [] when it is out of scope for this trigger. */
+function relevantBlockers(it, onlyBlockedBy) {
+  const blockers = gate.parseBlockers(it.body)
+  if (onlyBlockedBy && !blockers.includes(onlyBlockedBy)) return []
+  return blockers
+}
+
 /**
  * Release every open dependent whose blockers are all closed — gated on its epic branch not
  * being red. Shared by the issue-closed path and the CI-green retry.
  */
 export async function releaseReady(ctx, { onlyBlockedBy = null, branch = null } = {}) {
-  const { github, context } = ctx
-  const { owner, repo } = context.repo
-  const q = `repo:${owner}/${repo} is:issue is:open in:body "Blocked-by:"`
-  const found = await github.paginate(github.rest.search.issuesAndPullRequests, { q, per_page: 100 })
-
-  for (const it of found) {
-    const blockers = gate.parseBlockers(it.body)
-    if (!blockers.length) continue
-    if (onlyBlockedBy && !blockers.includes(onlyBlockedBy)) continue
-    await releaseOne(ctx, it, blockers, { onlyBlockedBy, branch })
+  for (const it of await findBlockedIssues(ctx)) {
+    const blockers = relevantBlockers(it, onlyBlockedBy)
+    if (blockers.length) await releaseOne(ctx, it, blockers, { onlyBlockedBy, branch })
   }
 }
 
