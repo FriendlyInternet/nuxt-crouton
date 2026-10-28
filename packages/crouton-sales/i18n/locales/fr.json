@@ -191,6 +191,7 @@
       "live": "En direct",
       "stale": "Obsolète",
       "waiting": "Connexion",
+      "noTill": "Aucune caisse connectée",
       "unavailable": "Statut indisponible",
       "justNow": "à l'instant",
       "secondsAgo": "il y a {n}s",
@@ -205,8 +206,8 @@
       "never": "jamais",
       "lastPush": "Dernier envoi",
       "lastPull": "Dernière réception",
-      "lostEdits": "Modifications perdues lors d'un conflit",
-      "noLostEdits": "Aucune modification n'a perdu un conflit.",
+      "lostEdits": "Modifications écrasées",
+      "noLostEdits": "Aucune modification n'a été écrasée.",
       "cloudWon": "La version du cloud a été conservée",
       "title": "Synchronisation cloud"
     },

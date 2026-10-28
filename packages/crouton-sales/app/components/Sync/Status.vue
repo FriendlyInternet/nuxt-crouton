@@ -115,11 +115,11 @@ const title = computed(() => {
 
 const lostEdits = computed(() => data.value?.lostEdits ?? [])
 /** Short state for the plain `detailed` line: "Live" / "Offline since 3m ago" / … */
-const plainLabel = computed(() =>
-  state.value === 'stale'
-    ? t('sales.sync.offlineSince', { ago: relativeLabel(ageMs.value) })
-    : ui.value.label,
-)
+const plainLabel = computed(() => {
+  if (state.value === 'stale') return t('sales.sync.offlineSince', { ago: relativeLabel(ageMs.value) })
+  if (state.value === 'never') return t('sales.sync.noTill')
+  return ui.value.label
+})
 
 const ui = computed(() => {
   switch (state.value) {

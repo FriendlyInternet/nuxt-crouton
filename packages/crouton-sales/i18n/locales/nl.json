@@ -192,6 +192,7 @@
       "live": "Live",
       "stale": "Verouderd",
       "waiting": "Verbinden",
+      "noTill": "Nog geen kassa verbonden",
       "unavailable": "Status onbeschikbaar",
       "justNow": "zojuist",
       "secondsAgo": "{n}s geleden",
@@ -206,8 +207,8 @@
       "never": "nooit",
       "lastPush": "Laatst verstuurd",
       "lastPull": "Laatst opgehaald",
-      "lostEdits": "Wijzigingen die een conflict verloren",
-      "noLostEdits": "Geen wijzigingen hebben een conflict verloren.",
+      "lostEdits": "Overschreven wijzigingen",
+      "noLostEdits": "Er zijn geen wijzigingen overschreven.",
       "cloudWon": "De versie in de cloud is behouden",
       "title": "Cloudsynchronisatie"
     },

@@ -192,6 +192,7 @@
       "live": "Live",
       "stale": "Stale",
       "waiting": "Connecting",
+      "noTill": "No till connected yet",
       "unavailable": "Status unavailable",
       "justNow": "just now",
       "secondsAgo": "{n}s ago",
@@ -206,8 +207,8 @@
       "never": "never",
       "lastPush": "Last push",
       "lastPull": "Last pull",
-      "lostEdits": "Edits that lost a conflict",
-      "noLostEdits": "No edits have lost a conflict.",
+      "lostEdits": "Overwritten edits",
+      "noLostEdits": "No edits were overwritten.",
       "cloudWon": "The cloud version was kept",
       "title": "Cloud sync"
     },
