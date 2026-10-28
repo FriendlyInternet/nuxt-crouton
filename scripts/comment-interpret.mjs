@@ -32,6 +32,29 @@ export function parseModelOutput(text) {
 
 const ask = (reason, extra = {}) => ({ action: 'ask', reason, ...extra })
 
+const DELEGATE_LABEL = /^(delegate|delegate-pi|delegate-hard|work-this)$/
+
+/** An action that does not fit the thread falls back to a question instead of doing the wrong thing. */
+function misfit(action, issue, pr, reply) {
+  const labels = issue.labels || []
+  const piBranch = pr && (workIssueFromRef(pr.headRef) || epicIssueFromRef(pr.headRef))
+  if (action === 'revise' && !piBranch) return ask('revise needs a pipeline PR', { reply })
+  if (action === 'replan' && (pr || !labels.includes('status:blocked'))) return ask('replan needs a held ticket', { reply })
+  if (action === 'start' && (pr || labels.includes('status:blocked') || labels.some(l => DELEGATE_LABEL.test(l)))) {
+    return ask('start needs an un-delegated ticket', { reply })
+  }
+  return null
+}
+
+/** Trim the model's fields to safe lengths. */
+function readFields(m) {
+  return {
+    action: String(m.action || '').trim().toLowerCase(),
+    reason: String(m.reason || '').trim().slice(0, 300) || 'no reason given',
+    reply: typeof m.reply === 'string' ? m.reply.trim().slice(0, 2000) : undefined,
+  }
+}
+
 /**
  * @param {object} input
  * @param {string|object|null} input.modelOutput  raw model text, or an already-parsed object
@@ -42,9 +65,7 @@ const ask = (reason, extra = {}) => ({ action: 'ask', reason, ...extra })
 export function decideAction({ modelOutput, issue = {}, pr = null } = {}) {
   const m = typeof modelOutput === 'string' || modelOutput == null ? parseModelOutput(modelOutput) : modelOutput
   if (!m) return ask('the model gave no usable answer', { reply: ASK_FALLBACK })
-  const action = String(m.action || '').trim().toLowerCase()
-  const reason = String(m.reason || '').trim().slice(0, 300) || 'no reason given'
-  const reply = typeof m.reply === 'string' ? m.reply.trim().slice(0, 2000) : undefined
+  const { action, reason, reply } = readFields(m)
 
   // Rule 5 — in code, not in the prompt.
   if (action === 'confirm' || IRREVERSIBLE.test(action)) {
@@ -53,15 +74,7 @@ export function decideAction({ modelOutput, issue = {}, pr = null } = {}) {
   }
   if (!ACTIONS.includes(action)) return ask(`unknown action "${action.slice(0, 40)}"`, { reply: reply || ASK_FALLBACK })
 
-  const labels = issue.labels || []
-  const piBranch = pr && (workIssueFromRef(pr.headRef) || epicIssueFromRef(pr.headRef))
-  // An action that does not fit the thread falls back to a question instead of doing the wrong thing.
-  if (action === 'revise' && !piBranch) return ask('revise needs a pipeline PR', { reply })
-  if (action === 'replan' && (pr || !labels.includes('status:blocked'))) return ask('replan needs a held ticket', { reply })
-  if (action === 'start' && (pr || labels.includes('status:blocked') || labels.some(l => /^(delegate|delegate-pi|delegate-hard|work-this)$/.test(l)))) {
-    return ask('start needs an un-delegated ticket', { reply })
-  }
-  return { action, reason, ...(reply ? { reply } : {}) }
+  return misfit(action, issue, pr, reply) || { action, reason, ...(reply ? { reply } : {}) }
 }
 
 /** The one-line "I read this as …" opener every reply carries (rule 6). Never @mentions. */
