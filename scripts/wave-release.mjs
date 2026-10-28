@@ -35,12 +35,52 @@ async function epicBranchOf({ github, context, core }, issue_number) {
   return null
 }
 
+/** Open the one-time "held: epic branch is red" comment on a dependent. */
+async function postHoldOnce({ github, context }, it, ref, doneNumber) {
+  const { owner, repo } = context.repo
+  const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: it.number, per_page: 100 })
+  if (comments.some(c => (c.body || '').includes(gate.HOLD_MARKER))) return
+  await github.rest.issues.createComment({ owner, repo, issue_number: it.number,
+    body: gate.formatHoldComment({ issueNumber: it.number, branch: ref, doneNumber }) })
+}
+
+/** Decide one dependent and act on it: hold (red branch), skip, or release. */
+async function releaseOne(ctx, it, blockers, { onlyBlockedBy, branch }) {
+  const { github, context, core } = ctx
+  const { owner, repo } = context.repo
+  const blockerStates = []
+  for (const b of blockers) {
+    const bi = await github.rest.issues.get({ owner, repo, issue_number: b })
+    blockerStates.push(bi.data.state)
+  }
+
+  // Which branch does this work land on? On the retry path we already know.
+  const ref = branch ?? await epicBranchOf(ctx, blockers[blockers.length - 1])
+  const status = ref ? await branchStatus(ctx, ref) : 'unknown'
+  const doneNumber = onlyBlockedBy ?? blockers[blockers.length - 1]
+
+  // `body` feeds releaseLabel (#1923): a child the decomposer created records the trigger label
+  // it would have been dispatched with, so a blocked LEAF goes straight to its worker.
+  const decision = gate.shouldRelease({ blockerStates, labels: it.labels, branchStatus: status, body: it.body })
+  if (!decision.release) {
+    core.info(`#${it.number}: ${decision.reason}`)
+    if (decision.reason === 'branch-red') await postHoldOnce(ctx, it, ref, doneNumber)
+    return
+  }
+
+  const releaseWith = decision.label || 'delegate'
+  await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: [releaseWith] })
+  await github.rest.issues.createComment({ owner, repo, issue_number: it.number,
+    body: gate.formatReleaseComment({ doneNumber, branchStatus: status, label: releaseWith }) })
+  core.info(`Released #${it.number} with ${releaseWith} (${decision.reason})`)
+}
+
 /**
  * Release every open dependent whose blockers are all closed — gated on its epic branch not
  * being red. Shared by the issue-closed path and the CI-green retry.
  */
 export async function releaseReady(ctx, { onlyBlockedBy = null, branch = null } = {}) {
-  const { github, context, core } = ctx
+  const { github, context } = ctx
   const { owner, repo } = context.repo
   const q = `repo:${owner}/${repo} is:issue is:open in:body "Blocked-by:"`
   const found = await github.paginate(github.rest.search.issuesAndPullRequests, { q, per_page: 100 })
@@ -49,37 +89,7 @@ export async function releaseReady(ctx, { onlyBlockedBy = null, branch = null } 
     const blockers = gate.parseBlockers(it.body)
     if (!blockers.length) continue
     if (onlyBlockedBy && !blockers.includes(onlyBlockedBy)) continue
-
-    const blockerStates = []
-    for (const b of blockers) {
-      const bi = await github.rest.issues.get({ owner, repo, issue_number: b })
-      blockerStates.push(bi.data.state)
-    }
-
-    // Which branch does this work land on? On the retry path we already know.
-    const ref = branch ?? await epicBranchOf(ctx, blockers[blockers.length - 1])
-    const status = ref ? await branchStatus(ctx, ref) : 'unknown'
-
-    // `body` feeds releaseLabel (#1923): a child the decomposer created records the trigger label
-    // it would have been dispatched with, so a blocked LEAF goes straight to its worker.
-    const decision = gate.shouldRelease({ blockerStates, labels: it.labels, branchStatus: status, body: it.body })
-    if (!decision.release) {
-      core.info(`#${it.number}: ${decision.reason}`)
-      if (decision.reason === 'branch-red') {
-        const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: it.number, per_page: 100 })
-        if (!comments.some(c => (c.body || '').includes(gate.HOLD_MARKER))) {
-          await github.rest.issues.createComment({ owner, repo, issue_number: it.number,
-            body: gate.formatHoldComment({ issueNumber: it.number, branch: ref, doneNumber: onlyBlockedBy ?? blockers[blockers.length - 1] }) })
-        }
-      }
-      continue
-    }
-
-    const releaseWith = decision.label || 'delegate'
-    await github.rest.issues.addLabels({ owner, repo, issue_number: it.number, labels: [releaseWith] })
-    await github.rest.issues.createComment({ owner, repo, issue_number: it.number,
-      body: gate.formatReleaseComment({ doneNumber: onlyBlockedBy ?? blockers[blockers.length - 1], branchStatus: status, label: releaseWith }) })
-    core.info(`Released #${it.number} with ${releaseWith} (${decision.reason})`)
+    await releaseOne(ctx, it, blockers, { onlyBlockedBy, branch })
   }
 }
 
