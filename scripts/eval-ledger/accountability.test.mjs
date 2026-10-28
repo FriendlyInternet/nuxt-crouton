@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * Tests for the accountability scoreboard (#1570).
  *   node --test scripts/eval-ledger/accountability.test.mjs

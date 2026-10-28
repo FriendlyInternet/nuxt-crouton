@@ -1,4 +1,4 @@
-// layer: harness
+// layer: stack
 /**
  * #2027 contract — the READ side of the claim guard.
  *

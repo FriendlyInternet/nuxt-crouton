@@ -1,3 +1,4 @@
+// layer: harness
 // Fix-bot guard (#2719): a CI "fix" must repair the worker's code, not delete it.
 //
 // On PR #2684 the worker referenced a menu group it never defined; the fix-bot turned CI green

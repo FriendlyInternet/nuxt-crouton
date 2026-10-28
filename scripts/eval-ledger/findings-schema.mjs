@@ -1,3 +1,4 @@
+// layer: harness
 // findings-schema.mjs — the DEFECT-FINDING record shape + validation + the
 // asymmetric scoring rules. One record per confirmed (or pending/rejected)
 // defect a review gate raised against an authored change.

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // bundle-size.mjs — DETERMINISTIC bundle measurement, CLIENT + SERVER (#1581).
 // Measures two things that answer two different questions:
 //   - CLIENT bundle  (public/_nuxt)        → what the browser downloads → user load speed.

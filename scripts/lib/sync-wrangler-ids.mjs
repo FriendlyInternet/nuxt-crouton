@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * sync-wrangler-ids.mjs — shared implementation behind each app's
  * `scripts/sync-wrangler-ids.mjs` shim (#1238). Apps scaffolded OUTSIDE this

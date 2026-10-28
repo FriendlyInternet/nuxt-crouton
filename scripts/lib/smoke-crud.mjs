@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * smoke-crud.mjs — the `smoke.crud` step runner for smoke-deployed.mjs (#2764).
  * Pure: HTTP and team lookup are injected so it is unit-testable without a network.

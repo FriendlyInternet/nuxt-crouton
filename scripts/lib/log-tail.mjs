@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * Distil a raw GitHub Actions job log into the tail worth quoting in the CI-failure comment (#2677).
  *

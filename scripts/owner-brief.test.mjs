@@ -1,4 +1,4 @@
-// layer: harness
+// layer: stack
 /**
  * #2081 contract — the ping and the depth are different artifacts.
  *

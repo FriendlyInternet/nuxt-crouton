@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Regression for #1056 — a teardown re-run must be idempotent: an already-absent
  * Worker/D1/KV is "already gone", not a failure. The bug was that runWrangler's

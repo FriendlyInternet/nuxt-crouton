@@ -27,7 +27,7 @@ import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+const ROOT = process.env.HARNESS_LAYERS_ROOT || join(dirname(fileURLToPath(import.meta.url)), '..')
 const SKILLS_DIR = join(ROOT, '.claude/skills')
 const AGENTS_DIR = join(ROOT, '.claude/agents')
 
@@ -108,11 +108,13 @@ function discoverFiles() {
   const out = []
   const dirs = [['.github/workflows', /\.yml$/, 'workflow'], ['scripts', /\.(mjs|sh)$/, 'script']]
   for (const [dir, ext, kind] of dirs) {
-    for (const f of readdirSync(join(ROOT, dir))) {
-      if (!ext.test(f)) continue
+    const base = join(ROOT, dir)
+    if (!existsSync(base)) continue
+    // scripts/ nests (eval-ledger/, …) — walk it all; the ticket says every .mjs/.sh.
+    for (const f of readdirSync(base, { recursive: true })) {
+      if (!ext.test(f) || f.split('/').includes('node_modules')) continue
       const text = readFileSync(join(ROOT, dir, f), 'utf8')
       const m = text.split('\n').slice(0, 3).join('\n').match(/^(?:#|\/\/) layer: (\S+)/m)
-      // Tests carry fixtures with stack tokens by design — they inherit the tag, are never scanned.
       const scan = harnessHits(text, f)
       out.push({ kind, name: `${dir}/${f}`, layer: m ? m[1] : null, hits: scan })
     }
@@ -121,7 +123,6 @@ function discoverFiles() {
 }
 
 function harnessHits(text, f) {
-  if (/\.test\.mjs$/.test(f)) return []
   const hits = new Set()
   for (const line of text.split('\n')) {
     if (/^\s*(#|\/\/) layer: /.test(line)) continue

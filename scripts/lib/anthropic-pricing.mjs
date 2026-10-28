@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * Anthropic API price table + a token→USD cost function (#1268).
  *

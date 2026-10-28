@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // append-bundle-history.mjs — append ONE bundle record to the committed trend (#1581).
 // Reads a record (from bundle-size.mjs) on stdin, appends to
 // writeups/perf/bundle-history.jsonl. Idempotent per (app, commit): a re-run on the

@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * wrangler-d1.mjs — shared helpers for the D1 tooling scripts (db-clone, db-counts).
  *

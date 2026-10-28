@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * draw.io (diagrams.net) emitter — same graph, same layout as the Excalidraw path, but as a
  * draw.io mxGraphModel. The point of draw.io: its GitHub mode opens/edits/SAVES files straight

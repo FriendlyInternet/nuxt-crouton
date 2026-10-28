@@ -1,3 +1,4 @@
+// layer: harness
 // owner-merge-go.mjs — has the owner said "go" on a held PR? (#2832)
 //
 // The owner's `ok` (or legacy `lgtm`/`approve`) on a PR held for a human IS the merge

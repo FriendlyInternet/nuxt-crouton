@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // accountability.mjs — the adversarial accountability scoreboard (#1570).
 // Joins findings.jsonl (defects) × the run-outcome ledger (author runs) into TWO
 // leaderboards: authors (ranked worst-first by defect-rate) and review gates

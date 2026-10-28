@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2608 contract — a PR preview's deploy must be repeatable.
  *

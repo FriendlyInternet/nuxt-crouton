@@ -1,3 +1,4 @@
+// layer: harness
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { ratesFor, costForUsage, tokensForUsage } from './anthropic-pricing.mjs'

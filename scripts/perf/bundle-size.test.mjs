@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * Tests for the bundle-size budget engine (#1581).
  *   node --test scripts/perf/bundle-size.test.mjs
