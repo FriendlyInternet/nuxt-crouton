@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { generatorsFor, withMarkers, verdict, buildPrompt } from './conflict-resolution.mjs'
+import { generatorsFor, withMarkers, verdict, buildPrompt, SCRIPTS_TEST_CMD } from './conflict-resolution.mjs'
 
 // A real conflicted merge: `base` and `side` both edit `file` from a common ancestor.
 function conflict(file, ancestor, base, side) {
@@ -64,4 +64,9 @@ test('a leftover marker without a choice fails loudly', () => {
 test('the prompt names the files, the generators, the choice file and the keep-both rule', () => {
   const p = buildPrompt({ base: 'main', files: ['a.mjs'], choiceFile: '/tmp/choice.md' })
   for (const s of ['- a.mjs', 'gen-routing.mjs', 'pnpm install --lockfile-only', '/tmp/choice.md', 'BOTH sides']) assert.ok(p.includes(s), s)
+})
+
+test('scripts test command matches the one CI runs', () => {
+  const ci = readFileSync(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  assert.ok(ci.includes(`run: ${SCRIPTS_TEST_CMD}`))
 })
