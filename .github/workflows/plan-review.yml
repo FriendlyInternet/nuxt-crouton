@@ -75,11 +75,23 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -uo pipefail
-          OUT="$(timeout 180 pi --print --approve --provider claude-bridge --model "$MODEL" 'Reply with exactly the two letters OK and nothing else.' 2>&1)"
+          PROMPT='Reply with exactly the two letters OK and nothing else.'
+          OUT="$(timeout 180 pi --print --approve --provider claude-bridge --model "$MODEL" "$PROMPT" 2>&1)"; RC=$?
           if ! echo "$OUT" | grep -q 'OK'; then
             echo "$OUT" | tail -n 20
-            echo "::error::review model $MODEL did not answer on provider claude-bridge — plan review NOT run, no fallback to another model (#2756)"
-            gh issue comment "$ISSUE" --body "$(printf '<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n🔴 **Plan review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). I did not fall back to another model.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$MODEL")" || true
+            echo "::error::review model $MODEL did not answer on provider claude-bridge (exit $RC) — plan review NOT run, no fallback to another model (#2756)"
+            # Diagnosis only (#2997): say WHY. The control call is never used to review — it only
+            # shows whether the bridge works at all or just not for the review model.
+            LISTED="$(pi --approve --list-models 2>&1 | grep '^claude-bridge ' | head -n 40 || true)"
+            CTRL_MODEL="$(node scripts/resolve-pipeline-model.mjs default)"
+            CONTROL="$(timeout 120 pi --print --approve --provider claude-bridge --model "$CTRL_MODEL" "$PROMPT" 2>&1 | tail -n 10 || true)"
+            {
+              printf '<!-- plan-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan review (#2756)_\n\n'
+              printf '🔴 **Plan review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge; exit code %s, 124 = timed out). I did not fall back to another model.\n' "$MODEL" "$RC"
+              printf '**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.\n\n'
+              printf '<details><summary>Why (preflight output)</summary>\n\nLast 20 lines of the %s call:\n\n```\n%s\n```\n\nclaude-bridge models listed by pi:\n\n```\n%s\n```\n\nControl call (%s, diagnosis only):\n\n```\n%s\n```\n</details>\n' "$MODEL" "$(echo "$OUT" | tail -n 20)" "$LISTED" "$CTRL_MODEL" "$CONTROL"
+            } > "$RUNNER_TEMP/preflight-fail.md"
+            gh issue comment "$ISSUE" --body-file "$RUNNER_TEMP/preflight-fail.md" || true
             exit 1
           fi
           echo "preflight: $MODEL answers on claude-bridge"
