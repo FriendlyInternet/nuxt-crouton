@@ -1,0 +1,11 @@
+# Deliberate exceptions to scripts/workflow-listeners.mjs (#2893). One `<file> <rule>` per line.
+# Each needs a reason; the default answer to a new line here is "fold it into the owner file".
+
+# The @claude mention bot: its own trigger phrase, unrelated to the owner's `ok` routing.
+claude.yml issue_comment
+
+# Project-board / PR status mirrors (#2891): they must see EVERY close to move a card to Done,
+# and do no other work. Folding them in would couple the board to the cleanup jobs' failures.
+status.yml issues-closed
+status.yml pr-closed
+pipeline-pr-status.yml issues-closed

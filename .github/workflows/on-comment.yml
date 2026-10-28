@@ -29,8 +29,14 @@ on:
 
 jobs:
   route:
-    # A bot's comment never routes (also stops our own replies re-triggering anything).
-    if: github.event.comment.user.type != 'Bot'
+    # A bot's comment never routes (also stops our own replies re-triggering anything). Most
+    # comments come from the pipeline's own bots; this keeps them from starting a runner at all.
+    # `performed_via_github_app` also catches an App acting under a user-typed identity. No flow
+    # needs a bot comment to trigger a workflow: the review-overlay comments are posted by the bot
+    # and consumed by reading the thread (revise), not by this trigger.
+    if: >-
+      github.event.comment.user.type != 'Bot' &&
+      github.event.comment.performed_via_github_app == null
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

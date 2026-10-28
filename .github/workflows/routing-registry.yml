@@ -4,6 +4,7 @@ name: routing-registry
 # .claude/agents/*.md model frontmatter in sync (WS6a / #864, guard #1029). `gen-routing.mjs --check`
 # fails if the registry is stale OR if a route's tier drifts from the model an agent actually pins —
 # the exact silent drift that bit us (task-orchestrator/decomposer → opus without a routing.json update).
+# The listener-fold guard (scripts/workflow-listeners.mjs) rides here too, same trigger paths.
 # gen-routing.mjs parses .claude/routing.json with a Node built-in (JSON.parse), so no install step is needed.
 
 on:
@@ -15,6 +16,8 @@ on:
       - 'writeups/architecture/routing-registry.md'
       - '.claude/pipeline-models.json'   # the ONE model setting (#2161)
       - '.github/workflows/**'           # a hard-coded model in a workflow is drift (#2161)
+      - '.github/workflow-listeners.allow'
+      - 'scripts/workflow-listeners.mjs'
   push:
     branches: [main]
     paths:
@@ -23,6 +26,8 @@ on:
       - 'scripts/gen-routing.mjs'
       - '.claude/pipeline-models.json'
       - '.github/workflows/**'
+      - '.github/workflow-listeners.allow'
+      - 'scripts/workflow-listeners.mjs'
 
 # Cancel superseded PR runs when a new commit is pushed; each PR is its own group
 # (ref in the key). cancel-in-progress is event-conditional so a push→main run is
@@ -42,3 +47,5 @@ jobs:
           node-version: '22'
       - name: Verify routing registry is current + no model drift (agents / model setting / workflows)
         run: node scripts/gen-routing.mjs --check
+      - name: Listeners stay folded (one comment / issue-close / PR-close workflow, #2893)
+        run: node scripts/workflow-listeners.mjs
