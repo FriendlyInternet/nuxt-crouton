@@ -34,7 +34,7 @@ export const shopProducts = sqliteTable('shop_products', {
   count: integer('count'),
   price: real('price'),
   enabled: integer('enabled', { mode: 'boolean' }).$default(() => false),
-  publishedAt: integer('publishedAt', { mode: 'timestamp' }).$default(() => new Date()),
+  publishedAt: integer('publishedAt', { mode: 'timestamp' }),
   metadata: jsonColumn('metadata').$default(() => ({})),
   items: jsonColumn('items').$default(() => (null)),
   tags: jsonColumn('tags').$default(() => (null)),
