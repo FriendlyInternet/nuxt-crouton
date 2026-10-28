@@ -197,6 +197,7 @@
       "secondsAgo": "{n}s ago",
       "minutesAgo": "{n}m ago",
       "hoursAgo": "{n}h ago",
+      "offlineSince": "Offline since {ago}",
       "syncedAgo": "synced {ago}",
       "staleDetail": "last synced {ago} — the till may be offline",
       "waitingDetail": "waiting for the first sync from the till",

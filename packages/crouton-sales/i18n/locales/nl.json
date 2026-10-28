@@ -197,6 +197,7 @@
       "secondsAgo": "{n}s geleden",
       "minutesAgo": "{n}m geleden",
       "hoursAgo": "{n}u geleden",
+      "offlineSince": "Offline sinds {ago}",
       "syncedAgo": "gesynchroniseerd {ago}",
       "staleDetail": "laatst gesynchroniseerd {ago} — de kassa is mogelijk offline",
       "waitingDetail": "wachten op de eerste synchronisatie vanaf de kassa",

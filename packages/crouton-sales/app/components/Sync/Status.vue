@@ -127,6 +127,13 @@ function diffLabel(l: { lost: Record<string, unknown>, kept: Record<string, unkn
     .join(', ')
 }
 
+/** Short state for the plain `detailed` line: "Live" / "Offline since 3m ago" / … */
+const plainLabel = computed(() =>
+  state.value === 'stale'
+    ? t('sales.sync.offlineSince', { ago: relativeLabel(ageMs.value) })
+    : ui.value.label,
+)
+
 const ui = computed(() => {
   switch (state.value) {
     case 'live':
@@ -156,6 +163,15 @@ onMounted(() => {
 <template>
   <div class="sales-sync-status-wrap space-y-3">
   <div
+    v-if="detailed"
+    class="sales-sync-status flex min-w-0 items-center gap-2 text-sm"
+    :title="title"
+  >
+    <span class="size-2 shrink-0 rounded-full" :class="ui.dot" />
+    <span class="truncate" :class="ui.color">{{ plainLabel }}</span>
+  </div>
+  <div
+    v-else
     class="sales-sync-status flex w-fit max-w-full items-center gap-2.5 rounded-full border border-default bg-elevated/60 px-3.5 py-1.5 text-sm"
     :title="title"
   >
@@ -193,7 +209,7 @@ onMounted(() => {
           </li>
         </ul>
       </div>
-      <p v-else class="text-muted">{{ t('sales.sync.noLostEdits') }}</p>
+      <p v-else-if="data && !errored" class="text-muted">{{ t('sales.sync.noLostEdits') }}</p>
     </div>
   </div>
 </template>

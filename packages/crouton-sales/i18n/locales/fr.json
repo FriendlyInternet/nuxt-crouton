@@ -196,6 +196,7 @@
       "secondsAgo": "il y a {n}s",
       "minutesAgo": "il y a {n}min",
       "hoursAgo": "il y a {n}h",
+      "offlineSince": "Hors ligne depuis {ago}",
       "syncedAgo": "synchronisé {ago}",
       "staleDetail": "dernière synchronisation {ago} — la caisse est peut-être hors ligne",
       "waitingDetail": "en attente de la première synchronisation depuis la caisse",
