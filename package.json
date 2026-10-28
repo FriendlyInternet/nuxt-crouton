@@ -73,8 +73,9 @@
   "pnpm": {
     "overrides": {
       "vue": "^3.5.44",
-      "nuxt": "^4.6.1",
-      "@nuxt/schema": "^4.6.1",
+      "nuxt": "^4.6.2",
+      "@nuxt/schema": "^4.6.2",
+      "@nuxt/nitro-server": "^4.6.2",
       "@nuxt/ui": "^4.11.3",
       "@nuxt/devtools": "^3.4.2",
       "@nuxt/devtools-kit": "^3.4.2",
@@ -91,7 +92,10 @@
       "protocol-buffers-schema": "^3.6.1",
       "@simplewebauthn/server": "^13.3.2",
       "flatted": "^3.4.2",
-      "proxy-addr": "^2.0.8"
+      "proxy-addr": "^2.0.8",
+      "undici@7": "^7.30.1",
+      "undici@8": "^8.12.2",
+      "tar@7": "^7.5.21"
     },
     "onlyBuiltDependencies": [
       "better-sqlite3"
