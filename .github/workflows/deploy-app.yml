@@ -100,6 +100,14 @@ on:
       # Repo-level token the status app uses to read issues (#2553); pushed to the status Worker only.
       STATUS_GITHUB_TOKEN:
         required: false
+      # Read by steps below but never declared (actionlint, #2970): declare every secret a
+      # reusable workflow reads rather than relying on it arriving undeclared.
+      RESEND_API_KEY:
+        required: false
+      HARNESS_APP_ID:
+        required: false
+      HARNESS_APP_PRIVATE_KEY:
+        required: false
 
 jobs:
   deploy:
