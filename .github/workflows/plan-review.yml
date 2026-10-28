@@ -75,7 +75,10 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -uo pipefail
-          OUT="$(timeout 180 pi --print --approve --provider claude-bridge --model "$MODEL" 'Reply with exactly the two letters OK and nothing else.' 2>&1)"
+          # Probe with `claude -p`, NOT `pi --print`: a bare one-word reply is a tool-less turn, so
+          # .pi/extensions/complete-work.ts intercepts it (nudge, then PI_TASK_COMPLETE_NOTHING_LEFT)
+          # and the model's OK never reaches stdout — the probe then failed for every model.
+          OUT="$(timeout 180 claude -p 'Reply with exactly the two letters OK and nothing else.' --model "$MODEL" --output-format text 2>&1)"
           if ! echo "$OUT" | grep -q 'OK'; then
             echo "$OUT" | tail -n 20
             echo "::error::review model $MODEL did not answer on provider claude-bridge — plan review NOT run, no fallback to another model (#2756)"
