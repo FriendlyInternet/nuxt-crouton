@@ -567,7 +567,9 @@ jobs:
             exit 1
           fi
           LIST="$(sed 's/^/- `/; s/$/` — resolved, both sides kept/' "$RUNNER_TEMP/conflict-files.txt")"
-          git commit -q -m "Merge ${BASE} into ${REV_BRANCH} (resolve conflicts)" -m "$(printf 'Conflicts resolved by the revise worker (#2848):\n%s' "$(sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt")")"
+          # Message via a file, never argv: a long file list hit ARG_MAX -> exit 126 (#2954).
+          { printf 'Merge %s into %s (resolve conflicts)\n\nConflicts resolved by the revise worker (#2848):\n' "$BASE" "$REV_BRANCH"; sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt"; } > "$RUNNER_TEMP/conflict-msg.txt"
+          if ! git commit -q -F "$RUNNER_TEMP/conflict-msg.txt"; then echo "::error::git commit of the conflict merge failed (#2954)"; exit 1; fi
           # A resolved conflict must land as a real merge (HEAD + origin/base). A one-parent commit
           # is a flat copy of the base: the conflicts never clear (#2914).
           NPAR="$(git rev-list --parents -n1 HEAD | wc -w)"
