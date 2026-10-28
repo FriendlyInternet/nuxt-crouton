@@ -111,7 +111,7 @@ ${table}
 ${overrides}
 
 ## Known gaps
-The top-level workflow loop (claude.yml, decompose-on-issue.yml, fix-ci, daily sweeps)
+The top-level workflow loop (fix-ci and the weekly sweeps)
 runs on the \`claude-code-action\` **default** model — unpinned. Pinning those promotes
 them into the routes table above.
 `

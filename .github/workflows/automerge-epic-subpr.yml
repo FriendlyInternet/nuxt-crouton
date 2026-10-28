@@ -59,7 +59,7 @@ name: Auto-merge epic sub-PRs
 # green sub-PR sat unmerged forever, and the owner merged them by hand.
 # `workflow_run` DOES fire for Actions-generated completions. `CI` owns `CI Gate`, so its
 # completion is precisely the moment the answer can change. Same cure #1884 applied to
-# pipeline-pr-status.yml.
+# status.yml.
 # LEVEL-TRIGGERED BACKSTOP (#2091). Everything above is EDGE-triggered — a PR event, or a
 # workflow completing. A PR held at a moment when the answer was legitimately "not yet" is
 # therefore never re-asked, because its edges have all already fired: the pi worker pushes
@@ -85,8 +85,10 @@ on:
     workflows: ["CI"]
     types: [completed]
   # #2832: an owner `ok` on a held PR is the merge go — don't wait for the next CI event.
-  issue_comment:
-    types: [created]
+  # #2890: the comment no longer triggers this file directly — on-comment.yml's router calls it
+  # (kind=automerge-go). The caller's event is still issue_comment, so the branches below that
+  # read `issue_comment` keep working unchanged.
+  workflow_call:
 
 permissions:
   contents: read

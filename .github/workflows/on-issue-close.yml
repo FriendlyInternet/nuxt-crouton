@@ -1,46 +1,126 @@
-name: Open epic→main PR when assembled
+name: On issue close
 
-# The "done" signal (#1815). Nothing else in the pipeline opens the epic→main PR — the worker only
-# opens sub-PRs against the epic branch, and automerge-epic-subpr.yml lands those INTO the epic
-# branch. So when an epic's LAST child closes and its branch is ahead of main, THIS opens the
-# epic/<n>-… → main PR (READY, never merged) and requests the owner's review, so "done" lands in the
-# owner's github.com/pulls/review-requested queue. The owner's `ok` on it is the merge go (#2832): the pipeline merges once green.
+# ONE listener for "an issue closed" (#2893, epic #2889). Before this, closing an issue started
+# eight workflows; each did one small thing. Now one run, one job per concern:
 #
-# TRIGGER = issues:closed, NOT pull_request:closed. A sub-PR merging into a non-default epic branch
-# does not auto-close its `Closes #NN` child — schedule-waves.yml closes it explicitly and THAT
-# emits issues:closed. Keying off issues:closed means the just-completed child already reads as
-# closed here (no race against schedule-waves), so "all children closed" is decidable in one pass.
+#   job              was
+#   strip-status     strip-status-on-close.yml     (#641)
+#   refresh-blocked  refresh-blocked-on-close.yml  (#2112)
+#   epic-ready-pr    epic-ready-pr.yml             (#1815)
+#   cleanup-epic-branch  cleanup-epic-branches.yml (issue path, #2788)
+#   release          schedule-waves.yml (issue path) + traffic-release.yml (#2786)
 #
-# APP TOKEN, not GITHUB_TOKEN: a GITHUB_TOKEN-opened PR does not trigger pull_request CI — the same
-# cascade reason automerge-epic-subpr.yml uses the App token. The epic→main PR MUST run CI so the
-# owner reviews it green.
+# `release` is the ONE place that lifts a wait: `Blocked-by:` lines (scripts/wave-release.mjs) and
+# the scope-label traffic check (scripts/traffic-control.mjs) are evaluated together. Together with
+# on-pr-close.yml's clear-blocked job those are the only two places that remove `status:blocked`.
 #
-# The PR body deliberately does NOT carry `Closes #<epic>`: epics close via the /close-epic
-# postmortem flow (#856), so auto-closing on this merge would bypass the postmortem gate.
+# Token rule unchanged: `release` and `epic-ready-pr` use the Harness App token (their writes must
+# trigger downstream workflows); the cleanups use GITHUB_TOKEN. Permissions live at job level.
+# scripts/workflow-listeners.test.mjs fails CI if any other workflow listens for issue close.
 
 on:
   issues:
-    types: [closed]
+    # `unlabeled`: a blocker with no PR (closed or unlabelled issue) would otherwise never
+    # release its waiter. Only `release` runs for it.
+    types: [closed, unlabeled]
   workflow_dispatch:
     inputs:
       epic_branch:
-        description: 'epic/<n>-<slug> branch to evaluate'
+        description: 'epic/<n>-<slug> branch to evaluate (epic-ready-pr job only)'
         required: true
 
-permissions:
-  contents: read
-  # The App token does the writing; these are for the sub-PR approval gather (#2494).
-  pull-requests: read
-  issues: read
-
-concurrency:
-  # One evaluation per epic at a time (two children closing at once must not double-open the PR).
-  group: epic-ready-${{ github.event.issue.number || github.event.inputs.epic_branch }}
-  cancel-in-progress: false
-
 jobs:
-  open-epic-pr:
+  strip-status:
+    # (#641) status.yml moves the board card on close; this owns the stale `status:*` LABEL.
+    # Idempotent: a 404 ("label not present") is swallowed, so a re-run is a clean no-op.
+    if: github.event_name == 'issues' && github.event.action == 'closed'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { owner, repo } = context.repo
+            const issue_number = context.payload.issue.number
+
+            // Match by the `status:` prefix so new status labels are covered automatically.
+            const toRemove = (context.payload.issue.labels || [])
+              .map(l => l.name)
+              .filter(n => (n || '').toLowerCase().startsWith('status:'))
+
+            if (toRemove.length === 0) { core.info('No status:* label to strip.'); return }
+
+            for (const name of toRemove) {
+              try {
+                await github.rest.issues.removeLabel({ owner, repo, issue_number, name })
+                core.info(`Removed "${name}" from #${issue_number}`)
+              } catch (e) {
+                // 404 = label already gone (race / re-run) — ignore; rethrow anything else.
+                if (e.status === 404) core.info(`"${name}" already absent on #${issue_number}`)
+                else throw e
+              }
+            }
+
+  refresh-blocked:
+    # (#2112) Nudge every other open `status:blocked` issue that cites this one by number. Never
+    # removes the hold — that stays a human / on-comment.yml call.
+    if: github.event_name == 'issues' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const closedNumber = context.payload.issue.number
+            const tokenRe = new RegExp(`(^|[^\\d#])#${closedNumber}(?!\\d)`)
+
+            const blocked = await github.paginate(github.rest.issues.listForRepo, {
+              ...context.repo,
+              state: 'open',
+              labels: 'status:blocked',
+              per_page: 100,
+            })
+
+            for (const issue of blocked) {
+              if (issue.number === closedNumber) continue
+              if (issue.pull_request) continue
+
+              let cites = tokenRe.test(issue.body || '')
+              if (!cites) {
+                const comments = await github.paginate(github.rest.issues.listComments, {
+                  ...context.repo,
+                  issue_number: issue.number,
+                  per_page: 100,
+                })
+                cites = comments.some(c => tokenRe.test(c.body || ''))
+              }
+              if (!cites) continue
+
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: issue.number,
+                body: `🔄 the blocker this was waiting on (#${closedNumber}) has since closed — re-check whether this hold still applies.`,
+              })
+              core.info(`Posted refresh nudge on #${issue.number} (cites closed #${closedNumber}).`)
+            }
+
+  epic-ready-pr:
+    # The "done" signal (#1815) — see the file header. Manual dispatch re-evaluates one epic branch.
+    if: github.event_name == 'workflow_dispatch' || github.event.action == 'closed'
+    concurrency:
+      # One evaluation per epic at a time (two children closing at once must not double-open the PR).
+      group: epic-ready-${{ github.event.issue.number || github.event.inputs.epic_branch }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The App token does the writing; these are for the sub-PR approval gather (#2494).
+      pull-requests: read
+      issues: read
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -204,3 +284,83 @@ jobs:
               await github.rest.pulls.requestReviewers({ owner, repo, pull_number: pr.number, reviewers: [OWNER] })
               core.info(`Requested review from @${OWNER}.`)
             } catch (e) { core.warning(`requestReviewers @${OWNER}: ${e.message}`) }
+
+  cleanup-epic-branch:
+    # (#2788) An epic's integration branch is deleted when the epic CLOSES, and only if it is fully
+    # contained in main (zero loss). The epic→main merge half lives in on-pr-close.yml.
+    if: github.event_name == 'issues' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      issues: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { shouldKeepEpicBranch } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/epic-branch-keep.mjs`)
+            // Epic closed: find its integration branch(es) by prefix.
+            const n = context.payload.issue.number
+            const epicState = 'closed'
+            const refs = await github.paginate(github.rest.git.listMatchingRefs, { ...context.repo, ref: `heads/epic/${n}-` })
+            const branches = refs.map(r => r.ref.replace('refs/heads/', ''))
+            if (!branches.length) core.info(`No epic/${n}-* branch to clean up.`)
+            for (const branch of branches) {
+              if (shouldKeepEpicBranch(branch, epicState)) {
+                core.info(`Keeping ${branch}: its epic is still open (or state unknown).`)
+                continue
+              }
+              // Closed epic: only drop the branch if main already contains all of it.
+              const cmp = await github.rest.repos.compareCommitsWithBasehead({ ...context.repo, basehead: `main...${branch}` })
+              if (cmp.data.ahead_by > 0) {
+                core.warning(`Keeping ${branch}: ${cmp.data.ahead_by} commit(s) not in main.`)
+                continue
+              }
+              try {
+                await github.rest.git.deleteRef({ ...context.repo, ref: `heads/${branch}` })
+                core.info(`🧹 Deleted epic branch ${branch} (epic closed).`)
+              } catch (e) {
+                // Already gone (e.g. "delete branch on merge" beat us) — not an error.
+                core.warning(`Could not delete ${branch}: ${e.message}`)
+              }
+            }
+
+  release:
+    # Lift a wait: every dependent whose `Blocked-by:` blockers are now all closed (gated on the
+    # epic branch not being red), then every ticket parked by the scope-label traffic check.
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      issues: write
+      checks: read
+    steps:
+      # App token (not GITHUB_TOKEN): the released label must cascade into work-issue-pidev.yml.
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const ws = process.env.GITHUB_WORKSPACE
+            const { releaseReady } = await import(`${ws}/scripts/wave-release.mjs`)
+            const { releaseWaiting } = await import(`${ws}/scripts/traffic-control.mjs`)
+
+            // Blocked-by: dependents only react to a CLOSE; unlabelled only frees traffic.
+            if (context.payload.action === 'closed') {
+              core.info(`Completed workstream: #${context.payload.issue.number}`)
+              await releaseReady({ github, context, core }, { onlyBlockedBy: context.payload.issue.number })
+            }
+            const released = await releaseWaiting({ github, context })
+            core.info(released.length ? `traffic released: ${released.map((n) => '#' + n).join(', ')}` : 'traffic: nothing to release')

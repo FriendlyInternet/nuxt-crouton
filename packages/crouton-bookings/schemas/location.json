@@ -56,13 +56,12 @@
     }
   },
   "content": {
-    "type": "text",
+    "type": "richText",
     "meta": {
       "translatable": true,
       "label": "Content",
       "area": "main",
-      "group": "content",
-      "component": "EditorSimple"
+      "group": "content"
     }
   },
   "allowedMemberIds": {
