@@ -9,6 +9,13 @@ export default defineCroutonManifest({
   category: 'addon',
   aiHint: 'use when app has content/articles/posts/rich text',
   dependencies: [],
+
+  // Rich text is a real field type: same TEXT column as `text`, edited with CroutonEditorSimple.
+  // Only valid in apps that extend crouton-editor (core alone rejects it as an unknown type).
+  fieldTypes: {
+    richText: { label: 'Rich text', icon: 'i-lucide-pen-tool', description: 'Rich text content (TipTap editor, translatable)', db: 'TEXT', drizzle: 'text', zod: 'z.string()', tsType: 'string', defaultValue: "''", component: 'CroutonEditorSimple' },
+  },
+
   provides: {
     composables: ['useEditorVariables'],
     components: [
