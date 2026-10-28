@@ -307,9 +307,9 @@ jobs:
           # No force-push: if the agent already pushed, add a revert commit restoring $PRE's tree.
           # Undo only the fix-bot's own commits; a worker revision pushed meanwhile must survive (#2978).
           if [ "$PUSHED" = 1 ] && ! bash scripts/revert-pushed-fix.sh "$PRE" "$BRANCH" "$HEAD_NOW"; then
-            gh pr comment "$PR" --body "> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix not undone_
-
-⚠️ The refused auto-fix is already on this branch and could not be reverted cleanly (later commits touch the same lines). Nothing was pushed. Please revert the fix-bot commit(s) \`$PRE..$HEAD_NOW\` by hand."
+            UNDONE_NOTE="> 🤖 **pi.dev harness** · fix-bot guard (#2719) · _auto-fix not undone_"
+            UNDONE_NOTE="$UNDONE_NOTE"$'\n\n'"⚠️ The refused auto-fix is already on this branch and could not be reverted cleanly (later commits touch the same lines). Nothing was pushed. Please revert the fix-bot commit(s) \`$PRE..$HEAD_NOW\` by hand."
+            gh pr comment "$PR" --body "$UNDONE_NOTE"
           fi
           LINES="$(node -e 'const r=JSON.parse(require("fs").readFileSync(process.argv[1]));console.log(r.removed.map(x=>"- `"+x.file+"`: `"+x.line.trim()+"`").join(String.fromCharCode(10)))' "$RUNNER_TEMP/verdict.json")"
           ERR="$(gh run view "$RUN_ID" --log-failed 2>/dev/null | tail -n 60 || true)"
