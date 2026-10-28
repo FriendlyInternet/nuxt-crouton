@@ -39,20 +39,32 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
-      code: ${{ steps.filter.outputs.code }}
+      # poc | app | package | infra | none — derived from harness.config.mjs by
+      # scripts/ci-detect.mjs (#2894). Every job below gates on these, not on a blanket "code".
+      stage: ${{ steps.filter.outputs.stage }}
+      # JSON list of apps to re-check: changed apps + apps depending on a changed package.
+      apps: ${{ steps.filter.outputs.apps }}
+      packages: ${{ steps.filter.outputs.packages }}
+      pocs: ${{ steps.filter.outputs.pocs }}
+      mcp: ${{ steps.filter.outputs.mcp }}
       # CI files themselves (#2335): a workflow-only PR must still be shellchecked — it is
       # exactly the PR where shell mistakes happen, and it used to skip the lint entirely.
       workflows: ${{ steps.filter.outputs.workflows }}
+      base_is_epic: ${{ steps.filter.outputs.base_is_epic }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
       - id: filter
         env:
           BASE_REF: ${{ github.event.pull_request.base.ref }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          if [ "$EVENT" = "pull_request" ]; then
             git fetch --no-tags origin "$BASE_REF" >/dev/null 2>&1 || true
             base="$(git merge-base "origin/$BASE_REF" HEAD)"
             files="$(git diff --name-only "$base" HEAD)"
@@ -60,25 +72,50 @@ jobs:
             files="$(git show --name-only --pretty=format: HEAD)"
           fi
           echo "changed files:"; echo "$files" | sed 's/^/  /'
-          if echo "$files" | grep -qE '^(packages/|apps/|scripts/|pnpm-lock\.yaml$|\.github/workflows/ci\.yml$)'; then
-            echo "code=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "code=false  (no code paths touched — heavy jobs will skip)" >&2
-            echo "code=false" >> "$GITHUB_OUTPUT"
-          fi
-          if echo "$files" | grep -qE '^\.github/(workflows|actions)/'; then
-            echo "workflows=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "workflows=false" >> "$GITHUB_OUTPUT"
-          fi
+          FILES="$files" node scripts/ci-detect.mjs
 
-  # Was `lint-and-typecheck` — renamed under #1097: the job never ran eslint and
-  # only typechecks the MCP server, so the old name overclaimed. App typecheck
-  # is the separate `typecheck-apps` job below.
-  typecheck-mcp:
-    name: Type Check MCP Server
+  # Build every @fyit/* package ONCE and hand `packages/*/dist` to the jobs that need it as an
+  # artifact (#2894). Before this, typecheck-apps, test and both kassa builds each rebuilt (or
+  # separately cache-restored) the same dist. warm-packages stays the single content-addressed
+  # cache, so an unchanged package set is a cache hit here and a build only on a real change.
+  prepare:
+    name: Build packages
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - uses: ./.github/actions/warm-packages
+
+      # tar, not a glob upload: a multi-path glob artifact's root depends on the least common
+      # ancestor, a tarball extracts to exactly packages/*/dist every time.
+      - name: Pack dist
+        run: tar czf package-dist.tgz packages/*/dist
+
+      - name: Upload package dist
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: package-dist
+          path: package-dist.tgz
+          retention-days: 1
+
+  # Type check + test the MCP server. Only packages/crouton-mcp can break it (or infra).
+  mcp:
+    name: MCP Server (typecheck + tests)
+    needs: changes
+    if: needs.changes.outputs.mcp == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -100,17 +137,57 @@ jobs:
       - name: Type check MCP Server
         run: pnpm --filter @fyit/crouton-mcp typecheck
 
-  typecheck-apps:
+      - name: Run MCP Server tests
+        run: pnpm --filter @fyit/crouton-mcp test
+
+  # A POC has no app typecheck sweep and no AI reviews (#2894): this is its one check.
+  poc-typecheck:
+    name: Typecheck POC
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.pocs != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - uses: ./.github/actions/warm-packages
+
+      - name: Typecheck each changed POC
+        env:
+          POCS: ${{ needs.changes.outputs.pocs }}
+          NODE_OPTIONS: '--max-old-space-size=8192'
+        run: |
+          set -euo pipefail
+          for poc in $(echo "$POCS" | jq -r '.[]'); do
+            dir="pocs/$poc"
+            [ -f "$dir/package.json" ] || { echo "skip $poc (deleted)"; continue; }
+            if ! jq -e '.scripts.typecheck' "$dir/package.json" >/dev/null; then
+              echo "skip $poc (no typecheck script)"; continue
+            fi
+            echo "::group::$poc"
+            [ -f "$dir/nuxt.config.ts" ] && (cd "$dir" && npx nuxt prepare)
+            pnpm --filter "./$dir" typecheck
+            echo "::endgroup::"
+          done
+
+  typecheck-apps:
+    needs: [changes, prepare]
+    if: needs.changes.outputs.apps != '[]'
     # The CI backing for CLAUDE.md's "EVERY change requires pnpm typecheck"
-    # (#1097) — runs the exact local sweep (`pnpm typecheck` =
-    # `pnpm -r --filter './apps/*' typecheck`) so a type regression in an app
-    # goes red on the PR instead of on the next unlucky local run. Docs-only
-    # PRs never pay for this: the workflow-level `paths:` filter already
-    # excludes them. Build set: every workspace dep of every app (`{./apps/*}^...`
-    # — packages without a build script are skipped), because the dist-consumed
-    # layers must exist before `nuxt prepare` can resolve them.
+    # (#1097) so a type regression in an app goes red on the PR instead of on the
+    # next unlucky local run. On a PR it checks only the apps `changes` says are
+    # affected (changed, or depending on a changed package); a push to main and
+    # infra changes check all of them plus the CLI (`pnpm typecheck`).
     name: Type Check Apps
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -127,34 +204,39 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Cache app workspace-dependency builds
-        id: app-dep-cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      - name: Download package dist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          path: packages/*/dist
-          key: app-dep-builds-${{ hashFiles('packages/**/*.ts', 'packages/**/*.vue', 'pnpm-lock.yaml') }}
+          name: package-dist
+      - run: tar xzf package-dist.tgz
 
-      - name: Build the apps' workspace dependencies
-        if: steps.app-dep-cache.outputs.cache-hit != 'true'
-        run: pnpm --filter '{./apps/*}^...' build
-
-      - name: Prepare apps
+      - name: Prepare + type check the affected apps
+        env:
+          APPS: ${{ needs.changes.outputs.apps }}
+          STAGE: ${{ needs.changes.outputs.stage }}
+          NODE_OPTIONS: '--max-old-space-size=8192'
         run: |
-          for dir in apps/*/; do
+          set -euo pipefail
+          for app in $(echo "$APPS" | jq -r '.[]'); do
+            dir="apps/$app"
             if [ -f "$dir/nuxt.config.ts" ]; then
               echo "Preparing $dir"
               (cd "$dir" && npx nuxt prepare)
             fi
           done
-
-      - name: Type check apps
-        run: pnpm typecheck
-        env:
-          NODE_OPTIONS: '--max-old-space-size=8192'
+          if [ "${{ github.event_name }}" = "push" ] || [ "$STAGE" = "infra" ]; then
+            pnpm typecheck
+          else
+            for app in $(echo "$APPS" | jq -r '.[]'); do
+              pnpm --filter "./apps/$app" typecheck
+            done
+          fi
 
   build-kassa:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    needs: [changes, prepare]
+    # Only when kassa itself, or a package kassa depends on, changed (the `apps` list is the
+    # dependency walk, scripts/ci-detect.mjs).
+    if: contains(fromJSON(needs.changes.outputs.apps), 'kassa')
     # Dual-target smoke test: kassa must build for both the Cloudflare
     # (cloud) and node-server (venue/Pi) presets, or the unused path silently
     # rots. The build itself is the smoke test — node-server boot was proven in
@@ -181,10 +263,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts
 
-      - name: Build kassa's workspace dependencies
-        # '^...' selects kassa's transitive workspace deps (excludes kassa
-        # itself). They are dist-consumed, so they must be built before the app.
-        run: pnpm --filter "kassa^..." build
+      - name: Download package dist
+        # kassa's workspace deps are dist-consumed; `prepare` built them all once.
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package-dist
+      - run: tar xzf package-dist.tgz
 
       - name: Prepare Nuxt
         # postinstall (nuxt prepare) is skipped above via --ignore-scripts.
@@ -200,44 +284,6 @@ jobs:
           # Build-time prerender needs a secret present; value is irrelevant in CI.
           BETTER_AUTH_SECRET: ci-placeholder
 
-  docs-check:
-    name: Documentation Check
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '22'
-
-      - name: Check package documentation
-        run: node scripts/check-docs.mjs
-
-  # An app's schemas/*.json is a COPY of its package's and forks silently from install
-  # onwards. kassa's products.json lost `required: true` that way, which is how order
-  # items ended up routing to no kitchen screen (#1766/#1769). Only UNDECLARED
-  # behavioural drift fails — intentional divergence lives in
-  # scripts/schema-drift.baseline.json with a reason. The unit tests for the checker
-  # itself are picked up by the `scripts-tests` job's scripts/*.test.mjs glob.
-  schema-drift-check:
-    name: Schema Drift Check
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '22'
-
-      - name: Check app↔package schema drift
-        run: node scripts/check-schema-drift.mjs
-
   # Does every CHANGED .vue actually compile? (#2182) The pi worker self-heals its OWN broken
   # SFCs in-run (work-issue-pidev.yml), but a hand-written or other-lane PR has no such guard —
   # and an uncompilable `.vue` (an unbalanced/unclosed tag) reaches CI only INDIRECTLY (a build
@@ -247,7 +293,7 @@ jobs:
   compile-check:
     name: Compile changed .vue
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.stage != 'none'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -280,58 +326,10 @@ jobs:
           fi
           node scripts/verify-touched-compiles.mjs --base "$BASE"
 
-  sync-validation:
-    name: Sync Validation
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '22'
-
-      - name: Validate field types sync
-        run: node scripts/validate-field-types-sync.mjs
-
-      # #1845: an async function inside the ARRAY form of definePageMeta({ middleware })
-      # never gets unctx's await-restore shim, so the Nuxt context is lost across the
-      # await and navigateTo() throws during SSR (#1839). Invisible to typecheck, to the
-      # build, and to eslint (which this workflow doesn't run) — hence a dedicated check.
-      - name: Check page middleware async context
-        run: node scripts/check-page-middleware.mjs
-
-  mcp-server-tests:
-    name: MCP Server Tests
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Build MCP Server
-        run: pnpm --filter @fyit/crouton-mcp build
-
-      - name: Run MCP Server tests
-        run: pnpm --filter @fyit/crouton-mcp test
-
   test:
     name: Test Suite
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
+    needs: [changes, prepare]
+    if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -355,15 +353,13 @@ jobs:
       - name: Build better-sqlite3's native binding
         run: pnpm rebuild better-sqlite3
 
-      # Build ALL @fyit packages, not a hand-listed three (#2073). This step used to name
-      # crouton-auth / crouton-core / crouton explicitly, which silently assumed no app ever
-      # consumes another dist-built package. Adding `@fyit/crouton-devtools` to the apps broke
-      # `nuxt prepare` below with "Could not load `@fyit/crouton-devtools`. Is it installed?" —
-      # the exact failure `warm-packages` was written for ("a subset can miss a package the app
-      # transitively extends", #1222). Using the shared action means the next dist-consumed
-      # package needs no edit here, and it shares the content-addressed cache with the deploy
-      # jobs instead of maintaining a second, narrower one.
-      - uses: ./.github/actions/warm-packages
+      # ALL @fyit packages' dist, built once by `prepare` (#2073: never a hand-listed subset —
+      # `nuxt prepare` below dies on any dist-consumed package that is missing, #1222).
+      - name: Download package dist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: package-dist
+      - run: tar xzf package-dist.tgz
 
       - name: Prepare apps
         run: |
@@ -386,42 +382,10 @@ jobs:
           path: coverage/coverage-final.json
           retention-days: 1
 
-  changeset-check:
-    name: Changeset Check
-    needs: changes
-    if: github.event_name == 'pull_request' && needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Check for package changes
-        id: packages-changed
-        run: |
-          CHANGED=$(git diff --name-only origin/main...HEAD -- 'packages/')
-          if [ -z "$CHANGED" ]; then
-            echo "changed=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "changed=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Check for changeset
-        if: steps.packages-changed.outputs.changed == 'true'
-        run: |
-          # Look for new .md files in .changeset/ (excluding README and config)
-          CHANGESETS=$(git diff --name-only origin/main...HEAD -- '.changeset/*.md' | grep -v README.md || true)
-          if [ -z "$CHANGESETS" ]; then
-            echo "::warning::No changeset found. If this PR changes published packages, run 'pnpm changeset' to add one."
-          else
-            echo "Changeset found: $CHANGESETS"
-          fi
-
   package-check:
     name: Package Validation
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.packages != '[]' || needs.changes.outputs.stage == 'infra'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -446,26 +410,6 @@ jobs:
       - name: Check package exports (publint)
         run: pnpm check:publint
 
-  # The pure `scripts/*.mjs` helpers (deploy-detect, packages-guard, harness-stages,
-  # pipeline-context, pipeline-loop-guard, …) carry `node --test` contracts next to them. This
-  # job runs them so those contracts actually GATE — most load-bearingly the #1685 WS4 loop-guard
-  # (bot-actor · exact-label · depth cap), which must hold before the decomposer emits labels.
-  # No pnpm install: the tests use only Node core + the local .mjs modules.
-  scripts-tests:
-    name: Scripts unit tests
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: '22'
-      - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
-        # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
-        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs
-
   # Lint the bash embedded in our workflows (#1904). ~700 lines of shell live inside YAML with no
   # local execution path, and every defect found in the pi worker's finish step so far lived
   # there, so any feedback at all is an improvement on none.
@@ -488,19 +432,55 @@ jobs:
   # directives (SC1125 — our `— prose` suffix is invalid syntax, so those disables were being
   # dropped) and 2 deliberate `find | xargs -I{}` uses, all fixed at the source. Backlog: zero,
   # so there is nothing left for warn-only to protect.
-  shellcheck-workflows:
-    name: Shellcheck workflow shell
+  #
+  # (#2894) This job also carries the checks that need only Node core and no `pnpm install`,
+  # which used to be five separate jobs each paying for its own checkout + setup:
+  # docs-check, schema-drift-check, sync-validation, scripts-tests, shellcheck-workflows.
+  node-checks:
+    name: Node checks (docs, drift, sync, scripts tests, shellcheck)
     needs: changes
     # Runs on code changes AND on CI-file changes (#2335) — a PR that edits only a workflow
-    # or a composite action is the one that most needs this and used to skip it.
-    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.workflows == 'true'
+    # or a composite action is the one that most needs the shellcheck and used to skip it.
+    if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage) || needs.changes.outputs.workflows == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      IS_CODE: ${{ contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage) }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
+
+      - name: Check package documentation
+        if: env.IS_CODE == 'true'
+        run: node scripts/check-docs.mjs
+
+      # An app's schemas/*.json is a COPY of its package's and forks silently from install
+      # onwards (#1766/#1769). Only UNDECLARED behavioural drift fails — intentional divergence
+      # lives in scripts/schema-drift.baseline.json with a reason.
+      - name: Check app↔package schema drift
+        if: env.IS_CODE == 'true'
+        run: node scripts/check-schema-drift.mjs
+
+      - name: Validate field types sync
+        if: env.IS_CODE == 'true'
+        run: node scripts/validate-field-types-sync.mjs
+
+      # #1845: an async function inside the ARRAY form of definePageMeta({ middleware })
+      # never gets unctx's await-restore shim, so the Nuxt context is lost across the
+      # await and navigateTo() throws during SSR (#1839).
+      - name: Check page middleware async context
+        if: env.IS_CODE == 'true'
+        run: node scripts/check-page-middleware.mjs
+
+      # The pure scripts/*.mjs helpers carry `node --test` contracts next to them — most
+      # load-bearingly the #1685 WS4 loop-guard. Node core only, so no install.
+      - name: Run scripts/*.test.mjs + scripts/lib/*.test.mjs
+        if: env.IS_CODE == 'true'
+        # lib/ was outside the glob, so its 8 suites never ran in CI (#2608).
+        run: node --test scripts/*.test.mjs scripts/lib/*.test.mjs
+
       - name: Extract each `run:` block and lint it
         run: |
           set -uo pipefail
@@ -583,7 +563,7 @@ jobs:
           "$SHELLCHECK" -S warning -e SC2086,SC2016,SC1091 /tmp/wf-shell/*.sh
 
   fallow-audit:
-    if: needs.changes.outputs.code == 'true'
+    if: contains(fromJSON('["app","package","infra"]'), needs.changes.outputs.stage)
     # Rung 1 of the check ladder (#632): the codebase-intelligence gate (#1145).
     # `fallow audit` is diff-scoped — it judges only the changed code
     # (pass/warn/fail) and excludes inherited findings by default, so the
@@ -654,9 +634,8 @@ jobs:
   gate:
     name: CI Gate
     if: always()
-    needs: [changes, typecheck-mcp, typecheck-apps, build-kassa, docs-check, schema-drift-check,
-            compile-check, sync-validation, mcp-server-tests, test, changeset-check, package-check,
-            scripts-tests, fallow-audit, shellcheck-workflows]
+    needs: [changes, prepare, mcp, poc-typecheck, typecheck-apps, build-kassa, compile-check,
+            test, package-check, node-checks, fallow-audit]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
