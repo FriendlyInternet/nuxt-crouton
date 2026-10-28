@@ -496,8 +496,7 @@ jobs:
             # Conflict: give pi the resolution task, with the owner's comment queued after it.
             CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
             node "$RUNNER_TEMP/conflict-resolution.mjs" prompt "$BASE" "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-task.txt"
-            { cat "$RUNNER_TEMP/conflict-task.txt"; printf '\nOnly AFTER the conflicts are resolved, also do what this comment asks (skip it if you wrote a choice):\n\n'; cat "$RUNNER_TEMP/feedback.txt"; } > "$RUNNER_TEMP/feedback.combined"
-            mv "$RUNNER_TEMP/feedback.combined" "$RUNNER_TEMP/feedback.txt"
+            # The task is rendered by the pi-conflict-resolver persona (#3002), not folded into feedback.txt.
             echo "conflict=1" >> "$GITHUB_OUTPUT"
             echo "base_merged=${BASE_TIP}" >> "$GITHUB_OUTPUT"
             echo "::notice::PR is behind ${BASE} and conflicts — pi resolves it (#2848)"
@@ -528,6 +527,7 @@ jobs:
           # WS2 (#1695): the integration branch parsed off the issue's pipeline block (empty → main).
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
           REVISE: ${{ inputs.feedback != '' && '1' || '' }}
+          REV_CONFLICT: ${{ steps.revise.outputs.conflict }}
           # #2755: plan mode — the planner persona, no commit/PR (see the `plan` step below).
           PLAN: ${{ inputs.mode == 'plan' && '1' || '' }}
           FEEDBACK_ID: ${{ inputs.mode == 'plan' && inputs.feedback || '' }}
@@ -568,8 +568,15 @@ jobs:
             fi
           elif [ -n "${REVISE:-}" ]; then
             PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-            node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" \
-              --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
+            if [ "${REV_CONFLICT:-}" = "1" ]; then
+              # #3002: the base merge conflicted — the task is the merge, with its own persona (the
+              # reviser's "work-<issue>" / "owner comment" framing made pi stop on epic PRs).
+              node scripts/pipeline-prompt.mjs pi-conflict-resolver --var "pr=$PRN" --var "issue=$ISSUE" --var "branch=${REV_BRANCH:-work-${ISSUE}}" \
+                --var-file "task=$RUNNER_TEMP/conflict-task.txt" --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
+            else
+              node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" \
+                --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
+            fi
           else
             node scripts/pipeline-prompt.mjs pi-worker --var "issue=$ISSUE" --var "branch_instr=$BRANCH_INSTR" > "$PROMPT_FILE"
             # #2757: BUILD FROM AN APPROVED PLAN — plan-approved.yml passes the plan comment id.
@@ -673,6 +680,13 @@ jobs:
             exit 0
           elif [ "$RC" != 0 ]; then
             git merge --abort || true
+            UNTOUCHED=1
+            for f in $(git diff --name-only --diff-filter=U); do grep -q '^<<<<<<< ' "$f" 2>/dev/null || UNTOUCHED=0; done
+            if [ -n "$UNMERGED" ] && [ "$UNTOUCHED" = 1 ] && [ ! -s "$CHOICE_FILE" ]; then
+              say "$(printf '%s\n\n⚠️ Behind `%s` and conflicting, and the resolver ended without resolving anything (#3002). Nothing was pushed.\n\n%s' "$HDR" "$BASE" "$UNMERGED")"
+              echo "::error::conflict resolver ended without resolving the merge (#3002)"
+              exit 1
+            fi
             say "$(printf '%s\n\n⚠️ Behind `%s` and conflicting, and my resolution did not pass its checks (see the run log). Nothing was pushed.\n\n%s' "$HDR" "$BASE" "$UNMERGED")"
             echo "::error::conflict resolution failed its checks (#2848)"
             exit 1

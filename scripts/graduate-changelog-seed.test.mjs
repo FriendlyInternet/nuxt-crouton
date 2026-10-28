@@ -52,12 +52,8 @@ test('seedAppChangelogFromPoc: non-array input yields []', () => {
   assert.deepEqual(seedAppChangelogFromPoc({}), [])
 })
 
-test('seedAppChangelogFromPoc: real crouton-builder-demo spike-changelog.json seeds cleanly', async () => {
-  const { readFileSync } = await import('node:fs')
-  const { resolve, dirname } = await import('node:path')
-  const { fileURLToPath } = await import('node:url')
-  const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-  const raw = JSON.parse(readFileSync(resolve(root, 'pocs/crouton-builder-demo/app/spike-changelog.json'), 'utf8'))
+test('seedAppChangelogFromPoc: a long real-shaped POC changelog seeds cleanly, newest first', () => {
+  const raw = Array.from({ length: 52 }, (_, i) => ({ v: i + 1, note: `change ${i + 1}`, commit: `c${i + 1}` }))
   const seeded = seedAppChangelogFromPoc(raw)
   assert.equal(seeded.length, raw.length)
   assert.equal(seeded[0].v, 52)
