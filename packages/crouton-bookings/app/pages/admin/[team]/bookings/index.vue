@@ -71,6 +71,20 @@ function exitPreview() {
   impersonatedUserId.value = null
 }
 
+// Shared Panel props + handlers (inline and fullscreen modal)
+const panelProps = computed(() => ({
+  bookings: bookings.value,
+  locations: locations.value,
+  settings: firstSettings.value,
+  loading: loading.value,
+  title: '',
+  emptyMessage: isPreview.value
+    ? t('bookings.admin.noBookingsForUser', { name: impersonatedUser.value?.name || t('bookings.admin.thisUser') })
+    : t('bookings.admin.noBookingsForTeam'),
+  onCreated: handleBookingChange,
+  onUpdated: handleBookingChange
+}))
+
 // Refresh bookings when a new booking is created, updated, or email sent
 async function handleBookingChange() {
   await refreshAdminBookings()
@@ -134,44 +148,20 @@ async function handleBookingChange() {
       </UDropdownMenu>
     </div>
 
-    <div class="flex-1 min-h-0">
-      <CroutonBookingsPanel
-        :bookings="bookings"
-        :locations="locations"
-        :settings="firstSettings"
-        :loading="loading"
-        title=""
-        :empty-message="isPreview ? t('bookings.admin.noBookingsForUser', { name: impersonatedUser?.name || t('bookings.admin.thisUser') }) : t('bookings.admin.noBookingsForTeam')"
-        @created="handleBookingChange"
-        @updated="handleBookingChange"
-      />
-    </div>
+    <CroutonBookingsPanel v-bind="panelProps" class="flex-1 min-h-0" />
 
-    <UModal v-model:open="fullscreenOpen" fullscreen :ui="{ content: 'bg-default' }">
-      <template #content>
-        <div class="flex flex-col h-full pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-          <div class="flex items-center px-2 py-1 border-b border-default">
-            <UButton
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-x"
-              :aria-label="t('bookings.admin.closeFullScreen')"
-              @click="fullscreenOpen = false"
-            />
-          </div>
-          <div class="flex-1 min-h-0">
-            <CroutonBookingsPanel
-              :bookings="bookings"
-              :locations="locations"
-              :settings="firstSettings"
-              :loading="loading"
-              title=""
-              :empty-message="isPreview ? t('bookings.admin.noBookingsForUser', { name: impersonatedUser?.name || t('bookings.admin.thisUser') }) : t('bookings.admin.noBookingsForTeam')"
-              @created="handleBookingChange"
-              @updated="handleBookingChange"
-            />
-          </div>
-        </div>
+    <UModal
+      v-model:open="fullscreenOpen"
+      fullscreen
+      close
+      :title="t('bookings.admin.title')"
+      :ui="{
+        content: 'bg-default pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]',
+        body: 'p-0 sm:p-0 flex-1 min-h-0 flex flex-col'
+      }"
+    >
+      <template #body>
+        <CroutonBookingsPanel v-bind="panelProps" class="flex-1 min-h-0" />
       </template>
     </UModal>
   </div>

@@ -47,7 +47,6 @@
     },
     "admin": {
       "openFullScreen": "Open full screen",
-      "closeFullScreen": "Close full screen",
       "title": "Bookings",
       "sectionTitle": "Bookings",
       "overview": "Overview",

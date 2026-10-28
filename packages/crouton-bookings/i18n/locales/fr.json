@@ -47,7 +47,6 @@
     },
     "admin": {
       "openFullScreen": "Ouvrir en plein écran",
-      "closeFullScreen": "Fermer le plein écran",
       "title": "Réservations",
       "sectionTitle": "Réservations",
       "overview": "Aperçu",

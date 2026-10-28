@@ -47,7 +47,6 @@
     },
     "admin": {
       "openFullScreen": "Open op volledig scherm",
-      "closeFullScreen": "Volledig scherm sluiten",
       "title": "Boekingen",
       "sectionTitle": "Boekingen",
       "overview": "Overzicht",
