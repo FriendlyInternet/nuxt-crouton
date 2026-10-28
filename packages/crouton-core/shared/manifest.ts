@@ -79,11 +79,34 @@ export interface FieldTypeDefinition {
   zod: string
   tsType: string
   defaultValue: string
+  /** Sample values the generators emit for this type (seed + generated tests). */
+  seed: FieldTypeSeed
+  /** Source literal of a schema-valid value, embedded in the generated `<Collection>.test.ts`. */
+  testSample: string
   component?: string
   previewComponent?: string
   aliases?: string[]
   meta?: Record<string, unknown>
 }
+
+export interface FieldTypeSeed {
+  /** drizzle-seed generator expression for `seed.ts` (e.g. `f.int({ minValue: 0, maxValue: 100 })`) */
+  drizzleSeed: string
+  /**
+   * JS expression for the value in `seed.json` row `i`. Evaluated with `i`
+   * (row index), `name` (field name) and `now` (epoch ms) in scope.
+   */
+  fixture: string
+}
+
+/**
+ * The per-type shape the CLI's `getTypeMapping` returns (and the crouton-mcp
+ * snapshot stores): the generator-facing slice of `FieldTypeDefinition`, with
+ * `defaultValue` renamed `default` and the canonical type name attached.
+ */
+export type FieldTypeMapping
+  = Pick<FieldTypeDefinition, 'db' | 'drizzle' | 'zod' | 'tsType' | 'seed' | 'testSample' | 'component'>
+    & { default: string; canonical: string }
 
 export interface ManifestCollection {
   name: string

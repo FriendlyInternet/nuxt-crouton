@@ -67,13 +67,14 @@ export function mapType(t: string, validTypes?: Set<string>): string {
 interface Field {
   name: string
   type: string
+  seed?: { drizzleSeed: string }
 }
 
 /**
  * Get the drizzle-seed generator for a field based on name and type
  */
 export function getSeedGenerator(field: Field): string {
-  const { name, type } = field
+  const { name, seed } = field
   const n = name.toLowerCase()
 
   // Name-based heuristics (more specific patterns first)
@@ -96,20 +97,9 @@ export function getSeedGenerator(field: Field): string {
   if (n === 'status') return 'f.valuesFromArray({ values: ["active", "inactive", "pending"] })'
   if (n === 'type' || n === 'category') return 'f.valuesFromArray({ values: ["type_a", "type_b", "type_c"] })'
 
-  // Type-based fallbacks
-  const typeMap: Record<string, string> = {
-    string: 'f.loremIpsum({ sentencesCount: 1 })',
-    text: 'f.loremIpsum({ sentencesCount: 3 })',
-    number: 'f.int({ minValue: 0, maxValue: 100 })',
-    decimal: 'f.number({ minValue: 0, maxValue: 1000, precision: 100 })',
-    boolean: 'f.weightedRandom([{ value: true, weight: 0.5 }, { value: false, weight: 0.5 }])',
-    date: 'f.date({ minDate: "2020-01-01", maxDate: "2025-12-31" })',
-    json: 'f.valuesFromArray({ values: [{}] })',
-    repeater: 'f.valuesFromArray({ values: [[]] })',
-    array: 'f.valuesFromArray({ values: [[]] })',
-  }
-
-  return typeMap[type] || 'f.loremIpsum({ sentencesCount: 1 })'
+  // Type-based: the manifest declares the generator per field type (loadFields
+  // stamps it on the field). Only a type the manifest doesn't know falls back.
+  return seed?.drizzleSeed ?? 'f.loremIpsum({ sentencesCount: 1 })'
 }
 
 // typeMapping has been removed — use loadTypeMapping() from manifest-loader.ts

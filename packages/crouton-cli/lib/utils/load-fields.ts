@@ -14,6 +14,10 @@ export interface Field {
   zod: string
   default: string
   tsType: string
+  /** Sample-value generators declared by the manifest (drizzle-seed expr + seed.json expr) */
+  seed?: { drizzleSeed: string, fixture: string }
+  /** Source literal of a schema-valid value for generated tests, from the manifest */
+  testSample?: string
   /** Form control declared by the manifest for this field's (canonical) type; undefined for unknown types (#2286) */
   component?: string
 }
@@ -116,6 +120,8 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
       zod: typeMapping[resolvedType]?.zod || 'z.string()',
       default: typeMapping[resolvedType]?.default || '\'\'',
       tsType: typeMapping[resolvedType]?.tsType || 'string',
+      seed: typeMapping[resolvedType]?.seed,
+      testSample: typeMapping[resolvedType]?.testSample,
       component: typeMapping[resolvedType]?.component
     }
   })

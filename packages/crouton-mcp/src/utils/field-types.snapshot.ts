@@ -9,6 +9,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
+    "seed": {
+      "drizzleSeed": "f.loremIpsum({ sentencesCount: 1 })",
+      "fixture": "`Sample ${name} ${i + 1}`"
+    },
+    "testSample": "'sample'",
     "canonical": "string",
     "component": "UInput"
   },
@@ -18,6 +23,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
+    "seed": {
+      "drizzleSeed": "f.loremIpsum({ sentencesCount: 3 })",
+      "fixture": "`Sample ${name} content for row ${i + 1}. Lorem ipsum dolor sit amet, consectetur adipiscing elit.`"
+    },
+    "testSample": "'sample'",
     "canonical": "text",
     "component": "UTextarea"
   },
@@ -27,6 +37,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.number()",
     "default": "0",
     "tsType": "number",
+    "seed": {
+      "drizzleSeed": "f.int({ minValue: 0, maxValue: 100 })",
+      "fixture": "i + 1"
+    },
+    "testSample": "1",
     "canonical": "number",
     "component": "UInputNumber"
   },
@@ -36,6 +51,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.number()",
     "default": "0",
     "tsType": "number",
+    "seed": {
+      "drizzleSeed": "f.int({ minValue: 0, maxValue: 100 })",
+      "fixture": "i + 1"
+    },
+    "testSample": "1",
     "canonical": "number",
     "component": "UInputNumber"
   },
@@ -45,6 +65,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.number()",
     "default": "0",
     "tsType": "number",
+    "seed": {
+      "drizzleSeed": "f.number({ minValue: 0, maxValue: 1000, precision: 100 })",
+      "fixture": "i + 1"
+    },
+    "testSample": "1",
     "canonical": "decimal",
     "component": "UInputNumber"
   },
@@ -54,6 +79,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.boolean()",
     "default": "false",
     "tsType": "boolean",
+    "seed": {
+      "drizzleSeed": "f.weightedRandom([{ value: true, weight: 0.5 }, { value: false, weight: 0.5 }])",
+      "fixture": "i % 2 === 0"
+    },
+    "testSample": "true",
     "canonical": "boolean",
     "component": "UCheckbox"
   },
@@ -63,6 +93,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.date()",
     "default": "null",
     "tsType": "Date | null",
+    "seed": {
+      "drizzleSeed": "f.date({ minDate: \"2020-01-01\", maxDate: \"2025-12-31\" })",
+      "fixture": "Math.floor(now / 1000) - i * 86_400"
+    },
+    "testSample": "'2024-01-01T00:00:00.000Z'",
     "canonical": "date",
     "component": "CroutonCalendar"
   },
@@ -72,6 +107,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.date()",
     "default": "null",
     "tsType": "Date | null",
+    "seed": {
+      "drizzleSeed": "f.date({ minDate: \"2020-01-01\", maxDate: \"2025-12-31\" })",
+      "fixture": "Math.floor(now / 1000) - i * 86_400"
+    },
+    "testSample": "'2024-01-01T00:00:00.000Z'",
     "canonical": "date",
     "component": "CroutonCalendar"
   },
@@ -81,6 +121,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.record(z.string(), z.any())",
     "default": "{}",
     "tsType": "Record<string, any>",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: [{}] })",
+      "fixture": "{}"
+    },
+    "testSample": "{}",
     "canonical": "json",
     "component": "UTextarea"
   },
@@ -90,6 +135,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.array(z.any())",
     "default": "[]",
     "tsType": "any[]",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: [[]] })",
+      "fixture": "[]"
+    },
+    "testSample": "[]",
     "canonical": "repeater",
     "component": "CroutonFormRepeater"
   },
@@ -99,6 +149,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.array(z.string())",
     "default": "[]",
     "tsType": "string[]",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: [[]] })",
+      "fixture": "['sample']"
+    },
+    "testSample": "[]",
     "canonical": "array",
     "component": "UTextarea"
   },
@@ -108,6 +163,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: ['placeholder-id'] })",
+      "fixture": "''"
+    },
+    "testSample": "'sample'",
     "canonical": "reference",
     "component": "CroutonFormReferenceSelect"
   },
@@ -117,6 +177,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: [\"\"] })",
+      "fixture": "''"
+    },
+    "testSample": "'sample'",
     "canonical": "image",
     "component": "CroutonImageUpload"
   },
@@ -126,6 +191,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: [\"\"] })",
+      "fixture": "''"
+    },
+    "testSample": "'sample'",
     "canonical": "file",
     "component": "CroutonImageUpload"
   },
@@ -135,6 +205,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
+    "seed": {
+      "drizzleSeed": "f.loremIpsum({ sentencesCount: 3 })",
+      "fixture": "`Sample ${name} content for row ${i + 1}.`"
+    },
+    "testSample": "'sample'",
     "canonical": "richText",
     "component": "CroutonEditorSimple"
   }
