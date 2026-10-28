@@ -339,6 +339,7 @@ jobs:
           cp scripts/pi-edited-files.mjs "$RUNNER_TEMP/pi-edited-files.mjs"
           # pi-commit-plan.mjs imports ./pi-edited-files.mjs relatively, so stash it alongside (#1849).
           cp scripts/pi-commit-plan.mjs "$RUNNER_TEMP/pi-commit-plan.mjs"
+          cp scripts/revise-base.mjs "$RUNNER_TEMP/revise-base.mjs"
           # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
@@ -681,6 +682,11 @@ jobs:
           if [ -n "${REV_START:-}" ]; then
             # REVISE: stack on the PR as it stands — never reset it to the base (that would wipe it).
             git checkout -f -B "$BR" "${REV_BASE:-$REV_START}" 2>&1 | tail -1
+            # #2883: the revision must sit on a merge commit that contains the base. If REV_BASE was
+            # lost we are on the old PR head — merge the base now, or fail loudly, never commit stale.
+            CONFLICT_FLAG=""; [ "${REV_CONFLICT:-}" = "1" ] && [ -z "${REV_BASE:-}" ] && CONFLICT_FLAG="--conflict"
+            git fetch -q --unshallow origin "$BASE" 2>/dev/null || git fetch -q origin "$BASE" 2>/dev/null || true
+            node "$RUNNER_TEMP/revise-base.mjs" "origin/${BASE}" $CONFLICT_FLAG || exit 1
             # Whole-PR diff base, so the visual-change + evidence checks still see the PR's .vue
             # changes and a held UI PR STAYS held after a non-visual revision. The checkout is
             # depth-1, so origin/<base> has no parents: when the base moved on since the PR branched
