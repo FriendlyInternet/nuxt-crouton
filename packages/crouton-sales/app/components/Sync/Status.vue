@@ -51,7 +51,7 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useT()
-const ago = useSyncAgo()
+const ageLabel = useSyncAge()
 
 const data = ref<SyncStatusResponse | null>(null)
 const errored = ref(false)
@@ -74,12 +74,11 @@ async function fetchStatus() {
   }
 }
 
-const serverNow = computed(() => nowTick.value + clockOffset.value)
 // Age of the last contact, in ms, against the server clock.
 const ageMs = computed(() => {
   const last = data.value?.lastContactAt
   if (!last) return null
-  return serverNow.value - last
+  return (nowTick.value + clockOffset.value) - last
 })
 
 type State = 'never' | 'live' | 'stale' | 'error'
@@ -89,6 +88,12 @@ const state = computed<State>(() => {
   return (ageMs.value ?? Infinity) >= props.staleMs ? 'stale' : 'live'
 })
 
+// Compact relative label: "just now" / "12s ago" / "4m ago" / "2h ago".
+function relativeLabel(ms: number | null): string {
+  if (ms == null) return ''
+  return ageLabel(ms)
+}
+
 // With several tills the banner shows the freshest; the rest are in the tooltip.
 const deviceCount = computed(() => data.value?.devices?.length ?? 0)
 const title = computed(() => {
@@ -96,7 +101,8 @@ const title = computed(() => {
   if (deviceCount.value > 1) {
     lines.push(t('sales.sync.tillsSynced', { n: deviceCount.value }))
     for (const d of data.value!.devices!) {
-      lines.push(`${d.deviceId.replace('device:', '').slice(0, 8)} — ${d.lastContactAt ? ago(d.lastContactAt, serverNow.value) : '…'}`)
+      const age = d.lastContactAt ? (nowTick.value + clockOffset.value) - d.lastContactAt : null
+      lines.push(`${d.deviceId.replace('device:', '').slice(0, 8)} — ${age == null ? '…' : relativeLabel(age)}`)
     }
   }
   return lines.join('\n')
@@ -105,7 +111,7 @@ const title = computed(() => {
 const lostEdits = computed(() => data.value?.lostEdits ?? [])
 /** Short state for the plain `detailed` line: "Live" / "Offline since 3m ago" / … */
 const plainLabel = computed(() => {
-  if (state.value === 'stale') return t('sales.sync.offlineSince', { ago: ago(data.value?.lastContactAt, serverNow.value) })
+  if (state.value === 'stale') return t('sales.sync.offlineSince', { ago: relativeLabel(ageMs.value) })
   if (state.value === 'never') return t('sales.sync.noTill')
   return ui.value.label
 })
@@ -114,10 +120,10 @@ const ui = computed(() => {
   switch (state.value) {
     case 'live':
       return { dot: 'bg-success', pulse: true, color: 'text-success',
-        label: t('sales.sync.live'), detail: t('sales.sync.syncedAgo', { ago: ago(data.value?.lastContactAt, serverNow.value) }) }
+        label: t('sales.sync.live'), detail: t('sales.sync.syncedAgo', { ago: relativeLabel(ageMs.value) }) }
     case 'stale':
       return { dot: 'bg-warning', pulse: false, color: 'text-warning',
-        label: t('sales.sync.stale'), detail: t('sales.sync.staleDetail', { ago: ago(data.value?.lastContactAt, serverNow.value) }) }
+        label: t('sales.sync.stale'), detail: t('sales.sync.staleDetail', { ago: relativeLabel(ageMs.value) }) }
     case 'never':
       // Neutral (not a semantic status) — kept muted rather than a status token.
       return { dot: 'bg-muted', pulse: false, color: 'text-muted',
