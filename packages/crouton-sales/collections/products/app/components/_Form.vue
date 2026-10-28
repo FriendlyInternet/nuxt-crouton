@@ -1,8 +1,8 @@
 <!--
-  SalesProductForm
+  SalesProductsForm
   Package-provided form for the sales products collection.
-  Replaces the CLI-generated _Form.vue (wired via componentName in
-  useSalesProducts config).
+  Replaces the CLI-generated _Form.vue (picked up by its canonical name,
+  no config entry).
 
   - Event is implied by the event workspace, so the selector is hidden when
     eventId is preset (passed as initialData to crouton.open()).

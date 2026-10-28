@@ -14,6 +14,7 @@ e2e/                         # the harness (Playwright) — NOT a workspace pack
   auth.smoke.spec.ts         # auth feature itself: logout/re-login, logged-out guard, team switch
   collection.smoke.spec.ts   # generic, manifest-driven list + CRUD checks
   surface.smoke.spec.ts      # generic, manifest-driven package-surface checks (optional)
+  card.smoke.spec.ts         # generic, manifest-driven: a name-resolved collection card renders in the List layout (with-bookings, #2824)
   i18n.smoke.spec.ts         # generic, manifest-driven locale-switch check (optional)
   maps.smoke.spec.ts         # generic, manifest-driven maps mount + live geocode check (optional)
   a11y.smoke.spec.ts         # generic, manifest-driven axe-core accessibility scan (per surface)
