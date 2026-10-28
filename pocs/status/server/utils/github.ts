@@ -13,7 +13,7 @@ const cachedGh = defineCachedFunction(
   { name: 'status-gh', maxAge: 60 * 5, swr: false, getKey: (path: string) => path }
 )
 
-function githubToken(event: H3Event): string | undefined {
+export function githubToken(event: H3Event): string | undefined {
   const env = (event.context as { cloudflare?: { env?: Record<string, string> } }).cloudflare?.env
   return env?.GITHUB_TOKEN || process.env.GITHUB_TOKEN
 }
