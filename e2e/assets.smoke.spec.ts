@@ -10,9 +10,9 @@
  * VueUse's useFileDialog, so there is no input in the DOM until it opens) →
  * (Skip crop) → alt text → Upload Asset → the filename appears in the grid.
  */
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { FIXTURE, ensureAuthed, surfaceUrl, TEAM_FILE } from './helpers'
+import { test, FIXTURE, ensureAuthed, surfaceUrl, TEAM_FILE } from './helpers'
 
 const isAssetsFixture = FIXTURE === 'with-assets'
 
