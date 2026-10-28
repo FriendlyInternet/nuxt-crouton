@@ -266,5 +266,9 @@
   },
   "calendar": {
     "placeholder": "Select a date"
+  },
+  "collab": {
+    "editingCount": "{count} editing",
+    "currentlyEditing": "Currently editing:"
   }
 }

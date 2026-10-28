@@ -414,6 +414,7 @@ jobs:
           cp scripts/pi-edited-files.mjs "$RUNNER_TEMP/pi-edited-files.mjs"
           # pi-commit-plan.mjs imports ./pi-edited-files.mjs relatively, so stash it alongside (#1849).
           cp scripts/pi-commit-plan.mjs "$RUNNER_TEMP/pi-commit-plan.mjs"
+          cp scripts/revise-base.mjs "$RUNNER_TEMP/revise-base.mjs"
           # The finish step's DECISION core (#1893/#1904) — stashed for the same reason as the two
           # above: pi may check out a work branch mid-run that doesn't carry scripts/.
           cp scripts/pi-finish.mjs "$RUNNER_TEMP/pi-finish.mjs"
@@ -478,6 +479,19 @@ jobs:
           elif git merge --no-edit "origin/${BASE}" 2>&1 | tail -3 && [ ! -f .git/MERGE_HEAD ]; then
             echo "base merged: ${BASE_TIP}"
             echo "base_merged=${BASE_TIP}" >> "$GITHUB_OUTPUT"
+            # Push the clean merge NOW (#2941). A comment that only asks to bring the PR up to date
+            # gives pi nothing to edit, so the run ends "nothing left" and the finish step — where
+            # the merge used to be pushed — never delivers it. A plain (fast-forward) push: a
+            # concurrent push to the PR is refused, never overwritten. rev_start moves to the pushed
+            # head so the finish step's lease and "did this run change anything" stay correct.
+            if git push origin "HEAD:${REV_BRANCH}" 2>&1 | tail -2 && [ "${PIPESTATUS[0]}" = 0 ]; then
+              echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              echo "base_pushed=1" >> "$GITHUB_OUTPUT"
+              RPR="$(gh pr list --head "${REV_BRANCH}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2941)_\n\nBrought up to date with `%s` (merge commit `%s`). Any other change you asked for follows in its own commit; the preview redeploys from this push.' "$BASE" "$(git rev-parse --short HEAD)")" 2>&1 | tail -1 || true
+            else
+              echo "::warning::could not push the base merge — the finish step will retry (#2941)"
+            fi
           else
             # Conflict: give pi the resolution task, with the owner's comment queued after it.
             CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
@@ -643,7 +657,10 @@ jobs:
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
           RPR="$(gh pr list --head "${REV_BRANCH}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-          say() { [ -n "$RPR" ] && gh pr comment "$RPR" --body "$1" 2>&1 | tail -1 || true; }
+          say() {
+            if [ -z "$RPR" ]; then echo "::error::conflict note not posted: no open PR found for ${REV_BRANCH}"; return 0; fi
+            gh pr comment "$RPR" --body "$1" >/dev/null 2>&1 || echo "::error::conflict note could not be posted on PR #${RPR}"
+          }
           HDR='> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
           UNMERGED="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
           node "$RUNNER_TEMP/conflict-resolution.mjs" verify "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-files.txt"
@@ -661,7 +678,16 @@ jobs:
             exit 1
           fi
           LIST="$(sed 's/^/- `/; s/$/` — resolved, both sides kept/' "$RUNNER_TEMP/conflict-files.txt")"
-          git commit -q -m "Merge ${BASE} into ${REV_BRANCH} (resolve conflicts)" -m "$(printf 'Conflicts resolved by the revise worker (#2848):\n%s' "$(sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt")")"
+          # Message via a file, never argv: a long file list hit ARG_MAX -> exit 126 (#2954).
+          { printf 'Merge %s into %s (resolve conflicts)\n\nConflicts resolved by the revise worker (#2848):\n' "$BASE" "$REV_BRANCH"; sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt"; } > "$RUNNER_TEMP/conflict-msg.txt"
+          if ! git commit -q -F "$RUNNER_TEMP/conflict-msg.txt"; then echo "::error::git commit of the conflict merge failed (#2954)"; exit 1; fi
+          # A resolved conflict must land as a real merge (HEAD + origin/base). A one-parent commit
+          # is a flat copy of the base: the conflicts never clear (#2914).
+          NPAR="$(git rev-list --parents -n1 HEAD | wc -w)"
+          if [ "$NPAR" != 3 ]; then
+            echo "::error::conflict resolution committed $((NPAR - 1)) parent(s), expected 2 — refusing to push a flat copy (#2914)"
+            exit 1
+          fi
           echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           say "$(printf '%s\n\nMerged `%s` into this PR and resolved the conflicts:\n\n%s\n\nGenerated files were rebuilt, not hand-merged; no conflict markers remain and the checks pass.' "$HDR" "$BASE" "$LIST")"
 
@@ -725,7 +751,11 @@ jobs:
           APPROVED_PLAN_ID: ${{ inputs.mode != 'plan' && inputs.feedback == '' && inputs.plan || '' }}
           # #2658: REV_START + the current base merged in (equals REV_START when already current).
           REV_BASE: ${{ steps.conflict.outputs.rev_base || steps.revise.outputs.rev_base }}
+          # #2914: the base merge conflicted — only a merge commit from the conflict step may be stacked on.
+          REV_CONFLICT: ${{ steps.revise.outputs.conflict }}
           BASE_MERGED: ${{ steps.revise.outputs.base_merged }}
+          # #2941: the revise step already pushed a clean base merge (counts as delivered when pi adds nothing).
+          BASE_PUSHED: ${{ steps.revise.outputs.base_pushed }}
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
@@ -790,11 +820,23 @@ jobs:
           # replay the deletion after the checkout below (#2446; the copy loop alone dropped them).
           git status --porcelain -uall 2>/dev/null | grep -E '^( D|D )' | sed 's/^...//' > "$RUNNER_TEMP/deleted.txt" || true
 
+          if [ -n "${REV_START:-}" ] && [ "${REV_CONFLICT:-}" = 1 ] && [ -z "${REV_BASE:-}" ]; then
+            # The resolution never became a merge commit (it failed its checks, or was asked to the
+            # owner; the conflict step already said which on the PR). Stacking pi's edits on the old
+            # head would push a flat copy of the base — the conflicts would never clear (#2914).
+            echo "::warning::base merge conflicted and was not committed as a merge — pushing nothing (#2914)"
+            exit 0
+          fi
           git fetch origin "$BASE" --quiet 2>/dev/null || true
           BR="work-${ISSUE}"; [ -n "${REV_START:-}" ] && BR="${REV_BRANCH:-$BR}"
           if [ -n "${REV_START:-}" ]; then
             # REVISE: stack on the PR as it stands — never reset it to the base (that would wipe it).
             git checkout -f -B "$BR" "${REV_BASE:-$REV_START}" 2>&1 | tail -1
+            # #2883: the revision must sit on a merge commit that contains the base. If REV_BASE was
+            # lost we are on the old PR head — merge the base now, or fail loudly, never commit stale.
+            CONFLICT_FLAG=""; [ "${REV_CONFLICT:-}" = "1" ] && [ -z "${REV_BASE:-}" ] && CONFLICT_FLAG="--conflict"
+            git fetch -q --unshallow origin "$BASE" 2>/dev/null || git fetch -q origin "$BASE" 2>/dev/null || true
+            node "$RUNNER_TEMP/revise-base.mjs" "origin/${BASE}" $CONFLICT_FLAG || exit 1
             # Whole-PR diff base, so the visual-change + evidence checks still see the PR's .vue
             # changes and a held UI PR STAYS held after a non-visual revision. The checkout is
             # depth-1, so origin/<base> has no parents: when the base moved on since the PR branched
@@ -883,6 +925,9 @@ jobs:
               FILES="$(git diff --name-status "$RUN_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
               [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.%s' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES" "${BASE_MERGED:+$(printf '\n\nbase merged: `%s`' "$BASE_MERGED")}")" 2>&1 | tail -1 || true
               fi
+            elif [ "${BASE_PUSHED:-}" = "1" ]; then
+              echo "revise: base merge pushed by the revise step (#2941)"
+              echo "revised=1" >> "$GITHUB_OUTPUT"
             elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
               REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
               if [ "${REPLIED:-0}" -gt 0 ]; then
