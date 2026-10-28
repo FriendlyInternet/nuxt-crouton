@@ -546,7 +546,10 @@ jobs:
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
           CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
           RPR="$(gh pr list --head "${REV_BRANCH}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
-          say() { [ -n "$RPR" ] && gh pr comment "$RPR" --body "$1" 2>&1 | tail -1 || true; }
+          say() {
+            if [ -z "$RPR" ]; then echo "::error::conflict note not posted: no open PR found for ${REV_BRANCH}"; return 0; fi
+            gh pr comment "$RPR" --body "$1" >/dev/null 2>&1 || echo "::error::conflict note could not be posted on PR #${RPR}"
+          }
           HDR='> 🤖 **pi.dev harness** · agent pipeline (CI) · _merge conflict (#2848)_'
           UNMERGED="$(git diff --name-only --diff-filter=U | sed 's/^/- `/; s/$/`/')"
           node "$RUNNER_TEMP/conflict-resolution.mjs" verify "$CHOICE_FILE" > "$RUNNER_TEMP/conflict-files.txt"
