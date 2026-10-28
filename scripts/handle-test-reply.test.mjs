@@ -2,7 +2,7 @@
 //   node --test scripts/handle-test-reply.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { decideTestReply, buildFailureIssue } from './handle-test-reply.mjs'
+import { decideTestReply, buildFailureIssue, decideEpicClose } from './handle-test-reply.mjs'
 
 const base = { labels: ['epic', 'status:to-test'], association: 'OWNER' }
 
@@ -29,4 +29,19 @@ test('failure issue carries the note, the epic link and a dedup line', () => {
   assert.match(body, /Part of #7/)
   assert.match(body, /> x broke/)
   assert.match(body, /Dedup-checked:/)
+})
+
+const kid = (number, state) => ({ number, state })
+test('epic close: children closed + epic PR merged → close', () => {
+  assert.deepEqual(decideEpicClose({ subIssues: [kid(1, 'closed')], prs: [{ number: 9, state: 'closed', merged_at: 'x' }] }), { close: true })
+})
+test('epic close: open epic PR stays open and is named', () => {
+  const r = decideEpicClose({ subIssues: [kid(1, 'closed')], prs: [{ number: 9, state: 'open' }] })
+  assert.equal(r.close, false)
+  assert.match(r.comment, /#9/)
+})
+test('epic close: open sub-issue stays open and is named', () => {
+  const r = decideEpicClose({ subIssues: [kid(4, 'open')], prs: [] })
+  assert.equal(r.close, false)
+  assert.match(r.comment, /#4/)
 })
