@@ -380,7 +380,7 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install
-        run: pnpm install --frozen-lockfile
+        run: eval "$(node scripts/harness-flavor.mjs install)"
 
       # GitHub-hosted runners (#2275) have no `claude` login. pi's `claude-bridge` provider
       # drives the Claude SUBSCRIPTION through Claude Code (Agent SDK). setup-pi installs pinned pi + CLI and
@@ -412,6 +412,9 @@ jobs:
           git status --porcelain 2>/dev/null | grep -vE "$SCRATCH" | cut -c4- > "$RUNNER_TEMP/pre-pi-dirty.txt" || true
           echo "pre-pi non-scratch dirty paths: $(wc -l < "$RUNNER_TEMP/pre-pi-dirty.txt" | tr -d ' ')"
           cp scripts/pi-edited-files.mjs "$RUNNER_TEMP/pi-edited-files.mjs"
+          # The flavor resolver too (pi switches branches mid-run; the finish step still asks it). It
+          # locates flavor.config.mjs at ../ from itself, so stash both under one root.
+          mkdir -p "$RUNNER_TEMP/flavor/scripts" && cp scripts/harness-flavor.mjs "$RUNNER_TEMP/flavor/scripts/" && cp flavor.config.mjs "$RUNNER_TEMP/flavor/"
           # pi-commit-plan.mjs imports ./pi-edited-files.mjs relatively, so stash it alongside (#1849).
           cp scripts/pi-commit-plan.mjs "$RUNNER_TEMP/pi-commit-plan.mjs"
           cp scripts/revise-base.mjs "$RUNNER_TEMP/revise-base.mjs"
@@ -469,8 +472,8 @@ jobs:
           # stays in progress and pi resolves it (keep both sides, regenerate generated files); the
           # `conflict` step below verifies the result and commits it, or posts a 🔀 choice.
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
-          git config user.name  "nuxt-harness[bot]"
-          git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+          git config user.name  "$(node scripts/harness-flavor.mjs bot.name)"
+          git config user.email "$(node scripts/harness-flavor.mjs bot.email)"
           git fetch -q --unshallow origin "${REV_BRANCH}" "$BASE" 2>/dev/null || git fetch -q origin "${REV_BRANCH}" "$BASE"
           BASE_TIP="$(git rev-parse --short "origin/${BASE}")"
           if git merge-base --is-ancestor "origin/${BASE}" HEAD; then
@@ -538,8 +541,8 @@ jobs:
           set -uo pipefail
           # The Harness App identity for any commits pi makes (so they're attributable
           # and not a masquerading human — the #862 lesson).
-          git config user.name  "nuxt-harness[bot]"
-          git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+          git config user.name  "$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name)"
+          git config user.email "$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.email)"
           LOG="decompose-pidev-exec-${{ github.run_id }}.log"
           START=$(date +%s)
           # Front-load the CANONICAL operating contract (#1022) so pi does not stall-and-ask
@@ -782,8 +785,8 @@ jobs:
           exec > >(tee "$RUNNER_TEMP/finish.log") 2>&1
           trap 'echo $? > "$RUNNER_TEMP/finish.exit"' EXIT
           BASE="main"; [ -n "${EPIC_BRANCH:-}" ] && BASE="$EPIC_BRANCH"
-          git config user.name  "nuxt-harness[bot]"
-          git config user.email "nuxt-harness[bot]@users.noreply.github.com"
+          git config user.name  "$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.name)"
+          git config user.email "$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" bot.email)"
           ROOT="$(git rev-parse --show-toplevel)"
 
           # 1) Read THIS run's pi session (per-run --session-dir). The ledger = files pi HAND-EDITED
@@ -1056,6 +1059,8 @@ jobs:
             if [ -n "$APP_DIR" ]; then BORROWED=1; echo "acceptance: package-only change — borrowing consuming app $APP_DIR (#2709)"; else NO_APP_NA=1; fi
           fi
 
+          TC_PREPARE="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" typecheck.prepare)"
+          TC_CMD="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" typecheck.command)"
           ACCEPT="neutral"; ACCEPT_MSG="could not typecheck the touched app — not verified"
           if [ "$NO_APP_NA" = "1" ]; then
             ACCEPT="na"; ACCEPT_MSG="no app touched; CI runs Type Check Apps"
@@ -1084,10 +1089,10 @@ jobs:
                 # fresh poc. Guarded (errexit is on for this step): a failed install just leaves the env
                 # unprepared, and the AUTOIMP→NEUTRAL guard still catches it — never a false FAIL.
                 echo "acceptance: linking $PKG into the workspace before typecheck (#1872)"
-                pnpm install --filter "$PKG..." --no-frozen-lockfile > "$RUNNER_TEMP/acc-install.log" 2>&1 \
+                eval "${TC_PREPARE//\{pkg\}/$PKG}" > "$RUNNER_TEMP/acc-install.log" 2>&1 \
                   || { echo "::warning::acceptance: install for $PKG failed — env may be unprepared (#1872)"; tail -15 "$RUNNER_TEMP/acc-install.log" || true; }
-                echo "acceptance: pnpm --filter $PKG typecheck ($APP_DIR)"
-                if pnpm --filter "$PKG" typecheck > "$RUNNER_TEMP/acc.log" 2>&1; then TC_EXIT=0; else TC_EXIT=$?; fi
+                echo "acceptance: ${TC_CMD//\{pkg\}/$PKG} ($APP_DIR)"
+                if eval "${TC_CMD//\{pkg\}/$PKG}" > "$RUNNER_TEMP/acc.log" 2>&1; then TC_EXIT=0; else TC_EXIT=$?; fi
               else
                 echo "acceptance: NEUTRAL — $APP_DIR has no typecheck script (raw nuxt typecheck would false-fail on auto-imports)"
               fi
