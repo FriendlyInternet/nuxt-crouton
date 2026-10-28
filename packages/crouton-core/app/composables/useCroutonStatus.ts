@@ -100,12 +100,13 @@ export function useCroutonStatus() {
   }
 
   /**
-   * Merge the current user's recent changes from crouton-events into the feed. No-op without the
+   * Merge recent changes (own; teammates' too with collab) from crouton-events into the feed. No-op without the
    * events app; throttled to once per minute unless `force`. Call on mount / pill open.
    */
   const refreshTeamEvents = async (force = false) => {
     if (!useCroutonApps().hasApp('events')) return
     const userId = getUserId()
+    const live = useCroutonApps().hasApp('collab')
     const teamId = useTeamContext().getTeamId()
     const now = Date.now()
     if (teamId !== eventsTeamId) {
@@ -117,9 +118,9 @@ export function useCroutonStatus() {
     lastEventsFetch = now
     try {
       const rows = await $fetch<TeamEventRow[]>(`/api/teams/${teamId}/crouton-events`, {
-        query: { userId, pageSize: EVENTS_LIMIT, dateFrom: new Date(now - EVENTS_WINDOW_MS).toISOString() },
+        query: { userId: live ? undefined : userId, pageSize: EVENTS_LIMIT, dateFrom: new Date(now - EVENTS_WINDOW_MS).toISOString() },
       })
-      history.value = mergeTeamEvents(history.value, rows, t, userId)
+      history.value = mergeTeamEvents(history.value, rows, t, userId, live)
     } catch {
       // Feed falls back to own changes
     }
@@ -127,6 +128,12 @@ export function useCroutonStatus() {
 
   if (import.meta.client && getCurrentInstance()) {
     onMounted(() => { refreshTeamEvents() })
+  }
+
+  // Live sync: a teammate's change lands in the feed within seconds (no polling, no throttle)
+  if (import.meta.client && getCurrentInstance() && useCroutonApps().hasApp('collab') && useCroutonApps().hasApp('events')) {
+    const stop = useNuxtApp().hook('crouton:remoteChange' as any, () => { refreshTeamEvents(true) })
+    onScopeDispose(stop)
   }
 
   // Register listener once per JS runtime (SSR and client each get their own)
