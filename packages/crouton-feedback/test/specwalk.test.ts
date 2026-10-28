@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { walkEntries, stepsOf, selectorFor, exportText, type VerdictMap } from '../src/runtime/tools/specwalk-data'
+import { parseWalkParam, MAX_WALK_PARAM, walkEntries, stepsOf, selectorFor, exportText, type VerdictMap } from '../src/runtime/tools/specwalk-data'
 import { createSpecWalkTool } from '../src/runtime/tools/specwalk'
 import type { ComposedPlan } from '../src/runtime/tools/plan-data'
 
@@ -114,5 +114,30 @@ describe('createSpecWalkTool', () => {
     const tool = createSpecWalkTool({ count: () => 1, getBadge: () => '0/1', setOpen: (v) => { open = v } })
     tool.activate!(); expect(open).toBe(true)
     tool.deactivate!(); expect(open).toBe(false)
+  })
+})
+
+describe('parseWalkParam (ad-hoc walk from the link)', () => {
+  const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url')
+
+  it('turns each step into one walk entry', () => {
+    const w = parseWalkParam(enc({ title: 'Card', app: 'velo', ref: '#1', steps: [{ text: 'Open it' }, { text: 'Click', expect: 'Opens' }] }))
+    expect(w?.title).toBe('Card')
+    expect(w?.entries.map(e => e.behaviour)).toEqual(['Open it', 'Click'])
+    expect(w?.entries[1]!.expect).toBe('Opens')
+    expect(new Set(w?.entries.map(e => e.id)).size).toBe(2)
+  })
+
+  it('ignores bad input', () => {
+    expect(parseWalkParam(null)).toBeNull()
+    expect(parseWalkParam('')).toBeNull()
+    expect(parseWalkParam('!!not base64!!')).toBeNull()
+    expect(parseWalkParam(enc('nope'))).toBeNull()
+    expect(parseWalkParam(enc({ steps: [] }))).toBeNull()
+    expect(parseWalkParam(enc({ steps: [{ text: '  ' }] }))).toBeNull()
+  })
+
+  it('ignores an oversized param', () => {
+    expect(parseWalkParam('A'.repeat(MAX_WALK_PARAM + 1))).toBeNull()
   })
 })
