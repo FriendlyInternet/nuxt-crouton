@@ -17,8 +17,8 @@
  * edit your work.
  */
 
-/** Prefixes the pipeline opens PRs from. `claude/issue-` = the claude lane, `work-` = pi. */
-export const PIPELINE_BRANCH_PREFIXES = ['claude/issue-', 'work-']
+/** Prefixes the pipeline opens PRs from. `work-` = the pi worker (the `claude/issue-` lane was dropped, #2892). */
+export const PIPELINE_BRANCH_PREFIXES = ['work-']
 
 export function isPipelineBranch(ref) {
   const s = String(ref || '')

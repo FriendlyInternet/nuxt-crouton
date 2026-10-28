@@ -59,15 +59,15 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 | `deploy-pocs.yml` | PR touching `pocs/**` + dispatch(app, mode) | POC staging previews; `mode: version` = immutable Workers-version preview URL. Steps: `poc-deploy` skill |
 | `deploy-docs.yml` | push to main (`docs/**`) / PR build-smoke / dispatch | Docs site — self-contained, NOT via deploy-app.yml |
 | `deploy-sandbox.yml` | dispatch | Manual `sandboxes/*` deploy |
-| `report-failed-deploy.yml` | `workflow_run[completed]` of the deploy workflows | On failure on `main`, opens exactly one issue per failing run (idempotency marker, #340). Note: its watch list still names "Deploy Blog (POC preview)", a workflow that no longer exists — harmless dangling reference |
+| `report-failed-deploy.yml` | `workflow_run[completed]` of the deploy workflows | On failure on `main`, opens exactly one issue per failing run (idempotency marker, #340). |
 
 ### Agent pipeline (see §5 for the chain)
 
-`claude.yml` (@claude mention) · `decompose-on-issue.yml` (`delegate` label) · `comment-dispatch.yml` (`/delegate` comment) · `resume-on-comment.yml` (reply on `status:blocked`) · `close-epic-on-comment.yml` (`/close-epic`) · `schedule-waves.yml` (baton pass) · `automerge-epic-subpr.yml` · `fix-ci-on-failure.yml` · `status.yml` · plus the pi.dev variants: `decompose-on-issue-pidev.yml` (**LIVE** — promoted past dispatch-only in #1017: fires when a human applies the `delegate-pi` label, plus manual dispatch; default model tuned in #1019; has run for real under `delegate-pi`) and `a11y-daily-pidev.yml` (still dispatch-only + `AGENT_HARNESS` gated); both run on GitHub-hosted `ubuntu-latest` on the Claude SUBSCRIPTION via the `claude-bridge` pi provider (npm `pi-claude-bridge`, pinned in `.pi/settings.json` with the other extensions) — `.github/actions/setup-pi` installs a pinned pi + `claude` CLI, preflights `CLAUDE_CODE_OAUTH_TOKEN`, and asserts the provider is registered before pi starts; every pi call passes `--approve` or the project's extension list is ignored (#2275). The older `pi-claude-cli` extension is dead against pi 1.x (registers, then every turn ends silently). The mac-mini and its `mac-mini-smoke.yml` / `pi-box-apply.yml` are retired (#2275).
+`comment-dispatch.yml` (`/delegate` comment) · `resume-on-comment.yml` (reply on `status:blocked`) · `close-epic-on-comment.yml` (`/close-epic`) · `schedule-waves.yml` (baton pass) · `automerge-epic-subpr.yml` · `fix-ci-on-failure.yml` · `status.yml` · plus the pi.dev variants: `decompose-on-issue-pidev.yml` (**LIVE** — promoted past dispatch-only in #1017: fires when a human applies the `delegate-pi` label, plus manual dispatch; default model tuned in #1019; has run for real under `delegate-pi`); it runs on GitHub-hosted `ubuntu-latest` on the Claude SUBSCRIPTION via the `claude-bridge` pi provider (npm `pi-claude-bridge`, pinned in `.pi/settings.json` with the other extensions) — `.github/actions/setup-pi` installs a pinned pi + `claude` CLI, preflights `CLAUDE_CODE_OAUTH_TOKEN`, and asserts the provider is registered before pi starts; every pi call passes `--approve` or the project's extension list is ignored (#2275). The older `pi-claude-cli` extension is dead against pi 1.x (registers, then every turn ends silently). The mac-mini and its `mac-mini-smoke.yml` / `pi-box-apply.yml` are retired (#2275).
 
 ### Digests & scheduled reports (real cadence in §4)
 
-`epic-digest.yml` · `housekeeping.yml` · `skills-digest.yml` · `eval-scoreboard.yml` · `label-ready-epics.yml` · `loop-station-advisor.yml` · `loop-station-inventory.yml` (push-triggered; **commits** to `writeups/loop-station/history.jsonl`) · `sync-changelogs.yml` · `unlighthouse.yml` (weekly staging crawl, never gates) · `red-team-daily.yml` / `a11y-daily.yml` (**dispatch-only**, see §4).
+`epic-digest.yml` · `housekeeping.yml` · `skills-digest.yml` · `label-ready-epics.yml` · `weekly.yml` (Monday: `usage` → `findings` → `advisor`, plus the `cleanup` branch janitor) · `loop-station-inventory.yml` (push-triggered; **commits** to `writeups/loop-station/history.jsonl`) · `sync-changelogs.yml`.
 
 ### Housekeeping / ops (event-driven or dispatch-only)
 
@@ -76,8 +76,8 @@ All three share one pattern: a claude-code-action run writes a `<name>-verdict.j
 | `labels.yml` | push touching `.github/labels.yml` | Syncs labels (`skip_delete: true` — never removes) |
 | `strip-status-on-close.yml` | issue closed | Strips `status:*` labels (#641) |
 | `cleanup-epic-branches.yml` | PR closed | Deletes `epic/*` head branch only when merged into main (#613) |
-| `cleanup-merged-branches.yml` | weekly cron + dispatch | Dry-run unless `vars.CLEANUP_BRANCHES_APPLY=true` |
-| `status.yml` | PR/issue events, CI completions | One run per event: `board` job moves Projects-v2 cards; `pr-comment` job keeps the sticky PR status + epic rollup (merged from project-status + pipeline-pr-status, #2891) |; s/`pipeline-pr-status.yml` (no-LLM/`status.yml` (no-LLM/
+| `weekly.yml` (`cleanup` job) | weekly cron + dispatch | Merged-branch janitor; dry-run unless `vars.CLEANUP_BRANCHES_APPLY=true` |
+| `status.yml` | PR/issue events, CI completions | One run per event: `board` job moves Projects-v2 cards; `pr-comment` job keeps the sticky PR status + epic rollup (merged from project-status + the former pipeline-pr-status, #2891/#2892) |
 | `db-clone.yml` | dispatch | D1 mirror between envs (`db-clone` skill) |
 | `db-counts.yml` | dispatch | Read-only row counts of any app DB — the safe "what's in there" check (#384) |
 | `teardown-app.yml` | dispatch | CF/branch/issue teardown (`remove-app` skill) — runs in CI because the interactive agent has no Cloudflare creds |
@@ -154,7 +154,7 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 | `WORKER_SECRETS_JSON` | `deploy-app.yml` | Optional bundle of Worker secrets — **see the trap below** |
 | `RESEND_API_KEY` | digests, red-team email | Email rail; steps skip green when unset |
 | `REVIEW_SEED_SECRET` | deploy-app.yml | **Required** salt for review-login passwords — unset → no review login, pre-prod gate refuses (#2358) |
-| `PI_PROVIDER_KEY` | pi.dev variants | pi's model-provider key; required by `decompose-on-issue-pidev.yml` (live on the `delegate-pi` label, #1017) and `a11y-daily-pidev.yml` (dispatch-only). Funding state not verifiable from the repo — if a pi run errors at the agent step, check this key's credit first |
+| `PI_PROVIDER_KEY` | pi.dev variants | pi's model-provider key; required by `decompose-on-issue-pidev.yml` (live on the `delegate-pi` label, #1017). Funding state not verifiable from the repo — if a pi run errors at the agent step, check this key's credit first |
 
 ### The WORKER_SECRETS_JSON trap (fixed under [#1094](https://github.com/FriendlyInternet/nuxt-crouton/issues/1094))
 
@@ -162,7 +162,7 @@ Flow: build → deploy → sync ids → `wrangler d1 migrations apply <db-name> 
 
 ### Actions vars
 
-`AGENT_RUNNER` (only the pi.dev workers: work-issue-pidev, decompose-on-issue-pidev, a11y-daily-pidev; set to `ubuntu-latest` since #2275 — no self-hosted runner exists, so any other value queues forever) · `HOSTED_RUNNER` (everything else that was on the mac-mini — deploys and the claude-code-action reviews, which run on the subscription via `CLAUDE_CODE_OAUTH_TOKEN` on any machine; default ubuntu-latest, #2275) · `AGENT_HARNESS` (`pi` opt-in) · `CLEANUP_BRANCHES_APPLY` · `LABEL_READY_EPICS_APPLY` (write-gates for otherwise dry-run jobs) · `DIGEST_REPORT_EMAIL` / `DIGEST_EMAIL_FROM` / `RESEND_FROM` / `RED_TEAM_REPORT_EMAIL` (email rails) · `PROJECT_NAME` · `UNLIGHTHOUSE_SITE`.
+`AGENT_RUNNER` (only the pi.dev workers: work-issue-pidev, decompose-on-issue-pidev; set to `ubuntu-latest` since #2275 — no self-hosted runner exists, so any other value queues forever) · `HOSTED_RUNNER` (everything else that was on the mac-mini — deploys and the claude-code-action reviews, which run on the subscription via `CLAUDE_CODE_OAUTH_TOKEN` on any machine; default ubuntu-latest, #2275) · `AGENT_HARNESS` (`pi` opt-in) · `CLEANUP_BRANCHES_APPLY` · `LABEL_READY_EPICS_APPLY` (write-gates for otherwise dry-run jobs) · `DIGEST_REPORT_EMAIL` / `RESEND_FROM` / `RED_TEAM_REPORT_EMAIL` (email rails) · `PROJECT_NAME`.
 
 ### Three auth rules every agent workflow obeys
 
@@ -181,14 +181,10 @@ Do not trust "daily" labels; the truth is `on.schedule` + `.github/digests.yml`.
 | `e2e.yml` | `0 4 * * *` | Nightly full-matrix backstop — genuinely daily |
 | `epic-digest.yml` | `0 5 * * *` | Daily wake-up; real send day from `digests.yml` via `schedule.mjs` (retrofit #1139) |
 | `label-ready-epics.yml` | `0 5 * * *` | Daily (labels only when `vars.LABEL_READY_EPICS_APPLY` allows) |
-| `skills-digest.yml` | `0 5 * * *` | **Monthly (1st)** — cron is only a wake-up; `.github/digests.yml` `monthly:1` gates the send |
+| `skills-digest.yml` | `0 5 1 * *` | **Monthly (1st)** — cron fires on the 1st; `.github/digests.yml` `monthly:1` is a second guard |
 | `housekeeping.yml` | `0 6 * * *` | Daily per digests.yml (`schedule: daily`) |
 | `sync-changelogs.yml` | `0 6 * * *` | Daily |
-| `cleanup-merged-branches.yml` | `30 6 * * 1` | Weekly Mon (dry-run by default) |
-| `eval-scoreboard.yml` | `0 7 * * *` | **Weekly Mon** per digests.yml (`weekly:mon`) |
-| `loop-station-advisor.yml` | `23 7 * * 1` | Weekly Mon |
-| `unlighthouse.yml` | `23 7 * * 1` | Weekly Mon |
-| `red-team-daily.yml`, `a11y-daily.yml` | **none — `workflow_dispatch` only** | Daily schedules dropped to cut cost (#823). Root CLAUDE.md still calls the red-team sweep a live "daily deep sweep" — stale, tracked [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097). Coverage now relies on the per-PR gates |
+| `weekly.yml` | `30 6 * * 1` | Weekly Mon — ordered jobs: `usage` → `findings` → `advisor`; `cleanup` (dry-run by default) alongside |
 
 **Cadence-as-data rule**: for the digests, never edit a workflow's `cron` to change cadence — edit `.github/digests.yml` (the daily cron is a cheap wake-up; `.claude/skills/housekeeping/schedule.mjs` exits early on non-send days).
 
@@ -196,27 +192,25 @@ Do not trust "daily" labels; the truth is `on.schedule` + `.github/digests.yml`.
 
 How one `delegate` label becomes merged code (entry/steps verified in the named workflows; full theory in `.claude/agents/CLAUDE.md`):
 
-1. **Entry** — `decompose-on-issue.yml` fires only on `issues: [opened, labeled]` with `label.name == 'delegate'` (gating on the specific label avoids re-fires when workers add other labels, #535). Runs claude-code-action with `/task-decompose #NN`. The pi.dev twin `decompose-on-issue-pidev.yml` fires the same way on the `delegate-pi` label (#1017). Mobile entry: comment `/delegate` → `comment-dispatch.yml` (OWNER/MEMBER/COLLABORATOR only) removes+re-adds the label **with the App token** so the labeled event actually triggers downstream. `claude.yml` separately answers `@claude` mentions on issues/PRs.
+1. **Entry** — `decompose-on-issue-pidev.yml` fires on the `delegate-pi` label (#1017). Mobile entry: comment `/delegate` → `comment-dispatch.yml` (OWNER/MEMBER/COLLABORATOR only) removes+re-adds the label **with the App token** so the labeled event actually triggers downstream. `claude.yml` separately answers `@claude` mentions on issues/PRs.
 2. **Artifact gates** (#461/#603) — deterministic post-steps fail the run if the agent produced nothing observable (comment / PR / sub-issues / `status:blocked` hold); #661 classifies WHY from the execution log.
 3. **Sign-off resume** — `resume-on-comment.yml`: any human (non-Bot) comment on an issue labelled `status:blocked` resumes the pipeline; if the comment matches `\b(approve|approved|lgtm)\b` a deterministic step finds the linked draft gate-PR, marks it ready (GraphQL), and merges it — merge commit, never squash (#572). This is why reactions and labels resume nothing.
 4. **Auto-merge** — `automerge-epic-subpr.yml`: non-draft bot PRs targeting `epic/*` merge when green; any sub-PR touching `packages/` is held with `status:blocked` — shared code never lands unreviewed even onto an epic branch (#586/#339). Two distinct gates, and the difference matters: the **green gate** blocks a RED check, while the **presence gate** (#1698) additionally requires that `CI Gate` has *reported* `success` for the head SHA. Absence of failure is not evidence of success — on #1668 `CI` never started, so nothing was red and an unchecked build break merged. A **missing** `CI Gate` now leaves the PR open with a one-time explanatory comment (push an empty commit to fire `synchronize`); a **pending** one waits for the `check_suite` re-fire. The `main` ruleset can't cover this path — it only targets the default branch.
 5. **Baton pass** — `schedule-waves.yml` (#283): on PR merge, closes its `Closes #NN` issues (auto-close only works on the default branch); on issue close, releases dependents whose `Blocked-by: #NN` body lines are ALL closed by applying `delegate` (fan-in aware).
-6. **Fix-bot** — `fix-ci-on-failure.yml` (#338): `workflow_run` failure of CI/E2E on `claude/issue-*` branches only; attempt cap via `ci-fix-attempts:N` label (max 3); forbidden from `packages/`; pushes with the App token so CI re-runs; exhaustion → `status:blocked` + owner mention.
-7. **Status & close** — `pipeline-pr-status.yml` (no-LLM sticky comments per PR + epic rollup); `label-ready-epics.yml` marks finished epics; `close-epic-on-comment.yml` (#856) closes on a human `/close-epic` comment only when the epic already carries `status:ready-to-close` (postmortem-before-close holds structurally; server-side re-checks + maintainer permission check).
+6. **Fix-bot** — `fix-ci-on-failure.yml` (#338): `workflow_run` failure of CI/E2E on `work-*` branches only; attempt cap via `ci-fix-attempts:N` label (max 3); forbidden from `packages/`; pushes with the App token so CI re-runs; exhaustion → `status:blocked` + owner mention.
+7. **Status & close** — `status.yml` `pr-comment` job (no-LLM sticky comments per PR + epic rollup); `label-ready-epics.yml` marks finished epics; `close-epic-on-comment.yml` (#856) closes on a human `/close-epic` comment only when the epic already carries `status:ready-to-close` (postmortem-before-close holds structurally; server-side re-checks + maintainer permission check).
 
 ### Gate-honesty hardening state
 
 The three per-PR review gates shipped **fail-open** (missing tool grant meant the agent could never write its verdict file; outage was indistinguishable from a clean scan — #1034). Grants fixed in #1031/#1033 (per the workflow comments the fail-open comment lines remain as warnings); #1035 added a known-bad fixture smoke per gate. Follow-ups: [#1036](https://github.com/FriendlyInternet/nuxt-crouton/issues/1036) (bake the tool grant into the workflow standard) and [#1037](https://github.com/FriendlyInternet/nuxt-crouton/issues/1037) (distinguish agent-outage from clean scan) — issue state is live data, check GitHub before relying on it. Practical consequence until #1037 lands: **a green review-gate check can still mean "the agent never ran"** — on a security-sensitive PR, open the check and confirm the verdict comment exists. (This paragraph is the owner of the #1034-hardening status; siblings citing it should defer here.)
 
-Also volatile: `.claude/routing.json` `_known_gaps` states the top-level workflow loop (claude.yml, decompose, fix-ci, the sweeps) runs on the claude-code-action **default model, unpinned** — pinning is an acknowledged follow-up.
+Also volatile: `.claude/routing.json` `_known_gaps` states the top-level workflow loop (fix-ci, the weekly sweeps) runs on the claude-code-action **default model, unpinned** — pinning is an acknowledged follow-up.
 
 ## 6. Known doc drift in this area
 
 Workflow files beat all prose for CI/deploy mechanics (the doc-vs-doc trust order is owned by `crouton-docs-trust-map` §1). The known-stale claims are tracked — read the issue for current fix state:
 
 - ~~Per-app `deploy-<app>.yml` callers~~ / ~~`WORKER_SECRETS_JSON` as an Environment secret~~ — both fixed ([#1093](https://github.com/FriendlyInternet/nuxt-crouton/issues/1093), [#1094](https://github.com/FriendlyInternet/nuxt-crouton/issues/1094)): CLAUDE.md + the `deploy` skill now describe `deploy-apps.yml` + `deploy.config.json` and the repo-level secret (§2, §3)
-- **"Daily deep sweep" red-team/a11y still live** (root CLAUDE.md) — dispatch-only since #823 (§4). (The other half of this row — CI not backing the mandatory-typecheck rule — was fixed under [#1097](https://github.com/FriendlyInternet/nuxt-crouton/issues/1097): `ci.yml` now runs the full app sweep as `typecheck-apps`.)
-- `report-failed-deploy.yml` watches "Deploy Blog (POC preview)", a workflow that no longer exists — harmless dangling reference (untracked)
 - Folk knowledge: the `ui-approved` label resumes nothing — inert by design; only a reply comment resumes (#572)
 
 When this skill and a workflow file disagree, the workflow file wins — then fix this skill.
