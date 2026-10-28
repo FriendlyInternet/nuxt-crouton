@@ -2,15 +2,14 @@ name: Pipeline PR status
 
 # Always-on status for the agent pipeline (#337, epic #336). Deterministic, NO LLM:
 # keep exactly ONE "sticky" status comment on each pipeline PR (head branch
-# `claude/issue-*`), edited in place across runs — never a new comment per run — plus a
+# `work-*`), edited in place across runs — never a new comment per run — plus a
 # single roll-up line on the parent epic so the whole tree's health reads at a glance.
 #
 # The sticky is found by a hidden HTML marker and updated; the epic roll-up by its own
 # marker on the epic issue. Both are idempotent, so the high-frequency `check_suite`
 # firing just refreshes the same two comments (no spam).
 #
-# Scope: only PRs whose HEAD branch is pipeline-authored — `claude/issue-*` (the claude
-# pipeline) OR `work-*` (the pi worker, #1815). Human PRs are never touched. Uses
+# Scope: only PRs whose HEAD branch is pipeline-authored — `work-*` (the pi worker, #1815). Human PRs are never touched. Uses
 # GITHUB_TOKEN (it only writes comments; nothing here needs to cascade to another workflow,
 # so no App token is required).
 
@@ -470,10 +469,9 @@ jobs:
               let pr
               try { pr = (await github.rest.pulls.get({ owner, repo, pull_number })).data } catch { continue }
               if (pr.state !== 'open') continue
-              // Pipeline-authored branches: the old claude pipeline (`claude/issue-*`) AND the pi
-              // pipeline (`work-*`). The pi branches were silently skipped before #1815, so no pi
+              // Pipeline-authored branches: the pi pipeline (`work-*`). The pi branches were silently skipped before #1815, so no pi
               // worker PR ever got a status note — the main reason the owner saw no signal at all.
-              const isPipeline = pr.head.ref.startsWith('claude/issue-') || pr.head.ref.startsWith('work-')
+              const isPipeline = pr.head.ref.startsWith('work-')
               if (!isPipeline) {
                 core.info(`#${pull_number} head ${pr.head.ref} is not a pipeline branch — skipping.`); continue
               }

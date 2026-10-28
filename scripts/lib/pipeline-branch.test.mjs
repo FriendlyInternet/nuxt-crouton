@@ -20,8 +20,8 @@ test('the pi worker branch is a pipeline branch — the case that was missing', 
   assert.equal(isPipelineBranch('work-1642'), true)
 })
 
-test('the claude lane still matches', () => {
-  assert.equal(isPipelineBranch('claude/issue-123'), true)
+test('the retired claude lane no longer matches (#2892)', () => {
+  assert.equal(isPipelineBranch('claude/issue-123'), false)
 })
 
 test('HUMAN branches are NOT pipeline branches — the half that protects your PRs', () => {
@@ -42,7 +42,7 @@ test('empty and nullish refs are safe', () => {
 })
 
 test('the prefix list is exported so the workflows share one definition', () => {
-  assert.deepEqual(PIPELINE_BRANCH_PREFIXES, ['claude/issue-', 'work-'])
+  assert.deepEqual(PIPELINE_BRANCH_PREFIXES, ['work-'])
 })
 
 /* ── Drift guard: the workflows CANNOT import this module ──────────────────────
