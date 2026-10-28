@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #1965 contract — a gate's rule is run over every file it would judge BEFORE the gate merges,
  * and the run cannot report "clean" without having actually looked at something.

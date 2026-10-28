@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2462 contract — which changed files get a gallery review link on a PR.
  *

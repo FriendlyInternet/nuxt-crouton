@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // epic-branch-keep.mjs — the pure "keep this epic branch?" decision (#2788).
 //
 // WHY. An `epic/<N>-*` branch was deleted the moment its first epic→main PR merged, even while

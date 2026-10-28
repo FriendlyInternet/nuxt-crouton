@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Generate writeups/architecture/skills-and-triggers.html from .claude/skills/.
  *

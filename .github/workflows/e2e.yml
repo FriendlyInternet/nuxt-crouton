@@ -1,3 +1,4 @@
+# layer: stack
 name: E2E
 
 # Boots crouton fixture apps and runs the Playwright smoke (login + CRUD + package

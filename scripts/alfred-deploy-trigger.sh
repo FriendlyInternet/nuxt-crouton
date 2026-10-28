@@ -1,4 +1,5 @@
 #!/bin/zsh
+# layer: stack
 # Alfred workflow trigger for GitHub Actions deploys
 # Usage: deploy-trigger.sh <target>
 # Targets: triage, velo-staging, velo-prod, alex

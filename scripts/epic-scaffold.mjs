@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // epic-scaffold.mjs — one command makes an epic pipeline-ready (#2429, WS7 of #2108).
 //
 // WHY. A hand-prepared epic needs five facts nobody wrote down: the hidden

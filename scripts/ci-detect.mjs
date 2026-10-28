@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * ci-detect — what kind of change is this, and which CI jobs does it need? (#2894)
  *

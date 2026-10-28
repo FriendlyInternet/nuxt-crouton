@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Canary rig assertions (#1878).
  *

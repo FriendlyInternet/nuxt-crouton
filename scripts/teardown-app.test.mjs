@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #1894 contract — teardown must target the resources an app ACTUALLY has.
  *

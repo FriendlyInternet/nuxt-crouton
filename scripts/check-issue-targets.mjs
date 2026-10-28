@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * #1689 — reachability probe for `issue-sanity-check`.
  *

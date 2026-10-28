@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * smoke-deployed.mjs — prove a DEPLOYED preview actually works, not just that it
  * typechecked and booted (#293). Both blog runs once claimed "code-complete" off

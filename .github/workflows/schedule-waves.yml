@@ -1,3 +1,4 @@
+# layer: stage
 name: Wave scheduler
 
 # The CI-finished retry of the wave scheduler (#283, folded by #2893). The issue-closed release

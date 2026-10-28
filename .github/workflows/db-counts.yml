@@ -1,3 +1,4 @@
+# layer: stack
 name: db-counts
 
 # Read-only D1 inspection from the GitHub app (#384):

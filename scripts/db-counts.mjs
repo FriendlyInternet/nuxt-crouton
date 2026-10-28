@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * db-counts.mjs — print row counts for every table in one Cloudflare D1 database.
  *

@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * Contract for the squash schema differ (#1717).
  *

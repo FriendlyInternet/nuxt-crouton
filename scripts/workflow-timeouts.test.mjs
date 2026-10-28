@@ -1,3 +1,4 @@
+// layer: harness
 // Every GitHub Actions job must carry an explicit `timeout-minutes` (#2336).
 //
 // GitHub's default ceiling is 6 hours. A hung job holds its concurrency group that long, so

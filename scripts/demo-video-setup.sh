@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# layer: stack
 # Idempotent setup for shot-scraper demo recordings (see .claude/skills/demo-video).
 #
 # 1. Installs shot-scraper (+ Python Playwright) via pip if missing.

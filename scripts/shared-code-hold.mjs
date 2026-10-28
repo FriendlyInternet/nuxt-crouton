@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stage
 // shared-code-hold.mjs — does a sub-PR's changed-file list hold it for a human? (#2777)
 //
 // Pure decision; automerge-epic-subpr.yml only does the calls. Owner decision (#2754):

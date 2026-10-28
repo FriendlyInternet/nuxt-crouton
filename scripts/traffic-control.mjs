@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 /**
  * traffic-control.mjs — same-package tickets run one after another (#2786).
  *

@@ -1,3 +1,4 @@
+# layer: stack
 name: Report failed post-merge deploy
 
 # (#340, epic #336) The dangerous failures happen AFTER merge: a staging/prod deploy

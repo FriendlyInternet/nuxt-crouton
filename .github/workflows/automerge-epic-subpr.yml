@@ -1,3 +1,4 @@
+# layer: stack
 name: Auto-merge epic sub-PRs
 
 # The decompose pipeline's design (task-decompose SKILL): a NON-GATE sub-PR merges

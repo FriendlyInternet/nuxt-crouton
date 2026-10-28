@@ -1,3 +1,4 @@
+# layer: stack
 name: Fix CI on failure
 
 # Fix-bot (#338, epic #336): when a pipeline PR's CI fails, an agent wakes up, reads the

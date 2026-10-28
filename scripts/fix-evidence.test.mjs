@@ -1,3 +1,4 @@
+// layer: harness
 // Contract for the pipeline-fix evidence check (#2657). Run: node --test scripts/fix-evidence.test.mjs
 import { test } from 'node:test'
 import assert from 'node:assert/strict'

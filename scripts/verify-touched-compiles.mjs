@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // verify-touched-compiles.mjs — does the code the worker just TOUCHED actually compile? (#2182)
 //
 // The pi worker could open a PR whose changed `.vue` doesn't even parse (an unbalanced tag →

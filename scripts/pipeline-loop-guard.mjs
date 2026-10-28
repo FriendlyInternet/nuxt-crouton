@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // pipeline-loop-guard.mjs — WS4 of epic #1685: the loop-guards that make the event-driven,
 // label-handoff pipeline (WS3) safe to turn on. Pure + unit-tested (pipeline-loop-guard.test.mjs)
 // so the invariants that broke at #457 can't silently regress when the decomposer starts

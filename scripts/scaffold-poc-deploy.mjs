@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // scaffold-poc-deploy.mjs — opt a POC into Cloudflare Workers preview deploys.
 //
 // Part of epic #265 ("build X → testable preview URL"), reworked under #481.

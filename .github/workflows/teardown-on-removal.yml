@@ -1,3 +1,4 @@
+# layer: stack
 name: teardown-on-removal
 
 # Removing an app's code removes its Cloudflare app, database and storage (#2865, epic #2858).

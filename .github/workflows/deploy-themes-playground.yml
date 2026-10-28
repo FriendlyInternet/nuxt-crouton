@@ -1,3 +1,4 @@
+# layer: stack
 name: Deploy Themes Playground
 
 # Self-contained Workers deploy for the crouton-themes PLAYGROUND (#1598), the

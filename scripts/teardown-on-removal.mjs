@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * teardown-on-removal.mjs — the FACT-GATHERING half of auto-teardown (#2865, epic #2858).
  *

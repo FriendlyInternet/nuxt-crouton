@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 /**
  * "Where did the API money go?" — on-demand cost report (#1268).
  *

@@ -1,3 +1,4 @@
+# layer: harness
 name: Sync issue labels
 
 # Keeps the repo's label set in sync with .github/labels.yml (the source of truth).

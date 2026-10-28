@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #1845 contract — the recurrence guard for #1839.
  *

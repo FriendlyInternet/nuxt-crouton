@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * corpus-check.mjs — run a proposed gate's rule over every file it would judge, before
  * the gate merges (#1965).

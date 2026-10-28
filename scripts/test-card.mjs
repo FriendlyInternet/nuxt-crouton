@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // test-card.mjs — the pure "is this epic ready to be tested by the owner?" decision + the card
 // text (#2541, epic #2519). The GitHub I/O lives in post-test-card.mjs; this file is the
 // deterministic core, unit-tested in isolation (same split as epic-ready.mjs).

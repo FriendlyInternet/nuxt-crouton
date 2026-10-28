@@ -1,3 +1,4 @@
+# layer: harness
 name: Build review (independent reviewer — pi.dev)
 
 # #2777 (epic #2754) — when a pipeline PR (head `work-<N>`) turns green, the same top-model

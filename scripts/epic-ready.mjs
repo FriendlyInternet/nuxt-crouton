@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // epic-ready.mjs — the pure "is this epic assembled and ready to PR into main?" decision (#1815).
 //
 // WHY a pure module. The GitHub I/O (list sub-issues, list PRs, compare branches) lives in

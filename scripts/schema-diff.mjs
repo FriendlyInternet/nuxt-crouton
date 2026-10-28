@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * Column-level schema diff for migration squashes (#1717).
  *

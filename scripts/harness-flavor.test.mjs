@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2884 contract — the flavor file answers every stack row with crouton's current
  * answers, the resolver prints them, and the values match the code they were lifted from.

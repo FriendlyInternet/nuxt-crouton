@@ -1,3 +1,4 @@
+# layer: harness
 name: Warn on a risky Closes
 
 # Two shapes of `Closes #NN` that fire the moment a PR merges and defeat a gate:

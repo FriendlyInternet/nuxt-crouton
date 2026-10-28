@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // comment-route.mjs — ONE decision for "what does this comment mean?" (#2890, epic #2889)
 //
 // WHY. Nine workflows each listened to `issue_comment`, so every comment started nine runs

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 // Extract the EXACT set of files a pi run created/modified, from its session log — the
 // "Pattern B" commit strategy used by Aider (fnames → per-file git add) and claude-code-action
 // (commit_files with an explicit files[]). We commit precisely this set instead of `git add -A`,

@@ -1,3 +1,4 @@
+// layer: harness
 /**
  * #2819 contract — when the owner's lgtm merges an epic PR into main.
  *

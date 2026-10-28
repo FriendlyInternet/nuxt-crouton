@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // Guard: keep the event listeners folded (#2893, epic #2889).
 //
 // Comment, issue-close and PR-close each started 6-9 workflows, 8 of which exited immediately.

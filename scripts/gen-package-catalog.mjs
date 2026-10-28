@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: stack
 /**
  * gen-package-catalog.mjs — regenerate the internal package catalog the
  * task-decomposition pipeline reads for its "package-fit check" (step 0, #292).

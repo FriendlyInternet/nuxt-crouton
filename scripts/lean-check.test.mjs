@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * lean-check.test.mjs — pure-helper tests for the report-only leanness check (#2190).
  *

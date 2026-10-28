@@ -1,3 +1,4 @@
+# layer: harness
 name: skills-digest
 
 # Monthly roll-up of the skills in .claude/skills/ + a "what changed since last digest" band,

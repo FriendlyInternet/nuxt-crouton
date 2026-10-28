@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // approval.mjs — is this comment an APPROVAL? One definition, used everywhere (#2051).
 //
 // WHY THIS IS ITS OWN MODULE. `lgtm` was matched by a bare `/\b(approve|approved|lgtm)\b/i`

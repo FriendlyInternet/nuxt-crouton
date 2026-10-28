@@ -1,3 +1,4 @@
+// layer: stage
 /**
  * #2777 contract — when the shared-code hold releases a sub-PR.
  *

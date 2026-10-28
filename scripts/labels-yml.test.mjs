@@ -1,3 +1,4 @@
+// layer: harness
 // .github/labels.yml is applied to GitHub by labels.yml (crazy-max/ghaction-github-labeler)
 // on every push to main. GitHub rejects a label description over 100 characters, and the
 // labeler aborts the whole sync on the first rejection — so ONE long description silently

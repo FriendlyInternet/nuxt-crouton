@@ -1,3 +1,4 @@
+# layer: harness
 name: routing-registry
 
 # Keep .claude/routing.json, the generated writeups/architecture/routing-registry.md, AND the real
@@ -18,6 +19,8 @@ on:
       - '.github/workflows/**'           # a hard-coded model in a workflow is drift (#2161)
       - '.github/workflow-listeners.allow'
       - 'scripts/workflow-listeners.mjs'
+      - 'scripts/harness-layers.mjs'
+      - 'scripts/**'                     # every script carries a layer tag (#2887)
   push:
     branches: [main]
     paths:
@@ -28,6 +31,8 @@ on:
       - '.github/workflows/**'
       - '.github/workflow-listeners.allow'
       - 'scripts/workflow-listeners.mjs'
+      - 'scripts/harness-layers.mjs'
+      - 'scripts/**'
 
 # Cancel superseded PR runs when a new commit is pushed; each PR is its own group
 # (ref in the key). cancel-in-progress is event-conditional so a push→main run is
@@ -49,3 +54,5 @@ jobs:
         run: node scripts/gen-routing.mjs --check
       - name: Listeners stay folded (one comment / issue-close / PR-close workflow, #2893)
         run: node scripts/workflow-listeners.mjs
+      - name: Layer tags present + no stack token in harness files (#2887)
+        run: node scripts/harness-layers.mjs --check

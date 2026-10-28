@@ -1,3 +1,4 @@
+# layer: stack
 name: Deploy Sandbox (manual, Cloudflare Workers)
 
 # On-demand preview deploys for sandboxes/* AND in-package playgrounds

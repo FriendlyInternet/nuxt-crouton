@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// layer: harness
 // pipeline-context.mjs — WS2 of epic #1685 (#1695): carry the pipeline's
 // { epic, depth, epic_branch } context ON the issue, so a fresh single-use run can read it.
 //

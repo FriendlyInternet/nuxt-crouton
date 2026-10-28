@@ -1,3 +1,4 @@
+// layer: stack
 /**
  * #2456 contract — the review-flag check tries the app's own pages, not just `/`.
  *
