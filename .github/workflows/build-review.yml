@@ -64,11 +64,9 @@ jobs:
           J="$(gh pr view "$PR" --json number,headRefName,headRefOid,baseRefName,isDraft,author,labels,state)"
           echo "$J"
           REF="$(echo "$J" | jq -r .headRefName)"; BASE="$(echo "$J" | jq -r .baseRefName)"
-          SHA="$(echo "$J" | jq -r .headRefOid)"; AUTHOR="$(echo "$J" | jq -r .author.login)"
-          # Only a pipeline PR: head work-<N>, into an epic branch, authored by the bot.
-          if ! echo "$REF" | grep -Eq '^work-[0-9]+$' || ! echo "$BASE" | grep -q '^epic/' \
-             || [ "$(echo "$J" | jq -r .state)" != OPEN ] || [ "$(echo "$J" | jq -r .isDraft)" = true ] \
-             || ! echo "$AUTHOR" | grep -Eq '^(claude|nuxt-harness)(\[bot\]|$)'; then
+          SHA="$(echo "$J" | jq -r .headRefOid)"
+          # Only a pipeline PR: head work-<N>, into an epic branch, authored by the bot (#2985).
+          if ! echo "$J" | node scripts/build-review-pick.mjs; then
             echo "not a ready pipeline PR — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           # CI Gate must have reported success for this exact head.
@@ -113,7 +111,10 @@ jobs:
           PR: ${{ steps.pr.outputs.pr }}
         run: |
           set -uo pipefail
-          OUT="$(timeout 180 pi --print --approve --provider claude-bridge --model "$MODEL" 'Reply with exactly the two letters OK and nothing else.' 2>&1)"
+          # Probe with `claude -p`, NOT `pi --print`: a bare one-word reply is a tool-less turn, so
+          # .pi/extensions/complete-work.ts intercepts it (nudge, then PI_TASK_COMPLETE_NOTHING_LEFT)
+          # and the model's OK never reaches stdout — the probe then failed for every model.
+          OUT="$(timeout 180 claude -p 'Reply with exactly the two letters OK and nothing else.' --model "$MODEL" --output-format text 2>&1)"
           if ! echo "$OUT" | grep -q 'OK'; then
             echo "$OUT" | tail -n 20
             echo "::error::review model $MODEL did not answer on provider claude-bridge — build review NOT run, no fallback (#2777)"
