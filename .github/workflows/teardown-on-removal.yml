@@ -1,0 +1,177 @@
+name: teardown-on-removal
+
+# Removing an app's code removes its Cloudflare app, database and storage (#2865, epic #2858).
+# On every push to main: find the pocs/<app> / apps/<app> folders the push deleted, then for each
+#   1. plan   — scripts/teardown-on-removal.mjs (names from the app's LAST wrangler.jsonc)
+#   2. delete — scripts/teardown-app.mjs: export the database => delete => verify gone
+#   3. branches — delete branches named for the app (exact-name rule); open PRs on them are listed, not touched
+#   4. comment on the PR that removed the code, listing what was deleted and what was not
+# The job goes red if anything was not deleted. Production of a launched app (apps/) is NEVER touched
+# here — that stays a manual teardown-app.yml run with a typed confirm.
+# Catch-up for an app removed before this existed: run teardown-app.yml by hand.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pocs/**'
+      - 'apps/**'
+
+permissions:
+  contents: read
+
+jobs:
+  teardown:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Two pushes must not race on the same resources.
+    concurrency:
+      group: teardown-on-removal
+      cancel-in-progress: false
+    env:
+      BEFORE: ${{ github.event.before }}
+      AFTER: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # teardown-app.mjs reads the app's last config from git history.
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Plan
+        id: plan
+        run: |
+          # A brand-new branch push has an all-zero `before`; nothing to diff against.
+          if [ -z "$BEFORE" ] || [ "${BEFORE//0/}" = "" ]; then
+            echo "apps=" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          node scripts/teardown-on-removal.mjs --before "$BEFORE" --after "$AFTER" > "$RUNNER_TEMP/plan.json"
+          APPS=$(node -e 'const p=require(process.argv[1]);console.log([...new Set(p.map(x=>x.app))].join(" "))' "$RUNNER_TEMP/plan.json")
+          echo "apps=$APPS" >> "$GITHUB_OUTPUT"
+          { echo "### Teardown plan"; echo '```json'; cat "$RUNNER_TEMP/plan.json"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install wrangler
+        if: steps.plan.outputs.apps != ''
+        run: npm install --global wrangler@4
+
+      # Each app runs on its own so one failure does not hide the others; the final step turns any
+      # failure red. The database export lands in teardown-backups/ BEFORE anything is deleted.
+      - name: Delete Cloudflare resources
+        id: cf
+        if: steps.plan.outputs.apps != ''
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          APPS: ${{ steps.plan.outputs.apps }}
+        run: |
+          mkdir -p teardown-backups "$RUNNER_TEMP/logs"
+          set -o pipefail
+          FAILED=""
+          for app in $APPS; do
+            node scripts/teardown-app.mjs --app "$app" --scope staging --backup-dir "teardown-backups/$app" 2>&1 | tee "$RUNNER_TEMP/logs/$app.log" || FAILED="$FAILED $app"
+          done
+          echo "failed=$(echo $FAILED | tr ' ' '\n' | sort -u | tr '\n' ' ' | xargs)" >> "$GITHUB_OUTPUT"
+          # fail the step when any app failed, so the final "Fail if anything was not deleted" step fires
+          [ -z "$FAILED" ]
+        continue-on-error: true
+
+      - name: Upload database backups
+        if: steps.plan.outputs.apps != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: teardown-db-backups
+          path: teardown-backups/
+          retention-days: 30
+          if-no-files-found: ignore
+
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        if: steps.plan.outputs.apps != ''
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+
+      - name: Delete branches + comment on the removing PR
+        if: steps.plan.outputs.apps != ''
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          APPS: ${{ steps.plan.outputs.apps }}
+          FAILED: ${{ steps.cf.outputs.failed }}
+          CF_OUTCOME: ${{ steps.cf.outcome }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const fs = require('fs')
+            const path = require('path')
+            const { branchMatchesApp } = await import(path.join(process.env.GITHUB_WORKSPACE, 'scripts/teardown-plan.mjs'))
+            const { owner, repo } = context.repo
+            const apps = process.env.APPS.split(' ').filter(Boolean)
+            const failed = new Set((process.env.FAILED || '').split(' ').filter(Boolean))
+            const plan = JSON.parse(fs.readFileSync(path.join(process.env.RUNNER_TEMP, 'plan.json'), 'utf8'))
+            const PROTECTED = new Set(['main', 'master', 'staging', 'production', 'develop'])
+
+            const branches = (await github.paginate(github.rest.repos.listBranches, { owner, repo, per_page: 100 })).map(b => b.name)
+            const open = await github.paginate(github.rest.pulls.list, { owner, repo, state: 'open', per_page: 100 })
+
+            const sections = []
+            let anyBad = false
+            for (const app of apps) {
+              const rows = plan.filter(p => p.app === app)
+              const cfBad = failed.has(app) || process.env.CF_OUTCOME !== 'success'
+              if (cfBad) anyBad = true
+              const lines = [`#### \`${app}\``]
+              for (const r of rows) {
+                lines.push(`- ${cfBad ? '⚠ not confirmed deleted' : '✓ deleted'}: worker \`${r.worker}\`, database \`${r.d1}\`, storage \`${r.kvTitle}\``)
+                for (const n of r.notes) lines.push(`- ℹ ${n}`)
+              }
+              const deleted = []
+              const kept = []
+              for (const name of branches.filter(n => !PROTECTED.has(n) && branchMatchesApp(n, app))) {
+                const prs = open.filter(p => p.head.repo?.full_name === `${owner}/${repo}` && p.head.ref === name)
+                if (prs.length) { kept.push(`\`${name}\` (open PR ${prs.map(p => '#' + p.number).join(', ')})`); continue }
+                try {
+                  await github.rest.git.deleteRef({ owner, repo, ref: `heads/${name}` })
+                  deleted.push(`\`${name}\``)
+                } catch (e) {
+                  anyBad = true
+                  kept.push(`\`${name}\` (delete failed: ${e.message})`)
+                }
+              }
+              lines.push(`- branches deleted: ${deleted.join(', ') || 'none'}`)
+              if (kept.length) lines.push(`- branches NOT deleted: ${kept.join(', ')}`)
+              sections.push(lines.join('\n'))
+            }
+
+            const run = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+            const head = anyBad
+              ? `🔴 **Issue — removing \`${apps.join('`, `')}\` left something behind.** Check the run: ${run}`
+              : `✅ **Done — \`${apps.join('`, `')}\` was removed from Cloudflare** (app, database, storage) and its branches deleted.`
+            const body = [
+              head,
+              '',
+              '<details><summary>What was removed, and what was not</summary>',
+              '',
+              sections.join('\n\n'),
+              '',
+              'A database export was kept for 30 days as the `teardown-db-backups` artifact on the run above.',
+              '',
+              '</details>',
+              '',
+              '<sub>🤖 **pi.dev harness** · teardown-on-removal (CI) · #2865</sub>',
+            ].join('\n')
+
+            const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({ owner, repo, commit_sha: context.sha })
+            if (!prs.length) core.warning('No PR is associated with this push — nowhere to comment.')
+            for (const pr of prs) await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body })
+            core.summary.addRaw(body)
+            await core.summary.write()
+
+      - name: Fail if anything was not deleted
+        if: always() && steps.plan.outputs.apps != '' && steps.cf.outcome != 'success'
+        env:
+          FAILED: ${{ steps.cf.outputs.failed }}
+        run: |
+          echo "::error::Not everything was deleted for: $FAILED — see the Delete Cloudflare resources step."
+          exit 1
