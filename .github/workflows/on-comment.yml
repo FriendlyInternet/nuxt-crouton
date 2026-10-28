@@ -67,7 +67,7 @@ jobs:
             }
             const d = routeComment({
               comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type },
-              issue: { number: i.number, isPr, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
+              issue: { number: i.number, isPr, body: i.body, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
               pr,
             })
             core.info(`comment-route: #${i.number} comment ${c.id} → kind=${d.kind} (${d.reason})`)
@@ -1051,6 +1051,11 @@ jobs:
             if (i.pull_request) {
               const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
               lines.push(`PR head ${p.head.ref} → base ${p.base.ref}, draft=${p.draft}`)
+              // The review run checks out the default branch, so the PR's own diff has to ride in the prompt.
+              const diff = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number, mediaType: { format: 'diff' } })).data
+              const text = String(diff)
+              fs.writeFileSync(`${process.env.RUNNER_TEMP}/interpret-diff.txt`, text.slice(0, 60000))
+              if (text.length > 60000) fs.writeFileSync(`${process.env.RUNNER_TEMP}/interpret-diff-trimmed`, String(text.length))
             }
             lines.push('Body: ' + trim(i.body, 1500), 'Recent comments:')
             for (const c of comments) lines.push(`- ${c.user.login}: ${trim(c.body, 500)}`)
@@ -1112,6 +1117,9 @@ jobs:
             echo "Give a fresh, independent review of the plan or diff in this thread, as a skeptical second reader."
             echo "Lead with a verdict line, then at most 8 concrete findings. READ-ONLY: edit nothing, run no git or gh."
             echo; cat "$RUNNER_TEMP/interpret-context.txt"
+            if [ -f "$RUNNER_TEMP/interpret-diff.txt" ]; then
+              echo; echo "--- PR DIFF (the checkout is the default branch, not this PR) ---"; cat "$RUNNER_TEMP/interpret-diff.txt"
+            fi
           } > "$RUNNER_TEMP/review-prompt.txt"
           pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills \
             "$(cat "$RUNNER_TEMP/review-prompt.txt")" > "$RUNNER_TEMP/interpret-review.md" || echo "review run failed"
@@ -1151,7 +1159,8 @@ jobs:
             } else if (d.action === 'review') {
               let rev = ''
               try { rev = fs.readFileSync(`${process.env.RUNNER_TEMP}/interpret-review.md`, 'utf8').trim() } catch {}
-              await say(`👀 ${opener}. Review below.`,
+              const trimmed = fs.existsSync(`${process.env.RUNNER_TEMP}/interpret-diff-trimmed`)
+              await say(`👀 ${opener}. Review below.${trimmed ? ' The PR diff was too long, so the review saw only its first ~60k characters.' : ''}`,
                 rev ? `<details><summary>Independent review</summary>\n\n${rev.slice(0, 6000)}\n\n</details>` : '_The review run produced no text — reply again to retry._')
             } else if (d.action === 'revise') {
               const pr = (await github.rest.pulls.get({ owner, repo, pull_number: issue_number })).data
@@ -1160,12 +1169,11 @@ jobs:
                 ref: context.payload.repository.default_branch,
                 inputs: { issue: String(r.issue), feedback: String(c.id), branch: r.branch } })
               await say(`🛠 ${opener}. The worker is re-running on this PR with your comment.`)
-            } else if (d.action === 'start' || d.action === 'replan') {
+            } else if (d.action === 'start') {
               let hasWorkBranch = false
               try { await github.rest.git.getRef({ owner, repo, ref: `heads/work-${issue_number}` }); hasWorkBranch = true } catch {}
               const { label } = resolveLane('delegate', hasWorkBranch)
-              // A held ticket is released first so the planner/worker is not told to stay blocked.
-              if (d.action === 'replan') { try { await github.rest.issues.removeLabel({ owner, repo, issue_number, name: 'status:blocked' }) } catch {} }
+              // decideAction turns start/replan on a held ticket into `confirm`, so a hold is never released here.
               await relabel(label)
               await say(`🛠 ${opener}. Starting it now (\`${label}\`).`)
             }

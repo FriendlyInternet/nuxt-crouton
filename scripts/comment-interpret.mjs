@@ -34,13 +34,25 @@ const ask = (reason, extra = {}) => ({ action: 'ask', reason, ...extra })
 
 const DELEGATE_LABEL = /^(delegate|delegate-pi|delegate-hard|work-this)$/
 
+/**
+ * A ticket with an open sign-off hold is never released from here: `replan` / `start` there would
+ * remove `status:blocked` / add `delegate` and start the build without an `ok`. A pipeline-owned
+ * hold never reaches this reader (comment-route sends it to the resume job, which re-runs the
+ * planner and keeps the hold), so what is left is a ticket to hand over — confirm first.
+ */
+function heldHandoff(action, issue, pr) {
+  if (pr || !(issue.labels || []).includes('status:blocked')) return null
+  if (action !== 'replan' && action !== 'start') return null
+  return { action: 'confirm', confirmText: 'hand this held ticket to the pipeline' }
+}
+
 /** An action that does not fit the thread falls back to a question instead of doing the wrong thing. */
 function misfit(action, issue, pr, reply) {
   const labels = issue.labels || []
   const piBranch = pr && (workIssueFromRef(pr.headRef) || epicIssueFromRef(pr.headRef))
   if (action === 'revise' && !piBranch) return ask('revise needs a pipeline PR', { reply })
   if (action === 'replan' && (pr || !labels.includes('status:blocked'))) return ask('replan needs a held ticket', { reply })
-  if (action === 'start' && (pr || labels.includes('status:blocked') || labels.some(l => DELEGATE_LABEL.test(l)))) {
+  if (action === 'start' && (pr || labels.some(l => DELEGATE_LABEL.test(l)))) {
     return ask('start needs an un-delegated ticket', { reply })
   }
   return null
@@ -74,6 +86,8 @@ export function decideAction({ modelOutput, issue = {}, pr = null } = {}) {
   }
   if (!ACTIONS.includes(action)) return ask(`unknown action "${action.slice(0, 40)}"`, { reply: reply || ASK_FALLBACK })
 
+  const held = heldHandoff(action, issue, pr)
+  if (held) return { ...held, reason }
   return misfit(action, issue, pr, reply) || { action, reason, ...(reply ? { reply } : {}) }
 }
 

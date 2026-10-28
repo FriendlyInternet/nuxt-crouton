@@ -22,7 +22,6 @@ test('case 3: JSON wrapped in prose is still read', () => {
 test('case 4: each allowed action passes when the thread fits', () => {
   const ok = (action, issue, p) => decideAction({ modelOutput: j({ action, reason: 'r' }), issue, pr: p }).action
   assert.equal(ok('revise', plain, pr), 'revise')
-  assert.equal(ok('replan', held), 'replan')
   assert.equal(ok('start', plain), 'start')
   assert.equal(ok('review', plain), 'review')
   assert.equal(ok('answer', plain), 'answer')
@@ -36,7 +35,6 @@ test('case 4: an action that does not fit the thread becomes ask', () => {
   assert.equal(ok('revise', plain, { headRef: 'feature/x' }), 'ask')
   assert.equal(ok('revise', plain), 'ask')
   assert.equal(ok('replan', plain), 'ask')
-  assert.equal(ok('start', held), 'ask')
   assert.equal(ok('start', { labels: ['delegate'] }), 'ask')
   assert.equal(ok('start', plain, pr), 'ask')
 })
@@ -56,4 +54,13 @@ test('case 6: the reply opener never carries an @mention', () => {
   const t = readAs({ action: 'confirm', confirmText: 'ping @pmcp' })
   assert.match(t, /^I read this as: /)
   assert.ok(!/@(?=pmcp)/.test(t))
+})
+
+test('case 7: replan / start on a held ticket only ever confirm — never release the hold', () => {
+  for (const a of ['replan', 'start']) {
+    const d = decideAction({ modelOutput: j({ action: a, reason: 'fresh pass' }), issue: held })
+    assert.equal(d.action, 'confirm', a)
+    assert.match(d.confirmText, /pipeline/)
+  }
+  assert.equal(decideAction({ modelOutput: j({ action: 'replan', reason: 'r' }), issue: plain }).action, 'ask')
 })

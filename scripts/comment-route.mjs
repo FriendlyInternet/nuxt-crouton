@@ -12,7 +12,7 @@
 // PRECEDENCE (first match wins, so a comment can never start two acting jobs):
 //   issue: /close-epic → close-epic · slash/rocket command → dispatch · `ok`/`not ok:` on a
 //          status:to-test card → test-card (beats resume: that `ok` answers the card) ·
-//          status:blocked → resume · an approval on an un-blocked issue → resume with
+//          status:blocked → resume (pipeline-owned tickets; else `interpret`) · an approval on an un-blocked issue → resume with
 //          blocked=false (the job only explains the skipped approval)
 //   PR:    approval on a draft → approve-draft · approval on a ready epic→main PR from the
 //          owner → approve-epic · any other approval → automerge-go · a non-approval on a
@@ -37,6 +37,14 @@ const OWNERS = new Set(['OWNER', 'MEMBER'])
 /** Whole-word `/close-epic` as a command (not mentioned in code or a quote). */
 const CLOSE_EPIC = /(^|\s)\/close-epic(\s|$)/i
 
+/**
+ * A ticket the pipeline owns: its body carries the hidden `<!-- pipeline:` marker, or it holds a
+ * delegate-style label. Only those have a resume job that does something with a reply (#2980).
+ */
+export function isPipelineOwned({ body = '', labels = [] } = {}) {
+  return String(body).includes('<!-- pipeline:') || labels.some(l => /^(delegate|delegate-pi|delegate-hard|work-this)$/.test(l))
+}
+
 /** Routing for a comment on a plain issue. */
 function routeIssue({ body, collab, issue, out }) {
   const labels = issue.labels || []
@@ -45,7 +53,11 @@ function routeIssue({ body, collab, issue, out }) {
   if (collab && labels.includes('status:to-test') && parseTestReply(body).result) {
     return out('test-card', 'a reply to a test card')
   }
-  if (out.blocked) return out('resume', 'a reply on a status:blocked issue')
+  // A held ticket the pipeline does not own has nothing to resume: an approval still goes to the
+  // resume job (it explains), any other owner comment falls through to `interpret`.
+  if (out.blocked && (isPipelineOwned({ body: issue.body, labels }) || isApproval(body))) {
+    return out('resume', 'a reply on a status:blocked issue')
+  }
   if (isApproval(body)) return out('resume', 'an approval on an issue that is not blocked (explain only)')
   return out('none', 'no command, no card reply, issue not blocked')
 }

@@ -30,7 +30,7 @@ test('test-card: ok / not ok on a status:to-test card', () => {
 })
 
 test('resume: a reply on a blocked issue; an approval on an unblocked one is explain-only', () => {
-  const blocked = routeComment({ comment: c('use blue instead'), issue: issue(['status:blocked']) })
+  const blocked = routeComment({ comment: c('use blue instead'), issue: issue(['status:blocked', 'delegate-pi']) })
   assert.deepEqual([blocked.kind, blocked.blocked], ['resume', true])
   const open = routeComment({ comment: c('ok'), issue: issue() })
   assert.deepEqual([open.kind, open.blocked], ['resume', false])
@@ -88,8 +88,17 @@ test('interpret: only an owner\'s unmatched plain comment (#2980)', () => {
 
 test('interpret never beats a fixed route', () => {
   assert.equal(kind({ comment: c('ok'), issue: issue(['status:blocked']) }), 'resume')
-  assert.equal(kind({ comment: c('anything at all'), issue: issue(['status:blocked']) }), 'resume')
+  assert.equal(kind({ comment: c('anything at all'), issue: issue(['status:blocked', 'delegate-pi']) }), 'resume')
   assert.equal(kind({ comment: c('**Worker:** fix it'), issue: prIssue, pr: pr() }), 'revise')
   assert.equal(kind({ comment: c('lgtm'), issue: prIssue, pr: pr({ draft: true }) }), 'approve-draft')
   assert.equal(kind({ comment: c('🚀'), issue: issue() }), 'dispatch')
+})
+
+test('held tickets: pipeline-owned → resume, otherwise the owner\'s plain comment is interpreted (#2980)', () => {
+  const held = ['status:blocked']
+  const text = 'can we have a fresh pass on this plan?'
+  assert.equal(kind({ comment: c(text), issue: { ...issue(held), body: 'plan\n<!-- pipeline: epic=1 -->' } }), 'resume')
+  assert.equal(kind({ comment: c(text), issue: issue([...held, 'work-this']) }), 'resume')
+  assert.equal(kind({ comment: c(text), issue: { ...issue(held), body: 'a held plan' } }), 'interpret')
+  assert.equal(kind({ comment: c('ok'), issue: { ...issue(held), body: 'a held plan' } }), 'resume')
 })
