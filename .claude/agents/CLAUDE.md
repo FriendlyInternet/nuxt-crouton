@@ -190,7 +190,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   `parent_issue_url` is set / it carries a parent epic), do **NOT** mint a fresh
   `epic/<child>-<slug>` off `main`. Resolve the parent epic and use its existing
   `epic/<parent>-<slug>` as the integration base, then work just that child there. Only a
-  true top-level epic creates a new epic branch. (This is what makes a human/`comment-dispatch`
+  true top-level epic creates a new epic branch. (This is what makes a human/`on-comment` dispatch job
   `delegate`/`/deploy` on a single child issue land on the right branch instead of off `main`.)
 - **Stop-conditions live in `task-decomposer.md`:** `MAX_DEPTH = 3`, `MAX_CHILDREN = 6`,
   and the four-part LEAF TEST. Tune them there (+ orchestrator's MAX_CHILDREN).
@@ -213,7 +213,7 @@ conventions (`frontend-review`), a11y (`/a11y`), or visual taste (`/ui-proposal`
   sign-off" (needs an *approval*) — keyed off the ask-human template's mandatory
   `## 🔀 Blocked —` first line, so a question can't read as an approval request.
 - **A block comment is a HANDOFF, not just a question (#639) — emit it via the `ask-human`
-  skill (#1189).** The owner's reply spawns a **brand-new session** (`resume-on-comment.yml`)
+  skill (#1189).** The owner's reply spawns a **brand-new session** (`on-comment.yml`)
   that has **zero memory** of your reasoning and checks out `main` — not your worktree, which
   is gone. So the blocking comment must be self-contained enough for a cold agent to resume
   from, **and** 10-second-scannable for an owner holding many threads: lead with the one
@@ -288,7 +288,7 @@ package). Threaded through `epic_branch` in the agent contract:
 ### Claude-action workflow standard (any `anthropics/claude-code-action` workflow)
 
 When you add or copy a workflow that runs `anthropics/claude-code-action` (the event→agent
-glue like `claude.yml` / `decompose-on-issue.yml` / `resume-on-comment.yml`), it MUST carry
+glue like `claude.yml` / `decompose-on-issue.yml` / `on-comment.yml`), it MUST carry
 all of these by **default** — they're not optional extras; each one has burned us:
 
 - **`id-token: write` at the JOB level.** Job-level `permissions` *fully overrides* (does

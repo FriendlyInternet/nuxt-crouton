@@ -85,8 +85,10 @@ on:
     workflows: ["CI"]
     types: [completed]
   # #2832: an owner `ok` on a held PR is the merge go — don't wait for the next CI event.
-  issue_comment:
-    types: [created]
+  # #2890: the comment no longer triggers this file directly — on-comment.yml's router calls it
+  # (kind=automerge-go). The caller's event is still issue_comment, so the branches below that
+  # read `issue_comment` keep working unchanged.
+  workflow_call:
 
 permissions:
   contents: read
