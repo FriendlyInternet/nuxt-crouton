@@ -68,7 +68,7 @@ jobs:
               pr = { headRef: p.head.ref, baseRef: p.base.ref, draft: p.draft, state: p.state }
             }
             const d = routeComment({
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type },
+              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
               issue: { number: i.number, isPr, labels: (i.labels || []).map(l => (typeof l === 'string' ? l : l.name)) },
               pr,
             })
@@ -954,7 +954,7 @@ jobs:
             const c = context.payload.comment
             const route = routePrComment({
               pr: { headRef: pr.head.ref, state: pr.state },
-              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type },
+              comment: { body: c.body, authorAssociation: c.author_association, userType: c.user.type, performedViaGithubApp: c.performed_via_github_app?.name ?? null },
             })
             core.info(`PR #${pull_number} (${pr.head.ref}): revise=${route.revise} — ${route.reason}`)
             if (!route.revise) {
