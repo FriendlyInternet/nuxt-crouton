@@ -43,7 +43,7 @@ function generateRepeaterItemInterface(field: Record<string, any>, layerPascalCa
   const interfaceName = `${layerPascalCase}${pascalCasePlural}${fieldPascalCase}Item`
 
   const translatableProps = field.meta?.translatableProperties || []
-  const properties = field.meta?.properties || {}
+  const properties: Record<string, any> = field.meta?.properties || {}
 
   // Generate property lines
   const propertyLines = []

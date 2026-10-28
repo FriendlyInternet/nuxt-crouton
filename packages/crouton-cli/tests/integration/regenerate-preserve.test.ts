@@ -41,7 +41,6 @@ function runCLI(args: string[], cwd: string) {
 }
 
 const SCHEMA = JSON.stringify({
-  id: { type: 'uuid', meta: { primaryKey: true } },
   title: { type: 'string', meta: { required: true, maxLength: 200 } },
   price: { type: 'decimal', meta: { precision: 10, scale: 2 } }
 })
@@ -65,10 +64,6 @@ const MARKER = '// >>> HAND EDITED — MUST SURVIVE REGEN <<<'
 
 let dir: string
 
-// NOTE: the direct `generate` command currently exits 1 at the very end due to an
-// unrelated known bug (#1246, promptedConfigs ReferenceError) that throws AFTER all
-// files are written. So these tests assert on FILE STATE, not exit codes — the write
-// loop (and the skip-existing behaviour under test) completes before that crash.
 // `--noDb` (camelCase — citty reads `--no-db` as negating a `db` arg) skips the slow
 // migration/nuxt-prepare step, which would otherwise time out in a bare temp dir.
 async function generate(extraArgs: string[] = []) {
@@ -93,9 +88,9 @@ beforeEach(async () => {
   await writeFile(join(dir, 'package.json'), PKG_JSON, 'utf8')
   await writeFile(join(dir, 'nuxt.config.ts'), NUXT_CONFIG, 'utf8')
   await writeFile(join(dir, 'widget-schema.json'), SCHEMA, 'utf8')
-  // Baseline generation runs WITHOUT --force (deps satisfied above). We assert the
-  // scaffold was written (file state), not exit code — see the #1246 note above.
+  // Baseline generation runs WITHOUT --force (deps satisfied above).
   const first = await generate()
+  expect(first.exitCode, `baseline generate failed:\n${first.stdout}\n${first.stderr}`).toBe(0)
   expect(existsSync(join(dir, POST_HANDLER)), `baseline generate did not write files:\n${first.stdout}\n${first.stderr}`).toBe(true)
 })
 

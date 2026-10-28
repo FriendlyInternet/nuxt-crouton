@@ -137,21 +137,18 @@ export async function rollbackFromConfig({ configPath, dryRun = false, keepFiles
   const resolvedPath = path.resolve(configPath)
 
   if (!await fileExists(resolvedPath)) {
-    consola.error(`\nConfig file not found: ${configPath}`)
-    process.exit(1)
+    throw new Error(`Config file not found: ${configPath}`)
   }
 
   let config: Record<string, any>
   try {
     config = (await import(resolvedPath)).default
   } catch (error) {
-    consola.error(`\nError loading config: ${error.message}`)
-    process.exit(1)
+    throw new Error(`Error loading config: ${error.message}`, { cause: error })
   }
 
   if (!config || !config.targets) {
-    consola.error(`\nInvalid config: missing targets`)
-    process.exit(1)
+    throw new Error('Invalid config: missing targets')
   }
 
   // Count total collections

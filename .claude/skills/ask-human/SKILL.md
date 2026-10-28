@@ -112,7 +112,7 @@ status, stack traces — all collapsed. Context and findings are welcome; they m
 > 🤖 **pi.dev harness** · agent pipeline (CI) · _<one-line context>_
 **Needs:** approval
 
-**Reply:** ✅ (or `lgtm`) to release · anything else is a change request
+**Reply:** `ok` to release (or `not ok: what's wrong`) · anything else is a change request
 
 <details><summary>What changed + evidence</summary>
 …
@@ -160,7 +160,7 @@ itself* (the reply loop is WS5, #1191). We already own every medium — pick by 
 | **A flow or interaction** (multi-step, timing, motion) | short video | `demo-video` (WebM storyboard) | commenting |
 | **The data model** (fields, types, relationships) | schema render | `schema-review` (→ PNG/HTML/MD) | inline comment on the committed `.md`; or `A`/`B` |
 | **Structure / status / dependencies** (what depends on what, where the tree is) | diagram | `ticket-diagram` (Excalidraw on the epic) | editing the Excalidraw → `scripts/ticket-excalidraw-import.mjs` round-trips it back; or `A`/`B` |
-| **A tradeoff / priority / naming** (no visual or structural surface) | prose | the block above | `A`/`B`/`lgtm` |
+| **A tradeoff / priority / naming** (no visual or structural surface) | prose | the block above | `A`/`B`/`ok` |
 
 Rules:
 - **One artifact, the most direct one.** Don't attach three renders "to be safe" — pick the
@@ -176,7 +176,7 @@ Rules:
 ## Why this shape
 
 - **10-second-scannable** → the owner triages 20 threads without opening each.
-- **Recommendation-first** → most replies collapse to `lgtm`, one round-trip (epic metric #1).
+- **Recommendation-first** → most replies collapse to `ok`, one round-trip (epic metric #1).
 - **Self-contained** → the resuming session (`resume-on-comment.yml`, fresh, checks out
   `main`) continues from the branch + comment without re-deriving or diverging (#639).
 

@@ -30,7 +30,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
-    "typecheck": "pnpm -r --filter './apps/*' typecheck",
+    "typecheck": "pnpm -r --filter './apps/*' --filter @fyit/crouton-cli typecheck",
     "typecheck:fixtures": "pnpm -r --filter './fixtures/*' typecheck",
     "typecheck:mcp": "pnpm --filter @fyit/crouton-mcp typecheck",
     "poc:scaffold-deploy": "node scripts/scaffold-poc-deploy.mjs",
