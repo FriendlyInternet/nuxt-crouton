@@ -54,6 +54,11 @@ const tabs = computed(() => [
       to: `/admin/${teamSlug.value}/sales/printers`
     },
     {
+      label: t('sales.sidebar.devices'),
+      icon: 'i-lucide-monitor-smartphone',
+      to: `/admin/${teamSlug.value}/sales/devices`
+    },
+    {
       label: t('sales.sidebar.helpers'),
       icon: 'i-lucide-users',
       to: `/admin/${teamSlug.value}/sales/helpers`

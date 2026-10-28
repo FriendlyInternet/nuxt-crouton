@@ -3,7 +3,6 @@ export interface McpCollectionConfig {
   name: string
   layer: string
   apiPath: string
-  componentName?: string
   columns?: Array<{ accessorKey: string; header: string }>
   defaultValues?: Record<string, unknown>
   sortable?: { enabled: boolean; orderField: string }

@@ -12,6 +12,15 @@ One-command teardown of a crouton **poc/app** — the inverse of `/deploy`. Wher
 Worker + D1 + KV, this removes all of it: **code, Cloudflare resources, GitHub
 branches, and the tracking epic/sub-issues**.
 
+> **The removal PR is the whole flow (#2865).** Merging a PR that deletes `pocs/<app>` or
+> `apps/<app>` runs `.github/workflows/teardown-on-removal.yml` on main: it exports the database,
+> deletes the Worker + D1 + KV (staging only), deletes the app's branches (exact-name rule; branches
+> with an open PR are left alone), and comments on the removing PR with what was and wasn't deleted.
+> The job goes red if anything is left. **Production of a launched `apps/` app is never touched by
+> it** — and the manual `teardown-app.yml` dispatch below is for that (typed confirm), and for
+> catch-up on apps removed before this existed. Note: if any file stays under the app's folder
+> (e.g. a kept `HANDOFF.md`), the app counts as not removed and nothing is torn down.
+
 > **Always `--dry-run` first.** Every destructive step has a dry-run that lists
 > exactly what it would remove and touches nothing. Only run the real teardown
 > after the dry-run output looks right.
@@ -49,7 +58,9 @@ docs references — those land as a normal **PR** on a feature branch.
   (mirrors `db-clone`'s prod guard). Never delete production data without it.
 - **Back up first for prod.** Before tearing down a launched app's prod D1, take a
   backup with the `db-clone` skill (clone prod → a keep-safe env) or
-  `wrangler d1 export`.
+  `wrangler d1 export`. Both teardown paths (manual `teardown-app.yml` and the
+  automatic `teardown-on-removal.yml`) keep the D1 export as a
+  `teardown-db-backups` run artifact for 30 days.
 - This skill removes infrastructure on purpose — it is exempt from the
   "staging-only deploy" standing rule, but prod teardown stays deliberate +
   guarded, exactly like prod deploys.

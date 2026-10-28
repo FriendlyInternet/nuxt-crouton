@@ -39,7 +39,6 @@ interface CollectionConfig {
    * - 'media': Images, videos, files — shown under "Media"
    */
   kind?: CollectionKind
-  componentName?: string
   /** Container type for create/update forms. Defaults to 'slideover'.
    * 'inline' renders an editor panel beside the collection layout (split-view).
    */
@@ -170,14 +169,6 @@ export default function useCollections() {
   const appConfig = useAppConfig()
   const collectionRegistry = (appConfig.croutonCollections || {}) as Record<string, CollectionConfig>
 
-  // Build component map from configs so FormDynamicLoader can resolve forms
-  const componentMap = reactive<Record<string, string>>({})
-  Object.entries(collectionRegistry).forEach(([name, config]) => {
-    if (config?.componentName) {
-      componentMap[name] = config.componentName
-    }
-  })
-
   // Build dependent field component map for FormDependentFieldLoader
   const dependentFieldComponentMap = reactive<Record<string, Record<string, string>>>({})
   Object.entries(collectionRegistry).forEach(([name, config]) => {
@@ -192,7 +183,6 @@ export default function useCollections() {
   }
 
   return {
-    componentMap,
     dependentFieldComponentMap,
     getConfig,
     configs: collectionRegistry

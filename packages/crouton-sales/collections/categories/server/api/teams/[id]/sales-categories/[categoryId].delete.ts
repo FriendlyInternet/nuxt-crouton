@@ -1,6 +1,7 @@
 // Team-based endpoint - requires @fyit/crouton-auth package
 // The resolveTeamAndCheckMembership utility handles team resolution and auth
 import { deleteSalesCategory } from '../../../../database/queries'
+import { captureConfigWrite } from '../../../../../../../server/utils/config-capture'
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
 
 export default defineEventHandler(async (event) => {
@@ -18,5 +19,6 @@ export default defineEventHandler(async (event) => {
   const dbTimer = timing.start('db')
   const result = await deleteSalesCategory(categoryId, team.id, user.id, { role: membership.role })
   dbTimer.end()
+  await captureConfigWrite(useDB(), { entityType: 'category', operation: 'delete', entityId: categoryId, teamId: team.id })
   return result
 })

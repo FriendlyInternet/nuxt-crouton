@@ -11,8 +11,7 @@ export default defineNuxtConfig({
     dirs: [
       {
         path: join(currentDir, 'app/components'),
-        prefix: 'BookingsEmaillogs',
-        global: true
+        prefix: 'BookingsEmaillogs'
       }
     ]
   }

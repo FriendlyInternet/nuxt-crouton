@@ -13,7 +13,6 @@ const mockCollectionsConfig: Record<string, any> = {
   products: {
     layer: 'shop',
     apiPath: 'shop-products',
-    componentName: 'ShopProductsForm'
   },
   posts: {
     layer: 'blog'

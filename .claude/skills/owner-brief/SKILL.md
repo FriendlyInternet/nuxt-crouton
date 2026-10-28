@@ -25,7 +25,7 @@ not a parallel system; reach for that skill's templates when the brief is a hold
 | ✅ | **Done** | landed and verified | nothing | **no** |
 | 🔀 | **Choice** | a real fork, needs your pick | `A` / `B` | yes |
 | 🛠 | **Action** | you must do something the agent can't | do it, then comment | yes |
-| 👀 | **Review** | approve or reject a diff/preview | ✅ / `lgtm` / changes | yes |
+| 👀 | **Review** | approve or reject a diff/preview | `ok` / `not ok: …` | yes |
 
 If two apply, pick the one that describes **what you need back**, not what you did. A bug you
 already fixed is ✅, not 🔴.

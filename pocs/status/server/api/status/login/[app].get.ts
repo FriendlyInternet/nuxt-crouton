@@ -1,8 +1,8 @@
 import { appTargetFor } from '../../../utils/app-urls'
-import { reviewLoginUrl } from '../../../utils/review-login'
-import { listLiveApps, listPreviews } from '../../../utils/live-apps'
+import { reviewLoginUrl, sanitizeWalk, withWalk } from '../../../utils/review-login'
+import { listLiveApps, resolvePrLogin } from '../../../utils/live-apps'
 import { isSafePath } from '../../../utils/totest-core'
-import { decidePreview, previewGoneHtml } from '../../../utils/live-apps-core'
+import { previewGoneHtml, previewNoneHtml } from '../../../utils/live-apps-core'
 
 // Owner-only one-tap sign-in to an app's staging review login. The URL carries the
 // password, so it is never logged or rendered into HTML — only a 302 Location.
@@ -46,7 +46,12 @@ export default defineEventHandler(async (event) => {
   }
   let base = target.stagingUrl
   if (key !== 'main') {
-    const decision = decidePreview((await listPreviews(event)).data, app, key)
+    const decision = await resolvePrLogin(event, app, key)
+    if (decision.gone === 'none') {
+      setResponseStatus(event, 404)
+      setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
+      return previewNoneHtml(decision.pr, app, target.stagingUrl)
+    }
     if (decision.gone) {
       setResponseStatus(event, 410)
       setHeader(event, 'Content-Type', 'text/html; charset=utf-8')
@@ -55,11 +60,13 @@ export default defineEventHandler(async (event) => {
     base = decision.url
   }
 
+  const walk = sanitizeWalk(getQuery(event).walk)
+
   // No sign-in for this app (opted out, or no seed secret here): just open its staging site.
   const secret = String(cfg.reviewSeedSecret || '')
   if (!target.hasSignIn || !secret) {
-    return sendRedirect(event, to ? `${base.replace(/\/+$/, '')}${to}` : base, 302)
+    return sendRedirect(event, to || walk ? `${base.replace(/\/+$/, '')}${withWalk(to, walk)}` : base, 302)
   }
 
-  return sendRedirect(event, reviewLoginUrl(base, secret, app, key, to), 302)
+  return sendRedirect(event, reviewLoginUrl(base, secret, app, key, to, walk), 302)
 })

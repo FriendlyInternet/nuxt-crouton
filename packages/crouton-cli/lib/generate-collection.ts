@@ -10,7 +10,7 @@ import { loadConfig } from 'c12'
 // Import utilities
 import { toCase, toSnakeCase, toLayerCamelCase, pascal } from './utils/helpers.ts'
 import { loadTypeMapping, discoverManifests, getGeneratorDetectors, getGeneratorContributions } from './utils/manifest-loader.ts'
-import type { DetectionResult, DetectedField, FormEnhancement, ListEnhancement, GeneratorContribution } from '@fyit/crouton-core/shared/manifest'
+import type { DetectionResult, DetectedField, GeneratorContribution } from '@fyit/crouton-core/shared/manifest'
 import { detectRequiredDependencies, displayMissingDependencies, ensureLayersExtended } from './utils/module-detector.ts'
 import { setupCroutonCssSource, displayManualCssSetupInstructions } from './utils/css-setup.ts'
 import { addToNuxtConfigExtends, addRuntimeConfig } from './utils/update-nuxt-config.ts'
@@ -348,64 +348,6 @@ export async function buildSchemaExportNames(collectionName: string, layer: stri
     exportName: `${layerCamelCase}${cases.pascalCasePlural}`,
     importPath: `../../layers/${layer}/collections/${cases.plural}/server/database/schema`,
     schemaIndexPath: await getSchemaPath()
-  }
-}
-
-// Create database table using Drizzle
-async function createDatabaseTable(config: { name: string; layer: string; fields?: Field[]; force?: boolean }): Promise<boolean> {
-  const { name, layer, force = false } = config
-  const cases = toCase(name)
-
-  try {
-    // Verify the schema file exists
-    const schemaPath = path.resolve('layers', layer, 'collections', cases.plural, 'server', 'database', 'schema.ts')
-
-    try {
-      await fsp.access(schemaPath)
-    } catch {
-      console.error(`✗ Schema file not found at ${schemaPath}`)
-      return false
-    }
-
-    // First, update the schema index to include the new collection
-    console.log(`↻ Updating schema index...`)
-    const { exportName, importPath: schemaImportPath, schemaIndexPath } = await buildSchemaExportNames(name, layer)
-    const schemaResult = await addNamedSchemaExport(schemaIndexPath, exportName, schemaImportPath, force)
-    const schemaUpdated = schemaResult.added || schemaResult.reason === 'already exported'
-
-    if (!schemaUpdated) {
-      if (schemaResult.reason?.startsWith('conflicting')) {
-        console.error(`⚠️  Warning: ${schemaResult.reason}`)
-        console.error(`   Use --force to override or choose a different name.`)
-      }
-      console.error(`✗ Schema index update failed due to conflicts`)
-      console.error(`  Skipping database migration to avoid errors`)
-      console.error(`  You can:`)
-      console.error(`  1. Use --force to override the conflict`)
-      console.error(`  2. Manually resolve the conflict in server/db/schema.ts`)
-      console.error(`  3. Choose a different collection name`)
-      return false
-    }
-
-    if (schemaResult.created) {
-      console.log('✓ Created server/db/schema.ts with auth schema')
-    }
-    if (schemaResult.added) {
-      console.log(`✓ Updated schema index with ${exportName} export`)
-    } else {
-      console.log(`✓ Schema index already contains ${exportName} export`)
-    }
-
-    // Generate the migration — drizzle-kit against the resolved sources, no Nuxt (#1445 WS2).
-    console.log(`↻ Creating database migration...`)
-    await runMigrationStep()
-    console.log(`! Migration generated. The table will be created when you restart the dev server.`)
-    return true
-  } catch (error: any) {
-    if (error instanceof DuplicateTableError) throw error // hard fail → non-zero exit
-    console.error(`✗ Failed to create database table:`, error.message)
-    console.log(`! You may need to create the table manually with: pnpm db:generate`)
-    return false
   }
 }
 
@@ -823,9 +765,7 @@ async function ensureRequiredDependencies(config: Record<string, any> | null, no
   if (dependencies.missing.length > 0) {
     const shouldContinue = displayMissingDependencies(dependencies)
     if (!shouldContinue && !force) {
-      console.error('⚠️  Aborting: Missing required dependencies')
-      console.error('   Use --force to generate anyway (may result in broken code)')
-      process.exit(1)
+      throw new Error('Aborting: missing required dependencies. Use --force to generate anyway (may result in broken code)')
     }
     if (force) {
       console.warn('⚠️  Continuing with --force despite missing dependencies')
@@ -875,24 +815,6 @@ async function applyManifestEnhancements(params: {
   const contributions = allContributions.filter(({ packageId }) =>
     extendedPackages.has(packageId) || detectedPackages.has(packageId)
   )
-  // Auto-detect formComponent from package contributions (when not explicitly configured).
-  // Scope to `contributions` (extended + detector-matched), NOT
-  // `allContributions` — otherwise a package the app doesn't use (e.g. crouton-sales
-  // reserving "location"/"product"/"category"/"printer") forces its bespoke form on
-  // an unrelated collection and skips Form.vue generation (#558).
-  if (!collectionConfig?.formComponent) {
-    const formComponentCtx = { collectionName: collection, fields, detected }
-    for (const { contribution } of contributions) {
-      const result = contribution.getFormComponent?.(formComponentCtx)
-      if (result) {
-        collectionConfig = { ...collectionConfig, formComponent: result }
-        data.collectionConfig = collectionConfig
-        console.log(`✓ Auto-detected form component: ${result}`)
-        break
-      }
-    }
-  }
-
   const translatableFieldNames = config?.translations?.collections?.[toCase(collection).plural] || []
   data.formEnhancements = runFormContributions(contributions, data, dialect)
   data.listEnhancements = runListContributions(contributions, data, translatableFieldNames)
@@ -924,11 +846,7 @@ function printDryRunPlan(params: {
     console.log(`   • API endpoints: [id]/move.patch.ts, reorder.patch.ts`)
     console.log(`   • Form: Parent picker component\n`)
   }
-  if (!collectionConfig?.formComponent) {
-    console.log(`• ${base}/app/components/Form.vue`)
-  } else {
-    console.log(`• Form.vue skipped (using ${collectionConfig.formComponent})`)
-  }
+  console.log(`• ${base}/app/components/Form.vue`)
   console.log(`• ${base}/app/components/List.vue`)
 
   // Show repeater components
@@ -1067,11 +985,10 @@ function buildCoreScaffoldFiles(params: {
 
   // All endpoints now use @crouton/auth for team-based authentication
   const files: GeneratedFile[] = [
-    // Only generate Form.vue if no custom formComponent specified
-    ...(collectionConfig?.formComponent ? [] : [{
+    {
       path: path.join(base, 'app', 'components', '_Form.vue'),
       content: generateFormComponent(data, config)
-    }]),
+    },
     {
       path: path.join(base, 'app', 'components', 'List.vue'),
       content: generateListComponent(data, config)
@@ -1347,9 +1264,6 @@ async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb,
   // Handle translation configuration
   config = resolveTranslationConfig({ fields, config, collectionConfig, noTranslations, plural: cases.plural })
 
-  // Check for required modules/dependencies
-  await ensureRequiredDependencies(config, noTranslations, force)
-
   // Prepare data for all generators
   // Typed as Record<string, any> so contribution results can be attached dynamically
   const data: Record<string, any> = buildGeneratorData({ layer, collection, fields, hierarchy, sortable, collab, config, collectionConfig })
@@ -1364,6 +1278,9 @@ async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb,
     printDryRunPlan({ base, layer, cases, layerPascalCase, hierarchy, collectionConfig, fields, seed, seedCount, tests, noDb })
     return
   }
+
+  // Check for required modules/dependencies (writes nuxt.config.ts — never in a dry run)
+  await ensureRequiredDependencies(config, noTranslations, force)
 
   // Create directories
   const apiPath = resolveApiPath(layer, collection, cases)
@@ -1405,29 +1322,23 @@ async function writeScaffold({ layer, collection, fields, dialect, dryRun, noDb,
 
   // Create database table if requested
   if (!noDb) {
-    await createDatabaseTable({ name: collection, layer, fields, force })
-
-    // Always export i18n schema since crouton-i18n is bundled with @fyit/crouton-core
-    console.log(`↻ Ensuring translations_ui table...`)
-    await exportI18nSchema(force)
+    await runDatabaseSetup([{ name: collection, layer }], force)
   }
 
   // Update collection registry
   await registerCollectionInAppConfig({ layer, cases, layerPascalCase, layerCamelCase })
 
   // Record generation history for DevTools Generators tab
-  if (!dryRun) {
-    try {
-      recordGenerationHistory({
-        collection: cases.plural,
-        fields: fields.filter(f => f.name !== 'id').map(f => f.name),
-        generator: 'crouton-cli',
-        timestamp: new Date().toISOString(),
-        layer,
-      })
-    } catch {
-      // Non-fatal — history recording failure should not block generation
-    }
+  try {
+    recordGenerationHistory({
+      collection: cases.plural,
+      fields: fields.filter(f => f.name !== 'id').map(f => f.name),
+      generator: 'crouton-cli',
+      timestamp: new Date().toISOString(),
+      layer,
+    })
+  } catch {
+    // Non-fatal — history recording failure should not block generation
   }
 
   console.log(`\n✓ Successfully generated collection '${cases.plural}' in layer '${layer}'`)
@@ -1474,7 +1385,9 @@ async function runMigrationStep(appDir: string = process.cwd()): Promise<void> {
   throw new Error('migration generation failed')
 }
 
-async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer: string; fields: Field[] }>, force: boolean): Promise<void> {
+// The one database step for both paths: schema index → translations_ui → migration.
+// Throws on any failure so the CLI exits non-zero.
+async function runDatabaseSetup(allCollections: Array<{ name: string; layer: string }>, force: boolean): Promise<void> {
   console.log(`\n${'═'.repeat(60)}`)
   console.log(`  DATABASE SETUP`)
   console.log(`${'═'.repeat(60)}\n`)
@@ -1485,7 +1398,7 @@ async function runBatchDatabaseSetup(allCollections: Array<{ name: string; layer
     const { exportName: colExportName, importPath: colImportPath, schemaIndexPath: colSchemaIndexPath } = await buildSchemaExportNames(col.name, col.layer)
     const colSchemaResult = await addNamedSchemaExport(colSchemaIndexPath, colExportName, colImportPath, force)
     if (!colSchemaResult.added && colSchemaResult.reason !== 'already exported') {
-      console.error(`  ✗ Failed to update schema index for ${col.name}: ${colSchemaResult.reason}`)
+      throw new Error(`Failed to update schema index for ${col.name}: ${colSchemaResult.reason}. Use --force to override or choose a different name.`)
     }
   }
 
@@ -1581,11 +1494,11 @@ async function runPostGeneration(opts: PostGenerationOptions): Promise<void> {
 
   // Update schema index for all collections and run migration once (unless disabled)
   if (!noDb && !dryRun && allCollections.length > 0) {
-    await runBatchDatabaseSetup(allCollections, force)
+    await runDatabaseSetup(allCollections, force)
   }
 
   // Setup CSS @source directive for Tailwind
-  await setupTailwindCss()
+  if (!dryRun) await setupTailwindCss()
 
   // Generate the type/query registries and the default layout
   if (!dryRun) {
@@ -1612,7 +1525,7 @@ async function loadAndPrepareConfig(options: RunConfigOptions): Promise<Record<s
     : undefined
   const configCwd = resolvedConfigPath ? path.dirname(resolvedConfigPath) : process.cwd()
 
-  const { config } = await loadConfig({
+  const { config } = await loadConfig<Record<string, any>>({
     name: 'crouton',
     cwd: configCwd,
     configFile: resolvedConfigPath || undefined,
@@ -1624,8 +1537,7 @@ async function loadAndPrepareConfig(options: RunConfigOptions): Promise<Record<s
   })
 
   if (!config || (Object.keys(config).length === 0)) {
-    console.error(`\n❌ Config file not found\n`)
-    process.exit(1)
+    throw new Error('Config file not found')
   }
 
   // Store config file directory for downstream path resolution (fieldsFile in collections)
@@ -1699,7 +1611,7 @@ async function persistPromptedConfigs(
 // Ask the setup questions of the packages the app extends (prompts
 // interactively, defaults in CI) and persist the answers.
 async function applyPackageConfiguration(config: Record<string, any>, options: RunConfigOptions): Promise<void> {
-  if (options.noAutoMerge) return
+  if (options.noAutoMerge || options.dryRun) return
 
   const { applyManifestConfiguration } = await import('./utils/manifest-configuration.ts')
   const promptedConfigs = await applyManifestConfiguration(config, resolveExtendedPackages(process.cwd()))
@@ -1781,8 +1693,7 @@ async function generateConfigEntry(params: {
 // collection, then run the batch post-generation steps.
 async function runEnhancedConfigFormat(config: Record<string, any>, typeMapping: any): Promise<void> {
   if (!config.targets || !config.collections) {
-    console.error('Error: Invalid config file - missing targets or collections')
-    process.exit(1)
+    throw new Error('Invalid config file - missing targets or collections')
   }
 
   // Create a map of collection names to their full config (including fieldsFile, hierarchy, etc.)
@@ -1828,35 +1739,28 @@ async function runEnhancedConfigFormat(config: Record<string, any>, typeMapping:
  * Run config-based generation.
  */
 export async function runConfig(options: RunConfigOptions = {}): Promise<void> {
-  try {
-    const typeMapping = await loadTypeMapping()
+  const typeMapping = await loadTypeMapping()
 
-    // Load the config file and fold CLI flags / the --only filter into it
-    const config = await loadAndPrepareConfig(options)
+  // Load the config file and fold CLI flags / the --only filter into it
+  const config = await loadAndPrepareConfig(options)
 
-    // Validate configuration before proceeding
-    const validation = await validateConfig(config)
+  // Validate configuration before proceeding
+  const validation = await validateConfig(config)
 
-    if (!validation.valid) {
-      console.error('\n⛔ Cannot proceed with generation due to validation errors\n')
-      process.exit(1)
-    }
+  if (!validation.valid) {
+    throw new Error('Cannot proceed with generation due to validation errors')
+  }
 
-    // Refuse packaged collections before anything is written (#2278)
-    assertNoOwnedCollections(config, await discoverManifests())
+  // Refuse packaged collections before anything is written (#2278)
+  assertNoOwnedCollections(config, await discoverManifests())
 
-    // Ask the setup questions of the packages the app extends
-    await applyPackageConfiguration(config, options)
+  // Ask the setup questions of the packages the app extends
+  await applyPackageConfiguration(config, options)
 
-    if (config.collections && config.targets) {
-      await runEnhancedConfigFormat(config, typeMapping)
-    } else {
-      console.error('Error: Invalid config file — it needs collections[] and targets[] (the old schemaPath format was removed in #2290)')
-      process.exit(1)
-    }
-  } catch (error: any) {
-    console.error('Error:', error.message)
-    process.exit(1)
+  if (config.collections && config.targets) {
+    await runEnhancedConfigFormat(config, typeMapping)
+  } else {
+    throw new Error('Invalid config file — it needs collections[] and targets[] (the old schemaPath format was removed in #2290)')
   }
 }
 
@@ -1871,8 +1775,7 @@ async function validateGenerateArgs(args: Record<string, any>): Promise<void> {
     await fsp.access(schemaPath)
     console.log(`✓ Schema file found: ${args.fieldsFile}`)
   } catch {
-    console.error(`\n❌ Schema file not found: ${args.fieldsFile}\n`)
-    process.exit(1)
+    throw new Error(`Schema file not found: ${args.fieldsFile}`)
   }
 
   // Check for write permissions
@@ -1880,13 +1783,12 @@ async function validateGenerateArgs(args: Record<string, any>): Promise<void> {
     await fsp.access(process.cwd(), fsp.constants.W_OK)
     console.log(`✓ Write permissions verified`)
   } catch {
-    console.error(`\n❌ No write permissions in current directory\n`)
-    process.exit(1)
+    throw new Error('No write permissions in current directory')
   }
 
   // Check dependencies unless force flag
   if (!args.force) {
-    const dependencies = await detectRequiredDependencies()
+    const dependencies = await detectRequiredDependencies({})
 
     if (dependencies.missing.length > 0) {
       console.log('\n⚠️  Missing dependencies detected:')
@@ -1904,74 +1806,55 @@ async function validateGenerateArgs(args: Record<string, any>): Promise<void> {
  * Run single-collection generation with explicit args.
  */
 export async function runGenerate(options: RunGenerateOptions = {}): Promise<void> {
+  const typeMapping = await loadTypeMapping()
+  const args = {
+    layer: options.layer,
+    collection: options.collection,
+    fieldsFile: options.fieldsFile,
+    dialect: options.dialect || 'sqlite',
+    dryRun: options.dryRun || false,
+    noDb: options.noDb || false,
+    force: options.force || false,
+    noTranslations: options.noTranslations || false,
+    hierarchy: options.hierarchy || false,
+    seed: options.seed || false,
+    seedCount: options.seedCount || 25,
+    tests: options.tests || false
+  }
+
+  // Validate CLI arguments
+  await validateGenerateArgs(args)
+
+  console.log(`\n📦 Will generate:`)
+  console.log(`  Layer: ${args.layer}`)
+  console.log(`  Collection: ${args.collection}`)
+  console.log(`  Dialect: ${args.dialect}`)
+
+  if (args.dryRun) {
+    console.log('\n🔍 DRY RUN MODE - No files will be created')
+  }
+
+  console.log('\n' + '─'.repeat(60) + '\n')
+
+  // Load and validate the schema content
+  let fields
   try {
-    const typeMapping = await loadTypeMapping()
-    const args = {
-      layer: options.layer,
-      collection: options.collection,
-      fieldsFile: options.fieldsFile,
-      dialect: options.dialect || 'sqlite',
-      dryRun: options.dryRun || false,
-      noDb: options.noDb || false,
-      force: options.force || false,
-      noTranslations: options.noTranslations || false,
-      hierarchy: options.hierarchy || false,
-      seed: options.seed || false,
-      seedCount: options.seedCount || 25,
-      tests: options.tests || false
-    }
-
-    // Validate CLI arguments
-    await validateGenerateArgs(args)
-
-    console.log(`\n📦 Will generate:`)
-    console.log(`  Layer: ${args.layer}`)
-    console.log(`  Collection: ${args.collection}`)
-    console.log(`  Dialect: ${args.dialect}`)
-
-    if (args.dryRun) {
-      console.log('\n🔍 DRY RUN MODE - No files will be created')
-    }
-
-    console.log('\n' + '─'.repeat(60) + '\n')
-
-    // Load and validate the schema content
-    let fields
-    try {
-      fields = await loadFields(args.fieldsFile, typeMapping)
-      console.log(`✓ Loaded ${fields.length} fields from schema`)
-    } catch (error: any) {
-      console.error(`\n❌ Error loading schema: ${error.message}\n`)
-      process.exit(1)
-    }
-
-    // Proceed with generation
-    await writeScaffold({ ...args, fields })
-
-    // Generate the type + query registries for type-safe CRUD composables
-    if (!args.dryRun) {
-      await generateRegistryFiles()
-
-      // Print .env hints for prompted configurations
-      if (promptedConfigs.length > 0) {
-        const allHints = promptedConfigs.flatMap(pc => pc.envHints || [])
-        if (allHints.length > 0) {
-          console.log(`\n${'═'.repeat(60)}`)
-          console.log(`  ENVIRONMENT VARIABLES`)
-          console.log(`${'═'.repeat(60)}\n`)
-          console.log(`Add these to your .env file:\n`)
-          allHints.forEach(hint => console.log(`   ${hint}`))
-          console.log('')
-        }
-      }
-
-      console.log(`\n${'═'.repeat(60)}`)
-      console.log(`  ALL DONE!`)
-      console.log(`${'═'.repeat(60)}\n`)
-      console.log(`Next step: Restart your Nuxt dev server\n`)
-    }
+    fields = await loadFields(args.fieldsFile, typeMapping)
+    console.log(`✓ Loaded ${fields.length} fields from schema`)
   } catch (error: any) {
-    console.error('Error:', error.message)
-    process.exit(1)
+    throw new Error(`Error loading schema: ${error.message}`, { cause: error })
+  }
+
+  // Proceed with generation
+  await writeScaffold({ ...args, fields })
+
+  // Generate the type + query registries for type-safe CRUD composables
+  if (!args.dryRun) {
+    await generateRegistryFiles()
+
+    console.log(`\n${'═'.repeat(60)}`)
+    console.log(`  ALL DONE!`)
+    console.log(`${'═'.repeat(60)}\n`)
+    console.log(`Next step: Restart your Nuxt dev server\n`)
   }
 }

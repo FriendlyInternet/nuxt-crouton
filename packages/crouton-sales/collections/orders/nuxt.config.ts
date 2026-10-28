@@ -11,8 +11,7 @@ export default defineNuxtConfig({
     dirs: [
       {
         path: join(currentDir, 'app/components'),
-        prefix: 'SalesOrders',
-        global: true
+        prefix: 'SalesOrders'
       }
     ]
   }

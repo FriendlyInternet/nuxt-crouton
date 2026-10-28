@@ -48,6 +48,9 @@ export interface CollabUser {
    */
   name: string
 
+  /** Profile image URL; initials are shown when absent. */
+  image?: string
+
   /**
    * Hex color for the user's cursor and selection highlighting.
    * Should be a 6-character hex color code (e.g., '#ff0000').

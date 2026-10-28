@@ -18,7 +18,6 @@ const _croutonRedirectsConfig = {
   name: 'croutonRedirects',
   layer: 'crouton',
   apiPath: 'crouton-redirects',
-  componentName: 'CroutonRedirectsForm',
   display: {
     title: 'fromPath',
     subtitle: 'toPath',

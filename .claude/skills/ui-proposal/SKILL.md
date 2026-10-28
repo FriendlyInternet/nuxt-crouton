@@ -14,7 +14,7 @@ PNG. A `--static` fallback (offline HTML/CSS mockup + PNG) is available when a l
 isn't practical.
 
 Either way the outcome is identical: a draft PR is posted, the reviewer gives feedback,
-you iterate, and an `approve`/`lgtm` comment unblocks the build.
+you iterate, and an `ok` comment unblocks the build.
 
 ## When to use
 - A task's diff adds or changes a **visual surface**: a `.vue` component, a layout, a page,
@@ -34,7 +34,7 @@ If `writeups/design/<epic>/` exists (see `scripts/design-handoff.mjs`), `read` i
 | **When** | App can be deployed to staging | Deploy is unavailable, broken, or would take too long |
 | **Fidelity** | Real Nuxt UI styling, real data, real responsive behaviour | Offline HTML/CSS approximation |
 | **Reviewer UX** | Click the running page, pin a comment | Read a PNG, comment inline on the `.md` diff |
-| **Approval signal** | Reply `approve` / `lgtm` — same loop | Reply `approve` / `lgtm` — same loop |
+| **Approval signal** | Reply `ok` (or `not ok: …`) — same loop | Reply `ok` (or `not ok: …`) — same loop |
 
 ---
 
@@ -55,13 +55,13 @@ The loop (capture tooling provided by `@fyit/crouton-devtools`):
    🔍 Live preview ready: https://<name>.pmcp.dev
    Reviewer: open the link, click any element, and type your change in the overlay.
    Each pin posts a 🎯 Preview feedback comment here naming the source file.
-   Reply `lgtm` or `approve` when satisfied.
+   Reply `ok` when satisfied, or `not ok: what's wrong`.
    ```
 4. **Apply `status:blocked`**, @mention `@pmcp`, and **stop**. Do not build further until
    approved.
 5. **On each `🎯 Preview feedback` comment:** read the named source file, make the change,
    commit, redeploy. Reply to the comment when done.
-6. **On `approve` / `lgtm` reply:** remove `status:blocked`, drop a short note on the PR,
+6. **On `ok` reply:** remove `status:blocked`, drop a short note on the PR,
    and resume building/generating (step 6 of `task-worker`).
 
 ### Env contract (already wired by WS2 of epic #590)
@@ -158,7 +158,7 @@ it lands in "Files changed" so the reviewer can inline-comment a specific change
    ![<slug> mockup](https://raw.githubusercontent.com/FriendlyInternet/nuxt-crouton/<branch>/writeups/ui-proposals/<slug>.png)
 
    Review the **"what changes"** list (`writeups/ui-proposals/<slug>.md`) and comment any change.
-   Reply `lgtm` / `approve` when satisfied.
+   Reply `ok` when satisfied, or `not ok: what's wrong`.
    ```
    Use the actual **head branch** in the URL (e.g. `receiptDesign`, `claude/issue-<NN>-<slug>`);
    the image re-renders whenever the committed file changes, so editing in place (step 5) works.
@@ -175,7 +175,7 @@ On each change request: revise the proposal (mockup files for `--static`, source
 live-preview), re-render / redeploy, **edit the sticky comment in place** (never post a new
 one), and reply to/resolve each inline thread you addressed. Commit and push.
 
-On `approve` / `lgtm` reply: remove `status:blocked`, note "approved → building" on the
+On `ok` reply: remove `status:blocked`, note "approved → building" on the
 sticky comment, and resume.
 
 ---

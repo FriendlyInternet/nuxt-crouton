@@ -268,7 +268,8 @@
 </template>
 
 <script lang="ts" setup>
-import { computed, resolveComponent, getCurrentInstance, provide, inject, type Component } from 'vue'
+import { computed, resolveComponent, provide, inject, type Component } from 'vue'
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
 import { CROUTON_ITEM_ACTION_KEY } from '../types/table'
 import { useBreakpoints, breakpointsTailwind, useMounted } from '@vueuse/core'
 import type { ListProps, LayoutType, ResponsiveLayout, layoutPresets, HierarchyConfig, SortableOptions, KanbanConfig, CollabPresenceConfig, GridSize } from '../types/table'
@@ -330,26 +331,8 @@ const getCardComponent = (collectionName: string, variant?: string): Component |
     ? `${pascalName}${variant}`
     : `${pascalName}Card`
 
-  // Check if component exists without triggering Vue warning
-  const instance = getCurrentInstance()
-  if (!instance) return null
-
-  // Check global components (Nuxt auto-imports register here)
-  const appComponents = instance.appContext.components
-  if (appComponents[componentName]) {
-    const resolved = resolveComponent(componentName)
-    // resolveComponent returns string if not found, but we've verified it exists
-    return typeof resolved === 'string' ? null : resolved
-  }
-
-  // Also check lazy variants (LazyBookingsPagesCard)
-  const lazyName = `Lazy${componentName}`
-  if (appComponents[lazyName]) {
-    const resolved = resolveComponent(lazyName)
-    return typeof resolved === 'string' ? null : resolved
-  }
-
-  return null // No warning emitted
+  // Nuxt's resolved winner (app beats layer) from the build-time map; absent → default card
+  return collectionForms[componentName] ?? null
 }
 
 const customCardComponent = computed(() => {

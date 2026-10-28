@@ -26,6 +26,7 @@ export default defineNuxtConfig({
     '@fyit/crouton-email',
     '@fyit/crouton-maps',
     '@fyit/crouton-events',
+    '@fyit/crouton-collab',
   ],
   hub: {
     blob: true,

@@ -480,6 +480,11 @@ export default defineAppConfig({
           icon: 'i-lucide-printer'
         },
         {
+          path: '/sales/devices',
+          label: 'sales.sidebar.devices',
+          icon: 'i-lucide-monitor-smartphone'
+        },
+        {
           path: '/sales/helpers',
           label: 'sales.sidebar.helpers',
           icon: 'i-lucide-users'
