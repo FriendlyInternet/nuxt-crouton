@@ -207,10 +207,11 @@
       "never": "never",
       "lastPush": "Last push",
       "lastPull": "Last pull",
-      "lostEdits": "Overwritten edits",
-      "noLostEdits": "No edits were overwritten.",
-      "cloudWon": "The cloud version was kept",
-      "title": "Cloud sync"
+      "lostEdits": "Replaced till changes",
+      "noLostEdits": "No till changes were replaced.",
+      "cloudWon": "The online version was kept",
+      "title": "Sync",
+      "explain": "The till remembers when you change something, even offline. When it reconnects, the latest change wins. During a live event the till always goes first. Till changes that were replaced this way are listed below."
     },
     "dashboard": {
       "revenue": "Revenue",

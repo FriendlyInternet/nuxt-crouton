@@ -207,10 +207,11 @@
       "never": "nooit",
       "lastPush": "Laatst verstuurd",
       "lastPull": "Laatst opgehaald",
-      "lostEdits": "Overschreven wijzigingen",
-      "noLostEdits": "Er zijn geen wijzigingen overschreven.",
-      "cloudWon": "De versie in de cloud is behouden",
-      "title": "Cloudsynchronisatie"
+      "lostEdits": "Vervangen kassawijzigingen",
+      "noLostEdits": "Er werden geen kassawijzigingen vervangen.",
+      "cloudWon": "De online versie is behouden",
+      "title": "Synchronisatie",
+      "explain": "De kassa onthoudt wanneer je iets wijzigt, ook offline. Bij het opnieuw verbinden geldt: de laatste wijziging blijft. Tijdens een lopend evenement gaat de kassa altijd voor. Kassawijzigingen die zo vervangen werden, zie je hieronder."
     },
     "dashboard": {
       "revenue": "Omzet",

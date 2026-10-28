@@ -206,10 +206,11 @@
       "never": "jamais",
       "lastPush": "Dernier envoi",
       "lastPull": "Dernière réception",
-      "lostEdits": "Modifications écrasées",
-      "noLostEdits": "Aucune modification n'a été écrasée.",
-      "cloudWon": "La version du cloud a été conservée",
-      "title": "Synchronisation cloud"
+      "lostEdits": "Modifications de caisse remplacées",
+      "noLostEdits": "Aucune modification de caisse n'a été remplacée.",
+      "cloudWon": "La version en ligne a été conservée",
+      "title": "Synchronisation",
+      "explain": "La caisse retient quand vous modifiez quelque chose, même hors ligne. À la reconnexion, la dernière modification l'emporte. Pendant un événement en cours, la caisse a toujours la priorité. Les modifications de caisse remplacées ainsi sont listées ci-dessous."
     },
     "dashboard": {
       "revenue": "Chiffre d'affaires",
