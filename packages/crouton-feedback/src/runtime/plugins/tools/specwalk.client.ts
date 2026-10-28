@@ -3,6 +3,7 @@ import { defineNuxtPlugin, useRuntimeConfig } from 'nuxt/app'
 import { useFeedbackTools } from '../../composables/useFeedbackTools'
 import { useSpecWalk } from '../../composables/useSpecWalk'
 import { createSpecWalkTool } from '../../tools/specwalk'
+import { consumeWalkQuery } from '../../tools/specwalk-data'
 import { mountOverlayInBody } from '../../overlay/mount'
 import SpecWalkOverlay from '../../components/SpecWalkOverlay.vue'
 
@@ -35,16 +36,27 @@ export default defineNuxtPlugin((nuxtApp) => {
   // (marked/total) is read live by the launcher, so it re-renders as verdicts land.
   watch(open, (v) => { if (!v) registry.deactivate(tool) })
 
+  // Ad-hoc walk from the link (`?walk=<base64url JSON>`). Checked on every
+  // navigation, not just first load: after sign-in the auth modal navigates
+  // client-side to `/?walk=…`, which `app:mounted` never sees.
+  const router = nuxtApp.$router as import('vue-router').Router
+  const takeWalk = (query: Record<string, unknown>) =>
+    consumeWalkQuery(query, {
+      start: (raw) => {
+        const ok = startAdhoc(raw)
+        if (ok) void registry.activate(tool)
+        return ok
+      },
+      drop: () => {
+        const { walk: _w, ...rest } = router.currentRoute.value.query
+        void router.replace({ query: rest, hash: router.currentRoute.value.hash })
+      }
+    })
+  router.afterEach(to => { takeWalk(to.query) })
+
   nuxtApp.hook('app:mounted', () => {
-    // Ad-hoc walk from the link (`?walk=<base64url JSON>`): open it, then drop the
-    // param so a reload doesn't restart it. Invalid input is ignored.
-    const url = new URL(location.href)
-    const raw = url.searchParams.get('walk')
-    if (raw !== null) {
-      if (startAdhoc(raw)) void registry.activate(tool)
-      url.searchParams.delete('walk')
-      history.replaceState(history.state, '', url.pathname + url.search + url.hash)
-    }
+    // First load: the router may already have settled before this plugin ran.
+    takeWalk(router.currentRoute.value.query)
     mountOverlayInBody(SpecWalkOverlay, nuxtApp.vueApp._context, '__feedback_specwalk_root')
   })
 })

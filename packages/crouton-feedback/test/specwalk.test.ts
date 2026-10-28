@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseWalkParam, MAX_WALK_PARAM, walkEntries, stepsOf, selectorFor, exportText, type VerdictMap } from '../src/runtime/tools/specwalk-data'
+import { consumeWalkQuery, parseWalkParam, MAX_WALK_PARAM, walkEntries, stepsOf, selectorFor, exportText, type VerdictMap } from '../src/runtime/tools/specwalk-data'
 import { createSpecWalkTool } from '../src/runtime/tools/specwalk'
 import type { ComposedPlan } from '../src/runtime/tools/plan-data'
 
@@ -139,5 +139,36 @@ describe('parseWalkParam (ad-hoc walk from the link)', () => {
 
   it('ignores an oversized param', () => {
     expect(parseWalkParam('A'.repeat(MAX_WALK_PARAM + 1))).toBeNull()
+  })
+})
+
+describe('consumeWalkQuery (walk arriving via client-side navigation)', () => {
+  const enc = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url')
+
+  it('opens the walk from a route query and drops the param', () => {
+    const started: string[] = []
+    let dropped = 0
+    const raw = enc({ steps: [{ text: 'Open it' }] })
+    const hit = consumeWalkQuery({ walk: raw }, {
+      start: (r) => { started.push(r); return parseWalkParam(r) !== null },
+      drop: () => { dropped++ }
+    })
+    expect(hit).toBe(true)
+    expect(started).toEqual([raw])
+    expect(dropped).toBe(1)
+  })
+
+  it('does nothing when there is no walk param', () => {
+    let called = false
+    const deps = { start: () => { called = true; return true }, drop: () => { called = true } }
+    expect(consumeWalkQuery({ other: '1' }, deps)).toBe(false)
+    expect(consumeWalkQuery(undefined, deps)).toBe(false)
+    expect(called).toBe(false)
+  })
+
+  it('still drops an invalid param so a reload does not retry it', () => {
+    let dropped = 0
+    consumeWalkQuery({ walk: '!!bad!!' }, { start: r => parseWalkParam(r) !== null, drop: () => { dropped++ } })
+    expect(dropped).toBe(1)
   })
 })

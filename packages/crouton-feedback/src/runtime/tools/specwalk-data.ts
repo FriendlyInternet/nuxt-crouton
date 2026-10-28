@@ -152,3 +152,21 @@ export function parseWalkParam(raw: unknown): AdhocWalk | null {
   if (!entries.length) return null
   return { title: clip(data.title, 80) || 'Walk', app: clip(data.app, 60), ref: clip(data.ref, 60), entries }
 }
+
+/**
+ * Handle a route query that may carry `walk` — used for both the first page load
+ * and every later client-side navigation (e.g. the post-sign-in redirect lands
+ * on `/?walk=…` without a page load). Opens the walk if valid, then always calls
+ * `drop` so a reload doesn't restart it. Returns true when a `walk` param was present.
+ */
+export function consumeWalkQuery(
+  query: Record<string, unknown> | null | undefined,
+  deps: { start: (raw: string) => boolean, drop: () => void }
+): boolean {
+  const v = query?.walk
+  const raw = Array.isArray(v) ? v[0] : v
+  if (raw === undefined || raw === null) return false
+  if (typeof raw === 'string') deps.start(raw)
+  deps.drop()
+  return true
+}
