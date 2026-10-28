@@ -132,7 +132,8 @@ export function useCroutonStatus() {
 
   // Live sync: a teammate's change lands in the feed within seconds (no polling, no throttle)
   if (import.meta.client && getCurrentInstance() && useCroutonApps().hasApp('collab') && useCroutonApps().hasApp('events')) {
-    const stop = useNuxtApp().hook('crouton:remoteChange' as any, () => { refreshTeamEvents(true) })
+    const debouncedRefresh = useDebounceFn(() => refreshTeamEvents(true), 1000)
+    const stop = useNuxtApp().hook('crouton:remoteChange' as any, () => { debouncedRefresh() })
     onScopeDispose(stop)
   }
 
