@@ -167,10 +167,14 @@
       "cancellation": "annulation"
     },
     "filters": {
-      "calendar": "Calendrier",
+      "settings": "Paramètres du calendrier",
+      "view": "Affichage",
+      "foldCalendar": "Masquer le calendrier",
+      "unfoldCalendar": "Afficher le calendrier",
+      "locationCards": "Cartes des lieux",
       "locations": "Lieux",
       "map": "Carte",
-      "cancelled": "Annulé",
+      "cancelled": "Afficher les annulés",
       "today": "Aujourd'hui",
       "week": "Semaine",
       "month": "Mois",

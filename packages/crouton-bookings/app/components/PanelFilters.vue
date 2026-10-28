@@ -61,68 +61,82 @@ function isLocationSelected(locationId: string): boolean {
   return props.selectedLocations.includes(locationId)
 }
 
+const hasActiveFilter = computed(() => props.selectedLocations.length > 0 || props.showCancelled)
+
+const keepOpen = (e: Event) => e.preventDefault()
+
+const settingsItems = computed(() => {
+  const locationItems = (props.locations ?? []).map(location => ({
+    type: 'checkbox' as const,
+    label: location.title,
+    checked: isLocationSelected(location.id),
+    onUpdateChecked: () => toggleLocation(location.id),
+    onSelect: keepOpen,
+  }))
+  const viewItems = [
+    ...(props.hasLocationsWithCoordinates
+      ? [{
+          type: 'checkbox' as const,
+          label: t('bookings.filters.map'),
+          icon: 'i-lucide-map',
+          checked: props.showMap,
+          onUpdateChecked: (v: boolean) => emit('update:showMap', v),
+          onSelect: keepOpen,
+        }]
+      : []),
+    {
+      type: 'checkbox' as const,
+      label: t('bookings.filters.cancelled'),
+      icon: 'i-lucide-x-circle',
+      checked: props.showCancelled,
+      onUpdateChecked: (v: boolean) => emit('update:showCancelled', v),
+      onSelect: keepOpen,
+    },
+    ...(props.canManageLocations && locationItems.length > 0
+      ? [{
+          type: 'checkbox' as const,
+          label: t('bookings.filters.locationCards'),
+          icon: 'i-lucide-map-pin',
+          checked: props.showLocations,
+          onUpdateChecked: (v: boolean) => emit('update:showLocations', v),
+          onSelect: keepOpen,
+        }]
+      : []),
+  ]
+  return [
+    ...(locationItems.length > 0
+      ? [[{ type: 'label' as const, label: t('bookings.filters.locations') }, ...locationItems]]
+      : []),
+    [{ type: 'label' as const, label: t('bookings.filters.view') }, ...viewItems],
+  ]
+})
 </script>
 
 <template>
   <div class="flex flex-col gap-3">
-    <!-- Section toggles + view controls -->
+    <!-- One short row: Week|Month · Today · settings · fold -->
     <div class="flex items-center justify-between gap-2">
-      <div class="flex items-center gap-1 overflow-x-auto scrollbar-hide flex-nowrap md:flex-wrap">
-        <!-- Section toggles -->
+      <UFieldGroup v-if="showCalendar" size="sm">
         <UButton
-          size="sm"
-          class="shrink-0"
-          :color="showCalendar || hasSelectedDate ? 'primary' : 'neutral'"
-          :variant="showCalendar ? 'solid' : 'outline'"
-          icon="i-lucide-calendar"
-          @click="emit('update:showCalendar', !showCalendar)"
+          :color="calendarView === 'week' ? 'primary' : 'neutral'"
+          :variant="calendarView === 'week' ? 'solid' : 'outline'"
+          @click="emit('update:calendarView', 'week')"
         >
-          {{ t('bookings.filters.calendar') }}
+          {{ t('bookings.filters.week') }}
         </UButton>
-
         <UButton
-          v-if="locations && locations.length > 0"
-          size="sm"
-          class="shrink-0"
-          :color="showLocations || selectedLocations.length > 0 ? 'primary' : 'neutral'"
-          :variant="showLocations ? 'solid' : 'outline'"
-          icon="i-lucide-map-pin"
-          @click="emit('update:showLocations', !showLocations)"
+          :color="calendarView === 'month' ? 'primary' : 'neutral'"
+          :variant="calendarView === 'month' ? 'solid' : 'outline'"
+          @click="emit('update:calendarView', 'month')"
         >
-          {{ t('bookings.filters.locations') }}
-          <UBadge v-if="!showLocations && selectedLocations.length > 0" size="xs" color="primary" variant="solid" class="ml-0.5">
-            {{ selectedLocations.length }}
-          </UBadge>
+          {{ t('bookings.filters.month') }}
         </UButton>
+      </UFieldGroup>
+      <span v-else />
 
+      <div class="flex items-center gap-1 shrink-0">
         <UButton
-          v-if="hasLocationsWithCoordinates"
-          size="sm"
-          class="shrink-0"
-          :color="showMap ? 'primary' : 'neutral'"
-          :variant="showMap ? 'solid' : 'outline'"
-          icon="i-lucide-map"
-          @click="emit('update:showMap', !showMap)"
-        >
-          {{ t('bookings.filters.map') }}
-        </UButton>
-
-        <UButton
-          size="sm"
-          class="shrink-0"
-          :color="showCancelled ? 'error' : 'neutral'"
-          :variant="showCancelled ? 'solid' : 'outline'"
-          icon="i-lucide-x-circle"
-          @click="emit('update:showCancelled', !showCancelled)"
-        >
-          {{ t('bookings.filters.cancelled') }}
-        </UButton>
-
-      </div>
-
-      <!-- View controls (only visible when calendar is shown) -->
-      <div v-if="showCalendar" class="flex items-center gap-1 shrink-0">
-        <UButton
+          v-if="showCalendar"
           size="sm"
           color="neutral"
           variant="soft"
@@ -131,23 +145,27 @@ function isLocationSelected(locationId: string): boolean {
           {{ t('bookings.filters.today') }}
         </UButton>
 
-        <UButton
-          size="sm"
-          :color="calendarView === 'week' ? 'primary' : 'neutral'"
-          :variant="calendarView === 'week' ? 'solid' : 'outline'"
-          @click="emit('update:calendarView', 'week')"
-        >
-          {{ t('bookings.filters.week') }}
-        </UButton>
+        <UDropdownMenu :items="settingsItems">
+          <UChip :show="hasActiveFilter" color="primary" size="md">
+            <UButton
+              size="sm"
+              color="neutral"
+              variant="ghost"
+              icon="i-lucide-settings"
+              :aria-label="t('bookings.filters.settings')"
+            />
+          </UChip>
+        </UDropdownMenu>
 
         <UButton
           size="sm"
-          :color="calendarView === 'month' ? 'primary' : 'neutral'"
-          :variant="calendarView === 'month' ? 'solid' : 'outline'"
-          @click="emit('update:calendarView', 'month')"
-        >
-          {{ t('bookings.filters.month') }}
-        </UButton>
+          color="neutral"
+          variant="ghost"
+          :icon="showCalendar ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'"
+          :aria-label="showCalendar ? t('bookings.filters.foldCalendar') : t('bookings.filters.unfoldCalendar')"
+          :aria-expanded="showCalendar"
+          @click="emit('update:showCalendar', !showCalendar)"
+        />
       </div>
     </div>
 
