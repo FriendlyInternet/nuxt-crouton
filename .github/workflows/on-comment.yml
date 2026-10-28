@@ -15,6 +15,7 @@ name: On comment
 #                                            its schedule/PR/check triggers stay there)
 #   close-epic      close-epic               close-epic-on-comment.yml
 #   dispatch        dispatch                 comment-dispatch.yml
+#   interpret       interpret                NEW (#2980): an owner's plain comment no command matched
 #   resume          resume, explain-…        resume-on-comment.yml (both jobs)
 #   revise          revise                   revise-on-pr-comment.yml
 #   test-card       test-card                test-card-reply.yml
@@ -1003,3 +1004,168 @@ jobs:
           COMMENT_AUTHOR_ASSOCIATION: ${{ github.event.comment.author_association }}
           APPLY: 'true'
         run: node scripts/handle-test-reply.mjs
+
+  # Last resort (#2980): an OWNER's plain comment that matched no command. A light model proposes
+  # ONE action; scripts/comment-interpret.mjs validates it and refuses merge/close/delete/deploy
+  # in code (they only ever become "reply `ok` to confirm"). One run per thread at a time.
+  interpret:
+    needs: route
+    if: needs.route.outputs.kind == 'interpret'
+    runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    concurrency:
+      group: comment-interpret-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+      actions: write
+    steps:
+      # App token: the `delegate` label must fire a downstream `labeled` workflow (as in `dispatch`).
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Gather context + write the prompt
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs')
+            const { buildPrompt } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-interpret.mjs`)
+            const i = context.payload.issue
+            const trim = (s, n) => String(s || '').slice(0, n)
+            const comments = (await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: i.number, per_page: 100 })).slice(-5)
+            const lines = [
+              `${i.pull_request ? 'PR' : 'Issue'} #${i.number} (${i.state}): ${trim(i.title, 200)}`,
+              `Labels: ${(i.labels || []).map(l => l.name).join(', ') || 'none'}`,
+            ]
+            if (i.pull_request) {
+              const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
+              lines.push(`PR head ${p.head.ref} → base ${p.base.ref}, draft=${p.draft}`)
+            }
+            lines.push('Body: ' + trim(i.body, 1500), 'Recent comments:')
+            for (const c of comments) lines.push(`- ${c.user.login}: ${trim(c.body, 500)}`)
+            const ctxText = lines.join('\n')
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/interpret-context.txt`, ctxText)
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/interpret-prompt.txt`,
+              buildPrompt({ context: ctxText, comment: trim(context.payload.comment.body, 3000) }))
+
+      - name: Set up pi + Claude CLI (subscription)
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      # Tiers come from .claude/pipeline-models.json only — no model literal here (#2161).
+      - name: Resolve models
+        id: model
+        run: |
+          echo "light=$(node scripts/resolve-pipeline-model.mjs light)" >> "$GITHUB_OUTPUT"
+          echo "hard=$(node scripts/resolve-pipeline-model.mjs hard)" >> "$GITHUB_OUTPUT"
+
+      # The light model only READS and proposes; a failed/empty run becomes `ask` in decideAction.
+      - name: Read the comment (light model)
+        env:
+          PI_MODEL: ${{ steps.model.outputs.light }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" \
+            "$(cat "$RUNNER_TEMP/interpret-prompt.txt")" > "$RUNNER_TEMP/interpret-model.txt" 2>"$RUNNER_TEMP/interpret-model.err" \
+            || echo "light model run failed (becomes ask)"
+
+      - name: Decide
+        id: decide
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs')
+            const { decideAction } = await import(`${process.env.GITHUB_WORKSPACE}/scripts/comment-interpret.mjs`)
+            const i = context.payload.issue
+            let pr = null
+            if (i.pull_request) {
+              const p = (await github.rest.pulls.get({ ...context.repo, pull_number: i.number })).data
+              pr = { headRef: p.head.ref }
+            }
+            let out = ''
+            try { out = fs.readFileSync(`${process.env.RUNNER_TEMP}/interpret-model.txt`, 'utf8') } catch {}
+            const d = decideAction({ modelOutput: out, issue: { labels: (i.labels || []).map(l => l.name) }, pr })
+            core.info(`interpret: #${i.number} → ${JSON.stringify(d)}`)
+            fs.writeFileSync(`${process.env.RUNNER_TEMP}/interpret-decision.json`, JSON.stringify(d))
+            core.setOutput('action', d.action)
+
+      # Reviews stay strong: only the reading above is light. Read-only, no git/gh credentials.
+      - name: Independent review (hard model)
+        if: steps.decide.outputs.action == 'review'
+        env:
+          PI_MODEL: ${{ steps.model.outputs.hard }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          {
+            echo "Give a fresh, independent review of the plan or diff in this thread, as a skeptical second reader."
+            echo "Lead with a verdict line, then at most 8 concrete findings. READ-ONLY: edit nothing, run no git or gh."
+            echo; cat "$RUNNER_TEMP/interpret-context.txt"
+          } > "$RUNNER_TEMP/review-prompt.txt"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" --skill .claude/skills \
+            "$(cat "$RUNNER_TEMP/review-prompt.txt")" > "$RUNNER_TEMP/interpret-review.md" || echo "review run failed"
+
+      - name: Act on the decision (one action)
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const fs = require('node:fs')
+            const root = process.env.GITHUB_WORKSPACE
+            const { readAs } = await import(`${root}/scripts/comment-interpret.mjs`)
+            const { resolveLane } = await import(`${root}/scripts/comment-command.mjs`)
+            const { routePrComment } = await import(`${root}/scripts/revise-route.mjs`)
+            const d = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/interpret-decision.json`, 'utf8'))
+            const { owner, repo } = context.repo
+            const issue_number = context.payload.issue.number
+            const c = context.payload.comment
+            const header = '> 🤖 **pi.dev harness** · agent pipeline (CI) · _plain-comment reader (#2980)_\n\n'
+            const say = (brief, more) => github.rest.issues.createComment({ owner, repo, issue_number,
+              body: `${header}${brief}${more ? `\n\n${more}` : ''}` })
+            const opener = readAs(d)
+            const relabel = async (label) => {
+              const cur = (context.payload.issue.labels || []).map(l => l.name)
+              if (cur.includes(label)) { try { await github.rest.issues.removeLabel({ owner, repo, issue_number, name: label }) } catch {} }
+              await github.rest.issues.addLabels({ owner, repo, issue_number, labels: [label] })
+            }
+            if (d.action === 'ignore') { core.info('FYI comment — no reply.'); return }
+            try { await github.rest.reactions.createForIssueComment({ owner, repo, comment_id: c.id, content: 'eyes' }) } catch {}
+
+            if (d.action === 'confirm') {
+              await say(`🔀 ${opener}. Reply \`ok\` to confirm.`, 'Nothing has been done yet.')
+            } else if (d.action === 'ask') {
+              await say(`🔀 ${opener}?`, d.reply || 'Could you say a bit more about what you want done?')
+            } else if (d.action === 'answer') {
+              await say(`💬 ${opener}.`, d.reply || 'No answer text came back — please ask again.')
+            } else if (d.action === 'review') {
+              let rev = ''
+              try { rev = fs.readFileSync(`${process.env.RUNNER_TEMP}/interpret-review.md`, 'utf8').trim() } catch {}
+              await say(`👀 ${opener}. Review below.`,
+                rev ? `<details><summary>Independent review</summary>\n\n${rev.slice(0, 6000)}\n\n</details>` : '_The review run produced no text — reply again to retry._')
+            } else if (d.action === 'revise') {
+              const pr = (await github.rest.pulls.get({ owner, repo, pull_number: issue_number })).data
+              const r = routePrComment({ pr: { headRef: pr.head.ref, state: pr.state }, comment: {} })
+              await github.rest.actions.createWorkflowDispatch({ owner, repo, workflow_id: 'work-issue-pidev.yml',
+                ref: context.payload.repository.default_branch,
+                inputs: { issue: String(r.issue), feedback: String(c.id), branch: r.branch } })
+              await say(`🛠 ${opener}. The worker is re-running on this PR with your comment.`)
+            } else if (d.action === 'start' || d.action === 'replan') {
+              let hasWorkBranch = false
+              try { await github.rest.git.getRef({ owner, repo, ref: `heads/work-${issue_number}` }); hasWorkBranch = true } catch {}
+              const { label } = resolveLane('delegate', hasWorkBranch)
+              // A held ticket is released first so the planner/worker is not told to stay blocked.
+              if (d.action === 'replan') { try { await github.rest.issues.removeLabel({ owner, repo, issue_number, name: 'status:blocked' }) } catch {} }
+              await relabel(label)
+              await say(`🛠 ${opener}. Starting it now (\`${label}\`).`)
+            }

@@ -28,7 +28,7 @@ import { routePrComment } from './revise-route.mjs'
 
 export const KINDS = [
   'approve-draft', 'approve-epic', 'automerge-go', 'close-epic',
-  'dispatch', 'resume', 'revise', 'test-card', 'none',
+  'dispatch', 'interpret', 'resume', 'revise', 'test-card', 'none',
 ]
 
 const COLLABORATORS = new Set(['OWNER', 'MEMBER', 'COLLABORATOR'])
@@ -67,7 +67,25 @@ function routePrApproval({ assoc, collab, pr, out }) {
  * @param {{headRef:string, baseRef:string, draft:boolean, state:string}} [input.pr]  required when issue.isPr
  * @returns {{kind:string, number:number, reason:string, blocked:boolean}}
  */
-export function routeComment({ comment = {}, issue = {}, pr } = {}) {
+export function routeComment(input = {}) {
+  const d = routeBase(input)
+  if (d.kind === 'none' && isInterpretable(input)) return { ...d, kind: 'interpret', reason: 'an owner comment that matches no command' }
+  return d
+}
+
+/** Owner-only, human, non-empty, not an approval / slash command / `> 🤖` agent comment; a PR must be open. */
+function isInterpretable({ comment = {}, issue = {}, pr } = {}) {
+  const body = String(comment.body || '')
+  if (!OWNERS.has(comment.authorAssociation) || comment.userType === 'Bot') return false
+  const first = body.split('\n').find(l => l.trim()) || ''
+  if (!first) return false
+  if (/^>\s*🤖/u.test(first.trim())) return false
+  if (/^\//.test(first.trim()) || isApproval(body)) return false
+  if (issue.isPr && (!pr || pr.state !== 'open')) return false
+  return true
+}
+
+function routeBase({ comment = {}, issue = {}, pr } = {}) {
   const number = issue.number ?? 0
   const blocked = (issue.labels || []).includes('status:blocked')
   const out = (kind, reason) => ({ kind, number, reason, blocked })

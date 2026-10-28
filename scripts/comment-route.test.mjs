@@ -9,12 +9,12 @@ const prIssue = { number: 7, isPr: true, labels: [] }
 const kind = (input) => routeComment(input).kind
 
 test('every kind the workflow switches on is declared', () => {
-  assert.equal(KINDS.length, 9)
+  assert.equal(KINDS.length, 10)
 })
 
 test('close-epic: /close-epic on an issue', () => {
   assert.equal(kind({ comment: c('/close-epic'), issue: issue() }), 'close-epic')
-  assert.equal(kind({ comment: c('use `/close-epic` later'), issue: issue() }), 'none')
+  assert.equal(kind({ comment: c('use `/close-epic` later'), issue: issue() }), 'interpret')
 })
 
 test('dispatch: a rocket or slash command from a collaborator', () => {
@@ -26,7 +26,7 @@ test('dispatch: a rocket or slash command from a collaborator', () => {
 test('test-card: ok / not ok on a status:to-test card', () => {
   assert.equal(kind({ comment: c('ok'), issue: issue(['status:to-test']) }), 'test-card')
   assert.equal(kind({ comment: c('not ok: broken'), issue: issue(['status:to-test']) }), 'test-card')
-  assert.equal(kind({ comment: c('looks fine, thanks'), issue: issue(['status:to-test']) }), 'none')
+  assert.equal(kind({ comment: c('looks fine, thanks'), issue: issue(['status:to-test']) }), 'interpret')
 })
 
 test('resume: a reply on a blocked issue; an approval on an unblocked one is explain-only', () => {
@@ -34,7 +34,7 @@ test('resume: a reply on a blocked issue; an approval on an unblocked one is exp
   assert.deepEqual([blocked.kind, blocked.blocked], ['resume', true])
   const open = routeComment({ comment: c('ok'), issue: issue() })
   assert.deepEqual([open.kind, open.blocked], ['resume', false])
-  assert.equal(kind({ comment: c('use blue instead'), issue: issue() }), 'none')
+  assert.equal(kind({ comment: c('use blue instead'), issue: issue() }), 'interpret')
 })
 
 test('approve-draft: approval on a draft PR', () => {
@@ -52,13 +52,13 @@ test('automerge-go: approval on a ready leaf PR', () => {
 
 test('revise: a change request on a pi branch', () => {
   assert.equal(kind({ comment: c('make the header bigger'), issue: prIssue, pr: pr() }), 'revise')
-  assert.equal(kind({ comment: c('make the header bigger'), issue: prIssue, pr: pr({ headRef: 'fix/other' }) }), 'none')
+  assert.equal(kind({ comment: c('make the header bigger'), issue: prIssue, pr: pr({ headRef: 'fix/other' }) }), 'interpret')
 })
 
 test('none: bots, "looks good", a non-approval word that contains ok', () => {
   assert.equal(kind({ comment: c('ok', 'NONE', 'Bot'), issue: prIssue, pr: pr() }), 'none')
-  assert.equal(kind({ comment: c('looks good'), issue: prIssue, pr: pr({ headRef: 'fix/other' }) }), 'none')
-  assert.equal(kind({ comment: c('looks good'), issue: issue() }), 'none')
+  assert.equal(kind({ comment: c('looks good'), issue: prIssue, pr: pr({ headRef: 'fix/other' }) }), 'interpret')
+  assert.equal(kind({ comment: c('looks good'), issue: issue() }), 'interpret')
 })
 
 // The four races from the audit: each comment must start exactly ONE acting job.
@@ -73,4 +73,23 @@ test('race: lgtm on an epic PR merges once', () => {
 })
 test('race: ok on an issue with both status:blocked and status:to-test answers the card only', () => {
   assert.equal(kind({ comment: c('ok'), issue: issue(['status:blocked', 'status:to-test']) }), 'test-card')
+})
+
+test('interpret: only an owner\'s unmatched plain comment (#2980)', () => {
+  assert.equal(kind({ comment: c('can we get a second opinion on this plan?'), issue: issue() }), 'interpret')
+  assert.equal(kind({ comment: c('thanks', 'MEMBER'), issue: prIssue, pr: pr({ headRef: 'fix/other' }) }), 'interpret')
+  // never: bots, non-owners, agent headers, slash commands, closed PRs
+  assert.equal(kind({ comment: c('thanks', 'OWNER', 'Bot'), issue: issue() }), 'none')
+  assert.equal(kind({ comment: c('thanks', 'COLLABORATOR'), issue: issue() }), 'none')
+  assert.equal(kind({ comment: c('> 🤖 **Claude Code** · interactive agent\n\nFYI'), issue: issue() }), 'none')
+  assert.equal(kind({ comment: c('/nonsense'), issue: issue() }), 'none')
+  assert.equal(kind({ comment: c('thanks'), issue: prIssue, pr: pr({ headRef: 'fix/other', state: 'closed' }) }), 'none')
+})
+
+test('interpret never beats a fixed route', () => {
+  assert.equal(kind({ comment: c('ok'), issue: issue(['status:blocked']) }), 'resume')
+  assert.equal(kind({ comment: c('anything at all'), issue: issue(['status:blocked']) }), 'resume')
+  assert.equal(kind({ comment: c('**Worker:** fix it'), issue: prIssue, pr: pr() }), 'revise')
+  assert.equal(kind({ comment: c('lgtm'), issue: prIssue, pr: pr({ draft: true }) }), 'approve-draft')
+  assert.equal(kind({ comment: c('🚀'), issue: issue() }), 'dispatch')
 })
