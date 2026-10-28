@@ -47,8 +47,7 @@ jobs:
     # sibling didn't — the definition now lives once, in scripts/lib/pipeline-branch.mjs.
     if: >
       github.event.workflow_run.conclusion == 'failure' &&
-      (startsWith(github.event.workflow_run.head_branch, 'claude/issue-') ||
-       startsWith(github.event.workflow_run.head_branch, 'work-'))
+      startsWith(github.event.workflow_run.head_branch, 'work-')
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # NOTE: permissions MUST live at the job level — GitHub job-level `permissions` fully
@@ -105,8 +104,8 @@ jobs:
             const attempts = attemptLabel ? Number(attemptLabel.split(':')[1]) : 0
 
             // The linked issue (from the branch name) is the resume surface for resume-on-comment.
-            // Both lanes (#2157): `claude/issue-<n>-<slug>` and the pi worker's `work-<n>`.
-            const m = /^(?:claude\/issue-|work-)(\d+)/.exec(full.head.ref)
+            // Both lanes (#2157): the pi worker's `work-<n>`.
+            const m = /^work-(\d+)/.exec(full.head.ref)
             const issueNumber = m ? Number(m[1]) : null
 
             if (attempts >= MAX) {

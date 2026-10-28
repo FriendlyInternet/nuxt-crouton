@@ -473,7 +473,7 @@ jobs:
               // Pipeline-authored branches: the old claude pipeline (`claude/issue-*`) AND the pi
               // pipeline (`work-*`). The pi branches were silently skipped before #1815, so no pi
               // worker PR ever got a status note — the main reason the owner saw no signal at all.
-              const isPipeline = pr.head.ref.startsWith('claude/issue-') || pr.head.ref.startsWith('work-')
+              const isPipeline = pr.head.ref.startsWith('work-')
               if (!isPipeline) {
                 core.info(`#${pull_number} head ${pr.head.ref} is not a pipeline branch — skipping.`); continue
               }

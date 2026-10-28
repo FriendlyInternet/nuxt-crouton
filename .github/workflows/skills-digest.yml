@@ -5,14 +5,13 @@ name: skills-digest
 # (reusing scripts/gen-skills-doc.mjs) and computes the git delta, render.mjs makes email-safe
 # HTML + a plain-text mirror. Cadence + delivery live in .github/digests.yml (#838/#841).
 #
-# The cron fires DAILY (cheap wake-up); .claude/skills/housekeeping/schedule.mjs reads
-# digests.yml and exits early unless today is the configured send day (monthly:1 by default) —
-# so changing the cadence is a one-line YAML edit, never a cron change.
+# The cron fires on the 1st only (#2892); .claude/skills/housekeeping/schedule.mjs still reads
+# digests.yml as a second guard and exits early unless today is the configured send day.
 
 on:
   schedule:
-    # ~06:00 Europe/Brussels (05:00 UTC winter). The gate below decides the actual send day.
-    - cron: '0 5 * * *'
+    # ~06:00 Europe/Brussels (05:00 UTC winter), 1st of the month.
+    - cron: '0 5 1 * *'
   workflow_dispatch:
 
 permissions:

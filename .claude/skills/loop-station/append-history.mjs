@@ -48,19 +48,29 @@ try {
   process.exit(1)
 }
 
-function lastCommit() {
+function lastRecord() {
   if (!existsSync(HISTORY)) return null
   const lines = readFileSync(HISTORY, 'utf8').trim().split('\n').filter(Boolean)
   if (lines.length === 0) return null
   try {
-    return JSON.parse(lines[lines.length - 1]).commit
+    return JSON.parse(lines[lines.length - 1])
   } catch {
     return null
   }
 }
 
-if (record.commit && record.commit === lastCommit()) {
+const last = lastRecord()
+
+if (record.commit && record.commit === last?.commit) {
   console.error(`append-history: skipped — commit ${record.commit.slice(0, 8)} already recorded`)
+  process.stdout.write('false\n')
+  process.exit(0)
+}
+
+// A merge that left every total unchanged adds a row but no information (#2892) — and each row is
+// a commit on main. Skip it; the trend only moves when the numbers do.
+if (last?.totals && JSON.stringify(record.totals) === JSON.stringify(last.totals)) {
+  console.error('append-history: skipped — totals unchanged since the previous row')
   process.stdout.write('false\n')
   process.exit(0)
 }

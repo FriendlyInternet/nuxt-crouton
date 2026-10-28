@@ -7,7 +7,7 @@ name: Cleanup merged epic branches
 #
 # Scope is deliberately narrow:
 #   • head ref starts with `epic/`  AND  base ref is `main`  AND  the PR merged.
-# Sub-PRs (head `claude/issue-*`) merging into an epic branch do NOT match — only the final
+# Sub-PRs (head `work-*`) merging into an epic branch do NOT match — only the final
 # epic→main merge does, so we never delete an epic branch that still has open sub-work.
 
 # #2788: an epic→main merge no longer deletes the branch while epic #N is still OPEN — later fixes
