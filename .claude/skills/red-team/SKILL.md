@@ -56,8 +56,8 @@ a structured findings list.
 > *public* disclosure of an unfixed flaw. Only file public issues when the human driving you
 > has OK'd it (or the finding is a fail-closed correctness bug, not an exploitable vuln). When
 > in doubt, deliver findings **privately** (hand the report back, or email it) and ask before
-> filing. The **daily automation never posts publicly** — it emails the report
-> (`red-team-daily.yml`). Treat that as the default posture; the steps below apply once a
+> filing. Any automated sweep never posts publicly — it
+> emails the report. Treat that as the default posture; the steps below apply once a
 > private channel or human OK is in place.
 
 For **every finding with `severity ∈ {high, critical}` AND `confidence == confirmed`**:
@@ -99,8 +99,7 @@ of these now?"* — fixing is a separate, explicit step (this skill finds; it do
 
 - **CI** (`.github/workflows/review.yml`) runs the *subagent* directly at `depth=quick` on a
   PR diff and **fails the check on a high/critical** finding — it doesn't go through this skill.
-- **Daily** (`.github/workflows/red-team-daily.yml`) runs `depth=deep` whole-repo, posts the
-  report to a standing issue, and files issues exactly as step 4 above.
+- The scheduled deep sweep (`red-team-daily.yml`) was deleted (#2892); run `depth=deep` on demand.
 - Both workflows MUST follow the **Claude-action workflow standard** in
   `.claude/agents/CLAUDE.md` — notably the tool-permission grant (per-PR: `--allowedTools …`;
   daily sweep: `--permission-mode bypassPermissions`), without which the gate fails open

@@ -78,14 +78,11 @@ node scripts/eval-ledger/scoreboard.mjs --json     # raw rollup
 node scripts/eval-ledger/scoreboard.mjs --html     # standalone HTML view
 ```
 
-## Periodic scoreboard post (WS6b.2 · #884)
+## Periodic scoreboard post (retired, #2892)
 
-`.github/workflows/eval-scoreboard.yml` renders the scoreboard and upserts it onto one standing
-issue (**📊 Model routing scoreboard**). Deterministic — no LLM, no secrets beyond the built-in
-`GITHUB_TOKEN`; it reads the committed ledger and renders. Cadence is **config-as-data** in
-`.github/digests.yml` (`eval-scoreboard: weekly:mon`); the cron fires daily and `schedule.mjs`
-gates it to the send day, exactly like `housekeeping`. A manual `workflow_dispatch` always sends.
-Change the cadence in `digests.yml`, never the workflow cron.
+The weekly `eval-scoreboard.yml` job that posted this scoreboard to a standing issue was
+deleted: the ledger's last row is from July 2026 and nothing read the post. Render on demand
+with the commands above.
 
 ## Capturing a pi.dev run (#1203)
 
@@ -109,5 +106,5 @@ and provider-qualifies the model. It runs where the session file lives (the mac-
   bad model can't hurt `main`). Feed it with `from-pi-session.mjs` (#1203) against the run's
   session jsonl; a real datapoint (2026-07-07 a11y-pidev, $0.365) is already seeded.
 - **task-worker / decompose** capture (appending a row from those flows) is the remaining piece —
-  the periodic scoreboard post itself ships here (`eval-scoreboard.yml`).
+  the periodic scoreboard post was retired (#2892).
 - **Golden-task eval** rows (`flow: golden-*`, on fixtures, never `main`) ship in `scripts/eval-golden/` (#885) — 3 deterministic probes (reports-only / small-crud / scaffold) that append here via the same `append.mjs`.
