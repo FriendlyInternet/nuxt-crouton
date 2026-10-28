@@ -58,7 +58,6 @@ const _salesPrintqueuesConfig = {
   name: 'salesPrintqueues',
   layer: 'sales',
   apiPath: 'sales-printqueues',
-  componentName: 'SalesPrintqueuesForm',
   defaultValues: {
     eventId: '',
     orderId: '',

@@ -802,24 +802,6 @@ async function applyManifestEnhancements(params: {
   const contributions = allContributions.filter(({ packageId }) =>
     extendedPackages.has(packageId) || detectedPackages.has(packageId)
   )
-  // Auto-detect formComponent from package contributions (when not explicitly configured).
-  // Scope to `contributions` (extended + detector-matched), NOT
-  // `allContributions` — otherwise a package the app doesn't use (e.g. crouton-sales
-  // reserving "location"/"product"/"category"/"printer") forces its bespoke form on
-  // an unrelated collection and skips Form.vue generation (#558).
-  if (!collectionConfig?.formComponent) {
-    const formComponentCtx = { collectionName: collection, fields: fields as unknown as DetectedField[], detected }
-    for (const { contribution } of contributions) {
-      const result = contribution.getFormComponent?.(formComponentCtx)
-      if (result) {
-        collectionConfig = { ...collectionConfig, formComponent: result }
-        data.collectionConfig = collectionConfig
-        console.log(`✓ Auto-detected form component: ${result}`)
-        break
-      }
-    }
-  }
-
   const translatableFieldNames = config?.translations?.collections?.[toCase(collection).plural] || []
   data.formEnhancements = runFormContributions(contributions, data, dialect)
   data.listEnhancements = runListContributions(contributions, data, translatableFieldNames)
@@ -851,11 +833,7 @@ function printDryRunPlan(params: {
     console.log(`   • API endpoints: [id]/move.patch.ts, reorder.patch.ts`)
     console.log(`   • Form: Parent picker component\n`)
   }
-  if (!collectionConfig?.formComponent) {
-    console.log(`• ${base}/app/components/Form.vue`)
-  } else {
-    console.log(`• Form.vue skipped (using ${collectionConfig.formComponent})`)
-  }
+  console.log(`• ${base}/app/components/Form.vue`)
   console.log(`• ${base}/app/components/List.vue`)
 
   // Show repeater components
@@ -994,11 +972,10 @@ function buildCoreScaffoldFiles(params: {
 
   // All endpoints now use @crouton/auth for team-based authentication
   const files: GeneratedFile[] = [
-    // Only generate Form.vue if no custom formComponent specified
-    ...(collectionConfig?.formComponent ? [] : [{
+    {
       path: path.join(base, 'app', 'components', '_Form.vue'),
       content: generateFormComponent(data, config)
-    }]),
+    },
     {
       path: path.join(base, 'app', 'components', 'List.vue'),
       content: generateListComponent(data, config)

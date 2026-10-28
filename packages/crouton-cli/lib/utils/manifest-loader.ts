@@ -133,10 +133,32 @@ export async function discoverManifests(rootDir?: string): Promise<CroutonManife
     }
   }
 
+  assertUniqueLayerNames(manifests)
+
   _manifestCache = manifests
   _cacheRootDir = cwd
   _contributionCache = contributionCache
   return manifests
+}
+
+/**
+ * Fail when two packages declare the same layer name. Form/component names are
+ * derived from the layer, so a shared name would let one package silently
+ * override the other (package-over-package override is unsupported, #2280).
+ */
+export function assertUniqueLayerNames(manifests: CroutonManifest[]): void {
+  const owners = new Map<string, string>()
+  for (const m of manifests) {
+    const name = m.layer?.name
+    if (!name) continue
+    const first = owners.get(name)
+    if (first && first !== m.id) {
+      throw new Error(
+        `[manifest-loader] Layer name "${name}" is claimed by both "${first}" and "${m.id}". Layer names must be unique across packages.`,
+      )
+    }
+    owners.set(name, m.id)
+  }
 }
 
 /**

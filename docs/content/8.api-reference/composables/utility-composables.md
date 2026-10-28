@@ -321,7 +321,6 @@ const labels = {
   listTitle: collectionWithCapital(collection),          // 'Products'
   createButton: `New ${collectionWithCapitalSingular(collection)}`,  // 'New Product'
   tableTitle: camelToTitleCase(collection),              // 'Shop Products'
-  componentName: `${toPascalCase(collection)}Form`,      // 'ShopProductsForm'
   apiPath: stripLayerPrefix(collection)                  // 'products'
 }
 </script>

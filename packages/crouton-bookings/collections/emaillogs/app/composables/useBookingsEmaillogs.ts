@@ -51,7 +51,6 @@ const _bookingsEmaillogsConfig = {
   name: 'bookingsEmaillogs',
   layer: 'bookings',
   apiPath: 'bookings-emaillogs',
-  componentName: 'BookingsEmaillogsForm',
   defaultValues: {
     bookingId: '',
     templateId: '',

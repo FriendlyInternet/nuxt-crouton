@@ -7,7 +7,7 @@ const props = defineProps<{
 
 const { getConfig } = useCollections()
 // Resolve collection registry key: prefer configs that have an apiPath (i.e. a generated collection)
-// The package registers a partial 'assets' config (packageForm only, no apiPath),
+// The package registers a partial 'assets' config (no apiPath),
 // so we must check for the actual generated collection key first.
 const collectionName = props.collection
   || (getConfig('croutonAssets')?.apiPath ? 'croutonAssets' : undefined)
