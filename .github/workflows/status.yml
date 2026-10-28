@@ -1,16 +1,21 @@
-name: Pipeline PR status
+name: Status
 
+# ONE status workflow (#2891, epic #2889): the Projects-v2 board mover (`board` job, formerly
+# project-status.yml) and the pipeline PR sticky comment (`pr-comment` job, formerly
+# pipeline-pr-status.yml) fired on the same events and each paid for its own runner — merged so
+# one run per event, and a newer run for the same PR/issue cancels a stale one (see `concurrency`).
+#
 # Always-on status for the agent pipeline (#337, epic #336). Deterministic, NO LLM:
 # keep exactly ONE "sticky" status comment on each pipeline PR (head branch
-# `claude/issue-*`), edited in place across runs — never a new comment per run — plus a
+# `work-*`), edited in place across runs — never a new comment per run — plus a
 # single roll-up line on the parent epic so the whole tree's health reads at a glance.
 #
 # The sticky is found by a hidden HTML marker and updated; the epic roll-up by its own
 # marker on the epic issue. Both are idempotent, so the high-frequency `check_suite`
 # firing just refreshes the same two comments (no spam).
 #
-# Scope: only PRs whose HEAD branch is pipeline-authored — `claude/issue-*` (the claude
-# pipeline) OR `work-*` (the pi worker, #1815). Human PRs are never touched. Uses
+# Scope: only PRs whose HEAD branch is pipeline-authored — `work-*` (the pi worker, #1815;
+# the dead `claude/issue-*` pipeline branch was dropped in #2891). Human PRs are never touched. Uses
 # GITHUB_TOKEN (it only writes comments; nothing here needs to cascade to another workflow,
 # so no App token is required).
 
@@ -29,18 +34,20 @@ on:
   # what actually refreshes the sticky. Add a workflow here when it becomes a gate worth
   # reflecting; an unlisted one simply doesn't trigger a refresh (the next listed one will).
   workflow_run:
-    workflows: ["CI", "E2E", "Frontend Review (PR)", "A11y (PR)", "Red-Team (PR)", "Packages guard"]
+    workflows: ["CI", "E2E", "Review", "Packages guard"]
     types: [completed]
   check_suite:
     types: [completed]
   status: {}
+  # Union of both old files: sticky wants synchronize, board wants converted_to_draft/closed.
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft, closed]
   # Refresh the epic's live card on the build-progress transitions PR/check events miss —
   # a child issue closing (schedule-waves closes it when its sub-PR merges) advances the
   # done/total count (#1838). Scoped to closed/reopened so we don't fire on every repo label change.
+  # (board also wants assigned/labeled; the `pr-comment` job's `if` keeps it to closed/reopened.)
   issues:
-    types: [closed, reopened]
+    types: [assigned, reopened, labeled, closed]
 
 permissions:
   contents: read
@@ -48,26 +55,29 @@ permissions:
   issues: write
   actions: read # job logs for the red-PR log tail (#2677)
 
-# Key by head SHA (PR/check events) or issue number (issues events) so concurrent refreshes for
-# the SAME target collapse to one (each run recomputes full state, so the latest wins); distinct
-# targets never cancel each other.
+# One run per PR/issue at a time; a newer run supersedes a stale one so an old comment never
+# overwrites a fresh one (#2891).
 #
-# ⚠️ `cancel-in-progress` MUST stay false here (#1989). This group is keyed by the very SHA this
-# workflow reports ON, and a cancelled run leaves a check-run named `status` attached to that SHA.
-# Both readers treat `cancelled` as red — this file's own `ciState()` (:92) and, fatally,
-# `automerge-epic-subpr.yml`'s RED list (:89) — so self-cancellation marked the commit red and
-# every pipeline sub-PR silently stopped auto-merging into its epic, while a 🔴 ping told the
-# owner to go fix code that was never broken (observed on PR #1987).
-# The other cancelling workflows (a11y, frontend-review, red-team, simplify-review,
-# skill-freshness-pr) key on the PR *number*, so their cancelled run belongs to the superseded
-# SHA and is harmless — do NOT "align" this one back to them.
-# Queueing instead is safe: each run recomputes full state, so the last to finish still wins.
+# ⚠️ #1989: a CANCELLED run leaves a cancelled check-run on the commit it ran for, and both
+# `ciState()` below and `automerge-epic-subpr.yml`'s RED list read `cancelled` as red — that once
+# froze every pipeline sub-PR's auto-merge. A `pull_request` run is attached to the PR head SHA, so
+# those runs (a) sit in their own `-pr` group and (b) queue instead of cancelling. Every other event
+# (workflow_run, check_suite, status, issues) attaches to the default-branch SHA or none, so
+# cancelling there is harmless. Do NOT set cancel-in-progress to a bare `true`.
 concurrency:
-  group: pipeline-status-${{ github.event.workflow_run.head_sha || github.event.check_suite.head_sha || github.event.pull_request.head.sha || github.event.issue.number || github.sha }}
-  cancel-in-progress: false
+  group: status-${{ github.event_name == 'pull_request' && 'pr-' || '' }}${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.pull_requests[0].number || github.event.workflow_run.head_sha || github.event.check_suite.head_sha || github.event.sha || github.run_id }}
+  cancel-in-progress: ${{ github.event_name != 'pull_request' }}
 
 jobs:
-  status:
+  pr-comment:
+    # Sticky comment: PR open/refresh (pipeline `work-*` branches only), CI completions, and
+    # epic-card refresh on child close/reopen. Board-only events skip this job entirely.
+    if: >
+      (github.event_name == 'pull_request' &&
+        contains(fromJSON('["opened","reopened","synchronize","ready_for_review"]'), github.event.action) &&
+        startsWith(github.event.pull_request.head.ref, 'work-')) ||
+      (github.event_name == 'issues' && contains(fromJSON('["closed","reopened"]'), github.event.action)) ||
+      github.event_name == 'workflow_run' || github.event_name == 'check_suite' || github.event_name == 'status'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -470,13 +480,168 @@ jobs:
               let pr
               try { pr = (await github.rest.pulls.get({ owner, repo, pull_number })).data } catch { continue }
               if (pr.state !== 'open') continue
-              // Pipeline-authored branches: the old claude pipeline (`claude/issue-*`) AND the pi
-              // pipeline (`work-*`). The pi branches were silently skipped before #1815, so no pi
+              // Pipeline-authored branches: the pi pipeline (`work-*`; `claude/issue-*` dropped in #2891). The pi branches were silently skipped before #1815, so no pi
               // worker PR ever got a status note — the main reason the owner saw no signal at all.
-              const isPipeline = pr.head.ref.startsWith('claude/issue-') || pr.head.ref.startsWith('work-')
+              const isPipeline = pr.head.ref.startsWith('work-')
               if (!isPipeline) {
                 core.info(`#${pull_number} head ${pr.head.ref} is not a pipeline branch — skipping.`); continue
               }
               await updatePr(pr)
               core.info(`Updated sticky status for #${pull_number}.`)
             }
+
+# ── board job: Auto-moves cards on the GitHub Project board (Status field) so it reflects
+# reality without manual dragging:
+#   - PR opened / reopened / ready for review  -> In review
+#   - PR back to draft                          -> In progress
+#   - PR closed (merged or not)                 -> Done
+#   - Issue assigned or reopened                -> In progress
+#   - Issue labeled status:in-progress          -> In progress
+#   - Issue labeled status:blocked              -> Blocked
+#   - Issue closed                              -> Done
+# The label triggers are the reliable signal: the github-tasks flow (and
+# agents) mark "work started" by applying status:in-progress, not by
+# assigning — so without these an issue would skip In progress entirely and
+# jump straight to In review when its PR opens.
+# We own merged/closed -> Done here rather than delegating to the Project's
+# built-in workflow, so the board advances deterministically without depending
+# on a UI toggle that can silently be off. When a merged PR auto-closes its
+# linked issues, each fires its own `issues: closed` event, so those cards move
+# to Done too — including a parent epic once you close it.
+# (Item added -> Backlog is still handled by the Project's built-in workflow.)
+#
+# ── Auth (#546): org-scoped Nuxt Harness App token, no PAT ──────────────────
+# The board is now the FriendlyInternet **org** Projects v2 board ("Crouton").
+# GITHUB_TOKEN can't write a Projects v2 board, but the Nuxt Harness App can:
+# installed on the org with Organization → Projects: Read & write, it mints a
+# short-lived installation token at runtime. This retires the PROJECTS_TOKEN PAT
+# (the repo is fully PAT-free). Needs Actions secrets HARNESS_APP_ID +
+# HARNESS_APP_PRIVATE_KEY (org-level). Set repo variable PROJECT_NAME only if
+# the board isn't named "Crouton".
+#
+# The board is resolved by title at the ORG level (organization.projectsV2), NOT via
+# repository.projectsV2 — a private org board isn't reliably returned by the repo-link
+# lookup to an App token even when linked, which silently no-op'd this on every event.
+# So card-moving no longer depends on the repo<->project link. (#646)
+  board:
+    # Card moves: every PR/issue event except a plain push (synchronize) or a check completion.
+    if: >
+      (github.event_name == 'pull_request' && github.event.action != 'synchronize') ||
+      github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Mint an org-scoped Nuxt Harness App installation token. `owner` (no
+      # `repositories`) yields a token carrying the org-level grants — here
+      # Organization → Projects: Read & write — which is what writing the
+      # org board requires. (#546)
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PROJECT_NAME: ${{ vars.PROJECT_NAME || 'Crouton' }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const projectName = process.env.PROJECT_NAME
+            const { owner, repo } = context.repo
+
+            // Map a status:* label to a board column. Returning null means
+            // "ignore this label" so unrelated labels are a clean no-op.
+            const labelToStatus = (name) => {
+              switch ((name || '').toLowerCase()) {
+                case 'status:in-progress': return 'In progress'
+                case 'status:blocked':     return 'Blocked'
+                // #2083 — the auto-merge shared-code hold moved off `status:blocked` onto its
+                // own label. This case is load-bearing: the switch returns null for anything
+                // unknown, which is a silent no-op, so without it those PRs would simply stop
+                // appearing on the board with nothing in the log to say so. Same column —
+                // they are still parked awaiting a human — but a distinguishable label.
+                case 'status:needs-merge': return 'Blocked'
+                default:                   return null
+              }
+            }
+
+            // Decide the target Status from the event
+            let target = null
+            if (context.eventName === 'pull_request') {
+              const a = context.payload.action
+              // closed covers both merge and close-without-merge — either way
+              // the PR is off the board's active lanes.
+              if (a === 'closed') target = 'Done'
+              else if (a === 'converted_to_draft') target = 'In progress'
+              else target = 'In review' // opened / reopened / ready_for_review
+            } else if (context.eventName === 'issues') {
+              const a = context.payload.action
+              // A merged PR's `Closes #NN` auto-closes its issues, firing this
+              // `closed` event — that's what advances sub-issues (and a manually
+              // closed parent epic) to Done.
+              if (a === 'closed') target = 'Done'
+              // `labeled` is the reliable "work started/blocked" signal; the
+              // label name decides the column. assigned/reopened keep the old
+              // In-progress behaviour as a fallback.
+              else if (a === 'labeled') target = labelToStatus(context.payload.label?.name)
+              else target = 'In progress'
+            }
+            if (!target) return
+
+            const contentNodeId = context.payload.pull_request?.node_id
+              ?? context.payload.issue?.node_id
+            if (!contentNodeId) return
+
+            // 1) Find the project + its Status field/options by title, among the ORG's
+            //    Projects v2 boards. Resolving at the org level (not repository.projectsV2)
+            //    keeps this working without the repo<->project link, which doesn't reliably
+            //    surface a private org board to the App token even when linked. (#646)
+            let project = null
+            let pcursor = null
+            do {
+              const projQ = await github.graphql(`
+                query($org:String!,$cursor:String){
+                  organization(login:$org){
+                    projectsV2(first:100, after:$cursor){
+                      pageInfo{ hasNextPage endCursor }
+                      nodes {
+                        id title
+                        field(name:"Status"){ ... on ProjectV2SingleSelectField { id options { id name } } }
+                      }
+                    }
+                  }
+                }`, { org: owner, cursor: pcursor })
+              const conn = projQ.organization.projectsV2
+              project = conn.nodes.find(p => p.title === projectName)
+              pcursor = (!project && conn.pageInfo.hasNextPage) ? conn.pageInfo.endCursor : null
+            } while (pcursor)
+            if (!project || !project.field) { core.warning(`Project "${projectName}" or its Status field not found`); return }
+            const option = project.field.options.find(o => o.name.toLowerCase() === target.toLowerCase())
+            if (!option) { core.warning(`Status option "${target}" not found`); return }
+
+            // 2) Find this item on the project (add it if missing)
+            const itemQ = await github.graphql(`
+              query($id:ID!){ node(id:$id){
+                ... on Issue { projectItems(first:50){ nodes { id project { id } } } }
+                ... on PullRequest { projectItems(first:50){ nodes { id project { id } } } }
+              } }`, { id: contentNodeId })
+            let item = (itemQ.node.projectItems?.nodes || []).find(i => i.project.id === project.id)
+            if (!item) {
+              const added = await github.graphql(`
+                mutation($project:ID!,$content:ID!){
+                  addProjectV2ItemById(input:{projectId:$project,contentId:$content}){ item { id } }
+                }`, { project: project.id, content: contentNodeId })
+              item = { id: added.addProjectV2ItemById.item.id }
+            }
+
+            // 3) Set Status
+            await github.graphql(`
+              mutation($project:ID!,$item:ID!,$field:ID!,$opt:String!){
+                updateProjectV2ItemFieldValue(input:{
+                  projectId:$project, itemId:$item, fieldId:$field,
+                  value:{ singleSelectOptionId:$opt }
+                }){ projectV2Item { id } }
+              }`, { project: project.id, item: item.id, field: project.field.id, opt: option.id })
+
+            core.info(`Set "${projectName}" status -> ${target} for ${contentNodeId}`)

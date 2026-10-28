@@ -46,7 +46,7 @@ Verified 2026-07-02: `packages/*` → `stage: package, gates(required): test-fir
 | **`.claude/routing.json` / agent models** | CI drift check `routing-registry.yml` | run `node scripts/gen-routing.mjs` | CI |
 | A **`spec.json`** entry to `status: "settled"` | hook `gate-spec-signoff.mjs` blocks unless `signedOff` is recorded (#988/#992) | `spec` | recorded sign-off, not assertion |
 
-`harness.config.mjs` also names `code-review` and `sec` in its gate vocabulary, but **no stage declares them required** — in practice per-PR CI review gates (`red-team.yml`, `a11y.yml`, `frontend-review.yml`) fire by changed-path instead (see `crouton-ci-and-deploy-map`).
+`harness.config.mjs` also names `code-review` and `sec` in its gate vocabulary, but **no stage declares them required** — in practice per-PR CI review gates (`review.yml`) fire by changed-path instead (see `crouton-ci-and-deploy-map`).
 
 ## 2. Approval semantics (#572) — one loop for every gate
 
