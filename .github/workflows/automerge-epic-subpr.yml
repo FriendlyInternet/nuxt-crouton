@@ -224,7 +224,11 @@ jobs:
               if (epicToMain && state === 'dirty') {
                 const marker = `<!-- epic-conflict-resolve:${pr.head.sha} -->`
                 const prior = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pull_number, per_page: 100 })
-                if (!prior.some(x => (x.body || '').includes(marker))) {
+                // Concurrent sweeps all see "no marker yet" for the same head (#2914), so also hold off
+                // while ANY resolver note on this PR is under 30 minutes old: one run per branch at a time.
+                const recent = prior.some(x => (x.body || '').includes('<!-- epic-conflict-resolve:')
+                  && Date.now() - Date.parse(x.created_at) < 30 * 60 * 1000)
+                if (!recent && !prior.some(x => (x.body || '').includes(marker))) {
                   const epicIssue = Number(/^epic\/(\d+)-/.exec(pr.head.ref)?.[1])
                   try {
                     const note = await github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
