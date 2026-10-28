@@ -20,7 +20,18 @@ interface SyncStatusResponse {
   lastEventAt: number | null
   lastBatchApplied: number
   /** Every till of the team, freshest first (#2725). */
-  devices?: Array<{ deviceId: string, lastContactAt: number | null }>
+  devices?: Array<{ deviceId: string, lastContactAt: number | null, lastPullAt?: number | null }>
+  /** Latest config edits that lost a conflict, newest first (#816). */
+  lostEdits?: Array<{
+    id: string
+    deviceId: string | null
+    entityType: string
+    entityId: string
+    reason: string
+    lost: Record<string, unknown>
+    kept: Record<string, unknown>
+    at: number
+  }>
   serverNow: number
 }
 
@@ -30,10 +41,13 @@ const props = withDefaults(defineProps<{
   pollMs?: number
   /** Age beyond which the mirror is considered stale (Pi likely offline). */
   staleMs?: number
+  /** Also list each till's last push/pull and the edits that lost a conflict. */
+  detailed?: boolean
 }>(), {
   pollMs: 5000,
   // The Pi pings at least every 30s when online; 90s = ~3 missed pings.
   staleMs: 90000,
+  detailed: false,
 })
 
 const { t } = useT()
@@ -99,6 +113,14 @@ const title = computed(() => {
   return lines.join('\n')
 })
 
+const lostEdits = computed(() => data.value?.lostEdits ?? [])
+/** Short state for the plain `detailed` line: "Live" / "Offline since 3m ago" / … */
+const plainLabel = computed(() => {
+  if (state.value === 'stale') return t('sales.sync.offlineSince', { ago: relativeLabel(ageMs.value) })
+  if (state.value === 'never') return t('sales.sync.noTill')
+  return ui.value.label
+})
+
 const ui = computed(() => {
   switch (state.value) {
     case 'live':
@@ -126,8 +148,18 @@ onMounted(() => {
 </script>
 
 <template>
+  <div class="sales-sync-status-wrap space-y-3">
   <div
-    class="sales-sync-status flex items-center gap-2.5 rounded-full border border-default bg-elevated/60 px-3.5 py-1.5 text-sm"
+    v-if="detailed"
+    class="sales-sync-status flex min-w-0 items-center gap-2 text-sm"
+    :title="title"
+  >
+    <span class="size-2 shrink-0 rounded-full" :class="ui.dot" />
+    <span class="truncate" :class="ui.color">{{ plainLabel }}</span>
+  </div>
+  <div
+    v-else
+    class="sales-sync-status flex w-fit max-w-full items-center gap-2.5 rounded-full border border-default bg-elevated/60 px-3.5 py-1.5 text-sm"
     :title="title"
   >
     <span class="relative flex size-2.5 shrink-0">
@@ -140,5 +172,14 @@ onMounted(() => {
     </span>
     <span class="font-medium" :class="ui.color">{{ ui.label }}</span>
     <span class="text-muted truncate">{{ ui.detail }}</span>
+  </div>
+
+    <SalesSyncDetails
+      v-if="detailed"
+      :devices="data?.devices ?? []"
+      :lost-edits="lostEdits"
+      :now="nowTick + clockOffset"
+      :show-empty="!!data && !errored"
+    />
   </div>
 </template>

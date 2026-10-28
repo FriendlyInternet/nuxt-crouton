@@ -10,9 +10,11 @@
  * filtered to the caller's team — see server/database/schema.ts.
  */
 import { resolveTeamAndCheckMembership } from '@fyit/crouton-auth/server/utils/team'
-import { readSyncStatuses, toStatusPayload } from '../../../../utils/sync-status'
+import { readLostEdits, readSyncStatuses, toStatusPayload } from '../../../../utils/sync-status'
 
 export default defineEventHandler(async (event) => {
   const { team } = await resolveTeamAndCheckMembership(event)
-  return toStatusPayload(await readSyncStatuses(useDB(), team.id))
+  const db = useDB()
+  const [statuses, lostEdits] = await Promise.all([readSyncStatuses(db, team.id), readLostEdits(db, team.id)])
+  return toStatusPayload(statuses, Date.now(), lostEdits)
 })

@@ -76,7 +76,7 @@ export interface CollectOptions {
  * The boundary is inclusive because stored times have second precision; a
  * repeated row is harmless since applying is idempotent.
  */
-// fallow-ignore-next-line complexity — one linear pass: read each source, merge, order, page
+// fallow-ignore-next-line complexity -- one linear pass: read each source, merge, order, page
 export async function collectConfigChanges(db: any, teamId: string, since: number, opts: CollectOptions = {}): Promise<PullReply> {
   const limit = Math.max(1, opts.limit ?? DEFAULT_PULL_LIMIT)
   const skip = Math.max(0, opts.skip ?? 0)
@@ -156,7 +156,7 @@ export interface ApplyPulledOptions {
 }
 
 /** Till side: apply pulled changes with the conflict rule. Never writes the outbox. */
-// fallow-ignore-next-line complexity — the conflict-rule walk (team guard, tombstone, verdict, apply) reads best in one place
+// fallow-ignore-next-line complexity -- the conflict-rule walk (team guard, tombstone, verdict, apply) reads best in one place
 export async function applyPulledChanges(db: any, changes: ConfigChange[], opts: ApplyPulledOptions = {}): Promise<ApplyPulledResult> {
   const result: ApplyPulledResult = { applied: 0, kept: [], rejected: 0 }
   if (changes.length === 0) return result
@@ -253,7 +253,7 @@ export interface PullResult {
 }
 
 /** Till side: pull until caught up (bounded), apply, persist the cursor after each page. */
-// fallow-ignore-next-line complexity — the paged pull loop with cursor persistence; splitting it would scatter the cursor invariants
+// fallow-ignore-next-line complexity -- the paged pull loop with cursor persistence; splitting it would scatter the cursor invariants
 export async function pullConfigChanges(db: any, opts: PullOptions = {}): Promise<PullResult> {
   const url = resolvePullUrl(opts)
   const headers = syncAuthHeaders(opts)

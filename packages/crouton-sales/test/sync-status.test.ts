@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { recordSyncHeartbeat, toStatusPayload, type SyncStatus } from '../server/utils/sync-status'
+import { recordLostEdits, recordSyncPull, recordSyncHeartbeat, toStatusPayload, type SyncStatus } from '../server/utils/sync-status'
 
 /** #2725 — one heartbeat row per paired till; the status payload lists them all. */
 function fakeDb() {
@@ -54,6 +54,7 @@ describe('toStatusPayload', () => {
     lastContactAt: contact === null ? null : at(contact),
     lastEventAt: null,
     lastBatchApplied: applied,
+    lastPullAt: null,
   })
 
   it('headlines the freshest till and lists every till', () => {
@@ -67,5 +68,72 @@ describe('toStatusPayload', () => {
   it('reports nulls when no till has ever synced', () => {
     const p = toStatusPayload([], 1)
     expect(p).toMatchObject({ lastContactAt: null, lastEventAt: null, lastBatchApplied: 0, devices: [] })
+  })
+})
+
+describe('#816 pull time and lost edits', () => {
+  it('recordSyncPull stamps only the pull time for the device', async () => {
+    const { db, calls } = fakeDb()
+    await recordSyncPull(db, { deviceId: 'till-1', teamId: 'A' })
+    expect(calls.values).toMatchObject({ id: 'till-1', teamId: 'A' })
+    expect(calls.values.lastPullAt).toBeInstanceOf(Date)
+    expect(Object.keys(calls.set)).toEqual(['lastPullAt', 'updatedAt'])
+  })
+
+  it('payload carries lastPullAt per till and the lost edits with both versions', () => {
+    const row = (deviceId: string): SyncStatus => ({
+      deviceId, teamId: 'A', lastContactAt: new Date(10), lastEventAt: null, lastBatchApplied: 0, lastPullAt: new Date(7),
+    })
+    const p = toStatusPayload([row('t1')], 50, [{
+      id: 'c1', deviceId: 't1', entityType: 'product', entityId: 'p1', reason: 'older',
+      lost: { price: 5 }, kept: { price: 6 }, createdAt: new Date(40),
+    }])
+    expect(p.devices[0]!.lastPullAt).toBe(7)
+    expect(p.lostEdits).toEqual([{
+      id: 'c1', deviceId: 't1', entityType: 'product', entityId: 'p1', reason: 'older',
+      lost: { price: 5 }, kept: { price: 6 }, at: 40,
+    }])
+  })
+
+  it('recordLostEdits stores what the till sent and what the cloud kept', async () => {
+    let rows: any[] = []
+    const db = { insert: () => ({ values: async (v: any) => { rows = v } }) }
+    await recordLostEdits(db, [
+      { entityType: 'product', entityId: 'p1', reason: 'older', payload: { price: 5 }, current: { price: 6 } },
+    ], { deviceId: 't1', teamId: 'A' })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ teamId: 'A', deviceId: 't1', entityId: 'p1', reason: 'older' })
+    expect(JSON.parse(rows[0].lostJson)).toEqual({ price: 5 })
+    expect(JSON.parse(rows[0].keptJson)).toEqual({ price: 6 })
+  })
+
+  it('records every conflict of a large batch, chunked under the D1 bound-param cap', async () => {
+    const rows: any[] = []
+    const db = {
+      insert: () => ({
+        values: async (v: any[]) => {
+          // a multi-row insert binds ≥ 1 param per column per row; D1 rejects > 100
+          if (v.length * Object.keys(v[0]).length > 100) throw new Error('too many SQL variables')
+          rows.push(...v)
+        },
+      }),
+    }
+    const conflicts = Array.from({ length: 30 }, (_, i) => ({
+      entityType: 'product', entityId: `p${i}`, reason: 'older', payload: { price: i }, current: { price: 0 },
+    }))
+    await recordLostEdits(db, conflicts, { deviceId: 't1', teamId: 'A' })
+    expect(rows).toHaveLength(30)
+    expect(new Set(rows.map(r => r.entityId)).size).toBe(30)
+  })
+
+  it('records nothing without conflicts or a team, and never throws', async () => {
+    const insert = vi.fn()
+    await recordLostEdits({ insert }, [], { teamId: 'A' })
+    await recordLostEdits({ insert }, [{ entityType: 'product', entityId: 'p', reason: 'older', payload: {} }], {})
+    expect(insert).not.toHaveBeenCalled()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const boom = { insert: () => { throw new Error('x') } }
+    await expect(recordLostEdits(boom, [{ entityType: 'product', entityId: 'p', reason: 'older', payload: {} }], { teamId: 'A' })).resolves.toBeUndefined()
+    warn.mockRestore()
   })
 })
