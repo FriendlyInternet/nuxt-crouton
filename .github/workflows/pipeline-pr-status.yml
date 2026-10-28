@@ -29,7 +29,7 @@ on:
   # what actually refreshes the sticky. Add a workflow here when it becomes a gate worth
   # reflecting; an unlisted one simply doesn't trigger a refresh (the next listed one will).
   workflow_run:
-    workflows: ["CI", "E2E", "Frontend Review (PR)", "A11y (PR)", "Red-Team (PR)", "Packages guard"]
+    workflows: ["CI", "E2E", "Review", "Packages guard"]
     types: [completed]
   check_suite:
     types: [completed]
@@ -58,7 +58,7 @@ permissions:
 # `automerge-epic-subpr.yml`'s RED list (:89) — so self-cancellation marked the commit red and
 # every pipeline sub-PR silently stopped auto-merging into its epic, while a 🔴 ping told the
 # owner to go fix code that was never broken (observed on PR #1987).
-# The other cancelling workflows (a11y, frontend-review, red-team, simplify-review,
+# The other cancelling workflows (review,
 # skill-freshness-pr) key on the PR *number*, so their cancelled run belongs to the superseded
 # SHA and is harmless — do NOT "align" this one back to them.
 # Queueing instead is safe: each run recomputes full state, so the last to finish still wins.
