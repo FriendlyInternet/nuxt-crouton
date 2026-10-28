@@ -75,7 +75,7 @@ const MAX_SCREENS_PER_PKG = 6
  * by the full path after the team slug (`bookings/locations`; the team home is `overview`),
  * de-duplicated by target.
  */
-function selectScreens(routes: { path: string, file?: string }[]): ReviewScreen[] {
+export function selectScreens(routes: { path: string, file?: string }[]): ReviewScreen[] {
   const byPkg = new Map<string, Map<string, ReviewScreen>>()
   for (const r of routes) {
     const pkg = r.file ? PAGE_RE.exec(realPath(r.file))?.[1] : undefined
