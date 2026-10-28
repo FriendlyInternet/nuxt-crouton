@@ -564,6 +564,13 @@ jobs:
           fi
           LIST="$(sed 's/^/- `/; s/$/` — resolved, both sides kept/' "$RUNNER_TEMP/conflict-files.txt")"
           git commit -q -m "Merge ${BASE} into ${REV_BRANCH} (resolve conflicts)" -m "$(printf 'Conflicts resolved by the revise worker (#2848):\n%s' "$(sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt")")"
+          # A resolved conflict must land as a real merge (HEAD + origin/base). A one-parent commit
+          # is a flat copy of the base: the conflicts never clear (#2914).
+          NPAR="$(git rev-list --parents -n1 HEAD | wc -w)"
+          if [ "$NPAR" != 3 ]; then
+            echo "::error::conflict resolution committed $((NPAR - 1)) parent(s), expected 2 — refusing to push a flat copy (#2914)"
+            exit 1
+          fi
           echo "rev_base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           say "$(printf '%s\n\nMerged `%s` into this PR and resolved the conflicts:\n\n%s\n\nGenerated files were rebuilt, not hand-merged; no conflict markers remain and the checks pass.' "$HDR" "$BASE" "$LIST")"
 
@@ -595,6 +602,8 @@ jobs:
           REV_START: ${{ steps.revise.outputs.rev_start }}
           # #2658: REV_START + the current base merged in (equals REV_START when already current).
           REV_BASE: ${{ steps.conflict.outputs.rev_base || steps.revise.outputs.rev_base }}
+          # #2914: the base merge conflicted — only a merge commit from the conflict step may be stacked on.
+          REV_CONFLICT: ${{ steps.revise.outputs.conflict }}
           BASE_MERGED: ${{ steps.revise.outputs.base_merged }}
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
@@ -660,6 +669,13 @@ jobs:
           # replay the deletion after the checkout below (#2446; the copy loop alone dropped them).
           git status --porcelain -uall 2>/dev/null | grep -E '^( D|D )' | sed 's/^...//' > "$RUNNER_TEMP/deleted.txt" || true
 
+          if [ -n "${REV_START:-}" ] && [ "${REV_CONFLICT:-}" = 1 ] && [ -z "${REV_BASE:-}" ]; then
+            # The resolution never became a merge commit (it failed its checks, or was asked to the
+            # owner; the conflict step already said which on the PR). Stacking pi's edits on the old
+            # head would push a flat copy of the base — the conflicts would never clear (#2914).
+            echo "::warning::base merge conflicted and was not committed as a merge — pushing nothing (#2914)"
+            exit 0
+          fi
           git fetch origin "$BASE" --quiet 2>/dev/null || true
           BR="work-${ISSUE}"; [ -n "${REV_START:-}" ] && BR="${REV_BRANCH:-$BR}"
           if [ -n "${REV_START:-}" ]; then
