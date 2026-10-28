@@ -1,0 +1,16 @@
+{
+  "_about": "Which `work-this` issues start in PLAN mode (plan → independent review → build) instead of building directly (#2757, epic #2754). Read by scripts/lib/plan-route.mjs. Grow the lists here — no workflow edit. Overrides: label `plan-first` forces a plan, `no-plan` skips it (no-plan wins if both).",
+  "planLabels": ["type:fix"],
+  "forcePlanLabel": "plan-first",
+  "skipPlanLabel": "no-plan",
+  "packagePathPattern": "\\bpackages/[A-Za-z0-9_.-]+",
+  "sensitivePatterns": [
+    "packages/crouton-auth/",
+    "server/[\\w./-]*sync",
+    "scoped[- ]access",
+    "\\bpairing\\b",
+    "\\bmulti-team\\b",
+    "\\b(filters?|filtered|scop(?:e|ed|es)|where)\\b[^\\n]{0,40}\\bteam(?:Id|_id)?\\b",
+    "\\bteam(?:Id|_id)?\\b[^\\n]{0,40}\\b(filters?|filtered|scoped?)\\b"
+  ]
+}

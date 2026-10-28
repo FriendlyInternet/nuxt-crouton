@@ -6,6 +6,7 @@
   "tiers": {
     "small":  { "claude": "haiku",  "pi": "claude-haiku-4-5", "pi_local": "ollama:qwen2.5-coder:7b", "out_per_mtok": 5,  "note": "reports / triage / decompose — no code written. (pi ran GLM per #1409's eval; reverted to Claude sub #1669)" },
     "medium": { "claude": "sonnet", "pi": "claude-sonnet-5-5", "out_per_mtok": 15, "note": "most work. (pi ran GLM per #1421's eval; reverted to Claude sub #1669)" },
+    "review": { "claude": "fable", "pi": "claude-fable-5-1", "out_per_mtok": 75, "note": "independent plan reviewer (#2756) — strongest model, read-only, never edits code" },
     "large":  { "claude": "opus",   "pi": "claude-opus-5-5", "out_per_mtok": 75, "note": "hard build / synthesis — quality-sensitive" }
   },
 
@@ -13,6 +14,9 @@
 
   "_routes": "One entry per agent/flow. tier = what it runs on TODAY (must match the agent frontmatter — --check is the guard). proposed = where the cheap-but-good re-tiering would put it, pending the #865 quality measurement. Omit proposed to mean \"no change proposed\".",
   "routes": {
+    "ticket-reviewer":   { "tier": "review", "why": "independent ticket review before an epic starts (#2776) — reads the epic, its tickets and the code they name, returns go / no-go / needs-owner per ticket; never edits. Same tier and model as plan-reviewer" },
+    "build-reviewer":    { "tier": "review", "why": "independent build review of a green pipeline PR against its ticket before merge (#2777) — reads the ticket, plan and diff, returns go / no-go / needs-owner; never edits" },
+    "plan-reviewer":     { "tier": "review", "why": "independent plan review before any code (#2756) — reads the plan + the code it names, returns go / no-go / needs-owner; never edits. Fable per the owner's choice 2026-10-27" },
     "task-worker":       { "tier": "large",  "why": "writes code → PR; quality-sensitive — hold on Claude until #865 proves a cheaper model" },
     "pi-worker":         { "tier": "medium", "why": "pi single-use worker persona (#2431) — extracted from printf in work-issue-pidev.yml; model is chosen per-run by resolve-pipeline-model, this row records the default tier" },
     "pi-reviser":        { "tier": "medium", "why": "pi worker in revise mode (#2446/#2431) — stacks an owner-requested change on an open PR; same per-run model as pi-worker" },
