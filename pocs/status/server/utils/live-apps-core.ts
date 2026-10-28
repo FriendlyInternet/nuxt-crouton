@@ -51,19 +51,6 @@ export function configPathsFromTree(tree: Array<{ path: string, type: string }>)
   })
 }
 
-/** Preview entries from repo-wide issue comments, kept only for the given open PRs. */
-export function previewsFromComments(comments: Array<{ body?: string, issue_url?: string }>, open: Map<number, { title: string, updated_at: string }>): Preview[] {
-  const seen = new Set<string>()
-  return comments.flatMap((c) => {
-    const pr = Number(/\/issues\/(\d+)$/.exec(c.issue_url ?? '')?.[1])
-    const meta = open.get(pr)
-    const parsed = meta ? parseDeployComment(c.body) : null
-    if (!meta || !parsed || seen.has(`${parsed.app}#${pr}`)) return []
-    seen.add(`${parsed.app}#${pr}`)
-    return [{ app: parsed.app, pr, title: meta.title, updatedAt: meta.updated_at, url: parsed.url }]
-  })
-}
-
 /** Every app with a deploy.config.json on main: 1 tree call + 1 read per config. Failed reads go into `error`. */
 export async function loadLiveApps(get: GhGet): Promise<{ data: LiveApp[], error: string | null }> {
   const tree = await get<{ tree: Array<{ path: string, type: string }>, truncated?: boolean }>(`/repos/${REPO}/git/trees/main?recursive=1`)
@@ -79,20 +66,25 @@ export async function loadLiveApps(get: GhGet): Promise<{ data: LiveApp[], error
   return { data: apps.filter((a): a is LiveApp => !!a).sort((a, b) => a.app.localeCompare(b.app)), error: errors.length ? errors.join('; ') : null }
 }
 
-/** Open-PR previews: 1 pulls call + ≤3 repo-wide comment pages (newest first, last 3 days), not one call per PR. */
-export async function loadPreviews(get: GhGet, now = Date.now()): Promise<{ data: Preview[], error: string | null }> {
+/** Open-PR previews: 1 pulls call + one read of each open PR's own comments (parallel; ≤3 pages each). */
+export async function loadPreviews(get: GhGet): Promise<{ data: Preview[], error: string | null }> {
   const pulls = await get<Array<{ number: number, title: string, updated_at: string }>>(`/repos/${REPO}/pulls?state=open&per_page=50`, { fresh: true })
   if (pulls.error) return { data: [], error: pulls.error }
-  const open = new Map((pulls.data ?? []).map(p => [p.number, p]))
-  const since = new Date(now - 3 * 86400_000).toISOString()
-  const comments: Array<{ body?: string, issue_url?: string }> = []
-  for (let page = 1; page <= 3; page++) {
-    const r = await get<Array<{ body?: string, issue_url?: string }>>(`/repos/${REPO}/issues/comments?sort=updated&direction=desc&since=${since}&per_page=100&page=${page}`)
-    if (r.error) return { data: previewsFromComments(comments, open), error: r.error }
-    comments.push(...(r.data ?? []))
-    if ((r.data ?? []).length < 100) break
-  }
-  return { data: previewsFromComments(comments, open), error: null }
+  const errors: string[] = []
+  const lists = await Promise.all((pulls.data ?? []).map(async (p) => {
+    const found: Preview[] = []
+    for (let page = 1; page <= 3; page++) {
+      const r = await get<Array<{ body?: string }>>(`/repos/${REPO}/issues/${p.number}/comments?per_page=100&page=${page}`, { fresh: true })
+      if (r.error) { errors.push(`#${p.number}: ${r.error}`); break }
+      for (const c of r.data ?? []) {
+        const parsed = parseDeployComment(c.body)
+        if (parsed && !found.some(f => f.app === parsed.app)) found.push({ app: parsed.app, pr: p.number, title: p.title, updatedAt: p.updated_at, url: parsed.url })
+      }
+      if ((r.data ?? []).length < 100) break
+    }
+    return found
+  }))
+  return { data: lists.flat(), error: errors.length ? errors.join('; ') : null }
 }
 
 /** Resolves a `pr<N>` login from that PR's own state + comments (fresh), not the repo-wide list. */
