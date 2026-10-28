@@ -167,10 +167,14 @@
       "cancellation": "cancellation"
     },
     "filters": {
-      "calendar": "Calendar",
+      "settings": "Calendar settings",
+      "view": "View",
+      "foldCalendar": "Hide calendar",
+      "unfoldCalendar": "Show calendar",
+      "locationCards": "Location cards",
       "locations": "Locations",
       "map": "Map",
-      "cancelled": "Cancelled",
+      "cancelled": "Show cancelled",
       "today": "Today",
       "week": "Week",
       "month": "Month",

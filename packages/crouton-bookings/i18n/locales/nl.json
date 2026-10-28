@@ -167,10 +167,14 @@
       "cancellation": "annulering"
     },
     "filters": {
-      "calendar": "Kalender",
+      "settings": "Kalenderinstellingen",
+      "view": "Weergave",
+      "foldCalendar": "Kalender verbergen",
+      "unfoldCalendar": "Kalender tonen",
+      "locationCards": "Locatiekaarten",
       "locations": "Locaties",
       "map": "Kaart",
-      "cancelled": "Geannuleerd",
+      "cancelled": "Geannuleerde tonen",
       "today": "Vandaag",
       "week": "Week",
       "month": "Maand",
