@@ -55,11 +55,11 @@ jobs:
       # re-fire THIS workflow.
       #
       # CRUCIAL: add the label with the HARNESS APP TOKEN, not the default GITHUB_TOKEN. The label
-      # must *trigger* project-status.yml (which maps status:in-progress → the board's "In progress"
+      # must *trigger* status.yml (which maps status:in-progress → the board's "In progress"
       # column) — and events from the default GITHUB_TOKEN do NOT trigger other workflows. A
       # default-token add would set the label but never move the board card. (#1218)
       #
-      # And the ADD must be FRESH (#1968). project-status.yml fires on `issues: labeled`, and GitHub
+      # And the ADD must be FRESH (#1968). status.yml fires on `issues: labeled`, and GitHub
       # raises no such event when the label is already present — so on an issue that already carries
       # `status:in-progress` (a re-dispatch, a resume, a human who set it before applying `delegate`)
       # a bare add succeeds, warns nothing, and the card never moves. Remove first, exactly as

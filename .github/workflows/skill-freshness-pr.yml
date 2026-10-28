@@ -6,7 +6,7 @@ name: Skill freshness (PR advisory)
 # knowingly skip it. Deterministic, NO LLM: reuses scripts/skill-freshness.mjs --cite (pure
 # token-vs-path matching). It NEVER fails the check and never mutates a skill — staleness is a
 # signal, not a build failure (the epic's rejected "blocking gate on staleness"). Mirrors the
-# sticky-upsert pattern of pipeline-pr-status.yml.
+# sticky-upsert pattern of status.yml.
 
 on:
   pull_request:
