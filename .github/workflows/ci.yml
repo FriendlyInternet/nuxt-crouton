@@ -582,6 +582,29 @@ jobs:
           # /tmp). Everything else at -S warning is on and blocking.
           "$SHELLCHECK" -S warning -e SC2086,SC2016,SC1091 /tmp/wf-shell/*.sh
 
+  # Parses every workflow the way GitHub does (#2970). A duplicate env key merged on 2026-10-28
+  # made every worker dispatch fail to parse for ~30 min; nothing in CI parsed workflows.
+  # shellcheck/pyflakes integration is OFF: shell is already covered by shellcheck-workflows.
+  # Corpus run at introduction: 5 real hits (undeclared secrets in deploy-app.yml), fixed.
+  actionlint:
+    name: Actionlint workflows
+    needs: changes
+    if: needs.changes.outputs.workflows == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install pinned actionlint and run it
+        env:
+          AL_VERSION: 1.7.7
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/actionlint
+          curl -fsSL "https://github.com/rhysd/actionlint/releases/download/v${AL_VERSION}/actionlint_${AL_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C /tmp/actionlint
+          /tmp/actionlint/actionlint -version
+          /tmp/actionlint/actionlint -color -shellcheck= -pyflakes=
+
   fallow-audit:
     if: needs.changes.outputs.code == 'true'
     # Rung 1 of the check ladder (#632): the codebase-intelligence gate (#1145).
@@ -656,7 +679,7 @@ jobs:
     if: always()
     needs: [changes, typecheck-mcp, typecheck-apps, build-kassa, docs-check, schema-drift-check,
             compile-check, sync-validation, mcp-server-tests, test, changeset-check, package-check,
-            scripts-tests, fallow-audit, shellcheck-workflows]
+            scripts-tests, fallow-audit, shellcheck-workflows, actionlint]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
