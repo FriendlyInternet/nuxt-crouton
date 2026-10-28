@@ -896,9 +896,13 @@ features: {
 
 ### Form component names
 
-Every collection form is named `<Layer><Plural>Form` (e.g. `ShopProductsForm`) — there is no
-`formComponent` override. To customise a form, put your own component with that name in the app's
-`app/components`; it wins over the generated and package-registered ones.
+Every collection form is named `<Layer><Plural>Form` (e.g. `ShopProductsForm`) and every list
+`<Layer><Plural>List` — one rule, no per-collection override option. The generator writes
+`_Form.vue` / `List.vue` and the layer's `components` prefix (`<Layer><Plural>`) gives them these names.
+To eject (replace a package's or generated form/list), create `app/components/<Layer><Plural>Form.vue`
+(or `List.vue`) in the app; it wins over the generated and package-registered ones. Delete it to go back.
+The layer name is the collection key in `croutonCollections` (`app.config.ts`) with an upper-case first
+letter. Docs: `docs/content/5.customization/2.eject.md`.
 
 ## Examples
 
