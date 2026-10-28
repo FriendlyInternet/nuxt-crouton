@@ -26,7 +26,7 @@ describe('FIELD_TYPES', () => {
   })
 
   it('should have required properties for each type', () => {
-    const requiredProps = ['db', 'drizzle', 'zod', 'default', 'tsType']
+    const requiredProps = ['db', 'zod', 'default', 'tsType']
 
     for (const [typeName, mapping] of Object.entries(FIELD_TYPES)) {
       for (const prop of requiredProps) {
@@ -38,8 +38,8 @@ describe('FIELD_TYPES', () => {
   describe('string type', () => {
     it('should have correct mapping', () => {
       expect(FIELD_TYPES.string).toMatchObject({
-        db: 'VARCHAR(255)',
-        drizzle: 'text',
+        db: 'TEXT',
+        sqlite: { column: 'text' },
         zod: 'z.string()',
         default: '\'\'',
         tsType: 'string'
@@ -50,8 +50,8 @@ describe('FIELD_TYPES', () => {
   describe('decimal type', () => {
     it('should have correct mapping', () => {
       expect(FIELD_TYPES.decimal).toMatchObject({
-        db: 'DECIMAL(10,2)',
-        drizzle: 'decimal',
+        db: 'REAL',
+        sqlite: { column: 'real' },
         zod: 'z.number()',
         default: '0',
         tsType: 'number'
@@ -62,8 +62,8 @@ describe('FIELD_TYPES', () => {
   describe('json type', () => {
     it('should have correct mapping', () => {
       expect(FIELD_TYPES.json).toMatchObject({
-        db: 'JSON',
-        drizzle: 'json',
+        db: 'TEXT (JSON)',
+        sqlite: { column: 'json' },
         zod: 'z.record(z.string(), z.any())',
         default: '{}',
         tsType: 'Record<string, any>'
@@ -74,8 +74,8 @@ describe('FIELD_TYPES', () => {
   describe('repeater type', () => {
     it('should have correct mapping', () => {
       expect(FIELD_TYPES.repeater).toMatchObject({
-        db: 'JSON',
-        drizzle: 'json',
+        db: 'TEXT (JSON)',
+        sqlite: { column: 'json' },
         zod: 'z.array(z.any())',
         default: '[]',
         tsType: 'any[]'

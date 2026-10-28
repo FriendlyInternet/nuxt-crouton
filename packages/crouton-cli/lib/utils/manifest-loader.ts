@@ -307,7 +307,7 @@ export function getTypeMapping(
       // UInput + text column instead of CroutonCalendar + a timestamp column (#285).
       const entry = {
         db: def.db,
-        drizzle: def.drizzle,
+        sqlite: def.sqlite,
         zod: def.zod,
         default: def.defaultValue,
         tsType: def.tsType,
