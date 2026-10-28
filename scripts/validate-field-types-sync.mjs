@@ -83,7 +83,7 @@ function extractMcpFieldTypes(content) {
   while ((match = regex.exec(objectContent)) !== null) {
     const key = match[1]
     // Filter out property names that are clearly nested (db, drizzle, zod, etc.)
-    if (!['db', 'drizzle', 'zod', 'default', 'tsType'].includes(key)) {
+    if (!['db', 'sqlite', 'column', 'mode', 'zod', 'default', 'tsType'].includes(key)) {
       types.push(key)
     }
   }

@@ -20,6 +20,8 @@ export interface Field {
   testSample?: string
   /** Form control declared by the manifest for this field's (canonical) type; undefined for unknown types (#2286) */
   component?: string
+  /** SQLite column the manifest declares for this type; database-schema emits from it */
+  sqlite?: { column: 'integer' | 'real' | 'text' | 'json', mode?: 'boolean' | 'timestamp' }
 }
 
 const FIELD_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/
@@ -122,7 +124,8 @@ export async function loadFields(p: string, typeMapping: Record<string, any>): P
       tsType: typeMapping[resolvedType]?.tsType || 'string',
       seed: typeMapping[resolvedType]?.seed,
       testSample: typeMapping[resolvedType]?.testSample,
-      component: typeMapping[resolvedType]?.component
+      component: typeMapping[resolvedType]?.component,
+      sqlite: typeMapping[resolvedType]?.sqlite
     }
   })
 }

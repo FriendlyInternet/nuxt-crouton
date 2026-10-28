@@ -4,8 +4,10 @@ import type { FieldTypeMapping } from './field-types.js'
 
 export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
   "string": {
-    "db": "VARCHAR(255)",
-    "drizzle": "text",
+    "db": "TEXT",
+    "sqlite": {
+      "column": "text"
+    },
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
@@ -19,7 +21,9 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
   },
   "text": {
     "db": "TEXT",
-    "drizzle": "text",
+    "sqlite": {
+      "column": "text"
+    },
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
@@ -33,7 +37,9 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
   },
   "number": {
     "db": "INTEGER",
-    "drizzle": "integer",
+    "sqlite": {
+      "column": "integer"
+    },
     "zod": "z.number()",
     "default": "0",
     "tsType": "number",
@@ -47,7 +53,9 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
   },
   "integer": {
     "db": "INTEGER",
-    "drizzle": "integer",
+    "sqlite": {
+      "column": "integer"
+    },
     "zod": "z.number()",
     "default": "0",
     "tsType": "number",
@@ -60,8 +68,10 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "component": "UInputNumber"
   },
   "decimal": {
-    "db": "DECIMAL(10,2)",
-    "drizzle": "decimal",
+    "db": "REAL",
+    "sqlite": {
+      "column": "real"
+    },
     "zod": "z.number()",
     "default": "0",
     "tsType": "number",
@@ -74,8 +84,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "component": "UInputNumber"
   },
   "boolean": {
-    "db": "BOOLEAN",
-    "drizzle": "boolean",
+    "db": "INTEGER (boolean)",
+    "sqlite": {
+      "column": "integer",
+      "mode": "boolean"
+    },
     "zod": "z.boolean()",
     "default": "false",
     "tsType": "boolean",
@@ -88,8 +101,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "component": "UCheckbox"
   },
   "date": {
-    "db": "TIMESTAMP",
-    "drizzle": "timestamp",
+    "db": "INTEGER (timestamp)",
+    "sqlite": {
+      "column": "integer",
+      "mode": "timestamp"
+    },
     "zod": "z.date()",
     "default": "null",
     "tsType": "Date | null",
@@ -102,8 +118,11 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "component": "CroutonCalendar"
   },
   "datetime": {
-    "db": "TIMESTAMP",
-    "drizzle": "timestamp",
+    "db": "INTEGER (timestamp)",
+    "sqlite": {
+      "column": "integer",
+      "mode": "timestamp"
+    },
     "zod": "z.date()",
     "default": "null",
     "tsType": "Date | null",
@@ -116,8 +135,10 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "component": "CroutonCalendar"
   },
   "json": {
-    "db": "JSON",
-    "drizzle": "json",
+    "db": "TEXT (JSON)",
+    "sqlite": {
+      "column": "json"
+    },
     "zod": "z.record(z.string(), z.any())",
     "default": "{}",
     "tsType": "Record<string, any>",
@@ -130,8 +151,10 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "component": "UTextarea"
   },
   "repeater": {
-    "db": "JSON",
-    "drizzle": "json",
+    "db": "TEXT (JSON)",
+    "sqlite": {
+      "column": "json"
+    },
     "zod": "z.array(z.any())",
     "default": "[]",
     "tsType": "any[]",
@@ -144,8 +167,10 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "component": "CroutonFormRepeater"
   },
   "array": {
-    "db": "TEXT",
-    "drizzle": "text",
+    "db": "TEXT (JSON)",
+    "sqlite": {
+      "column": "json"
+    },
     "zod": "z.array(z.string())",
     "default": "[]",
     "tsType": "string[]",
@@ -158,8 +183,10 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "component": "UTextarea"
   },
   "reference": {
-    "db": "VARCHAR(255)",
-    "drizzle": "text",
+    "db": "TEXT",
+    "sqlite": {
+      "column": "text"
+    },
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
@@ -172,8 +199,10 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "component": "CroutonFormReferenceSelect"
   },
   "image": {
-    "db": "VARCHAR(255)",
-    "drizzle": "text",
+    "db": "TEXT",
+    "sqlite": {
+      "column": "text"
+    },
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
@@ -186,8 +215,10 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "component": "CroutonImageUpload"
   },
   "file": {
-    "db": "VARCHAR(255)",
-    "drizzle": "text",
+    "db": "TEXT",
+    "sqlite": {
+      "column": "text"
+    },
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",
@@ -201,7 +232,9 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
   },
   "richText": {
     "db": "TEXT",
-    "drizzle": "text",
+    "sqlite": {
+      "column": "text"
+    },
     "zod": "z.string()",
     "default": "''",
     "tsType": "string",

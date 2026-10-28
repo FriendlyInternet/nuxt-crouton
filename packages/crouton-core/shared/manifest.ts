@@ -70,12 +70,19 @@ export interface CroutonManifest {
   detects?: ManifestDetects
 }
 
+export interface SqliteColumn {
+  column: 'integer' | 'real' | 'text' | 'json'
+  mode?: 'boolean' | 'timestamp'
+}
+
 export interface FieldTypeDefinition {
   label: string
   icon: string
   description: string
+  /** Human-readable column type shown in docs/MCP (display only). */
   db: string
-  drizzle: string
+  /** The SQLite column the generator emits — the single source of truth for database-schema. */
+  sqlite: SqliteColumn
   zod: string
   tsType: string
   defaultValue: string
@@ -105,7 +112,7 @@ export interface FieldTypeSeed {
  * `defaultValue` renamed `default` and the canonical type name attached.
  */
 export type FieldTypeMapping
-  = Pick<FieldTypeDefinition, 'db' | 'drizzle' | 'zod' | 'tsType' | 'seed' | 'testSample' | 'component'>
+  = Pick<FieldTypeDefinition, 'db' | 'sqlite' | 'zod' | 'tsType' | 'seed' | 'testSample' | 'component'>
     & { default: string; canonical: string }
 
 export interface ManifestCollection {

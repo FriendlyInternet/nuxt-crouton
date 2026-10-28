@@ -7,7 +7,7 @@ import { generateRepeaterItemSchema } from '../../../lib/generators/composable.t
 import { generateFieldComponents } from '../../../lib/generators/field-components.ts'
 
 const entry = (zod: string, tsType: string, canonical: string, component: string) =>
-  ({ db: '', drizzle: '', zod, default: '', tsType, canonical, component })
+  ({ db: '', sqlite: { column: 'text' }, zod, default: '', tsType, canonical, component })
 
 // Manifest-shaped mapping: repeater/reference/image/file are NOT in the old private maps.
 const typeMapping = {

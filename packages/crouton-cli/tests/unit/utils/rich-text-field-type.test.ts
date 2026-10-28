@@ -27,7 +27,7 @@ describe('richText field type (editor manifest)', () => {
     expect(body.zod).toBe('z.string()')
     expect(body.component).toBe('CroutonEditorSimple')
     expect(mapping.richText.db).toBe('TEXT')
-    expect(mapping.richText.drizzle).toBe(mapping.text.drizzle)
+    expect(mapping.richText.sqlite).toEqual(mapping.text.sqlite)
   })
 
   it('renders CroutonEditorSimple in _Form.vue', async () => {
