@@ -61,7 +61,7 @@ export function mapType(t: string, validTypes?: Set<string>): string {
     return validTypes.has(t) ? t : 'string'
   }
   // Fallback for callers that don't pass validTypes (backward compat during migration)
-  return ['string', 'text', 'number', 'decimal', 'boolean', 'date', 'json', 'repeater', 'array', 'image', 'file'].includes(t) ? t : 'string'
+  return ['string', 'text', 'richText', 'number', 'decimal', 'boolean', 'date', 'json', 'repeater', 'array', 'image', 'file'].includes(t) ? t : 'string'
 }
 
 interface Field {

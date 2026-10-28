@@ -128,6 +128,15 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "tsType": "string",
     "canonical": "file",
     "component": "CroutonImageUpload"
+  },
+  "richText": {
+    "db": "TEXT",
+    "drizzle": "text",
+    "zod": "z.string()",
+    "default": "''",
+    "tsType": "string",
+    "canonical": "richText",
+    "component": "CroutonEditorSimple"
   }
 }
 

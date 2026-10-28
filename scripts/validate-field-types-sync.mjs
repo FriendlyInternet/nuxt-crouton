@@ -33,7 +33,7 @@ const skillPath = join(projectRoot, '.claude/skills/crouton.md')
  */
 function extractGeneratorFieldTypes(content) {
   // Match the array in mapType function: ['string', 'text', ...]
-  const match = content.match(/\['([a-z]+)'(?:,\s*'([a-z]+)')*\]\.includes/)
+  const match = content.match(/\['([a-zA-Z]+)'(?:,\s*'([a-zA-Z]+)')*\]\.includes/)
   if (!match) {
     // Try matching typeMapping object keys
     const typeMapMatch = content.match(/export const typeMapping\s*=\s*\{([\s\S]+?)\n\}/)
@@ -48,14 +48,14 @@ function extractGeneratorFieldTypes(content) {
 
   // Extract all types from the includes call
   const fullMatch = content.match(
-    /\[['"]([a-z]+)['"](?:,\s*['"]([a-z]+)['"])*\]\.includes/
+    /\[['"]([a-zA-Z]+)['"](?:,\s*['"]([a-zA-Z]+)['"])*\]\.includes/
   )
   if (fullMatch) {
     const typesStr = content.match(
       /\[([^\]]+)\]\.includes/
     )?.[1]
     if (typesStr) {
-      return typesStr.match(/'([a-z]+)'/g)?.map(t => t.replace(/'/g, ''))
+      return typesStr.match(/'([a-zA-Z]+)'/g)?.map(t => t.replace(/'/g, ''))
     }
   }
   return null
