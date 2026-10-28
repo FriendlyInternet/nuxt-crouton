@@ -51,6 +51,7 @@ const props = withDefaults(defineProps<{
 })
 
 const { t } = useT()
+const ageLabel = useSyncAge()
 
 const data = ref<SyncStatusResponse | null>(null)
 const errored = ref(false)
@@ -90,13 +91,7 @@ const state = computed<State>(() => {
 // Compact relative label: "just now" / "12s ago" / "4m ago" / "2h ago".
 function relativeLabel(ms: number | null): string {
   if (ms == null) return ''
-  const s = Math.max(0, Math.round(ms / 1000))
-  if (s < 5) return t('sales.sync.justNow')
-  if (s < 60) return t('sales.sync.secondsAgo', { n: s })
-  const m = Math.round(s / 60)
-  if (m < 60) return t('sales.sync.minutesAgo', { n: m })
-  const h = Math.round(m / 60)
-  return t('sales.sync.hoursAgo', { n: h })
+  return ageLabel(ms)
 }
 
 // With several tills the banner shows the freshest; the rest are in the tooltip.

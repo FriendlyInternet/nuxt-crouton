@@ -14,6 +14,7 @@ interface Device {
 interface SyncDevice { deviceId: string, lastContactAt: number | null, lastPullAt?: number | null }
 
 const { t } = useT()
+const ageLabel = useSyncAge()
 const toast = useToast()
 const { teamSlug } = useTeamContext()
 
@@ -35,12 +36,7 @@ const shortId = (id: string) => bare(id).slice(0, 8) || '—'
 
 function agoOf(at: number | null | undefined): string {
   if (!at) return t('sales.sync.never')
-  const s = Math.max(0, Math.round(((sync.value?.serverNow ?? Date.now()) - at) / 1000))
-  if (s < 5) return t('sales.sync.justNow')
-  if (s < 60) return t('sales.sync.secondsAgo', { n: s })
-  const m = Math.round(s / 60)
-  if (m < 60) return t('sales.sync.minutesAgo', { n: m })
-  return t('sales.sync.hoursAgo', { n: Math.round(m / 60) })
+  return ageLabel((sync.value?.serverNow ?? Date.now()) - at)
 }
 const dateOf = (at: string | number | null) => at ? new Date(at).toLocaleDateString() : '—'
 
