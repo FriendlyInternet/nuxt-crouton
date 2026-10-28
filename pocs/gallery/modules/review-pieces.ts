@@ -65,18 +65,40 @@ function selectPieces(components: Candidate[]): ReviewPiece[] {
     .sort((a, b) => a.pkg.localeCompare(b.pkg) || a.name.localeCompare(b.name))
 }
 
-/** A package's own pages as links: only routes that need nothing but the team (no `:id`). */
+/** Pages that belong to shared email infrastructure, not to the package that happens to ship them. */
+const SHARED_LEAVES = new Set(['email-logs', 'email-templates'])
+/** Keep the row scannable on a phone: shallowest screens first, at most this many per package. */
+const MAX_SCREENS_PER_PKG = 6
+
+/**
+ * A package's own pages as links: only routes that need nothing but the team (no `:id`), labelled
+ * by the full path after the team slug (`bookings/locations`; the team home is `overview`),
+ * de-duplicated by target.
+ */
 function selectScreens(routes: { path: string, file?: string }[]): ReviewScreen[] {
-  const screens: ReviewScreen[] = []
+  const byPkg = new Map<string, Map<string, ReviewScreen>>()
   for (const r of routes) {
     const pkg = r.file ? PAGE_RE.exec(realPath(r.file))?.[1] : undefined
     if (!pkg || !r.path.includes(':team')) continue
     const to = r.path.replace(/:team(\([^)]*\))?/, DEMO_TEAM_SLUG)
     if (to.includes(':')) continue
-    const label = to.split('/').filter(Boolean).slice(-1)[0] ?? to
-    screens.push({ pkg, label: label === DEMO_TEAM_SLUG ? 'overview' : label, to })
+    const segments = to.split('/').filter(Boolean)
+    const slugAt = segments.indexOf(DEMO_TEAM_SLUG)
+    const rest = segments.slice(slugAt + 1)
+    if (rest.length && SHARED_LEAVES.has(rest[rest.length - 1]!)) continue
+    // A package's own section (`bookings` in crouton-bookings) is its home: its root is the overview.
+    const own = pkg.replace(/^crouton-/, '')
+    const shown = rest[0] === own ? rest.slice(1) : rest
+    const label = shown.join('/') || 'overview'
+    const list = byPkg.get(pkg) ?? new Map<string, ReviewScreen>()
+    if (!list.has(to)) list.set(to, { pkg, label, to })
+    byPkg.set(pkg, list)
   }
-  return screens
+  return [...byPkg.values()].flatMap(list =>
+    [...list.values()]
+      .sort((x, y) => x.label.split('/').length - y.label.split('/').length)
+      .slice(0, MAX_SCREENS_PER_PKG),
+  )
 }
 
 export default defineNuxtModule({
