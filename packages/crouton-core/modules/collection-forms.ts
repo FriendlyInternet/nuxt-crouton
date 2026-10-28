@@ -1,7 +1,7 @@
 import { addTemplate, addTypeTemplate, defineNuxtModule } from '@nuxt/kit'
 
 /**
- * Build-time map of every `*Form` / `*Detail` / `*Select` / `*List` component → its lazy component.
+ * Build-time map of every `*Form` / `*Detail` / `*Select` / `*List` / `*Card*` / `*Input` component → its lazy component.
  *
  * FormDynamicLoader resolves a collection's form by canonical name
  * (`<Layer><Plural>Form`). Doing that through the runtime component registry
@@ -12,16 +12,21 @@ import { addTemplate, addTypeTemplate, defineNuxtModule } from '@nuxt/kit'
  * looked up by FormDependentFieldLoader the same way.
  * `*List` is the collection list (`<Layer><Plural>List`), looked up by CollectionViewer
  * the same way, so an app ejects a list by adding one file.
+ * `*Card*` / `*Input` cover card lists, mini cards and repeater items, looked up the same way.
  * Each value is Nuxt's `Lazy<Name>` export from `#components`, a real lazy chunk.
  */
 
 export const COLLECTION_FORMS_TEMPLATE = 'crouton-collection-forms.mjs'
 
-const isFormOrDetail = (name: string) => /(Form|Detail|Select|List)$/.test(name)
+// `Card` / `Card<Variant>` / `CardMini` are looked up by Collection, DependentFieldCardMini and
+// FormDependentSelectOption; `Input` is the repeater item (`<Layer><Plural><Field>Input`).
+// Nuxt UI's own `U*` components never match a collection lookup, so they stay out.
+const isCollectionComponent = (name: string) =>
+  !/^U[A-Z]/.test(name) && /(Form|Detail|Select|List|Input|Card([A-Z][A-Za-z0-9]*)?)$/.test(name)
 
 /** Render the template source for a list of resolved component names. */
 export function renderCollectionForms(pascalNames: string[]): string {
-  const names = [...new Set(pascalNames.filter(isFormOrDetail))].sort()
+  const names = [...new Set(pascalNames.filter(isCollectionComponent))].sort()
   const imports = names.map(n => `  Lazy${n},`).join('\n')
   const entries = names.map(n => `  ${n}: Lazy${n},`).join('\n')
   return [

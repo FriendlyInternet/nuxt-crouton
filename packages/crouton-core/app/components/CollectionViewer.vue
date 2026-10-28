@@ -76,16 +76,9 @@
         :class="showInlineEditor ? 'w-2/5 border-r border-default' : 'w-full'"
         class="transition-all duration-200 min-h-0 overflow-auto"
       >
-        <div
-          v-if="componentError"
-          class="text-red-600 p-4 bg-red-50 rounded"
-        >
-          {{ t('collection.componentError', { error: componentError }) }}
-        </div>
-
         <!-- Workspace layout: render CroutonWorkspace directly -->
         <CroutonWorkspace
-          v-else-if="currentLayout === 'workspace'"
+          v-if="currentLayout === 'workspace'"
           :collection="collectionName"
           class="h-full"
         />
@@ -158,7 +151,6 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const { t } = useT()
-const componentError = ref<string | null>(null)
 const currentLayout = ref(props.defaultLayout)
 
 // Use composable for formatting
@@ -275,27 +267,9 @@ const componentName = computed(() => {
   return `${toPascalCase(props.collectionName)}List`
 })
 
-// Nuxt's resolved winner (app beats layer) from the build-time map; falls back to
-// the runtime registry name for lists the map doesn't know (off-convention names).
+// Nuxt's resolved winner (app beats layer) from the build-time map
 const listComponent = computed(() => {
   if (!componentName.value) return null
-  return collectionForms[componentName.value] ?? componentName.value
-})
-
-// Try to resolve the component
-onMounted(async () => {
-  if (!componentName.value) return
-
-  try {
-    // Check if component exists in the global scope
-    const globalComponents = getCurrentInstance()?.appContext.components
-    if (!globalComponents || !globalComponents[componentName.value]) {
-      // Component might be auto-imported but not registered yet
-      // This is fine, Vue will handle it
-      console.debug(`Component ${componentName.value} will be resolved by auto-import`)
-    }
-  } catch (err) {
-    componentError.value = err instanceof Error ? err.message : String(err)
-  }
+  return collectionForms[componentName.value] ?? null
 })
 </script>

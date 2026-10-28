@@ -143,6 +143,22 @@ export interface EjectedListSpec {
   marker: string
 }
 
+/**
+ * "Card renders" — a collection's `<Pascal>Card` is resolved by name through
+ * Collection.vue (no global component registration). Seeds one row via the API,
+ * switches the list to the List layout, and asserts text only the card prints.
+ */
+export interface CardRendersSpec {
+  /** Collection key whose card the fixture ships (e.g. "mainItems"). */
+  collectionKey: string
+  /** Team-scoped API segment for the collection (e.g. "main-items"). */
+  apiPath: string
+  /** Row payload to create (first field is stamped to stay unique). */
+  create: Record<string, string>
+  /** Text the card prints around the first field's value, proving it rendered. */
+  marker: string
+}
+
 export interface FixtureManifest {
   collections: CollectionSpec[]
   /** Optional package-specific surfaces; omit for fixtures with nothing extra. */
@@ -155,6 +171,8 @@ export interface FixtureManifest {
   ejectedForm?: EjectedFormSpec
   /** Optional app-list-overrides-package-list check. */
   ejectedList?: EjectedListSpec
+  /** Optional check that a name-resolved collection card renders. */
+  cardRenders?: CardRendersSpec
   /**
    * Opt the WHOLE fixture out of the axe-core a11y scan (a11y.smoke.spec.ts).
    * Set `false` to skip every collection/surface scan for this fixture. Omit

@@ -57,8 +57,7 @@ export default defineNuxtConfig({
       // TranslationsUiForm / TranslationsUiList (the canonical <Layer><Plural> names).
       {
         path: join(currentDir, 'app/collection-components'),
-        prefix: 'Translations',
-        global: true
+        prefix: 'Translations'
       },
       // Stubs dir: registers AITranslateButton without prefix so crouton-ai can override it.
       // priority: -1 matches the pattern used by crouton-core stubs — overridden by real packages.

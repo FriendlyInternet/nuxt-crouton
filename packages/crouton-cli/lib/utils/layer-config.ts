@@ -46,8 +46,7 @@ export default defineNuxtConfig({
     dirs: [
       {
         path: './components',
-        prefix: layerName,
-        global: true // Makes them available globally
+        prefix: layerName
       }
     ]
   },
