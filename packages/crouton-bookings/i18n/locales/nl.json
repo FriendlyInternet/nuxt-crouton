@@ -46,6 +46,7 @@
       "cancelled": "Geannuleerd"
     },
     "admin": {
+      "openFullScreen": "Open op volledig scherm",
       "title": "Boekingen",
       "sectionTitle": "Boekingen",
       "overview": "Overzicht",
