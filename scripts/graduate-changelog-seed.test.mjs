@@ -52,8 +52,12 @@ test('seedAppChangelogFromPoc: non-array input yields []', () => {
   assert.deepEqual(seedAppChangelogFromPoc({}), [])
 })
 
-test('seedAppChangelogFromPoc: a long real-shaped POC changelog seeds cleanly, newest first', () => {
-  const raw = Array.from({ length: 52 }, (_, i) => ({ v: i + 1, note: `change ${i + 1}`, commit: `c${i + 1}` }))
+test('seedAppChangelogFromPoc: a representative spike-changelog.json seeds cleanly', () => {
+  const raw = [
+    { v: 52, note: 'Composite layout sizing', commit: '' },
+    { v: 51, note: 'Fixed drag-borders spilling outside the card', commit: '0613db0' },
+    { v: 50, note: 'Drop a block beside a pane inside a layout', commit: '3af5039' }
+  ]
   const seeded = seedAppChangelogFromPoc(raw)
   assert.equal(seeded.length, raw.length)
   assert.equal(seeded[0].v, 52)
