@@ -567,6 +567,7 @@ Repeater fields can support per-item translations using `translatableProperties`
 |------|-----|------------|---------|
 | string | `z.string()` | `string` | `''` |
 | text | `z.string()` | `string` | `''` |
+| richText² | `z.string()` | `string` | `''` |
 | number | `z.number()` | `number` | `0` |
 | decimal | `z.number()` | `number` | `0` |
 | boolean | `z.boolean()` | `boolean` | `false` |
@@ -576,6 +577,8 @@ Repeater fields can support per-item translations using `translatableProperties`
 | file | `z.string()` | `string` | `''` |
 | repeater | `z.array(z.any())` or typed¹ | `any[]` or typed¹ | `[]` |
 | array | `z.array(z.string())` | `string[]` | `[]` |
+
+² Declared by `crouton-editor`'s manifest (TEXT column, `CroutonEditorSimple`); only valid when the app extends crouton-editor
 
 ¹ When `meta.properties` is defined, generates typed item schema (see Translatable Repeater Fields)
 
