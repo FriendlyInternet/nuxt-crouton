@@ -113,6 +113,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
                     <li v-for="(s, n) in i.steps" :key="n">{{ s }}</li>
                   </ol>
                   <UButton block icon="i-lucide-log-in" label="Open and sign in" :href="loginHref(a.app, i)" target="_blank" />
+                  <ReplyButtons v-if="i.kind === 'epic'" kind="issue" :number="i.number" />
                 </div>
               </div>
 
@@ -134,6 +135,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
                   </div>
                   <p class="text-xs text-muted">Updated {{ day(p.updatedAt) }}</p>
                   <UButton block variant="outline" icon="i-lucide-log-in" label="Open and sign in" :href="`/api/status/login/${a.app}?key=pr${p.pr}`" target="_blank" />
+                  <ReplyButtons kind="pr" :number="p.pr" />
                 </div>
               </div>
             </div>
@@ -199,6 +201,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
                   :href="loginHref(i.app, i)"
                   target="_blank"
                 />
+                <ReplyButtons v-if="i.kind === 'epic'" kind="issue" :number="i.number" />
               </div>
             </UCard>
           </section>
