@@ -894,8 +894,8 @@ jobs:
             # A run with no inputs commit is ONE commit: give it the issue title, not "generate: …".
             # The splitter files every change the session ledger doesn't list as authored under
             # "generated", so a hand-written run lands here entirely (#2427).
-            if [ "$(git rev-parse HEAD)" = "$RUN_START" ]; then GEN_SUBJECT="$TITLE"; else GEN_SUBJECT="generate: derived output for #${ISSUE}"; fi
-            git commit -q -m "$GEN_SUBJECT" -m "🤖 pi worker — generator/CLI output (e.g. crouton generate), committed separately from the inputs (#1849). Refs #${ISSUE}"
+            if [ "$(git rev-parse HEAD)" = "$RUN_START" ]; then GEN_SUBJECT="$TITLE"; else GEN_SUBJECT="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" generated.commitSubject) for #${ISSUE}"; fi
+            git commit -q -m "$GEN_SUBJECT" -m "🤖 pi worker — generator/CLI output (e.g. $(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" generated.generators --json | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).join(", "))')), committed separately from the inputs (#1849). Refs #${ISSUE}"
             echo "commit 2: $NGEN generated file(s)"
           fi
           N=$((NIN + NGEN))
@@ -993,7 +993,7 @@ jobs:
           # sign-off hold commits nothing) versus "the planner never ran" (a harness bug). Only the
           # second is a failure, and it is the one that must be loud.
           PLAN_ERR="$RUNNER_TEMP/plan-stderr.txt"
-          PLAN_OUT="$(node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" 2>"$PLAN_ERR")"
+          PLAN_OUT="$(LOGIC_RE="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" testsGate.logicPaths)" TEST_RE="$(node "$RUNNER_TEMP/flavor/scripts/harness-flavor.mjs" testsGate.testPaths)" node "$RUNNER_TEMP/pi-finish.mjs" plan "$COMMITTED" 2>"$PLAN_ERR")"
           PLAN_RC=$?
           if [ "$PLAN_RC" -ne 0 ]; then
             echo "::error::pi-finish plan exited $PLAN_RC — the harness could not read this run's result. This is a WORKFLOW bug, not an underspecified issue."

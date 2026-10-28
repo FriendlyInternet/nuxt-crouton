@@ -34,4 +34,4 @@ runs:
     - name: Build all packages (cache miss)
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: pnpm build:packages
+      run: eval "$(node scripts/harness-flavor.mjs warm.command)"

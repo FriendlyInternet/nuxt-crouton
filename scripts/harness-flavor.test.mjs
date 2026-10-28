@@ -65,3 +65,23 @@ test('validate flags a broken profile', () => {
   assert.ok(validate({ ...flavor, bot: {} }).some((p) => /bot/.test(p)))
   assert.ok(validate({ ...flavor, reviewGates: { x: { paths: [] } } }).length >= 2)
 })
+
+test('planTestsGate honours flavor-supplied patterns', () => {
+  const r = planTestsGate({
+    committedFiles: ['lib/a.py', 'tests/test_a.py'],
+    logicRe: '^lib/.*\\.py$',
+    testRe: '(^|/)tests/'
+  })
+  assert.deepEqual(r.pkgLogic, ['lib/a.py'])
+  assert.equal(r.missing, false)
+})
+
+test('work-issue-pidev asks the flavor instead of carrying stack commands', async () => {
+  const { readFileSync } = await import('node:fs')
+  const wf = readFileSync(new URL('../.github/workflows/work-issue-pidev.yml', import.meta.url), 'utf8')
+  const run = (l) => l.trim().startsWith('#') ? '' : l
+  const code = wf.split('\n').map(run).join('\n')
+  assert.ok(!/run: pnpm install --frozen-lockfile|user.name  "nuxt-harness|run: pnpm build:packages|pnpm --filter/.test(code))
+  assert.ok(!/GEN_SUBJECT="generate:/.test(code))
+  assert.equal(cli('generated.commitSubject'), 'generate: derived output')
+})

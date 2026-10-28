@@ -48,10 +48,14 @@ export function planAcceptance({ committedFiles }) {
 const LOGIC_RE = /^packages\/[^/]+\/.*\.(ts|mjs|js)$/;
 const TEST_RE = /(^|\/)(test|tests|__tests__)\/|\.(test|spec)\./;
 
-export function planTestsGate({ committedFiles }) {
+// The patterns default to the crouton profile; a flavor (flavor.config.mjs testsGate) overrides
+// them by passing regex sources (the workflow forwards them as LOGIC_RE / TEST_RE env vars).
+export function planTestsGate({ committedFiles, logicRe, testRe }) {
+  const logic = logicRe ? new RegExp(logicRe) : LOGIC_RE;
+  const test = testRe ? new RegExp(testRe) : TEST_RE;
   const files = (committedFiles || []).map((f) => String(f).trim()).filter(Boolean);
-  const pkgLogic = files.filter((f) => LOGIC_RE.test(f) && !TEST_RE.test(f));
-  const testFiles = files.filter((f) => TEST_RE.test(f));
+  const pkgLogic = files.filter((f) => logic.test(f) && !test.test(f));
+  const testFiles = files.filter((f) => test.test(f));
   return { pkgLogic, testFiles, missing: pkgLogic.length > 0 && testFiles.length === 0 };
 }
 
@@ -90,7 +94,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     } else if (cmd === 'plan') {
       const committedFiles = readFileList(arg);
       const { appDir } = planAcceptance({ committedFiles });
-      const { pkgLogic, testFiles, missing } = planTestsGate({ committedFiles });
+      const { pkgLogic, testFiles, missing } = planTestsGate({
+        committedFiles,
+        logicRe: process.env.LOGIC_RE,
+        testRe: process.env.TEST_RE
+      });
       process.stdout.write(
         `APP_DIR=${appDir || ''}\n`
         + `PKG_LOGIC=${pkgLogic.length}\n`
