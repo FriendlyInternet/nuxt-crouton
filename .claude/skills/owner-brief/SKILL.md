@@ -138,4 +138,4 @@ inside it.
 
 ## Plain comments are read (#2980)
 
-An owner comment that matches no command is read by a light model, which picks one safe action (revise, replan, start, review, answer, ask, ignore). Merge, close, delete, deploy and teardown are never done from a plain comment: the reply is "I read this as X. Reply `ok` to confirm." Irreversible actions still need `ok`.
+An owner comment that matches no command is read by a default-tier model (Sonnet), which picks one safe action (revise, replan, start, review, answer, ask, ignore). Merge, close, delete, deploy and teardown are never done from a plain comment: the reply is "I read this as X. Reply `ok` to confirm." Irreversible actions still need `ok`.

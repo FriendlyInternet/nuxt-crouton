@@ -1005,7 +1005,7 @@ jobs:
           APPLY: 'true'
         run: node scripts/handle-test-reply.mjs
 
-  # Last resort (#2980): an OWNER's plain comment that matched no command. A light model proposes
+  # Last resort (#2980): an OWNER's plain comment that matched no command. A default-tier model proposes
   # ONE action; scripts/comment-interpret.mjs validates it and refuses merge/close/delete/deploy
   # in code (they only ever become "reply `ok` to confirm"). One run per thread at a time.
   interpret:
@@ -1073,18 +1073,18 @@ jobs:
       - name: Resolve models
         id: model
         run: |
-          echo "light=$(node scripts/resolve-pipeline-model.mjs light)" >> "$GITHUB_OUTPUT"
+          echo "reader=$(node scripts/resolve-pipeline-model.mjs default)" >> "$GITHUB_OUTPUT"
           echo "hard=$(node scripts/resolve-pipeline-model.mjs hard)" >> "$GITHUB_OUTPUT"
 
-      # The light model only READS and proposes; a failed/empty run becomes `ask` in decideAction.
-      - name: Read the comment (light model)
+      # The reader model only READS and proposes; a failed/empty run becomes `ask` in decideAction.
+      - name: Read the comment (default model)
         env:
-          PI_MODEL: ${{ steps.model.outputs.light }}
+          PI_MODEL: ${{ steps.model.outputs.reader }}
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           pi --print --approve --provider claude-bridge --model "$PI_MODEL" \
             "$(cat "$RUNNER_TEMP/interpret-prompt.txt")" > "$RUNNER_TEMP/interpret-model.txt" 2>"$RUNNER_TEMP/interpret-model.err" \
-            || echo "light model run failed (becomes ask)"
+            || echo "reader model run failed (becomes ask)"
 
       - name: Decide
         id: decide
@@ -1106,7 +1106,7 @@ jobs:
             fs.writeFileSync(`${process.env.RUNNER_TEMP}/interpret-decision.json`, JSON.stringify(d))
             core.setOutput('action', d.action)
 
-      # Reviews stay strong: only the reading above is light. Read-only, no git/gh credentials.
+      # Reviews stay strong: the reading above uses the default tier. Read-only, no git/gh credentials.
       - name: Independent review (hard model)
         if: steps.decide.outputs.action == 'review'
         env:
