@@ -25,12 +25,8 @@ const props = defineProps<{
 }>()
 
 const { t } = useT()
-const ageLabel = useSyncAge()
-
-function agoOf(at: number | null | undefined): string {
-  if (!at) return t('sales.sync.never')
-  return ageLabel(props.now - at)
-}
+const ago = useSyncAgo()
+const agoOf = (at: number | null | undefined) => ago(at, props.now)
 const tillName = (id: string | null) => (id ?? '').replace('device:', '').slice(0, 8) || '—'
 /** "price: 5 → 6" for the fields that differ; falls back to the lost values alone. */
 function diffLabel(l: LostEdit): string {
