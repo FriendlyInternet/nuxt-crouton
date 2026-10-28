@@ -10,7 +10,6 @@
   },
   "exports": {
     ".": "./bin/crouton-generate.js",
-    "./lib/utils/config-builder": "./lib/utils/config-builder.ts",
     "./lib/utils/manifest-loader": "./lib/utils/manifest-loader.ts",
     "./*": "./*"
   },
@@ -21,6 +20,7 @@
     "README.md"
   ],
   "scripts": {
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -53,14 +53,12 @@
     "c12": "^3.0.0",
     "citty": "^0.2.1",
     "consola": "^3.4.0",
-    "defu": "^6.1.0",
     "jiti": "^2.6.0",
     "magicast": "^0.3.5",
     "pathe": "^2.0.0",
     "pkg-types": "^2.0.0",
     "pluralize": "^8.0.0",
-    "scule": "^1.3.0",
-    "zod": "^4.0.0"
+    "scule": "^1.3.0"
   },
   "engines": {
     "node": ">=18.0.0"

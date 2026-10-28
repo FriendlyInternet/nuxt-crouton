@@ -93,10 +93,8 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          # CI fixtures (with-collab is intentionally excluded — its crouton-collab package
-          # has pre-existing type errors that fail the #197 typecheck gate; #210 keeps it a
-          # local-only spike until type-clean).
-          ALL="minimal with-pages with-bookings with-assets with-maps with-devtools with-sales"
+          # CI fixtures.
+          ALL="minimal with-pages with-bookings with-assets with-maps with-devtools with-sales with-collab"
           # Packages whose change can affect EVERY fixture (shared base + generator + harness inputs).
           UNIVERSAL="crouton crouton-core crouton-i18n crouton-cli crouton-auth"
 
@@ -121,7 +119,7 @@ jobs:
                 case "$f" in
                   fixtures/*/*)
                     fx=$(printf '%s' "$f" | cut -d/ -f2)
-                    case " $ALL " in *" $fx "*) add "$fx";; esac   # ignore non-CI fixtures (with-collab)
+                    case " $ALL " in *" $fx "*) add "$fx";; esac   # ignore non-CI fixtures
                     ;;
                   packages/*/*)
                     pkg=$(printf '%s' "$f" | cut -d/ -f2)
@@ -205,6 +203,19 @@ jobs:
 
       - name: Type-check the generated fixture
         run: pnpm --filter "e2e-fixture-${{ matrix.fixture }}" typecheck
+
+      # Lint gate for CLI output (#2740): the repo eslint rules over what the
+      # generator just emitted, formatting rules off (eslint.generated.config.mjs).
+      # An unused import/variable in a template now fails here, not in a user's app.
+      # Some fixtures (with-sales) emit no layers/ output; eslint errors on an
+      # empty glob, so skip only when there is genuinely nothing to lint.
+      - name: Lint generated output
+        run: |
+          if ls fixtures/${{ matrix.fixture }}/layers/*/collections >/dev/null 2>&1; then
+            pnpm exec eslint -c eslint.generated.config.mjs --no-warn-ignored "fixtures/${{ matrix.fixture }}/layers/*/collections/**/*.{ts,vue}"
+          else
+            echo "No generated layers/*/collections in ${{ matrix.fixture }} — nothing to lint"
+          fi
 
       # No browser-install step: the Playwright image already ships Chromium at
       # /ms-playwright (PLAYWRIGHT_BROWSERS_PATH preset), so there's nothing to

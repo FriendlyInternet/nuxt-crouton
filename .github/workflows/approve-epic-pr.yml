@@ -1,0 +1,84 @@
+name: Merge an approved epic PR into main
+
+# The owner's `ok` / `lgtm` / ✅ on an `epic/*` → `main` PR merges it once `CI Gate` and `E2E Gate`
+# are green (#2819). The decision lives in scripts/epic-merge-decision.mjs (unit-tested);
+# this file only makes the calls. approve-draft-pr.yml releases drafts; resume-on-comment.yml
+# handles issues — neither merged a PR, so an lgtm on an epic PR did nothing.
+#
+# Merge uses the Harness App token, NOT GITHUB_TOKEN, so the post-merge staging deploy fires
+# (GITHUB_TOKEN-initiated events suppress downstream workflows, #572).
+# merge_method: merge — curated commits are preserved, no squash (AGENTS.md).
+# If a gate has not finished, auto-merge is enabled so GitHub merges when it goes green; a
+# red gate gets one reply naming the failing check and nothing is merged.
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  merge:
+    if: |
+      github.event.issue.pull_request &&
+      github.event.comment.user.type != 'Bot' &&
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'MEMBER') &&
+      (contains(github.event.comment.body, '✅') ||
+       contains(github.event.comment.body, '✔') ||
+       contains(github.event.comment.body, '☑') ||
+       contains(github.event.comment.body, 'ok') ||
+       contains(github.event.comment.body, 'lgtm') ||
+       contains(github.event.comment.body, 'approve'))
+    # contains() is a cheap pre-filter only; decideEpicMerge() is the decision (#2004).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 1
+
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const { owner, repo } = context.repo
+            const pull_number = context.payload.issue.number
+            const { decideEpicMerge } = await import(
+              `${process.env.GITHUB_WORKSPACE}/scripts/epic-merge-decision.mjs`)
+
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number })
+            const checkRuns = await github.paginate(github.rest.checks.listForRef,
+              { owner, repo, ref: pr.head.sha, per_page: 100 })
+            const d = decideEpicMerge({ comment: context.payload.comment, pr, checkRuns })
+            core.info(`#${pull_number}: ${d.action} — ${d.reason}`)
+            const say = body => github.rest.issues.createComment({ owner, repo, issue_number: pull_number,
+              body: `${body}\n\n<sub>🤖 agent pipeline (CI) · approve-epic-pr #2819</sub>` })
+
+            if (d.action === 'ignore') return
+            if (d.action === 'red') {
+              await say(`🔴 **Not merged — ${d.failing.map(f => `\`${f}\``).join(', ')} is red.** Fix it and comment \`lgtm\` again.`)
+              return
+            }
+            if (d.action === 'wait') {
+              try {
+                await github.graphql(
+                  `mutation($id:ID!){ enablePullRequestAutoMerge(input:{pullRequestId:$id, mergeMethod:MERGE}){ pullRequest { id } } }`,
+                  { id: pr.node_id })
+                await say(`⏳ **Approved — will merge when the checks finish** (${d.pending.map(p => `\`${p}\``).join(', ')} not green yet). Auto-merge is on.`)
+              } catch (e) {
+                await say(`⏳ **Approved, but ${d.pending.map(p => `\`${p}\``).join(', ')} hasn't finished** and auto-merge couldn't be enabled (${e.message}). Comment \`lgtm\` again once it is green.`)
+              }
+              return
+            }
+            await github.rest.pulls.merge({ owner, repo, pull_number, merge_method: 'merge', sha: pr.head.sha })
+            await say(`✅ **Merged** — approved by @${context.payload.comment.user.login}, both gates green.`)

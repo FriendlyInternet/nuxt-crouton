@@ -296,6 +296,18 @@ runs axe on the **live DOM** and **fails on any critical/serious violation**.
   the matrix already selects; `@axe-core/playwright` is a root devDependency picked up
   by CI's `pnpm install`. Findings show up in the same Playwright HTML report / trace.
 
+## Console guard (#2916)
+Every spec imports `test` from `./helpers` (not `@playwright/test`); it adds an auto
+fixture that collects console warnings/errors and uncaught page errors, and fails the
+test at the end if any match the list in `console-guard.cjs` — today
+`[Vue warn]: Failed to resolve component` (a component looked up by name is missing, so
+a blank spot renders). The failure names the message and the page URL. Other console
+noise never fails. To add a pattern: one line in `CONSOLE_FAIL_PATTERNS` with a reason.
+To accept a known warning on one fixture, add `allowConsole: [{ "pattern": "…", "reason": "…" }]`
+to its `e2e.manifest.json` (none today). This relies on `nuxt dev` (Vue's warnings are
+dev-only) — don't switch the fixtures to a production build. Matcher unit test:
+`node --test scripts/lib/console-guard.test.mjs`.
+
 ## Gotchas
 - **Module format:** repo root is CommonJS, and Playwright 1.57 transpiles
   config/specs to CJS — use `__dirname`/`join`, **not** `import.meta.url`

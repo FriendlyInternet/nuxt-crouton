@@ -5,7 +5,6 @@ exports[`generateComposable > generates correct composable for basic collection 
  * @crouton-generated
  * @collection products
  * @layer shop
- * @generated 2025-01-01
  *
  * ## AI Context
  * - Composable: useShopProducts

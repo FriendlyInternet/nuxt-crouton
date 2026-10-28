@@ -1,5 +1,5 @@
 // Generator for database queries
-import { toKebabCase, pascal } from '../utils/helpers.ts'
+import { toKebabCase, pascal, toLayerCamelCase } from '../utils/helpers.ts'
 import { collectFilterFields } from '../utils/filter-fields.ts'
 
 // Shared context for the tree-query template builders below
@@ -317,7 +317,6 @@ function detectReferenceFields(data: Record<string, any>, config: Record<string,
   // Add standard team/metadata user references
   // These are always single references
   // Team fields are always required (all generated endpoints use @crouton/auth)
-  const useMetadata = config?.flags?.useMetadata ?? true
 
   // owner is always included (required for @crouton/auth)
   singleReferences.push({
@@ -327,31 +326,20 @@ function detectReferenceFields(data: Record<string, any>, config: Record<string,
     isUserReference: true
   })
 
-  if (useMetadata) {
-    singleReferences.push({
-      fieldName: 'createdBy',
-      targetCollection: 'users',
-      isExternal: true,
-      isUserReference: true
-    })
-    singleReferences.push({
-      fieldName: 'updatedBy',
-      targetCollection: 'users',
-      isExternal: true,
-      isUserReference: true
-    })
-  }
+  singleReferences.push({
+    fieldName: 'createdBy',
+    targetCollection: 'users',
+    isExternal: true,
+    isUserReference: true
+  })
+  singleReferences.push({
+    fieldName: 'updatedBy',
+    targetCollection: 'users',
+    isExternal: true,
+    isUserReference: true
+  })
 
   return { singleReferences, arrayReferences }
-}
-
-// Convert a layer name to camelCase to ensure a valid JavaScript identifier
-// (e.g. my-app_core -> myAppCore)
-function toLayerCamelCase(layer: string): string {
-  return layer
-    .split(/[-_]/)
-    .map((part, index) => index === 0 ? part : part.charAt(0).toUpperCase() + part.slice(1))
-    .join('')
 }
 
 // Generate imports for referenced schemas (external, cross-layer, or same-layer)
@@ -473,7 +461,7 @@ function buildSelectJoins(
 }
 
 // Generate post-query processing code for JSON fields (repeater, json types)
-// These fields come back as strings from SQLite and need to be parsed
+// jsonColumn.fromDriver already parses them, so only null defaults are applied here
 function buildJsonFieldProcessing(
   jsonFields: { fieldName: string; fieldType: string; defaultValue: string }[],
   camelCasePlural: string
@@ -481,15 +469,7 @@ function buildJsonFieldProcessing(
   let jsonFieldProcessing = ''
   if (jsonFields.length > 0) {
     const fieldParsers = jsonFields.map(field => `
-      // Parse ${field.fieldName} from JSON string
-      if (typeof item.${field.fieldName} === 'string') {
-        try {
-          item.${field.fieldName} = JSON.parse(item.${field.fieldName})
-        } catch (e) {
-          console.error('Error parsing ${field.fieldName}:', e)
-          item.${field.fieldName} = ${field.defaultValue}
-        }
-      }
+      // ${field.fieldName} is already parsed by jsonColumn.fromDriver; only default it
       if (item.${field.fieldName} === null || item.${field.fieldName} === undefined) {
         item.${field.fieldName} = ${field.defaultValue}
       }`).join('')
@@ -512,7 +492,7 @@ function buildArrayRefProcessing(
   let postQueryProcessing = ''
   if (arrayReferences.length > 0) {
     // Group array references by target collection for efficient querying
-    const refsByCollection = {}
+    const refsByCollection: Record<string, any[]> = {}
     arrayReferences.forEach((ref) => {
       const collection = ref.targetCollection
       if (!refsByCollection[collection]) {
@@ -536,35 +516,16 @@ function buildArrayRefProcessing(
       // Build the ID collection logic for all fields referencing this collection
       const idCollectionCode = refs.map(ref => `
     ${camelCasePlural}.forEach(item => {
-        if (item.${ref.fieldName}) {
-          try {
-            const ids = typeof item.${ref.fieldName} === 'string'
-              ? JSON.parse(item.${ref.fieldName})
-              : item.${ref.fieldName}
-            if (Array.isArray(ids)) {
-              ids.forEach(id => all${collectionVarName}Ids.add(id))
-            }
-          } catch (e) {
-            // Handle parsing errors gracefully
-            console.error('Error parsing ${ref.fieldName}:', e)
-          }
+        if (Array.isArray(item.${ref.fieldName})) {
+          item.${ref.fieldName}.forEach(id => all${collectionVarName}Ids.add(id))
         }
       })`).join('')
 
       // Build the mapping logic for all fields
       const mappingCode = refs.map(ref => `
         item.${ref.fieldName}Data = []
-        if (item.${ref.fieldName}) {
-          try {
-            const ids = typeof item.${ref.fieldName} === 'string'
-              ? JSON.parse(item.${ref.fieldName})
-              : item.${ref.fieldName}
-            if (Array.isArray(ids)) {
-              item.${ref.fieldName}Data = related${collectionVarName}.filter(r => ids.includes(r.id))
-            }
-          } catch (e) {
-            console.error('Error mapping ${ref.fieldName}:', e)
-          }
+        if (Array.isArray(item.${ref.fieldName})) {
+          item.${ref.fieldName}Data = related${collectionVarName}.filter(r => item.${ref.fieldName}.includes(r.id))
         }`).join('')
 
       processingBlocks.push(`
@@ -614,7 +575,6 @@ interface QueryTemplateContext {
   prefixedPascalCasePlural: string
   camelCase: string
   camelCasePlural: string
-  useMetadata: boolean
   typesPath: string
   ascImport: string
   schemaImports: string
@@ -635,7 +595,7 @@ function buildFileHeader(ctx: QueryTemplateContext): string {
   // `sql` is always needed now — getAll* runs a count(*) for pagination totals.
   const sqlImport = ', sql'
   return `// Generated with JSON field post-processing support (v2025-01-11)
-import { eq, and${ctx.useMetadata ? ', desc' : ''}${ctx.ascImport}, inArray${sqlImport} } from 'drizzle-orm'
+import { eq, and, desc${ctx.ascImport}, inArray${sqlImport} } from 'drizzle-orm'
 import { alias } from 'drizzle-orm/sqlite-core'
 import * as tables from './schema'
 import type { ${ctx.prefixedPascalCase}, New${ctx.prefixedPascalCase} } from '${ctx.typesPath}'
@@ -742,8 +702,8 @@ export async function update${ctx.prefixedPascalCase}(
   const [${ctx.camelCase}] = await (db as any)
     .update(tables.${ctx.tableName})
     .set({
-      ...updates,${ctx.useMetadata ? `
-      updatedBy: userId` : ''}
+      ...updates,
+      updatedBy: userId
     })
     .where(and(...conditions))
     .returning()
@@ -840,16 +800,11 @@ export function generateQueries(
   // Check if hierarchy or sortable is enabled for import modifications
   const hasHierarchy = data.hierarchy && data.hierarchy.enabled
   const hasSortable = data.sortable && data.sortable.enabled
-  const useMetadata = config?.flags?.useMetadata ?? true
   const ascImport = (hasHierarchy || hasSortable) ? ', asc' : ''
   const orderField = hasSortable ? (data.sortable.orderField || 'order') : 'order'
   const orderByClause = hasSortable
-    ? (useMetadata
-        ? `asc(tables.${tableName}.${orderField}), desc(tables.${tableName}.createdAt)`
-        : `asc(tables.${tableName}.${orderField})`)
-    : (useMetadata
-        ? `desc(tables.${tableName}.createdAt)`
-        : '')
+    ? `asc(tables.${tableName}.${orderField}), desc(tables.${tableName}.createdAt)`
+    : `desc(tables.${tableName}.createdAt)`
 
   // Generate tree queries if hierarchy is enabled
   const treeQueries = generateTreeQueries(data, tableName, prefixedPascalCase, prefixedPascalCasePlural, camelCasePlural)
@@ -866,7 +821,6 @@ export function generateQueries(
     prefixedPascalCasePlural,
     camelCase,
     camelCasePlural,
-    useMetadata,
     typesPath,
     ascImport,
     schemaImports,

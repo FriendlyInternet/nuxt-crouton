@@ -38,6 +38,10 @@ test('pi-decomposer (+ shared dedup rule)', () => {
   assertGolden(renderPrompt('pi-decomposer', { issue: '1932' }), 'pi-decomposer')
 })
 
+test('pi-planner (plan mode, #2755)', () => {
+  assertGolden(renderPrompt('pi-planner', { issue: '1932' }), 'pi-planner')
+})
+
 test('a missing variable is a hard error, not an empty string', () => {
   assert.throws(() => renderPrompt('pi-worker', { issue: '1' }), /missing --var branch_instr/)
 })

@@ -6,10 +6,10 @@ import { z } from 'zod'
 
 const bodySchema = z.object({
   name: z.string().min(1, 'name is required'),
-  street: z.string().optional(),
-  city: z.string().optional(),
-  postcode: z.string().optional(),
-  coordinates: z.string().optional()
+  street: z.string().nullish(),
+  city: z.string().nullish(),
+  postcode: z.string().nullish(),
+  coordinates: z.string().nullish()
 }).strip()
 
 export default defineEventHandler(async (event) => {

@@ -9,7 +9,7 @@
  * dispatch runs on the new model, no workflow change.
  *
  * PURE CORE + THIN CLI, so the resolution rule is unit-tested without the fs:
- *   resolveModel(config, tier)  — 'light' | 'default' | 'hard' → the model id from the config.
+ *   resolveModel(config, tier)  — 'light' | 'default' | 'hard' | 'review' → the model id from the config.
  * The CLI reads .claude/pipeline-models.json (repo-relative to cwd — the checkout root in CI
  * and the repo root locally) and prints the model. On ANY failure it exits non-zero and prints
  * nothing to stdout, so the calling workflow step fails loudly rather than an empty or stale
@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
-export const VALID_TIERS = ['light', 'default', 'hard']
+export const VALID_TIERS = ['light', 'default', 'hard', 'review']
 
 /** PURE. Given the parsed config + a tier, return the model id. Throws on anything unusable. */
 export function resolveModel(config, tier) {

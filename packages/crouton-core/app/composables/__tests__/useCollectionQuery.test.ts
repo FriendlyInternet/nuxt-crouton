@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { ref, computed, reactive, watch } from 'vue'
+import { ref, computed, reactive, watch, effectScope, getCurrentScope, onScopeDispose } from 'vue'
 
 // Mock route
 let mockRoute: { path: string; params: Record<string, any> } = {
@@ -50,6 +50,17 @@ vi.stubGlobal('reactive', reactive)
 vi.stubGlobal('watch', watch)
 vi.stubGlobal('useRoute', () => mockRoute)
 vi.stubGlobal('useFetch', mockUseFetch)
+vi.stubGlobal('getCurrentScope', getCurrentScope)
+vi.stubGlobal('onScopeDispose', onScopeDispose)
+
+// Minimal nuxtApp hook registry: hook() returns an unsubscribe fn
+const remoteHooks = new Set<(e: any) => any>()
+vi.stubGlobal('useNuxtApp', () => ({
+  hook: (name: string, fn: (e: any) => any) => {
+    if (name === 'crouton:remoteChange') remoteHooks.add(fn)
+    return () => remoteHooks.delete(fn)
+  }
+}))
 
 vi.stubGlobal('useAppConfig', () => ({
   croutonCollections: mockCollectionsConfig
@@ -80,9 +91,11 @@ vi.stubGlobal('console', {
 // Import composables/utils after mocking
 import useCollections from '../useCollections'
 import { useTeamContext } from '../useTeamContext'
+import { useRemoteCollectionRefresh } from '../useRemoteCollectionRefresh'
 
 vi.stubGlobal('useCollections', useCollections)
 vi.stubGlobal('useTeamContext', useTeamContext)
+vi.stubGlobal('useRemoteCollectionRefresh', useRemoteCollectionRefresh)
 
 // Import the composable under test
 import { useCollectionQuery } from '../useCollectionQuery'
@@ -479,6 +492,14 @@ describe('useCollectionQuery', () => {
     it('leaves paginationData null when disabled', async () => {
       const result = await useCollectionQuery('products')
       expect(result.paginationData.value).toBeNull()
+    })
+  })
+
+  describe('remote change subscription', () => {
+    it('wires remote changes to refresh', async () => {
+      await useCollectionQuery('products')
+      for (const fn of remoteHooks) await fn({ collection: 'products' })
+      expect(mockFetchState.refresh).toHaveBeenCalledTimes(1)
     })
   })
 

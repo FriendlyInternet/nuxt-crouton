@@ -218,34 +218,9 @@ export default {
     // All generated endpoints use @crouton/auth for team-based authentication.
     // Do NOT define teamId or owner in your schema JSON - they're auto-generated.
 
-    /**
-     * useMetadata: Add timestamp and audit fields
-     *
-     * When true, automatically adds to ALL collections:
-     * - createdAt (timestamp) - When record was created
-     * - updatedAt (timestamp) - When record was last modified
-     * - updatedBy (text) - User ID who last modified
-     *
-     * WARNING: Do NOT define these fields in your schema JSON
-     * when this is true - they're auto-generated.
-     *
-     * @default true
-     */
-    useMetadata: true,
-
     // --------------------------------------------------------
     // GENERATION BEHAVIOR
     // --------------------------------------------------------
-
-    /**
-     * autoRelations: Generate relation helper comments
-     *
-     * Adds commented relation stubs in generated schemas
-     * to help set up Drizzle relations manually.
-     *
-     * @default false
-     */
-    autoRelations: false,
 
     /**
      * noTranslations: Skip translation field generation
@@ -518,7 +493,6 @@ export default {
 //   npx crouton-generate rollback shop products
 //   npx crouton-generate rollback shop products --dry-run
 //   npx crouton-generate rollback-bulk --layer=shop
-//   npx crouton-generate rollback-interactive
 //
 // Other commands:
 //   npx crouton-generate init                    # Create example schema

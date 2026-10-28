@@ -15,21 +15,26 @@ export function getInitials(name: string): string {
 
 /**
  * Generate a consistent HSL color from a user ID.
+ * Polynomial hash (ids differing in the last char hash to consecutive integers), then a
+ * golden-angle step so near-identical ids (u1/u2) land on well-separated hues.
  */
 export function generateUserColor(userId: string): string {
-  let hash = 0
+  let h = 0
   for (let i = 0; i < userId.length; i++) {
-    hash = userId.charCodeAt(i) + ((hash << 5) - hash)
+    h = (Math.imul(h, 31) + userId.charCodeAt(i)) >>> 0
   }
-  const hue = Math.abs(hash) % 360
-  return `hsl(${hue}, 70%, 50%)`
+  const hue = Math.round((h * 137.508) % 360)
+  return `hsl(${hue}, 65%, 45%)`
 }
 
 /**
  * Get readable text color based on background luminance.
- * Returns dark text for light backgrounds, white for dark backgrounds.
+ * Accepts #rrggbb or hsl(h, s%, l%). Returns dark text for light backgrounds, white otherwise.
  */
 export function getTextColor(bgColor: string): string {
+  const hsl = bgColor.match(/^hsla?\(\s*[\d.]+\s*,\s*[\d.]+%\s*,\s*([\d.]+)%/i)
+  if (hsl) return Number(hsl[1]) > 60 ? '#1f2937' : 'white'
+
   const hex = bgColor.replace('#', '')
   if (hex.length !== 6) return 'white'
 

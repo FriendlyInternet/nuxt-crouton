@@ -7,7 +7,7 @@
  *
  * Target: fixtures/minimal (pkg "e2e-fixture-minimal").
  */
-import type { Page } from '@playwright/test'
+import { test as base, type Page } from '@playwright/test'
 import AxeBuilder from '@axe-core/playwright'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -159,6 +159,19 @@ export interface CardRendersSpec {
   marker: string
 }
 
+/**
+ * A two-client live-sync check exercising crouton-collab. Two browser contexts
+ * (same saved auth, same team) open the collection list; we assert both join the
+ * team room (/api/collab/[roomId]/users) and that a save by client B shows up on
+ * client A's list without a reload. Omit for fixtures without crouton-collab.
+ */
+export interface CollabSpec {
+  /** Collection key whose list both clients open (e.g. "mainItems"). */
+  collectionKey: string
+  /** Field label filled when client B creates a row. */
+  field: string
+}
+
 export interface FixtureManifest {
   collections: CollectionSpec[]
   /** Optional package-specific surfaces; omit for fixtures with nothing extra. */
@@ -173,6 +186,8 @@ export interface FixtureManifest {
   ejectedList?: EjectedListSpec
   /** Optional check that a name-resolved collection card renders. */
   cardRenders?: CardRendersSpec
+  /** Optional two-client live-sync check; omit for fixtures without crouton-collab. */
+  collab?: CollabSpec
   /**
    * Opt the WHOLE fixture out of the axe-core a11y scan (a11y.smoke.spec.ts).
    * Set `false` to skip every collection/surface scan for this fixture. Omit
@@ -180,6 +195,11 @@ export interface FixtureManifest {
    * over this blanket switch so coverage stays as wide as possible.
    */
   a11y?: boolean
+  /**
+   * Console warnings/errors to ACCEPT on this fixture (see console-guard.cjs).
+   * Each needs a reason; substring-matched. None are allowed today.
+   */
+  allowConsole?: { pattern: string, reason: string }[]
 }
 
 /** Read the active fixture's e2e manifest (what to smoke). */
@@ -498,3 +518,30 @@ export function formatA11yViolations(violations: A11yViolation[]): string {
       + `    ${v.targets.join(' , ')}`)
     .join('\n')
 }
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const consoleGuard = require('./console-guard.cjs') as typeof import('./console-guard.cjs')
+
+/**
+ * The shared `test`: identical to Playwright's, plus an auto fixture that collects
+ * the page's console warnings/errors and uncaught page errors, and fails the test at
+ * the end if any match consoleGuard's fail list (#2916). Specs import `test` from
+ * here instead of '@playwright/test'. Runs under `nuxt dev`, so Vue's dev-only
+ * warnings are present — keep it that way.
+ */
+export const test = base.extend<{ consoleGuard: void }>({
+  consoleGuard: [async ({ page }, use) => {
+    const seen: { type: string, text: string, url: string }[] = []
+    page.on('console', m => seen.push({ type: m.type(), text: m.text(), url: page.url() }))
+    page.on('pageerror', e => seen.push({ type: 'pageerror', text: e.message, url: page.url() }))
+    await use()
+    let allow: { pattern: string, reason: string }[] = []
+    try {
+      allow = fixtureManifest().allowConsole ?? []
+    } catch {}
+    const failures = consoleGuard.evaluate(seen, allow)
+    if (failures.length) {
+      throw new Error(`Console guard: ${failures.length} problem(s)\n${consoleGuard.formatFailures(failures)}`)
+    }
+  }, { auto: true }]
+})

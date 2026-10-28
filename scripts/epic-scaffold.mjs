@@ -11,7 +11,8 @@
 // THE PLAN (JSON):
 //   { "title": "...", "body": "... Dedup-checked: ...", "labels": ["epic","pkg:x"],
 //     "slug": "optional-branch-slug",
-//     "packagesApproved": "optional — appended to every child as `Packages-approved: …`",
+//     "packagesApproved": "optional — string, or { why, packages: [...] }: stamps every child with
+//        `Packages-approved: …` and (object form) one `pkg:<name>` label per package (#2778)",
 //     "children": [ { "title", "body", "labels", "blockedBy": [siblingIdx…], "needsSplit"? } ] }
 //
 // The epic body MUST carry a `Dedup-checked:` line — this must not become a way around the
@@ -19,14 +20,17 @@
 //
 //   node scripts/epic-scaffold.mjs [--dry-run] plan.json [--repo O/R]
 //
-// Running this already starts the work: every child with no `Blocked-by` gets `work-this` immediately,
-// and the wave scheduler releases the rest as their blockers close. Do NOT label the epic `delegate-pi`
+// Running this starts a TICKET REVIEW (#2776, ticket-review.yml), not the work: the reviewer reads the
+// epic and its tickets first, and only on `go` does the epic get `tickets:approved` and every child
+// with no `Blocked-by` get its trigger label. (Docs/chore-only and pocs/-only epics skip the review and
+// start immediately.) The wave scheduler releases the rest as their blockers close. Do NOT label the epic `delegate-pi`
 // afterwards — that runs the decomposer on an epic that already has children and dispatches the
 // unblocked ones a second time. Use `--dry-run` to look before anything starts.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
+import { shouldReview } from './lib/ticket-verdict.mjs'
 import { hasTestSteps } from './test-card.mjs'
 import { parsePlan, planToActions, runActions, ghCreateIssue, PlanError } from './apply-decompose-plan.mjs'
 
@@ -47,12 +51,6 @@ function parseJsonObject(raw) {
   return p
 }
 
-/** Append `Packages-approved: <why>` to a child body unless it already carries one. */
-function withPackagesApproved(child, approved) {
-  if (!approved || typeof child?.body !== 'string' || /^\s*Packages-approved:/im.test(child.body)) return child?.body
-  return `${child.body.trimEnd()}\n\nPackages-approved: ${approved}\n`
-}
-
 /** Validate the scaffold plan → { title, body, labels, slug, children } (children via parsePlan). */
 export function parseScaffoldPlan(raw) {
   const p = parseJsonObject(raw)
@@ -62,10 +60,10 @@ export function parseScaffoldPlan(raw) {
     throw new PlanError('epic body has no `Dedup-checked:` line — run the issue-dedup search first and attest it (the scaffold must not bypass the dedup gate)')
   }
   if (!hasTestSteps(p.body)) throw new PlanError(NO_TEST_STEPS_MSG)
-  const approved = typeof p.packagesApproved === 'string' && p.packagesApproved.trim() ? p.packagesApproved.trim() : null
   const children = parsePlan({
     leaf: false,
-    children: (p.children || []).map(c => ({ ...c, body: withPackagesApproved(c, approved) })),
+    packagesApproved: p.packagesApproved,
+    children: p.children || [],
   }).children
   const labels = Array.isArray(p.labels) ? p.labels.filter(l => typeof l === 'string' && l) : []
   if (!labels.includes('epic')) labels.unshift('epic')
@@ -79,7 +77,8 @@ export const epicBranch = (n, slug) => `epic/${n}-${slug}`
 export function scaffoldActions(plan, { epic, knownLabels = [] }) {
   return planToActions(
     { leaf: false, children: plan.children },
-    { target: epic, epic, depth: 0, epic_branch: epicBranch(epic, plan.slug), knownLabels },
+    // #2776: a brand-new epic has no `tickets:approved` yet — its tickets are reviewed first.
+    { target: epic, epic, depth: 0, epic_branch: epicBranch(epic, plan.slug), knownLabels, reviewTickets: shouldReview(plan.children) },
   )
 }
 
@@ -88,7 +87,8 @@ export function renderTree(plan, actions, epic = 'N') {
   const lines = [`epic #${epic}: ${plan.title}  [${plan.labels.join(', ')}]`, `  branch: ${epicBranch(epic, plan.slug)} (from origin/main)`]
   plan.children.forEach((c, i) => {
     const create = actions.find(a => a.type === 'create' && a.ref === `child${i}`)
-    const deps = c.blockedBy.length ? `  Blocked-by: ${c.blockedBy.map(d => `child${d}`).join(', ')}` : '  (dispatched immediately)'
+    const held = actions.some(a => a.type === 'request-ticket-review')
+    const deps = c.blockedBy.length ? `  Blocked-by: ${c.blockedBy.map(d => `child${d}`).join(', ')}` : held ? '  (starts once the ticket review approves)' : '  (dispatched immediately)'
     lines.push(`  child${i}: ${c.title}  [${(create?.labels || c.labels).join(', ')}]`, `   ${deps.trim()}`)
     const block = (create?.body || '').match(/<!--\s*pipeline:[^>]*-->/)
     if (block) lines.push(`   ${block[0]}`)
@@ -130,7 +130,8 @@ function ensureBranch(branch, sha) {
 /** Labels the plan uses that the repo taxonomy doesn't have — an unknown one fails creation midway. */
 export function unknownPlanLabels(plan, knownLabels) {
   if (!knownLabels.length) return []
-  return plan.labels.filter(l => !knownLabels.includes(l))
+  const used = [...plan.labels, ...plan.children.flatMap(c => c.labels.filter(l => l.startsWith('pkg:')))]
+  return [...new Set(used)].filter(l => !knownLabels.includes(l))
 }
 
 function main(argv) {

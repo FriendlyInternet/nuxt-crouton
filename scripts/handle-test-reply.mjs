@@ -26,6 +26,24 @@ export function decideTestReply({ labels = [], body = '', association = '' } = {
   return { act: true, result, note }
 }
 
+/**
+ * A verified epic is done when every sub-issue is closed and its epic→main PR is merged (#2955).
+ * `prs` are the PRs whose head is the epic's branch; with none, there is nothing unmerged to wait on.
+ * @returns {{ close: true } | { close: false, comment: string }}
+ */
+export function decideEpicClose({ subIssues = [], prs = [] } = {}) {
+  const openKids = subIssues.filter(i => i.state !== 'closed')
+  const openPrs = prs.filter(p => p.state === 'open')
+  const unmerged = !openPrs.length && prs.length && !prs.some(p => p.merged_at)
+  const waiting = [
+    ...openKids.map(i => `#${i.number} (sub-issue still open)`),
+    ...openPrs.map(p => `#${p.number} (epic→main PR still open)`),
+    ...(unmerged ? [`#${prs[0].number} (epic→main PR closed without merging)`] : [])
+  ]
+  if (!waiting.length) return { close: true }
+  return { close: false, comment: `Verified, but left open — still waiting on: ${waiting.join(', ')}.` }
+}
+
 /** Body of the follow-up sub-issue created from a `not ok` note. */
 export function buildFailureIssue({ epicNumber, note }) {
   const what = note || '(no detail given — owner replied `not ok`; ask what is wrong)'
@@ -76,6 +94,23 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const base = `/repos/${REPO}/issues/${number}`
   const issue = await gh(base)
   const labels = (issue.labels || []).map(l => (typeof l === 'string' ? l : l.name))
+  const PROV = '> 🤖 **pi.dev harness** · agent pipeline (CI) · _test-card reply handler (#2542)_'
+  // Close a verified epic once its children and epic→main PR are all merged (#2955).
+  const closeIfDone = async () => {
+    const subIssues = await gh(`${base}/sub_issues?per_page=100`)
+    const pulls = await gh(`/repos/${REPO}/pulls?state=all&base=main&per_page=100`)
+    const prs = pulls.filter(p => p.head.ref.startsWith(`epic/${number}-`))
+    const c = decideEpicClose({ subIssues, prs })
+    const body = c.close ? 'Closed — verified, every sub-issue is closed and the epic is merged to main.' : c.comment
+    await gh(`${base}/comments`, { method: 'POST', body: JSON.stringify({ body: `${body}\n\n${PROV}` }) })
+    if (c.close) await gh(base, { method: 'PATCH', body: JSON.stringify({ state: 'closed', state_reason: 'completed' }) })
+    console.log(`handle-test-reply: #${number} ${c.close ? 'closed' : 'left open'}`)
+  }
+  // Backfill: re-check an already-verified epic (CLOSE_VERIFIED=true, APPLY=true).
+  if (process.env.CLOSE_VERIFIED === 'true' && labels.includes('status:verified') && issue.state === 'open') {
+    if (APPLY) await closeIfDone()
+    process.exit(0)
+  }
   const d = decideTestReply({
     labels,
     body: process.env.COMMENT_BODY,
@@ -102,6 +137,7 @@ if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
     : `❌ Marked **failed**. Your note became a new task: #${child.number}`
   await gh(`${base}/comments`, {
     method: 'POST',
-    body: JSON.stringify({ body: `${msg}\n\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _test-card reply handler (#2542)_` })
+    body: JSON.stringify({ body: `${msg}\n\n${PROV}` })
   })
+  if (d.result === 'ok') await closeIfDone()
 }

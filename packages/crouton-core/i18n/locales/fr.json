@@ -265,5 +265,9 @@
   },
   "calendar": {
     "placeholder": "Choisir une date"
+  },
+  "collab": {
+    "editingCount": "{count} en cours d'édition",
+    "currentlyEditing": "En cours d'édition :"
   }
 }

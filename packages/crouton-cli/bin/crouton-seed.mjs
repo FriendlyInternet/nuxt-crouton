@@ -44,8 +44,7 @@ const main = defineCommand({
     },
     locale: {
       type: 'string',
-      description: 'Locale for demo content',
-      default: 'nl'
+      description: 'Locale for demo content (default: the app\'s crouton.config defaultLocale, else en)'
     },
     'dry-run': {
       type: 'boolean',
