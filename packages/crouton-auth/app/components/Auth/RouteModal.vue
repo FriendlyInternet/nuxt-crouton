@@ -253,7 +253,7 @@ async function onLoginSubmit(event: FormSubmitEvent<{ email: string, password?: 
 
 async function handleMagicLink(email: string) {
   try {
-    await loginWithMagicLink(email)
+    await loginWithMagicLink(email, state.value.redirectTo)
     magicLinkSent.value = true
     magicLinkEmail.value = email
     notify.success(t('auth.checkYourInbox'), { description: t('auth.magicLinkSentDescription') })
