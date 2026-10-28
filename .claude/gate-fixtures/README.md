@@ -17,7 +17,7 @@ points each gate's subagent directly at its fixture instead of a PR diff.
 
 ## Diff-scope exclusion (so these never self-flag ordinary PRs)
 
-Each real gate workflow (`frontend-review.yml`, `a11y.yml`, `red-team.yml`)
+Each real gate workflow (`review.yml` jobs)
 excludes this directory from its `paths` trigger with a leading `!` entry —
 `'!.claude/gate-fixtures/**'` — so committing/touching a fixture does not
 itself trigger the real per-PR gate. The **smoke** workflow scans the fixture

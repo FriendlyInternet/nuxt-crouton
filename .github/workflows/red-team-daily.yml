@@ -17,7 +17,7 @@ name: Red-Team (daily deep sweep)
 # If RESEND_API_KEY / the vars are unset the email step warns and skips (the job stays green).
 
 on:
-  # Daily schedule dropped to cut cost (#823) — rely on the per-PR red-team.yml gate
+  # Daily schedule dropped to cut cost (#823) — rely on the per-PR review.yml gate
   # (scope:diff, depth:quick). Kept dispatchable for an occasional manual whole-repo sweep.
   workflow_dispatch:        # manual run
 
@@ -29,7 +29,7 @@ jobs:
   red-team-daily:
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
-    # Job-level permissions (see red-team.yml for why id-token MUST be here). No issues/PR
+    # Job-level permissions (see review.yml for why id-token MUST be here). No issues/PR
     # write — this workflow does NOT post to GitHub; disclosure is by private email only.
     permissions:
       contents: read

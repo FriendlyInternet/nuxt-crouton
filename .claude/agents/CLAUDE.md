@@ -58,7 +58,7 @@ Static-first; at `depth=deep` it may dynamically confirm high/criticals against 
 | `red-team` | `red-team.md` | no | no (reports only) | `sonnet` |
 
 It's steered by the **`/red-team` skill** (on demand) and run by
-`.github/workflows/red-team.yml` (per-PR `quick`, fails the check on high+) and
+`.github/workflows/review.yml` (per-PR `quick`, fails the check on high+) and
 `red-team-daily.yml` (daily `deep`). Findings → a report under `writeups/reports/` + (for
 confirmed high/criticals) `security`/`sec:*` GitHub issues.
 
@@ -77,7 +77,7 @@ against a fixture. It reports; it patches the safe set (`alt`/`aria-label`/label
 | `a11y` | `a11y.md` | no | only under `fix:true` (safe set) | `sonnet` |
 
 It's steered by the **`/a11y` skill** (on demand) and run by
-`.github/workflows/a11y.yml` (per-PR `quick`, fails the check on 🔴 critical/serious) and
+`.github/workflows/review.yml` (per-PR `quick`, fails the check on 🔴 critical/serious) and
 `a11y-daily.yml` (daily `deep`, posts a public standing issue + files `a11y` issues for new
 criticals). Severity maps axe critical/serious → 🔴, moderate → 🟡, minor → 🔵.
 
@@ -99,7 +99,7 @@ deterministic set (v3→v4 renames, redundant-overlay-`UCard` unwraps) under `fi
 | `frontend-review` | `frontend-review.md` | no | only under `fix:true` (safe set) | `sonnet` |
 
 It's steered by the **`/frontend-review` skill** (on demand) and run by
-`.github/workflows/frontend-review.yml` (per-PR `quick`, fails the check on a 🔴
+`.github/workflows/review.yml` (per-PR `quick`, fails the check on a 🔴
 critical convention break, diff-scoped so never the backlog). Its lens is conventions
 only — not visual taste (`/ui-proposal`), accessibility (`/a11y`), or security
 (`/red-team`).
@@ -122,7 +122,7 @@ findings**. It reports; it patches only the safe deterministic set under `fix:tr
 **It is ADVISORY — it has no 🔴 and NEVER blocks a merge.** Simplification is a judgment
 call, so its whole point is to *inform*, and precision beats recall (a noisy taste call
 teaches people to mute it). It's the CI form of the on-demand `/simplify` built-in, run by
-`.github/workflows/simplify-review.yml` (per-PR `quick`, diff-scoped, report-only — posts a
+`.github/workflows/review.yml` (per-PR `quick`, diff-scoped, report-only — posts a
 sticky comment + writes a verdict for the outage-check, always exits 0). Sonnet (not Haiku)
 because judgment/false-positive cost dominates here — see `routing.json`. Its lens is
 **simpler/less-duplicated/more-idiomatic** only — not bugs (`/code-review`, `red-team`),
@@ -308,7 +308,7 @@ all of these by **default** — they're not optional extras; each one has burned
   retries, hits max_turns — and the gate fails **OPEN** as a hollow green. This shipped broken
   in `frontend-review`, `a11y`, `red-team` (fixed #1031/#1033) *and* the loop-station advisor
   (fixed #1037). Two standard forms:
-  - **Per-PR verdict gates** (`frontend-review.yml` / `a11y.yml` / `red-team.yml`):
+  - **Per-PR verdict gates** (`review.yml`):
     `--allowedTools Bash,Write,Edit,Read,Grep,Glob` in `claude_args`.
   - **Sweeps/advisors that file issues** (`a11y-daily.yml` / `red-team-daily.yml` /
     `loop-station-advisor.yml`): `--permission-mode bypassPermissions`.

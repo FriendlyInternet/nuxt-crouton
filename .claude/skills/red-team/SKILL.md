@@ -97,7 +97,7 @@ of these now?"* — fixing is a separate, explicit step (this skill finds; it do
 
 ## Relationship to the other entry points
 
-- **CI** (`.github/workflows/red-team.yml`) runs the *subagent* directly at `depth=quick` on a
+- **CI** (`.github/workflows/review.yml`) runs the *subagent* directly at `depth=quick` on a
   PR diff and **fails the check on a high/critical** finding — it doesn't go through this skill.
 - **Daily** (`.github/workflows/red-team-daily.yml`) runs `depth=deep` whole-repo, posts the
   report to a standing issue, and files issues exactly as step 4 above.

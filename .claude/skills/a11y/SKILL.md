@@ -189,7 +189,7 @@ called out as "needs a human decision" with the reason.
   spawn-and-collate shape, different lens. Reach for `/a11y` when you specifically want
   accessibility, with the option to comment or fix.
 - **CI runs the same engines automatically** (#730, mirroring the red-team workflows):
-  `.github/workflows/a11y.yml` runs the subagent at `depth=quick` on a PR diff — posts a
+  `.github/workflows/review.yml` runs the subagent at `depth=quick` on a PR diff — posts a
   sticky `<!-- a11y -->` comment and **fails the check on a 🔴 critical/serious finding**
   (diff-scoped, so never on the pre-existing backlog). `.github/workflows/a11y-daily.yml`
   runs `/a11y` at `depth=deep` daily — writes a report (`writeups/reports/a11y-repo-*.md`),

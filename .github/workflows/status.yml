@@ -34,7 +34,7 @@ on:
   # what actually refreshes the sticky. Add a workflow here when it becomes a gate worth
   # reflecting; an unlisted one simply doesn't trigger a refresh (the next listed one will).
   workflow_run:
-    workflows: ["CI", "E2E", "Frontend Review (PR)", "A11y (PR)", "Red-Team (PR)", "Packages guard"]
+    workflows: ["CI", "E2E", "Review", "Packages guard"]
     types: [completed]
   check_suite:
     types: [completed]

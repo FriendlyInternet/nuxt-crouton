@@ -12,7 +12,7 @@ name: A11y (daily sweep)
 # Required repo config: secrets.ANTHROPIC_API_KEY (shared with the other claude workflows).
 
 on:
-  # Daily schedule dropped to cut cost (#823) — rely on the per-PR a11y.yml gate (diff-scoped).
+  # Daily schedule dropped to cut cost (#823) — rely on the per-PR review.yml gate (diff-scoped).
   # Kept dispatchable for an occasional manual whole-repo sweep.
   workflow_dispatch:        # manual run
 
@@ -24,7 +24,7 @@ jobs:
   a11y-daily:
     runs-on: ${{ vars.HOSTED_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
-    # Job-level permissions (see a11y.yml for why id-token MUST be here). `issues: write`
+    # Job-level permissions (see review.yml for why id-token MUST be here). `issues: write`
     # because — unlike the security sweep — this workflow DOES post to GitHub (standing
     # issue + new-finding issues); a11y findings are safe to disclose publicly.
     permissions:
