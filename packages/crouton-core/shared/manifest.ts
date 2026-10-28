@@ -229,20 +229,7 @@ export interface ListEnhancement {
   scriptCode?: string
 }
 
-export interface FormComponentContext {
-  /** The base collection name from the schema (e.g. 'assets', 'pages') */
-  collectionName: string
-  fields: DetectedField[]
-  detected: DetectionResult
-}
-
 export interface GeneratorContribution {
-  /**
-   * Return a form component name to use instead of generating Form.vue.
-   * Called during generation — if a non-null string is returned, the CLI
-   * skips Form.vue generation and sets `componentName` to this value.
-   */
-  getFormComponent?(ctx: FormComponentContext): string | null
   enhanceForm?(ctx: FormContext): FormEnhancement | null
   enhanceList?(ctx: ListContext): ListEnhancement | null
 }

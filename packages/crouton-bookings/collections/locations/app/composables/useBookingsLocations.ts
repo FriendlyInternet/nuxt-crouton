@@ -8,7 +8,7 @@
  * - Composable: useBookingsLocations
  * - Collection name: bookingsLocations
  * - API endpoint: /api/teams/[id]/bookings-locations
- * - Form component: CroutonBookingsLocationForm (the package's own form; the generated _Form.vue was removed in #2278 — it depended on crouton-maps composables)
+ * - Form component: BookingsLocationsForm (the package's own form; the generated _Form.vue was removed in #2278 — it depended on crouton-maps composables)
  * - List component: BookingsLocationsList
  * - Fields: title, color, street, zip, city, location, content, allowedMemberIds, slots, openDays, slotSchedule, blockedDates, offerFullDay, inventoryMode, quantity, maxBookingsPerMonth
  *
@@ -88,7 +88,6 @@ const _bookingsLocationsConfig = {
   name: 'bookingsLocations',
   layer: 'bookings',
   apiPath: 'bookings-locations',
-  componentName: 'CroutonBookingsLocationForm',
   defaultValues: {
     title: '',
     color: '',

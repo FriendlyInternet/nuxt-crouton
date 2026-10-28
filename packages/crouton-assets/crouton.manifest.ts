@@ -44,7 +44,7 @@ export default defineCroutonManifest({
       { name: 'CroutonAssetsUploader', description: 'Upload component with optional crop step and metadata form', props: ['modelValue'] },
       { name: 'CroutonAssetsCard', description: 'Media card for CroutonCollection grid (image/icon, edit/delete)', props: ['item'] },
       { name: 'CroutonAssetsAssetTile', description: 'Selection tile for Picker modal with selected state and checkmark', props: ['item', 'selected'] },
-      { name: 'CroutonAssetsForm', description: 'Asset create/upload form (registered as packageForm for assets collection)', props: [] },
+      { name: 'CroutonAssetsForm', description: 'Asset create/upload form (the assets collection form)', props: [] },
       { name: 'CroutonAssetsFormUpdate', description: 'Asset update/metadata edit form', props: ['item'] },
     ],
     apiRoutes: [
@@ -67,12 +67,6 @@ export default defineCroutonManifest({
 // ---------------------------------------------------------------------------
 
 export const generatorContribution = defineGeneratorContribution({
-  getFormComponent(ctx) {
-    // When generating the assets collection itself, use the package's custom form
-    if (ctx.collectionName === 'assets') return 'CroutonAssetsForm'
-    return null
-  },
-
   enhanceForm(ctx) {
     const { detected } = ctx
     const { assetFields } = detected

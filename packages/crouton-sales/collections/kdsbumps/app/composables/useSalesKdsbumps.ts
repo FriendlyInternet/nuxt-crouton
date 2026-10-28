@@ -44,7 +44,6 @@ const _salesKdsbumpsConfig = {
   name: 'salesKdsbumps',
   layer: 'sales',
   apiPath: 'sales-kdsbumps',
-  componentName: 'SalesKdsbumpsForm',
   defaultValues: {
     eventId: '',
     orderId: '',

@@ -49,7 +49,6 @@ const _bookingsBookingsConfig = {
   name: 'bookingsBookings',
   layer: 'bookings',
   apiPath: 'bookings-bookings',
-  componentName: 'BookingsBookingsForm',
   defaultValues: {
     location: '',
     date: null,

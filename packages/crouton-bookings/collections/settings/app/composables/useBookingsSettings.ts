@@ -41,7 +41,6 @@ const _bookingsSettingsConfig = {
   name: 'bookingsSettings',
   layer: 'bookings',
   apiPath: 'bookings-settings',
-  componentName: 'BookingsSettingsForm',
   defaultValues: {
     statuses: [],
     groups: []

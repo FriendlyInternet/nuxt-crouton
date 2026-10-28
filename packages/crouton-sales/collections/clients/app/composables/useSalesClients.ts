@@ -44,7 +44,6 @@ const _salesClientsConfig = {
   name: 'salesClients',
   layer: 'sales',
   apiPath: 'sales-clients',
-  componentName: 'SalesClientsForm',
   defaultValues: {
     title: '',
     isReusable: false,

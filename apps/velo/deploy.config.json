@@ -1,7 +1,8 @@
 {
+  "collab": true,
   "stagingUrl": "https://velo.pmcp.dev",
   "productionUrl": "https://velo.friendlyinter.net",
-  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages",
+  "layerPackages": "@fyit/crouton-core @fyit/crouton-auth @fyit/crouton-i18n @fyit/crouton-assets @fyit/crouton-bookings @fyit/crouton-email @fyit/crouton-pages @fyit/crouton-collab",
   "smoke": {
     "crud": {
       "create": {
@@ -14,6 +15,10 @@
           "title": "smoke-{rand}",
           "slug": "smoke-{rand}",
           "translations": {
+            "fr": {
+              "title": "smoke-{rand}",
+              "slug": "smoke-{rand}"
+            },
             "en": {
               "title": "smoke-{rand}",
               "slug": "smoke-{rand}"
@@ -31,6 +36,9 @@
         "method": "PATCH",
         "body": {
           "translations": {
+            "fr": {
+              "title": "smoke-{rand}-b"
+            },
             "en": {
               "title": "smoke-{rand}-b"
             },

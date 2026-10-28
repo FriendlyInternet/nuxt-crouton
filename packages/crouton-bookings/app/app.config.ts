@@ -168,8 +168,7 @@ const withNavLabel = <T extends object>(config: T, labelKey: string) => ({
 export default defineAppConfig({
   croutonCollections: {
     bookingsBookings: withNavLabel(bookingsBookingsConfig, 'bookings.collections.bookings.title'),
-    // Package-provided form for locations (overrides the generated _Form.vue)
-    bookingsLocations: { ...withNavLabel(bookingsLocationsConfig, 'bookings.collections.locations.title'), packageForm: 'CroutonBookingsLocationForm' },
+    bookingsLocations: withNavLabel(bookingsLocationsConfig, 'bookings.collections.locations.title'),
     bookingsSettings: withNavLabel(bookingsSettingsConfig, 'bookings.collections.settings.title'),
     bookingsEmailtemplates: withNavLabel(bookingsEmailtemplatesConfig, 'bookings.collections.emailtemplates.title'),
     bookingsEmaillogs: withNavLabel(bookingsEmaillogsConfig, 'bookings.collections.emaillogs.title')

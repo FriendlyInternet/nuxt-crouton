@@ -23,6 +23,8 @@
     "packages/*/collections/**/app/components/**/*.vue",
     "packages/*/collections/**/app/composables/**/*.ts",
     "packages/*/collections/**/types.ts",
+    // A package's own collection form/list, registered as a Nuxt components dir (TranslationsUiForm)
+    "packages/*/app/collection-components/**/*.vue",
     // Loaded by crouton-core's nuxt.config at build time (join(process.cwd(), ...))
     "**/crouton.config.js",
     // Referenced from nuxt.config `css:` arrays, not imports
@@ -117,7 +119,8 @@
     "@fyit/crouton-events",       // meta-package distribution dep: makes extends resolvable
     "@ai-sdk/ui-utils",           // imported by crouton-ai's built dist .d.ts (dist is ignored)
     "@libsql/client",             // D1/sqlite runtime driver in generated scaffolds, loaded dynamically (like better-sqlite3) — #1252
-    "@fyit/crouton-feedback"      // crouton-devtools loads it via installModule('@fyit/crouton-feedback') — string ref, invisible to import analysis (verified src/module.ts:63) — #1324
+    "@fyit/crouton-feedback",     // crouton-devtools loads it via installModule('@fyit/crouton-feedback') — string ref, invisible to import analysis (verified src/module.ts:63) — #1324
+    "agents"                      // docs: optional peer of @nuxtjs/mcp-toolkit; its cloudflare transport imports agents/mcp, never our code — #2251
   ],
   // ONE health block only: this file briefly carried two "health" keys and JSON
   // last-key-wins silently discarded the first (#1256) — never add a second.

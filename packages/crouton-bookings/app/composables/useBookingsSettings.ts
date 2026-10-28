@@ -16,7 +16,6 @@ export const bookingsSettingsConfig = {
   name: 'bookingsSettings',
   layer: 'bookings',
   apiPath: 'bookings-settings',
-  componentName: 'BookingsSettingsForm',
   schema: bookingsSettingSchema,
   defaultValues: {
     statuses: [],

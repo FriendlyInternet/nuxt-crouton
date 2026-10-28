@@ -43,6 +43,13 @@
       "when": 1792838890776,
       "tag": "0005_lyrical_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793183537432,
+      "tag": "0006_thankful_puck",
+      "breakpoints": true
     }
   ]
 }

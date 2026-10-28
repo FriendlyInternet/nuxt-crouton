@@ -2,6 +2,15 @@
 import { SYSTEM_FIELD_GROUPS, metadataFields as systemMetadataFields, hierarchyFields as systemHierarchyFields } from '../utils/system-fields.ts'
 import { toSnakeCase, toLayerCamelCase } from '../utils/helpers.ts'
 
+// Date columns get no implicit default: nullable dates (publishedAt, deletedAt) must stay null
+// unless meta.default asks for a value ('now' → new Date(), anything else → that literal).
+function dateDefault(field: Record<string, any>): string {
+  const def = field.meta?.default
+  if (def === undefined || def === null || def === '') return ''
+  if (def === 'now') return '.$default(() => new Date())'
+  return `.$default(() => new Date(${JSON.stringify(def)}))`
+}
+
 // SQLite only — the pg dialect was removed (#2735); callers reject anything else up front.
 export function generateSchema(data: Record<string, any>, _dialect: string, config: Record<string, any> | null = null): string {
   const { plural, layer, layerPascalCase, singular, hierarchy, pascalCasePlural } = data
@@ -75,7 +84,7 @@ export function generateSchema(data: Record<string, any>, _dialect: string, conf
       } else if (field.type === 'number' || field.type === 'decimal') {
         return `  ${field.name}: ${field.type === 'decimal' ? 'real' : 'integer'}('${field.name}')${nullable}`
       } else if (field.type === 'date') {
-        return `  ${field.name}: integer('${field.name}', { mode: 'timestamp' })${nullable}.$default(() => new Date())`
+        return `  ${field.name}: integer('${field.name}', { mode: 'timestamp' })${nullable}${dateDefault(field)}`
       } else if (field.type === 'json' || field.type === 'repeater' || field.type === 'array' || isDependentField) {
       // Use [] for arrays/repeaters/dependent fields, {} for json objects
         const defaultValue = (field.type === 'array' || field.type === 'repeater' || isDependentField) ? 'null' : '{}'

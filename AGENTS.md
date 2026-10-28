@@ -109,15 +109,16 @@ A probabilistic runtime needs gates where a human should decide. A gate proposes
   missing test is made visible, not blocking — the stack adapter says how.)
 - **Code review** — the diff, for correctness + simplification.
 
-One shared loop: hold on a `blocked` status; the **only** resume signal is a reply comment containing
-`lgtm`/`approve` — not a reaction, not a label. Anything else is a change request. When unsure a diff
+One shared loop: hold on a `blocked` status; the **only** resume signal is a reply that is only `ok`
+(`lgtm`/`approve` still accepted) — not a reaction, not a label. `not ok: …` and anything else is a change request.
+On a PR held for a human, the owner's `ok` is also the merge go: once checks are green the pipeline merges it. When unsure a diff
 is in scope, don't gate.
 
 **Done is signed off, not asserted.** A unit of work is "done" only when the thing it promised is
 *checked and concretely signed off* — never on a proxy. A green build, a passing typecheck, a deploy
 URL, the agent's own confidence: every one of those can be true while the work is wrong (each lied
 during a real graduation, #988). So status is **derived from a recorded sign-off**, not self-asserted:
-no `lgtm`, not done. Where the work has an enumerable contract (a behaviour spec, an acceptance list),
+no `ok`, not done. Where the work has an enumerable contract (a behaviour spec, an acceptance list),
 "done" is *per entry* — each one checked and signed, not the set waved through at once. And the verdict
 comes from **comparison against the expected result**, not from re-reading the list: a list can't
 reveal its own gaps; running the real thing next to the contract can.

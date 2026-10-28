@@ -11,6 +11,8 @@
  *     script can move layout.
  *   - `app.config.ts` → visual only if a changed line sits under a `ui:` key.
  *
+ *   - `fixtures/**` → never visual (regenerated e2e output, #2852).
+ *
  * Fails toward holding: if the diff can't be read, prints 1. Never toward skipping.
  *
  *   node scripts/ui-touched.mjs <base>..<head>     # prints 0 or 1
@@ -22,6 +24,8 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const VISUAL_PATH = /\.(vue|css)$|\/app\/(components|layouts|pages)\//
+// Regenerated e2e fixture apps: generator output, never a surface a human signs off on (#2852).
+const FIXTURE_PATH = /^fixtures\//
 const APP_CONFIG = /(^|\/)app\.config\.ts$/
 
 /**
@@ -140,6 +144,7 @@ function visualFileChanged(f, getLines) {
 }
 
 function fileTouchesUi(f, getLines) {
+  if (FIXTURE_PATH.test(f.path)) return false
   if (APP_CONFIG.test(f.path)) return appConfigTouchesUi(f, getLines)
   return VISUAL_PATH.test(f.path) && visualFileChanged(f, getLines)
 }

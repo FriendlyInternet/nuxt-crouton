@@ -531,7 +531,7 @@ In the agent pipeline both paths are automated as a gate in `.claude/agents/task
 In an interactive session, do the same by hand. Be conservative — when unsure whether a diff is
 "visual", don't gate.
 
-**What counts as approval** (the sign-off signal): a **reply comment** containing `approve`/`lgtm`.
+**What counts as approval** (the sign-off signal): a **reply comment that is only `ok`** (`not ok: …` is a change request; `lgtm`/`approve` still accepted). On a PR held for a human (shared code, workflows, epic → main) the owner's `ok` is also the merge go: the pipeline merges once green (#2832).
 That comment is the *only* thing that resumes the pipeline — a 👍 reaction and the `ui-approved`
 label do **not** trigger anything (`resume-on-comment.yml` fires only on `issue_comment`; reactions
 raise no event and no workflow listens for the label) (#572). Anything else is a change request —
@@ -551,7 +551,7 @@ expensive after. This sits **after** the machine `validate_schema` step (the hum
 it). In the agent pipeline it's a gate in `.claude/agents/task-worker.md`; interactively, do the
 same by hand. It **reuses the same revision/approval loop and signal as the UI gate** (#310) —
 feedback goes inline on the committed `<collection>.md` in the diff; approval (a **comment**
-containing `lgtm`/`approve` — not a reaction or label, #572) unblocks generation.
+that is only `ok` (legacy `lgtm`/`approve`) — not a reaction or label, #572) unblocks generation.
 
 ## Test Sign-Off (agree on the test before you write the code) — epic #774
 
@@ -582,7 +582,7 @@ by the e2e fixture smoke, not here.
 
 In the agent pipeline it's a gate in `.claude/agents/task-worker.md`; interactively, do the same by
 hand. It **reuses the same revision/approval loop and signal as the UI/Schema gates** (#310) — hold
-on `status:blocked`; approval is a **comment** containing `lgtm`/`approve` (not a reaction or label,
+on `status:blocked`; approval is a **comment** that is only `ok` (legacy `lgtm`/`approve`; not a reaction or label,
 #572) and unblocks the code. (The CI `test` job already hard-gates `pnpm test` — this gate is about
 *order*, writing the test first, not enforcement.)
 
@@ -593,6 +593,17 @@ ticket; the hold happens on the ticket, before `delegate`, not on a PR. The pipe
 finish step's tests gate (#1885) opens the PR as a **draft** when a `packages/*` logic file lands
 with no test — visible, not blocking. A worker that meets a ticket asking for a test-first hold
 follows this rule and says so in its done comment.
+
+**Plan → review → build (pipeline lane, #2757, epic #2754).** A `work-this` issue that is a bug
+(`type:fix`), names a `packages/` path, or touches auth / sync / scoped-access / team-filtered
+data starts in **plan mode**: the `route` job in `work-issue-pidev.yml` (rules in
+`.claude/plan-routing.json`, logic in `scripts/lib/plan-route.mjs`) dispatches a plan run
+(#2755) → `plan-review.yml` has an independent top-model reviewer grade it (#2756) → on
+`plan:approved`, `plan-approved.yml` dispatches the build with the approved plan comment as its
+instruction (`plan` input). The build implements exactly that plan, stops and says why if reality
+differs, links the plan in its PR body and appends a row to
+`writeups/reports/plan-review-ledger.jsonl` (`scripts/plan-ledger.mjs`). Chores and app-only
+tweaks build directly. Labels `plan-first` / `no-plan` force or skip the step (`no-plan` wins).
 
 ## Documentation Organization
 
