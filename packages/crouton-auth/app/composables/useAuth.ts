@@ -214,7 +214,7 @@ export function useAuth() {
   /**
    * Sign in with OAuth provider
    */
-  async function loginWithOAuth(provider: string): Promise<void> {
+  async function loginWithOAuth(provider: string, redirectTo?: string): Promise<void> {
     loading.value = true
     error.value = null
     try {

@@ -151,7 +151,7 @@ const oauthButtons = computed<ButtonProps[]>(() => {
 async function handleOAuth(provider: string) {
   formError.value = null
   try {
-    await loginWithOAuth(provider)
+    await loginWithOAuth(provider, state.value.redirectTo)
   } catch (e: unknown) {
     const message = e instanceof Error ? localizeError(e, t) : t('auth.oauthLoginFailed')
     formError.value = message
