@@ -44,8 +44,8 @@ test('a non-object config throws', () => {
   assert.throws(() => resolveModel(null, 'default'), /config must be an object/)
 })
 
-test('VALID_TIERS is exactly the three the workflows use', () => {
-  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard'])
+test('VALID_TIERS is exactly the four the workflows use', () => {
+  assert.deepEqual(VALID_TIERS, ['light', 'default', 'hard', 'review'])
 })
 
 // The committed config must itself be resolvable for both tiers — a broken checked-in file

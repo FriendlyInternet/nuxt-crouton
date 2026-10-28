@@ -93,8 +93,19 @@ on:
         required: false
         default: ""
         type: string
+      mode:
+        description: "build (default) = implement and open a PR. plan (#2755) = investigate, reproduce and post ONE plan comment (marker <!-- pipeline-plan:v1 -->) — no commits, no PR."
+        required: false
+        default: "build"
+        type: choice
+        options: ["build", "plan"]
       branch:
         description: "REVISE mode only (#2875): the PR head branch to revise when it is NOT work-<issue> — an epic/<N>-… → main PR. Blank = work-<issue>. `issue` is then the epic issue; the base is main."
+        required: false
+        default: ""
+        type: string
+      plan:
+        description: "BUILD from an approved plan (#2757): id of the plan comment (marker <!-- pipeline-plan:v1 -->) the plan reviewer approved. The build implements exactly that plan. Blank = no approved plan."
         required: false
         default: ""
         type: string
@@ -107,13 +118,77 @@ on:
     types: [labeled]
 
 jobs:
+  # ── ROUTE (#2757, epic #2754) — plan first, or build directly? ─────────────────────────
+  # A `work-this` LABEL event on a bug / packages/ change / auth-sync-team code starts in PLAN
+  # mode: this job dispatches this workflow with mode=plan and tells `work-pi` to stand down.
+  # The plan reviewer (plan-review.yml, #2756) then labels `plan:approved` and plan-approved.yml
+  # dispatches the build. Chores and app-only tweaks, a manual dispatch, a revise round and an
+  # issue already carrying `plan:approved` all go straight to `work-pi`. The rules are
+  # .claude/plan-routing.json (labels `plan-first` / `no-plan` override).
+  route:
+    name: Route (plan first or build)
+    if: |
+      (github.event_name == 'workflow_dispatch') ||
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+    outputs:
+      build: ${{ steps.route.outputs.build }}
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        if: ${{ github.event_name == 'issues' }}
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: ${{ github.event_name == 'issues' }}
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ github.event_name == 'issues' }}
+        with:
+          node-version: 22
+      - id: route
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          EVENT: ${{ github.event_name }}
+          ISSUE: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # A dispatch (manual, revise, plan, build-from-plan) always runs as asked.
+          if [ "$EVENT" = "workflow_dispatch" ]; then echo "build=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          gh issue view "$ISSUE" --repo "$REPO" --json title,body,labels --jq '.title + "\n" + .body' > "$RUNNER_TEMP/route-issue.txt"
+          LABELS="$(gh issue view "$ISSUE" --repo "$REPO" --json labels --jq '[.labels[].name] | join(",")')"
+          if echo ",$LABELS," | grep -q ',plan:approved,'; then
+            echo "issue #$ISSUE already carries plan:approved → build"
+            echo "build=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          R="$(node scripts/lib/plan-route.mjs "$LABELS" "$RUNNER_TEMP/route-issue.txt")"
+          echo "route: $R"
+          MODE="$(echo "$R" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).mode)')"
+          if [ "$MODE" = "plan" ]; then
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            gh workflow run work-issue-pidev.yml --repo "$REPO" -f issue="$ISSUE" -f mode=plan
+          else
+            echo "build=true" >> "$GITHUB_OUTPUT"
+          fi
+
   work-pi:
+    needs: route
     # Fire on: a manual dispatch, OR the EXACT `work-this` label freshly applied to a leaf
     # issue. The exact-label check is what stops a re-fire loop when the worker adds its own
     # labels (status:in-progress) mid-run (#535). Anything else → no run.
     if: |
+      needs.route.outputs.build == 'true' && (
       (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this')
+      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'work-this'))
     runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
     # One worker at a time per issue (#2645). `work-this` applied at creation fired two runs
     # (#2629) and #1491 got two PRs on `work-1491`. Queue, don't cancel.
@@ -369,7 +444,7 @@ jobs:
       # finish scripts from main — and hand the comment text to the prompt. REV_START is the
       # PR head: the finish step stacks on it and compares against it to tell "changed nothing".
       - id: revise
-        if: ${{ inputs.feedback != '' }}
+        if: ${{ inputs.feedback != '' && inputs.mode != 'plan' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           ISSUE: ${{ inputs.issue }}
@@ -404,6 +479,19 @@ jobs:
           elif git merge --no-edit "origin/${BASE}" 2>&1 | tail -3 && [ ! -f .git/MERGE_HEAD ]; then
             echo "base merged: ${BASE_TIP}"
             echo "base_merged=${BASE_TIP}" >> "$GITHUB_OUTPUT"
+            # Push the clean merge NOW (#2941). A comment that only asks to bring the PR up to date
+            # gives pi nothing to edit, so the run ends "nothing left" and the finish step — where
+            # the merge used to be pushed — never delivers it. A plain (fast-forward) push: a
+            # concurrent push to the PR is refused, never overwritten. rev_start moves to the pushed
+            # head so the finish step's lease and "did this run change anything" stay correct.
+            if git push origin "HEAD:${REV_BRANCH}" 2>&1 | tail -2 && [ "${PIPESTATUS[0]}" = 0 ]; then
+              echo "rev_start=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              echo "base_pushed=1" >> "$GITHUB_OUTPUT"
+              RPR="$(gh pr list --head "${REV_BRANCH}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
+              [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2941)_\n\nBrought up to date with `%s` (merge commit `%s`). Any other change you asked for follows in its own commit; the preview redeploys from this push.' "$BASE" "$(git rev-parse --short HEAD)")" 2>&1 | tail -1 || true
+            else
+              echo "::warning::could not push the base merge — the finish step will retry (#2941)"
+            fi
           else
             # Conflict: give pi the resolution task, with the owner's comment queued after it.
             CHOICE_FILE="$RUNNER_TEMP/conflict-choice.md"
@@ -440,6 +528,11 @@ jobs:
           # WS2 (#1695): the integration branch parsed off the issue's pipeline block (empty → main).
           EPIC_BRANCH: ${{ steps.ctx.outputs.epic_branch }}
           REVISE: ${{ inputs.feedback != '' && '1' || '' }}
+          # #2755: plan mode — the planner persona, no commit/PR (see the `plan` step below).
+          PLAN: ${{ inputs.mode == 'plan' && '1' || '' }}
+          FEEDBACK_ID: ${{ inputs.mode == 'plan' && inputs.feedback || '' }}
+          # #2757: the approved plan to build from (build mode only).
+          APPROVED_PLAN_ID: ${{ inputs.mode != 'plan' && inputs.feedback == '' && inputs.plan || '' }}
           REV_BRANCH: ${{ steps.ctx.outputs.rev_branch }}
         run: |
           set -uo pipefail
@@ -465,12 +558,30 @@ jobs:
           if [ -n "${EPIC_BRANCH:-}" ]; then
             BRANCH_INSTR="branch off the integration branch '${EPIC_BRANCH}' and target the PR THERE (not main)"
           fi
-          if [ -n "${REVISE:-}" ]; then
+          if [ -n "${PLAN:-}" ]; then
+            node scripts/pipeline-prompt.mjs pi-planner --var "issue=$ISSUE" > "$PROMPT_FILE"
+            # #2756: a plan REVIEW sent the plan back — `feedback` is the review comment id. Append
+            # it so the new plan answers the review's reasons (the revise step is skipped in plan mode).
+            if [ -n "${FEEDBACK_ID:-}" ]; then
+              gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${FEEDBACK_ID}" --jq .body > "$RUNNER_TEMP/feedback.txt"
+              { printf '\n\nYOUR PREVIOUS PLAN WAS SENT BACK by the plan reviewer. Post a NEW plan (same marker and sections) that fixes every FAIL below by actually investigating, not by rewording:\n\n'; cat "$RUNNER_TEMP/feedback.txt"; } >> "$PROMPT_FILE"
+            fi
+          elif [ -n "${REVISE:-}" ]; then
             PRN="$(gh pr list --head "${REV_BRANCH:-work-${ISSUE}}" --state open --json number -q '.[0].number' 2>/dev/null || true)"
             node scripts/pipeline-prompt.mjs pi-reviser --var "pr=$PRN" --var "issue=$ISSUE" \
               --var-file "feedback=$RUNNER_TEMP/feedback.txt" > "$PROMPT_FILE"
           else
             node scripts/pipeline-prompt.mjs pi-worker --var "issue=$ISSUE" --var "branch_instr=$BRANCH_INSTR" > "$PROMPT_FILE"
+            # #2757: BUILD FROM AN APPROVED PLAN — plan-approved.yml passes the plan comment id.
+            # The worker implements exactly that plan, and records the plan-review ledger row.
+            if [ -n "${APPROVED_PLAN_ID:-}" ]; then
+              gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${APPROVED_PLAN_ID}" --jq .body > "$RUNNER_TEMP/approved-plan.txt"
+              LEDGER_ROW="$(node scripts/plan-ledger.mjs "$ISSUE" 2>/dev/null || echo '{}')"
+              {
+                printf '\n\nAN INDEPENDENT REVIEWER APPROVED THIS PLAN (comment %s, #2757). IMPLEMENT EXACTLY THIS PLAN — its Fix, Files and Test sections are your scope. If reality differs from the plan (a file is gone, the cause is not what it says, the fix does not work), STOP: post a top-level issue comment saying what differs and why, add status:blocked, and do NOT improvise a different change.\n\nAlso append this ONE line to writeups/reports/plan-review-ledger.jsonl (create the file if missing; otherwise read it and keep every existing line; use the edit/write tool): %s\n\n--- APPROVED PLAN ---\n' "$APPROVED_PLAN_ID" "$LEDGER_ROW"
+                cat "$RUNNER_TEMP/approved-plan.txt"
+              } >> "$PROMPT_FILE"
+            fi
           fi
           # Confirmed on the mac-mini (#888): pin provider + load skills via --skill.
           # GHA runs `run:` steps with bash -e; `set -uo pipefail` above does not clear it.
@@ -567,7 +678,9 @@ jobs:
             exit 1
           fi
           LIST="$(sed 's/^/- `/; s/$/` — resolved, both sides kept/' "$RUNNER_TEMP/conflict-files.txt")"
-          git commit -q -m "Merge ${BASE} into ${REV_BRANCH} (resolve conflicts)" -m "$(printf 'Conflicts resolved by the revise worker (#2848):\n%s' "$(sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt")")"
+          # Message via a file, never argv: a long file list hit ARG_MAX -> exit 126 (#2954).
+          { printf 'Merge %s into %s (resolve conflicts)\n\nConflicts resolved by the revise worker (#2848):\n' "$BASE" "$REV_BRANCH"; sed 's/^/- /' "$RUNNER_TEMP/conflict-files.txt"; } > "$RUNNER_TEMP/conflict-msg.txt"
+          if ! git commit -q -F "$RUNNER_TEMP/conflict-msg.txt"; then echo "::error::git commit of the conflict merge failed (#2954)"; exit 1; fi
           # A resolved conflict must land as a real merge (HEAD + origin/base). A one-parent commit
           # is a flat copy of the base: the conflicts never clear (#2914).
           NPAR="$(git rev-list --parents -n1 HEAD | wc -w)"
@@ -589,12 +702,42 @@ jobs:
       # them); `.pi/npm/`, node_modules, logs, lockfile churn are excluded BY CONSTRUCTION (pi
       # never edited them) — no reliance on .gitignore foreseeing them. Files a generator wrote via
       # `bash` (not an edit tool) are NOT in the ledger; they are REPORTED, never silently committed.
+      # ── PLAN mode (#2755) — verify the plan comment, never commit ────────────────────
+      # The planner posts ONE comment carrying the marker. Parse it with scripts/lib/plan-shape.mjs:
+      # a malformed plan (missing section, an assumption with no why / no linked evidence) fails
+      # the run and says why on the issue; "Reproduced: no" labels the issue `plan:unverified`.
+      - id: plan
+        if: ${{ !cancelled() && steps.claim.outcome != 'failure' && inputs.mode == 'plan' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ inputs.issue }}
+          SINCE: ${{ steps.t0.outputs.ts }}
+        run: |
+          set -uo pipefail
+          gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?since=${SINCE}&per_page=100" \
+            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .body // empty' > "$RUNNER_TEMP/plan.md"
+          if [ ! -s "$RUNNER_TEMP/plan.md" ]; then
+            echo "::error::plan run posted no plan comment (marker <!-- pipeline-plan:v1 -->) — #2755"
+            echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
+          fi
+          VERDICT="$(node scripts/lib/plan-shape.mjs "$RUNNER_TEMP/plan.md")"; RC=$?
+          echo "$VERDICT"
+          if [ "$RC" -ne 0 ]; then
+            ERRS="$(echo "$VERDICT" | node -e 'const v=JSON.parse(require("fs").readFileSync(0,"utf8"));console.log(v.errors.map(e=>"- "+e).join("\n"))')"
+            gh issue comment "$ISSUE" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _plan check (#2755)_\n\n⚠️ **The plan above is malformed — the build will not use it.** Re-run in plan mode.\n\n%s' "$ERRS")" || true
+            echo "ok=0" >> "$GITHUB_OUTPUT"; exit 1
+          fi
+          echo "ok=1" >> "$GITHUB_OUTPUT"
+          if [ "$(echo "$VERDICT" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).unverified)')" = "true" ]; then
+            gh issue edit "$ISSUE" --add-label "plan:unverified" || true
+          fi
+
       - id: finish
         # `!cancelled()` deliberately keeps this running after a pi failure so partial work is
         # still persisted — but NOT after a claim-guard refusal (#2027): pi never ran, there is
         # nothing to finish, and the step's own failure then fed the artifact-gate a false
-        # "the harness crashed" signal.
-        if: ${{ !cancelled() && steps.claim.outcome != 'failure' && steps.traffic.outcome != 'failure' }}
+        # "the harness crashed" signal. Plan mode (#2755) never commits, so it skips this.
+        if: ${{ !cancelled() && steps.claim.outcome != 'failure' && steps.traffic.outcome != 'failure' && inputs.mode != 'plan' }}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -604,11 +747,15 @@ jobs:
           SINCE: ${{ steps.t0.outputs.ts }}
           # REVISE mode (#2446): the PR head pi started from (empty on a normal run).
           REV_START: ${{ steps.revise.outputs.rev_start }}
+          # #2757: the approved plan this build implements (linked from the PR body).
+          APPROVED_PLAN_ID: ${{ inputs.mode != 'plan' && inputs.feedback == '' && inputs.plan || '' }}
           # #2658: REV_START + the current base merged in (equals REV_START when already current).
           REV_BASE: ${{ steps.conflict.outputs.rev_base || steps.revise.outputs.rev_base }}
           # #2914: the base merge conflicted — only a merge commit from the conflict step may be stacked on.
           REV_CONFLICT: ${{ steps.revise.outputs.conflict }}
           BASE_MERGED: ${{ steps.revise.outputs.base_merged }}
+          # #2941: the revise step already pushed a clean base merge (counts as delivered when pi adds nothing).
+          BASE_PUSHED: ${{ steps.revise.outputs.base_pushed }}
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
@@ -778,6 +925,9 @@ jobs:
               FILES="$(git diff --name-status "$RUN_START" HEAD | sed 's/^/- `/; s/\t/` `/; s/$/`/' | head -20)"
               [ -n "$RPR" ] && gh pr comment "$RPR" --body "$(printf '> 🤖 **pi.dev harness** · agent pipeline (CI) · _revision (#2446)_\n\n🔧 **Revised from [your comment](%s)** — new commit `%s` on this PR:\n\n%s\n\nThe preview redeploys from this push.%s' "$FEEDBACK_FROM" "$(git rev-parse --short HEAD)" "$FILES" "${BASE_MERGED:+$(printf '\n\nbase merged: `%s`' "$BASE_MERGED")}")" 2>&1 | tail -1 || true
               fi
+            elif [ "${BASE_PUSHED:-}" = "1" ]; then
+              echo "revise: base merge pushed by the revise step (#2941)"
+              echo "revised=1" >> "$GITHUB_OUTPUT"
             elif ! grep -q '^revise_conflict=1' "$GITHUB_OUTPUT" 2>/dev/null; then
               REPLIED="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${RPR:-0}/comments?since=${SINCE}" --jq '[.[] | select(.user.login == "nuxt-harness[bot]")] | length' 2>/dev/null || echo 0)"
               if [ "${REPLIED:-0}" -gt 0 ]; then
@@ -1042,10 +1192,15 @@ jobs:
             # #2433: carry the issue's `<!-- review-surface: <app> <path> -->` markers onto the PR,
             # so the deploy screenshots the page that shows the change, not the app's start page.
             SURFACES="$(grep -oE '<!--[[:space:]]*review-surface:[^>]*-->' "$RUNNER_TEMP/issue-body.txt" 2>/dev/null | sed 's/^/\n/' | tr -d '\r' || true)"
+            # #2757: a build from an approved plan links that plan in the PR body.
+            PLAN_NOTE=""
+            if [ -n "${APPROVED_PLAN_ID:-}" ]; then
+              PLAN_NOTE="$(printf '\n\n📋 Built from the approved plan: https://github.com/%s/issues/%s#issuecomment-%s' "$GITHUB_REPOSITORY" "$ISSUE" "$APPROVED_PLAN_ID")"
+            fi
             if [ -z "$EXISTING" ]; then
               gh pr create $DRAFT_FLAG --base "$BASE" --head "$BR" \
                 --title "$TITLE" \
-                --body "$(printf 'Closes #%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
+                --body "$(printf 'Closes #%s%s%s%b\n\n🤖 Opened by the pi worker finish step (two-commit split + acceptance gate, #1764/#1849).' "$ISSUE" "$PLAN_NOTE" "$HOLD_NOTE" "$SURFACES")" 2>&1 | tail -3
             else
               # Re-dispatch: toggle the existing PR's draft state to match the new verdict.
               if [ -n "$DRAFT_FLAG" ]; then gh pr ready "$EXISTING" --undo 2>&1 | tail -1 || true
@@ -1186,9 +1341,13 @@ jobs:
           # the PR; a revise that produced neither is failed by its own step above.
           REVISED: ${{ steps.finish.outputs.revised }}
           REVISE_CONFLICT: ${{ steps.finish.outputs.revise_conflict }}
+          # #2755: a plan run's deliverable is the verified plan comment (no PR); the `plan` step
+          # fails the run itself when it is missing or malformed.
+          PLAN_OK: ${{ steps.plan.outputs.ok }}
         with:
           script: |
             const issue_number = Number(process.env.ISSUE_NUMBER)
+            if (process.env.PLAN_OK === '1') { core.info('Plan comment verified — artifact OK (#2755).'); return }
             if (process.env.REVISE_CONFLICT === '1') { core.setFailed('Revision not pushed: the PR changed during the run — explained on the PR (#2446).'); return }
             if (process.env.REVISED === '1') { core.info('Revision delivered on the PR (commit or reply) — artifact OK (#2446).'); return }
             const since = '${{ steps.t0.outputs.ts }}'

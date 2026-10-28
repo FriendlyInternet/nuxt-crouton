@@ -46,6 +46,7 @@
       "cancelled": "Annulée"
     },
     "admin": {
+      "openFullScreen": "Ouvrir en plein écran",
       "title": "Réservations",
       "sectionTitle": "Réservations",
       "overview": "Aperçu",

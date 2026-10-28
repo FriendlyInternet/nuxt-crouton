@@ -14,9 +14,9 @@
  * Uses the saved auth state (the switcher + the asserted string live on the
  * authenticated home page).
  */
-import { test, expect } from '@playwright/test'
+import { expect } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { surfaceUrl, ensureAuthed, fixtureManifest, TEAM_FILE, FIXTURE } from './helpers'
+import { test, surfaceUrl, ensureAuthed, fixtureManifest, TEAM_FILE, FIXTURE } from './helpers'
 
 const i18n = fixtureManifest().i18n
 

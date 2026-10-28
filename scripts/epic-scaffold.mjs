@@ -20,14 +20,17 @@
 //
 //   node scripts/epic-scaffold.mjs [--dry-run] plan.json [--repo O/R]
 //
-// Running this already starts the work: every child with no `Blocked-by` gets `work-this` immediately,
-// and the wave scheduler releases the rest as their blockers close. Do NOT label the epic `delegate-pi`
+// Running this starts a TICKET REVIEW (#2776, ticket-review.yml), not the work: the reviewer reads the
+// epic and its tickets first, and only on `go` does the epic get `tickets:approved` and every child
+// with no `Blocked-by` get its trigger label. (Docs/chore-only and pocs/-only epics skip the review and
+// start immediately.) The wave scheduler releases the rest as their blockers close. Do NOT label the epic `delegate-pi`
 // afterwards — that runs the decomposer on an epic that already has children and dispatches the
 // unblocked ones a second time. Use `--dry-run` to look before anything starts.
 
 import { readFileSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
+import { shouldReview } from './lib/ticket-verdict.mjs'
 import { hasTestSteps } from './test-card.mjs'
 import { parsePlan, planToActions, runActions, ghCreateIssue, PlanError } from './apply-decompose-plan.mjs'
 
@@ -74,7 +77,8 @@ export const epicBranch = (n, slug) => `epic/${n}-${slug}`
 export function scaffoldActions(plan, { epic, knownLabels = [] }) {
   return planToActions(
     { leaf: false, children: plan.children },
-    { target: epic, epic, depth: 0, epic_branch: epicBranch(epic, plan.slug), knownLabels },
+    // #2776: a brand-new epic has no `tickets:approved` yet — its tickets are reviewed first.
+    { target: epic, epic, depth: 0, epic_branch: epicBranch(epic, plan.slug), knownLabels, reviewTickets: shouldReview(plan.children) },
   )
 }
 
@@ -83,7 +87,8 @@ export function renderTree(plan, actions, epic = 'N') {
   const lines = [`epic #${epic}: ${plan.title}  [${plan.labels.join(', ')}]`, `  branch: ${epicBranch(epic, plan.slug)} (from origin/main)`]
   plan.children.forEach((c, i) => {
     const create = actions.find(a => a.type === 'create' && a.ref === `child${i}`)
-    const deps = c.blockedBy.length ? `  Blocked-by: ${c.blockedBy.map(d => `child${d}`).join(', ')}` : '  (dispatched immediately)'
+    const held = actions.some(a => a.type === 'request-ticket-review')
+    const deps = c.blockedBy.length ? `  Blocked-by: ${c.blockedBy.map(d => `child${d}`).join(', ')}` : held ? '  (starts once the ticket review approves)' : '  (dispatched immediately)'
     lines.push(`  child${i}: ${c.title}  [${(create?.labels || c.labels).join(', ')}]`, `   ${deps.trim()}`)
     const block = (create?.body || '').match(/<!--\s*pipeline:[^>]*-->/)
     if (block) lines.push(`   ${block[0]}`)

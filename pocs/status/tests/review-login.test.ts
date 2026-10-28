@@ -36,3 +36,28 @@ describe('previewSessionToken', () => {
     expect(previewSessionToken('s', 'status', 'pr7')).toBe(expected)
   })
 })
+
+describe('walk in the login redirect (#2681)', async () => {
+  const { reviewLoginUrl, sanitizeWalk, withWalk } = await import('../server/utils/review-login')
+  const { loginHrefFor } = await import('../app/utils/walk')
+
+  it('keeps the page deep link and the walk together', () => {
+    const u = new URL(reviewLoginUrl('https://velo.example.dev', 's', 'velo', 'main', '/en/x', 'abc_-1'))
+    expect(u.searchParams.get('redirect')).toBe('/en/x?walk=abc_-1')
+  })
+  it('puts the walk on / when there is no page', () => {
+    expect(withWalk('', 'abc')).toBe('/?walk=abc')
+    expect(withWalk('/p?a=1', 'abc')).toBe('/p?a=1&walk=abc')
+    expect(withWalk('/p', '')).toBe('/p')
+  })
+  it('drops a malformed or oversized walk', () => {
+    expect(sanitizeWalk('a b')).toBe('')
+    expect(sanitizeWalk('A'.repeat(2049))).toBe('')
+    expect(sanitizeWalk(['x'])).toBe('')
+  })
+  it('card login link carries both to and walk', () => {
+    const u = new URL(loginHrefFor({ app: 'velo', number: 7, title: 'T', steps: ['one', 'two'], to: '/en/x' }), 'http://h')
+    expect(u.searchParams.get('to')).toBe('/en/x')
+    expect(u.searchParams.get('walk')).toMatch(/^[A-Za-z0-9_-]+$/)
+  })
+})

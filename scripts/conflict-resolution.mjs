@@ -93,7 +93,9 @@ const sh = (cmd, args) => execFileSync(cmd, args, { encoding: 'utf8' })
 const conflicted = () => sh('git', ['diff', '--name-only', '--diff-filter=U']).split('\n').filter(Boolean)
 
 function run(cmd) {
-  const r = spawnSync(cmd, { shell: true, stdio: 'inherit' })
+  // stdout -> stderr: `verify` stdout is the file list the workflow captures, so a child's
+  // test output on stdout would flood it (#2954: 126 "Argument list too long" on git commit).
+  const r = spawnSync(cmd, { shell: true, stdio: ['inherit', 2, 2] })
   return r.status === 0
 }
 
