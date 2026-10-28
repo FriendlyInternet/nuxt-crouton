@@ -74,3 +74,8 @@ test('race: lgtm on an epic PR merges once', () => {
 test('race: ok on an issue with both status:blocked and status:to-test answers the card only', () => {
   assert.equal(kind({ comment: c('ok'), issue: issue(['status:blocked', 'status:to-test']) }), 'test-card')
 })
+
+test('revise: an interactive-agent **Worker:** request (posted via the Claude app as a User) routes (#3029)', () => {
+  const body = '> 🤖 **Claude Code** · interactive agent · posted from pmcp\n\n**Worker:** rename the header'
+  assert.equal(kind({ comment: c(body, 'MEMBER'), issue: prIssue, pr: pr() }), 'revise')
+})
