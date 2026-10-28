@@ -10,7 +10,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "''",
     "tsType": "string",
     "canonical": "string",
-    "component": "UInput"
+    "component": "UInput",
+    "seed": {
+      "drizzleSeed": "f.loremIpsum({ sentencesCount: 1 })",
+      "fixture": "\"Sample {{name}} {{n}}\""
+    },
+    "testSample": "'sample'"
   },
   "text": {
     "db": "TEXT",
@@ -19,7 +24,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "''",
     "tsType": "string",
     "canonical": "text",
-    "component": "UTextarea"
+    "component": "UTextarea",
+    "seed": {
+      "drizzleSeed": "f.loremIpsum({ sentencesCount: 3 })",
+      "fixture": "\"Sample {{name}} content for row {{n}}. Lorem ipsum dolor sit amet, consectetur adipiscing elit.\""
+    },
+    "testSample": "'sample'"
   },
   "number": {
     "db": "INTEGER",
@@ -28,7 +38,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "0",
     "tsType": "number",
     "canonical": "number",
-    "component": "UInputNumber"
+    "component": "UInputNumber",
+    "seed": {
+      "drizzleSeed": "f.int({ minValue: 0, maxValue: 100 })",
+      "fixture": "{{n}}"
+    },
+    "testSample": "1"
   },
   "integer": {
     "db": "INTEGER",
@@ -37,7 +52,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "0",
     "tsType": "number",
     "canonical": "number",
-    "component": "UInputNumber"
+    "component": "UInputNumber",
+    "seed": {
+      "drizzleSeed": "f.int({ minValue: 0, maxValue: 100 })",
+      "fixture": "{{n}}"
+    },
+    "testSample": "1"
   },
   "decimal": {
     "db": "DECIMAL(10,2)",
@@ -46,7 +66,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "0",
     "tsType": "number",
     "canonical": "decimal",
-    "component": "UInputNumber"
+    "component": "UInputNumber",
+    "seed": {
+      "drizzleSeed": "f.number({ minValue: 0, maxValue: 1000, precision: 100 })",
+      "fixture": "{{n}}"
+    },
+    "testSample": "1"
   },
   "boolean": {
     "db": "BOOLEAN",
@@ -55,7 +80,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "false",
     "tsType": "boolean",
     "canonical": "boolean",
-    "component": "UCheckbox"
+    "component": "UCheckbox",
+    "seed": {
+      "drizzleSeed": "f.weightedRandom([{ value: true, weight: 0.5 }, { value: false, weight: 0.5 }])",
+      "fixture": "{{even}}"
+    },
+    "testSample": "true"
   },
   "date": {
     "db": "TIMESTAMP",
@@ -64,7 +94,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "null",
     "tsType": "Date | null",
     "canonical": "date",
-    "component": "CroutonCalendar"
+    "component": "CroutonCalendar",
+    "seed": {
+      "drizzleSeed": "f.date({ minDate: \"2020-01-01\", maxDate: \"2025-12-31\" })",
+      "fixture": "{{unixDay}}"
+    },
+    "testSample": "'2024-01-01T00:00:00.000Z'"
   },
   "datetime": {
     "db": "TIMESTAMP",
@@ -73,7 +108,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "null",
     "tsType": "Date | null",
     "canonical": "date",
-    "component": "CroutonCalendar"
+    "component": "CroutonCalendar",
+    "seed": {
+      "drizzleSeed": "f.date({ minDate: \"2020-01-01\", maxDate: \"2025-12-31\" })",
+      "fixture": "{{unixDay}}"
+    },
+    "testSample": "'2024-01-01T00:00:00.000Z'"
   },
   "json": {
     "db": "JSON",
@@ -82,7 +122,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "{}",
     "tsType": "Record<string, any>",
     "canonical": "json",
-    "component": "UTextarea"
+    "component": "UTextarea",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: [{}] })",
+      "fixture": "{}"
+    },
+    "testSample": "{}"
   },
   "repeater": {
     "db": "JSON",
@@ -91,7 +136,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "[]",
     "tsType": "any[]",
     "canonical": "repeater",
-    "component": "CroutonFormRepeater"
+    "component": "CroutonFormRepeater",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: [[]] })",
+      "fixture": "[]"
+    },
+    "testSample": "[]"
   },
   "array": {
     "db": "TEXT",
@@ -100,7 +150,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "[]",
     "tsType": "string[]",
     "canonical": "array",
-    "component": "UTextarea"
+    "component": "UTextarea",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: [[]] })",
+      "fixture": "[\"sample\"]"
+    },
+    "testSample": "[]"
   },
   "reference": {
     "db": "VARCHAR(255)",
@@ -109,7 +164,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "''",
     "tsType": "string",
     "canonical": "reference",
-    "component": "CroutonFormReferenceSelect"
+    "component": "CroutonFormReferenceSelect",
+    "seed": {
+      "drizzleSeed": "f.loremIpsum({ sentencesCount: 1 })",
+      "fixture": "\"\""
+    },
+    "testSample": "'sample'"
   },
   "image": {
     "db": "VARCHAR(255)",
@@ -118,7 +178,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "''",
     "tsType": "string",
     "canonical": "image",
-    "component": "CroutonImageUpload"
+    "component": "CroutonImageUpload",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: [\"\"] })",
+      "fixture": "\"\""
+    },
+    "testSample": "'sample'"
   },
   "file": {
     "db": "VARCHAR(255)",
@@ -127,7 +192,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "''",
     "tsType": "string",
     "canonical": "file",
-    "component": "CroutonImageUpload"
+    "component": "CroutonImageUpload",
+    "seed": {
+      "drizzleSeed": "f.valuesFromArray({ values: [\"\"] })",
+      "fixture": "\"\""
+    },
+    "testSample": "'sample'"
   },
   "richText": {
     "db": "TEXT",
@@ -136,7 +206,12 @@ export const FIELD_TYPES_SNAPSHOT: Record<string, FieldTypeMapping> = {
     "default": "''",
     "tsType": "string",
     "canonical": "richText",
-    "component": "CroutonEditorSimple"
+    "component": "CroutonEditorSimple",
+    "seed": {
+      "drizzleSeed": "f.loremIpsum({ sentencesCount: 3 })",
+      "fixture": "\"<p>Sample {{name}} content {{n}}</p>\""
+    },
+    "testSample": "'sample'"
   }
 }
 
