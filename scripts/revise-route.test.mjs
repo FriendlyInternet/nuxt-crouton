@@ -41,6 +41,16 @@ test('routePrComment needs an open work-<N> PR', () => {
   assert.equal(routePrComment({ pr: { headRef: 'feat/x', state: 'open' }, comment: c }).revise, false)
 })
 
+test('an epic/<N>-… head routes to a revise on that branch (#2875)', () => {
+  const c = owner('**Worker:** bring this branch up to date with main')
+  const r = routePrComment({ pr: { headRef: 'epic/2754-plan-before-build', state: 'open' }, comment: c })
+  assert.equal(r.revise, true)
+  assert.equal(r.issue, 2754)
+  assert.equal(r.branch, 'epic/2754-plan-before-build')
+  assert.equal(routePrComment({ pr: { headRef: 'work-12', state: 'open' }, comment: c }).branch, '')
+  assert.equal(routePrComment({ pr: { headRef: 'feature/x', state: 'open' }, comment: c }).revise, false)
+})
+
 test('an interactive-agent comment that addresses the worker revises (#2453)', () => {
   const body = '> 🤖 **Claude Code** · interactive agent · posted from `@pmcp`\'s account (not Maarten) · _change request_\n\n👀 **review** — not lgtm yet.\n**Worker:** add the preview page and push.\n'
   const d = shouldRevise(owner(body))

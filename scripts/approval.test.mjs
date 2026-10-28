@@ -120,6 +120,11 @@ test('ok mid-line, quoted or in code is not a pass', () => {
   assert.equal(parseTestReply('this is not ok').result, null)
 })
 
-test('a bare ok is not a general approval', () => {
-  assert.equal(isApproval('ok'), false)
+test('a whole-reply ok is the owner yes-word (#2832)', () => {
+  for (const b of ['ok', 'OK!', 'ok 👍', 'Ok.', 'lgtm']) assert.equal(isApproval(b), true, b)
+})
+
+test('ok followed by anything, or not on its own, is NOT a yes (#2832)', () => {
+  for (const b of ['ok, but change X', "it's ok I guess", '> ok', 'not ok: X', 'okay then', '`ok`',
+    '> 🤖 **tool** · posted\n\nok', '🤖 ok']) assert.equal(isApproval(b), false, b)
 })

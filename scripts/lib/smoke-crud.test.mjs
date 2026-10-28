@@ -80,3 +80,15 @@ test('runCrud: readPublic is requested anonymously, read authenticated', async (
   assert.equal(calls.find(c => c.path === '/pub/r1').auth, false)
   assert.equal(calls.find(c => c.path.includes('ids=')).auth, true)
 })
+
+test('a failing step carries the first 500 chars of the response body (#2812)', async () => {
+  const long = 'x'.repeat(900)
+  const { http } = fake({
+    ...happy,
+    'PATCH /api/teams/t1/things/r1': { res: { ok: false, status: 422 }, json: null, text: `{"message":"bad ${long}"}` }
+  })
+  const failures = await runCrud(crud, deps(http))
+  assert.equal(failures.length, 1)
+  assert.match(failures[0], /^crud\.update: HTTP 422 — \{"message":"bad x+/)
+  assert.ok(failures[0].length < 560)
+})

@@ -363,6 +363,7 @@ export async function ensureLayersExtended(layers: string[], appDir: string = pr
 
   const nuxtConfigPath = path.join(appDir, 'nuxt.config.ts')
   const failed: string[] = []
+  let changed = 0
 
   for (const layer of layers) {
     const spec = isNpmPackage(layer) ? layer : `./layers/${layer}`
@@ -370,11 +371,13 @@ export async function ensureLayersExtended(layers: string[], appDir: string = pr
     // or another layer that extends it.
     if (isNpmPackage(layer) && await isLayerExtended(layer, appDir)) continue
     const result = await addToNuxtConfigExtends(nuxtConfigPath, spec)
-    if (!result.added && result.reason !== 'already in config') failed.push(spec)
+    if (result.added) changed++
+    else if (result.reason !== 'already in config') failed.push(spec)
   }
 
   if (failed.length === 0) {
-    console.log(`✓ Updated nuxt.config.ts to extend required layers`)
+    // Only report a write that happened — a dry run or an already-wired app must stay silent (#2731)
+    if (changed > 0) console.log(`✓ Updated nuxt.config.ts to extend required layers`)
     return
   }
   console.warn(`⚠️  Could not update nuxt.config.ts`)

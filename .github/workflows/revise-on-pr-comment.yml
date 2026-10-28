@@ -62,7 +62,7 @@ jobs:
             try { await github.rest.reactions.createForIssueComment({ ...context.repo, comment_id: c.id, content: 'eyes' }) } catch (e) {}
             await github.rest.actions.createWorkflowDispatch({
               ...context.repo, workflow_id: 'work-issue-pidev.yml', ref: context.payload.repository.default_branch,
-              inputs: { issue: String(route.issue), feedback: String(c.id) },
+              inputs: { issue: String(route.issue), feedback: String(c.id), branch: route.branch },
             })
             const runs = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/workflows/work-issue-pidev.yml`
             await github.rest.issues.createComment({ ...context.repo, issue_number: pull_number,

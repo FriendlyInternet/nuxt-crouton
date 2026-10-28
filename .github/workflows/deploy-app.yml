@@ -469,6 +469,11 @@ jobs:
             printf '%s' "$2" | npx wrangler secret put "$1" $TARGET
           }
           push NUXT_REVIEW_SEED_SECRET "$REVIEW_SEED_SECRET" REVIEW_SEED_SECRET
+          # PR previews only: switches on the preview-only sign-in route the screenshot check uses
+          # (#2700). Never set on staging or production, where that route stays a 404.
+          if [ "$DEPLOY_ENV" != "production" ] && [ -n "$PR_NUM" ]; then
+            push NUXT_REVIEW_PREVIEW_KEY "pr${PR_NUM}" PR_NUM
+          fi
           push GITHUB_TOKEN "$STATUS_GITHUB_TOKEN" STATUS_GITHUB_TOKEN
           # Magic-link sign-in mail + the owner-only guard (previews have no other source of these).
           push NUXT_EMAIL_RESEND_API_KEY "$RESEND_API_KEY" RESEND_API_KEY
@@ -756,6 +761,13 @@ jobs:
             echo "${APP} has no sign-in (deploy.config.json \"reviewLogin\": false) — no review login."
             exit 0
           fi
+          # A link-only app (no password to seed, e.g. pocs/status) is captured through a preview-only
+          # token instead (#2700): nothing to seed here, but the screenshot check must still run.
+          if [ "$(jq -r '.reviewLogin.method == "preview-token"' "$WORKSPACE/$APP/deploy.config.json" 2>/dev/null)" = "true" ]; then
+            echo "${APP} is link-only (reviewLogin.method preview-token) — no password login to seed; the screenshot signs in with a preview-only token."
+            echo "preview_token=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # Stable per-preview key: the PR number when this is a PR, else the ref.
           if [ -n "$PR_NUMBER" ]; then KEY="pr${PR_NUMBER}"; else KEY="$(printf '%s' "$REF_NAME" | tr -c 'a-zA-Z0-9' '-')"; fi
           EMAIL="review+${APP}-${KEY}@example.com"
@@ -804,107 +816,29 @@ jobs:
             echo "### ⚠️ Review login unavailable (${APP}) — the seed step failed; no working login for this preview." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # ── Capture the review surfaces so the flow can SHOW the change (#2173) ──────────
-      # Deploy-side on purpose: THIS env boots the app; the pi worker's often can't ("could not
-      # typecheck the touched app"). Logs into the live preview, drives the app to each DECLARED
-      # review surface (deploy.config.json `reviewSurfaces`, else reviewLogin.landing), validates
-      # the shot isn't blank/error, and commits the PNG(s) to writeups/ui-proposals/ — where the
-      # #2172 sign-off gate looks. The push (App token) re-runs CI so that gate re-evaluates and
-      # finds the evidence. That push DOES re-deploy any PR that already matches watchPaths (the
-      # path filters diff the whole PR, base..head), so a run triggered BY a capture commit skips
-      # capturing — one extra deploy round, then it stops (#2294). Never fails the deploy — no
-      # capture ⇒ the gate withholds (honest).
-      - name: Mint token for review-capture push
-        id: capture-token
-        if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && steps.seed.outputs.email != '' }}
-        continue-on-error: true
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          app-id: ${{ secrets.HARNESS_APP_ID }}
-          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
-          owner: FriendlyInternet
-
-      - name: Capture + commit review-surface evidence (#2173)
-        if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && steps.seed.outputs.email != '' && steps.capture-token.outputs.token != '' }}
+      # ── Hand the deployed preview to preview-screenshot.yml (#2697) ──────────────────
+      # The screenshot used to be captured inline here (#2173), so a miss could only be retried
+      # by redeploying. It is now its own workflow ("Preview screenshot" check): this step only
+      # records WHERE the preview is. No secrets in the file — the review login is re-derived
+      # downstream from REVIEW_SEED_SECRET, since artifacts are readable by anyone with repo access.
+      - name: Record preview for the screenshot check (#2697)
+        if: ${{ inputs.environment == 'staging' && github.event.pull_request.number != '' && (steps.seed.outputs.email != '' || steps.seed.outputs.preview_token == 'true') && steps.deploy.outputs.url != '' }}
         env:
           DEPLOY_URL: ${{ steps.deploy.outputs.url }}
-          EMAIL: ${{ steps.seed.outputs.email }}
-          PASSWORD: ${{ steps.seed.outputs.password }}
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_REF: ${{ github.head_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          REPO: ${{ github.repository }}
-          GH_TOKEN_PUSH: ${{ steps.capture-token.outputs.token }}
-          # Read for `<!-- review-surface: <app> <path> -->` markers: the page that shows the
-          # change, copied from the issue by the worker (#2433). Env, never interpolated into bash.
-          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          set -o pipefail
-          [ -n "$DEPLOY_URL" ] || { echo "no deploy url — skipping capture"; exit 0; }
-          # Loop guard (#2294): don't re-capture on the deploy our own capture commit triggered.
-          HEAD_MSG=$(GH_TOKEN="$GH_TOKEN_PUSH" gh api "repos/${REPO}/commits/${HEAD_SHA}" --jq '.commit.message' 2>/dev/null || true)
-          case "$HEAD_MSG" in
-            "chore(review): capture "*) echo "triggered by a capture commit — skipping (no capture loop, #2294)"; exit 0;;
-          esac
-          # Report the outcome where reviewers look (#2572): a sticky PR comment (one per app) plus
-          # an annotation. Every exit path below calls this — a silent "exit 0" hid PR #2545's miss.
-          LOG="$RUNNER_TEMP/capture.log"; : > "$LOG"
-          report() { # $1 = ok|miss, $2 = headline
-            local mark="<!-- review-capture:${APP} -->" body
-            body="${mark}"$'\n'"**Review capture · ${APP}** — $2"
-            if [ -s "$LOG" ]; then
-              body+=$'\n\n<details><summary>per-surface result</summary>\n\n```\n'"$(grep '^surface=' "$LOG" | head -20)"$'\n```\n</details>'
-            fi
-            if [ "$1" = ok ]; then echo "::notice title=Review capture (${APP})::$2"; else echo "::warning title=Review capture (${APP})::$2"; fi
-            local cid
-            cid=$(GH_TOKEN="$GH_TOKEN_PUSH" gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate \
-              --jq ".[] | select(.body | startswith(\"${mark}\")) | .id" 2>/dev/null | head -1 || true)
-            if [ -n "$cid" ]; then
-              GH_TOKEN="$GH_TOKEN_PUSH" gh api -X PATCH "repos/${REPO}/issues/comments/${cid}" -f body="$body" >/dev/null 2>&1 \
-                || echo "::warning::could not update the review-capture comment"
-            else
-              GH_TOKEN="$GH_TOKEN_PUSH" gh api -X POST "repos/${REPO}/issues/${PR_NUMBER}/comments" -f body="$body" >/dev/null 2>&1 \
-                || echo "::warning::could not post the review-capture comment"
-            fi
-          }
-          npx playwright install chromium >/dev/null 2>&1 || true
-          # Capture to a temp dir so the commit is done in a CLEAN clone, never the dirty deploy
-          # workspace (build output / sync:ids-modified wrangler.jsonc would otherwise ride along).
-          OUT="$RUNNER_TEMP/uip"; rm -rf "$OUT"; mkdir -p "$OUT"
-          node scripts/capture-review-surfaces.mjs \
-            --url "$DEPLOY_URL" --email "$EMAIL" --password "$PASSWORD" \
-            --manifest "$WORKSPACE/$APP/deploy.config.json" --app "$APP" --pr "$PR_NUMBER" --out "$OUT" 2>&1 | tee "$LOG" || true
-          WHY=$(grep '^surface=' "$LOG" | sed -E 's/^surface=([^ ]+) status=[a-z]+ reason=/\1: /' | head -5 | paste -sd';' - || true)
-          shopt -s nullglob; PNGS=("$OUT"/*.png)
-          if [ ${#PNGS[@]} -eq 0 ]; then
-            echo "no valid captures — the sign-off gate will withhold (nothing to show)"
-            report miss "✗ no capture — ${WHY:-no surface result printed (marker not found, or the script crashed)}"; exit 0
-          fi
-          NAMES=$(printf '%s, ' "${PNGS[@]##*/}"); NAMES="${NAMES%, }"
-          BR="$RUNNER_TEMP/uip-branch"; rm -rf "$BR"
-          git clone --depth=1 --branch "$HEAD_REF" \
-            "https://x-access-token:${GH_TOKEN_PUSH}@github.com/${REPO}.git" "$BR" 2>/dev/null || {
-              echo "::warning::could not clone $HEAD_REF for capture commit — skipping (non-fatal)"
-              report miss "✗ captured ${NAMES} but could not clone ${HEAD_REF} to commit it"; exit 0; }
-          mkdir -p "$BR/writeups/ui-proposals"
-          cp "$OUT"/*.png "$BR/writeups/ui-proposals/"
-          cd "$BR" || { echo "::warning::could not cd into the capture clone — skipping (non-fatal)"; report miss "✗ captured ${NAMES} but could not enter the clone"; exit 0; }
-          git config user.name "nuxt-harness[bot]"
-          git config user.email "295566920+nuxt-harness[bot]@users.noreply.github.com"
-          git add writeups/ui-proposals/*.png
-          if git commit -q -m "chore(review): capture ${APP} review surface(s) for PR #${PR_NUMBER} (#2173)"; then
-            if git push origin "HEAD:${HEAD_REF}"; then
-              echo "✓ committed ${#PNGS[@]} capture(s) → the sign-off gate can now show them"
-              report ok "✓ committed ${#PNGS[@]} capture(s): ${NAMES}"
-            else
-              report miss "✗ captured ${NAMES} but the push to ${HEAD_REF} failed"
-            fi
-          else
-            echo "captures unchanged — nothing to commit"
-            report ok "✓ captured ${NAMES} — unchanged from the last commit"
-          fi
+          mkdir -p "$RUNNER_TEMP/preview-meta"
+          jq -n --arg app "$APP" --arg workspace "$WORKSPACE" --arg url "$DEPLOY_URL" --arg pr "$PR_NUMBER" \
+            '{app:$app, workspace:$workspace, url:$url, pr:($pr|tonumber)}' > "$RUNNER_TEMP/preview-meta/meta.json"
+
+      - name: Upload preview record
+        if: ${{ hashFiles(format('{0}/preview-meta/meta.json', runner.temp)) != '' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preview-meta-${{ inputs.app }}
+          path: ${{ runner.temp }}/preview-meta/meta.json
 
       # Prove the DEPLOYED preview actually works — log in with the seeded account, run
       # any app-declared CRUD + public read, and screenshot it (#293). This is the
@@ -927,6 +861,7 @@ jobs:
           APP: ${{ inputs.app }}
           WORKSPACE: ${{ inputs.workspace }}
         run: |
+          set -o pipefail
           MANIFEST="$WORKSPACE/$APP/deploy.config.json"
           # No sign-in to smoke ("reviewLogin": false, #2377): just check the page answers 200.
           if [ "$(jq -r '.reviewLogin == false' "$MANIFEST" 2>/dev/null)" = "true" ]; then
@@ -940,13 +875,40 @@ jobs:
             fi
             exit 0
           fi
-          if node scripts/smoke-deployed.mjs --url "$URL" --email "$EMAIL" --password "$PW" --app "$APP" --manifest "$MANIFEST"; then
+          if node scripts/smoke-deployed.mjs --url "$URL" --email "$EMAIL" --password "$PW" --app "$APP" --manifest "$MANIFEST" 2>&1 | tee "$RUNNER_TEMP/smoke.log"; then
             echo "result=pass" >> "$GITHUB_OUTPUT"
             echo "### ✅ Deployed-preview smoke ($APP) — passed" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "result=fail" >> "$GITHUB_OUTPUT"
             echo "### ❌ Deployed-preview smoke ($APP) — failed (see step log)" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # A report-only failure must not pass unseen (#2812): put the failing step lines and the
+      # server's response on the PR, one sticky comment per head SHA. No @mention, no gate.
+      - name: Comment smoke failure on PR
+        if: ${{ steps.smoke.outputs.result == 'fail' && github.event_name == 'pull_request' }}
+        continue-on-error: true
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          APP: ${{ inputs.app }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        with:
+          script: |
+            const fs = require('fs')
+            const { APP: app, SHA: sha } = process.env
+            let log = ''
+            try { log = fs.readFileSync(`${process.env.RUNNER_TEMP}/smoke.log`, 'utf8') } catch { /* page-only smoke has no log */ }
+            const lines = log.split('\n').filter(l => l.includes('✗')).map(l => l.replace(/^\[smoke\] /, '')).slice(0, 20)
+            const detail = lines.length ? lines.join('\n') : 'The page did not answer 200 (see the run log).'
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+            const marker = `<!-- deploy-smoke-fail:${app}:${sha} -->`
+            const body = `${marker}\n⚠️ **${app}** deployed-preview smoke failed (report-only, so the PR is not blocked) — [run log](${runUrl})\n\n\`\`\`\n${detail.slice(0, 6000)}\n\`\`\`\n\n<sub>🤖 Set \`smoke.required: true\` in \`${app}/deploy.config.json\` to make this block the PR.</sub>`
+            const { owner, repo } = context.repo
+            const issue_number = context.issue.number
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number, per_page: 100 })
+            const existing = comments.find(c => c.body && c.body.includes(marker))
+            if (existing) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body })
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body })
 
       - name: Upload smoke screenshot
         if: ${{ always() && steps.smoke.outputs.result != '' }}
@@ -1005,13 +967,13 @@ jobs:
             const app = '${{ inputs.app }}'
             const email = `${{ steps.seed.outputs.email }}`
             const marker = `<!-- deploy-staging:${app} -->`
-            // Review login (#608). The password and the one-click link that carries it are
-            // NEVER posted here — PR comments are public on this repo (#2358). The link goes
-            // to the owner by email (step above); this only says the login exists.
-            const login = email
-              ? `\n\n🔑 Review login \`${email}\` — the sign-in link comes by email when the epic is ready to test.`
-              : ''
+            // Review login (#608, #2817). No credentials are ever posted here — PR comments
+            // are public on this repo (#2358). The status app signs in server-side and
+            // redirects to this PR's preview, so the link is safe to post.
             const pr = context.issue.number
+            const login = email
+              ? `\n\n🔑 [Open and sign in](https://status.pmcp.dev/api/status/login/${app}?key=pr${pr})\n<sub>The sign-in email is separate: one per epic, once the work is merged and live on staging.</sub>`
+              : ''
             // #2462: the gallery deploys for a PR that changes a shared UI piece — link each
             // changed piece's own review page, not just the gallery's front door.
             let pieces = ''

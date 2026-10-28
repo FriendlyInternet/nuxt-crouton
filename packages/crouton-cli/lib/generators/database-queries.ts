@@ -492,7 +492,7 @@ function buildArrayRefProcessing(
   let postQueryProcessing = ''
   if (arrayReferences.length > 0) {
     // Group array references by target collection for efficient querying
-    const refsByCollection = {}
+    const refsByCollection: Record<string, any[]> = {}
     arrayReferences.forEach((ref) => {
       const collection = ref.targetCollection
       if (!refsByCollection[collection]) {
