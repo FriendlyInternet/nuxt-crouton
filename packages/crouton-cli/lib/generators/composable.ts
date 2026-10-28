@@ -20,7 +20,7 @@ export function generateRepeaterItemSchema(field: Record<string, any>, layerCame
 
   // Add all properties from meta.properties
   for (const [propName, propDef] of Object.entries(properties)) {
-    const zodType = mapPropertyToZod(propDef)
+    const zodType = propDef.zod || 'z.string()'
     if (propDef.required === true) {
       schemaFields.push(`${propName}: ${zodType}`)
     } else {
@@ -40,24 +40,6 @@ export function generateRepeaterItemSchema(field: Record<string, any>, layerCame
   ${schemaFields.join(',\n  ')}
 })`
   }
-}
-
-/**
- * Map property type to Zod schema
- */
-function mapPropertyToZod(propDef: Record<string, any>): string {
-  const type = propDef.type || 'string'
-  const zodMap = {
-    string: 'z.string()',
-    text: 'z.string()',
-    number: 'z.number()',
-    decimal: 'z.number()',
-    boolean: 'z.boolean()',
-    date: 'z.date()',
-    json: 'z.record(z.string(), z.any())',
-    array: 'z.array(z.string())'
-  }
-  return zodMap[type] || 'z.string()'
 }
 
 /**
