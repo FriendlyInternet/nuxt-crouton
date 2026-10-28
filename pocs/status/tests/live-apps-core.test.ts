@@ -60,17 +60,17 @@ describe('GitHub call budget', () => {
       }
       if (path.includes('/contents/')) return { data: cfg({ stagingUrl: 'https://s' }), error: null }
       if (path.includes('/pulls?')) return { data: Array.from({ length: 50 }, (_, i) => ({ number: i + 1, title: 't', updated_at: '' })), error: null }
-      return { data: [{ body, issue_url: 'https://api.github.com/repos/o/r/issues/12' }], error: null }
+      return { data: path.includes('/issues/12/comments') ? [{ body }] : [], error: null }
     }
     return { calls, get: get as never }
   }
-  it('stays within 25 calls for 15 apps and 50 open PRs', async () => {
+  it('makes 1 call per open PR: 15 apps + 50 open PRs stays within 70 calls', async () => {
     const { calls, get } = makeGet()
     const apps = await loadLiveApps(get)
     const previews = await loadPreviews(get)
     expect(apps.data).toHaveLength(15)
     expect(previews.data).toEqual([{ app: 'velo', pr: 12, title: 't', updatedAt: '', url: 'https://velo-pr12.example.workers.dev' }])
-    expect(calls.length).toBeLessThanOrEqual(25)
+    expect(calls.length).toBeLessThanOrEqual(70)
   })
   it('reports failed config reads instead of swallowing them', async () => {
     const { get } = makeGet('/contents/')
@@ -99,9 +99,17 @@ describe('decidePrLogin', () => {
     expect(await decidePrLogin(mk('open', [[{ body: 'hi' }]]), 'velo', 'pr7')).toEqual({ gone: 'none', pr: 7 })
     expect(previewNoneHtml(7, 'velo', 'https://s')).toContain('PR #7 has no test build yet')
   })
-  it('reads repo-wide comments newest first', async () => {
+  it('finds a deploy comment older than 400 other repo comments, and skips merged PRs', async () => {
     const paths: string[] = []
-    await loadPreviews((async (p: string) => { paths.push(p); return { data: [], error: null } }) as never)
-    expect(paths.find(p => p.includes('issues/comments'))).toContain('sort=updated&direction=desc')
+    const get = (async (p: string) => {
+      paths.push(p)
+      if (p.includes('/pulls?')) return { data: [{ number: 5, title: 'open', updated_at: 'u' }], error: null }
+      if (p.includes('/issues/5/comments')) return { data: [{ body: deploy }], error: null }
+      return { data: [], error: null }
+    }) as never
+    const r = await loadPreviews(get)
+    expect(r.data).toEqual([{ app: 'velo', pr: 5, title: 'open', updatedAt: 'u', url: 'https://velo-pr7.example.dev' }])
+    expect(paths).toHaveLength(2)
+    expect(paths.some(p => p.includes('issues/comments'))).toBe(false)
   })
 })

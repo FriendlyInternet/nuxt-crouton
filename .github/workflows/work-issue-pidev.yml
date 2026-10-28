@@ -606,7 +606,6 @@ jobs:
           # #2914: the base merge conflicted — only a merge commit from the conflict step may be stacked on.
           REV_CONFLICT: ${{ steps.revise.outputs.conflict }}
           BASE_MERGED: ${{ steps.revise.outputs.base_merged }}
-          REV_CONFLICT: ${{ steps.revise.outputs.conflict }}
           FEEDBACK_FROM: ${{ steps.revise.outputs.from }}
           # #2161: same resolved model as the pi-run step, so the run-record states which model
           # actually built this PR (provenance on the ticket).
