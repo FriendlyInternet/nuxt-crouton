@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { withManifest } from '../../helpers/manifest-fields.ts'
 import { generateSeedFixture } from '../../../lib/generators/collection-seed-fixture.ts'
 
-const blogFields = [
+const blogFields = withManifest([
   { name: 'title', type: 'string', meta: { required: true } },
   { name: 'slug', type: 'string', meta: { required: true } },
   { name: 'body', type: 'text', meta: {} },
@@ -14,7 +15,7 @@ const blogFields = [
   { name: 'teamId', type: 'string', meta: {} },
   { name: 'createdAt', type: 'date', meta: {} },
   { name: 'categoryId', type: 'string', meta: {}, refTarget: 'categories' },
-]
+])
 
 describe('generateSeedFixture (#298)', () => {
   const fixture = generateSeedFixture({ layer: 'blog', plural: 'posts', fields: blogFields })!

@@ -7,17 +7,11 @@
  */
 
 import { createJiti } from 'jiti'
+import type { FieldTypeMapping } from '@fyit/crouton-core/shared/manifest'
 import { AUTO_GENERATED_FIELDS_SNAPSHOT, FIELD_TYPES_SNAPSHOT } from './field-types.snapshot.js'
 
-export interface FieldTypeMapping {
-  db: string
-  drizzle: string
-  zod: string
-  default: string
-  tsType: string
-  canonical?: string
-  component?: string
-}
+// One type, owned by the manifest system — not a copy (#2910).
+export type { FieldTypeMapping }
 
 // Mutable state — populated by loadFieldTypes() at startup
 export let FIELD_TYPES: Record<string, FieldTypeMapping> = { ...FIELD_TYPES_SNAPSHOT }
