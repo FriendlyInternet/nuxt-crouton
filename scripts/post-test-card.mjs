@@ -70,13 +70,16 @@ function appInfo(labels) {
   const pocId = appId ? '' : labels.find(n => n.startsWith('poc:'))?.slice(4) || ''
   const id = appId || pocId
   let stagingUrl = ''
+  let crudChecked
   if (id) {
     try {
-      stagingUrl = JSON.parse(readFileSync(`${pocId ? 'pocs' : 'apps'}/${id}/deploy.config.json`, 'utf8')).stagingUrl || ''
+      const cfg = JSON.parse(readFileSync(`${pocId ? 'pocs' : 'apps'}/${id}/deploy.config.json`, 'utf8'))
+      stagingUrl = cfg.stagingUrl || ''
+      crudChecked = Boolean(cfg.smoke?.crud)
     } catch { /* app without deploy config — card says so */ }
   }
   const app = id.charAt(0).toUpperCase() + id.slice(1)
-  return { app, id, stagingUrl, reviewAccount: id ? `review+${id}-main@example.com` : '' }
+  return { app, id, stagingUrl, crudChecked, reviewAccount: id ? `review+${id}-main@example.com` : '' }
 }
 
 // One-click sign-in link for the staging review account — same derivation as deploy-app.yml's
