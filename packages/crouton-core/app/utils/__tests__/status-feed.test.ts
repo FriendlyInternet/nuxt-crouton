@@ -137,3 +137,27 @@ describe('mergeTeamEvents', () => {
     expect(out[0]!.id).toBe('event-e11')
   })
 })
+
+describe('mergeTeamEvents with live sync', () => {
+  const ev = (over = {}) => ({ id: 'e1', timestamp: 2000, operation: 'update', collectionName: 'bookings', userId: 'other', userName: 'Lotte Smith', itemId: 'b12', ...over })
+
+  it('drops others without includeOthers', () => {
+    expect(mergeTeamEvents([], [ev()], t, 'me')).toEqual([])
+  })
+
+  it('merges others with first name when includeOthers', () => {
+    const out = mergeTeamEvents([], [ev()], t, 'me', true)
+    expect(out).toHaveLength(1)
+    expect(out[0]!.text).toContain('Lotte saved')
+  })
+
+  it('dedupes by event id', () => {
+    const first = mergeTeamEvents([], [ev()], t, 'me', true)
+    expect(mergeTeamEvents(first, [ev()], t, 'me', true)).toHaveLength(1)
+  })
+
+  it('keeps own entries unchanged', () => {
+    const own = mergeTeamEvents([], [ev({ userId: 'me', id: 'e2' })], t, 'me', true)
+    expect(own[0]!.text).toContain('You saved')
+  })
+})

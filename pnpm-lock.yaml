@@ -192,6 +192,9 @@ importers:
       '@fyit/crouton-bookings':
         specifier: workspace:*
         version: link:../../packages/crouton-bookings
+      '@fyit/crouton-collab':
+        specifier: workspace:*
+        version: link:../../packages/crouton-collab
       '@fyit/crouton-core':
         specifier: workspace:*
         version: link:../../packages/crouton-core
