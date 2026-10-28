@@ -193,7 +193,6 @@ Access the central collection registry and configuration management system.
 interface CollectionConfig {
   name?: string
   layer?: string
-  componentName?: string
   apiPath?: string
   defaultPagination?: {
     currentPage: number
@@ -207,7 +206,6 @@ interface CollectionConfig {
 }
 
 function useCollections(): {
-  componentMap: Record<string, string>
   dependentFieldComponentMap: Record<string, Record<string, string>>
   getConfig: (name: string) => CollectionConfig | undefined
   configs: Record<string, CollectionConfig>
@@ -216,7 +214,6 @@ function useCollections(): {
 
 ### Returns
 
-- **componentMap** - Map of collection names to form component names
 - **dependentFieldComponentMap** - Map of collections to their custom field components
 - **getConfig** - Get configuration for a specific collection
 - **configs** - Full registry of all collection configurations
@@ -235,21 +232,6 @@ console.log(productsConfig?.layer) // 'shop'
 // Access all registered collections
 const allCollections = Object.keys(configs)
 console.log(allCollections) // ['shopProducts', 'shopCategories', ...]
-</script>
-```
-
-### Accessing Component Maps
-
-```vue
-<script setup lang="ts">
-const { componentMap } = useCollections()
-
-// Get form component name for a collection
-const formComponent = componentMap['shopProducts']
-console.log(formComponent) // 'ShopProductsForm'
-
-// Dynamically load the form component
-const FormComponent = resolveComponent(formComponent)
 </script>
 ```
 
@@ -303,7 +285,6 @@ export default defineAppConfig({
       name: 'shopProducts',
       layer: 'shop',
       apiPath: '/api/crouton-collection/shopProducts',
-      componentName: 'ShopProductsForm',
       references: {
         categoryId: 'shopCategories',  // Refresh categories when product changes
         authorId: 'users'               // Refresh users when product changes
@@ -322,7 +303,6 @@ export default defineAppConfig({
       name: 'shopCategories',
       layer: 'shop',
       apiPath: '/api/crouton-collection/shopCategories',
-      componentName: 'ShopCategoriesForm'
     }
   }
 })
@@ -380,7 +360,7 @@ console.log('Registered collections:', collectionNames)
 - ✅ Use `dependentFieldComponents` for custom field renderers
 
 **DON'T:**
-- ❌ Modify `componentMap` or `dependentFieldComponentMap` directly
+- ❌ Modify `dependentFieldComponentMap` directly
 - ❌ Assume a collection exists - always check with `getConfig()`
 - ❌ Manually manage collection data state (use `useCollectionQuery` instead)
 
@@ -403,17 +383,7 @@ if (!config) {
 
 **Problem**: Form component not loading
 
-```vue
-<script setup lang="ts">
-const { componentMap } = useCollections()
-
-// Check if component is registered
-if (!componentMap['shopProducts']) {
-  // Missing componentName in app.config.ts
-  // Check your collection config
-}
-</script>
-```
+The form is looked up by name: `<Layer><Plural>Form` (e.g. `ShopProductsForm`). Check that a component with that exact name exists — see [Replace a form or list](/customization/eject).
 
 ---
 

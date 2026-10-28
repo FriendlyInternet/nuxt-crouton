@@ -1,0 +1,209 @@
+name: Build review (independent reviewer — pi.dev)
+
+# #2777 (epic #2754) — when a pipeline PR (head `work-<N>`) turns green, the same top-model
+# reviewer as the plan review (the `review` tier of .claude/pipeline-models.json) reads the
+# finished diff against the ticket and the approved plan, grades it against a fixed rubric
+# (.claude/agents/build-reviewer.md) and posts a verdict on the PR:
+#   go           → label `build:approved` (auto-merge requires it)
+#   no-go        → a `**Worker:**` revision with the reasons; after 2 sent-back rounds, hold
+#   needs-owner  → one yes/no question, held `status:blocked`
+#
+# SAFETY: the pi step is READ-ONLY and holds NO GitHub token (persist-credentials:false; the App
+# token is only used by the trusted steps). It checks out the PR head as DATA and never runs it.
+# No silent model fallback — the preflight fails loudly (same as plan review).
+#
+# Workflow-change: new workflow for the build-review gate (#2777).
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: 'PR number to (re-)review'
+        required: true
+
+concurrency:
+  group: build-review-${{ github.event.inputs.pr || github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'work-')) }}
+    runs-on: ${{ vars.AGENT_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          app-id: ${{ secrets.HARNESS_APP_ID }}
+          private-key: ${{ secrets.HARNESS_APP_PRIVATE_KEY }}
+          owner: FriendlyInternet
+
+      # Trusted scripts come from the default branch; the PR head is fetched separately as data.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Pick the PR to review
+        id: pr
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          INPUT_PR: ${{ github.event.inputs.pr }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT_PR" ]; then PR="$INPUT_PR"
+          else PR="$(gh pr list --repo "${{ github.repository }}" --head "$HEAD_BRANCH" --state open --json number --jq '.[0].number // empty')"; fi
+          if [ -z "$PR" ]; then echo "no open PR for $HEAD_BRANCH — nothing to review"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          J="$(gh pr view "$PR" --json number,headRefName,headRefOid,baseRefName,isDraft,author,labels,state)"
+          echo "$J"
+          REF="$(echo "$J" | jq -r .headRefName)"; BASE="$(echo "$J" | jq -r .baseRefName)"
+          SHA="$(echo "$J" | jq -r .headRefOid)"
+          # Only a pipeline PR: head work-<N>, into an epic branch, authored by the bot (#2985).
+          if ! echo "$J" | node scripts/build-review-pick.mjs; then
+            echo "not a ready pipeline PR — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # CI Gate must have reported success for this exact head.
+          if [ -z "$INPUT_PR" ]; then
+            OK="$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs?per_page=100" --jq '[.check_runs[] | select(.name=="CI Gate" and .conclusion=="success")] | length')"
+            if [ "$OK" = 0 ]; then echo "CI Gate not green for $SHA yet — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          fi
+          # One review per head commit: a CI re-run on the same sha does not re-spend the model.
+          if gh api --paginate "repos/${{ github.repository }}/issues/$PR/comments?per_page=100" --jq '.[].body' | grep -q "<!-- build-review-sha:$SHA -->"; then
+            echo "already reviewed $SHA — skip"; echo "skip=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          {
+            echo "skip=false"; echo "pr=$PR"; echo "sha=$SHA"; echo "base=$BASE"
+            echo "issue=${REF#work-}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.pr.outputs.skip == 'false'
+        with:
+          node-version: 22
+
+      - name: Resolve review model
+        if: steps.pr.outputs.skip == 'false'
+        id: model
+        run: |
+          MODEL="$(node scripts/resolve-pipeline-model.mjs review)"
+          echo "model=$MODEL" >> "$GITHUB_OUTPUT"
+          echo "review model: $MODEL (from .claude/pipeline-models.json)"
+
+      - name: Set up pi + Claude CLI (subscription)
+        if: steps.pr.outputs.skip == 'false'
+        uses: ./.github/actions/setup-pi
+        with:
+          oauth-token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+      - name: Preflight — the review model runs on claude-bridge
+        if: steps.pr.outputs.skip == 'false'
+        env:
+          MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR: ${{ steps.pr.outputs.pr }}
+        run: |
+          set -uo pipefail
+          # Probe with `claude -p`, NOT `pi --print`: a bare one-word reply is a tool-less turn, so
+          # .pi/extensions/complete-work.ts intercepts it (nudge, then PI_TASK_COMPLETE_NOTHING_LEFT)
+          # and the model's OK never reaches stdout — the probe then failed for every model.
+          OUT="$(timeout 180 claude -p 'Reply with exactly the two letters OK and nothing else.' --model "$MODEL" --output-format text 2>&1)"
+          if ! echo "$OUT" | grep -q 'OK'; then
+            echo "$OUT" | tail -n 20
+            echo "::error::review model $MODEL did not answer on provider claude-bridge — build review NOT run, no fallback (#2777)"
+            gh pr comment "$PR" --body "$(printf '<!-- build-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review could not run** — the review model `%s` did not answer on the pipeline provider (claude-bridge). I did not fall back to another model, so this PR is not approved.\n**Needs:** action — set a model that runs in `.claude/pipeline-models.json` (`review`), then re-run this workflow.' "$MODEL")" || true
+            exit 1
+          fi
+
+      - name: Gather the ticket, the plan and the diff
+        if: steps.pr.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ISSUE: ${{ steps.pr.outputs.issue }}
+          PR: ${{ steps.pr.outputs.pr }}
+          BASE: ${{ steps.pr.outputs.base }}
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          set -euo pipefail
+          D="$RUNNER_TEMP/build-review"; mkdir -p "$D"
+          gh issue view "$ISSUE" --json title,body --jq '"# " + .title + "\n\n" + .body' > "$D/issue.md"
+          # The newest approved plan comment, if the issue went through plan review.
+          gh api --paginate "repos/${{ github.repository }}/issues/${ISSUE}/comments?per_page=100" \
+            --jq '[.[] | select(.body | contains("<!-- pipeline-plan:v1 -->"))] | last | .body // ""' > "$D/plan.md"
+          # Prior sent-back rounds for THIS PR.
+          PRIOR="$(gh api --paginate "repos/${{ github.repository }}/issues/${PR}/comments?per_page=100" \
+            --jq '[.[] | select(.body | contains("<!-- build-review-verdict:no-go -->"))] | length' | awk '{ s += $1 } END { print s + 0 }')"
+          echo "$PRIOR" > "$D/prior"
+          # The PR head as DATA (never executed here), diffed with copy detection against the base.
+          git fetch --no-tags origin "$BASE" "pull/${PR}/head"
+          git checkout --detach "$SHA"
+          git diff -C --find-copies-harder --no-color "origin/${BASE}...${SHA}" > "$D/diff.patch"
+          wc -c "$D/diff.patch"
+
+      # ── The reviewer: READ-ONLY, no GitHub token in its env ──────────────────────
+      - id: pi
+        if: steps.pr.outputs.skip == 'false'
+        env:
+          PI_MODEL: ${{ steps.model.outputs.model }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ISSUE: ${{ steps.pr.outputs.issue }}
+          PR: ${{ steps.pr.outputs.pr }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/build-review"
+          # Persona and the verdict parser come from the default branch, not the PR head.
+          git show "origin/${{ github.event.repository.default_branch }}:.claude/agents/build-reviewer.md" \
+            | awk '/^---$/ && n < 2 { n++; next } n >= 2' \
+            | sed -e "s#{{issue}}#${ISSUE}#g" -e "s#{{pr}}#${PR}#g" -e "s#{{verdict_file}}#$D/verdict.md#g" \
+                  -e "s#{{issue_file}}#$D/issue.md#g" -e "s#{{plan_file}}#$D/plan.md#g" -e "s#{{diff_file}}#$D/diff.patch#g" > "$D/prompt.txt"
+          pi --print --approve --provider claude-bridge --model "$PI_MODEL" "$(cat "$D/prompt.txt")" 2>&1 | tee "$D/pi.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Post the verdict
+        if: ${{ !cancelled() && steps.pr.outputs.skip == 'false' }}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          MODEL: ${{ steps.model.outputs.model }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ISSUE: ${{ steps.pr.outputs.issue }}
+          PR: ${{ steps.pr.outputs.pr }}
+          SHA: ${{ steps.pr.outputs.sha }}
+        run: |
+          set -uo pipefail
+          D="$RUNNER_TEMP/build-review"
+          # The parser is trusted code from the default branch (the checkout is the PR head).
+          mkdir -p "$RUNNER_TEMP/trusted"
+          git show "origin/${{ github.event.repository.default_branch }}:scripts/lib/build-verdict.mjs" > "$RUNNER_TEMP/trusted/build-verdict.mjs"
+          PRIOR="$(cat "$D/prior" 2>/dev/null || echo 0)"; ROUND=$((PRIOR + 1))
+          fail() {
+            echo "::error::$1"
+            gh pr comment "$PR" --body "$(printf '<!-- build-review-failed -->\n> 🤖 **pi.dev harness** · agent pipeline (CI) · _build review (#2777)_\n\n🔴 **Build review %s** — nothing was approved.\n**Needs:** action — re-run [the review](%s).' "$1" "$RUN_URL")" || true
+            exit 1
+          }
+          [ -s "$D/verdict.md" ] || fail "produced no verdict"
+          DECISION="$(node "$RUNNER_TEMP/trusted/build-verdict.mjs" "$D/diff.patch" "$D/issue.md" "$D/verdict.md")" || fail "verdict was malformed"
+          VERDICT="$(echo "$DECISION" | node -e 'console.log(JSON.parse(require("fs").readFileSync(0,"utf8")).verdict)')"
+          { printf '<!-- build-review-sha:%s -->\n' "$SHA"; node "$RUNNER_TEMP/trusted/build-verdict.mjs" render "$D/diff.patch" "$D/issue.md" "$D/verdict.md" "$ROUND" "$MODEL"; } > "$D/comment.md"
+          # remove-then-add: re-adding a label the PR already carries fires no event.
+          gh pr edit "$PR" --remove-label "build:approved" 2>/dev/null || true
+          COMMENT_URL="$(gh pr comment "$PR" --body-file "$D/comment.md")"
+          echo "verdict: $VERDICT (round $ROUND) → $COMMENT_URL"
+          case "$VERDICT" in
+            go) gh pr edit "$PR" --add-label "build:approved" ;;
+            needs-owner) gh issue edit "$ISSUE" --add-label "status:blocked" ;;
+            no-go)
+              if [ "$ROUND" -ge 2 ]; then
+                gh issue edit "$ISSUE" --add-label "status:blocked"
+              else
+                CID="${COMMENT_URL##*issuecomment-}"
+                gh workflow run work-issue-pidev.yml -f issue="$ISSUE" -f feedback="$CID"
+              fi
+              ;;
+          esac

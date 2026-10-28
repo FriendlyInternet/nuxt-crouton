@@ -28,6 +28,7 @@
 </template>
 
 <script setup lang="ts">
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
 interface Option {
   id: string
   label?: string
@@ -91,13 +92,8 @@ const cardComponent = computed(() => {
   // NOT the Crouton prefix
   const componentName = `${collectionPascal}${fieldPascal}Card${props.cardVariant}`
 
-  try {
-    const resolvedComponent = resolveComponent(componentName)
-    return resolvedComponent
-  } catch {
-    // Component not found, will use fallback badge
-    return null
-  }
+  // Not in the map → null, the caller falls back to a badge
+  return collectionForms[componentName] ?? null
 })
 
 // Check if an option is selected

@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
-import { generateSchema } from '../../../lib/generators/database-schema.ts'
+import { generateSchema as rawGenerateSchema } from '../../../lib/generators/database-schema.ts'
+import { getTypeMapping } from '../../../lib/utils/manifest-loader.ts'
+import coreManifest from '../../../../crouton-core/crouton.manifest.ts'
+import editorManifest from '../../../../crouton-editor/crouton.manifest.ts'
 import {
   schemaData,
   schemaWithHierarchyData,
@@ -8,6 +11,18 @@ import {
   minimalConfig,
   translationsConfig
 } from '../../fixtures/sample-data.mjs'
+
+// loadFields attaches the manifest's `sqlite` descriptor to every field; the hand-built
+// fixture fields here get it the same way, from the real manifests.
+const typeMapping = getTypeMapping([coreManifest, editorManifest] as any)
+function withSqlite(data: Record<string, any>) {
+  return {
+    ...data,
+    fields: (data.fields ?? []).map((f: any) => ({ ...f, sqlite: f.sqlite ?? typeMapping[f.type]?.sqlite }))
+  }
+}
+const generateSchema = (data: Record<string, any>, dialect: string, config: any = null) =>
+  rawGenerateSchema(withSqlite(data), dialect, config)
 
 // Type helper to work around .mjs module inference (config = null default)
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -165,5 +180,45 @@ describe('generateSchema', () => {
       expect(result).toContain("uniqueIndex('shop_products_team_email_idx').on(table.teamId, table.email)")
     })
 
+  })
+})
+
+describe('field types emit from the manifest sqlite descriptor', () => {
+  const one = (type: string, meta: Record<string, any> = {}) =>
+    generateSchema({ ...schemaData, fields: [{ name: 'f', type, meta }] }, 'sqlite', minimalConfig as AnyConfig)
+      .split('\n').find(l => l.includes('  f:'))!
+
+  it('every manifest type has a sqlite entry (guards new types)', () => {
+    for (const [name, def] of Object.entries(typeMapping)) {
+      expect(def.sqlite, name).toBeDefined()
+    }
+  })
+
+  for (const [type, def] of Object.entries(typeMapping)) {
+    it(`${type} emits the column its sqlite descriptor names`, () => {
+      const line = one(type)
+      const { column, mode } = def.sqlite
+      if (column === 'json') expect(line).toContain("jsonColumn('f')")
+      else if (mode) expect(line).toContain(`${column}('f', { mode: '${mode}' })`)
+      else expect(line).toContain(`${column}('f')`)
+    })
+  }
+
+  it('dependsOn and slotButtonGroup string fields are stored as json', () => {
+    expect(one('string', { dependsOn: 'x' })).toContain("jsonColumn('f')")
+    expect(one('string', { displayAs: 'slotButtonGroup' })).toContain("jsonColumn('f')")
+  })
+
+  it('keeps boolean and date defaults', () => {
+    expect(one('boolean', { default: true })).toContain('.$default(() => true)')
+    expect(one('boolean')).toContain('.$default(() => false)')
+    expect(one('date')).not.toContain('$default')
+    expect(one('date', { default: 'now' })).toContain('new Date()')
+  })
+
+  it('json defaults: {} for json, null for array/repeater', () => {
+    expect(one('json')).toContain('({})')
+    expect(one('array')).toContain('(null)')
+    expect(one('repeater')).toContain('(null)')
   })
 })

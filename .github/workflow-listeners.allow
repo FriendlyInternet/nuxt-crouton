@@ -5,3 +5,8 @@
 # and do no other work. Folding them in would couple the board to the cleanup jobs' failures.
 status.yml issues-closed
 status.yml pr-closed
+
+# Plan review (#2756, landed on main while #2889 was in flight). Listens for the owner's reply on
+# a plan comment. Temporary: fold its comment path into on-comment.yml under the CI backlog epic
+# (#2995) — tracked there. Until then this line keeps the guard honest instead of silencing it.
+plan-review.yml issue_comment

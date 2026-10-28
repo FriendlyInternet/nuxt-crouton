@@ -62,7 +62,6 @@ const _croutonAssetsConfig = {
   name: 'croutonAssets',
   layer: 'crouton',
   apiPath: 'crouton-assets',
-  componentName: 'CroutonAssetsForm',
   defaultValues: {
     teamId: '',
     userId: '',

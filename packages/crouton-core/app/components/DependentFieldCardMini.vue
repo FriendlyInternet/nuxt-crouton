@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
 const { t } = useT()
 /**
  * DependentFieldCardMini - Display dependent field values with proper resolution
@@ -53,12 +54,7 @@ const customComponent = computed(() => {
 
   const componentName = `${collectionPascal}${fieldPascal}CardMini`
 
-  try {
-    const resolvedComponent = resolveComponent(componentName)
-    return resolvedComponent
-  } catch (_e) {
-    return null
-  }
+  return collectionForms[componentName] ?? null
 })
 
 // Resolve IDs to full objects from parent's field array

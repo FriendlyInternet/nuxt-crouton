@@ -278,7 +278,7 @@ describe('useAuth', () => {
 
       expect(mockAuthClient.signIn.social).toHaveBeenCalledWith({
         provider: 'github',
-        callbackURL: 'http://localhost:3000/auth/callback'
+        callbackURL: 'http://localhost:3000/'
       })
     })
 
@@ -306,7 +306,7 @@ describe('useAuth', () => {
 
       expect(mockAuthClient.signIn.magicLink).toHaveBeenCalledWith({
         email: 'test@example.com',
-        callbackURL: 'http://localhost:3000/auth/callback'
+        callbackURL: 'http://localhost:3000/'
       })
     })
 

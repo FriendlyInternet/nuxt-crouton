@@ -14,6 +14,12 @@ definePageMeta({
 
 const { teamSlug } = useTeamContext()
 const { t } = useT()
+
+// Kassa has no top tabs; this strip is the in-section nav (Events + the linked tills, #806).
+const links = computed(() => [[
+  { label: t('sales.sidebar.events'), icon: 'i-lucide-calendar', to: `/admin/${teamSlug.value}/sales/events` },
+  { label: t('sales.sidebar.devices'), icon: 'i-lucide-monitor-smartphone', to: `/admin/${teamSlug.value}/sales/devices` }
+]])
 </script>
 
 <template>
@@ -29,6 +35,7 @@ const { t } = useT()
     </template>
 
     <template #body>
+      <UNavigationMenu :items="links" class="border-b border-default px-4 sm:px-6" />
       <div class="max-w-[96rem] w-full">
         <NuxtPage />
       </div>
