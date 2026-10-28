@@ -1,0 +1,13 @@
+{
+ "epic": "## Decisions log\n- Team data is always scoped per team.\n",
+ "tickets": [
+  {
+   "number": 2725,
+   "title": "Rows without a team get the current team",
+   "labels": [
+    "type:fix"
+   ],
+   "body": "## Hypothesis\nWe think that forcing teamId on rows that have none fixes the leak.\n\nForce teamId on rows without one in insert.ts.\n"
+  }
+ ]
+}

@@ -1,10 +1,11 @@
 /// <reference types="@cloudflare/workers-types" />
 
 import * as Y from 'yjs'
+import { verifyCollabToken } from '../utils/collabToken'
 
 interface Env {
   DB: D1Database
-  BETTER_AUTH_SECRET?: string
+  COLLAB_TOKEN_SECRET?: string
 }
 
 interface Session {
@@ -185,30 +186,8 @@ export class CollabRoom implements DurableObject {
    * Verify an HMAC-signed collab token.
    * Token format: base64(JSON payload).base64(HMAC signature)
    */
-  private async verifyToken(token: string): Promise<string | null> {
-    const secret = this.env.BETTER_AUTH_SECRET
-    if (!secret) return null
-
-    const [payloadB64, signatureB64] = token.split('.')
-    if (!payloadB64 || !signatureB64) return null
-
-    try {
-      const payload = atob(payloadB64)
-      const enc = new TextEncoder()
-      const key = await crypto.subtle.importKey(
-        'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
-      )
-      const sigBytes = Uint8Array.from(atob(signatureB64), c => c.charCodeAt(0))
-      const valid = await crypto.subtle.verify('HMAC', key, sigBytes, enc.encode(payload))
-      if (!valid) return null
-
-      const data = JSON.parse(payload) as { userId: string; exp: number }
-      if (Date.now() > data.exp) return null
-
-      return data.userId
-    } catch {
-      return null
-    }
+  private verifyToken(token: string): Promise<string | null> {
+    return verifyCollabToken(token, this.env.COLLAB_TOKEN_SECRET)
   }
 
   /**
