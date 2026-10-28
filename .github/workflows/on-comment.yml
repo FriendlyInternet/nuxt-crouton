@@ -1073,7 +1073,7 @@ jobs:
       - name: Resolve models
         id: model
         run: |
-          echo "reader=$(node scripts/resolve-pipeline-model.mjs default)" >> "$GITHUB_OUTPUT"
+          echo "reader=$(node scripts/resolve-pipeline-model.mjs light)" >> "$GITHUB_OUTPUT"
           echo "hard=$(node scripts/resolve-pipeline-model.mjs hard)" >> "$GITHUB_OUTPUT"
 
       # The reader model only READS and proposes; a failed/empty run becomes `ask` in decideAction.
@@ -1131,7 +1131,7 @@ jobs:
           script: |
             const fs = require('node:fs')
             const root = process.env.GITHUB_WORKSPACE
-            const { readAs } = await import(`${root}/scripts/comment-interpret.mjs`)
+            const { readAs, noMention } = await import(`${root}/scripts/comment-interpret.mjs`)
             const { resolveLane } = await import(`${root}/scripts/comment-command.mjs`)
             const { routePrComment } = await import(`${root}/scripts/revise-route.mjs`)
             const d = JSON.parse(fs.readFileSync(`${process.env.RUNNER_TEMP}/interpret-decision.json`, 'utf8'))
@@ -1153,15 +1153,15 @@ jobs:
             if (d.action === 'confirm') {
               await say(`🔀 ${opener}. Reply \`ok\` to confirm.`, 'Nothing has been done yet.')
             } else if (d.action === 'ask') {
-              await say(`🔀 ${opener}?`, d.reply || 'Could you say a bit more about what you want done?')
+              await say(`🔀 ${opener}?`, (d.reply ? noMention(d.reply) : 'Could you say a bit more about what you want done?'))
             } else if (d.action === 'answer') {
-              await say(`💬 ${opener}.`, d.reply || 'No answer text came back — please ask again.')
+              await say(`💬 ${opener}.`, (d.reply ? noMention(d.reply) : 'No answer text came back — please ask again.'))
             } else if (d.action === 'review') {
               let rev = ''
               try { rev = fs.readFileSync(`${process.env.RUNNER_TEMP}/interpret-review.md`, 'utf8').trim() } catch {}
               const trimmed = fs.existsSync(`${process.env.RUNNER_TEMP}/interpret-diff-trimmed`)
               await say(`👀 ${opener}. Review below.${trimmed ? ' The PR diff was too long, so the review saw only its first ~60k characters.' : ''}`,
-                rev ? `<details><summary>Independent review</summary>\n\n${rev.slice(0, 6000)}\n\n</details>` : '_The review run produced no text — reply again to retry._')
+                rev ? `<details><summary>Independent review</summary>\n\n${noMention(rev.slice(0, 6000))}\n\n</details>` : '_The review run produced no text — reply again to retry._')
             } else if (d.action === 'revise') {
               const pr = (await github.rest.pulls.get({ owner, repo, pull_number: issue_number })).data
               const r = routePrComment({ pr: { headRef: pr.head.ref, state: pr.state }, comment: {} })

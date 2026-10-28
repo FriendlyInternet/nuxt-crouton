@@ -94,7 +94,12 @@ export function decideAction({ modelOutput, issue = {}, pr = null } = {}) {
 /** The one-line "I read this as …" opener every reply carries (rule 6). Never @mentions. */
 export function readAs(decision) {
   const text = decision.action === 'confirm' ? decision.confirmText : decision.reason
-  return `I read this as: ${String(text).replace(/@/g, '@\u200b')}`
+  return `I read this as: ${noMention(text)}`
+}
+
+/** Break every `@handle` so model-written text can never ping anyone (rule 6). */
+export function noMention(text) {
+  return String(text).replace(/@/g, '@\u200b')
 }
 
 /** The fixed prompt for the light model; context is trimmed by the caller. */

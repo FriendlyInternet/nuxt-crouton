@@ -64,3 +64,8 @@ test('case 7: replan / start on a held ticket only ever confirm — never releas
   }
   assert.equal(decideAction({ modelOutput: j({ action: 'replan', reason: 'r' }), issue: plain }).action, 'ask')
 })
+
+test('case 6b: model-written reply text is defanged too', async () => {
+  const { noMention } = await import('./comment-interpret.mjs')
+  assert.ok(!/@(?=pmcp)/.test(noMention('ask @pmcp and @team')))
+})
