@@ -36,8 +36,7 @@ const { data: totest, status: totestStatus } = await useFetch<{ data: ToTestItem
 const { data: decisionsRes, status: decisionsStatus } = await useFetch<{ data: { decisions: Decision[], openQuestions: OpenQuestion[] } | null, error: string | null }>('/api/status/decisions', { lazy: true })
 const { data: changelogRes, status: changelogStatus } = await useFetch<{ data: ChangelogRow[] | null, error: string | null }>('/api/status/changelog', { lazy: true })
 
-const loginHref = (app: string, to: string) =>
-  `/api/status/login/${app}${to ? `?to=${encodeURIComponent(to)}` : ''}`
+const loginHref = (app: string, i: ToTestItem) => loginHrefFor({ ...i, app })
 
 // --- Apps ---
 const { data: appsRes, status: appsStatus } = await useFetch<{ data: AppRow[] | null, error: string | null }>('/api/status/apps', { lazy: true })
@@ -113,7 +112,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
                   <ol v-if="i.steps.length" class="list-decimal space-y-1 pl-5 text-sm">
                     <li v-for="(s, n) in i.steps" :key="n">{{ s }}</li>
                   </ol>
-                  <UButton block icon="i-lucide-log-in" label="Open and sign in" :href="loginHref(a.app, i.to)" target="_blank" />
+                  <UButton block icon="i-lucide-log-in" label="Open and sign in" :href="loginHref(a.app, i)" target="_blank" />
                 </div>
               </div>
 
@@ -197,7 +196,7 @@ const day = (iso?: string | null) => (iso ? iso.slice(0, 10) : '')
                   size="lg"
                   icon="i-lucide-log-in"
                   label="Open and sign in"
-                  :href="loginHref(i.app, i.to)"
+                  :href="loginHref(i.app, i)"
                   target="_blank"
                 />
               </div>
