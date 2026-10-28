@@ -99,7 +99,6 @@
   "collection": {
     "noItemsYet": "Nog geen items",
     "createFirstItem": "Maak je eerste {collection} item aan om te beginnen",
-    "componentError": "Kan collectiecomponent niet laden: {error}",
     "componentNotFound": "Component niet gevonden voor collectie: {collection}",
     "selectItem": "Selecteer een item om te beginnen",
     "orPressN": "of druk op N om een nieuw item aan te maken",

@@ -57,8 +57,17 @@ describe('generateComposable', () => {
     expect(result).toContain("name: 'shopProducts'")
     expect(result).toContain("layer: 'shop'")
     expect(result).toContain("apiPath: 'shop-products'")
-    expect(result).toContain("componentName: 'ShopProductsForm'")
+    expect(result).not.toContain('componentName')
     expect(result).toContain('defaultValues: {')
+  })
+
+  it('always emits the canonical form name — collectionConfig cannot override it', () => {
+    const result = generateComposable(
+      { ...basicComposableData, collectionConfig: { formComponent: 'CustomForm' } },
+      minimalConfig
+    )
+    expect(result).not.toContain('componentName')
+    expect(result).not.toContain('CustomForm')
   })
 
   it('generates non-enumerable schema property', () => {

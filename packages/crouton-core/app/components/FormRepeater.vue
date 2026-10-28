@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { collectionForms } from '#build/crouton-collection-forms.mjs'
 import { nanoid } from 'nanoid'
 import { useSortable } from '@vueuse/integrations/useSortable'
 import type { SortableEvent } from 'sortablejs'
@@ -79,24 +80,15 @@ const updateItem = (index: number, val: any) => {
   emit('update:modelValue', items.value)
 }
 
-// Check if component can be resolved
-const componentResolved = computed(() => {
-  try {
-    // Try to resolve the component - this will work for auto-imported components
-    const component = resolveComponent(props.componentName, false)
-    return component !== props.componentName // If resolved, it returns the component, not the string
-  } catch (e) {
-    return false
-  }
-})
+// Repeater item from the build-time collection map (Nuxt's resolved winner)
+const itemComponent = computed(() => collectionForms[props.componentName])
 
 // Warn in development if component cannot be resolved
 onMounted(() => {
-  if (!componentResolved.value && import.meta.dev) {
+  if (!itemComponent.value && import.meta.dev) {
     console.warn(`[CroutonFormRepeater] Warning: Component "${props.componentName}" may not be resolved correctly. Check that:
-1. The component is registered globally
-2. The component name matches the registered name (including any prefixes)
-3. Auto-imports are configured correctly`)
+1. The component file exists in a layer's components dir
+2. The component name matches the file's canonical name (<Layer><Plural><Field>Input)`)
   }
 })
 </script>
@@ -138,7 +130,7 @@ onMounted(() => {
         <!-- Item component -->
         <div class="flex-1 min-w-0">
           <component
-            :is="componentName"
+            :is="itemComponent"
             :model-value="item"
             @update:model-value="(val: unknown) => updateItem(index, val)"
           />
